@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { Grid, vimKey } from './grid'
-import styles from './Nido.module.css'
+import styles from './assets/Nido.module.css'
 
 interface Props {
     children?: ReactNode

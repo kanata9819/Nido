@@ -19,7 +19,7 @@ import {
 import type { FileEntry, SessionState, Workspace } from '../../shared/types'
 import Editor from './Editor'
 import Sidebar from './Sidebar'
-import styles from './Nido.module.css'
+import styles from './assets/Nido.module.css'
 
 type Panel = 'commands' | 'workspaces' | 'files' | 'buffers' | 'settings' | null
 interface Item {

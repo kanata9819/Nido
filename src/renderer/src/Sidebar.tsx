@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, FileCode2, Folder, FolderOpen, RefreshCw } from 'lucide-react'
 import type { FileEntry, Workspace } from '../../shared/types'
-import styles from './Nido.module.css'
+import styles from './assets/Nido.module.css'
 
 interface Props {
     workspace: Workspace
