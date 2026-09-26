@@ -178,9 +178,11 @@ export class Session {
             throw error
         }
     }
+
     async resize(columns: number, rows: number): Promise<void> {
         if (this.attached) await this.client.request('nvim_ui_try_resize', [columns, rows])
     }
+
     input(keys: string): Promise<void> {
         // nvim_input can accept only part of a byte sequence when its input queue is full.
         const next = this.inputQueue.then(async () => {
@@ -194,12 +196,15 @@ export class Session {
         this.inputQueue = next.catch(() => {})
         return next
     }
+
     async paste(text: string): Promise<void> {
         await this.client.request('nvim_paste', [text, true, -1])
     }
+
     async save(): Promise<void> {
         await this.write('write')
     }
+
     async snapshot(): Promise<SavedWorkspace> {
         const data = (await this.client.request('nvim_exec_lua', [
             `local files = {}
@@ -221,6 +226,7 @@ export class Session {
             files: Array.isArray(data.files) ? data.files : []
         }
     }
+
     async restore(saved: SavedWorkspace): Promise<string[]> {
         const errors: string[] = []
         for (const file of saved.files) {
@@ -244,15 +250,18 @@ export class Session {
         ])
         return errors
     }
+
     async modified(): Promise<boolean> {
         return (await this.client.request('nvim_exec_lua', [
             'for _,b in ipairs(vim.api.nvim_list_bufs()) do if vim.bo[b].modified then return true end end return false',
             []
         ])) as boolean
     }
+
     async saveAll(): Promise<void> {
         await this.write('wall')
     }
+
     private async write(command: 'write' | 'wall'): Promise<void> {
         const error = (await this.client.request('nvim_exec_lua', [
             'local ok, err = pcall(vim.cmd, ...); return ok and "" or tostring(err)',
@@ -260,16 +269,20 @@ export class Session {
         ])) as string
         if (error) throw new Error(error)
     }
+
     async selectBuffer(buffer: number): Promise<void> {
         await this.client.request('nvim_set_current_buf', [buffer])
     }
+
     async closeBuffer(buffer: number, force = false): Promise<void> {
         if (!force && (await this.bufferModified(buffer))) throw new Error('Buffer has unsaved changes.')
         await this.client.request('nvim_buf_delete', [buffer, { force }])
     }
+
     async bufferModified(buffer: number): Promise<boolean> {
         return (await this.client.request('nvim_get_option_value', ['modified', { buf: buffer }])) as boolean
     }
+
     async path(relativePath: string): Promise<string> {
         if (isAbsolute(relativePath)) throw new Error('Expected a project-relative path.')
         const actual = await realpath(resolve(this.workspace.root, relativePath))
@@ -278,11 +291,13 @@ export class Session {
             throw new Error('Path is outside this workspace.')
         return actual
     }
+
     async openFile(relativePath: string): Promise<void> {
         const file = await this.path(relativePath)
         if (!(await stat(file)).isFile()) throw new Error('Choose a file.')
         await this.client.request('nvim_exec_lua', ['vim.cmd.edit(vim.fn.fnameescape(...))', [file]])
     }
+
     async files(relativePath: string): Promise<FileEntry[]> {
         const directory = await this.path(relativePath)
         const entries = await readdir(directory, { withFileTypes: true })
@@ -295,6 +310,7 @@ export class Session {
             }))
             .sort((a, b) => Number(b.directory) - Number(a.directory) || a.name.localeCompare(b.name))
     }
+
     async findFiles(): Promise<FileEntry[]> {
         const result: FileEntry[] = []
         const visit = async (directory: string, depth: number): Promise<void> => {
@@ -310,6 +326,7 @@ export class Session {
         await visit('', 0)
         return result
     }
+
     async stop(): Promise<void> {
         if (this.stopped || !this.process.pid) return
         this.stopped = true

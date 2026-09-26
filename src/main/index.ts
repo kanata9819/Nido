@@ -16,18 +16,22 @@ const send = (event: NidoEvent): void => {
     if (window && !window.isDestroyed()) window.webContents.send('nido:event', event)
     if (event.type === 'exit') sessions.delete(event.id)
 }
+
 function session(id: unknown): Session {
     if (typeof id !== 'string' || !sessions.has(id)) throw new Error('Workspace is no longer running.')
     return sessions.get(id)!
 }
+
 function text(value: unknown): string {
     if (typeof value !== 'string' || value.length > 4_000_000) throw new Error('Invalid text.')
     return value
 }
+
 function integer(value: unknown, max = 1_000_000): number {
     if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > max) throw new Error('Invalid number.')
     return Number(value)
 }
+
 async function confirmClose(s: Session): Promise<boolean> {
     if (!(await s.modified())) return true
     const { response } = await dialog.showMessageBox(window, {

@@ -95,14 +95,17 @@ export default function App(): React.JSX.Element {
             setError(message.replace(/^Error: Error invoking remote method '[^']+': Error: /, '')),
         []
     )
+
     const focusEditor = (): void => {
         setPanel(null)
         setLeader(false)
         setFocusTick((n) => n + 1)
     }
+
     const run = (promise: Promise<unknown>): void => {
         void promise.catch((e) => report(String(e)))
     }
+
     const activate = (id: string): void => {
         setActive(id)
         focusEditor()
@@ -127,6 +130,7 @@ export default function App(): React.JSX.Element {
             }),
         [report]
     )
+
     useEffect(() => {
         let cancelled = false
         void window.nido
@@ -147,6 +151,7 @@ export default function App(): React.JSX.Element {
             cancelled = true
         }
     }, [report])
+
     useEffect(() => {
         if (!restoring)
             void window.nido
@@ -156,9 +161,11 @@ export default function App(): React.JSX.Element {
                 )
                 .catch((e) => report(String(e)))
     }, [workspaces, active, restoring, report])
+
     useEffect(() => {
         localStorage.setItem('nido.fontSize', String(fontSize))
     }, [fontSize])
+
     useEffect(() => {
         if (panel !== 'files' || !active) return
         let cancelled = false
@@ -196,6 +203,7 @@ export default function App(): React.JSX.Element {
             setFocusTick((n) => n + 1)
         }
     }
+
     const nextWorkspace = (offset: number): void => {
         if (!workspaces.length) return
         activate(
@@ -203,6 +211,7 @@ export default function App(): React.JSX.Element {
                 .id
         )
     }
+
     const moveWorkspace = (offset: number): void => {
         setWorkspaces((old) => {
             const index = old.findIndex((w) => w.id === active),
@@ -214,9 +223,11 @@ export default function App(): React.JSX.Element {
         })
         focusEditor()
     }
+
     const openFile = (path: string): void => {
         run(window.nido.openFile(active, path).then(focusEditor))
     }
+
     const closeWorkspace = (id: string): void => {
         run(
             window.nido.closeWorkspace(id).then(() => {
@@ -224,6 +235,7 @@ export default function App(): React.JSX.Element {
             })
         )
     }
+
     const showPanel = (value: Panel): void => {
         setLeader(false)
         setQuery('')
@@ -234,12 +246,14 @@ export default function App(): React.JSX.Element {
             setFileList([])
         }
     }
+
     const showExplorer = (): void => {
         setLeader(false)
         setPanel(null)
         setSidebar(true)
         requestAnimationFrame(() => document.querySelector<HTMLElement>('aside:not([hidden]) [role="tree"]')?.focus())
     }
+
     const commands: Item[] = [
         {
             key: 'w',

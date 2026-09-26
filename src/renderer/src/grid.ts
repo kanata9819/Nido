@@ -4,6 +4,7 @@ export interface Cell {
     text: string
     highlight: number
 }
+
 interface Highlight {
     foreground?: number
     background?: number
@@ -15,6 +16,7 @@ interface Highlight {
     reverse?: boolean
     strikethrough?: boolean
 }
+
 export class Grid {
     cells: Cell[][] = []
     highlights = new Map<number, Highlight>()

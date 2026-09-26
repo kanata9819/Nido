@@ -22,6 +22,7 @@ export default function Sidebar({ workspace, active, currentFile, onOpen, onErro
             onError(String(e))
         }
     }
+
     useEffect(() => {
         let cancelled = false
         window.nido
@@ -36,6 +37,7 @@ export default function Sidebar({ workspace, active, currentFile, onOpen, onErro
             cancelled = true
         }
     }, [workspace.id, onError])
+
     const visible: (FileEntry & { depth: number })[] = []
     const visit = (path: string, depth: number): void => {
         for (const entry of entries[path] || []) {
@@ -43,7 +45,7 @@ export default function Sidebar({ workspace, active, currentFile, onOpen, onErro
             if (entry.directory && expanded.has(entry.path)) visit(entry.path, depth + 1)
         }
     }
-    visit('', 0)
+
     const toggle = (entry: FileEntry): void => {
         setSelected(entry.path)
         if (!entry.directory) {
@@ -58,6 +60,9 @@ export default function Sidebar({ workspace, active, currentFile, onOpen, onErro
         }
         setExpanded(next)
     }
+
+    visit('', 0)
+
     return (
         <aside className={styles.sidebar} aria-label="File explorer" hidden={!active}>
             <div className={styles.sidebarHeading}>
