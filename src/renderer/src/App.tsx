@@ -15,7 +15,9 @@ import {
   Square,
   X
 } from 'lucide-react';
-import type { FileEntry, SessionState, Workspace } from '../../shared/types';
+import type { FileEntry, Panel, SessionState, Workspace } from '../../shared/types';
+import Editor from './Editor';
+import Sidebar from './Sidebar';
 import { buildItems, filename } from './commands';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { Panel as PanelComponent } from './components/Panel';
@@ -273,15 +275,17 @@ export default function App(): React.JSX.Element {
     requestAnimationFrame(() => document.querySelector<HTMLElement>('aside:not([hidden]) [role="tree"]')?.focus());
   };
 
-  const { commands, items, filtered } = buildItems(
-    active,
-    panel,
-    workspaces,
-    fileList,
-    state,
-    query,
-    { showPanel, moveWorkspace, run, focusEditor, closeWorkspace, create, showExplorer, openFile, activate }
-  );
+  const { commands, items, filtered } = buildItems(active, panel, workspaces, fileList, state, query, {
+    showPanel,
+    moveWorkspace,
+    run,
+    focusEditor,
+    closeWorkspace,
+    create,
+    showExplorer,
+    openFile,
+    activate
+  });
 
   const keydown = useKeyboardShortcuts({
     panel,
