@@ -2,25 +2,25 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #191e23;
+  background: #141414;
 }
 .titlebar {
-  height: 52px;
+  height: 38px;
   flex-shrink: 0;
   display: flex;
   align-items: stretch;
-  background: #171c20;
-  border-bottom: 1px solid #30383e;
+  background: #0e1012;
+  border-bottom: 1px solid #282c30;
   user-select: none;
 }
 .brand {
-  width: 133px;
+  width: 115px;
   flex-shrink: 0;
   display: flex;
   gap: 11px;
   align-items: center;
-  padding-left: 22px;
-  font-size: 17px;
+  padding-left: 14px;
+  font-size: 15px;
   font-weight: 600;
   -webkit-app-region: drag;
 }
@@ -34,7 +34,7 @@
   min-width: 0;
   overflow-x: auto;
   gap: 7px;
-  padding-top: 6px;
+  padding-top: 3px;
 }
 .workspaceTab {
   display: flex;
@@ -65,7 +65,7 @@
 }
 .activeWorkspace {
   border-color: #333d44;
-  background: #232a30;
+  background: #202326;
   box-shadow: inset 0 2px #a3cc94;
 }
 .workspaceDot,
@@ -116,20 +116,20 @@
   min-height: 0;
 }
 .rail {
-  width: 58px;
+  width: 42px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12px 0;
-  gap: 12px;
-  background: #181d21;
-  border-right: 1px solid #2b333a;
+  padding: 8px 0;
+  gap: 8px;
+  background: #101214;
+  border-right: 1px solid #25292d;
 }
 .rail button {
   position: relative;
-  width: 44px;
-  height: 42px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   color: #7e8b97;
@@ -144,7 +144,7 @@
   position: absolute;
   height: 28px;
   width: 3px;
-  left: -7px;
+  left: -4px;
   background: #a3cc94;
   border-radius: 0 2px 2px 0;
 }
@@ -156,8 +156,8 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: #1b2025;
-  border-right: 1px solid #2d353c;
+  background: #17191b;
+  border-right: 1px solid #282c30;
 }
 .sidebarHeading {
   height: 49px;
@@ -247,13 +247,13 @@
   display: flex;
   flex-shrink: 0;
   background: #1b2126;
-  border-bottom: 1px solid #30383f;
+  border-bottom: 1px solid #282c30;
   overflow-x: auto;
 }
 .fileTab {
   display: flex;
   flex-shrink: 0;
-  border-right: 1px solid #30383f;
+  border-right: 1px solid #282c30;
   min-width: 125px;
   max-width: 290px;
   border-top: 2px solid transparent;
@@ -278,7 +278,7 @@
   color: #9aa6b0;
 }
 .activeFile {
-  background: #191e23;
+  background: #141414;
   border-top-color: #a3cc94;
   color: #f0f1f4;
 }
@@ -337,8 +337,8 @@
   gap: 22px;
   align-items: center;
   padding: 0 15px;
-  border-top: 1px solid #30383f;
-  background: #1b2025;
+  border-top: 1px solid #282c30;
+  background: #17191b;
   flex-shrink: 0;
   font-size: 11px;
   color: #91a0ad;
@@ -356,6 +356,9 @@
   height: 13px;
   border-left: 1px solid #3a434b;
 }
+.mode[data-mode='INSERT'] { background: #86bddd; }
+.mode[data-mode='VISUAL'] { background: #c9a6e6; }
+.mode[data-mode='COMMAND'] { background: #dbb98b; }
 .statusGap {
   flex: 1;
 }
@@ -412,7 +415,7 @@
 .workspaceWelcome {
   position: absolute;
   inset: 0 0 36px;
-  background: #191e23;
+  background: #141414;
   overflow: auto;
 }
 .eyebrow {
@@ -477,7 +480,7 @@
   right: 25px;
   width: 405px;
   border: 1px solid #3a454d;
-  background: #20272df5;
+  background: #1b1e21f5;
   border-radius: 11px;
   box-shadow: 0 10px 40px #0005;
   padding: 18px;
@@ -544,7 +547,7 @@
   flex-direction: column;
   border: 1px solid #435049;
   border-radius: 11px;
-  background: #20272d;
+  background: #1b1e21;
   box-shadow: 0 22px 80px #0007;
   overflow: hidden;
 }
@@ -561,7 +564,7 @@
   color: #7d8b97;
 }
 .paletteInput {
-  background: #181f24;
+  background: #121416;
   color: #e0e7eb;
   margin: 0 12px 10px;
   padding: 13px 14px;

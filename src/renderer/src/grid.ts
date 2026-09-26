@@ -167,6 +167,12 @@ export class Grid {
         }
       }
     }
+    if (focused && !this.busy && /^(normal|insert|replace|visual)/.test(this.mode) && this.cursor.row < this.rows) {
+      const y = this.cursor.row * cellHeight;
+      ctx.fillStyle = '#46515c';
+      ctx.fillRect(0, y, width, 1);
+      ctx.fillRect(0, y + cellHeight - 1, width, 1);
+    }
     this.drawCursor(ctx, cellWidth, cellHeight, focused);
     return { cellWidth, cellHeight };
   }

@@ -57,6 +57,13 @@ test('normal shutdown restores workspace order, active file and cursors', async 
       )
       .toBe(true);
     await page.screenshot({ path: 'test-results/nido-rust-highlights.png' });
+    await expect.poll(() => page.locator('canvas:visible').evaluate((element) => {
+      const canvas = element as HTMLCanvasElement;
+      const scale = window.devicePixelRatio || 1;
+      const ctx = canvas.getContext('2d')!;
+      const sample = (y: number): string => Array.from(ctx.getImageData(canvas.width - 2, Math.floor((y + 0.5) * scale), 1, 1).data).slice(0, 3).join(',');
+      return [sample(0), sample(24), sample(12)];
+    })).toEqual(['70,81,92', '70,81,92', '20,20,20']);
     await expect(page.getByTitle('Rust language server connection')).toHaveText('rust_analyzer');
     await page.keyboard.type(":lua vim.lsp.handlers['$/progress'](nil, {token='nido-ui-test',value={kind='begin',title='Indexing',message='example_crate',percentage=42}}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})");
     await page.keyboard.press('Enter');
@@ -65,6 +72,12 @@ test('normal shutdown restores workspace order, active file and cursors', async 
     await page.keyboard.type(":lua vim.lsp.handlers['$/progress'](nil, {token='nido-ui-test',value={kind='end'}}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})");
     await page.keyboard.press('Enter');
     await expect(page.getByRole('status').filter({ hasText: 'example_crate' })).toHaveCount(0);
+    await page.keyboard.type(":lua vim.lsp.util.open_floating_preview({'# Nido documentation', '', '**Markdown preview**'}, 'markdown', {})");
+    await page.keyboard.press('Enter');
+    await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /Markdown preview/);
+    await expect(page.locator('canvas:visible')).not.toHaveAttribute('aria-description', /Parser could not be created|Error executing/);
+    await page.screenshot({ path: 'test-results/nido-documentation.png' });
+    await page.keyboard.press('j');
     for (const [file, keys] of [
       ['a.txt', '3G4l'],
       ['b.txt', 'gg6l']
@@ -92,6 +105,7 @@ test('normal shutdown restores workspace order, active file and cursors', async 
     await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
     await page.keyboard.press('i');
     await expect(page.getByText('INSERT', { exact: true })).toBeVisible();
+    await expect(page.getByText('INSERT', { exact: true })).toHaveCSS('background-color', 'rgb(134, 189, 221)');
     await page.keyboard.press('Shift+H');
     await page.keyboard.press('Shift+L');
     await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /HL/);
@@ -201,6 +215,7 @@ test('keyboard-only workspace switching, editing, saving and dirty-close guard',
     await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /smoke test/);
     await page.keyboard.press('Control+v');
     await expect(page.getByText('VISUAL', { exact: true })).toBeVisible();
+    await expect(page.getByText('VISUAL', { exact: true })).toHaveCSS('background-color', 'rgb(201, 166, 230)');
     await page.keyboard.press('Escape');
     await page.keyboard.type('Go');
     await page.locator('textarea:visible').evaluate((element) => {

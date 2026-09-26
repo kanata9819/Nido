@@ -83,6 +83,11 @@ export default function App(): React.JSX.Element {
     mode = useRef<Record<string, string>>({});
   const active = workspaces.some((w) => w.id === selectedWorkspace) ? selectedWorkspace : workspaces[0]?.id || '';
   const state = states[active] || defaultState;
+  const displayMode = state.mode.startsWith('i')
+    ? 'INSERT'
+    : state.mode.startsWith('v') || state.mode === 'V' || state.mode === '\u0016'
+      ? 'VISUAL'
+      : state.mode.startsWith('c') ? 'COMMAND' : 'NORMAL';
   const workspace = workspaces.find((w) => w.id === active);
   const current = state.buffers.find((b) => b.id === state.current);
   const report = useCallback(
@@ -531,14 +536,8 @@ export default function App(): React.JSX.Element {
         </main>
       </div>
       <footer className={styles.statusbar}>
-        <span className={styles.mode}>
-          {state.mode.startsWith('i')
-            ? 'INSERT'
-            : state.mode.startsWith('v') || state.mode === 'V' || state.mode === '\u0016'
-              ? 'VISUAL'
-              : state.mode.startsWith('c')
-                ? 'COMMAND'
-                : 'NORMAL'}
+        <span className={styles.mode} data-mode={displayMode}>
+          {displayMode}
         </span>
         <span className={styles.statusWorkspace}>{workspace?.name || 'Welcome to Nido'}</span>
         <span className={styles.statusDivider} />

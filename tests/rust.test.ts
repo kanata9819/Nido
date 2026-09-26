@@ -29,6 +29,10 @@ test('Rust syntax and real rust-analyzer navigation, completion and diagnostics'
       session!.client.request('nvim_exec_lua', [code, args]);
     assert.deepEqual(await lua('return {vim.bo.filetype, vim.bo.syntax}'), ['rust', 'rust']);
     assert.equal(await lua("return vim.fn.synIDattr(vim.fn.synIDtrans(vim.fn.synID(2, 1, 1)), 'fg#')"), '#569cd6');
+    assert.equal(await lua("return vim.fn.synIDattr(vim.fn.synIDtrans(vim.fn.synID(1, 1, 1)), 'fg#')"), '#569cd6');
+    assert.equal(await lua("return vim.fn.synIDattr(vim.fn.synIDtrans(vim.fn.synID(1, 5, 1)), 'fg#')"), '#4ec9b0');
+    assert.equal(await lua("return vim.api.nvim_get_hl(0, {name='@lsp.type.namespace.rust', link=false}).fg"), 0x4ec9b0);
+    assert.equal(await lua("return vim.api.nvim_get_hl(0, {name='@lsp.type.parameter', link=false}).fg"), 0xffd602);
     const params = {
       textDocument: { uri: pathToFileURL(join(root, 'src/main.rs')).href },
       position: { line: 2, character: 18 }

@@ -28,42 +28,20 @@ vim.diagnostic.config({
   update_in_insert = false,
   float = { border = 'rounded', source = true },
 })
-local colors = {
- Normal = {fg='#d6dce2',bg='#191e23'}, NormalFloat = {fg='#d6dce2',bg='#22292f'},
- LineNr = {fg='#65717d'}, CursorLineNr = {fg='#a8cf9e'},
- -- Dark+ style token colors, with Nido's existing editor background.
- Comment = {fg='#6a9955'}, SpecialComment = {link='Comment'},
- String = {fg='#ce9178'}, Character = {link='String'},
- Statement = {fg='#c586c0'}, Keyword = {fg='#569cd6'}, Type = {fg='#4ec9b0'},
- StorageClass = {link='Keyword'}, Structure = {link='Keyword'},
- Function = {fg='#dcdcaa'}, Identifier = {fg='#9cdcfe'}, Number = {fg='#b5cea8'},
- Float = {link='Number'}, Boolean = {link='Keyword'}, Constant = {fg='#4fc1ff'},
- Operator = {fg='#d4d4d4'}, Delimiter = {fg='#d4d4d4'},
- PreProc = {fg='#c586c0'}, Macro = {link='Function'},
- Special = {fg='#d7ba7d'}, Visual = {bg='#35464e'}, Search = {fg='#191e23',bg='#d6bc87'},
- rustModPath = {fg='#d4d4d4'}, rustSelf = {link='Keyword'},
- rustAssert = {link='Function'}, rustPanic = {link='Function'},
- Pmenu = {fg='#d6dce2',bg='#252e35'}, PmenuSel = {fg='#191e23',bg='#a8cf9e'},
- NonText = {fg='#46515c'}, EndOfBuffer = {fg='#191e23'},
- DiagnosticError = {fg='#ee8790'}, DiagnosticWarn = {fg='#dbb98b'},
- DiagnosticInfo = {fg='#86bddd'}, DiagnosticHint = {fg='#a8cf9e'},
- DiagnosticUnderlineError = {undercurl=true,sp='#ee8790'},
- DiagnosticUnderlineWarn = {undercurl=true,sp='#dbb98b'},
- ['@lsp.type.function.rust'] = {link='Function'},
- ['@lsp.type.method.rust'] = {link='Function'},
- ['@lsp.type.struct.rust'] = {link='Type'},
- ['@lsp.type.enum.rust'] = {link='Type'},
- ['@lsp.type.interface.rust'] = {link='Type'},
- ['@lsp.type.typeParameter.rust'] = {link='Type'},
- ['@lsp.type.macro.rust'] = {link='Function'},
- ['@lsp.type.parameter.rust'] = {link='Identifier'},
- ['@lsp.type.variable.rust'] = {link='Identifier'},
- ['@lsp.type.enumMember.rust'] = {link='Constant'},
- ['@lsp.type.property.rust'] = {link='Identifier'},
- ['@lsp.type.namespace.rust'] = {fg='#d4d4d4'},
-}
-for name, attrs in pairs(colors) do vim.api.nvim_set_hl(0, name, attrs) end
-
+-- Bundle only Azami and its theme dependency; personal plugins stay isolated.
+vim.opt.runtimepath:append(vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':h'))
+vim.cmd('colorscheme azami')
+-- Darken surfaces without changing Azami's token colors.
+for _, name in ipairs({'Normal', 'NormalNC', 'LineNr', 'CursorLineNr', 'SignColumn', 'EndOfBuffer'}) do
+  local attrs = vim.api.nvim_get_hl(0, {name=name, link=false})
+  attrs.bg = '#141414'
+  if name == 'EndOfBuffer' then attrs.fg = '#141414' end
+  vim.api.nvim_set_hl(0, name, attrs)
+end
+-- Native Rust syntax and LSP use these groups without a Rust Tree-sitter parser.
+vim.api.nvim_set_hl(0, 'rustKeyword', {link='@keyword'})
+vim.api.nvim_set_hl(0, '@lsp.type.namespace.rust', {link='@module'})
+vim.api.nvim_set_hl(0, '@lsp.type.macro.rust', {link='@function.macro'})
 vim.api.nvim_create_autocmd('LspAttach', {
   callback = function(event)
     local opts = { buffer = event.buf }

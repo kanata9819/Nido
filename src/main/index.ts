@@ -27,7 +27,7 @@ app.whenReady().then(() => {
     height: 940,
     minWidth: 850,
     minHeight: 560,
-    backgroundColor: '#191e23',
+    backgroundColor: '#141414',
     frame: false,
     show: false,
     webPreferences: {

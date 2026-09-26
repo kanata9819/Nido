@@ -58,7 +58,19 @@ test('Nido uses bundled Neovim and isolated config', async () => {
       assert(found, 'Nido init.lua must be sourced')
       assert(vim.v.progpath:match('nvim%-win64[/\\\\]bin[/\\\\]nvim.exe$'))
       assert(package.loaded.lazy == nil and package.loaded.noice == nil)
-      assert(#vim.opt.runtimepath:get() == 1)
+      local paths = vim.opt.runtimepath:get()
+      assert(#paths == 3)
+      assert(vim.g.colors_name == 'azami')
+      assert(vim.api.nvim_get_hl(0, {name='Normal'}).bg == 0x141414)
+      assert(paths[1] == vim.env.VIMRUNTIME)
+      assert(paths[2] == vim.fn.fnamemodify(vim.v.progpath, ':h:h') .. '/lib/nvim')
+      for _, language in ipairs({'markdown', 'markdown_inline', 'c', 'lua', 'query', 'vim', 'vimdoc'}) do
+        assert(vim.treesitter.language.add(language), language .. ' parser must load')
+      end
+      local fence = string.rep(string.char(96), 3)
+      local buf, win = vim.lsp.util.open_floating_preview({'# Documentation', '', '**hello**', '', fence .. 'rust', 'fn example() {}', fence}, 'markdown', {})
+      assert(vim.treesitter.get_parser(buf):parse()[1])
+      vim.api.nvim_win_close(win, true)
       return {vim.g.nido, vim.o.showtabline, vim.o.laststatus, vim.o.showmode}`,
       []
     ]);

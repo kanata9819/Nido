@@ -104,7 +104,8 @@ export class Session {
         '-u',
         resolve(resources, 'nido/init.lua'),
         '--cmd',
-        'lua vim.opt.runtimepath = {vim.env.VIMRUNTIME}; vim.opt.packpath = {}'
+        // Keep bundled parser DLLs discoverable while excluding personal config.
+        "lua vim.opt.runtimepath = {vim.env.VIMRUNTIME, vim.fn.fnamemodify(vim.v.progpath, ':h:h') .. '/lib/nvim'}; vim.opt.packpath = {}"
       ],
       {
         cwd: root,
