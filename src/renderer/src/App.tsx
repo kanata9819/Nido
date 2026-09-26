@@ -765,9 +765,8 @@ export default function App(): React.JSX.Element {
                 <p>
                   Vim editing · Space commands · Ctrl+Tab workspaces
                   <br />
-                  Your personal Neovim configuration is untouched.
-                  <br />
-                  This preview starts Neovim with --clean.
+                  Nido includes its own Neovim and editor settings. Personal Neovim config is not
+                  loaded.
                 </p>
               </div>
             ) : (

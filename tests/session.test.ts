@@ -7,6 +7,30 @@ import { Session } from '../src/main/session'
 import { Grid, vimKey } from '../src/renderer/src/grid'
 import { readLayout, writeLayout } from '../src/main/persistence'
 
+test('Nido uses bundled Neovim and isolated config', async () => {
+  const session = await Session.create(process.cwd(), () => {})
+  try {
+    await session.attach(80, 24)
+    const result = await session.client.request('nvim_exec_lua', [
+      `assert(vim.wait(5000, function() return vim.v.vim_did_enter == 1 end))
+      assert(vim.env.NVIM_APPNAME == 'nido')
+      local found = false
+      for _, script in ipairs(vim.fn.getscriptinfo()) do
+        if script.name:match('nido[/\\\\]init.lua$') then found = true end
+      end
+      assert(found, 'Nido init.lua must be sourced')
+      assert(vim.v.progpath:match('nvim%-win64[/\\\\]bin[/\\\\]nvim.exe$'))
+      assert(package.loaded.lazy == nil and package.loaded.noice == nil)
+      assert(#vim.opt.runtimepath:get() == 1)
+      return {vim.g.nido, vim.o.showtabline, vim.o.laststatus, vim.o.showmode}`,
+      []
+    ])
+    assert.deepEqual(result, [true, 0, 0, false])
+  } finally {
+    await session.stop()
+  }
+})
+
 test('workspace snapshot restores each cursor and tolerates missing files', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-restore-'))
   const sessions: Session[] = []
@@ -34,6 +58,7 @@ test('workspace snapshot restores each cursor and tolerates missing files', asyn
     const restored = await Session.create(root, () => {})
     sessions.push(restored)
     assert.deepEqual(await restored.restore((await readLayout(path)).workspaces[0]), [])
+    await restored.attach(90, 30)
     assert.deepEqual(await restored.snapshot(), snapshot)
     await restored.stop()
     await writeFile(join(root, 'first.txt'), 'short\n')

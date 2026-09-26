@@ -5,6 +5,7 @@ import { readLayout, writeLayout } from './persistence'
 import type { NidoEvent, Workspace } from '../shared/types'
 
 const sessions = new Map<string, Session>()
+const neovimResources = app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources')
 let window: BrowserWindow
 let closing = false
 let prompting = false
@@ -116,7 +117,7 @@ app.whenReady().then(() => {
         const saved = await readLayout(join(app.getPath('userData'), 'workspaces.json'))
         for (const [index, workspace] of saved.workspaces.entries()) {
           try {
-            const s = await Session.create(workspace.root, send)
+            const s = await Session.create(workspace.root, send, neovimResources)
             sessions.set(s.workspace.id, s)
             errors.push(...(await s.restore(workspace)))
             if (index === saved.active) active = s.workspace.id
@@ -151,7 +152,7 @@ app.whenReady().then(() => {
       properties: ['openDirectory']
     })
     if (result.canceled) return null
-    const s = await Session.create(result.filePaths[0], send)
+    const s = await Session.create(result.filePaths[0], send, neovimResources)
     sessions.set(s.workspace.id, s)
     return s.workspace
   })

@@ -13,34 +13,6 @@ import type {
 } from '../shared/types'
 
 const setup = `
-vim.o.termguicolors = true
-vim.o.number = true
-vim.o.relativenumber = false
-vim.o.showmode = false
-vim.o.laststatus = 0
-vim.o.showtabline = 0
-vim.o.mouse = ''
-vim.o.hidden = true
-vim.o.expandtab = true
-vim.o.shiftwidth = 2
-vim.o.tabstop = 2
-vim.o.ignorecase = true
-vim.o.smartcase = true
-vim.o.scrolloff = 5
-vim.o.signcolumn = 'yes'
-vim.o.fillchars = 'eob: '
-vim.cmd('syntax enable')
-local colors = {
- Normal = {fg='#d6dce2',bg='#191e23'}, NormalFloat = {fg='#d6dce2',bg='#22292f'},
- LineNr = {fg='#65717d'}, CursorLineNr = {fg='#a8cf9e'},
- Comment = {fg='#75828c',italic=true}, String = {fg='#a8cf9e'},
- Statement = {fg='#c9a6e6'}, Keyword = {fg='#c9a6e6'}, Type = {fg='#86bddd'},
- Function = {fg='#88c8dc'}, Identifier = {fg='#b9cee4'}, Number = {fg='#dbb98b'},
- Special = {fg='#dbb98b'}, Visual = {bg='#35464e'}, Search = {fg='#191e23',bg='#d6bc87'},
- Pmenu = {fg='#d6dce2',bg='#252e35'}, PmenuSel = {fg='#191e23',bg='#a8cf9e'},
- NonText = {fg='#46515c'}, EndOfBuffer = {fg='#191e23'},
-}
-for name, attrs in pairs(colors) do vim.api.nvim_set_hl(0, name, attrs) end
 local channel = ...
 local pending = false
 local function publish()
@@ -88,14 +60,35 @@ export class Session {
 
   private constructor(
     root: string,
-    private emit: (event: NidoEvent) => void
+    private emit: (event: NidoEvent) => void,
+    resources: string
   ) {
     this.workspace = { id: randomUUID(), root, name: basename(root) || root }
-    this.process = spawn(process.env.NIDO_NVIM || 'nvim', ['--embed', '--clean'], {
-      cwd: root,
-      windowsHide: true,
-      stdio: 'pipe'
-    })
+    this.process = spawn(
+      resolve(resources, 'nvim-win64/bin/nvim.exe'),
+      [
+        '--embed',
+        '--noplugin',
+        '-i',
+        'NONE',
+        '-u',
+        resolve(resources, 'nido/init.lua'),
+        '--cmd',
+        'lua vim.opt.runtimepath = {vim.env.VIMRUNTIME}; vim.opt.packpath = {}'
+      ],
+      {
+        cwd: root,
+        env: {
+          ...process.env,
+          NVIM_APPNAME: 'nido',
+          VIMRUNTIME: resolve(resources, 'nvim-win64/share/nvim/runtime'),
+          VIMINIT: '',
+          EXINIT: ''
+        },
+        windowsHide: true,
+        stdio: 'pipe'
+      }
+    )
     this.client = attach({ proc: this.process })
     this.client.on('notification', (method: string, args: unknown[]) => {
       if (method === 'redraw') {
@@ -122,21 +115,41 @@ export class Session {
     )
   }
 
-  static async create(root: string, emit: (event: NidoEvent) => void): Promise<Session> {
+  static async create(
+    root: string,
+    emit: (event: NidoEvent) => void,
+    resources = resolve(__dirname, '../../resources')
+  ): Promise<Session> {
     const actual = await realpath(root)
     if (!(await stat(actual)).isDirectory()) throw new Error('Choose a project folder.')
-    const session = new Session(actual, emit)
+    for (const file of ['nvim-win64/bin/nvim.exe', 'nido/init.lua']) {
+      try {
+        await stat(resolve(resources, file))
+      } catch {
+        throw new Error(
+          `Bundled Neovim is missing: ${file}. Reinstall Nido, or run pnpm prepare:neovim in development.`
+        )
+      }
+    }
+    const session = new Session(actual, emit, resources)
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
       await Promise.race([
         (async () => {
           const api = (await session.client.request('nvim_get_api_info', [])) as [number, unknown]
           await session.client.request('nvim_exec_lua', [setup, [api[0]]])
+          // Embedded Neovim loads init.lua only after a UI attaches. Finish startup
+          // before restoring buffers so startup cannot reset their cursor positions.
+          await session.attach(80, 24)
+          await session.client.request('nvim_exec_lua', [
+            'assert(vim.wait(10000, function() return vim.v.vim_did_enter == 1 end), "Neovim startup timed out")',
+            []
+          ])
         })(),
         new Promise<never>((_, reject) => {
           session.process.once('error', reject)
           timer = setTimeout(
-            () => reject(new Error('Neovim did not start. Install nvim on PATH or set NIDO_NVIM.')),
+            () => reject(new Error('Bundled Neovim did not start. Check the Nido installation.')),
             12000
           )
         })
@@ -151,7 +164,12 @@ export class Session {
   }
 
   async attach(columns: number, rows: number): Promise<void> {
-    if (this.attached) return
+    if (this.attached) {
+      await this.resize(columns, rows)
+      await this.client.request('nvim_command', ['redraw!'])
+      this.emit({ type: 'state', id: this.workspace.id, state: this.state })
+      return
+    }
     this.attached = true
     try {
       await this.client.request('nvim_ui_attach', [

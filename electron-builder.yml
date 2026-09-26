@@ -3,15 +3,25 @@ productName: nido
 directories:
   buildResources: build
 files:
+  - '!resources/**'
+  - '!scripts/**'
+  - '!tests/**'
+  - '!.downloads/**'
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
-asarUnpack:
-  - resources/**
+extraResources:
+  - from: resources/nvim-win64
+    to: nvim-win64
+  - from: resources/nido
+    to: nido
 win:
+  target:
+    - target: nsis
+      arch: [x64]
   executableName: nido
 nsis:
   artifactName: ${name}-${version}-setup.${ext}

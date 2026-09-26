@@ -7,14 +7,19 @@ test('normal shutdown restores workspace order, active file and cursors', async 
   const root = await mkdtemp(join(tmpdir(), 'nido-restart-'))
   const env = { ...process.env }
   delete env.ELECTRON_RUN_AS_NODE
-  const args = ['.', `--user-data-dir=${join(root, 'profile')}`]
+  const executablePath = process.env.NIDO_PACKAGED_EXE
+  if (executablePath) {
+    for (const key of Object.keys(env)) if (key.toLowerCase() === 'path') env[key] = ''
+    env.VIMINIT = 'lua error("Personal configuration must not run")'
+  }
+  const args = [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`]
   let running: Awaited<ReturnType<typeof electron.launch>> | undefined
   try {
     await mkdir(join(root, 'One'))
     await mkdir(join(root, 'Two'))
     await writeFile(join(root, 'One', 'a.txt'), 'first line\nsecond line\nthird line\n')
     await writeFile(join(root, 'One', 'b.txt'), 'another line\n')
-    running = await electron.launch({ args, env })
+    running = await electron.launch({ executablePath, args, env })
     let page = await running.firstWindow()
     await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible()
     await running.evaluate(
@@ -46,7 +51,7 @@ test('normal shutdown restores workspace order, active file and cursors', async 
       void window.nido.windowAction('close')
     })
     await closed
-    running = await electron.launch({ args, env })
+    running = await electron.launch({ executablePath, args, env })
     page = await running.firstWindow()
     await expect(page.getByRole('tab', { name: 'Workspace Two', exact: true })).toHaveAttribute(
       'aria-selected',
@@ -80,8 +85,14 @@ test('keyboard-only workspace switching, editing, saving and dirty-close guard',
   await writeFile(join(root, 'Nido', 'App.tsx'), 'export default function App() { return null }\n')
   const env = { ...process.env }
   delete env.ELECTRON_RUN_AS_NODE
+  const executablePath = process.env.NIDO_PACKAGED_EXE
+  if (executablePath) {
+    for (const key of Object.keys(env)) if (key.toLowerCase() === 'path') env[key] = ''
+    env.VIMINIT = 'lua error("Personal configuration must not run")'
+  }
   const app = await electron.launch({
-    args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+    executablePath,
+    args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
     env
   })
   try {

@@ -7,3 +7,6 @@ out
 
 /test-results/
 /playwright-report/
+/.downloads/
+/resources/nvim-win64/
+.nvimlog
