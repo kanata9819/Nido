@@ -3,6 +3,72 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+test('normal shutdown restores workspace order, active file and cursors', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-restart-'))
+  const env = { ...process.env }
+  delete env.ELECTRON_RUN_AS_NODE
+  const args = ['.', `--user-data-dir=${join(root, 'profile')}`]
+  let running: Awaited<ReturnType<typeof electron.launch>> | undefined
+  try {
+    await mkdir(join(root, 'One'))
+    await mkdir(join(root, 'Two'))
+    await writeFile(join(root, 'One', 'a.txt'), 'first line\nsecond line\nthird line\n')
+    await writeFile(join(root, 'One', 'b.txt'), 'another line\n')
+    running = await electron.launch({ args, env })
+    let page = await running.firstWindow()
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible()
+    await running.evaluate(
+      ({ dialog }, paths) => {
+        let i = 0
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [paths[i++]] })
+      },
+      [join(root, 'One'), join(root, 'Two')]
+    )
+    await page.keyboard.press('Control+Shift+n')
+    await expect(page.getByRole('tab', { name: 'Workspace One', exact: true })).toBeVisible()
+    for (const [file, keys] of [
+      ['a.txt', '3G4l'],
+      ['b.txt', 'gg6l']
+    ]) {
+      await page.keyboard.press('Control+p')
+      await page.getByRole('textbox', { name: 'Filter items' }).fill(file)
+      await page.keyboard.press('Enter')
+      await expect(page.getByRole('tab', { name: file, exact: true })).toBeVisible()
+      await page.keyboard.type(keys)
+    }
+    await expect(page.getByText('Ln 1, Col 7', { exact: true })).toBeVisible()
+    await page.keyboard.press('Control+Shift+n')
+    await expect(page.getByRole('tab', { name: 'Workspace Two', exact: true })).toBeVisible()
+    await page.keyboard.press('Space')
+    await page.keyboard.press('h')
+    const closed = running.waitForEvent('close')
+    await page.evaluate(() => {
+      void window.nido.windowAction('close')
+    })
+    await closed
+    running = await electron.launch({ args, env })
+    page = await running.firstWindow()
+    await expect(page.getByRole('tab', { name: 'Workspace Two', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    await page.keyboard.press('Alt+2')
+    await expect(page.getByRole('tab', { name: 'Workspace One', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    await expect(page.getByText('Ln 1, Col 7', { exact: true })).toBeVisible()
+    await page.getByRole('tab', { name: 'a.txt', exact: true }).click()
+    await expect(page.getByText('Ln 3, Col 5', { exact: true })).toBeVisible()
+  } finally {
+    if (running) {
+      await running.evaluate(({ app }) => app.exit(0)).catch(() => {})
+      await running.close()
+    }
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test('keyboard-only workspace switching, editing, saving and dirty-close guard', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-e2e-'))
   await mkdir(join(root, 'Nido'))

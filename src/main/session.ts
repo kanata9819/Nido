@@ -3,7 +3,14 @@ import { realpath, readdir, stat } from 'node:fs/promises'
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { attach, type NeovimClient } from 'neovim'
-import type { FileEntry, NidoEvent, Redraw, SessionState, Workspace } from '../shared/types'
+import type {
+  FileEntry,
+  NidoEvent,
+  Redraw,
+  SavedWorkspace,
+  SessionState,
+  Workspace
+} from '../shared/types'
 
 const setup = `
 vim.o.termguicolors = true
@@ -179,6 +186,50 @@ export class Session {
   }
   async save(): Promise<void> {
     await this.write('write')
+  }
+  async snapshot(): Promise<SavedWorkspace> {
+    const data = (await this.client.request('nvim_exec_lua', [
+      `local files = {}
+      for _, b in ipairs(vim.api.nvim_list_bufs()) do
+        local name = vim.api.nvim_buf_get_name(b)
+        if vim.bo[b].buflisted and vim.bo[b].buftype == '' and name ~= '' then
+          local pos = vim.api.nvim_buf_get_mark(b, '"')
+          local wins = vim.fn.win_findbuf(b)
+          if #wins > 0 then pos = vim.api.nvim_win_get_cursor(wins[1]) end
+          table.insert(files, {path=name, line=math.max(1,pos[1]), column=pos[2]})
+        end
+      end
+      return {files=files, current=vim.api.nvim_buf_get_name(0)}`,
+      []
+    ])) as Omit<SavedWorkspace, 'root'>
+    return {
+      root: this.workspace.root,
+      ...data,
+      files: Array.isArray(data.files) ? data.files : []
+    }
+  }
+  async restore(saved: SavedWorkspace): Promise<string[]> {
+    const errors: string[] = []
+    for (const file of saved.files) {
+      try {
+        if (!(await stat(file.path)).isFile()) throw new Error('File is unavailable.')
+        await this.client.request('nvim_exec_lua', [
+          `local path, line, column = ...
+          vim.cmd.edit(vim.fn.fnameescape(path))
+          line = math.min(line, vim.api.nvim_buf_line_count(0))
+          vim.api.nvim_win_set_cursor(0, {line, column})`,
+          [file.path, file.line, file.column]
+        ])
+      } catch (error) {
+        errors.push(`${file.path}: ${String(error)}`)
+      }
+    }
+    await this.client.request('nvim_exec_lua', [
+      `local b = vim.fn.bufnr(...)
+      if b > 0 then vim.api.nvim_set_current_buf(b) end`,
+      [saved.current]
+    ])
+    return errors
   }
   async modified(): Promise<boolean> {
     return (await this.client.request('nvim_exec_lua', [

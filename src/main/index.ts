@@ -1,12 +1,16 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu } from 'electron'
 import { join } from 'node:path'
 import { Session } from './session'
-import type { NidoEvent } from '../shared/types'
+import { readLayout, writeLayout } from './persistence'
+import type { NidoEvent, Workspace } from '../shared/types'
 
 const sessions = new Map<string, Session>()
 let window: BrowserWindow
 let closing = false
 let prompting = false
+let order: string[] = []
+let active = ''
+let restoration: Promise<{ workspaces: Workspace[]; active: string; errors: string[] }> | undefined
 const send = (event: NidoEvent): void => {
   if (window && !window.isDestroyed()) window.webContents.send('nido:event', event)
   if (event.type === 'exit') sessions.delete(event.id)
@@ -75,7 +79,17 @@ app.whenReady().then(() => {
     prompting = true
     void (async () => {
       try {
+        if (restoration) await restoration
         for (const s of sessions.values()) if (!(await confirmClose(s))) return
+        const ids = [
+          ...order.filter((id) => sessions.has(id)),
+          ...[...sessions.keys()].filter((id) => !order.includes(id))
+        ]
+        await writeLayout(join(app.getPath('userData'), 'workspaces.json'), {
+          version: 1,
+          workspaces: await Promise.all(ids.map((id) => session(id).snapshot())),
+          active: Math.max(0, ids.indexOf(active))
+        })
         closing = true
         await Promise.all([...sessions.values()].map((s) => s.stop()))
         window.close()
@@ -95,6 +109,42 @@ app.whenReady().then(() => {
       return fn(...args)
     })
   }
+  handle('restore', () => {
+    restoration ??= (async () => {
+      const errors: string[] = []
+      try {
+        const saved = await readLayout(join(app.getPath('userData'), 'workspaces.json'))
+        for (const [index, workspace] of saved.workspaces.entries()) {
+          try {
+            const s = await Session.create(workspace.root, send)
+            sessions.set(s.workspace.id, s)
+            errors.push(...(await s.restore(workspace)))
+            if (index === saved.active) active = s.workspace.id
+          } catch (error) {
+            errors.push(`${workspace.root}: ${String(error)}`)
+          }
+        }
+      } catch (error) {
+        errors.push(`Workspace restore failed: ${String(error)}`)
+      }
+      order = [...sessions.keys()]
+      active ||= order[0] || ''
+      return { workspaces: [...sessions.values()].map((s) => s.workspace), active, errors }
+    })()
+    return restoration
+  })
+  handle('layout', (ids, selected) => {
+    if (
+      !Array.isArray(ids) ||
+      !ids.every((id) => typeof id === 'string' && sessions.has(id)) ||
+      new Set(ids).size !== ids.length ||
+      typeof selected !== 'string' ||
+      (selected !== '' && !ids.includes(selected))
+    )
+      throw new Error('Invalid workspace layout.')
+    order = ids
+    active = selected
+  })
   handle('create', async () => {
     const result = await dialog.showOpenDialog(window, {
       title: 'Open a workspace in Nido',

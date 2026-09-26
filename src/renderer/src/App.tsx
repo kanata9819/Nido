@@ -49,6 +49,7 @@ export default function App(): React.JSX.Element {
   const [fileList, setFileList] = useState<FileEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [restoring, setRestoring] = useState(true)
   const [error, setError] = useState('')
   const [focusTick, setFocusTick] = useState(0)
   const [sidebar, setSidebar] = useState(true)
@@ -102,6 +103,35 @@ export default function App(): React.JSX.Element {
     [report]
   )
   useEffect(() => {
+    let cancelled = false
+    void window.nido
+      .restoreWorkspaces()
+      .then((result) => {
+        if (cancelled) return
+        setWorkspaces(result.workspaces)
+        setActive(result.active)
+        if (result.errors.length) report(result.errors.join('\n'))
+      })
+      .catch((e) => {
+        if (!cancelled) report(String(e))
+      })
+      .finally(() => {
+        if (!cancelled) setRestoring(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [report])
+  useEffect(() => {
+    if (!restoring)
+      void window.nido
+        .workspaceLayout(
+          workspaces.map((w) => w.id),
+          active
+        )
+        .catch((e) => report(String(e)))
+  }, [workspaces, active, restoring, report])
+  useEffect(() => {
     localStorage.setItem('nido.fontSize', String(fontSize))
   }, [fontSize])
   useEffect(() => {
@@ -124,7 +154,7 @@ export default function App(): React.JSX.Element {
   }, [panel, active, report])
 
   const create = async (): Promise<void> => {
-    if (creating) return
+    if (creating || restoring) return
     setCreating(true)
     setLeader(false)
     setPanel(null)

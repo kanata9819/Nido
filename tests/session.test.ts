@@ -5,6 +5,52 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Session } from '../src/main/session'
 import { Grid, vimKey } from '../src/renderer/src/grid'
+import { readLayout, writeLayout } from '../src/main/persistence'
+
+test('workspace snapshot restores each cursor and tolerates missing files', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-restore-'))
+  const sessions: Session[] = []
+  try {
+    await writeFile(join(root, 'first.txt'), 'first line\nsecond line\nthird line\n')
+    await writeFile(join(root, 'second.txt'), 'another file\n')
+    const first = await Session.create(root, () => {})
+    sessions.push(first)
+    await first.openFile('first.txt')
+    await first.client.request('nvim_win_set_cursor', [0, [3, 4]])
+    await first.openFile('second.txt')
+    await first.client.request('nvim_win_set_cursor', [0, [1, 6]])
+    const snapshot = await first.snapshot()
+    assert.deepEqual(
+      snapshot.files.map((f) => [f.line, f.column]),
+      [
+        [3, 4],
+        [1, 6]
+      ]
+    )
+    const path = join(root, 'workspaces.json')
+    assert.deepEqual((await readLayout(path)).workspaces, [])
+    await writeLayout(path, { version: 1, workspaces: [snapshot], active: 0 })
+    await first.stop()
+    const restored = await Session.create(root, () => {})
+    sessions.push(restored)
+    assert.deepEqual(await restored.restore((await readLayout(path)).workspaces[0]), [])
+    assert.deepEqual(await restored.snapshot(), snapshot)
+    await restored.stop()
+    await writeFile(join(root, 'first.txt'), 'short\n')
+    await rm(join(root, 'second.txt'))
+    const changed = await Session.create(root, () => {})
+    sessions.push(changed)
+    assert.equal((await changed.restore(snapshot)).length, 1)
+    assert.equal((await changed.snapshot()).files[0].line, 1)
+    await writeFile(path, '{broken')
+    await assert.rejects(readLayout(path))
+    await writeFile(path, JSON.stringify({ version: 1, active: 0, workspaces: [{ root }] }))
+    await assert.rejects(readLayout(path), /Invalid/)
+  } finally {
+    await Promise.all(sessions.map((s) => s.stop()))
+    await rm(root, { recursive: true, force: true })
+  }
+})
 
 test('grid updates preserve highlights, wide characters and scroll regions', () => {
   const grid = new Grid()

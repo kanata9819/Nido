@@ -3,6 +3,11 @@ export interface Workspace {
   root: string
   name: string
 }
+export interface SavedWorkspace {
+  root: string
+  files: { path: string; line: number; column: number }[]
+  current: string
+}
 export interface BufferInfo {
   id: number
   name: string
@@ -28,6 +33,8 @@ export type NidoEvent =
   | { type: 'exit'; id: string }
   | { type: 'error'; id: string; message: string }
 export interface NidoAPI {
+  restoreWorkspaces(): Promise<{ workspaces: Workspace[]; active: string; errors: string[] }>
+  workspaceLayout(ids: string[], active: string): Promise<void>
   createWorkspace(): Promise<Workspace | null>
   closeWorkspace(id: string): Promise<boolean>
   attach(id: string, columns: number, rows: number): Promise<void>

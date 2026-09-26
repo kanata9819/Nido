@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { NidoAPI, NidoEvent } from '../shared/types'
 
 const api: NidoAPI = {
+  restoreWorkspaces: () => ipcRenderer.invoke('nido:restore'),
+  workspaceLayout: (ids, active) => ipcRenderer.invoke('nido:layout', ids, active),
   createWorkspace: () => ipcRenderer.invoke('nido:create'),
   closeWorkspace: (id) => ipcRenderer.invoke('nido:close', id),
   attach: (id, columns, rows) => ipcRenderer.invoke('nido:attach', id, columns, rows),
