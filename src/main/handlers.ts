@@ -145,7 +145,7 @@ export function registerHandlers({
       }
       state.order = [...sessions.keys()];
       state.active ||= state.order[0] || '';
-      return { workspaces: [...sessions.values()].map((s) => s.workspace), state.active, errors };
+      return { workspaces: [...sessions.values()].map((s) => s.workspace), active: state.active, errors };
     })();
     return state.restoration;
   });
