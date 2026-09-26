@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, FileCode2, Folder, FolderOpen, RefreshCw } from 'lucide-react';
 import type { FileEntry, Workspace } from '../../shared/types';
 import { getVisibleEntries } from './sidebarTree';
@@ -7,13 +7,16 @@ import { createOnKeyDown } from './sidebarKeyboard';
 import styles from './assets/Nido.module.css';
 
 interface Props {
+  width: number;
+  onResize: (width: number) => void;
   workspace: Workspace;
   active: boolean;
   currentFile: string;
   onOpen: (path: string) => void;
   onError: (message: string) => void;
 }
-export default function Sidebar({ workspace, active, currentFile, onOpen, onError }: Props): React.JSX.Element {
+export default function Sidebar({ workspace, active, currentFile, onOpen, onError, width, onResize }: Props): React.JSX.Element {
+  const drag = useRef<{ x: number; width: number } | null>(null);
   const [entries, setEntries] = useState<Record<string, FileEntry[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState('');
@@ -48,7 +51,42 @@ export default function Sidebar({ workspace, active, currentFile, onOpen, onErro
   const visible = getVisibleEntries(entries, expanded);
 
   return (
-    <aside className={styles.sidebar} aria-label="File explorer" hidden={!active}>
+    <aside className={styles.sidebar} aria-label="File explorer" hidden={!active} style={{ width }}
+      onKeyDownCapture={(event) => {
+        if (event.nativeEvent.isComposing || event.keyCode === 229 || event.ctrlKey || event.altKey || event.metaKey) return;
+        if (event.shiftKey && ['H', 'L'].includes(event.key)) {
+          event.preventDefault();
+          event.stopPropagation();
+          onResize(width + (event.key === 'H' ? -20 : 20));
+        }
+      }}
+    >
+      <div className={styles.sidebarResize} role="separator" aria-label="Explorer width"
+        aria-orientation="vertical" aria-valuemin={160} aria-valuemax={480} aria-valuenow={width}
+        tabIndex={0} title="Drag to resize · Shift+H / L"
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+            event.preventDefault();
+            onResize(width + (event.key === 'ArrowLeft' ? -20 : 20));
+          }
+        }}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          event.currentTarget.focus();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          drag.current = { x: event.clientX, width };
+        }}
+        onPointerMove={(event) => {
+          if (drag.current) onResize(drag.current.width + event.clientX - drag.current.x);
+        }}
+        onPointerUp={(event) => {
+          drag.current = null;
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+        onLostPointerCapture={() => { drag.current = null; }}
+        onPointerCancel={() => { drag.current = null; }}
+      />
       <div className={styles.sidebarHeading}>
         <span>{workspace.name}</span>
         <button title="Refresh files" aria-label="Refresh files" onClick={() => void load('')}>

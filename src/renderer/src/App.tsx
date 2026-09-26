@@ -75,6 +75,16 @@ export default function App(): React.JSX.Element {
   const [error, setError] = useState('');
   const [focusTick, setFocusTick] = useState(0);
   const [sidebar, setSidebar] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = Number(localStorage.getItem('nido.sidebarWidth'));
+    return Number.isFinite(saved) && saved >= 160 && saved <= 480 ? saved : 243;
+  });
+  const resizeSidebar = (width: number): void => {
+    setSidebarWidth(Math.max(160, Math.min(480, width)));
+  };
+  useEffect(() => {
+    localStorage.setItem('nido.sidebarWidth', String(sidebarWidth));
+  }, [sidebarWidth]);
   const [fontSize, setFontSize] = useState(() => {
     const value = Number(localStorage.getItem('nido.fontSize'));
     return value >= 12 && value <= 24 ? value : 15;
@@ -409,6 +419,8 @@ export default function App(): React.JSX.Element {
         {sidebar &&
           workspaces.map((w) => (
             <Sidebar
+              width={sidebarWidth}
+              onResize={resizeSidebar}
               key={w.id}
               workspace={w}
               active={w.id === active}

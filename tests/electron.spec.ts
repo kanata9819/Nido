@@ -1,4 +1,5 @@
 import { test, expect, _electron as electron } from '@playwright/test';
+import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -101,6 +102,18 @@ test('normal shutdown restores workspace order, active file and cursors', async 
     await expect(page.getByRole('tab', { name: 'b.txt', exact: true })).toHaveAttribute('aria-selected', 'true');
     await page.keyboard.press('Control+h');
     await expect(page.getByRole('tree', { name: 'Project files' })).toBeFocused();
+    const explorer = page.getByRole('complementary', { name: 'File explorer' });
+    await page.keyboard.press('Shift+L');
+    await expect(explorer).toHaveCSS('width', '263px');
+    await page.keyboard.press('Shift+H');
+    await expect(explorer).toHaveCSS('width', '243px');
+    const edge = await page.getByRole('separator', { name: 'Explorer width' }).boundingBox();
+    assert.ok(edge);
+    await page.mouse.move(edge.x + edge.width / 2, edge.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(edge.x + edge.width / 2 + 40, edge.y + 100);
+    await page.mouse.up();
+    await expect(explorer).toHaveCSS('width', '283px');
     await page.keyboard.press('Control+l');
     await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
     await page.keyboard.press('i');
@@ -127,6 +140,7 @@ test('normal shutdown restores workspace order, active file and cursors', async 
     await closed;
     running = await electron.launch({ executablePath, args, env });
     page = await running.firstWindow();
+    await expect(page.getByRole('complementary', { name: 'File explorer' })).toHaveCSS('width', '283px');
     await expect(page.getByRole('tab', { name: 'Workspace Two', exact: true })).toHaveAttribute(
       'aria-selected',
       'true'

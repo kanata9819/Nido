@@ -56,6 +56,7 @@ Insertモードで`Ctrl+Space`を押すと補完候補を表示し、`Ctrl+N/P`�
 | Ctrl+Tab / Ctrl+Shift+Tab   | 次 / 前のワークスペース                                   |
 | Shift+H / Shift+L（Normal） | 前 / 次のファイルタブ（端で折り返す）                     |
 | Ctrl+H / Ctrl+L             | エクスプローラ / エディタへフォーカス移動                 |
+| Shift+H / Shift+L（エクスプローラ内） | 幅を20px縮める / 広げる（160〜480px、再起動後も保存） |
 | Alt+1 … Alt+9               | ワークスペースを直接選ぶ                                  |
 | Ctrl+Shift+P                | すべてのコマンド                                          |
 | Space（Normal時）           | キー操作メニュー                                          |
@@ -71,6 +72,8 @@ Insertモードで`Ctrl+Space`を押すと補完候補を表示し、`Ctrl+N/P`�
 | Ctrl+V                      | Vim標準の矩形選択など                                     |
 | Esc                         | メニューを閉じる / 編集に戻る / Normalへ戻る              |
 | Ctrl+j / Ctrl+k または矢印  | 検索メニュー内の移動                                      |
+
+エクスプローラ右端の境界をドラッグしても幅を調整できます。境界にフォーカスがあるときは左右矢印でも調整できます。
 
 編集はNeovimが担当するため、`/`、`:%s`、`:e`、`:w`、Undo、画面分割、`:tabnew`などを使えます。
 新規ファイルは `:e filename`、名前のないバッファの保存は `:w filename` です。
