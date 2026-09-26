@@ -13,27 +13,39 @@ let order: string[] = [];
 let active = '';
 let restoration: Promise<{ workspaces: Workspace[]; active: string; errors: string[] }> | undefined;
 const send = (event: NidoEvent): void => {
-  if (window && !window.isDestroyed()) window.webContents.send('nido:event', event);
-  if (event.type === 'exit') sessions.delete(event.id);
+  if (window && !window.isDestroyed()) {
+    window.webContents.send('nido:event', event);
+  }
+  if (event.type === 'exit') {
+    sessions.delete(event.id);
+  }
 };
 
 function session(id: unknown): Session {
-  if (typeof id !== 'string' || !sessions.has(id)) throw new Error('Workspace is no longer running.');
+  if (typeof id !== 'string' || !sessions.has(id)) {
+    throw new Error('Workspace is no longer running.');
+  }
   return sessions.get(id)!;
 }
 
 function text(value: unknown): string {
-  if (typeof value !== 'string' || value.length > 4_000_000) throw new Error('Invalid text.');
+  if (typeof value !== 'string' || value.length > 4_000_000) {
+    throw new Error('Invalid text.');
+  }
   return value;
 }
 
 function integer(value: unknown, max = 1_000_000): number {
-  if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > max) throw new Error('Invalid number.');
+  if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > max) {
+    throw new Error('Invalid number.');
+  }
   return Number(value);
 }
 
 async function confirmClose(s: Session): Promise<boolean> {
-  if (!(await s.modified())) return true;
+  if (!(await s.modified())) {
+    return true;
+  }
   const { response } = await dialog.showMessageBox(window, {
     type: 'warning',
     title: 'Unsaved changes',
@@ -44,8 +56,12 @@ async function confirmClose(s: Session): Promise<boolean> {
     cancelId: 1,
     noLink: true
   });
-  if (response === 1) return false;
-  if (response === 0) await s.saveAll();
+  if (response === 1) {
+    return false;
+  }
+  if (response === 0) {
+    await s.saveAll();
+  }
   return true;
 }
 
@@ -74,14 +90,24 @@ app.whenReady().then(() => {
   window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   window.once('ready-to-show', () => window.show());
   window.on('close', (event) => {
-    if (closing) return;
+    if (closing) {
+      return;
+    }
     event.preventDefault();
-    if (prompting) return;
+    if (prompting) {
+      return;
+    }
     prompting = true;
     void (async () => {
       try {
-        if (restoration) await restoration;
-        for (const s of sessions.values()) if (!(await confirmClose(s))) return;
+        if (restoration) {
+          await restoration;
+        }
+        for (const s of sessions.values()) {
+          if (!(await confirmClose(s))) {
+            return;
+          }
+        }
         const ids = [
           ...order.filter((id) => sessions.has(id)),
           ...[...sessions.keys()].filter((id) => !order.includes(id))
@@ -105,8 +131,9 @@ app.whenReady().then(() => {
   // Only the application renderer may invoke the explicit API below.
   const handle = (name: string, fn: (...args: unknown[]) => unknown): void => {
     ipcMain.handle(`nido:${name}`, (event, ...args: unknown[]) => {
-      if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame)
+      if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) {
         throw new Error('Untrusted sender.');
+      }
       return fn(...args);
     });
   };
@@ -120,7 +147,9 @@ app.whenReady().then(() => {
             const s = await Session.create(workspace.root, send, neovimResources);
             sessions.set(s.workspace.id, s);
             errors.push(...(await s.restore(workspace)));
-            if (index === saved.active) active = s.workspace.id;
+            if (index === saved.active) {
+              active = s.workspace.id;
+            }
           } catch (error) {
             errors.push(`${workspace.root}: ${String(error)}`);
           }
@@ -141,8 +170,9 @@ app.whenReady().then(() => {
       new Set(ids).size !== ids.length ||
       typeof selected !== 'string' ||
       (selected !== '' && !ids.includes(selected))
-    )
+    ) {
       throw new Error('Invalid workspace layout.');
+    }
     order = ids;
     active = selected;
   });
@@ -151,14 +181,18 @@ app.whenReady().then(() => {
       title: 'Open a workspace in Nido',
       properties: ['openDirectory']
     });
-    if (result.canceled) return null;
+    if (result.canceled) {
+      return null;
+    }
     const s = await Session.create(result.filePaths[0], send, neovimResources);
     sessions.set(s.workspace.id, s);
     return s.workspace;
   });
   handle('close', async (id) => {
     const s = session(id);
-    if (!(await confirmClose(s))) return false;
+    if (!(await confirmClose(s))) {
+      return false;
+    }
     await s.stop();
     sessions.delete(s.workspace.id);
     send({ type: 'exit', id: s.workspace.id });
@@ -185,20 +219,30 @@ app.whenReady().then(() => {
         cancelId: 0,
         noLink: true
       });
-      if (response !== 1) return false;
+      if (response !== 1) {
+        return false;
+      }
     }
     await s.closeBuffer(buffer, true);
     return true;
   });
   handle('save', (id) => session(id).save());
   handle('window', (action) => {
-    if (action === 'minimize') window.minimize();
-    else if (action === 'maximize') window.isMaximized() ? window.unmaximize() : window.maximize();
-    else if (action === 'close') window.close();
-    else throw new Error('Unknown window action.');
+    if (action === 'minimize') {
+      window.minimize();
+    } else if (action === 'maximize') {
+      window.isMaximized() ? window.unmaximize() : window.maximize();
+    } else if (action === 'close') {
+      window.close();
+    } else {
+      throw new Error('Unknown window action.');
+    }
   });
-  if (process.env.ELECTRON_RENDERER_URL) void window.loadURL(process.env.ELECTRON_RENDERER_URL);
-  else void window.loadFile(join(__dirname, '../renderer/index.html'));
+  if (process.env.ELECTRON_RENDERER_URL) {
+    void window.loadURL(process.env.ELECTRON_RENDERER_URL);
+  } else {
+    void window.loadFile(join(__dirname, '../renderer/index.html'));
+  }
 });
 app.on('window-all-closed', () => app.quit());
 app.on('will-quit', () => {

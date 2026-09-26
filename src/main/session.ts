@@ -95,12 +95,16 @@ export class Session {
       if (method === 'redraw') {
         // Other events can contain Neovim Window handles, which cannot cross Electron IPC.
         const events = (args as Redraw).filter(([name]) => gridEvents.has(name));
-        if (events.length) this.emit({ type: 'redraw', id: this.workspace.id, events });
+        if (events.length) {
+          this.emit({ type: 'redraw', id: this.workspace.id, events });
+        }
       }
       if (method === 'nido:state') {
         this.state = args[0] as SessionState;
         // Lua encodes an empty table as a map rather than an array.
-        if (!Array.isArray(this.state.buffers)) this.state.buffers = [];
+        if (!Array.isArray(this.state.buffers)) {
+          this.state.buffers = [];
+        }
         this.emit({ type: 'state', id: this.workspace.id, state: this.state });
       }
     });
@@ -120,7 +124,9 @@ export class Session {
     resources = resolve(__dirname, '../../resources')
   ): Promise<Session> {
     const actual = await realpath(root);
-    if (!(await stat(actual)).isDirectory()) throw new Error('Choose a project folder.');
+    if (!(await stat(actual)).isDirectory()) {
+      throw new Error('Choose a project folder.');
+    }
     for (const file of ['nvim-win64/bin/nvim.exe', 'nido/init.lua']) {
       try {
         await stat(resolve(resources, file));
@@ -180,7 +186,9 @@ export class Session {
   }
 
   async resize(columns: number, rows: number): Promise<void> {
-    if (this.attached) await this.client.request('nvim_ui_try_resize', [columns, rows]);
+    if (this.attached) {
+      await this.client.request('nvim_ui_try_resize', [columns, rows]);
+    }
   }
 
   input(keys: string): Promise<void> {
@@ -190,7 +198,9 @@ export class Session {
       while (rest.length && !this.stopped) {
         const accepted = (await this.client.request('nvim_input', [rest.toString()])) as number;
         rest = rest.subarray(accepted);
-        if (!accepted) await new Promise((done) => setTimeout(done, 2));
+        if (!accepted) {
+          await new Promise((done) => setTimeout(done, 2));
+        }
       }
     });
     this.inputQueue = next.catch(() => {});
@@ -231,7 +241,9 @@ export class Session {
     const errors: string[] = [];
     for (const file of saved.files) {
       try {
-        if (!(await stat(file.path)).isFile()) throw new Error('File is unavailable.');
+        if (!(await stat(file.path)).isFile()) {
+          throw new Error('File is unavailable.');
+        }
         await this.client.request('nvim_exec_lua', [
           `local path, line, column = ...
           vim.cmd.edit(vim.fn.fnameescape(path))
@@ -267,7 +279,9 @@ export class Session {
       'local ok, err = pcall(vim.cmd, ...); return ok and "" or tostring(err)',
       [command]
     ])) as string;
-    if (error) throw new Error(error);
+    if (error) {
+      throw new Error(error);
+    }
   }
 
   async selectBuffer(buffer: number): Promise<void> {
@@ -275,7 +289,9 @@ export class Session {
   }
 
   async closeBuffer(buffer: number, force = false): Promise<void> {
-    if (!force && (await this.bufferModified(buffer))) throw new Error('Buffer has unsaved changes.');
+    if (!force && (await this.bufferModified(buffer))) {
+      throw new Error('Buffer has unsaved changes.');
+    }
     await this.client.request('nvim_buf_delete', [buffer, { force }]);
   }
 
@@ -284,17 +300,22 @@ export class Session {
   }
 
   async path(relativePath: string): Promise<string> {
-    if (isAbsolute(relativePath)) throw new Error('Expected a project-relative path.');
+    if (isAbsolute(relativePath)) {
+      throw new Error('Expected a project-relative path.');
+    }
     const actual = await realpath(resolve(this.workspace.root, relativePath));
     const rel = relative(this.workspace.root, actual);
-    if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel))
+    if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
       throw new Error('Path is outside this workspace.');
+    }
     return actual;
   }
 
   async openFile(relativePath: string): Promise<void> {
     const file = await this.path(relativePath);
-    if (!(await stat(file)).isFile()) throw new Error('Choose a file.');
+    if (!(await stat(file)).isFile()) {
+      throw new Error('Choose a file.');
+    }
     await this.client.request('nvim_exec_lua', ['vim.cmd.edit(vim.fn.fnameescape(...))', [file]]);
   }
 
@@ -314,12 +335,18 @@ export class Session {
   async findFiles(): Promise<FileEntry[]> {
     const result: FileEntry[] = [];
     const visit = async (directory: string, depth: number): Promise<void> => {
-      if (depth > 12 || result.length >= 5000) return;
+      if (depth > 12 || result.length >= 5000) {
+        return;
+      }
       for (const entry of await this.files(directory)) {
-        if (result.length >= 5000) break;
-        if (!entry.directory) result.push(entry);
-        else if (!['node_modules', 'dist', 'out', 'build', 'target', '.next'].includes(entry.name))
+        if (result.length >= 5000) {
+          break;
+        }
+        if (!entry.directory) {
+          result.push(entry);
+        } else if (!['node_modules', 'dist', 'out', 'build', 'target', '.next'].includes(entry.name)) {
           await visit(entry.path, depth + 1);
+        }
       }
     };
     // ponytail: cap at 5,000 files/12 levels; use a cancellable indexed search for larger projects.
@@ -328,7 +355,9 @@ export class Session {
   }
 
   async stop(): Promise<void> {
-    if (this.stopped || !this.process.pid) return;
+    if (this.stopped || !this.process.pid) {
+      return;
+    }
     this.stopped = true;
     await new Promise<void>((done) => {
       const timer = setTimeout(() => {

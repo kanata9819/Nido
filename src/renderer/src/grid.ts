@@ -30,9 +30,18 @@ export class Grid {
   apply(events: Redraw): boolean {
     let flush = false;
     for (const [name, ...calls] of events) {
-      if (name === 'flush') flush = true;
-      if (name === 'busy_start') this.busy = true;
-      if (name === 'busy_stop') this.busy = false;
+      if (name === 'flush') {
+        flush = true;
+      }
+
+      if (name === 'busy_start') {
+        this.busy = true;
+      }
+
+      if (name === 'busy_stop') {
+        this.busy = false;
+      }
+
       for (const args of calls) {
         if (name === 'grid_resize' && args[0] === 1) {
           this.columns = Number(args[1]);
@@ -49,34 +58,50 @@ export class Grid {
           let column = Number(args[2]),
             highlight = 0;
           for (const cell of args[3] as [string, number?, number?][]) {
-            if (cell[1] !== undefined) highlight = cell[1];
+            if (cell[1] !== undefined) {
+              highlight = cell[1];
+            }
             for (let i = 0; i < (cell[2] ?? 1); i++) {
-              if (row && column < this.columns) row[column] = { text: cell[0], highlight };
+              if (row && column < this.columns) {
+                row[column] = { text: cell[0], highlight };
+              }
+
               column++;
             }
           }
         } else if (name === 'grid_scroll' && args[0] === 1) {
           const [, top, bottom, left, right, rows, columns] = args as number[];
           const old = this.cells.map((row) => row.slice());
-          for (let row = top; row < bottom; row++)
+          for (let row = top; row < bottom; row++) {
             for (let col = left; col < right; col++) {
-              const sourceRow = row + rows,
-                sourceCol = col + columns;
+              const sourceRow = row + rows;
+              const sourceCol = col + columns;
               this.cells[row][col] =
                 sourceRow >= top && sourceRow < bottom && sourceCol >= left && sourceCol < right
                   ? old[sourceRow][sourceCol]
                   : { text: ' ', highlight: 0 };
             }
-        } else if (name === 'hl_attr_define') this.highlights.set(Number(args[0]), args[1] as Highlight);
-        else if (name === 'default_colors_set') {
-          if (Number(args[0]) >= 0) this.foreground = color(Number(args[0]));
-          if (Number(args[1]) >= 0) this.background = color(Number(args[1]));
-        } else if (name === 'grid_cursor_goto' && args[0] === 1)
+          }
+        } else if (name === 'hl_attr_define') {
+          this.highlights.set(Number(args[0]), args[1] as Highlight);
+        } else if (name === 'default_colors_set') {
+          if (Number(args[0]) >= 0) {
+            this.foreground = color(Number(args[0]));
+          }
+          if (Number(args[1]) >= 0) {
+            this.background = color(Number(args[1]));
+          }
+        } else if (name === 'grid_cursor_goto' && args[0] === 1) {
           this.cursor = { row: Number(args[1]), column: Number(args[2]) };
-        else if (name === 'mode_change') this.mode = String(args[0]);
-        else if (name === 'busy_start') this.busy = true;
-        else if (name === 'busy_stop') this.busy = false;
-        else if (name === 'flush') flush = true;
+        } else if (name === 'mode_change') {
+          this.mode = String(args[0]);
+        } else if (name === 'busy_start') {
+          this.busy = true;
+        } else if (name === 'busy_stop') {
+          this.busy = false;
+        } else if (name === 'flush') {
+          flush = true;
+        }
       }
     }
     return flush;
@@ -98,8 +123,8 @@ export class Grid {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const family = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
     ctx.font = `${fontSize}px ${family}`;
-    const cellWidth = ctx.measureText('M').width,
-      cellHeight = Math.ceil(fontSize * 1.65);
+    const cellWidth = ctx.measureText('M').width;
+    const cellHeight = Math.ceil(fontSize * 1.65);
     ctx.fillStyle = this.background;
     ctx.fillRect(0, 0, width, height);
     ctx.textBaseline = 'alphabetic';
@@ -114,11 +139,16 @@ export class Grid {
           : h.background === undefined
             ? this.background
             : color(h.background);
+
         ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight);
       }
+
       for (let col = 0; col < this.columns; col++) {
         const cell = this.cells[row]?.[col];
-        if (!cell?.text || cell.text === ' ') continue;
+        if (!cell?.text || cell.text === ' ') {
+          continue;
+        }
+
         const h = this.highlights.get(cell.highlight) || {};
         ctx.font = `${h.italic ? 'italic ' : ''}${h.bold ? 'bold ' : ''}${fontSize}px ${family}`;
         ctx.fillStyle = h.reverse
@@ -128,23 +158,29 @@ export class Grid {
           : h.foreground === undefined
             ? this.foreground
             : color(h.foreground);
-        const x = col * cellWidth,
-          y = row * cellHeight;
+
+        const x = col * cellWidth;
+        const y = row * cellHeight;
+
         ctx.fillText(cell.text, x, y + (cellHeight + fontSize) / 2 - 3);
         if (h.underline || h.undercurl || h.strikethrough) {
-          if (h.special !== undefined) ctx.fillStyle = color(h.special);
+          if (h.special !== undefined) {
+            ctx.fillStyle = color(h.special);
+          }
           ctx.fillRect(x, y + (h.strikethrough ? cellHeight / 2 : cellHeight - 3), cellWidth, 1);
         }
       }
     }
     if (!this.busy && this.cursor.row < this.rows) {
-      const x = this.cursor.column * cellWidth,
-        y = this.cursor.row * cellHeight;
+      const x = this.cursor.column * cellWidth;
+      const y = this.cursor.row * cellHeight;
       ctx.fillStyle = '#aad39f';
       ctx.strokeStyle = '#aad39f';
-      if (!focused) ctx.strokeRect(x + 0.5, y + 1, cellWidth - 1, cellHeight - 2);
-      else if (this.mode.startsWith('insert')) ctx.fillRect(x, y + 2, 2, cellHeight - 4);
-      else {
+      if (!focused) {
+        ctx.strokeRect(x + 0.5, y + 1, cellWidth - 1, cellHeight - 2);
+      } else if (this.mode.startsWith('insert')) {
+        ctx.fillRect(x, y + 2, 2, cellHeight - 4);
+      } else {
         ctx.globalAlpha = 0.48;
         ctx.fillRect(x, y + 1, cellWidth, cellHeight - 2);
         ctx.globalAlpha = 1;
@@ -181,10 +217,19 @@ export function vimKey(
     PageDown: 'PageDown',
     Insert: 'Insert'
   };
+
   let key = special[event.key] || event.key;
   if (/^F\d+$/.test(key) || special[event.key] || event.ctrlKey || event.altKey || event.metaKey) {
     if (key === ' ') key = 'Space';
-    return `<${event.ctrlKey ? 'C-' : ''}${event.altKey ? 'M-' : ''}${event.metaKey ? 'D-' : ''}${event.shiftKey && (special[event.key] || event.ctrlKey || event.altKey) ? 'S-' : ''}${key}>`;
+    return `
+      <
+        ${event.ctrlKey ? 'C-' : ''}
+        ${event.altKey ? 'M-' : ''}
+        ${event.metaKey ? 'D-' : ''}
+        ${event.shiftKey && (special[event.key] || event.ctrlKey || event.altKey) ? 'S-' : ''}
+        ${key}
+      >
+    `;
   }
   return key === '<' ? '<LT>' : key;
 }

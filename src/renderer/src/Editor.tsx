@@ -20,14 +20,12 @@ export default function Editor({
   focusTick,
   onError
 }: Props): React.JSX.Element {
-  const host = useRef<HTMLDivElement>(null),
-    canvas = useRef<HTMLCanvasElement>(null),
-    input = useRef<HTMLTextAreaElement>(null);
-
-  const grid = useRef(new Grid()),
-    composing = useRef(false),
-    attached = useRef(false);
-
+  const host = useRef<HTMLDivElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  const grid = useRef(new Grid());
+  const composing = useRef(false);
+  const attached = useRef(false);
   const paint = useRef<() => void>(() => {});
   const error = useRef(onError);
 
@@ -36,16 +34,18 @@ export default function Editor({
   }, [onError]);
 
   useEffect(() => {
-    const element = host.current!,
-      surface = canvas.current!;
+    const element = host.current!;
+    const surface = canvas.current!;
 
-    let frame = 0,
-      disposed = false,
-      lastColumns = 0,
-      lastRows = 0;
+    let frame = 0;
+    let disposed = false;
+    let lastColumns = 0;
+    let lastRows = 0;
 
     const render = (): void => {
-      if (disposed || !element.clientWidth || !element.clientHeight) return;
+      if (disposed || !element.clientWidth || !element.clientHeight) {
+        return;
+      }
       const metrics = grid.current.draw(
         surface,
         element.clientWidth,
@@ -53,14 +53,17 @@ export default function Editor({
         fontSize,
         document.activeElement === input.current
       );
+
       surface.setAttribute(
         'aria-description',
         grid.current.cells.map((row) => row.map((cell) => cell.text).join('')).join('\n')
       );
+
       if (input.current) {
         input.current.style.left = `${grid.current.cursor.column * metrics.cellWidth}px`;
         input.current.style.top = `${grid.current.cursor.row * metrics.cellHeight}px`;
       }
+
       const columns = Math.max(20, Math.floor(element.clientWidth / metrics.cellWidth));
       const rows = Math.max(4, Math.floor(element.clientHeight / metrics.cellHeight));
       if (!attached.current) {
@@ -82,7 +85,9 @@ export default function Editor({
 
     paint.current = schedule;
     const unsubscribe = window.nido.onEvent((event) => {
-      if (event.type === 'redraw' && event.id === id && grid.current.apply(event.events)) schedule();
+      if (event.type === 'redraw' && event.id === id && grid.current.apply(event.events)) {
+        schedule();
+      }
     });
 
     const observer = new ResizeObserver(schedule);
@@ -115,7 +120,9 @@ export default function Editor({
       hidden={!active}
       onClick={() => input.current?.focus()}
       onWheel={(event) => {
-        if (!blocked) send(window.nido.input(id, event.deltaY > 0 ? '<C-E><C-E><C-E>' : '<C-Y><C-Y><C-Y>'));
+        if (!blocked) {
+          send(window.nido.input(id, event.deltaY > 0 ? '<C-E><C-E><C-E>' : '<C-Y><C-Y><C-Y>'));
+        }
       }}
     >
       <canvas ref={canvas} className={styles.canvas} aria-label="Neovim editor display" />
@@ -134,13 +141,19 @@ export default function Editor({
         }}
         onCompositionEnd={(event) => {
           composing.current = false;
-          if (event.data) send(window.nido.input(id, event.data.replaceAll('<', '<LT>')));
+          if (event.data) {
+            send(window.nido.input(id, event.data.replaceAll('<', '<LT>')));
+          }
           event.currentTarget.value = '';
         }}
         onInput={(event) => {
-          if (composing.current || (event.nativeEvent as InputEvent).isComposing) return;
+          if (composing.current || (event.nativeEvent as InputEvent).isComposing) {
+            return;
+          }
           const value = event.currentTarget.value;
-          if (value) send(window.nido.input(id, value.replaceAll('<', '<LT>')));
+          if (value) {
+            send(window.nido.input(id, value.replaceAll('<', '<LT>')));
+          }
           event.currentTarget.value = '';
         }}
         onPaste={(event) => {
@@ -148,12 +161,16 @@ export default function Editor({
           send(window.nido.paste(id, event.clipboardData.getData('text/plain')));
         }}
         onKeyDown={(event) => {
-          if (blocked || composing.current || event.nativeEvent.isComposing || event.keyCode === 229) return;
+          if (blocked || composing.current || event.nativeEvent.isComposing) {
+            return;
+          }
+
           if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'v') {
             event.preventDefault();
             send(window.nido.pasteClipboard(id));
             return;
           }
+
           const key = vimKey(event.nativeEvent);
           if (key) {
             event.preventDefault();

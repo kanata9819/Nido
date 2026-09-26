@@ -113,12 +113,16 @@ export default function App(): React.JSX.Element {
   useEffect(
     () =>
       window.nido.onEvent((event) => {
-        if (event.type === 'state') setStates((old) => ({ ...old, [event.id]: event.state }));
-        else if (event.type === 'redraw') {
+        if (event.type === 'state') {
+          setStates((old) => ({ ...old, [event.id]: event.state }));
+        } else if (event.type === 'redraw') {
           for (const [name, ...calls] of event.events)
-            if (name === 'mode_change') mode.current[event.id] = String(calls.at(-1)?.[0]);
-        } else if (event.type === 'error') report(event.message);
-        else if (event.type === 'exit') {
+            if (name === 'mode_change') {
+              mode.current[event.id] = String(calls.at(-1)?.[0]);
+            }
+        } else if (event.type === 'error') {
+          report(event.message);
+        } else if (event.type === 'exit') {
           setWorkspaces((old) => old.filter((w) => w.id !== event.id));
           setStates((old) => {
             const next = { ...old };
@@ -135,16 +139,24 @@ export default function App(): React.JSX.Element {
     void window.nido
       .restoreWorkspaces()
       .then((result) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setWorkspaces(result.workspaces);
         setActive(result.active);
-        if (result.errors.length) report(result.errors.join('\n'));
+        if (result.errors.length) {
+          report(result.errors.join('\n'));
+        }
       })
       .catch((e) => {
-        if (!cancelled) report(String(e));
+        if (!cancelled) {
+          report(String(e));
+        }
       })
       .finally(() => {
-        if (!cancelled) setRestoring(false);
+        if (!cancelled) {
+          setRestoring(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -152,13 +164,14 @@ export default function App(): React.JSX.Element {
   }, [report]);
 
   useEffect(() => {
-    if (!restoring)
+    if (!restoring) {
       void window.nido
         .workspaceLayout(
           workspaces.map((w) => w.id),
           active
         )
         .catch((e) => report(String(e)));
+    }
   }, [workspaces, active, restoring, report]);
 
   useEffect(() => {
@@ -166,18 +179,26 @@ export default function App(): React.JSX.Element {
   }, [fontSize]);
 
   useEffect(() => {
-    if (panel !== 'files' || !active) return;
+    if (panel !== 'files' || !active) {
+      return;
+    }
     let cancelled = false;
     window.nido
       .findFiles(active)
       .then((files) => {
-        if (!cancelled) setFileList(files);
+        if (!cancelled) {
+          setFileList(files);
+        }
       })
       .catch((e) => {
-        if (!cancelled) report(String(e));
+        if (!cancelled) {
+          report(String(e));
+        }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -185,7 +206,9 @@ export default function App(): React.JSX.Element {
   }, [panel, active, report]);
 
   const create = async (): Promise<void> => {
-    if (creating || restoring) return;
+    if (creating || restoring) {
+      return;
+    }
     setCreating(true);
     setLeader(false);
     setPanel(null);
@@ -205,7 +228,9 @@ export default function App(): React.JSX.Element {
   };
 
   const nextWorkspace = (offset: number): void => {
-    if (!workspaces.length) return;
+    if (!workspaces.length) {
+      return;
+    }
     activate(
       workspaces[(workspaces.findIndex((w) => w.id === active) + offset + workspaces.length) % workspaces.length].id
     );
@@ -215,7 +240,9 @@ export default function App(): React.JSX.Element {
     setWorkspaces((old) => {
       const index = old.findIndex((w) => w.id === active),
         target = index + offset;
-      if (target < 0 || target >= old.length) return old;
+      if (target < 0 || target >= old.length) {
+        return old;
+      }
       const next = [...old];
       [next[index], next[target]] = [next[target], next[index]];
       return next;
@@ -403,7 +430,9 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {
-      if (event.isComposing || event.keyCode === 229) return;
+      if (event.isComposing || event.keyCode === 229) {
+        return;
+      }
 
       const consume = (): void => {
         event.preventDefault();
@@ -453,14 +482,19 @@ export default function App(): React.JSX.Element {
         ['h', 'l'].includes(event.key.toLowerCase())
       ) {
         consume();
-        if (event.key.toLowerCase() === 'h') showExplorer();
-        else focusEditor();
+        if (event.key.toLowerCase() === 'h') {
+          showExplorer();
+        } else {
+          focusEditor();
+        }
         return;
       }
       if (event.altKey && /^[1-9]$/.test(event.key)) {
         consume();
         const w = workspaces[Number(event.key) - 1];
-        if (w) activate(w.id);
+        if (w) {
+          activate(w.id);
+        }
         return;
       }
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'n') {
@@ -485,8 +519,11 @@ export default function App(): React.JSX.Element {
       }
       if (leader) {
         consume();
-        if (event.key === ' ') showPanel('commands');
-        else commands.find((command) => command.key === event.key)?.run();
+        if (event.key === ' ') {
+          showPanel('commands');
+        } else {
+          commands.find((command) => command.key === event.key)?.run();
+        }
         return;
       }
       if (
@@ -780,7 +817,9 @@ export default function App(): React.JSX.Element {
         <div
           className={styles.scrim}
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) focusEditor();
+            if (event.target === event.currentTarget) {
+              focusEditor();
+            }
           }}
         >
           <div
@@ -862,7 +901,9 @@ export default function App(): React.JSX.Element {
                       key={`${item.title}-${i}`}
                       className={i === selection ? styles.selectedItem : ''}
                       ref={(node) => {
-                        if (node && i === selection) node.scrollIntoView({ block: 'nearest' });
+                        if (node && i === selection) {
+                          node.scrollIntoView({ block: 'nearest' });
+                        }
                       }}
                       onClick={item.run}
                     >

@@ -28,10 +28,14 @@ export default function Sidebar({ workspace, active, currentFile, onOpen, onErro
     window.nido
       .files(workspace.id, '')
       .then((files) => {
-        if (!cancelled) setEntries({ '': files });
+        if (!cancelled) {
+          setEntries({ '': files });
+        }
       })
       .catch((e) => {
-        if (!cancelled) onError(String(e));
+        if (!cancelled) {
+          onError(String(e));
+        }
       });
     return () => {
       cancelled = true;
@@ -42,7 +46,9 @@ export default function Sidebar({ workspace, active, currentFile, onOpen, onErro
   const visit = (path: string, depth: number): void => {
     for (const entry of entries[path] || []) {
       visible.push({ ...entry, depth });
-      if (entry.directory && expanded.has(entry.path)) visit(entry.path, depth + 1);
+      if (entry.directory && expanded.has(entry.path)) {
+        visit(entry.path, depth + 1);
+      }
     }
   };
 
@@ -53,8 +59,9 @@ export default function Sidebar({ workspace, active, currentFile, onOpen, onErro
       return;
     }
     const next = new Set(expanded);
-    if (next.has(entry.path)) next.delete(entry.path);
-    else {
+    if (next.has(entry.path)) {
+      next.delete(entry.path);
+    } else {
       next.add(entry.path);
       void load(entry.path);
     }
@@ -99,16 +106,20 @@ export default function Sidebar({ workspace, active, currentFile, onOpen, onErro
             }
           } else if (item && ['Enter', 'l', 'ArrowRight'].includes(event.key)) {
             event.preventDefault();
-            if (!item.directory || !expanded.has(item.path) || event.key === 'Enter') toggle(item);
-          } else if (item && ['h', 'ArrowLeft'].includes(event.key)) {
-            event.preventDefault();
-            if (expanded.has(item.path)) {
-              const next = new Set(expanded);
-              next.delete(item.path);
-              setExpanded(next);
-            } else {
-              const parent = item.path.replace(/[\\/][^\\/]+$/, '');
-              if (parent !== item.path) setSelected(parent);
+            if (!item.directory || !expanded.has(item.path) || event.key === 'Enter') {
+              toggle(item);
+            } else if (item && ['h', 'ArrowLeft'].includes(event.key)) {
+              event.preventDefault();
+              if (expanded.has(item.path)) {
+                const next = new Set(expanded);
+                next.delete(item.path);
+                setExpanded(next);
+              } else {
+                const parent = item.path.replace(/[\\/][^\\/]+$/, '');
+                if (parent !== item.path) {
+                  setSelected(parent);
+                }
+              }
             }
           }
         }}
