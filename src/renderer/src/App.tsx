@@ -15,7 +15,8 @@ import {
   Square,
   X
 } from 'lucide-react';
-import type { FileEntry, Panel, SessionState, Workspace } from '../../shared/types';
+import type { FileEntry, SessionState, Workspace } from '../../shared/types';
+import type { Panel } from './types';
 import Editor from './Editor';
 import Sidebar from './Sidebar';
 import { buildItems, filename } from './commands';
