@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#2b3835"/>
+      <stop offset="1" stop-color="#151d22"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#d1edb5"/>
+      <stop offset="1" stop-color="#8fbd88"/>
+    </linearGradient>
+  </defs>
+  <rect x="32" y="32" width="960" height="960" rx="228" fill="url(#tile)"/>
+  <rect x="44" y="44" width="936" height="936" rx="216" fill="none" stroke="#a3cc94" stroke-opacity=".16" stroke-width="8"/>
+  <path d="M271 792 C291 714 319 652 369 592" fill="none" stroke="#a3cc94" stroke-width="52" stroke-linecap="round"/>
+  <path d="M300 692 C190 527 289 337 503 325 C626 318 688 284 754 222 C832 448 734 678 514 709 C431 720 357 710 300 692Z" fill="url(#leaf)"/>
+  <path d="M300 698 C371 562 490 455 639 397" fill="none" stroke="#21302e" stroke-width="46" stroke-linecap="round"/>
+</svg>

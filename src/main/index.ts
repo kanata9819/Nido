@@ -52,6 +52,7 @@ app.setName('Nido')
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
   window = new BrowserWindow({
+    icon: join(neovimResources, 'icon.png'),
     title: 'Nido',
     width: 1440,
     height: 940,

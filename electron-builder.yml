@@ -14,11 +14,14 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 extraResources:
+  - from: resources/icon.png
+    to: icon.png
   - from: resources/nvim-win64
     to: nvim-win64
   - from: resources/nido
     to: nido
 win:
+  icon: build/icon.ico
   target:
     - target: nsis
       arch: [x64]

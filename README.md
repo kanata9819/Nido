@@ -19,6 +19,8 @@ Electronの実行ファイルが未取得の場合は `node node_modules/electro
 
 ## Windows配布
 
+アイコンの編集元は`build/icon.svg`です。変更後に`pnpm icons`でPNG・ICO・ICNSを再生成し、ビルドしてください。
+
 `pnpm build:unpack`で`dist/win-unpacked/nido.exe`、`pnpm build:win`でインストーラーを生成します。
 展開版はフォルダ全体で配布してください。Neovimは`resources/nvim-win64`、専用設定は`resources/nido/init.lua`に配置されます。
 ライセンスは`resources/nido/NEOVIM-LICENSE.txt`とNeovim runtimeの`doc/uganda.txt`に含まれます。
