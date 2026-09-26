@@ -22,7 +22,8 @@
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux",
     "test": "tsx --test tests/session.test.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:rust": "tsx --test tests/rust.test.ts"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",

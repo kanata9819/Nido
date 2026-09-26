@@ -19,6 +19,11 @@ test('normal shutdown restores workspace order, active file and cursors', async 
     await mkdir(join(root, 'Two'))
     await writeFile(join(root, 'One', 'a.txt'), 'first line\nsecond line\nthird line\n')
     await writeFile(join(root, 'One', 'b.txt'), 'another line\n')
+    await writeFile(join(root, 'One', 'highlight.rs'), 'fn main() { let greeting = "hello"; }\n')
+    await writeFile(
+      join(root, 'One', 'Cargo.toml'),
+      '[package]\nname = "nido_highlight_fixture"\nversion = "0.1.0"\nedition = "2021"\n[lib]\npath = "highlight.rs"\n'
+    )
     running = await electron.launch({ executablePath, args, env })
     let page = await running.firstWindow()
     await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible()
@@ -31,12 +36,35 @@ test('normal shutdown restores workspace order, active file and cursors', async 
     )
     await page.keyboard.press('Control+Shift+n')
     await expect(page.getByRole('tab', { name: 'Workspace One', exact: true })).toBeVisible()
+    await page.keyboard.press('Control+p')
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('highlight.rs')
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('tab', { name: 'highlight.rs', exact: true })).toBeVisible()
+    await expect
+      .poll(() =>
+        page.locator('canvas:visible').evaluate((element) => {
+          const canvas = element as HTMLCanvasElement
+          const pixels = canvas
+            .getContext('2d')!
+            .getImageData(0, 0, canvas.width, canvas.height).data
+          let keyword = false,
+            string = false
+          for (let i = 0; i < pixels.length; i += 4) {
+            if (pixels[i] === 86 && pixels[i + 1] === 156 && pixels[i + 2] === 214) keyword = true
+            if (pixels[i] === 206 && pixels[i + 1] === 145 && pixels[i + 2] === 120) string = true
+          }
+          return keyword && string
+        })
+      )
+      .toBe(true)
+    await page.screenshot({ path: 'test-results/nido-rust-highlights.png' })
     for (const [file, keys] of [
       ['a.txt', '3G4l'],
       ['b.txt', 'gg6l']
     ]) {
       await page.keyboard.press('Control+p')
       await page.getByRole('textbox', { name: 'Filter items' }).fill(file)
+      await expect(page.getByRole('button', { name: `${file} ${file}`, exact: true })).toBeVisible()
       await page.keyboard.press('Enter')
       await expect(page.getByRole('tab', { name: file, exact: true })).toBeVisible()
       await page.keyboard.type(keys)

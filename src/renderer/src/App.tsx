@@ -264,6 +264,28 @@ export default function App(): React.JSX.Element {
     },
     ...(active
       ? [
+          ...(state.lsp
+            ? [
+                ['Go to definition', 'F12 / gd', '<F12>'],
+                ['Find references', 'Shift+F12 / gr', '<S-F12>'],
+                ['Go to implementation', 'gI', 'gI'],
+                ['Go to type definition', 'gy', 'gy'],
+                ['Show documentation', 'K', 'K'],
+                ['Rename symbol', 'F2', '<F2>'],
+                ['Code actions', 'gra', 'gra'],
+                ['Format file', 'g=', 'g='],
+                ['Show diagnostic', 'gl', 'gl'],
+                ['Next diagnostic', ']d', ']d']
+              ].map(([title, detail, keys]) => ({
+                key: '',
+                title,
+                detail,
+                run: () => {
+                  run(window.nido.input(active, `<Esc>${keys}`))
+                  focusEditor()
+                }
+              }))
+            : []),
           {
             key: 'f',
             title: 'Find file',
@@ -723,6 +745,11 @@ export default function App(): React.JSX.Element {
         </span>
         <span className={styles.statusGap} />
         <span>{state.filetype || 'Plain text'}</span>
+        {state.filetype === 'rust' && (
+          <span title="Rust language server connection">
+            {state.lsp || 'Rust LSP: not connected'}
+          </span>
+        )}
         <span>UTF-8</span>
         <span>
           Ln {state.line}, Col {state.column}

@@ -14,6 +14,7 @@ export interface BufferInfo {
   modified: boolean
 }
 export interface SessionState {
+  lsp?: string
   empty?: boolean
   buffers: BufferInfo[]
   current: number

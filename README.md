@@ -32,6 +32,20 @@ Electronの実行ファイルが未取得の場合は `node node_modules/electro
 追加プラグインやプラグインマネージャーは同梱せず、Neovim標準機能を使います。
 RustはPATH上の`rust-analyzer`があれば自動接続します。言語サーバーとRustツールチェーンは別途必要です。
 LSP接続時は`gd`で定義、`gr`で参照、`K`で説明を表示します。`Ctrl+O`でジャンプ前へ戻れます。
+Rustファイルでは右下に接続中の`rust_analyzer`を表示します。`Ctrl+Shift+P`のコマンド一覧からもLSP機能を使えます。
+
+| 操作 | キー（Normalモード） |
+| --- | --- |
+| 定義 / 参照 | F12 または gd / Shift+F12 または gr |
+| 実装 / 型の定義 | gI / gy |
+| 説明 / 名前変更 | K / F2 |
+| コードアクション / 整形 | gra / g= |
+| 診断の詳細 / 次・前の診断 | gl / ]d・[d |
+
+Insertモードで`Ctrl+Space`を押すと補完候補を表示し、`Ctrl+N/P`で選択、`Ctrl+Y`で確定します。
+シンタックスハイライトは同梱のRust構文定義を使い、LSP接続後はセマンティックハイライトで関数・型・引数などを色分けします。
+保存時に`cargo check`で診断します。接続しない場合は`rustup component add rust-analyzer rust-src rustfmt`を実行し、Cargo.tomlを含むプロジェクトを開いてください。
+`pnpm test:rust`は実際のrust-analyzerを使って定義ジャンプ・参照・補完・構文色分け・型エラー検出を検証します。
 コマンド・検索入力は現在Neovim標準の画面下部です。Reactによるコマンド欄・通知表示は今後の対応です。
 
 ## 操作

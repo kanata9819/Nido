@@ -7,6 +7,43 @@ import { Session } from '../src/main/session'
 import { Grid, vimKey } from '../src/renderer/src/grid'
 import { readLayout, writeLayout } from '../src/main/persistence'
 
+test('a renderer joining after Neovim startup receives syntax colors', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-colors-'))
+  let grid: Grid | undefined
+  let session: Session | undefined
+  try {
+    await writeFile(join(root, 'main.rs'), 'fn main() { let greeting = "hello"; }\n')
+    session = await Session.create(root, (event) => {
+      if (event.type === 'redraw') grid?.apply(event.events)
+    })
+    await session.openFile('main.rs')
+    // The React renderer does not exist while Session.create initializes Neovim.
+    grid = new Grid()
+    await session.attach(90, 25)
+    await session.client.request('nvim_eval', ['1'])
+    const row = grid.cells.find((cells) =>
+      cells
+        .map((cell) => cell.text)
+        .join('')
+        .includes('fn main')
+    )
+    assert.ok(row)
+    const start = row
+      .map((cell) => cell.text)
+      .join('')
+      .indexOf('fn main')
+    assert.equal(grid.highlights.get(row[start].highlight)?.foreground, 0x569cd6)
+    const string = row
+      .map((cell) => cell.text)
+      .join('')
+      .indexOf('hello')
+    assert.equal(grid.highlights.get(row[string].highlight)?.foreground, 0xce9178)
+  } finally {
+    await session?.stop()
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test('Nido uses bundled Neovim and isolated config', async () => {
   const session = await Session.create(process.cwd(), () => {})
   try {
