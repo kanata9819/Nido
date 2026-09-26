@@ -6,7 +6,7 @@ interface UseKeyboardShortcutsParams {
   leader: boolean;
   error: string;
   setError: (value: string) => void;
-  setFocusTick: (value: number) => void;
+  setFocusTick: React.Dispatch<React.SetStateAction<number>>;
   focusEditor: () => void;
   modal: React.RefObject<HTMLDivElement | null>;
   mode: React.MutableRefObject<Record<string, string>>;

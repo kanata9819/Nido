@@ -36,6 +36,7 @@ test('normal shutdown restores workspace order, active file and cursors', async 
     );
     await page.keyboard.press('Control+Shift+n');
     await expect(page.getByRole('tab', { name: 'Workspace One', exact: true })).toBeVisible();
+    await expect(page.getByRole('treeitem', { name: 'a.txt', exact: true })).toBeVisible();
     await page.keyboard.press('Control+p');
     await page.getByRole('textbox', { name: 'Filter items' }).fill('highlight.rs');
     await page.keyboard.press('Enter');

@@ -222,15 +222,12 @@ export function vimKey(
   let key = special[event.key] || event.key;
   if (/^F\d+$/.test(key) || special[event.key] || event.ctrlKey || event.altKey || event.metaKey) {
     if (key === ' ') key = 'Space';
-    return `
-      <
-        ${event.ctrlKey ? 'C-' : ''}
-        ${event.altKey ? 'M-' : ''}
-        ${event.metaKey ? 'D-' : ''}
-        ${event.shiftKey && (special[event.key] || event.ctrlKey || event.altKey) ? 'S-' : ''}
-        ${key}
-      >
-    `;
+    const modifiers =
+      (event.ctrlKey ? 'C-' : '') +
+      (event.altKey ? 'M-' : '') +
+      (event.metaKey ? 'D-' : '') +
+      (event.shiftKey && (special[event.key] || event.ctrlKey || event.altKey) ? 'S-' : '');
+    return `<${modifiers}${key}>`;
   }
   return key === '<' ? '<LT>' : key;
 }

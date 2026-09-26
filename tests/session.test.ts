@@ -215,6 +215,7 @@ test('two real Neovim sessions edit, save, switch buffers and isolate state', as
     await first.closeBuffer(current);
     assert.equal(await first.modified(), false);
     await assert.rejects(() => first.path('../outside.txt'), /outside/);
+    assert.deepEqual((await first.files('')).map((f) => f.name).sort(), ['first.ts', 'second.ts']);
     assert.deepEqual((await first.findFiles()).map((f) => f.name).sort(), ['first.ts', 'second.ts']);
     assert.ok(grids[0].cells.length);
     assert.ok(grids[0].cells.some((r) => r.some((c) => c.text !== ' ')));

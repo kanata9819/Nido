@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
   ChevronRight,
@@ -276,7 +276,7 @@ export default function App(): React.JSX.Element {
     requestAnimationFrame(() => document.querySelector<HTMLElement>('aside:not([hidden]) [role="tree"]')?.focus());
   };
 
-  const { commands, items, filtered } = buildItems(active, panel, workspaces, fileList, state, query, {
+  const { commands, filtered } = buildItems(active, panel, workspaces, fileList, state, query, {
     showPanel,
     moveWorkspace,
     run,
@@ -310,7 +310,7 @@ export default function App(): React.JSX.Element {
     activate
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.addEventListener('keydown', keydown, true);
     return () => document.removeEventListener('keydown', keydown, true);
   });
@@ -573,7 +573,6 @@ export default function App(): React.JSX.Element {
       <PanelComponent
         panel={panel}
         filtered={filtered}
-        items={items}
         selection={selection}
         query={query}
         loading={loading}
@@ -585,7 +584,6 @@ export default function App(): React.JSX.Element {
         setSidebar={setSidebar}
         setQuery={setQuery}
         setSelection={setSelection}
-        report={report}
       />
     </div>
   );

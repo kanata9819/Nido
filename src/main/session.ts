@@ -55,7 +55,7 @@ export class Session {
   readonly workspace: Workspace;
   readonly process: ChildProcessWithoutNullStreams;
   readonly client: NeovimClient;
-  readonly files: SessionFiles;
+  private readonly fileService: SessionFiles;
   state: SessionState = { buffers: [], current: 0, mode: 'n', line: 1, column: 1, filetype: '' };
   private stopped = false;
   private attached = false;
@@ -93,7 +93,7 @@ export class Session {
       }
     );
     this.client = attach({ proc: this.process });
-    this.files = new SessionFiles(this.workspace.root, this.client);
+    this.fileService = new SessionFiles(this.workspace.root, this.client);
     this.client.on('notification', (method: string, args: unknown[]) => {
       if (method === 'redraw') {
         // Other events can contain Neovim Window handles, which cannot cross Electron IPC.
@@ -303,19 +303,19 @@ export class Session {
   }
 
   async path(relativePath: string): Promise<string> {
-    return this.files.path(relativePath);
+    return this.fileService.path(relativePath);
   }
 
   async openFile(relativePath: string): Promise<void> {
-    await this.files.openFile(relativePath);
+    await this.fileService.openFile(relativePath);
   }
 
   async files(relativePath: string): Promise<FileEntry[]> {
-    return this.files.files(relativePath);
+    return this.fileService.files(relativePath);
   }
 
   async findFiles(): Promise<FileEntry[]> {
-    return this.files.findFiles();
+    return this.fileService.findFiles();
   }
 
   async stop(): Promise<void> {

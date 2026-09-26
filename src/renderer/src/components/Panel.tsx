@@ -5,7 +5,6 @@ import styles from '../assets/Nido.module.css';
 interface PanelProps {
   panel: Panel;
   filtered: Item[];
-  items: Item[];
   selection: number;
   query: string;
   loading: boolean;
@@ -16,14 +15,12 @@ interface PanelProps {
   sidebar: boolean;
   setSidebar: (value: boolean) => void;
   setQuery: (value: string) => void;
-  setSelection: (value: number) => void;
-  report: (message: string) => void;
+  setSelection: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export function Panel({
   panel,
   filtered,
-  items,
   selection,
   query,
   loading,
@@ -34,8 +31,7 @@ export function Panel({
   sidebar,
   setSidebar,
   setQuery,
-  setSelection,
-  report
+  setSelection
 }: PanelProps): React.JSX.Element | null {
   if (!panel) return null;
 
