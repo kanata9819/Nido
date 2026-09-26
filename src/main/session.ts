@@ -8,6 +8,15 @@ import { SessionFiles } from './sessionFiles';
 
 const setup = `
 local channel = ...
+-- LSP messages belong in Nido's nonblocking notification, not Neovim's hit-enter prompt.
+vim.lsp.handlers['window/showMessage'] = function(_, params, ctx)
+  local client = vim.lsp.get_client_by_id(ctx.client_id)
+  local severity = vim.lsp.protocol.MessageType[params.type] or 'Info'
+  local message = ('LSP[%s][%s] %s'):format(client and client.name or ctx.client_id, severity, params.message)
+  local log = ({vim.lsp.log.error, vim.lsp.log.warn, vim.lsp.log.info, vim.lsp.log.debug})[params.type]
+  if log then log(message) end
+  vim.rpcnotify(channel, 'nido:message', message)
+end
 local pending = false
 local progress = {}
 local function publish()
@@ -123,6 +132,9 @@ export class Session {
     this.client = attach({ proc: this.process });
     this.fileService = new SessionFiles(this.workspace.root, this.client);
     this.client.on('notification', (method: string, args: unknown[]) => {
+      if (method === 'nido:message') {
+        this.emit({ type: 'error', id: this.workspace.id, message: String(args[0]) });
+      }
       if (method === 'redraw') {
         // Other events can contain Neovim Window handles, which cannot cross Electron IPC.
         const events = (args as Redraw).filter(([name]) => gridEvents.has(name));

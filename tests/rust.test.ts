@@ -8,6 +8,7 @@ import { Session } from '../src/main/session';
 
 test('Rust syntax and real rust-analyzer navigation, completion and diagnostics', { timeout: 90000 }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-rust-'));
+  const externalRoot = await mkdtemp(join(tmpdir(), 'nido-external-'));
   let session: Session | undefined;
   try {
     await mkdir(join(root, 'src'));
@@ -18,11 +19,13 @@ test('Rust syntax and real rust-analyzer navigation, completion and diagnostics'
     await writeFile(join(root, 'src/lib.rs'), 'pub fn greet() -> u32 { 42 }\n');
     await writeFile(
       join(root, 'src/main.rs'),
-      'use nido_rust_fixture::greet;\nfn main() {\n    let answer = greet();\n    println!("{}", answer);\n}\n'
+      'use nido_rust_fixture::greet;\nfn main() {\n    let answer = greet();\n    println!("{}", answer);\n}\ntype AppTabs = Vec<u32>;\nconst CURSOR_BLINK_INTERVAL: u32 = 500;\n'
     );
     let sawProgress = false;
+    const messages: string[] = [];
     session = await Session.create(root, (event) => {
       if (event.type === 'state' && event.state.lspProgress) sawProgress = true;
+      if (event.type === 'error') messages.push(event.message);
     });
     await session.openFile('src/main.rs');
     const lua = (code: string, args: unknown[] = []): Promise<unknown> =>
@@ -54,6 +57,8 @@ test('Rust syntax and real rust-analyzer navigation, completion and diagnostics'
     }
     assert.match(JSON.stringify(definition), /lib\.rs/);
     assert.equal(session.state.lsp, 'rust_analyzer');
+    assert.deepEqual(await lua("local a=vim.lsp.semantic_tokens.get_at_pos(0, 5, 5) or {}; local b=vim.lsp.semantic_tokens.get_at_pos(0, 6, 6) or {}; return {a[1] and a[1].type, b[1] and b[1].type}"), ['typeAlias', 'const']);
+    assert.deepEqual(await lua("return {vim.api.nvim_get_hl(0, {name='@lsp.type.typeAlias.rust', link=false}).fg, vim.api.nvim_get_hl(0, {name='@lsp.type.const.rust', link=false}).fg}"), [0x4ec9b0, 0x4fc1ff]);
     assert.ok(sawProgress, 'real rust-analyzer startup publishes progress');
     const progress = async (token: string, value: object): Promise<void> => {
       await lua(`local token, value = ...
@@ -71,6 +76,23 @@ test('Rust syntax and real rust-analyzer navigation, completion and diagnostics'
     await progress('nido-test-b', { kind: 'end' });
     assert.doesNotMatch(session.state.lspProgress || '', /Cargo test/);
     assert.match(JSON.stringify(await request('textDocument/hover', params)), /greet/);
+    await session.client.request('nvim_win_set_cursor', [0, [3, 18]]);
+    await session.input('<C-k>');
+    let preview: { id: number; width: number; height: number; title: unknown } | undefined;
+    for (let i = 0; i < 50; i++) {
+      preview = await lua(`for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local config = vim.api.nvim_win_get_config(win)
+        if config.relative ~= '' and config.title then
+          return {id=win, width=config.width, height=config.height, title=config.title}
+        end
+      end`) as typeof preview;
+      if (preview) break;
+      await new Promise((done) => setTimeout(done, 100));
+    }
+    assert.ok(preview, 'Ctrl+K should show a bordered documentation window');
+    assert.ok(preview.width <= 88 && preview.height <= 20);
+    assert.match(JSON.stringify(preview.title), /Type information/);
+    await session.client.request('nvim_win_close', [preview.id, true]);
     assert.match(
       JSON.stringify(
         await request('textDocument/rename', {
@@ -102,6 +124,27 @@ test('Rust syntax and real rust-analyzer navigation, completion and diagnostics'
       options: { tabSize: 4, insertSpaces: true }
     });
     assert.ok(Array.isArray(formatting) && formatting.length > 0);
+    // External Cargo roots must reuse the project's server, even after changing cwd.
+    const clientId = await lua("return vim.lsp.get_clients({name='rust_analyzer'})[1].id");
+    await writeFile(join(externalRoot, 'Cargo.toml'), '[package]\nname="external_fixture"\nversion="0.1.0"\n[lib]\npath="lib.rs"\n');
+    await writeFile(join(externalRoot, 'lib.rs'), '');
+    await lua(`local dir = ...
+      vim.cmd.cd(dir)
+      vim.cmd.edit(vim.fn.fnameescape(vim.fs.joinpath(dir, 'lib.rs')))
+      assert(vim.wait(5000, function() return #vim.lsp.get_clients({bufnr=0}) > 0 end))`, [externalRoot]);
+    assert.deepEqual(await lua("local clients=vim.lsp.get_clients({name='rust_analyzer'}); return {#clients, clients[1].id, vim.lsp.get_clients({bufnr=0})[1].id}"), [1, clientId, clientId]);
+    await lua(`local id = ...
+      for kind = 1, 4 do
+        vim.lsp.handlers['window/showMessage'](nil, {type=kind, message='Nido message test\\n' .. string.rep('long warning ', 200)}, {client_id=id})
+      end`, [clientId]);
+    await session.client.request('nvim_eval', ['1']);
+    assert.equal(messages.filter((message) => message.includes('Nido message test')).length, 4);
+    await session.input('iOK<Esc>');
+    for (let i = 0; i < 50 && await lua('return vim.api.nvim_get_current_line()') !== 'OK'; i++) {
+      await new Promise((done) => setTimeout(done, 20));
+    }
+    assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'OK', 'messages must not require Enter before editing');
+    await lua('vim.bo.modified = false');
     await session.openFile('src/main.rs');
     await lua("vim.api.nvim_buf_set_lines(0, 2, 3, false, {'    let answer: bool = greet();'})");
     await session.save();
@@ -115,5 +158,6 @@ test('Rust syntax and real rust-analyzer navigation, completion and diagnostics'
   } finally {
     await session?.stop();
     await rm(root, { recursive: true, force: true });
+    await rm(externalRoot, { recursive: true, force: true });
   }
 });

@@ -45,6 +45,9 @@ export function useEditorRendering({
     let disposed = false;
     let lastColumns = 0;
     let lastRows = 0;
+    let blinkTimer: ReturnType<typeof setTimeout> | undefined;
+    const input = inputRef.current!;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     const render = (): void => {
       if (disposed || !element.clientWidth || !element.clientHeight) {
@@ -88,18 +91,46 @@ export function useEditorRendering({
     };
 
     paintRef.current = schedule;
+    const canBlink = (): boolean => document.hasFocus() && !document.hidden &&
+      !element.hidden && document.activeElement === input && !reducedMotion.matches;
+    const blink = (): void => {
+      if (!canBlink()) return;
+      gridRef.current.cursorVisible = !gridRef.current.cursorVisible;
+      schedule();
+      blinkTimer = setTimeout(blink, 550);
+    };
+    const resetBlink = (): void => {
+      clearTimeout(blinkTimer);
+      gridRef.current.cursorVisible = true;
+      schedule();
+      if (canBlink()) blinkTimer = setTimeout(blink, 550);
+    };
+    for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart']) input.addEventListener(event, resetBlink);
+    window.addEventListener('focus', resetBlink);
+    window.addEventListener('blur', resetBlink);
+    document.addEventListener('visibilitychange', resetBlink);
+    reducedMotion.addEventListener('change', resetBlink);
     const unsubscribe = window.nido.onEvent((event) => {
-      if (event.type === 'redraw' && event.id === id && gridRef.current.apply(event.events)) {
-        schedule();
+      if (event.type === 'redraw' && event.id === id) {
+        const { row, column } = gridRef.current.cursor;
+        const mode = gridRef.current.mode;
+        if (gridRef.current.apply(event.events)) schedule();
+        if (row !== gridRef.current.cursor.row || column !== gridRef.current.cursor.column || mode !== gridRef.current.mode) resetBlink();
       }
     });
 
     const observer = new ResizeObserver(schedule);
     observer.observe(element);
-    schedule();
+    resetBlink();
 
     return () => {
       disposed = true;
+      clearTimeout(blinkTimer);
+      for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart']) input.removeEventListener(event, resetBlink);
+      window.removeEventListener('focus', resetBlink);
+      window.removeEventListener('blur', resetBlink);
+      document.removeEventListener('visibilitychange', resetBlink);
+      reducedMotion.removeEventListener('change', resetBlink);
       observer.disconnect();
       unsubscribe();
       cancelAnimationFrame(frame);

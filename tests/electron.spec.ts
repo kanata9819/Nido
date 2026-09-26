@@ -58,6 +58,21 @@ test('normal shutdown restores workspace order, active file and cursors', async 
       )
       .toBe(true);
     await page.screenshot({ path: 'test-results/nido-rust-highlights.png' });
+    const cursorIsVisible = (): Promise<boolean> => page.locator('canvas:visible').evaluate((element) => {
+      const canvas = element as HTMLCanvasElement;
+      const input = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Neovim input"]')!;
+      const scale = window.devicePixelRatio || 1;
+      const pixel = canvas.getContext('2d')!.getImageData(
+        Math.floor((parseFloat(input.style.left) + 1) * scale),
+        Math.floor((parseFloat(input.style.top) + 3) * scale), 1, 1).data;
+      return pixel[0] > 80;
+    });
+    await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(true);
+    await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(false);
+    await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(true);
+    await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(false);
+    await page.keyboard.press('ArrowLeft');
+    await expect.poll(cursorIsVisible, { intervals: [20], timeout: 400 }).toBe(true);
     await expect.poll(() => page.locator('canvas:visible').evaluate((element) => {
       const canvas = element as HTMLCanvasElement;
       const scale = window.devicePixelRatio || 1;
@@ -73,12 +88,25 @@ test('normal shutdown restores workspace order, active file and cursors', async 
     await page.keyboard.type(":lua vim.lsp.handlers['$/progress'](nil, {token='nido-ui-test',value={kind='end'}}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})");
     await page.keyboard.press('Enter');
     await expect(page.getByRole('status').filter({ hasText: 'example_crate' })).toHaveCount(0);
+    await page.keyboard.type(":lua vim.lsp.handlers['window/showMessage'](nil, {type=2,message='Failed to run build scripts of some packages.'}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})");
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('alert')).toContainText('LSP[rust_analyzer][Warning] Failed to run build scripts');
+    await expect(page.locator('canvas:visible')).not.toHaveAttribute('aria-description', /Press ENTER/);
+    await page.screenshot({ path: 'test-results/nido-lsp-warning.png' });
+    await page.getByRole('button', { name: 'Dismiss error' }).click();
+    await page.locator('textarea:visible').focus();
     await page.keyboard.type(":lua vim.lsp.util.open_floating_preview({'# Nido documentation', '', '**Markdown preview**'}, 'markdown', {})");
     await page.keyboard.press('Enter');
     await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /Markdown preview/);
     await expect(page.locator('canvas:visible')).not.toHaveAttribute('aria-description', /Parser could not be created|Error executing/);
     await page.screenshot({ path: 'test-results/nido-documentation.png' });
     await page.keyboard.press('j');
+    await page.keyboard.type('gg0w');
+    await expect(async () => {
+      await page.keyboard.press('Control+k');
+      await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /Type information/, { timeout: 1000 });
+    }).toPass({ timeout: 20000 });
+    await page.screenshot({ path: 'test-results/nido-hover.png' });
     for (const [file, keys] of [
       ['a.txt', '3G4l'],
       ['b.txt', 'gg6l']

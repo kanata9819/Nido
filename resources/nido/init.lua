@@ -40,14 +40,32 @@ for _, name in ipairs({'Normal', 'NormalNC', 'LineNr', 'CursorLineNr', 'SignColu
 end
 -- Native Rust syntax and LSP use these groups without a Rust Tree-sitter parser.
 vim.api.nvim_set_hl(0, 'rustKeyword', {link='@keyword'})
+vim.api.nvim_set_hl(0, 'rustStructure', {link='@keyword'})
 vim.api.nvim_set_hl(0, '@lsp.type.namespace.rust', {link='@module'})
 vim.api.nvim_set_hl(0, '@lsp.type.macro.rust', {link='@function.macro'})
+vim.api.nvim_set_hl(0, '@lsp.type.typeAlias.rust', {link='@type'})
+vim.api.nvim_set_hl(0, '@lsp.type.const.rust', {link='@constant'})
+vim.o.winborder = 'rounded'
+vim.api.nvim_set_hl(0, 'NormalFloat', {fg='#d4d4d4', bg='#1b1e21'})
+vim.api.nvim_set_hl(0, 'FloatBorder', {fg='#65717d', bg='#1b1e21'})
+vim.api.nvim_set_hl(0, 'FloatTitle', {fg='#a8cf9e', bg='#1b1e21', bold=true})
+local function preview_options(title)
+  return {
+    border = 'rounded', title = ' ' .. title .. ' ', title_pos = 'left',
+    max_width = math.max(20, math.min(88, math.floor(vim.o.columns * 0.7))),
+    max_height = math.max(4, math.min(20, math.floor(vim.o.lines * 0.45))),
+  }
+end
 vim.api.nvim_create_autocmd('LspAttach', {
   callback = function(event)
     local opts = { buffer = event.buf }
     vim.keymap.set('n', 'gd', vim.lsp.buf.definition, opts)
     vim.keymap.set('n', 'gr', vim.lsp.buf.references, opts)
-    vim.keymap.set('n', 'K', vim.lsp.buf.hover, opts)
+    for _, key in ipairs({'K', '<C-k>'}) do
+      vim.keymap.set('n', key, function()
+        vim.lsp.buf.hover(preview_options('Type information · K to focus'))
+      end, opts)
+    end
     vim.keymap.set('n', '<F12>', vim.lsp.buf.definition, opts)
     vim.keymap.set('n', '<S-F12>', vim.lsp.buf.references, opts)
     vim.keymap.set('n', 'gI', vim.lsp.buf.implementation, opts)
@@ -76,7 +94,9 @@ if vim.fn.executable('rust-analyzer') == 1 then
   vim.lsp.config('rust_analyzer', {
     cmd = { 'rust-analyzer' },
     filetypes = { 'rust' },
-    root_markers = { 'Cargo.toml', '.git' },
+    -- Each Nido session owns one workspace, including navigation into dependencies.
+    -- Discovering a root per buffer would start another server for Rust's sysroot.
+    root_dir = vim.fn.getcwd(),
     settings = { ['rust-analyzer'] = { check = { command = 'check' } } },
   })
   vim.lsp.enable('rust_analyzer')
