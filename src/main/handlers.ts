@@ -219,6 +219,10 @@ export function registerHandlers({
   });
 
   handle('save', (id) => session(id).save());
+  handle('scroll', (id, lines) => {
+    if (typeof lines !== 'number' || !Number.isInteger(lines) || Math.abs(lines) > 1000) throw new Error('Invalid scroll distance');
+    return session(id).scroll(lines);
+  });
   handle('debug', (id, action, target) => {
     if (typeof action !== 'string' || !['start', 'breakpoint', 'over', 'into', 'out', 'pause', 'stop', 'launch'].includes(action)) {
       throw new Error('Invalid debug action');

@@ -75,7 +75,7 @@ export function Panel({
               <input
                 autoFocus
                 type="range"
-                min="12"
+                min="8"
                 max="24"
                 value={fontSize}
                 onChange={(e) => setFontSize(Number(e.target.value))}

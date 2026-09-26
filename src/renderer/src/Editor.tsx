@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Grid } from './grid';
+import { accumulateScroll } from './scroll';
 import { useEditorRendering } from './hooks/useEditorRendering';
 import { useEditorInput } from './hooks/useEditorInput';
 import styles from './assets/Nido.module.css';
@@ -28,6 +29,8 @@ export default function Editor({
   const grid = useRef(new Grid());
   const composing = useRef(false);
   const attached = useRef(false);
+  const wheel = useRef({remainder: 0, time: 0});
+  useEffect(() => { wheel.current = {remainder: 0, time: 0}; }, [active, blocked, fontSize]);
   const paint = useRef<() => void>(() => {});
   const error = useRef(onError);
 
@@ -70,9 +73,12 @@ export default function Editor({
       hidden={!active}
       onClick={() => input.current?.focus()}
       onWheel={(event) => {
-        if (!blocked) {
-          send(window.nido.input(id, event.deltaY > 0 ? '<C-E><C-E><C-E>' : '<C-Y><C-Y><C-Y>'));
-        }
+        if (blocked || !active || event.ctrlKey || composing.current) return;
+        const now = performance.now();
+        const result = accumulateScroll(now - wheel.current.time > 200 ? 0 : wheel.current.remainder,
+          event.deltaY, event.deltaMode, Math.ceil(fontSize * 1.65), event.currentTarget.clientHeight);
+        wheel.current = {remainder: result.remainder, time: now};
+        if (result.lines) send(window.nido.scroll(id, Math.max(-1000, Math.min(1000, result.lines))));
       }}
     >
       <canvas ref={canvas} className={styles.canvas} aria-label="Neovim editor display" />
@@ -89,4 +95,3 @@ export default function Editor({
     </div>
   );
 }
-

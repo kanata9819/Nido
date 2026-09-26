@@ -273,6 +273,14 @@ export class Session {
     await this.write('write');
   }
 
+  async scroll(lines: number): Promise<void> {
+    if (!lines) return;
+    await this.client.request('nvim_exec_lua', [
+      "local n = ...; vim.cmd.normal({args={math.abs(n) .. string.char(n > 0 and 5 or 25)}, bang=true})",
+      [lines]
+    ]);
+  }
+
   async debug(action: DebugAction, target?: number): Promise<void> {
     const [channel] = await this.client.request('nvim_get_api_info', []) as [number, unknown];
     await this.client.request('nvim_exec_lua', ["require('nido_debug').action(...)", [action, channel, target ?? 0]]);

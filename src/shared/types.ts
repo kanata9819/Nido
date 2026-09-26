@@ -54,6 +54,7 @@ export interface NidoAPI {
   attach(id: string, columns: number, rows: number): Promise<void>;
   resize(id: string, columns: number, rows: number): Promise<void>;
   input(id: string, keys: string): Promise<void>;
+  scroll(id: string, lines: number): Promise<void>;
   paste(id: string, text: string): Promise<void>;
   pasteClipboard(id: string): Promise<void>;
   files(id: string, relative: string): Promise<FileEntry[]>;

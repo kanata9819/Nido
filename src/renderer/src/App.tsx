@@ -89,7 +89,7 @@ export default function App(): React.JSX.Element {
   }, [sidebarWidth]);
   const [fontSize, setFontSize] = useState(() => {
     const value = Number(localStorage.getItem('nido.fontSize'));
-    return value >= 12 && value <= 24 ? value : 15;
+    return value >= 8 && value <= 24 ? value : 15;
   });
   const modal = useRef<HTMLDivElement>(null),
     mode = useRef<Record<string, string>>({});
