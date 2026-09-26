@@ -359,6 +359,34 @@
 .statusGap {
   flex: 1;
 }
+.lspProgress {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 45vw;
+  color: #a8cf9e;
+}
+.lspProgress > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.progressSpinner {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border: 2px solid #46515c;
+  border-top-color: #a8cf9e;
+  border-radius: 50%;
+  animation: progressSpin 1s linear infinite;
+}
+@keyframes progressSpin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progressSpinner { animation: none; }
+}
 .sessionCount {
   color: #71808d;
 }

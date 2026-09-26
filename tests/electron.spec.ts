@@ -57,6 +57,14 @@ test('normal shutdown restores workspace order, active file and cursors', async 
       )
       .toBe(true);
     await page.screenshot({ path: 'test-results/nido-rust-highlights.png' });
+    await expect(page.getByTitle('Rust language server connection')).toHaveText('rust_analyzer');
+    await page.keyboard.type(":lua vim.lsp.handlers['$/progress'](nil, {token='nido-ui-test',value={kind='begin',title='Indexing',message='example_crate',percentage=42}}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})");
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('status')).toContainText('Indexing — example_crate (42%)');
+    await page.screenshot({ path: 'test-results/nido-lsp-progress.png' });
+    await page.keyboard.type(":lua vim.lsp.handlers['$/progress'](nil, {token='nido-ui-test',value={kind='end'}}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})");
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('status').filter({ hasText: 'example_crate' })).toHaveCount(0);
     for (const [file, keys] of [
       ['a.txt', '3G4l'],
       ['b.txt', 'gg6l']

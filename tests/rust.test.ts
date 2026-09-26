@@ -20,7 +20,10 @@ test('Rust syntax and real rust-analyzer navigation, completion and diagnostics'
       join(root, 'src/main.rs'),
       'use nido_rust_fixture::greet;\nfn main() {\n    let answer = greet();\n    println!("{}", answer);\n}\n'
     );
-    session = await Session.create(root, () => {});
+    let sawProgress = false;
+    session = await Session.create(root, (event) => {
+      if (event.type === 'state' && event.state.lspProgress) sawProgress = true;
+    });
     await session.openFile('src/main.rs');
     const lua = (code: string, args: unknown[] = []): Promise<unknown> =>
       session!.client.request('nvim_exec_lua', [code, args]);
@@ -47,6 +50,22 @@ test('Rust syntax and real rust-analyzer navigation, completion and diagnostics'
     }
     assert.match(JSON.stringify(definition), /lib\.rs/);
     assert.equal(session.state.lsp, 'rust_analyzer');
+    assert.ok(sawProgress, 'real rust-analyzer startup publishes progress');
+    const progress = async (token: string, value: object): Promise<void> => {
+      await lua(`local token, value = ...
+        local client = vim.lsp.get_clients({name='rust_analyzer'})[1]
+        vim.lsp.handlers['$/progress'](nil, {token=token, value=value}, {client_id=client.id})`, [token, value]);
+      await session!.client.request('nvim_eval', ['1']);
+    };
+    await progress('nido-test-a', { kind: 'begin', title: 'Indexing test' });
+    await progress('nido-test-b', { kind: 'begin', title: 'Cargo test' });
+    await progress('nido-test-a', { kind: 'report', message: 'crate_one', percentage: 42 });
+    assert.match(session.state.lspProgress || '', /Indexing test — crate_one \(42%\)/);
+    await progress('nido-test-a', { kind: 'end' });
+    assert.doesNotMatch(session.state.lspProgress || '', /Indexing test/);
+    assert.match(session.state.lspProgress || '', /Cargo test/);
+    await progress('nido-test-b', { kind: 'end' });
+    assert.doesNotMatch(session.state.lspProgress || '', /Cargo test/);
     assert.match(JSON.stringify(await request('textDocument/hover', params)), /greet/);
     assert.match(
       JSON.stringify(

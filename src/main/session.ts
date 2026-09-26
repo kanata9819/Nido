@@ -9,6 +9,7 @@ import { SessionFiles } from './sessionFiles';
 const setup = `
 local channel = ...
 local pending = false
+local progress = {}
 local function publish()
  if pending then return end
  pending = true
@@ -22,6 +23,19 @@ local function publish()
   end
   local pos = vim.api.nvim_win_get_cursor(0)
   local clients = {}
+  local tasks = {}
+  for _, client in ipairs(vim.lsp.get_clients()) do
+    if not client.initialized then
+      table.insert(tasks, client.name .. ': 起動中…')
+    end
+    for _, value in pairs(progress[client.id] or {}) do
+      local message = client.name .. ': ' .. (value.title or '読み込み中')
+      if value.message and value.message ~= '' then message = message .. ' — ' .. value.message end
+      if value.percentage then message = message .. ' (' .. value.percentage .. '%)' end
+      table.insert(tasks, message)
+    end
+  end
+  table.sort(tasks)
   for _, client in ipairs(vim.lsp.get_clients({bufnr=0})) do
     if client.initialized then table.insert(clients, client.name) end
   end
@@ -30,9 +44,22 @@ local function publish()
     and vim.api.nvim_buf_line_count(0) == 1 and vim.api.nvim_get_current_line() == ''
     and #vim.api.nvim_tabpage_list_wins(0) == 1
   vim.rpcnotify(channel, 'nido:state', {buffers=buffers, current=vim.api.nvim_get_current_buf(),
-   lsp=table.concat(clients, ', '), empty=empty, mode=vim.api.nvim_get_mode().mode, line=pos[1], column=pos[2]+1, filetype=vim.bo.filetype})
+   lsp=table.concat(clients, ', '), lspProgress=table.concat(tasks, ' / '), empty=empty, mode=vim.api.nvim_get_mode().mode, line=pos[1], column=pos[2]+1, filetype=vim.bo.filetype})
  end)
 end
+vim.api.nvim_create_autocmd('LspProgress', {callback=function(event)
+  local id, params = event.data.client_id, event.data.params
+  local value = params.value
+  if type(value) ~= 'table' or not value.kind then return end
+  progress[id] = progress[id] or {}
+  if value.kind == 'end' then
+    progress[id][params.token] = nil
+    if next(progress[id]) == nil then progress[id] = nil end
+  else
+    progress[id][params.token] = vim.tbl_extend('force', progress[id][params.token] or {}, value)
+  end
+  publish()
+end})
 vim.api.nvim_create_autocmd({'BufEnter','BufAdd','BufDelete','BufModifiedSet','BufFilePost','BufWritePost','ModeChanged','CursorMoved','CursorMovedI','FileType','TextChanged','TextChangedI','WinEnter','WinClosed','LspAttach','LspDetach'}, {callback=publish})
 publish()
 `;

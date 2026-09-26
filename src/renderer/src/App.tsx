@@ -546,6 +546,12 @@ export default function App(): React.JSX.Element {
           {workspaces.length} {workspaces.length === 1 ? 'session' : 'sessions'}
         </span>
         <span className={styles.statusGap} />
+        {state.lspProgress && (
+          <span className={styles.lspProgress} role="status" title={state.lspProgress}>
+            <span className={styles.progressSpinner} aria-hidden="true" />
+            <span>{state.lspProgress}</span>
+          </span>
+        )}
         <span>{state.filetype || 'Plain text'}</span>
         {state.filetype === 'rust' && (
           <span title="Rust language server connection">{state.lsp || 'Rust LSP: not connected'}</span>

@@ -15,6 +15,7 @@ export interface BufferInfo {
 }
 export interface SessionState {
   lsp?: string;
+  lspProgress?: string;
   empty?: boolean;
   buffers: BufferInfo[];
   current: number;
