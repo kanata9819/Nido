@@ -38,6 +38,36 @@ const defaultState: SessionState = {
   filetype: ''
 }
 
+function WorkspaceWelcome({ onOpen }: { onOpen: () => void }): React.JSX.Element {
+  return (
+    <section
+      className={`${styles.welcome} ${styles.workspaceWelcome}`}
+      aria-label="Workspace welcome"
+    >
+      <div className={styles.welcomeMark}>
+        <Leaf size={43} strokeWidth={1.4} />
+      </div>
+      <h1>Nido</h1>
+      <p>
+        A place for your code.
+        <br />
+        Open a file to get started.
+      </p>
+      <button className={styles.primary} onClick={onOpen}>
+        <FolderOpen size={18} /> Open a file <kbd>Ctrl P</kbd>
+      </button>
+      <div className={styles.welcomeKeys}>
+        <span>
+          <kbd>Space</kbd> Commands
+        </span>
+        <span>
+          <kbd>i</kbd> Start writing
+        </span>
+      </div>
+    </section>
+  )
+}
+
 export default function App(): React.JSX.Element {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [selectedWorkspace, setActive] = useState('')
@@ -643,7 +673,11 @@ export default function App(): React.JSX.Element {
               blocked={!!panel || leader}
               focusTick={focusTick}
               onError={report}
-            />
+            >
+              {states[w.id]?.empty && states[w.id]?.mode === 'n' && (
+                <WorkspaceWelcome onOpen={() => showPanel('files')} />
+              )}
+            </Editor>
           ))}
           {leader && (
             <div className={styles.leader} role="dialog" aria-label="Keyboard commands">

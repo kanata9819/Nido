@@ -381,6 +381,12 @@
   background: #a3cc9406;
   margin-bottom: 27px;
 }
+.workspaceWelcome {
+  position: absolute;
+  inset: 0 0 36px;
+  background: #191e23;
+  overflow: auto;
+}
 .eyebrow {
   font-size: 10px;
   letter-spacing: 2.4px;

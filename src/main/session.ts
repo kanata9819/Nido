@@ -27,11 +27,15 @@ local function publish()
    end
   end
   local pos = vim.api.nvim_win_get_cursor(0)
+  local empty = #buffers == 1 and buffers[1].id == vim.api.nvim_get_current_buf()
+    and buffers[1].name == '' and not buffers[1].modified and vim.bo.buftype == ''
+    and vim.api.nvim_buf_line_count(0) == 1 and vim.api.nvim_get_current_line() == ''
+    and #vim.api.nvim_tabpage_list_wins(0) == 1
   vim.rpcnotify(channel, 'nido:state', {buffers=buffers, current=vim.api.nvim_get_current_buf(),
-   mode=vim.api.nvim_get_mode().mode, line=pos[1], column=pos[2]+1, filetype=vim.bo.filetype})
+   empty=empty, mode=vim.api.nvim_get_mode().mode, line=pos[1], column=pos[2]+1, filetype=vim.bo.filetype})
  end)
 end
-vim.api.nvim_create_autocmd({'BufEnter','BufAdd','BufDelete','BufModifiedSet','BufFilePost','BufWritePost','ModeChanged','CursorMoved','CursorMovedI','FileType'}, {callback=publish})
+vim.api.nvim_create_autocmd({'BufEnter','BufAdd','BufDelete','BufModifiedSet','BufFilePost','BufWritePost','ModeChanged','CursorMoved','CursorMovedI','FileType','TextChanged','TextChangedI','WinEnter','WinClosed'}, {callback=publish})
 publish()
 `
 

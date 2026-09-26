@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { Grid, vimKey } from './grid'
 import styles from './Nido.module.css'
 
 interface Props {
+  children?: ReactNode
   id: string
   active: boolean
   fontSize: number
@@ -11,6 +12,7 @@ interface Props {
   onError: (message: string) => void
 }
 export default function Editor({
+  children,
   id,
   active,
   fontSize,
@@ -107,6 +109,7 @@ export default function Editor({
       }}
     >
       <canvas ref={canvas} className={styles.canvas} aria-label="Neovim editor display" />
+      {children}
       <textarea
         ref={input}
         className={styles.editorInput}

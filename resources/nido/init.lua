@@ -1,5 +1,6 @@
 -- Nido owns this configuration; personal Neovim config is not loaded.
 vim.g.nido = true
+vim.opt.shortmess:append('I')
 vim.o.termguicolors = true
 vim.o.number = true
 vim.o.relativenumber = false

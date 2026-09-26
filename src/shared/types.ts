@@ -14,6 +14,7 @@ export interface BufferInfo {
   modified: boolean
 }
 export interface SessionState {
+  empty?: boolean
   buffers: BufferInfo[]
   current: number
   mode: string
