@@ -9,7 +9,7 @@ interface PanelProps {
   selection: number;
   query: string;
   loading: boolean;
-  modal: React.RefObject<HTMLDivElement>;
+  modal: React.RefObject<HTMLDivElement | null>;
   focusEditor: () => void;
   fontSize: number;
   setFontSize: (value: number) => void;

@@ -3,7 +3,6 @@ import {
   ArrowRight,
   ChevronRight,
   Code2,
-  Command,
   FileCode2,
   Files,
   FolderOpen,
@@ -17,9 +16,6 @@ import {
   X
 } from 'lucide-react';
 import type { FileEntry, SessionState, Workspace } from '../../shared/types';
-import type { Panel, Item } from './types';
-import Editor from './Editor';
-import Sidebar from './Sidebar';
 import { buildItems, filename } from './commands';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { Panel as PanelComponent } from './components/Panel';

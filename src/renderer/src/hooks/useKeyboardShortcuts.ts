@@ -8,7 +8,7 @@ interface UseKeyboardShortcutsParams {
   setError: (value: string) => void;
   setFocusTick: (value: number) => void;
   focusEditor: () => void;
-  modal: React.RefObject<HTMLDivElement>;
+  modal: React.RefObject<HTMLDivElement | null>;
   mode: React.MutableRefObject<Record<string, string>>;
   active: string;
   workspaces: Workspace[];

@@ -2,7 +2,6 @@ import { app, BrowserWindow, Menu } from 'electron';
 import { join } from 'node:path';
 import { Session } from './session';
 import { registerHandlers, type AppState } from './handlers';
-import type { NidoEvent, Workspace } from '../shared/types';
 
 const sessions = new Map<string, Session>();
 const neovimResources = app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources');
