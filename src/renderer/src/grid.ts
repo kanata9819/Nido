@@ -83,6 +83,7 @@ export class Grid {
     }
     return flush
   }
+
   draw(
     canvas: HTMLCanvasElement,
     width: number,
@@ -154,6 +155,7 @@ export class Grid {
     return { cellWidth, cellHeight }
   }
 }
+
 function color(value: number): string {
   return `#${value.toString(16).padStart(6, '0')}`
 }
@@ -164,8 +166,10 @@ export function vimKey(
   if (
     event.isComposing ||
     ['Shift', 'Control', 'Alt', 'Meta', 'Dead', 'Process', 'Unidentified'].includes(event.key)
-  )
+  ) {
     return null
+  }
+
   const special: Record<string, string> = {
     Escape: 'Esc',
     Enter: 'CR',

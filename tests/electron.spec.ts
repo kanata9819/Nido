@@ -70,6 +70,43 @@ test('normal shutdown restores workspace order, active file and cursors', async 
       await page.keyboard.type(keys)
     }
     await expect(page.getByText('Ln 1, Col 7', { exact: true })).toBeVisible()
+    await page.keyboard.press('Shift+H')
+    await expect(page.getByRole('tab', { name: 'a.txt', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    await expect(page.getByText('Ln 3, Col 5', { exact: true })).toBeVisible()
+    await page.keyboard.press('Shift+L')
+    await expect(page.getByRole('tab', { name: 'b.txt', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    await page.keyboard.press('Shift+L')
+    await expect(page.getByRole('tab', { name: 'highlight.rs', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    await page.keyboard.press('Shift+H')
+    await expect(page.getByRole('tab', { name: 'b.txt', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    await page.keyboard.press('Control+h')
+    await expect(page.getByRole('tree', { name: 'Project files' })).toBeFocused()
+    await page.keyboard.press('Control+l')
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused()
+    await page.keyboard.press('i')
+    await expect(page.getByText('INSERT', { exact: true })).toBeVisible()
+    await page.keyboard.press('Shift+H')
+    await page.keyboard.press('Shift+L')
+    await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /HL/)
+    await expect(page.getByRole('tab', { name: 'b.txt Unsaved', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('u')
+    await expect(page.getByText('Ln 1, Col 7', { exact: true })).toBeVisible()
     await page.keyboard.press('Control+Shift+n')
     await expect(page.getByRole('tab', { name: 'Workspace Two', exact: true })).toBeVisible()
     await page.keyboard.press('Space')

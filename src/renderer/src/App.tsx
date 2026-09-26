@@ -442,6 +442,19 @@ export default function App(): React.JSX.Element {
         nextWorkspace(event.shiftKey ? -1 : 1)
         return
       }
+      if (
+        active &&
+        event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        ['h', 'l'].includes(event.key.toLowerCase())
+      ) {
+        consume()
+        if (event.key.toLowerCase() === 'h') showExplorer()
+        else focusEditor()
+        return
+      }
       if (event.altKey && /^[1-9]$/.test(event.key)) {
         consume()
         const w = workspaces[Number(event.key) - 1]
@@ -477,6 +490,23 @@ export default function App(): React.JSX.Element {
         consume()
         if (event.key === ' ') showPanel('commands')
         else commands.find((command) => command.key === event.key)?.run()
+        return
+      }
+      if (
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        ['H', 'L'].includes(event.key) &&
+        document.activeElement?.getAttribute('aria-label') === 'Neovim input' &&
+        (mode.current[active] || 'normal') === 'normal' &&
+        state.buffers.length > 0
+      ) {
+        consume()
+        const index = state.buffers.findIndex((buffer) => buffer.id === state.current)
+        const offset = event.key === 'H' ? -1 : 1
+        const next = state.buffers[(index + offset + state.buffers.length) % state.buffers.length]
+        run(window.nido.selectBuffer(active, next.id))
         return
       }
       if (
