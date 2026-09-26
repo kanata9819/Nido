@@ -1,4 +1,5 @@
 import type { Redraw } from '../../shared/types';
+import { color } from './gridColors';
 
 export interface Cell {
   text: string;
@@ -27,6 +28,7 @@ export class Grid {
   background = '#191e23';
   mode = 'normal';
   busy = false;
+
   apply(events: Redraw): boolean {
     let flush = false;
     for (const [name, ...calls] of events) {
@@ -95,12 +97,6 @@ export class Grid {
           this.cursor = { row: Number(args[1]), column: Number(args[2]) };
         } else if (name === 'mode_change') {
           this.mode = String(args[0]);
-        } else if (name === 'busy_start') {
-          this.busy = true;
-        } else if (name === 'busy_stop') {
-          this.busy = false;
-        } else if (name === 'flush') {
-          flush = true;
         }
       }
     }
@@ -171,6 +167,16 @@ export class Grid {
         }
       }
     }
+    this.drawCursor(ctx, cellWidth, cellHeight, focused);
+    return { cellWidth, cellHeight };
+  }
+
+  private drawCursor(
+    ctx: CanvasRenderingContext2D,
+    cellWidth: number,
+    cellHeight: number,
+    focused: boolean
+  ): void {
     if (!this.busy && this.cursor.row < this.rows) {
       const x = this.cursor.column * cellWidth;
       const y = this.cursor.row * cellHeight;
@@ -186,12 +192,7 @@ export class Grid {
         ctx.globalAlpha = 1;
       }
     }
-    return { cellWidth, cellHeight };
   }
-}
-
-function color(value: number): string {
-  return `#${value.toString(16).padStart(6, '0')}`;
 }
 
 export function vimKey(

@@ -17,18 +17,14 @@ import {
   X
 } from 'lucide-react';
 import type { FileEntry, SessionState, Workspace } from '../../shared/types';
+import type { Panel, Item } from './types';
 import Editor from './Editor';
 import Sidebar from './Sidebar';
+import { buildItems, filename } from './commands';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { Panel as PanelComponent } from './components/Panel';
 import styles from './assets/Nido.module.css';
 
-type Panel = 'commands' | 'workspaces' | 'files' | 'buffers' | 'settings' | null;
-interface Item {
-  key: string;
-  title: string;
-  detail: string;
-  run: () => void;
-}
-const filename = (path: string): string => path.split(/[\\/]/).pop() || '[Untitled]';
 const defaultState: SessionState = {
   buffers: [],
   current: 0,
@@ -281,279 +277,39 @@ export default function App(): React.JSX.Element {
     requestAnimationFrame(() => document.querySelector<HTMLElement>('aside:not([hidden]) [role="tree"]')?.focus());
   };
 
-  const commands: Item[] = [
-    {
-      key: 'w',
-      title: 'Switch workspace',
-      detail: 'Independent Neovim sessions',
-      run: () => showPanel('workspaces')
-    },
-    {
-      key: 'n',
-      title: 'Open workspace',
-      detail: 'Choose a project folder · Ctrl+Shift+N',
-      run: () => void create()
-    },
-    ...(active
-      ? [
-          ...(state.lsp
-            ? [
-                ['Go to definition', 'F12 / gd', '<F12>'],
-                ['Find references', 'Shift+F12 / gr', '<S-F12>'],
-                ['Go to implementation', 'gI', 'gI'],
-                ['Go to type definition', 'gy', 'gy'],
-                ['Show documentation', 'K', 'K'],
-                ['Rename symbol', 'F2', '<F2>'],
-                ['Code actions', 'gra', 'gra'],
-                ['Format file', 'g=', 'g='],
-                ['Show diagnostic', 'gl', 'gl'],
-                ['Next diagnostic', ']d', ']d']
-              ].map(([title, detail, keys]) => ({
-                key: '',
-                title,
-                detail,
-                run: () => {
-                  run(window.nido.input(active, `<Esc>${keys}`));
-                  focusEditor();
-                }
-              }))
-            : []),
-          {
-            key: 'f',
-            title: 'Find file',
-            detail: 'Search project filenames · Ctrl+P',
-            run: () => showPanel('files')
-          },
-          {
-            key: 'b',
-            title: 'Switch file',
-            detail: 'Open buffers in this workspace',
-            run: () => showPanel('buffers')
-          },
-          {
-            key: 'e',
-            title: 'Focus explorer',
-            detail: 'Navigate with j / k / h / l',
-            run: showExplorer
-          },
-          {
-            key: 's',
-            title: 'Save file',
-            detail: ':w · Ctrl+S',
-            run: () => {
-              run(window.nido.save(active));
-              focusEditor();
-            }
-          },
-          {
-            key: 'h',
-            title: 'Move workspace left',
-            detail: 'Reorder the workspace tabs',
-            run: () => moveWorkspace(-1)
-          },
-          {
-            key: 'l',
-            title: 'Move workspace right',
-            detail: 'Reorder the workspace tabs',
-            run: () => moveWorkspace(1)
-          },
-          {
-            key: 'x',
-            title: 'Close workspace',
-            detail: 'Prompts for unsaved changes',
-            run: () => {
-              focusEditor();
-              closeWorkspace(active);
-            }
-          },
-          {
-            key: 'd',
-            title: 'Close file',
-            detail: 'Prompts for unsaved changes',
-            run: () => {
-              run(window.nido.closeBuffer(active, state.current));
-              focusEditor();
-            }
-          }
-        ]
-      : []),
-    {
-      key: ',',
-      title: 'Settings',
-      detail: 'Editor font size and sidebar',
-      run: () => showPanel('settings')
-    },
-    {
-      key: 'q',
-      title: 'Quit Nido',
-      detail: 'Prompts for unsaved changes',
-      run: () => run(window.nido.windowAction('close'))
-    }
-  ];
-  const items: Item[] =
-    panel === 'workspaces'
-      ? [
-          ...workspaces.map((w, i) => ({
-            key: String(i + 1),
-            title: w.name,
-            detail: w.root,
-            run: () => activate(w.id)
-          })),
-          {
-            key: '+',
-            title: 'Open workspace',
-            detail: 'Start another independent session',
-            run: () => void create()
-          }
-        ]
-      : panel === 'files'
-        ? fileList.map((f) => ({
-            key: '',
-            title: f.name,
-            detail: f.path,
-            run: () => openFile(f.path)
-          }))
-        : panel === 'buffers'
-          ? state.buffers.map((b) => ({
-              key: b.modified ? '●' : '',
-              title: filename(b.name),
-              detail: b.name || 'Untitled buffer',
-              run: () => {
-                run(window.nido.selectBuffer(active, b.id));
-                focusEditor();
-              }
-            }))
-          : commands;
-  const filtered = items
-    .filter((item) => `${item.title} ${item.detail}`.toLowerCase().includes(query.toLowerCase()))
-    .slice(0, 100);
+  const { commands, items, filtered } = buildItems(
+    active,
+    panel,
+    workspaces,
+    fileList,
+    state,
+    query,
+    { showPanel, moveWorkspace, run, focusEditor, closeWorkspace, create, showExplorer, openFile, activate }
+  );
+
+  const keydown = useKeyboardShortcuts({
+    panel,
+    leader,
+    error,
+    setError,
+    setFocusTick,
+    focusEditor,
+    modal,
+    mode,
+    active,
+    workspaces,
+    nextWorkspace,
+    showExplorer,
+    create,
+    showPanel,
+    commands,
+    state: { buffers: state.buffers, current: state.current },
+    run,
+    setLeader,
+    activate
+  });
 
   useEffect(() => {
-    const keydown = (event: KeyboardEvent): void => {
-      if (event.isComposing || event.keyCode === 229) {
-        return;
-      }
-
-      const consume = (): void => {
-        event.preventDefault();
-        event.stopPropagation();
-      };
-
-      if (event.key === 'Escape') {
-        if (error) {
-          consume();
-          setError('');
-          setFocusTick((n) => n + 1);
-          return;
-        }
-
-        if (panel || leader || (document.activeElement as HTMLElement)?.getAttribute('aria-label') !== 'Neovim input') {
-          consume();
-          focusEditor();
-          return;
-        }
-      }
-      if (panel) {
-        if (event.key === 'Tab' && modal.current) {
-          const nodes = [...modal.current.querySelectorAll<HTMLElement>('button, input, [tabindex="0"]')];
-          const first = nodes[0],
-            last = nodes[nodes.length - 1];
-          if (event.shiftKey && document.activeElement === first) {
-            consume();
-            last?.focus();
-          } else if (!event.shiftKey && document.activeElement === last) {
-            consume();
-            first?.focus();
-          }
-        }
-        return;
-      }
-      if (event.ctrlKey && event.key === 'Tab') {
-        consume();
-        nextWorkspace(event.shiftKey ? -1 : 1);
-        return;
-      }
-      if (
-        active &&
-        event.ctrlKey &&
-        !event.altKey &&
-        !event.metaKey &&
-        !event.shiftKey &&
-        ['h', 'l'].includes(event.key.toLowerCase())
-      ) {
-        consume();
-        if (event.key.toLowerCase() === 'h') {
-          showExplorer();
-        } else {
-          focusEditor();
-        }
-        return;
-      }
-      if (event.altKey && /^[1-9]$/.test(event.key)) {
-        consume();
-        const w = workspaces[Number(event.key) - 1];
-        if (w) {
-          activate(w.id);
-        }
-        return;
-      }
-      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'n') {
-        consume();
-        void create();
-        return;
-      }
-      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'p') {
-        consume();
-        showPanel('commands');
-        return;
-      }
-      if (event.ctrlKey && event.key.toLowerCase() === 'p' && active && !mode.current[active]?.startsWith('insert')) {
-        consume();
-        showPanel('files');
-        return;
-      }
-      if (event.ctrlKey && event.key.toLowerCase() === 's' && active) {
-        consume();
-        run(window.nido.save(active));
-        return;
-      }
-      if (leader) {
-        consume();
-        if (event.key === ' ') {
-          showPanel('commands');
-        } else {
-          commands.find((command) => command.key === event.key)?.run();
-        }
-        return;
-      }
-      if (
-        event.shiftKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        !event.metaKey &&
-        ['H', 'L'].includes(event.key) &&
-        document.activeElement?.getAttribute('aria-label') === 'Neovim input' &&
-        (mode.current[active] || 'normal') === 'normal' &&
-        state.buffers.length > 0
-      ) {
-        consume();
-        const index = state.buffers.findIndex((buffer) => buffer.id === state.current);
-        const offset = event.key === 'H' ? -1 : 1;
-        const next = state.buffers[(index + offset + state.buffers.length) % state.buffers.length];
-        run(window.nido.selectBuffer(active, next.id));
-        return;
-      }
-      if (
-        event.key === ' ' &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        document.activeElement?.getAttribute('aria-label') === 'Neovim input' &&
-        (mode.current[active] || 'normal') === 'normal'
-      ) {
-        consume();
-        setLeader(true);
-      }
-    };
     document.addEventListener('keydown', keydown, true);
     return () => document.removeEventListener('keydown', keydown, true);
   });
@@ -813,131 +569,23 @@ export default function App(): React.JSX.Element {
           </button>
         </div>
       )}
-      {panel && (
-        <div
-          className={styles.scrim}
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              focusEditor();
-            }
-          }}
-        >
-          <div
-            className={styles.palette}
-            role="dialog"
-            aria-modal="true"
-            aria-label={panel === 'settings' ? 'Settings' : `${panel} palette`}
-            ref={modal}
-          >
-            <div className={styles.paletteHeading}>
-              <Command size={17} />
-              <span>
-                {panel === 'files'
-                  ? 'Find a file'
-                  : panel === 'workspaces'
-                    ? 'Your workspaces'
-                    : panel === 'buffers'
-                      ? 'Open files'
-                      : panel === 'settings'
-                        ? 'Settings'
-                        : 'All commands'}
-              </span>
-              <button aria-label="Close palette" onClick={focusEditor}>
-                <X size={17} />
-              </button>
-            </div>
-            {panel === 'settings' ? (
-              <div className={styles.settings}>
-                <label>
-                  Editor font size{' '}
-                  <input
-                    autoFocus
-                    type="range"
-                    min="12"
-                    max="24"
-                    value={fontSize}
-                    onChange={(e) => setFontSize(Number(e.target.value))}
-                  />
-                  <span>{fontSize}px</span>
-                </label>
-                <label>
-                  Show file explorer{' '}
-                  <input type="checkbox" checked={sidebar} onChange={(e) => setSidebar(e.target.checked)} />
-                </label>
-                <p>
-                  Vim editing · Space commands · Ctrl+Tab workspaces
-                  <br />
-                  Nido includes its own Neovim and editor settings. Personal Neovim config is not loaded.
-                </p>
-              </div>
-            ) : (
-              <>
-                <input
-                  autoFocus
-                  className={styles.paletteInput}
-                  aria-label="Filter items"
-                  placeholder={panel === 'files' ? 'Type a filename…' : 'Type to search…'}
-                  value={query}
-                  onChange={(event) => {
-                    setQuery(event.target.value);
-                    setSelection(0);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'ArrowDown' || (event.ctrlKey && event.key === 'j')) {
-                      event.preventDefault();
-                      setSelection((n) => Math.min(n + 1, filtered.length - 1));
-                    } else if (event.key === 'ArrowUp' || (event.ctrlKey && event.key === 'k')) {
-                      event.preventDefault();
-                      setSelection((n) => Math.max(0, n - 1));
-                    } else if (event.key === 'Enter') {
-                      event.preventDefault();
-                      filtered[Math.max(0, selection)]?.run();
-                    }
-                  }}
-                />
-                <div className={styles.paletteItems}>
-                  {filtered.map((item, i) => (
-                    <button
-                      key={`${item.title}-${i}`}
-                      className={i === selection ? styles.selectedItem : ''}
-                      ref={(node) => {
-                        if (node && i === selection) {
-                          node.scrollIntoView({ block: 'nearest' });
-                        }
-                      }}
-                      onClick={item.run}
-                    >
-                      <span className={styles.itemIcon}>
-                        {panel === 'workspaces' ? (
-                          <FolderOpen size={18} />
-                        ) : panel === 'files' || panel === 'buffers' ? (
-                          <FileCode2 size={18} />
-                        ) : (
-                          <Command size={17} />
-                        )}
-                      </span>
-                      <span>
-                        <strong>{item.title}</strong>
-                        <small>{item.detail}</small>
-                      </span>
-                      {item.key && <kbd>{item.key}</kbd>}
-                    </button>
-                  ))}
-                  {!filtered.length && (
-                    <p className={styles.noResults}>
-                      {loading ? 'Looking through your project…' : 'No matching items.'}
-                    </p>
-                  )}
-                </div>
-                <div className={styles.paletteFooter}>
-                  <span>↑ ↓ or Ctrl+j / k to navigate</span>
-                  <span>Enter to select · Esc to return</span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      <PanelComponent
+        panel={panel}
+        filtered={filtered}
+        items={items}
+        selection={selection}
+        query={query}
+        loading={loading}
+        modal={modal}
+        focusEditor={focusEditor}
+        fontSize={fontSize}
+        setFontSize={setFontSize}
+        sidebar={sidebar}
+        setSidebar={setSidebar}
+        setQuery={setQuery}
+        setSelection={setSelection}
+        report={report}
+      />
     </div>
   );
 }

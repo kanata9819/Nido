@@ -1,9 +1,10 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { realpath, readdir, stat } from 'node:fs/promises';
-import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
+import { realpath, stat } from 'node:fs/promises';
+import { basename, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { attach, type NeovimClient } from 'neovim';
 import type { FileEntry, NidoEvent, Redraw, SavedWorkspace, SessionState, Workspace } from '../shared/types';
+import { SessionFiles } from './sessionFiles';
 
 const setup = `
 local channel = ...
@@ -54,6 +55,7 @@ export class Session {
   readonly workspace: Workspace;
   readonly process: ChildProcessWithoutNullStreams;
   readonly client: NeovimClient;
+  readonly files: SessionFiles;
   state: SessionState = { buffers: [], current: 0, mode: 'n', line: 1, column: 1, filetype: '' };
   private stopped = false;
   private attached = false;
@@ -91,6 +93,7 @@ export class Session {
       }
     );
     this.client = attach({ proc: this.process });
+    this.files = new SessionFiles(this.workspace.root, this.client);
     this.client.on('notification', (method: string, args: unknown[]) => {
       if (method === 'redraw') {
         // Other events can contain Neovim Window handles, which cannot cross Electron IPC.
@@ -300,58 +303,19 @@ export class Session {
   }
 
   async path(relativePath: string): Promise<string> {
-    if (isAbsolute(relativePath)) {
-      throw new Error('Expected a project-relative path.');
-    }
-    const actual = await realpath(resolve(this.workspace.root, relativePath));
-    const rel = relative(this.workspace.root, actual);
-    if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
-      throw new Error('Path is outside this workspace.');
-    }
-    return actual;
+    return this.files.path(relativePath);
   }
 
   async openFile(relativePath: string): Promise<void> {
-    const file = await this.path(relativePath);
-    if (!(await stat(file)).isFile()) {
-      throw new Error('Choose a file.');
-    }
-    await this.client.request('nvim_exec_lua', ['vim.cmd.edit(vim.fn.fnameescape(...))', [file]]);
+    await this.files.openFile(relativePath);
   }
 
   async files(relativePath: string): Promise<FileEntry[]> {
-    const directory = await this.path(relativePath);
-    const entries = await readdir(directory, { withFileTypes: true });
-    return entries
-      .filter((e) => !e.isSymbolicLink() && e.name !== '.git' && (e.isFile() || e.isDirectory()))
-      .map((e) => ({
-        name: e.name,
-        path: relative(this.workspace.root, resolve(directory, e.name)),
-        directory: e.isDirectory()
-      }))
-      .sort((a, b) => Number(b.directory) - Number(a.directory) || a.name.localeCompare(b.name));
+    return this.files.files(relativePath);
   }
 
   async findFiles(): Promise<FileEntry[]> {
-    const result: FileEntry[] = [];
-    const visit = async (directory: string, depth: number): Promise<void> => {
-      if (depth > 12 || result.length >= 5000) {
-        return;
-      }
-      for (const entry of await this.files(directory)) {
-        if (result.length >= 5000) {
-          break;
-        }
-        if (!entry.directory) {
-          result.push(entry);
-        } else if (!['node_modules', 'dist', 'out', 'build', 'target', '.next'].includes(entry.name)) {
-          await visit(entry.path, depth + 1);
-        }
-      }
-    };
-    // ponytail: cap at 5,000 files/12 levels; use a cancellable indexed search for larger projects.
-    await visit('', 0);
-    return result;
+    return this.files.findFiles();
   }
 
   async stop(): Promise<void> {

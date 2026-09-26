@@ -1,5 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { Grid, vimKey } from './grid';
+import { Grid } from './grid';
+import { useEditorRendering } from './hooks/useEditorRendering';
+import { useEditorInput } from './hooks/useEditorInput';
 import styles from './assets/Nido.module.css';
 
 interface Props {
@@ -33,81 +35,29 @@ export default function Editor({
     error.current = onError;
   }, [onError]);
 
-  useEffect(() => {
-    const element = host.current!;
-    const surface = canvas.current!;
+  useEditorRendering({
+    id,
+    fontSize,
+    blocked,
+    active,
+    focusTick,
+    onError,
+    errorRef: error,
+    hostRef: host,
+    canvasRef: canvas,
+    inputRef: input,
+    gridRef: grid,
+    attachedRef: attached,
+    paintRef: paint
+  });
 
-    let frame = 0;
-    let disposed = false;
-    let lastColumns = 0;
-    let lastRows = 0;
-
-    const render = (): void => {
-      if (disposed || !element.clientWidth || !element.clientHeight) {
-        return;
-      }
-      const metrics = grid.current.draw(
-        surface,
-        element.clientWidth,
-        element.clientHeight,
-        fontSize,
-        document.activeElement === input.current
-      );
-
-      surface.setAttribute(
-        'aria-description',
-        grid.current.cells.map((row) => row.map((cell) => cell.text).join('')).join('\n')
-      );
-
-      if (input.current) {
-        input.current.style.left = `${grid.current.cursor.column * metrics.cellWidth}px`;
-        input.current.style.top = `${grid.current.cursor.row * metrics.cellHeight}px`;
-      }
-
-      const columns = Math.max(20, Math.floor(element.clientWidth / metrics.cellWidth));
-      const rows = Math.max(4, Math.floor(element.clientHeight / metrics.cellHeight));
-      if (!attached.current) {
-        attached.current = true;
-        lastColumns = columns;
-        lastRows = rows;
-        void window.nido.attach(id, columns, rows).catch((e) => error.current(String(e)));
-      } else if (columns !== lastColumns || rows !== lastRows) {
-        lastColumns = columns;
-        lastRows = rows;
-        void window.nido.resize(id, columns, rows).catch((e) => error.current(String(e)));
-      }
-    };
-
-    const schedule = (): void => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(render);
-    };
-
-    paint.current = schedule;
-    const unsubscribe = window.nido.onEvent((event) => {
-      if (event.type === 'redraw' && event.id === id && grid.current.apply(event.events)) {
-        schedule();
-      }
-    });
-
-    const observer = new ResizeObserver(schedule);
-    observer.observe(element);
-    schedule();
-
-    return () => {
-      disposed = true;
-      observer.disconnect();
-      unsubscribe();
-      cancelAnimationFrame(frame);
-    };
-  }, [id, fontSize]);
-
-  useEffect(() => {
-    if (active && !blocked) {
-      input.current?.focus();
-      paint.current();
-    }
-  }, [active, blocked, focusTick]);
+  const inputHandlers = useEditorInput({
+    id,
+    blocked,
+    composingRef: composing,
+    paintRef: paint,
+    onError
+  });
 
   const send = (promise: Promise<unknown>): void => {
     void promise.catch((e) => error.current(String(e)));
@@ -134,50 +84,9 @@ export default function Editor({
         spellCheck={false}
         autoCapitalize="off"
         autoComplete="off"
-        onFocus={() => paint.current()}
-        onBlur={() => paint.current()}
-        onCompositionStart={() => {
-          composing.current = true;
-        }}
-        onCompositionEnd={(event) => {
-          composing.current = false;
-          if (event.data) {
-            send(window.nido.input(id, event.data.replaceAll('<', '<LT>')));
-          }
-          event.currentTarget.value = '';
-        }}
-        onInput={(event) => {
-          if (composing.current || (event.nativeEvent as InputEvent).isComposing) {
-            return;
-          }
-          const value = event.currentTarget.value;
-          if (value) {
-            send(window.nido.input(id, value.replaceAll('<', '<LT>')));
-          }
-          event.currentTarget.value = '';
-        }}
-        onPaste={(event) => {
-          event.preventDefault();
-          send(window.nido.paste(id, event.clipboardData.getData('text/plain')));
-        }}
-        onKeyDown={(event) => {
-          if (blocked || composing.current || event.nativeEvent.isComposing) {
-            return;
-          }
-
-          if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'v') {
-            event.preventDefault();
-            send(window.nido.pasteClipboard(id));
-            return;
-          }
-
-          const key = vimKey(event.nativeEvent);
-          if (key) {
-            event.preventDefault();
-            send(window.nido.input(id, key));
-          }
-        }}
+        {...inputHandlers}
       />
     </div>
   );
 }
+

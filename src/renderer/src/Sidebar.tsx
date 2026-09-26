@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, FileCode2, Folder, FolderOpen, RefreshCw } from 'lucide-react';
 import type { FileEntry, Workspace } from '../../shared/types';
+import { getVisibleEntries } from './sidebarTree';
+import { toggle } from './sidebarToggle';
+import { createOnKeyDown } from './sidebarKeyboard';
 import styles from './assets/Nido.module.css';
 
 interface Props {
@@ -42,33 +45,7 @@ export default function Sidebar({ workspace, active, currentFile, onOpen, onErro
     };
   }, [workspace.id, onError]);
 
-  const visible: (FileEntry & { depth: number })[] = [];
-  const visit = (path: string, depth: number): void => {
-    for (const entry of entries[path] || []) {
-      visible.push({ ...entry, depth });
-      if (entry.directory && expanded.has(entry.path)) {
-        visit(entry.path, depth + 1);
-      }
-    }
-  };
-
-  const toggle = (entry: FileEntry): void => {
-    setSelected(entry.path);
-    if (!entry.directory) {
-      onOpen(entry.path);
-      return;
-    }
-    const next = new Set(expanded);
-    if (next.has(entry.path)) {
-      next.delete(entry.path);
-    } else {
-      next.add(entry.path);
-      void load(entry.path);
-    }
-    setExpanded(next);
-  };
-
-  visit('', 0);
+  const visible = getVisibleEntries(entries, expanded);
 
   return (
     <aside className={styles.sidebar} aria-label="File explorer" hidden={!active}>
@@ -84,45 +61,16 @@ export default function Sidebar({ workspace, active, currentFile, onOpen, onErro
         tabIndex={0}
         aria-label="Project files"
         aria-activedescendant={selected ? `file-${workspace.id}-${selected}` : undefined}
-        onKeyDown={(event) => {
-          const index = visible.findIndex((entry) => entry.path === selected),
-            item = visible[Math.max(0, index)];
-          if (['j', 'k', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
-            event.preventDefault();
-            const next =
-              event.key === 'Home'
-                ? 0
-                : event.key === 'End'
-                  ? visible.length - 1
-                  : Math.min(
-                      visible.length - 1,
-                      Math.max(0, index + (['j', 'ArrowDown'].includes(event.key) ? 1 : -1))
-                    );
-            if (visible[next]) {
-              setSelected(visible[next].path);
-              document
-                .getElementById(`file-${workspace.id}-${visible[next].path}`)
-                ?.scrollIntoView({ block: 'nearest' });
-            }
-          } else if (item && ['Enter', 'l', 'ArrowRight'].includes(event.key)) {
-            event.preventDefault();
-            if (!item.directory || !expanded.has(item.path) || event.key === 'Enter') {
-              toggle(item);
-            } else if (item && ['h', 'ArrowLeft'].includes(event.key)) {
-              event.preventDefault();
-              if (expanded.has(item.path)) {
-                const next = new Set(expanded);
-                next.delete(item.path);
-                setExpanded(next);
-              } else {
-                const parent = item.path.replace(/[\\/][^\\/]+$/, '');
-                if (parent !== item.path) {
-                  setSelected(parent);
-                }
-              }
-            }
-          }
-        }}
+        onKeyDown={createOnKeyDown({
+          visible,
+          selected,
+          expanded,
+          setSelected,
+          setExpanded,
+          load,
+          onOpen,
+          workspaceId: workspace.id,
+        })}
       >
         {visible.map((entry) => (
           <div
@@ -134,7 +82,7 @@ export default function Sidebar({ workspace, active, currentFile, onOpen, onErro
             aria-selected={selected === entry.path}
             className={`${styles.treeItem} ${selected === entry.path ? styles.treeSelected : ''} ${currentFile.endsWith(entry.path) ? styles.currentFile : ''}`}
             style={{ paddingLeft: 14 + entry.depth * 16 }}
-            onClick={() => toggle(entry)}
+            onClick={() => toggle({ entry, expanded, setExpanded, setSelected, onOpen, load })}
           >
             {entry.directory ? (
               expanded.has(entry.path) ? (
