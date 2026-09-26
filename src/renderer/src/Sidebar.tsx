@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, FileCode2, Folder, FolderOpen, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, FolderOpen, RefreshCw } from 'lucide-react';
+import FileIcon from './components/FileIcon';
 import type { FileEntry, Workspace } from '../../shared/types';
 import { getVisibleEntries } from './sidebarTree';
 import { toggle } from './sidebarToggle';
@@ -138,7 +139,7 @@ export default function Sidebar({ workspace, active, currentFile, onOpen, onErro
                 <Folder size={15} />
               )
             ) : (
-              <FileCode2 size={15} className={styles.fileIcon} />
+              <FileIcon path={entry.path} className={styles.fileIcon} />
             )}
             <span>{entry.name}</span>
           </div>

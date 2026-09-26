@@ -17,6 +17,8 @@ const api: NidoAPI = {
   selectBuffer: (id, buffer) => ipcRenderer.invoke('nido:selectBuffer', id, buffer),
   closeBuffer: (id, buffer) => ipcRenderer.invoke('nido:closeBuffer', id, buffer),
   save: (id) => ipcRenderer.invoke('nido:save', id),
+  debug: (id, action, target) => ipcRenderer.invoke('nido:debug', id, action, target),
+  setLineEnding: (id, format) => ipcRenderer.invoke('nido:setLineEnding', id, format),
   windowAction: (action) => ipcRenderer.invoke('nido:window', action),
   onEvent: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, event: NidoEvent): void => callback(event);

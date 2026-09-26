@@ -4,6 +4,44 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+test('Rust debugger keyboard controls stop, inspect and step in the packaged app', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-debug-ui-'));
+  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  const env = {...process.env};
+  delete env.ELECTRON_RUN_AS_NODE;
+  try {
+    await mkdir(join(root, 'src'));
+    await writeFile(join(root, 'Cargo.toml'), '[package]\nname="nido_debug_ui"\nversion="0.1.0"\nedition="2021"\n');
+    await writeFile(join(root, 'src/main.rs'), 'fn main() {\n    let number = 21;\n    let answer = number * 2;\n    println!("answer={answer}");\n}\n');
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
+    running = await electron.launch({executablePath, args:[...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`], env});
+    await running.evaluate(({dialog}, path) => {dialog.showOpenDialog = async () => ({canceled:false, filePaths:[path]});}, root);
+    const page = await running.firstWindow();
+    await expect(page.getByRole('heading', {name:'Make yourself at home.'})).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await expect(page.getByRole('treeitem', {name:'src', exact:true})).toBeVisible();
+    await page.keyboard.press('Control+p');
+    await page.getByRole('textbox', {name:'Filter items'}).fill('main.rs');
+    await expect(page.getByRole('button', {name:/main.rs.*src/})).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('tab', {name:'main.rs', exact:true})).toBeVisible();
+    await page.keyboard.type('3G');
+    await page.keyboard.press('F9');
+    await expect(page.getByRole('region', {name:'Debugger'})).toBeVisible();
+    await page.keyboard.press('F5');
+    await expect(page.getByRole('region', {name:'Debugger'})).toContainText('Debug · paused', {timeout:30000});
+    await expect(page.getByLabel('Debug variables')).toContainText('number = 21');
+    await page.keyboard.press('F10');
+    await expect(page.getByLabel('Debug variables')).toContainText('answer = 42');
+    await page.screenshot({path:'test-results/nido-debugger.png'});
+    await page.keyboard.press('Shift+F5');
+    await expect(page.getByRole('region', {name:'Debugger'})).toContainText('Debug · finished');
+  } finally {
+    await running?.close();
+    await rm(root, {recursive:true, force:true});
+  }
+});
+
 test('normal shutdown restores workspace order, active file and cursors', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-restart-'));
   const env = { ...process.env };
@@ -20,6 +58,7 @@ test('normal shutdown restores workspace order, active file and cursors', async 
     await mkdir(join(root, 'Two'));
     await writeFile(join(root, 'One', 'a.txt'), 'first line\nsecond line\nthird line\n');
     await writeFile(join(root, 'One', 'b.txt'), 'another line\n');
+    await writeFile(join(root, 'One', 'mixed.txt'), 'first\r\nsecond\n');
     await writeFile(join(root, 'One', 'highlight.rs'), 'fn main() { let greeting = "hello"; }\n');
     await writeFile(
       join(root, 'One', 'Cargo.toml'),
@@ -38,6 +77,26 @@ test('normal shutdown restores workspace order, active file and cursors', async 
     await page.keyboard.press('Control+Shift+n');
     await expect(page.getByRole('tab', { name: 'Workspace One', exact: true })).toBeVisible();
     await expect(page.getByRole('treeitem', { name: 'a.txt', exact: true })).toBeVisible();
+    await page.keyboard.press('Control+p');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('mixed.txt');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('combobox', { name: 'Line endings' })).toHaveValue('Mixed');
+    await expect(page.getByRole('alert')).toContainText('Mixed line endings detected');
+    await page.getByRole('button', { name: 'Dismiss error' }).click();
+    await page.getByRole('combobox', { name: 'Line endings' }).selectOption('LF');
+    await expect(page.getByRole('combobox', { name: 'Line endings' })).toHaveValue('LF');
+    assert.equal(await readFile(join(root, 'One', 'mixed.txt'), 'utf8'), 'first\r\nsecond\n');
+    await page.keyboard.press('Control+s');
+    await expect.poll(() => readFile(join(root, 'One', 'mixed.txt'), 'utf8')).toBe('first\nsecond\n');
+    await page.keyboard.press('Control+Shift+p');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('Convert line endings to CRLF');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('combobox', { name: 'Line endings' })).toHaveValue('CRLF');
+    await page.keyboard.press('Control+s');
+    await expect.poll(() => readFile(join(root, 'One', 'mixed.txt'), 'utf8')).toBe('first\r\nsecond\r\n');
+    await page.keyboard.press('Space');
+    await page.keyboard.press('d');
+    await expect(page.getByRole('tab', { name: 'mixed.txt', exact: true })).toHaveCount(0);
     await page.keyboard.press('Control+p');
     await page.getByRole('textbox', { name: 'Filter items' }).fill('highlight.rs');
     await page.keyboard.press('Enter');

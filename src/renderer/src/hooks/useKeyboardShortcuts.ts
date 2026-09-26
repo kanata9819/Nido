@@ -83,6 +83,13 @@ export function useKeyboardShortcuts({
       }
       return;
     }
+    if (active && !event.ctrlKey && !event.altKey && !event.metaKey && ['F5', 'F9', 'F10', 'F11'].includes(event.key)) {
+      consume();
+      const action = event.key === 'F9' ? 'breakpoint' : event.key === 'F10' ? 'over' : event.key === 'F11' ? (event.shiftKey ? 'out' : 'into') : (event.shiftKey ? 'stop' : 'start');
+      run(window.nido.debug(active, action));
+      focusEditor();
+      return;
+    }
     if (event.ctrlKey && event.key === 'Tab') {
       consume();
       nextWorkspace(event.shiftKey ? -1 : 1);

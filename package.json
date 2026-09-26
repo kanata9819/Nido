@@ -13,7 +13,7 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "start": "electron-vite preview",
-    "prepare:neovim": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-neovim.ps1",
+    "prepare:neovim": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-neovim.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-debugger.ps1",
     "dev": "npm run prepare:neovim && electron-vite dev",
     "build": "npm run prepare:neovim && npm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
@@ -23,7 +23,8 @@
     "build:linux": "electron-vite build && electron-builder --linux",
     "test": "tsx --test tests/session.test.ts",
     "test:e2e": "playwright test",
-    "test:rust": "tsx --test tests/rust.test.ts"
+    "test:rust": "tsx --test tests/rust.test.ts",
+    "test:debug": "tsx --test tests/debug.test.ts"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",

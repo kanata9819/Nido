@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain } from 'electron';
 import { join } from 'node:path';
 import { Session } from './session';
 import { readLayout, writeLayout } from './persistence';
-import type { NidoEvent, Workspace } from '../shared/types';
+import type { DebugAction, NidoEvent, Workspace } from '../shared/types';
 
 export interface AppState {
   order: string[];
@@ -219,6 +219,16 @@ export function registerHandlers({
   });
 
   handle('save', (id) => session(id).save());
+  handle('debug', (id, action, target) => {
+    if (typeof action !== 'string' || !['start', 'breakpoint', 'over', 'into', 'out', 'pause', 'stop', 'launch'].includes(action)) {
+      throw new Error('Invalid debug action');
+    }
+    return session(id).debug(action as DebugAction, action === 'launch' ? integer(target) : undefined);
+  });
+  handle('setLineEnding', (id, format) => {
+    if (format !== 'LF' && format !== 'CRLF') throw new Error('Invalid line ending');
+    return session(id).setLineEnding(format);
+  });
 
   handle('window', (action) => {
     if (action === 'minimize') {

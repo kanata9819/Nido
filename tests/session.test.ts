@@ -7,6 +7,51 @@ import { Session } from '../src/main/session';
 import { Grid, vimKey } from '../src/renderer/src/grid';
 import { readLayout, writeLayout } from '../src/main/persistence';
 
+test('line endings normalize only in memory until saved, preserve content and support undo', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-eol-'));
+  let session: Session | undefined;
+  try {
+    const original = 'one\r\ntwo\ninside\rcarriage\r\nlast';
+    await writeFile(join(root, 'mixed.txt'), original);
+    await writeFile(join(root, 'dos.txt'), 'one\r\ntwo\r\n');
+    const notices: string[] = [];
+    session = await Session.create(root, (event) => {
+      if (event.type === 'error') notices.push(event.message);
+    });
+    const lua = (code: string): Promise<unknown> => session!.client.request('nvim_exec_lua', [code, []]);
+    await session.openFile('mixed.txt');
+    await lua('return 1');
+    assert.equal(session.state.lineEnding, 'Mixed');
+    assert.ok(notices.some((message) => message.includes('Mixed line endings')));
+    await session.client.request('nvim_win_set_cursor', [0, [2, 1]]);
+    await session.setLineEnding('LF');
+    await lua('return 1');
+    assert.equal(session.state.lineEnding, 'LF');
+    assert.equal(await session.bufferModified(session.state.current), true);
+    assert.deepEqual(await lua('return vim.api.nvim_win_get_cursor(0)'), [2, 1]);
+    assert.equal(await readFile(join(root, 'mixed.txt'), 'utf8'), original);
+    await lua('vim.cmd.undo()');
+    assert.equal(await lua("return require('nido_eol').detect()"), 'Mixed');
+    await session.setLineEnding('LF');
+    await session.save();
+    assert.equal(await readFile(join(root, 'mixed.txt'), 'utf8'), 'one\ntwo\ninside\rcarriage\nlast');
+    await session.setLineEnding('CRLF');
+    await session.save();
+    assert.equal(await readFile(join(root, 'mixed.txt'), 'utf8'), 'one\r\ntwo\r\ninside\rcarriage\r\nlast');
+    await session.openFile('dos.txt');
+    await lua('return 1');
+    assert.equal(session.state.lineEnding, 'CRLF');
+    await session.setLineEnding('LF');
+    assert.equal(await session.bufferModified(session.state.current), true);
+    await session.save();
+    assert.equal(await readFile(join(root, 'dos.txt'), 'utf8'), 'one\ntwo\n');
+    await assert.rejects(session.setLineEnding('invalid' as 'LF'));
+  } finally {
+    await session?.stop();
+    await rm(root, {recursive: true, force: true});
+  }
+});
+
 test('a renderer joining after Neovim startup receives syntax colors', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-colors-'));
   let grid: Grid | undefined;

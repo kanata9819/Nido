@@ -3,7 +3,6 @@ import {
   ArrowRight,
   ChevronRight,
   Code2,
-  FileCode2,
   Files,
   FolderOpen,
   Keyboard,
@@ -18,6 +17,8 @@ import {
 import type { FileEntry, SessionState, Workspace } from '../../shared/types';
 import type { Panel } from './types';
 import Editor from './Editor';
+import FileIcon from './components/FileIcon';
+import DebugPanel from './components/DebugPanel';
 import Sidebar from './Sidebar';
 import { buildItems, filename } from './commands';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -73,6 +74,7 @@ export default function App(): React.JSX.Element {
   const [creating, setCreating] = useState(false);
   const [restoring, setRestoring] = useState(true);
   const [error, setError] = useState('');
+  const [debugVisible, setDebugVisible] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
   const [sidebar, setSidebar] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -93,6 +95,7 @@ export default function App(): React.JSX.Element {
     mode = useRef<Record<string, string>>({});
   const active = workspaces.some((w) => w.id === selectedWorkspace) ? selectedWorkspace : workspaces[0]?.id || '';
   const state = states[active] || defaultState;
+  useEffect(() => { if (state.debug) setDebugVisible(true); }, [state.debug?.status]);
   const displayMode = state.mode.startsWith('i')
     ? 'INSERT'
     : state.mode.startsWith('v') || state.mode === 'V' || state.mode === '\u0016'
@@ -447,7 +450,7 @@ export default function App(): React.JSX.Element {
                         focusEditor();
                       }}
                     >
-                      <FileCode2 size={15} />
+                      <FileIcon path={buffer.name} />
                       <span>{filename(buffer.name)}</span>
                       {buffer.modified && <span className={styles.unsaved} aria-label="Unsaved" />}
                     </button>
@@ -547,7 +550,12 @@ export default function App(): React.JSX.Element {
           )}
         </main>
       </div>
+      {active && debugVisible && <DebugPanel state={state.debug} action={(action, target) => {
+        run(window.nido.debug(active, action, target));
+        focusEditor();
+      }} />}
       <footer className={styles.statusbar}>
+        {active && <button aria-label="Toggle debugger" onClick={() => setDebugVisible(!debugVisible)}>Debug</button>}
         <span className={styles.mode} data-mode={displayMode}>
           {displayMode}
         </span>
@@ -568,6 +576,23 @@ export default function App(): React.JSX.Element {
           <span title="Rust language server connection">{state.lsp || 'Rust LSP: not connected'}</span>
         )}
         <span>UTF-8</span>
+        {active && state.lineEnding && (
+          <select
+            className={styles.lineEnding}
+            aria-label="Line endings"
+            title="Convert line endings (save to apply to disk)"
+            value={state.lineEnding}
+            onChange={(event) => {
+              run(window.nido.setLineEnding(active, event.target.value as 'LF' | 'CRLF'));
+              focusEditor();
+            }}
+          >
+            {state.lineEnding === 'Mixed' && <option value="Mixed" disabled>Mixed</option>}
+            {state.lineEnding === 'CR' && <option value="CR" disabled>CR</option>}
+            <option value="LF">LF</option>
+            <option value="CRLF">CRLF</option>
+          </select>
+        )}
         <span>
           Ln {state.line}, Col {state.column}
         </span>

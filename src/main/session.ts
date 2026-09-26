@@ -3,7 +3,7 @@ import { realpath, stat } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { attach, type NeovimClient } from 'neovim';
-import type { FileEntry, NidoEvent, Redraw, SavedWorkspace, SessionState, Workspace } from '../shared/types';
+import type { DebugAction, DebugState, FileEntry, NidoEvent, Redraw, SavedWorkspace, SessionState, Workspace } from '../shared/types';
 import { SessionFiles } from './sessionFiles';
 
 const setup = `
@@ -31,6 +31,11 @@ local function publish()
    end
   end
   local pos = vim.api.nvim_win_get_cursor(0)
+  local ending = vim.g.nido and require('nido_eol').detect() or nil
+  if ending == 'Mixed' and not vim.b.nido_mixed_notified then
+    vim.b.nido_mixed_notified = true
+    vim.rpcnotify(channel, 'nido:message', 'Mixed line endings detected. Choose LF or CRLF in the status bar to normalize, then save.')
+  end
   local clients = {}
   local tasks = {}
   for _, client in ipairs(vim.lsp.get_clients()) do
@@ -53,7 +58,7 @@ local function publish()
     and vim.api.nvim_buf_line_count(0) == 1 and vim.api.nvim_get_current_line() == ''
     and #vim.api.nvim_tabpage_list_wins(0) == 1
   vim.rpcnotify(channel, 'nido:state', {buffers=buffers, current=vim.api.nvim_get_current_buf(),
-   lsp=table.concat(clients, ', '), lspProgress=table.concat(tasks, ' / '), empty=empty, mode=vim.api.nvim_get_mode().mode, line=pos[1], column=pos[2]+1, filetype=vim.bo.filetype})
+   lineEnding=ending, lsp=table.concat(clients, ', '), lspProgress=table.concat(tasks, ' / '), empty=empty, mode=vim.api.nvim_get_mode().mode, line=pos[1], column=pos[2]+1, filetype=vim.bo.filetype})
  end)
 end
 vim.api.nvim_create_autocmd('LspProgress', {callback=function(event)
@@ -70,6 +75,8 @@ vim.api.nvim_create_autocmd('LspProgress', {callback=function(event)
   publish()
 end})
 vim.api.nvim_create_autocmd({'BufEnter','BufAdd','BufDelete','BufModifiedSet','BufFilePost','BufWritePost','ModeChanged','CursorMoved','CursorMovedI','FileType','TextChanged','TextChangedI','WinEnter','WinClosed','LspAttach','LspDetach'}, {callback=publish})
+vim.api.nvim_create_autocmd('User', {pattern='NidoLineEndings', callback=publish})
+vim.api.nvim_create_autocmd('OptionSet', {pattern={'fileformat','endofline'}, callback=publish})
 publish()
 `;
 
@@ -121,6 +128,7 @@ export class Session {
         env: {
           ...process.env,
           NVIM_APPNAME: 'nido',
+          NIDO_WORKSPACE_ROOT: root,
           VIMRUNTIME: resolve(resources, 'nvim-win64/share/nvim/runtime'),
           VIMINIT: '',
           EXINIT: ''
@@ -143,11 +151,18 @@ export class Session {
         }
       }
       if (method === 'nido:state') {
-        this.state = args[0] as SessionState;
+        this.state = { ...(args[0] as SessionState), debug: this.state.debug };
         // Lua encodes an empty table as a map rather than an array.
         if (!Array.isArray(this.state.buffers)) {
           this.state.buffers = [];
         }
+        this.emit({ type: 'state', id: this.workspace.id, state: this.state });
+      }
+      if (method === 'nido:debug') {
+        const debug = args[0] as DebugState;
+        if (!Array.isArray(debug.variables)) debug.variables = [];
+        if (!Array.isArray(debug.targets)) debug.targets = [];
+        this.state = { ...this.state, debug };
         this.emit({ type: 'state', id: this.workspace.id, state: this.state });
       }
     });
@@ -258,6 +273,15 @@ export class Session {
     await this.write('write');
   }
 
+  async debug(action: DebugAction, target?: number): Promise<void> {
+    const [channel] = await this.client.request('nvim_get_api_info', []) as [number, unknown];
+    await this.client.request('nvim_exec_lua', ["require('nido_debug').action(...)", [action, channel, target ?? 0]]);
+  }
+
+  async setLineEnding(format: 'LF' | 'CRLF'): Promise<void> {
+    await this.client.request('nvim_exec_lua', ["require('nido_eol').convert(...)", [format]]);
+  }
+
   async snapshot(): Promise<SavedWorkspace> {
     const data = (await this.client.request('nvim_exec_lua', [
       `local files = {}
@@ -308,7 +332,7 @@ export class Session {
 
   async modified(): Promise<boolean> {
     return (await this.client.request('nvim_exec_lua', [
-      'for _,b in ipairs(vim.api.nvim_list_bufs()) do if vim.bo[b].modified then return true end end return false',
+      "for _,b in ipairs(vim.api.nvim_list_bufs()) do if (vim.bo[b].buftype == '' or vim.bo[b].buftype == 'acwrite') and vim.bo[b].modified then return true end end return false",
       []
     ])) as boolean;
   }

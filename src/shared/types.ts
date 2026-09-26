@@ -14,6 +14,8 @@ export interface BufferInfo {
   modified: boolean;
 }
 export interface SessionState {
+  debug?: DebugState;
+  lineEnding?: 'LF' | 'CRLF' | 'Mixed' | 'CR';
   lsp?: string;
   lspProgress?: string;
   empty?: boolean;
@@ -23,6 +25,15 @@ export interface SessionState {
   line: number;
   column: number;
   filetype: string;
+}
+export type DebugAction = 'start' | 'breakpoint' | 'over' | 'into' | 'out' | 'pause' | 'stop' | 'launch';
+export interface DebugState {
+  terminal?: string;
+  status: 'idle' | 'building' | 'starting' | 'running' | 'paused' | 'finished' | 'error' | 'select';
+  output: string;
+  location?: string;
+  variables: {name: string; value: string; type: string}[];
+  targets: {name: string; path: string}[];
 }
 export interface FileEntry {
   name: string;
@@ -51,6 +62,8 @@ export interface NidoAPI {
   selectBuffer(id: string, buffer: number): Promise<void>;
   closeBuffer(id: string, buffer: number): Promise<boolean>;
   save(id: string): Promise<void>;
+  debug(id: string, action: DebugAction, target?: number): Promise<void>;
+  setLineEnding(id: string, format: 'LF' | 'CRLF'): Promise<void>;
   windowAction(action: 'minimize' | 'maximize' | 'close'): Promise<void>;
   onEvent(callback: (event: NidoEvent) => void): () => void;
 }

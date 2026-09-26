@@ -258,7 +258,7 @@
   flex-direction: column;
 }
 .fileTabs {
-  height: 45px;
+  height: 34px;
   display: flex;
   flex-shrink: 0;
   background: #1b2126;
@@ -345,6 +345,31 @@
   color: transparent;
   background: transparent;
   caret-color: transparent;
+}
+.lineEnding {
+  background: #141414;
+  color: inherit;
+  border: 1px solid transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.debugPanel {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-top: 1px solid #34383c;
+  background: #17191b;
+  font-size: 12px;
+}
+.debugToolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.debugToolbar button { color: #bfd8b6; padding: 4px; }
+.debugToolbar button:disabled { opacity: 0.35; cursor: default; }
+.debugLocation { color: #e2ca86; margin-top: 6px; }
+.debugDetails { display: flex; gap: 24px; max-height: 140px; overflow: auto; margin-top: 6px; }
+.debugDetails > div { min-width: 240px; }
+.debugDetails span { color: #9cdcfe; }
+.debugDetails pre { white-space: pre-wrap; margin: 0; flex: 1; }
+.lineEnding:focus-visible {
+  outline: 1px solid #a8cf9e;
 }
 .statusbar {
   height: 32px;

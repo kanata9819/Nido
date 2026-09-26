@@ -9,4 +9,5 @@ out
 /playwright-report/
 /.downloads/
 /resources/nvim-win64/
+/resources/debug/
 .nvimlog
