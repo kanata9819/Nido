@@ -1,0 +1,118 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { Session } from '../src/main/session'
+import { Grid, vimKey } from '../src/renderer/src/grid'
+
+test('grid updates preserve highlights, wide characters and scroll regions', () => {
+  const grid = new Grid()
+  grid.apply([
+    ['grid_resize', [1, 5, 3]],
+    [
+      'grid_line',
+      [
+        1,
+        0,
+        0,
+        [
+          ['日', 2],
+          ['', 2],
+          ['x', 3, 3]
+        ]
+      ]
+    ],
+    ['grid_line', [1, 1, 0, [['b', 4, 5]]]],
+    ['grid_line', [1, 2, 0, [['c', 5, 5]]]],
+    ['grid_scroll', [1, 0, 3, 0, 5, 1, 0]]
+  ])
+  assert.deepEqual(grid.cells[0][0], { text: 'b', highlight: 4 })
+  assert.equal(grid.cells[1][4].text, 'c')
+  assert.equal(grid.cells[2][0].text, ' ')
+  grid.apply([['grid_scroll', [1, 0, 3, 0, 5, -1, 0]]])
+  assert.equal(grid.cells[1][0].text, 'b')
+  assert.equal(grid.apply([['flush']]), true)
+  assert.equal(
+    vimKey({
+      key: '<',
+      ctrlKey: false,
+      altKey: false,
+      shiftKey: true,
+      metaKey: false,
+      isComposing: false
+    }),
+    '<LT>'
+  )
+  assert.equal(
+    vimKey({
+      key: 'Tab',
+      ctrlKey: false,
+      altKey: false,
+      shiftKey: true,
+      metaKey: false,
+      isComposing: false
+    }),
+    '<S-Tab>'
+  )
+  assert.equal(
+    vimKey({
+      key: 'Enter',
+      ctrlKey: false,
+      altKey: false,
+      shiftKey: false,
+      metaKey: false,
+      isComposing: true
+    }),
+    null
+  )
+})
+
+test('two real Neovim sessions edit, save, switch buffers and isolate state', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-test-'))
+  const sessions: Session[] = []
+  try {
+    await mkdir(join(root, 'one'))
+    await mkdir(join(root, 'two'))
+    await writeFile(join(root, 'one', 'first.ts'), 'const original = 1;\n')
+    await writeFile(join(root, 'one', 'second.ts'), 'const second = 2;\n')
+    await writeFile(join(root, 'outside.txt'), 'outside')
+    const grids = [new Grid(), new Grid()]
+    for (const [i, name] of ['one', 'two'].entries()) {
+      const session = await Session.create(join(root, name), (event) => {
+        if (event.type === 'redraw') grids[i].apply(event.events)
+      })
+      sessions.push(session)
+      await session.attach(80, 24)
+    }
+    const [first, second] = sessions
+    assert.notEqual(first.process.pid, second.process.pid)
+    await first.openFile('first.ts')
+    await first.input('gg0i// 日本語<CR><Esc>')
+    await first.client.request('nvim_eval', ['1'])
+    assert.equal(await first.modified(), true)
+    assert.equal(await second.modified(), false)
+    await assert.rejects(() => second.save(), /file name|filename/i)
+    await first.save()
+    assert.match(await readFile(join(root, 'one', 'first.ts'), 'utf8'), /日本語/)
+    await first.openFile('second.ts')
+    const current = (await first.client.request('nvim_exec_lua', [
+      'return vim.api.nvim_get_current_buf()',
+      []
+    ])) as number
+    await first.input('A // changed<Esc>')
+    await first.client.request('nvim_eval', ['1'])
+    await assert.rejects(() => first.closeBuffer(current), /modified|changes/i)
+    await first.saveAll()
+    await first.closeBuffer(current)
+    assert.equal(await first.modified(), false)
+    await assert.rejects(() => first.path('../outside.txt'), /outside/)
+    assert.deepEqual((await first.findFiles()).map((f) => f.name).sort(), ['first.ts', 'second.ts'])
+    assert.ok(grids[0].cells.length)
+    assert.ok(grids[0].cells.some((r) => r.some((c) => c.text !== ' ')))
+    await first.resize(90, 30)
+  } finally {
+    await Promise.all(sessions.map((session) => session.stop()))
+    await rm(root, { recursive: true, force: true })
+  }
+})
