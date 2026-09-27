@@ -50,5 +50,8 @@ app.whenReady().then(() => {
 });
 app.on('window-all-closed', () => app.quit());
 app.on('will-quit', () => {
-  for (const s of sessions.values()) s.process.kill();
+  for (const s of sessions.values()) {
+    s.terminal?.process.kill();
+    s.process.kill();
+  }
 });

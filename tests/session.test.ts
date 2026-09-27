@@ -8,6 +8,44 @@ import { Grid, vimKey } from '../src/renderer/src/grid';
 import { accumulateScroll, scrollOffset } from '../src/renderer/src/scroll';
 import { readLayout, writeLayout } from '../src/main/persistence';
 
+test(
+  'terminal sessions run PowerShell, preserve their shell and stop with their workspace',
+  { timeout: 30000 },
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-terminal-'));
+    let session: Session | undefined;
+    try {
+      session = await Session.create(root, () => {});
+      const [terminal, same] = await Promise.all([session.openTerminal(), session.openTerminal()]);
+      assert.equal(terminal, same);
+      assert.equal(terminal.workspace.kind, 'terminal');
+      await terminal.input("$nidoValue = 'kept'; Set-Content -Path first.txt -Value $nidoValue<CR>");
+      const waitFor = async (name: string): Promise<string> => {
+        for (let i = 0; i < 100; i++) {
+          try {
+            return await readFile(join(root, name), 'utf8');
+          } catch {
+            await new Promise((done) => setTimeout(done, 100));
+          }
+        }
+        throw new Error(`Terminal did not create ${name}`);
+      };
+      assert.match(await waitFor('first.txt'), /kept/);
+      await terminal.resize(100, 20);
+      assert.equal(await session.openTerminal(), terminal);
+      await terminal.input('Set-Content -Path second.txt -Value $nidoValue<CR>');
+      assert.match(await waitFor('second.txt'), /kept/);
+      assert.equal((await session.snapshot()).terminal, true);
+      assert.equal((await terminal.snapshot()).kind, 'terminal');
+      await session.stop();
+      assert.notEqual(terminal.process.exitCode, null);
+    } finally {
+      await session?.stop();
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+);
+
 test('indent guides follow depth, tabs and blank lines without changing text', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-indent-'));
   const grid = new Grid();
@@ -21,7 +59,10 @@ test('indent guides follow depth, tabs and blank lines without changing text', a
       }
     });
     await session.openFile('indent.txt');
-    await session.client.request('nvim_exec_lua', ['vim.bo.shiftwidth = 2; vim.bo.tabstop = 2; vim.cmd("redraw!")', []]);
+    await session.client.request('nvim_exec_lua', [
+      'vim.bo.shiftwidth = 2; vim.bo.tabstop = 2; vim.cmd("redraw!")',
+      []
+    ]);
     await session.client.request('nvim_eval', ['1']);
     const guides = (row: number) => grid.cells[row].filter((cell) => cell.text === '│');
     assert.equal(guides(0).length, 0);

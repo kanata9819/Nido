@@ -143,6 +143,8 @@ const gridEvents = new Set([
 ]);
 
 export class Session {
+  terminal?: Session;
+  private terminalStarting?: Promise<Session>;
   readonly workspace: Workspace;
   readonly process: ChildProcessWithoutNullStreams;
   readonly client: NeovimClient;
@@ -156,7 +158,7 @@ export class Session {
   private constructor(
     root: string,
     private emit: (event: NidoEvent) => void,
-    resources: string
+    private resources: string
   ) {
     this.workspace = { id: randomUUID(), root, name: basename(root) || root };
     this.process = spawn(
@@ -233,6 +235,7 @@ export class Session {
     });
     this.process.on('exit', () => {
       this.stopped = true;
+      void this.terminal?.stop();
       this.emit({ type: 'exit', id: this.workspace.id });
     });
     this.process.on('error', (error) => this.emit({ type: 'error', id: this.workspace.id, message: error.message }));
@@ -305,6 +308,53 @@ export class Session {
     }
   }
 
+  async startTerminal(): Promise<void> {
+    const next = this.inputQueue.then(async () => {
+      await this.client.request('nvim_exec_lua', ["require('nido_terminal').start()", []]);
+      this.workspace.kind = 'terminal';
+      this.workspace.name = `Terminal · ${basename(this.workspace.root)}`;
+      // Buffer replacement leaves terminal mode asynchronously. Queue input until it returns.
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const mode = (await this.client.request('nvim_get_mode', [])) as { mode: string };
+        if (mode.mode === 't') {
+          return;
+        }
+        await this.client.request('nvim_command', ['startinsert']);
+        await new Promise((done) => setTimeout(done, 10));
+      }
+      throw new Error('Terminal input did not become ready.');
+    });
+    this.inputQueue = next.catch(() => {});
+    return next;
+  }
+
+  async openTerminal(): Promise<Session> {
+    if (this.workspace.kind === 'terminal') {
+      return this;
+    }
+    if (this.terminal && !this.terminal.stopped) {
+      return this.terminal;
+    }
+    this.terminalStarting ??= (async () => {
+      const terminal = await Session.create(this.workspace.root, this.emit, this.resources);
+      try {
+        await terminal.startTerminal();
+        if (this.stopped) {
+          throw new Error('Workspace was closed.');
+        }
+        this.terminal = terminal;
+        this.workspace.terminalId = terminal.workspace.id;
+        return terminal;
+      } catch (error) {
+        await terminal.stop();
+        throw error;
+      }
+    })().finally(() => {
+      this.terminalStarting = undefined;
+    });
+    return this.terminalStarting;
+  }
+
   async resize(columns: number, rows: number): Promise<void> {
     if (this.attached) {
       await this.client.request('nvim_ui_try_resize', [columns, rows]);
@@ -314,6 +364,9 @@ export class Session {
   input(keys: string): Promise<void> {
     // nvim_input can accept only part of a byte sequence when its input queue is full.
     const next = this.inputQueue.then(async () => {
+      if (this.workspace.kind === 'terminal') {
+        await this.client.request('nvim_command', ['startinsert']);
+      }
       let rest = Buffer.from(keys);
       while (rest.length && !this.stopped) {
         const accepted = (await this.client.request('nvim_input', [rest.toString()])) as number;
@@ -328,6 +381,9 @@ export class Session {
   }
 
   async paste(text: string): Promise<void> {
+    if (this.workspace.kind === 'terminal') {
+      await this.client.request('nvim_command', ['startinsert']);
+    }
     await this.client.request('nvim_paste', [text, true, -1]);
   }
 
@@ -338,6 +394,9 @@ export class Session {
   async scroll(lines: number): Promise<void> {
     if (!lines) {
       return;
+    }
+    if (this.workspace.kind === 'terminal') {
+      await this.client.request('nvim_command', ['stopinsert']);
     }
     await this.client.request('nvim_exec_lua', [
       'local n = ...; vim.cmd.normal({args={math.abs(n) .. string.char(n > 0 and 5 or 25)}, bang=true})',
@@ -355,6 +414,9 @@ export class Session {
   }
 
   async snapshot(): Promise<SavedWorkspace> {
+    if (this.workspace.kind === 'terminal') {
+      return { root: this.workspace.root, kind: 'terminal', files: [], current: '' };
+    }
     const data = (await this.client.request('nvim_exec_lua', [
       `local files = {}
       for _, b in ipairs(vim.api.nvim_list_bufs()) do
@@ -371,12 +433,20 @@ export class Session {
     ])) as Omit<SavedWorkspace, 'root'>;
     return {
       root: this.workspace.root,
+      terminal: !!this.terminal,
       ...data,
       files: Array.isArray(data.files) ? data.files : []
     };
   }
 
   async restore(saved: SavedWorkspace): Promise<string[]> {
+    if (saved.kind === 'terminal') {
+      await this.startTerminal();
+      return [];
+    }
+    if (saved.terminal) {
+      await this.openTerminal();
+    }
     const errors: string[] = [];
     for (const file of saved.files) {
       try {
@@ -443,6 +513,9 @@ export class Session {
   }
 
   async openFile(relativePath: string): Promise<void> {
+    if (this.workspace.kind === 'terminal') {
+      throw new Error('Open an Editor session to edit files.');
+    }
     await this.fileService.openFile(relativePath);
   }
   async openReference(index: number, version: number): Promise<void> {
@@ -461,6 +534,7 @@ export class Session {
   }
 
   async stop(): Promise<void> {
+    await this.terminal?.stop();
     if (this.stopped || !this.process.pid) {
       return;
     }

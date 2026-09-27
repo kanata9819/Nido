@@ -360,6 +360,26 @@
   background: #17191b;
   font-size: 12px;
 }
+.terminalPanel {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: clamp(180px, 30vh, 420px);
+  min-height: 0;
+  background: #141414;
+  border-top: 1px solid #34383c;
+}
+.terminalPanel:focus-within {
+  border-top-color: #a5bd9b;
+}
+.folderActions select {
+  margin-left: 8px;
+  padding: 4px 8px;
+  background: #20262a;
+  color: inherit;
+  border: 1px solid #536359;
+  border-radius: 4px;
+}
 .referencesPanel {
   flex-shrink: 0;
   border-top: 1px solid #34383c;
@@ -452,8 +472,14 @@
   flex: 1;
 }
 .referencesToolbar button {
-  font-size: 20px;
+  font-size: 12px;
   padding: 0 8px;
+}
+.referencesToolbar button:last-child {
+  font-size: 20px;
+}
+.restartShell {
+  font-size: 12px;
 }
 .referencesList {
   min-height: 85px;

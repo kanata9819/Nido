@@ -79,7 +79,9 @@ export default function App(): React.JSX.Element {
   const [debugFocusTick, setDebugFocusTick] = useState(0);
   const [referencesVisible, setReferencesVisible] = useState(false);
   const [referencesFocusTick, setReferencesFocusTick] = useState(0);
-  const [bottomPanel, setBottomPanel] = useState<'debug' | 'references'>('debug');
+  const [bottomPanel, setBottomPanel] = useState<'debug' | 'references' | 'terminal'>('debug');
+  const [terminalVisible, setTerminalVisible] = useState(false);
+  const [terminalFocusTick, setTerminalFocusTick] = useState(0);
   const [focusTick, setFocusTick] = useState(0);
   const [sidebar, setSidebar] = useState(true);
   const [animations, setAnimations] = useState(() => localStorage.getItem('nido.animations') !== 'false');
@@ -117,13 +119,15 @@ export default function App(): React.JSX.Element {
       setDebugVisible(true);
     }
   }, [hasDebugger, active]);
-  const displayMode = state.mode.startsWith('i')
-    ? 'INSERT'
-    : state.mode.startsWith('v') || state.mode === 'V' || state.mode === '\u0016'
-      ? 'VISUAL'
-      : state.mode.startsWith('c')
-        ? 'COMMAND'
-        : 'NORMAL';
+  const displayMode = state.mode.startsWith('t')
+    ? 'TERMINAL'
+    : state.mode.startsWith('i')
+      ? 'INSERT'
+      : state.mode.startsWith('v') || state.mode === 'V' || state.mode === '\u0016'
+        ? 'VISUAL'
+        : state.mode.startsWith('c')
+          ? 'COMMAND'
+          : 'NORMAL';
   const workspace = workspaces.find((w) => w.id === active);
   const current = state.buffers.find((b) => b.id === state.current);
   const report = useCallback(
@@ -145,6 +149,52 @@ export default function App(): React.JSX.Element {
     void promise.catch((e) => report(String(e)));
   };
 
+  const showTerminal = (): void => {
+    if (!active) {
+      return;
+    }
+    if (workspace?.kind === 'terminal') {
+      focusEditor();
+      return;
+    }
+    setLeader(false);
+    if (workspace?.terminalId) {
+      setBottomPanel('terminal');
+      setTerminalVisible(true);
+      setTerminalFocusTick((value) => value + 1);
+      return;
+    }
+    const owner = active;
+    run(
+      window.nido.openTerminal(owner).then((terminal) => {
+        setWorkspaces((old) => old.map((w) => (w.id === owner ? { ...w, terminalId: terminal.id } : w)));
+        setBottomPanel('terminal');
+        setTerminalVisible(true);
+        setTerminalFocusTick((value) => value + 1);
+      })
+    );
+  };
+  const toggleTerminal = (): void => {
+    if (terminalVisible && bottomPanel === 'terminal' && workspace?.kind !== 'terminal') {
+      setTerminalVisible(false);
+      focusEditor();
+    } else {
+      showTerminal();
+    }
+  };
+
+  const restartShell = (id: string): void => {
+    run(
+      window.nido.restartTerminal(id).then(() => {
+        if (id === active) {
+          focusEditor();
+        } else {
+          setTerminalFocusTick((value) => value + 1);
+        }
+      })
+    );
+  };
+
   const activate = (id: string): void => {
     setActive(id);
     focusEditor();
@@ -163,7 +213,11 @@ export default function App(): React.JSX.Element {
         } else if (event.type === 'error') {
           report(event.message);
         } else if (event.type === 'exit') {
-          setWorkspaces((old) => old.filter((w) => w.id !== event.id));
+          setWorkspaces((old) =>
+            old
+              .filter((w) => w.id !== event.id)
+              .map((w) => (w.terminalId === event.id ? { ...w, terminalId: undefined } : w))
+          );
           setStates((old) => {
             const next = { ...old };
             delete next[event.id];
@@ -246,14 +300,14 @@ export default function App(): React.JSX.Element {
   }, [panel, active, report]);
 
   const create = async (): Promise<void> => {
-    if (creating || restoring) {
+    if (creating) {
       return;
     }
     setLeader(false);
     setPanel('folders');
   };
 
-  const openWorkspace = async (path: string): Promise<void> => {
+  const openWorkspace = async (path: string, kind: 'editor' | 'terminal'): Promise<void> => {
     if (creating || restoring) {
       return;
     }
@@ -261,7 +315,7 @@ export default function App(): React.JSX.Element {
     setLeader(false);
 
     try {
-      const added = await window.nido.createWorkspace(path);
+      const added = await window.nido.createWorkspace(path, kind);
       if (added) {
         setWorkspaces((old) => [...old, added]);
         setActive(added.id);
@@ -323,6 +377,10 @@ export default function App(): React.JSX.Element {
   };
 
   const showExplorer = (): void => {
+    if (workspace?.kind === 'terminal') {
+      focusEditor();
+      return;
+    }
     setLeader(false);
     setPanel(null);
     setSidebar(true);
@@ -342,10 +400,23 @@ export default function App(): React.JSX.Element {
   });
 
   const keydown = useKeyboardShortcuts({
+    restartShell: () => {
+      const id = workspace?.kind === 'terminal' ? active : workspace?.terminalId;
+      if (id) {
+        restartShell(id);
+      }
+    },
+    toggleTerminal,
     closeReferences,
     showDebugger: () => {
       setLeader(false);
-      if (bottomPanel === 'references' && state.references) {
+      if (
+        bottomPanel === 'terminal' ||
+        workspace?.kind === 'terminal' ||
+        (workspace?.terminalId && !state.debug && !state.references)
+      ) {
+        showTerminal();
+      } else if (bottomPanel === 'references' && state.references) {
         setReferencesVisible(true);
         setReferencesFocusTick((value) => value + 1);
       } else {
@@ -467,6 +538,7 @@ export default function App(): React.JSX.Element {
           </button>
         </nav>
         {sidebar &&
+          workspace?.kind !== 'terminal' &&
           workspaces.map((w) => (
             <Sidebar
               width={sidebarWidth}
@@ -482,7 +554,7 @@ export default function App(): React.JSX.Element {
         <main id="editor-preview-host" className={styles.main}>
           {workspace ? (
             <>
-              <div className={styles.fileTabs} role="tablist" aria-label="Files">
+              <div className={styles.fileTabs} role="tablist" aria-label="Files" hidden={workspace.kind === 'terminal'}>
                 {state.buffers.map((buffer) => (
                   <div
                     key={buffer.id}
@@ -515,14 +587,26 @@ export default function App(): React.JSX.Element {
                 <span>{workspace.name}</span>
                 <ChevronRight size={13} />
                 <span>
-                  {current?.name
-                    ? current.name
-                        .replace(workspace.root, '')
-                        .replace(/^[\\/]/, '')
-                        .replaceAll('\\', ' / ')
-                    : 'Untitled'}
+                  {workspace.kind === 'terminal'
+                    ? workspace.root
+                    : current?.name
+                      ? current.name
+                          .replace(workspace.root, '')
+                          .replace(/^[\\/]/, '')
+                          .replaceAll('\\', ' / ')
+                      : 'Untitled'}
                 </span>
-                <span className={styles.breadcrumbHint}>SPACE for commands</span>
+                {workspace.kind === 'terminal' ? (
+                  <button
+                    className={styles.restartShell}
+                    title="Restart shell (Ctrl+Shift+R)"
+                    onClick={() => restartShell(active)}
+                  >
+                    Restart shell <kbd>Ctrl Shift R</kbd>
+                  </button>
+                ) : (
+                  <span className={styles.breadcrumbHint}>SPACE for commands</span>
+                )}
               </div>
             </>
           ) : (
@@ -559,6 +643,7 @@ export default function App(): React.JSX.Element {
             <Editor
               key={w.id}
               id={w.id}
+              terminal={w.kind === 'terminal'}
               active={w.id === active}
               fontSize={fontSize}
               animations={animations}
@@ -566,7 +651,7 @@ export default function App(): React.JSX.Element {
               focusTick={focusTick}
               onError={report}
             >
-              {states[w.id]?.empty && states[w.id]?.mode === 'n' && (
+              {w.kind !== 'terminal' && states[w.id]?.empty && states[w.id]?.mode === 'n' && (
                 <WorkspaceWelcome onOpen={() => showPanel('files')} />
               )}
             </Editor>
@@ -596,6 +681,47 @@ export default function App(): React.JSX.Element {
               </footer>
             </div>
           )}
+          {workspaces
+            .filter((w) => w.terminalId)
+            .map((w) => (
+              <section
+                key={w.id}
+                className={styles.terminalPanel}
+                aria-label="Terminal"
+                hidden={w.id !== active || !terminalVisible || bottomPanel !== 'terminal'}
+              >
+                <div className={styles.referencesToolbar}>
+                  <strong>Terminal · {w.name}</strong>
+                  <span>Ctrl+@ Toggle · Ctrl+K Editor</span>
+                  <button
+                    className={styles.restartShell}
+                    title="Restart shell (Ctrl+Shift+R)"
+                    onClick={() => restartShell(w.terminalId!)}
+                  >
+                    Restart shell <kbd>Ctrl Shift R</kbd>
+                  </button>
+                  <button
+                    aria-label="Hide terminal"
+                    onClick={() => {
+                      setTerminalVisible(false);
+                      focusEditor();
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+                <Editor
+                  id={w.terminalId!}
+                  terminal
+                  active={w.id === active && terminalVisible && bottomPanel === 'terminal'}
+                  fontSize={fontSize}
+                  animations={false}
+                  blocked={!!panel || leader}
+                  focusTick={terminalFocusTick}
+                  onError={report}
+                />
+              </section>
+            ))}
         </main>
       </div>
       {active && state.references && (
@@ -610,7 +736,7 @@ export default function App(): React.JSX.Element {
           onOpen={(index) => run(window.nido.openReference(active, index, state.references!.version).then(focusEditor))}
         />
       )}
-      {active && debugVisible && bottomPanel === 'debug' && (
+      {active && workspace?.kind !== 'terminal' && debugVisible && bottomPanel === 'debug' && (
         <DebugPanel
           state={state.debug}
           focusTick={debugFocusTick}
@@ -624,6 +750,14 @@ export default function App(): React.JSX.Element {
         />
       )}
       <footer className={styles.statusbar}>
+        <span className={styles.mode} data-mode={displayMode}>
+          {displayMode}
+        </span>
+        {active && (
+          <button aria-label="Toggle terminal" onClick={toggleTerminal}>
+            Terminal
+          </button>
+        )}
         {active && (
           <button
             aria-label="Toggle debugger"
@@ -647,9 +781,6 @@ export default function App(): React.JSX.Element {
             References
           </button>
         )}
-        <span className={styles.mode} data-mode={displayMode}>
-          {displayMode}
-        </span>
         <span className={styles.statusWorkspace}>{workspace?.name || 'Welcome to Nido'}</span>
         <span className={styles.statusDivider} />
         <span className={styles.sessionCount}>
@@ -667,7 +798,7 @@ export default function App(): React.JSX.Element {
           <span title="Rust language server connection">{state.lsp || 'Rust LSP: not connected'}</span>
         )}
         <span>UTF-8</span>
-        {active && state.lineEnding && (
+        {active && workspace?.kind !== 'terminal' && state.lineEnding && (
           <select
             className={styles.lineEnding}
             aria-label="Line endings"
@@ -715,7 +846,7 @@ export default function App(): React.JSX.Element {
         animations={animations}
         setAnimations={setAnimations}
         initialFolder={workspace?.root || ''}
-        creating={creating}
+        creating={creating || restoring}
         openWorkspace={openWorkspace}
         panel={panel}
         filtered={filtered}

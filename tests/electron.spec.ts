@@ -28,6 +28,98 @@ async function chooseWorkspace(page: Page, path: string, navigate = false): Prom
   await page.keyboard.press('Control+Enter');
 }
 
+test('terminal toggle, focus, background execution and standalone terminal sessions', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-terminal-ui-'));
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  try {
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
+    running = await electron.launch({
+      executablePath,
+      args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+      env
+    });
+    const page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, root);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.press('Control+@');
+    const terminal = page.getByRole('region', { name: 'Terminal', exact: true });
+    await expect(terminal).toBeVisible();
+    const explorerBounds = await page.getByRole('complementary', { name: 'File explorer' }).boundingBox();
+    const terminalBounds = await terminal.boundingBox();
+    assert.ok(explorerBounds && terminalBounds);
+    assert.ok(terminalBounds.x >= explorerBounds.x + explorerBounds.width);
+    assert.ok(explorerBounds.y + explorerBounds.height >= terminalBounds.y + terminalBounds.height - 1);
+    await expect(page.getByRole('contentinfo').locator(':scope > :first-child')).toHaveText('NORMAL');
+    await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+    await page.keyboard.type(
+      "$nidoValue = 'alive'; Start-Sleep -Milliseconds 500; Set-Content background.txt $nidoValue"
+    );
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Control+@');
+    await expect(terminal).toBeHidden();
+    await expect.poll(async () => readFile(join(root, 'background.txt'), 'utf8').catch(() => '')).toContain('alive');
+    await page.keyboard.press('Control+j');
+    await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+    await page.keyboard.press('Control+k');
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.press('Control+j');
+    await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+    await page.keyboard.type('Set-Content preserved.txt $nidoValue');
+    await page.keyboard.press('Enter');
+    await expect.poll(async () => readFile(join(root, 'preserved.txt'), 'utf8').catch(() => '')).toContain('alive');
+    await expect(terminal.getByRole('button', { name: /Restart shell/ })).toHaveCSS('font-size', '12px');
+    await page.keyboard.press('Control+Shift+r');
+    await page.keyboard.type('Set-Content restarted.txt ([string]::IsNullOrEmpty($nidoValue))');
+    await page.keyboard.press('Enter');
+    await expect
+      .poll(async () => readFile(join(root, 'restarted.txt'), 'utf8').catch(() => ''))
+      .toContain('True')
+      .catch(async (error) => {
+        await page.screenshot({ path: 'test-results/restart-failure.png' });
+        throw error;
+      });
+    await page.screenshot({ path: 'test-results/nido-terminal.png' });
+    await page.keyboard.press('Control+Shift+n');
+    await expect(page.getByRole('combobox', { name: 'Session type' })).toBeVisible();
+    await page.getByRole('combobox', { name: 'Session type' }).focus();
+    await page.keyboard.press('End');
+    await chooseWorkspace(page, root);
+    const input = page.getByRole('textbox', { name: 'Terminal input' });
+    await expect(input).toHaveCount(1);
+    await expect(input).toBeFocused();
+    await page.keyboard.type("Set-Content standalone.txt 'separate'");
+    await page.keyboard.press('Enter');
+    await expect.poll(async () => readFile(join(root, 'standalone.txt'), 'utf8').catch(() => '')).toContain('separate');
+    await page.keyboard.press('Control+Tab');
+    await page.keyboard.press('Control+j');
+    await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+    const closed = running.waitForEvent('close');
+    await page.evaluate(() => {
+      void window.nido.windowAction('close');
+    });
+    await closed;
+    running = await electron.launch({
+      executablePath,
+      args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+      env
+    });
+    const restored = await running.firstWindow();
+    await expect(restored.getByRole('tab', { name: /^Workspace / })).toHaveCount(2, { timeout: 15000 });
+    await restored.keyboard.press('Alt+2');
+    await expect(restored.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+    await restored.keyboard.type("Set-Content restored.txt 'restored'");
+    await restored.keyboard.press('Enter');
+    await expect.poll(async () => readFile(join(root, 'restored.txt'), 'utf8').catch(() => '')).toContain('restored');
+  } finally {
+    await running?.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('viewport movement animates with keyboard and wheel and respects settings', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-motion-'));
   const content = Array.from({ length: 200 }, (_, index) => `line ${index + 1} ${'text '.repeat(60)}`).join('\n');

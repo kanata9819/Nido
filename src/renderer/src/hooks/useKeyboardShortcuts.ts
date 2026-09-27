@@ -16,6 +16,8 @@ interface UseKeyboardShortcutsParams {
   showExplorer: () => void;
   showDebugger: () => void;
   closeReferences: () => void;
+  toggleTerminal: () => void;
+  restartShell: () => void;
   create: () => Promise<void>;
   showPanel: (value: Panel) => void;
   commands: Item[];
@@ -40,6 +42,8 @@ export function useKeyboardShortcuts({
   showExplorer,
   showDebugger,
   closeReferences,
+  toggleTerminal,
+  restartShell,
   create,
   showPanel,
   commands,
@@ -57,8 +61,12 @@ export function useKeyboardShortcuts({
       event.preventDefault();
       event.stopPropagation();
     };
+    const terminalFocused = document.activeElement?.getAttribute('aria-label') === 'Terminal input';
 
     if (event.key === 'Escape') {
+      if (terminalFocused && !panel) {
+        return;
+      }
       if (document.activeElement?.closest('[aria-label="References"]')) {
         consume();
         closeReferences();
@@ -79,7 +87,7 @@ export function useKeyboardShortcuts({
     }
     if (panel) {
       if (event.key === 'Tab' && modal.current) {
-        const nodes = [...modal.current.querySelectorAll<HTMLElement>('button, input, [tabindex="0"]')];
+        const nodes = [...modal.current.querySelectorAll<HTMLElement>('button, input, select, [tabindex="0"]')];
         const first = nodes[0],
           last = nodes[nodes.length - 1];
         if (event.shiftKey && document.activeElement === first) {
@@ -92,7 +100,14 @@ export function useKeyboardShortcuts({
       }
       return;
     }
-    if (active && !event.ctrlKey && !event.altKey && !event.metaKey && ['F5', 'F9', 'F10', 'F11'].includes(event.key)) {
+    if (
+      active &&
+      !terminalFocused &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      ['F5', 'F9', 'F10', 'F11'].includes(event.key)
+    ) {
       consume();
       const action =
         event.key === 'F9'
@@ -115,6 +130,11 @@ export function useKeyboardShortcuts({
     if (event.ctrlKey && event.key === 'Tab') {
       consume();
       nextWorkspace(event.shiftKey ? -1 : 1);
+      return;
+    }
+    if (active && event.ctrlKey && !event.altKey && !event.metaKey && ['@', '`'].includes(event.key)) {
+      consume();
+      toggleTerminal();
       return;
     }
     if (
@@ -151,6 +171,15 @@ export function useKeyboardShortcuts({
     if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'p') {
       consume();
       showPanel('commands');
+      return;
+    }
+    if (terminalFocused) {
+      if (event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey && event.key.toLowerCase() === 'r') {
+        consume();
+        if (!event.repeat) {
+          restartShell();
+        }
+      }
       return;
     }
     if (event.ctrlKey && event.key.toLowerCase() === 'p' && active && !mode.current[active]?.startsWith('insert')) {

@@ -23,10 +23,14 @@ export interface HandlerDeps {
 
 export function registerHandlers({ window, sessions, state, neovimResources, send }: HandlerDeps): void {
   function session(id: unknown): Session {
-    if (typeof id !== 'string' || !sessions.has(id)) {
+    const found =
+      typeof id === 'string'
+        ? sessions.get(id) || [...sessions.values()].find((s) => s.terminal?.workspace.id === id)?.terminal
+        : undefined;
+    if (!found) {
       throw new Error('Workspace is no longer running.');
     }
-    return sessions.get(id)!;
+    return found;
   }
 
   function text(value: unknown): string {
@@ -174,11 +178,22 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
     };
   });
 
-  handle('create', async (path) => {
+  handle('create', async (path, kind = 'editor') => {
+    if (kind !== 'editor' && kind !== 'terminal') {
+      throw new Error('Invalid session type.');
+    }
     if (!isAbsolute(text(path))) {
       throw new Error('Enter an absolute folder path.');
     }
     const s = await Session.create(text(path), send, neovimResources);
+    try {
+      if (kind === 'terminal') {
+        await s.startTerminal();
+      }
+    } catch (error) {
+      await s.stop();
+      throw error;
+    }
     sessions.set(s.workspace.id, s);
     return s.workspace;
   });
@@ -195,6 +210,14 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
   });
 
   handle('attach', (id, columns, rows) => session(id).attach(integer(columns, 1000), integer(rows, 500)));
+  handle('openTerminal', async (id) => (await session(id).openTerminal()).workspace);
+  handle('restartTerminal', (id) => {
+    const s = session(id);
+    if (s.workspace.kind !== 'terminal') {
+      throw new Error('Not a terminal session.');
+    }
+    return s.startTerminal();
+  });
   handle('resize', (id, columns, rows) => session(id).resize(integer(columns, 1000), integer(rows, 500)));
   handle('input', (id, keys) => session(id).input(text(keys)));
   handle('paste', (id, value) => session(id).paste(text(value)));

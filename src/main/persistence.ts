@@ -26,6 +26,8 @@ export async function readLayout(path: string): Promise<SavedLayout> {
     !data.workspaces.every(
       (w) =>
         w &&
+        (w.kind === undefined || w.kind === 'editor' || w.kind === 'terminal') &&
+        (w.terminal === undefined || typeof w.terminal === 'boolean') &&
         typeof w.root === 'string' &&
         isAbsolute(w.root) &&
         typeof w.current === 'string' &&

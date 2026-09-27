@@ -6,6 +6,7 @@ import { useEditorInput } from './hooks/useEditorInput';
 import styles from './assets/Nido.module.css';
 
 interface Props {
+  terminal?: boolean;
   children?: ReactNode;
   id: string;
   active: boolean;
@@ -16,6 +17,7 @@ interface Props {
   onError: (message: string) => void;
 }
 export default function Editor({
+  terminal = false,
   children,
   id,
   active,
@@ -95,12 +97,16 @@ export default function Editor({
         }
       }}
     >
-      <canvas ref={canvas} className={styles.canvas} aria-label="Neovim editor display" />
+      <canvas
+        ref={canvas}
+        className={styles.canvas}
+        aria-label={terminal ? 'Terminal display' : 'Neovim editor display'}
+      />
       {children}
       <textarea
         ref={input}
         className={styles.editorInput}
-        aria-label="Neovim input"
+        aria-label={terminal ? 'Terminal input' : 'Neovim input'}
         spellCheck={false}
         autoCapitalize="off"
         autoComplete="off"

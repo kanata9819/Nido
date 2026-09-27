@@ -9,9 +9,10 @@ export default function FolderPicker({
 }: {
   initialPath: string;
   busy: boolean;
-  onOpen: (path: string) => void;
+  onOpen: (path: string, kind: 'editor' | 'terminal') => void;
 }): React.JSX.Element {
   const [path, setPath] = useState(initialPath);
+  const [kind, setKind] = useState<'editor' | 'terminal'>('editor');
   const [directory, setDirectory] = useState('');
   const [parent, setParent] = useState('');
   const [folders, setFolders] = useState<FileEntry[]>([]);
@@ -70,7 +71,7 @@ export default function FolderPicker({
         }
         if (event.ctrlKey && event.key === 'Enter' && !busy && !loading) {
           event.preventDefault();
-          onOpen(path);
+          onOpen(path, kind);
         }
       }}
     >
@@ -93,10 +94,22 @@ export default function FolderPicker({
         }}
       />
       <div className={styles.folderActions}>
+        <label>
+          Session type{' '}
+          <select
+            aria-label="Session type"
+            value={kind}
+            disabled={busy}
+            onChange={(event) => setKind(event.target.value as 'editor' | 'terminal')}
+          >
+            <option value="editor">Editor</option>
+            <option value="terminal">Terminal</option>
+          </select>
+        </label>
         <button disabled={loading || busy || parent === directory} onClick={() => void browse(parent)}>
           ↑ Parent
         </button>
-        <button disabled={loading || busy || !directory} onClick={() => onOpen(directory)}>
+        <button disabled={loading || busy || !directory} onClick={() => onOpen(directory, kind)}>
           {busy ? 'Opening…' : 'Open current folder'}
         </button>
       </div>
@@ -128,7 +141,7 @@ export default function FolderPicker({
             void browse(parent);
           } else if (folders[selected]) {
             if (key === 'Enter') {
-              onOpen(folders[selected].path);
+              onOpen(folders[selected].path, kind);
             } else {
               void browse(folders[selected].path);
             }

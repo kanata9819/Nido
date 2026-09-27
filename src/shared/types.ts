@@ -1,9 +1,13 @@
 export interface Workspace {
+  kind?: 'editor' | 'terminal';
+  terminalId?: string;
   id: string;
   root: string;
   name: string;
 }
 export interface SavedWorkspace {
+  kind?: 'editor' | 'terminal';
+  terminal?: boolean;
   root: string;
   files: { path: string; line: number; column: number }[];
   current: string;
@@ -61,7 +65,9 @@ export type NidoEvent =
 export interface NidoAPI {
   restoreWorkspaces(): Promise<{ workspaces: Workspace[]; active: string; errors: string[] }>;
   workspaceLayout(ids: string[], active: string): Promise<void>;
-  createWorkspace(path: string): Promise<Workspace | null>;
+  createWorkspace(path: string, kind?: 'editor' | 'terminal'): Promise<Workspace | null>;
+  openTerminal(id: string): Promise<Workspace>;
+  restartTerminal(id: string): Promise<void>;
   browseFolders(path?: string): Promise<{ path: string; parent: string; folders: FileEntry[] }>;
   closeWorkspace(id: string): Promise<boolean>;
   attach(id: string, columns: number, rows: number): Promise<void>;

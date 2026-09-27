@@ -8,7 +8,7 @@ interface PanelProps {
   setAnimations: (value: boolean) => void;
   initialFolder: string;
   creating: boolean;
-  openWorkspace: (path: string) => Promise<void>;
+  openWorkspace: (path: string, kind: 'editor' | 'terminal') => Promise<void>;
   panel: Panel;
   filtered: Item[];
   selection: number;
@@ -81,7 +81,11 @@ export function Panel({
           </button>
         </div>
         {panel === 'folders' ? (
-          <FolderPicker initialPath={initialFolder} busy={creating} onOpen={(path) => void openWorkspace(path)} />
+          <FolderPicker
+            initialPath={initialFolder}
+            busy={creating}
+            onOpen={(path, kind) => void openWorkspace(path, kind)}
+          />
         ) : panel === 'settings' ? (
           <div className={styles.settings}>
             <label>
