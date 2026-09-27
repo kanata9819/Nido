@@ -36,7 +36,7 @@ export interface ReferenceList {
 export interface ReferencePreview {
   first: number;
   line: number;
-  lines: string[];
+  lines: { text: string; color: string }[][];
 }
 export type DebugAction = 'start' | 'breakpoint' | 'over' | 'into' | 'out' | 'pause' | 'stop' | 'launch';
 export interface DebugState {

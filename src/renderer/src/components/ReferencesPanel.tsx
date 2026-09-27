@@ -106,10 +106,16 @@ export default function ReferencesPanel({
             </header>
             <div className={styles.referencePreviewCode}>
               {preview ? (
-                preview.lines.map((text, index) => (
+                preview.lines.map((spans, index) => (
                   <div key={index} data-current={preview.first + index === preview.line}>
                     <span aria-hidden="true">{preview.first + index}</span>
-                    <code>{text || ' '}</code>
+                    <code>
+                      {spans.map((span, part) => (
+                        <span key={part} style={{ color: span.color }}>
+                          {span.text || ' '}
+                        </span>
+                      ))}
+                    </code>
                   </div>
                 ))
               ) : (

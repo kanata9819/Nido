@@ -72,6 +72,8 @@ test('Rust syntax and real rust-analyzer navigation, completion and diagnostics'
     const referencePreview = await session.previewReference(call + 1, referenceList.version);
     assert.equal(referencePreview.line, 3);
     assert.ok(referencePreview.lines.length > 1);
+    assert.equal(referencePreview.lines[1][0].text, 'fn');
+    assert.equal(referencePreview.lines[1][0].color, '#569cd6');
     assert.deepEqual(await lua('return {vim.api.nvim_get_current_buf(), vim.api.nvim_win_get_cursor(0)}'), beforePreview);
     await assert.rejects(session.previewReference(call + 1, referenceList.version + 1), /References changed/);
     await session.openReference(call + 1, referenceList.version);
