@@ -10,6 +10,7 @@ interface CommandsCallbacks {
   closeWorkspace: (id: string) => void;
   create: () => Promise<void>;
   showExplorer: () => void;
+  openDebugger: () => void;
   openFile: (path: string) => void;
   activate: (id: string) => void;
 }
@@ -53,6 +54,16 @@ export function buildItems(
             detail: 'Git changes, diff and commits · Ctrl+Shift+G',
             run: () => showPanel('git')
           },
+          ...(workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal'
+            ? [
+                {
+                  key: 'D',
+                  title: 'Open debug panel',
+                  detail: 'Focus debugger · Space then Shift+D',
+                  run: callbacks.openDebugger
+                }
+              ]
+            : []),
           ...(
             [
               ['Start / continue debugging', 'F5', 'start'],

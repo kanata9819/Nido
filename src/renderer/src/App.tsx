@@ -463,6 +463,13 @@ export default function App(): React.JSX.Element {
   };
 
   const save = (): void => run(window.nido.save(active, formatOnSave));
+  const openDebugger = (): void => {
+    setLeader(false);
+    setPanel(null);
+    setBottomPanel('debug');
+    setDebugVisible(true);
+    setDebugFocusTick((value) => value + 1);
+  };
   const { commands, filtered } = buildItems(active, panel, workspaces, fileList, state, query, {
     save,
     showPanel,
@@ -472,6 +479,7 @@ export default function App(): React.JSX.Element {
     closeWorkspace,
     create,
     showExplorer,
+    openDebugger,
     openFile,
     activate
   });
@@ -498,9 +506,7 @@ export default function App(): React.JSX.Element {
         setReferencesVisible(true);
         setReferencesFocusTick((value) => value + 1);
       } else {
-        setBottomPanel('debug');
-        setDebugVisible(true);
-        setDebugFocusTick((value) => value + 1);
+        openDebugger();
       }
     },
     panel,
@@ -786,10 +792,10 @@ export default function App(): React.JSX.Element {
               </div>
               <div className={styles.leaderGrid}>
                 {commands
-                  .filter((c) => ['w', 'f', 'b', 'e', 'n', ',', 's', 'x', 'g'].includes(c.key))
+                  .filter((c) => ['w', 'f', 'b', 'e', 'n', ',', 's', 'x', 'g', 'D'].includes(c.key))
                   .map((c) => (
                     <button key={c.key} onClick={c.run}>
-                      <kbd>{c.key}</kbd>
+                      <kbd>{c.key === 'D' ? 'Shift+D' : c.key}</kbd>
                       {c.title}
                     </button>
                   ))}

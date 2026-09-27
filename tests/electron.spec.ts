@@ -603,6 +603,26 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
     await page.keyboard.type('Set-Content preserved.txt $nidoValue');
     await page.keyboard.press('Enter');
     await expect.poll(async () => readFile(join(root, 'preserved.txt'), 'utf8').catch(() => '')).toContain('alive');
+    await page.keyboard.press('Control+Shift+p');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('Open debug panel');
+    await page.keyboard.press('Enter');
+    const debuggerPanel = page.getByRole('region', { name: 'Debugger', exact: true });
+    await expect(debuggerPanel).toBeVisible();
+    await expect(debuggerPanel).toContainText('Debug · idle');
+    await expect.poll(() => debuggerPanel.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+    await expect(terminal).toBeHidden();
+    await page.keyboard.press('Control+@');
+    await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+    await page.keyboard.press('Control+k');
+    await page.keyboard.press('Space');
+    await expect(
+      page.getByRole('dialog', { name: 'Keyboard commands' }).getByRole('button', { name: 'Shift+D Open debug panel' })
+    ).toBeVisible();
+    await page.keyboard.press('D');
+    await expect(debuggerPanel).toBeVisible();
+    await expect.poll(() => debuggerPanel.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+    await page.keyboard.press('Control+@');
+    await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
     await expect(terminal.getByRole('button', { name: /Restart shell/ })).toHaveCSS('font-size', '12px');
     await page.keyboard.press('Control+Shift+r');
     await page.keyboard.type('Set-Content restarted.txt ([string]::IsNullOrEmpty($nidoValue))');

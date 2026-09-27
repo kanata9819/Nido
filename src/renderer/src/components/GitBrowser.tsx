@@ -158,9 +158,7 @@ export default function GitBrowser({
 
   let labels: string[];
   if (view === 2) {
-    labels = branches.map(
-      (branch) => `${branch.current ? '● ' : ''}${branch.remote ? '[remote] ' : ''}${branch.name}`
-    );
+    labels = branches.map((branch) => `${branch.current ? '● ' : ''}${branch.remote ? '[remote] ' : ''}${branch.name}`);
   } else if (commit) {
     labels = files;
   } else {
