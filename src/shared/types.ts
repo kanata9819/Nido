@@ -62,7 +62,24 @@ export type NidoEvent =
   | { type: 'state'; id: string; state: SessionState }
   | { type: 'exit'; id: string }
   | { type: 'error'; id: string; message: string };
+export interface GitChange {
+  path: string;
+  original?: string;
+  status: string;
+  staged: boolean;
+}
+
+export interface GitStatus {
+  root: string;
+  branch: string;
+  changes: GitChange[];
+}
+
 export interface NidoAPI {
+  gitStatus(id: string): Promise<GitStatus>;
+  gitDiff(id: string, path: string, staged: boolean): Promise<string>;
+  gitStage(id: string, path: string, staged: boolean): Promise<void>;
+  gitCommit(id: string, message: string): Promise<string>;
   restoreWorkspaces(): Promise<{ workspaces: Workspace[]; active: string; errors: string[] }>;
   workspaceLayout(ids: string[], active: string): Promise<void>;
   createWorkspace(path: string, kind?: 'editor' | 'terminal'): Promise<Workspace | null>;

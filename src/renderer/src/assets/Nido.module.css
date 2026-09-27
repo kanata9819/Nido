@@ -828,6 +828,10 @@
   box-shadow: 0 22px 80px #0007;
   overflow: hidden;
 }
+.gitPalette {
+  width: min(1100px, 94vw);
+  overflow: auto;
+}
 .paletteHeading {
   padding: 16px 19px;
   display: flex;

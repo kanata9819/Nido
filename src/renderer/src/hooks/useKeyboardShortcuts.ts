@@ -87,7 +87,11 @@ export function useKeyboardShortcuts({
     }
     if (panel) {
       if (event.key === 'Tab' && modal.current) {
-        const nodes = [...modal.current.querySelectorAll<HTMLElement>('button, input, select, [tabindex="0"]')];
+        const nodes = [
+          ...modal.current.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]'
+          )
+        ];
         const first = nodes[0],
           last = nodes[nodes.length - 1];
         if (event.shiftKey && document.activeElement === first) {
@@ -171,6 +175,18 @@ export function useKeyboardShortcuts({
     if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'p') {
       consume();
       showPanel('commands');
+      return;
+    }
+    if (
+      active &&
+      event.ctrlKey &&
+      event.shiftKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      event.key.toLowerCase() === 'g'
+    ) {
+      consume();
+      showPanel('git');
       return;
     }
     if (terminalFocused) {

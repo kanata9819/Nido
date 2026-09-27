@@ -2,6 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain } from 'electron';
 import { dirname, isAbsolute, join } from 'node:path';
 import { readdir, realpath } from 'node:fs/promises';
 import { Session } from './session';
+import { gitStatus, gitDiff, gitStage, gitCommit } from './git';
 import { readLayout, writeLayout } from './persistence';
 import type { DebugAction, NidoEvent, Workspace } from '../shared/types';
 
@@ -223,6 +224,19 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
   handle('paste', (id, value) => session(id).paste(text(value)));
   handle('pasteClipboard', async (id) => session(id).paste(await clipboard.readText()));
   handle('files', (id, path) => session(id).files(text(path)));
+  handle('gitStatus', (id) => gitStatus(session(id).workspace.root));
+  for (const [name, action] of [
+    ['gitDiff', gitDiff],
+    ['gitStage', gitStage]
+  ] as const) {
+    handle(name, (id, path, staged) => {
+      if (typeof staged !== 'boolean') {
+        throw new Error('Invalid Git selection.');
+      }
+      return action(session(id).workspace.root, text(path), staged);
+    });
+  }
+  handle('gitCommit', (id, message) => gitCommit(session(id).workspace.root, text(message)));
   handle('findFiles', (id) => session(id).findFiles());
   handle('openFile', (id, path) => session(id).openFile(text(path)));
   handle('openReference', (id, index, version) => session(id).openReference(integer(index), integer(version)));

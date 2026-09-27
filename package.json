@@ -21,7 +21,7 @@
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux",
-    "test": "tsx --test tests/session.test.ts",
+    "test": "tsx --test tests/session.test.ts tests/git.test.ts",
     "test:e2e": "playwright test",
     "test:rust": "tsx --test tests/rust.test.ts",
     "test:debug": "tsx --test tests/debug.test.ts"

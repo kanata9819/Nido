@@ -1,4 +1,4 @@
-export type Panel = 'commands' | 'workspaces' | 'files' | 'buffers' | 'settings' | 'folders' | null;
+export type Panel = 'commands' | 'workspaces' | 'files' | 'buffers' | 'settings' | 'folders' | 'git' | null;
 
 export interface Item {
   key: string;

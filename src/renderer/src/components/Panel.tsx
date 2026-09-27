@@ -2,8 +2,10 @@ import type { Panel, Item } from '../types';
 import { Command, FolderOpen, FileCode2, X } from 'lucide-react';
 import styles from '../assets/Nido.module.css';
 import FolderPicker from './FolderPicker';
+import GitPanel from './GitPanel';
 
 interface PanelProps {
+  workspaceId: string;
   animations: boolean;
   setAnimations: (value: boolean) => void;
   initialFolder: string;
@@ -25,6 +27,7 @@ interface PanelProps {
 }
 
 const panelTitles = {
+  git: 'Source control',
   folders: 'Open a workspace',
   files: 'Find a file',
   workspaces: 'Your workspaces',
@@ -34,6 +37,7 @@ const panelTitles = {
 };
 
 export function Panel({
+  workspaceId,
   animations,
   setAnimations,
   initialFolder,
@@ -67,7 +71,7 @@ export function Panel({
       }}
     >
       <div
-        className={styles.palette}
+        className={`${styles.palette} ${panel === 'git' ? styles.gitPalette : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={panel === 'settings' ? 'Settings' : `${panel} palette`}
@@ -80,7 +84,9 @@ export function Panel({
             <X size={17} />
           </button>
         </div>
-        {panel === 'folders' ? (
+        {panel === 'git' ? (
+          <GitPanel key={workspaceId} workspaceId={workspaceId} />
+        ) : panel === 'folders' ? (
           <FolderPicker
             initialPath={initialFolder}
             busy={creating}

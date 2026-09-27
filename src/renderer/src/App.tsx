@@ -5,6 +5,7 @@ import {
   Code2,
   Files,
   FolderOpen,
+  GitBranch,
   Keyboard,
   Leaf,
   Minus,
@@ -529,6 +530,14 @@ export default function App(): React.JSX.Element {
           <button aria-label="Workspaces" title="Workspaces (Space w)" onClick={() => showPanel('workspaces')}>
             <Square size={20} />
           </button>
+          <button
+            aria-label="Source control"
+            title="Source control (Ctrl+Shift+G / Space g)"
+            disabled={!active}
+            onClick={() => showPanel('git')}
+          >
+            <GitBranch size={21} />
+          </button>
           <div className={styles.railGap} />
           <button aria-label="Command palette" title="Commands (Ctrl+Shift+P)" onClick={() => showPanel('commands')}>
             <Keyboard size={21} />
@@ -667,7 +676,7 @@ export default function App(): React.JSX.Element {
               </div>
               <div className={styles.leaderGrid}>
                 {commands
-                  .filter((c) => ['w', 'f', 'b', 'e', 'n', ',', 's', 'x'].includes(c.key))
+                  .filter((c) => ['w', 'f', 'b', 'e', 'n', ',', 's', 'x', 'g'].includes(c.key))
                   .map((c) => (
                     <button key={c.key} onClick={c.run}>
                       <kbd>{c.key}</kbd>
@@ -843,6 +852,7 @@ export default function App(): React.JSX.Element {
         </div>
       )}
       <PanelComponent
+        workspaceId={active}
         animations={animations}
         setAnimations={setAnimations}
         initialFolder={workspace?.root || ''}

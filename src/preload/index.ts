@@ -2,6 +2,10 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { NidoAPI, NidoEvent } from '../shared/types';
 
 const api: NidoAPI = {
+  gitStatus: (id) => ipcRenderer.invoke('nido:gitStatus', id),
+  gitDiff: (id, path, staged) => ipcRenderer.invoke('nido:gitDiff', id, path, staged),
+  gitStage: (id, path, staged) => ipcRenderer.invoke('nido:gitStage', id, path, staged),
+  gitCommit: (id, message) => ipcRenderer.invoke('nido:gitCommit', id, message),
   restoreWorkspaces: () => ipcRenderer.invoke('nido:restore'),
   workspaceLayout: (ids, active) => ipcRenderer.invoke('nido:layout', ids, active),
   createWorkspace: (path, kind) => ipcRenderer.invoke('nido:create', path, kind),

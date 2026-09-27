@@ -40,6 +40,12 @@ export function buildItems(
     },
     ...(active
       ? [
+          {
+            key: 'g',
+            title: 'Source control',
+            detail: 'Git changes, diff and commits · Ctrl+Shift+G',
+            run: () => showPanel('git')
+          },
           ...(
             [
               ['Start / continue debugging', 'F5', 'start'],

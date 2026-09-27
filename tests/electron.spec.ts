@@ -3,6 +3,65 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+
+test('Git changes can be reviewed, staged and committed with the keyboard', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-git-ui-'));
+  const repository = join(root, 'repo');
+  await mkdir(repository);
+  const git = (...args: string[]): string =>
+    execFileSync('git', args, { cwd: repository, encoding: 'utf8', windowsHide: true });
+  git('init');
+  git('config', 'user.name', 'Nido Test');
+  git('config', 'user.email', 'nido-test@example.invalid');
+  git('config', 'commit.gpgsign', 'false');
+  await writeFile(join(repository, 'main.rs'), 'fn main() {}\n');
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  try {
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
+    running = await electron.launch({
+      executablePath,
+      args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+      env
+    });
+    const page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, repository);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.press('Control+Shift+g');
+    const panel = page.getByRole('region', { name: 'Git changes' });
+    await expect(panel).toHaveAttribute('aria-busy', 'false');
+    await expect(page.getByRole('listbox', { name: 'Changed files' })).toBeFocused();
+    await expect(page.getByLabel('Git diff')).toContainText('+fn main() {}');
+    await page.keyboard.press('s');
+    await expect(page.getByRole('heading', { name: 'Staged changes' })).toBeVisible();
+    await expect(panel).toHaveAttribute('aria-busy', 'false');
+    await page.keyboard.press('u');
+    await expect(page.getByRole('heading', { name: 'Staged changes' })).toHaveCount(0);
+    await expect(panel).toHaveAttribute('aria-busy', 'false');
+    await page.keyboard.press('s');
+    await expect(panel.getByRole('heading', { name: 'Staged changes' })).toBeVisible();
+    await expect(panel).toHaveAttribute('aria-busy', 'false');
+    await page.screenshot({ path: 'test-results/nido-git.png' });
+    await page.keyboard.press('c');
+    await expect(page.getByRole('textbox', { name: 'Commit message' })).toBeFocused();
+    await page.keyboard.type('First commit');
+    await page.keyboard.press('Control+Enter');
+    await expect(panel.getByText('Working tree clean.')).toBeVisible();
+    expect(git('log', '-1', '--format=%s').trim()).toBe('First commit');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.press('Space');
+    await page.keyboard.press('g');
+    await expect(panel).toBeVisible();
+  } finally {
+    await running?.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 async function chooseWorkspace(page: Page, path: string, navigate = false): Promise<void> {
   await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute('aria-busy', 'false');
