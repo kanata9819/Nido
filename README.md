@@ -32,9 +32,9 @@ Electronの実行ファイルが未取得の場合は `node node_modules/electro
 追加プラグインやプラグインマネージャーは同梱せず、Neovim標準機能を使います。
 Tier 1（優先して実装・回帰テストする言語）はRustとTypeScriptです。JavaScriptもTypeScriptと同じサーバーで対応します。
 
-| 言語 | 言語サーバー | 用意するもの |
-| --- | --- | --- |
-| Rust | rust-analyzer | Rustツールチェーン、rust-analyzer、rust-src、rustfmt |
+| 言語                                | 言語サーバー                                              | 用意するもの                                            |
+| ----------------------------------- | --------------------------------------------------------- | ------------------------------------------------------- |
+| Rust                                | rust-analyzer                                             | Rustツールチェーン、rust-analyzer、rust-src、rustfmt    |
 | TypeScript / TSX / JavaScript / JSX | 同梱のtypescript-language-server 6.0.1 + TypeScript 6.0.3 | プロジェクトの依存パッケージ（Node.jsの別途導入は不要） |
 
 TS/JSはElectron内蔵のNodeランタイムで起動し、`tsconfig.json` / `jsconfig.json`を読み取ります。設定ファイルのない単独ファイルにも接続します。

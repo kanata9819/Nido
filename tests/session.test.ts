@@ -36,11 +36,15 @@ end
 vim.fn.maparg('K', 'n', false, true).callback()
 vim.lsp.get_clients, vim.lsp.buf.hover = get_clients, hover
 assert(calls == 1)
-vim.cmd('messages clear')`, []
+vim.cmd('messages clear')`,
+      []
     ]);
     await session.save(false);
     assert.equal(await readFile(join(root, 'sample.ts'), 'utf8'), 'const state = 1;\n');
-    assert.doesNotMatch(JSON.stringify(await session.client.request('nvim_exec2', ['messages', { output: true }])), /written|\[w\]/);
+    assert.doesNotMatch(
+      JSON.stringify(await session.client.request('nvim_exec2', ['messages', { output: true }])),
+      /written|\[w\]/
+    );
     await session.client.request('nvim_exec_lua', ['vim.bo.readonly = true', []]);
     await assert.rejects(session.save(false), /readonly|E45/);
   } finally {
