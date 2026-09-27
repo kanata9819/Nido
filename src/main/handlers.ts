@@ -328,18 +328,26 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
   });
 
   handle('window', (action) => {
-    if (action === 'minimize') {
-      window.minimize();
-    } else if (action === 'maximize') {
-      if (window.isMaximized()) {
-        window.unmaximize();
-      } else {
-        window.maximize();
+    switch (action) {
+      case 'minimize': {
+        window.minimize();
+        break;
       }
-    } else if (action === 'close') {
-      window.close();
-    } else {
-      throw new Error('Unknown window action.');
+      case 'maximize': {
+        if (window.isMaximized()) {
+          window.unmaximize();
+        } else {
+          window.maximize();
+        }
+        break;
+      }
+      case 'close': {
+        window.close();
+        break;
+      }
+      default: {
+        throw new Error('Unknown window action.');
+      }
     }
   });
 }

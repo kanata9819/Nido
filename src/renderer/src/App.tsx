@@ -261,26 +261,36 @@ export default function App(): React.JSX.Element {
   useEffect(
     () =>
       window.nido.onEvent((event) => {
-        if (event.type === 'state') {
-          setStates((old) => ({ ...old, [event.id]: event.state }));
-        } else if (event.type === 'redraw') {
-          for (const [name, ...calls] of event.events)
-            if (name === 'mode_change') {
-              mode.current[event.id] = String(calls.at(-1)?.[0]);
+        switch (event.type) {
+          case 'state': {
+            setStates((old) => ({ ...old, [event.id]: event.state }));
+            break;
+          }
+          case 'redraw': {
+            for (const [name, ...calls] of event.events) {
+              if (name === 'mode_change') {
+                mode.current[event.id] = String(calls.at(-1)?.[0]);
+              }
             }
-        } else if (event.type === 'error') {
-          report(event.message);
-        } else if (event.type === 'exit') {
-          setWorkspaces((old) =>
-            old
-              .filter((w) => w.id !== event.id)
-              .map((w) => (w.terminalId === event.id ? { ...w, terminalId: undefined } : w))
-          );
-          setStates((old) => {
-            const next = { ...old };
-            delete next[event.id];
-            return next;
-          });
+            break;
+          }
+          case 'error': {
+            report(event.message);
+            break;
+          }
+          case 'exit': {
+            setWorkspaces((old) =>
+              old
+                .filter((w) => w.id !== event.id)
+                .map((w) => (w.terminalId === event.id ? { ...w, terminalId: undefined } : w))
+            );
+            setStates((old) => {
+              const next = { ...old };
+              delete next[event.id];
+              return next;
+            });
+            break;
+          }
         }
       }),
     [report]

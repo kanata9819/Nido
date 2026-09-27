@@ -133,17 +133,32 @@ export default function FolderPicker({
             return;
           }
           event.preventDefault();
-          if (key === 'j' || key === 'ArrowDown') {
-            setSelected((value) => Math.max(0, Math.min(folders.length - 1, value + 1)));
-          } else if (key === 'k' || key === 'ArrowUp') {
-            setSelected((value) => Math.max(0, value - 1));
-          } else if (key === 'h' || key === 'ArrowLeft' || key === 'Backspace') {
-            void browse(parent);
-          } else if (folders[selected]) {
-            if (key === 'Enter') {
-              onOpen(folders[selected].path, kind);
-            } else {
-              void browse(folders[selected].path);
+          switch (key) {
+            case 'j':
+            case 'ArrowDown': {
+              setSelected((value) => Math.max(0, Math.min(folders.length - 1, value + 1)));
+              break;
+            }
+            case 'k':
+            case 'ArrowUp': {
+              setSelected((value) => Math.max(0, value - 1));
+              break;
+            }
+            case 'h':
+            case 'ArrowLeft':
+            case 'Backspace': {
+              void browse(parent);
+              break;
+            }
+            default: {
+              if (folders[selected]) {
+                if (key === 'Enter') {
+                  onOpen(folders[selected].path, kind);
+                } else {
+                  void browse(folders[selected].path);
+                }
+              }
+              break;
             }
           }
         }}

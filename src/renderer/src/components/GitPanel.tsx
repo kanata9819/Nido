@@ -141,31 +141,46 @@ export default function GitPanel({
               return;
             }
             const index = changes.findIndex((change) => key(change) === selected);
-            if (['j', 'k', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
-              event.preventDefault();
-              const next =
-                event.key === 'Home'
-                  ? 0
-                  : event.key === 'End'
-                    ? changes.length - 1
-                    : Math.max(
-                        0,
-                        Math.min(changes.length - 1, index + (['j', 'ArrowDown'].includes(event.key) ? 1 : -1))
-                      );
-              if (changes[next]) {
-                setSelected(key(changes[next]));
+            switch (event.key) {
+              case 'j':
+              case 'k':
+              case 'ArrowDown':
+              case 'ArrowUp':
+              case 'Home':
+              case 'End': {
+                event.preventDefault();
+                const next =
+                  event.key === 'Home'
+                    ? 0
+                    : event.key === 'End'
+                      ? changes.length - 1
+                      : Math.max(
+                          0,
+                          Math.min(changes.length - 1, index + (['j', 'ArrowDown'].includes(event.key) ? 1 : -1))
+                        );
+                if (changes[next]) {
+                  setSelected(key(changes[next]));
+                }
+                break;
               }
-            } else if (event.key === 's' || event.key === 'u') {
-              event.preventDefault();
-              if (current && current.staged === (event.key === 'u')) {
-                stage();
+              case 's':
+              case 'u': {
+                event.preventDefault();
+                if (current && current.staged === (event.key === 'u')) {
+                  stage();
+                }
+                break;
               }
-            } else if (event.key === 'r') {
-              event.preventDefault();
-              void run(async () => {});
-            } else if (event.key === 'c') {
-              event.preventDefault();
-              input.current?.focus();
+              case 'r': {
+                event.preventDefault();
+                void run(async () => {});
+                break;
+              }
+              case 'c': {
+                event.preventDefault();
+                input.current?.focus();
+                break;
+              }
             }
           }}
         >

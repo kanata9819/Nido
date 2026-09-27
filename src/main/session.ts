@@ -224,56 +224,64 @@ export class Session {
     this.client = attach({ proc: this.process });
     this.fileService = new SessionFiles(this.workspace.root, this.client);
     this.client.on('notification', (method: string, args: unknown[]) => {
-      if (method === 'nido:scroll') {
-        this.pendingRedraw.push(['nido_scroll', args[0] as unknown[]]);
-      }
-      if (method === 'nido:message') {
-        this.emit({ type: 'error', id: this.workspace.id, message: String(args[0]) });
-      }
-      if (method === 'redraw') {
-        // Other events can contain Neovim Window handles, which cannot cross Electron IPC.
-        for (const event of args as Redraw) {
-          if (!gridEvents.has(event[0])) {
-            continue;
+      switch (method) {
+        case 'nido:scroll': {
+          this.pendingRedraw.push(['nido_scroll', args[0] as unknown[]]);
+          break;
+        }
+        case 'nido:message': {
+          this.emit({ type: 'error', id: this.workspace.id, message: String(args[0]) });
+          break;
+        }
+        case 'redraw': {
+          // Other events can contain Neovim Window handles, which cannot cross Electron IPC.
+          for (const event of args as Redraw) {
+            if (!gridEvents.has(event[0])) {
+              continue;
+            }
+            this.pendingRedraw.push(event);
+            // A repaint can span several RPC notifications. Never expose a partial frame.
+            if (event[0] === 'flush') {
+              const events = this.pendingRedraw;
+              this.pendingRedraw = [];
+              this.emit({ type: 'redraw', id: this.workspace.id, events });
+            }
           }
-          this.pendingRedraw.push(event);
-          // A repaint can span several RPC notifications. Never expose a partial frame.
-          if (event[0] === 'flush') {
-            const events = this.pendingRedraw;
-            this.pendingRedraw = [];
-            this.emit({ type: 'redraw', id: this.workspace.id, events });
+          break;
+        }
+        case 'nido:state': {
+          this.state = { ...(args[0] as SessionState), debug: this.state.debug, references: this.state.references };
+          // Lua encodes an empty table as a map rather than an array.
+          if (!Array.isArray(this.state.buffers)) {
+            this.state.buffers = [];
           }
+          if (!Array.isArray(this.state.problems)) {
+            this.state.problems = [];
+          }
+          this.emit({ type: 'state', id: this.workspace.id, state: this.state });
+          break;
         }
-      }
-      if (method === 'nido:state') {
-        this.state = { ...(args[0] as SessionState), debug: this.state.debug, references: this.state.references };
-        // Lua encodes an empty table as a map rather than an array.
-        if (!Array.isArray(this.state.buffers)) {
-          this.state.buffers = [];
+        case 'nido:references': {
+          const references = args[0] as NonNullable<SessionState['references']>;
+          if (!Array.isArray(references.items)) {
+            references.items = [];
+          }
+          this.state = { ...this.state, references };
+          this.emit({ type: 'state', id: this.workspace.id, state: this.state });
+          break;
         }
-        if (!Array.isArray(this.state.problems)) {
-          this.state.problems = [];
+        case 'nido:debug': {
+          const debug = args[0] as DebugState;
+          if (!Array.isArray(debug.variables)) {
+            debug.variables = [];
+          }
+          if (!Array.isArray(debug.targets)) {
+            debug.targets = [];
+          }
+          this.state = { ...this.state, debug };
+          this.emit({ type: 'state', id: this.workspace.id, state: this.state });
+          break;
         }
-        this.emit({ type: 'state', id: this.workspace.id, state: this.state });
-      }
-      if (method === 'nido:references') {
-        const references = args[0] as NonNullable<SessionState['references']>;
-        if (!Array.isArray(references.items)) {
-          references.items = [];
-        }
-        this.state = { ...this.state, references };
-        this.emit({ type: 'state', id: this.workspace.id, state: this.state });
-      }
-      if (method === 'nido:debug') {
-        const debug = args[0] as DebugState;
-        if (!Array.isArray(debug.variables)) {
-          debug.variables = [];
-        }
-        if (!Array.isArray(debug.targets)) {
-          debug.targets = [];
-        }
-        this.state = { ...this.state, debug };
-        this.emit({ type: 'state', id: this.workspace.id, state: this.state });
       }
     });
     this.process.stderr.on('data', () => {
