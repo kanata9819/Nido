@@ -55,6 +55,7 @@ export function useKeyboardShortcuts({
   activate
 }: UseKeyboardShortcutsParams): (event: KeyboardEvent) => void {
   const keydown = (event: KeyboardEvent): void => {
+    if (document.activeElement?.closest('[data-type-information]')) return;
     if (event.isComposing || event.keyCode === 229) {
       return;
     }
@@ -168,7 +169,8 @@ export function useKeyboardShortcuts({
       !event.altKey &&
       !event.metaKey &&
       !event.shiftKey &&
-      ['h', 'j', 'k', 'l'].includes(event.key.toLowerCase())
+      ['h', 'j', 'k', 'l'].includes(event.key.toLowerCase()) &&
+      !(event.key.toLowerCase() === 'k' && focusedLabel === 'Neovim input')
     ) {
       consume();
       if (event.key.toLowerCase() === 'h') {
@@ -255,13 +257,7 @@ export function useKeyboardShortcuts({
       run(window.nido.selectBuffer(active, next.id));
       return;
     }
-    if (
-      event.key === ' ' &&
-      !event.ctrlKey &&
-      !event.altKey &&
-      focusedLabel === 'Neovim input' &&
-      isNormalMode
-    ) {
+    if (event.key === ' ' && !event.ctrlKey && !event.altKey && focusedLabel === 'Neovim input' && isNormalMode) {
       consume();
       setLeader(true);
     }

@@ -13,12 +13,16 @@ import type { Redraw } from '../src/shared/types';
 test('hover without an LSP never opens help and successful saves stay quiet', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-hover-'));
   let session: Session | undefined;
+  const hovers: string[] = [];
   try {
     await writeFile(join(root, 'sample.ts'), 'const state = 1;\n');
-    session = await Session.create(root, () => {});
+    session = await Session.create(root, (event) => {
+      if (event.type === 'hover') hovers.push(event.markdown);
+    });
     await session.openFile('sample.ts');
     await session.client.request('nvim_exec_lua', [
-      `vim.lsp.enable('typescript', false)
+      `assert(vim.g.nido_channel, 'missing channel')
+vim.lsp.enable('typescript', false)
 for _, key in ipairs({'K', '<C-k>'}) do
   local mapping = vim.fn.maparg(key, 'n', false, true)
   assert(type(mapping.callback) == 'function')
@@ -27,19 +31,28 @@ for _, key in ipairs({'K', '<C-k>'}) do
   assert(vim.bo.filetype == 'typescript')
 end
 local calls = 0
-local get_clients, hover = vim.lsp.get_clients, vim.lsp.buf.hover
+local get_clients, request_all = vim.lsp.get_clients, vim.lsp.buf_request_all
 vim.lsp.get_clients = function() return {{}} end
-vim.lsp.buf.hover = function(opts)
+vim.lsp.buf_request_all = function(buf, method, params, callback)
   calls = calls + 1
-  assert(opts.border == 'rounded' and opts.max_height <= 20)
+  assert(method == 'textDocument/hover' and type(params) == 'function')
+  callback({[1]={result={contents={kind='markdown', value='A type description'}}}})
 end
 vim.fn.maparg('K', 'n', false, true).callback()
-vim.lsp.get_clients, vim.lsp.buf.hover = get_clients, hover
+local pending
+vim.lsp.buf_request_all = function(_, _, _, callback) pending = callback end
+vim.fn.maparg('K', 'n', false, true).callback()
+vim.api.nvim_win_set_cursor(0, {1, 1})
+pending({[1]={result={contents={kind='markdown', value='Stale type description'}}}})
+vim.lsp.get_clients, vim.lsp.buf_request_all = get_clients, request_all
 assert(calls == 1)
+assert(#vim.api.nvim_list_wins() == 1)
 vim.cmd('messages clear')`,
       []
     ]);
     await session.save(false);
+    assert.ok(hovers.includes('A type description'), JSON.stringify(hovers));
+    assert.ok(!hovers.includes('Stale type description'));
     assert.equal(await readFile(join(root, 'sample.ts'), 'utf8'), 'const state = 1;\n');
     assert.doesNotMatch(
       JSON.stringify(await session.client.request('nvim_exec2', ['messages', { output: true }])),

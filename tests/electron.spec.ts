@@ -155,6 +155,99 @@ test('Japanese editor text stays legible at fractional display scales', async ()
   }
 });
 
+test('type information is a selectable Nido card with keyboard scrolling and dismissal', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-hover-card-'));
+  const workspace = join(root, 'workspace');
+  await mkdir(workspace);
+  await writeFile(join(workspace, 'tsconfig.json'), '{}');
+  await writeFile(
+    join(workspace, 'sample.ts'),
+    [
+      '/**',
+      ' * カーソル位置を更新します。',
+      ' *',
+      ' * Returns the **screen position** from `row` and `column`.',
+      ' * <script>window.hoverUnsafe = true</script>',
+      ...Array.from({ length: 25 }, (_, index) => ` *\n * Detail ${index + 1}: coordinates are measured in cells.`),
+      ' */',
+      'export function setCursor(row: number, column: number): number {',
+      '  return row * 80 + column;',
+      '}',
+      'setCursor(1, 2);',
+      ''
+    ].join('\n')
+  );
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const running = await electron.launch({ args: ['.', `--user-data-dir=${join(root, 'profile')}`], env });
+  try {
+    const page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, workspace);
+    const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+    await expect(editor).toBeFocused();
+    await page.keyboard.press('Control+p');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('sample.ts');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /カーソル位置/);
+    await page.keyboard.type('G0');
+    await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /setCursor/);
+    const popup = page.getByRole('dialog', { name: 'Type information', exact: true });
+    await expect(async () => {
+      await editor.focus();
+      await page.keyboard.press('Control+k');
+      await expect(popup.locator('pre')).toContainText('setCursor', { timeout: 1000 });
+    }).toPass({ timeout: 15000 });
+    const content = page.getByLabel('Type information content', { exact: true });
+    await expect(content).toBeFocused();
+    await expect(content).toContainText('カーソル位置を更新します');
+    await expect(popup.locator('pre code span span').filter({ hasText: /^function$/ })).toHaveCSS(
+      'color',
+      'rgb(86, 156, 214)'
+    );
+    expect(
+      await popup
+        .locator('pre code span span')
+        .evaluateAll((spans) => new Set(spans.map((span) => getComputedStyle(span).color)).size)
+    ).toBeGreaterThan(1);
+    expect(await page.evaluate(() => 'hoverUnsafe' in window)).toBe(false);
+    await page.keyboard.press('j');
+    await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    await page.keyboard.press('Home');
+    await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
+    for (const [down, up, fraction] of [
+      ['d', 'u', 0.5],
+      ['f', 'b', 1]
+    ] as const) {
+      const height = await content.evaluate((node) => node.clientHeight);
+      await page.keyboard.press(`Control+${down}`);
+      await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeCloseTo(height * fraction, 0);
+      await page.keyboard.press(`Control+${up}`);
+      await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
+    }
+    await popup.screenshot({ path: 'test-results/nido-type-information.png' });
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'Close type information' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(popup).toBeHidden();
+    await expect(editor).toBeFocused();
+    await page.keyboard.press('K');
+    await expect(popup.locator('pre')).toContainText('setCursor');
+    await page.keyboard.press('Control+c');
+    await expect(popup).toBeHidden();
+    await expect(editor).toBeFocused();
+    await page.keyboard.press('Control+k');
+    await expect(popup.locator('pre')).toContainText('setCursor');
+    await page.getByRole('button', { name: 'Close type information' }).click();
+    await expect(popup).toBeHidden();
+    await expect(editor).toBeFocused();
+  } finally {
+    await running.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('window size and maximized state survive restart', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-window-'));
   const env = { ...process.env };

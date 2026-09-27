@@ -114,14 +114,17 @@ for (const extension of ['ts', 'js']) {
         assert.equal(await lua('return vim.wait(15000, function() return #vim.diagnostic.get(0) > 0 end, 50)'), true);
         assert.match(JSON.stringify(await lua('return vim.diagnostic.get(0)')), /toUpperCase/);
         await lua(`vim.api.nvim_win_set_cursor(0, {2, 14})
+        local notify = vim.rpcnotify
+        local hover = ''
+        vim.rpcnotify = function(channel, method, ...)
+          if method == 'nido:hover' then hover = select(1, ...) end
+          return notify(channel, method, ...)
+        end
         vim.fn.maparg('K', 'n', false, true).callback()
-        assert(vim.wait(5000, function() return #vim.api.nvim_list_wins() == 2 end, 50))
-        for _, win in ipairs(vim.api.nvim_list_wins()) do
-          if vim.api.nvim_win_get_config(win).relative ~= '' then
-            assert(vim.bo[vim.api.nvim_win_get_buf(win)].buftype ~= 'help')
-            vim.api.nvim_win_close(win, true)
-          end
-        end`);
+        local received = vim.wait(5000, function() return hover:find('greet') ~= nil end, 50)
+        vim.rpcnotify = notify
+        assert(received)
+        assert(#vim.api.nvim_list_wins() == 1)`);
         await session.save(true);
         assert.match(await readFile(path, 'utf8'), /const answer = greet\(\);/);
         // JSX/TSX use the same server, without creating another workspace client.

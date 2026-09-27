@@ -225,6 +225,18 @@ export class Session {
     this.fileService = new SessionFiles(this.workspace.root, this.client);
     this.client.on('notification', (method: string, args: unknown[]) => {
       switch (method) {
+        case 'nido:hover': {
+          if (typeof args[0] === 'string' && typeof args[1] === 'string') {
+            this.emit({
+              type: 'hover',
+              id: this.workspace.id,
+              markdown: args[0],
+              filetype: args[1],
+              codeBlocks: Array.isArray(args[2]) ? (args[2] as ReferencePreview['lines'][]) : []
+            });
+          }
+          break;
+        }
         case 'nido:scroll': {
           this.pendingRedraw.push(['nido_scroll', args[0] as unknown[]]);
           break;

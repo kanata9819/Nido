@@ -62,6 +62,7 @@ export interface FileEntry {
 }
 export type Redraw = [string, ...unknown[][]][];
 export type NidoEvent =
+  | { type: 'hover'; id: string; markdown: string; filetype: string; codeBlocks: ReferencePreview['lines'][] }
   | { type: 'filesChanged'; id: string }
   | { type: 'redraw'; id: string; events: Redraw }
   | { type: 'state'; id: string; state: SessionState }

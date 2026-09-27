@@ -51,25 +51,7 @@ vim.o.winborder = 'rounded'
 vim.api.nvim_set_hl(0, 'NormalFloat', {fg='#d4d4d4', bg='#1b1e21'})
 vim.api.nvim_set_hl(0, 'FloatBorder', {fg='#65717d', bg='#1b1e21'})
 vim.api.nvim_set_hl(0, 'FloatTitle', {fg='#a8cf9e', bg='#1b1e21', bold=true})
-local function preview_options(title)
-  return {
-    border = 'rounded', title = ' ' .. title .. ' ', title_pos = 'left',
-    max_width = math.max(20, math.min(88, math.floor(vim.o.columns * 0.7))),
-    max_height = math.max(4, math.min(20, math.floor(vim.o.lines * 0.45))),
-  }
-end
-local function show_type_information()
-  if #vim.lsp.get_clients({ bufnr = 0, method = 'textDocument/hover' }) == 0 then
-    local message = 'Type information is unavailable: no language server with hover support is attached to this file.'
-    if vim.g.nido_channel then
-      vim.rpcnotify(vim.g.nido_channel, 'nido:message', message)
-    else
-      vim.notify(message, vim.log.levels.INFO)
-    end
-    return
-  end
-  vim.lsp.buf.hover(preview_options('Type information · K to focus'))
-end
+local show_type_information = require('nido_hover').show
 -- Always override the built-in K help lookup, including files without an LSP.
 for _, key in ipairs({ 'K', '<C-k>' }) do
   vim.keymap.set('n', key, show_type_information)

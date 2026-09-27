@@ -4,6 +4,7 @@ import { accumulateScroll } from './scroll';
 import { useEditorRendering } from './hooks/useEditorRendering';
 import { useEditorInput } from './hooks/useEditorInput';
 import styles from './assets/Nido.module.css';
+import TypeInformation from './components/TypeInformation';
 
 interface Props {
   scrollFollowCursor?: boolean;
@@ -115,6 +116,7 @@ export default function Editor({
         aria-label={terminal ? 'Terminal display' : 'Neovim editor display'}
       />
       {children}
+      {active && !blocked && !terminal && <TypeInformation id={id} input={input} fontFamily={fontFamily} />}
       <textarea
         ref={input}
         className={styles.editorInput}

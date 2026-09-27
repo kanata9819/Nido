@@ -78,6 +78,10 @@ function M.preview(index, expected_version)
   local line = math.min(item.lnum, vim.api.nvim_buf_line_count(buffer))
   local first = math.max(1, line - 8)
   local lines = vim.api.nvim_buf_get_lines(buffer, first - 1, math.min(line + 8, vim.api.nvim_buf_line_count(buffer)), false)
+  return { first = first, line = line, lines = M.highlight(buffer, first, lines) }
+end
+
+function M.highlight(buffer, first, lines)
   local colors = {}
   local function color(group)
     if colors[group] == nil then
@@ -124,11 +128,7 @@ function M.preview(index, expected_version)
     end
     table.insert(highlighted, spans)
   end
-  return {
-    first = first,
-    line = line,
-    lines = highlighted,
-  }
+  return highlighted
 end
 
 function M.open(index, expected_version)
