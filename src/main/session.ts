@@ -9,6 +9,7 @@ import type {
   FileEntry,
   NidoEvent,
   Redraw,
+  ReferencePreview,
   SavedWorkspace,
   SessionState,
   Workspace
@@ -17,6 +18,7 @@ import { SessionFiles } from './sessionFiles';
 
 const setup = `
 local channel = ...
+vim.g.nido_channel = channel
 -- Single-grid UIs can receive a full repaint instead of grid_scroll on upward scrolling.
 vim.api.nvim_create_autocmd('WinScrolled', {
   callback = function()
@@ -203,11 +205,19 @@ export class Session {
         }
       }
       if (method === 'nido:state') {
-        this.state = { ...(args[0] as SessionState), debug: this.state.debug };
+        this.state = { ...(args[0] as SessionState), debug: this.state.debug, references: this.state.references };
         // Lua encodes an empty table as a map rather than an array.
         if (!Array.isArray(this.state.buffers)) {
           this.state.buffers = [];
         }
+        this.emit({ type: 'state', id: this.workspace.id, state: this.state });
+      }
+      if (method === 'nido:references') {
+        const references = args[0] as NonNullable<SessionState['references']>;
+        if (!Array.isArray(references.items)) {
+          references.items = [];
+        }
+        this.state = { ...this.state, references };
         this.emit({ type: 'state', id: this.workspace.id, state: this.state });
       }
       if (method === 'nido:debug') {
@@ -434,6 +444,12 @@ export class Session {
 
   async openFile(relativePath: string): Promise<void> {
     await this.fileService.openFile(relativePath);
+  }
+  async openReference(index: number, version: number): Promise<void> {
+    await this.client.request('nvim_exec_lua', ["require('nido_references').open(...)", [index, version]]);
+  }
+  async previewReference(index: number, version: number): Promise<ReferencePreview> {
+    return this.client.request('nvim_exec_lua', ["return require('nido_references').preview(...)", [index, version]]);
   }
 
   async files(relativePath: string): Promise<FileEntry[]> {

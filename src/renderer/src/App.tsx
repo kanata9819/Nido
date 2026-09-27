@@ -19,6 +19,7 @@ import type { Panel } from './types';
 import Editor from './Editor';
 import FileIcon from './components/FileIcon';
 import DebugPanel from './components/DebugPanel';
+import ReferencesPanel from './components/ReferencesPanel';
 import Sidebar from './Sidebar';
 import { buildItems, filename } from './commands';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -76,6 +77,9 @@ export default function App(): React.JSX.Element {
   const [error, setError] = useState('');
   const [debugVisible, setDebugVisible] = useState(false);
   const [debugFocusTick, setDebugFocusTick] = useState(0);
+  const [referencesVisible, setReferencesVisible] = useState(false);
+  const [referencesFocusTick, setReferencesFocusTick] = useState(0);
+  const [bottomPanel, setBottomPanel] = useState<'debug' | 'references'>('debug');
   const [focusTick, setFocusTick] = useState(0);
   const [sidebar, setSidebar] = useState(true);
   const [animations, setAnimations] = useState(() => localStorage.getItem('nido.animations') !== 'false');
@@ -102,6 +106,13 @@ export default function App(): React.JSX.Element {
   const state = states[active] || defaultState;
   const hasDebugger = !!state.debug;
   useEffect(() => {
+    if (state.references) {
+      setBottomPanel('references');
+      setReferencesVisible(true);
+      setReferencesFocusTick((value) => value + 1);
+    }
+  }, [active, state.references?.version, state.references?.loading]);
+  useEffect(() => {
     if (hasDebugger) {
       setDebugVisible(true);
     }
@@ -124,6 +135,10 @@ export default function App(): React.JSX.Element {
     setPanel(null);
     setLeader(false);
     setFocusTick((n) => n + 1);
+  };
+  const closeReferences = (): void => {
+    setReferencesVisible(false);
+    focusEditor();
   };
 
   const run = (promise: Promise<unknown>): void => {
@@ -327,10 +342,17 @@ export default function App(): React.JSX.Element {
   });
 
   const keydown = useKeyboardShortcuts({
+    closeReferences,
     showDebugger: () => {
       setLeader(false);
-      setDebugVisible(true);
-      setDebugFocusTick((value) => value + 1);
+      if (bottomPanel === 'references' && state.references) {
+        setReferencesVisible(true);
+        setReferencesFocusTick((value) => value + 1);
+      } else {
+        setBottomPanel('debug');
+        setDebugVisible(true);
+        setDebugFocusTick((value) => value + 1);
+      }
     },
     panel,
     leader,
@@ -457,7 +479,7 @@ export default function App(): React.JSX.Element {
               onError={report}
             />
           ))}
-        <main className={styles.main}>
+        <main id="editor-preview-host" className={styles.main}>
           {workspace ? (
             <>
               <div className={styles.fileTabs} role="tablist" aria-label="Files">
@@ -576,7 +598,19 @@ export default function App(): React.JSX.Element {
           )}
         </main>
       </div>
-      {active && debugVisible && (
+      {active && state.references && (
+        <ReferencesPanel
+          key={active}
+          workspaceId={active}
+          state={state.references}
+          root={workspace?.root || ''}
+          visible={referencesVisible && bottomPanel === 'references'}
+          focusTick={referencesFocusTick}
+          onClose={closeReferences}
+          onOpen={(index) => run(window.nido.openReference(active, index, state.references!.version).then(focusEditor))}
+        />
+      )}
+      {active && debugVisible && bottomPanel === 'debug' && (
         <DebugPanel
           state={state.debug}
           focusTick={debugFocusTick}
@@ -591,8 +625,26 @@ export default function App(): React.JSX.Element {
       )}
       <footer className={styles.statusbar}>
         {active && (
-          <button aria-label="Toggle debugger" onClick={() => setDebugVisible(!debugVisible)}>
+          <button
+            aria-label="Toggle debugger"
+            onClick={() => {
+              setBottomPanel('debug');
+              setDebugVisible(bottomPanel !== 'debug' || !debugVisible);
+            }}
+          >
             Debug
+          </button>
+        )}
+        {state.references && (
+          <button
+            aria-label="Toggle references"
+            onClick={() => {
+              setBottomPanel('references');
+              setReferencesVisible(bottomPanel !== 'references' || !referencesVisible);
+              setReferencesFocusTick((value) => value + 1);
+            }}
+          >
+            References
           </button>
         )}
         <span className={styles.mode} data-mode={displayMode}>

@@ -15,6 +15,7 @@ interface UseKeyboardShortcutsParams {
   nextWorkspace: (offset: number) => void;
   showExplorer: () => void;
   showDebugger: () => void;
+  closeReferences: () => void;
   create: () => Promise<void>;
   showPanel: (value: Panel) => void;
   commands: Item[];
@@ -38,6 +39,7 @@ export function useKeyboardShortcuts({
   nextWorkspace,
   showExplorer,
   showDebugger,
+  closeReferences,
   create,
   showPanel,
   commands,
@@ -57,6 +59,11 @@ export function useKeyboardShortcuts({
     };
 
     if (event.key === 'Escape') {
+      if (document.activeElement?.closest('[aria-label="References"]')) {
+        consume();
+        closeReferences();
+        return;
+      }
       if (error) {
         consume();
         setError('');

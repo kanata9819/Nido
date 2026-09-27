@@ -233,7 +233,7 @@ export function vimKey(
       (event.ctrlKey ? 'C-' : '') +
       (event.altKey ? 'M-' : '') +
       (event.metaKey ? 'D-' : '') +
-      (event.shiftKey && (special[event.key] || event.ctrlKey || event.altKey) ? 'S-' : '');
+      (event.shiftKey && (special[event.key] || /^F\d+$/.test(event.key) || event.ctrlKey || event.altKey) ? 'S-' : '');
     return `<${modifiers}${key}>`;
   }
   return key === '<' ? '<LT>' : key;

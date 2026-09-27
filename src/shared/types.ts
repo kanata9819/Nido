@@ -14,6 +14,7 @@ export interface BufferInfo {
   modified: boolean;
 }
 export interface SessionState {
+  references?: ReferenceList;
   debug?: DebugState;
   lineEnding?: 'LF' | 'CRLF' | 'Mixed' | 'CR';
   lsp?: string;
@@ -25,6 +26,17 @@ export interface SessionState {
   line: number;
   column: number;
   filetype: string;
+}
+export interface ReferenceList {
+  version: number;
+  loading: boolean;
+  error: string;
+  items: { path: string; line: number; column: number; text: string }[];
+}
+export interface ReferencePreview {
+  first: number;
+  line: number;
+  lines: string[];
 }
 export type DebugAction = 'start' | 'breakpoint' | 'over' | 'into' | 'out' | 'pause' | 'stop' | 'launch';
 export interface DebugState {
@@ -61,6 +73,8 @@ export interface NidoAPI {
   files(id: string, relative: string): Promise<FileEntry[]>;
   findFiles(id: string): Promise<FileEntry[]>;
   openFile(id: string, relative: string): Promise<void>;
+  openReference(id: string, index: number, version: number): Promise<void>;
+  previewReference(id: string, index: number, version: number): Promise<ReferencePreview>;
   selectBuffer(id: string, buffer: number): Promise<void>;
   closeBuffer(id: string, buffer: number): Promise<boolean>;
   save(id: string): Promise<void>;

@@ -143,6 +143,82 @@ test('viewport movement animates with keyboard and wheel and respects settings',
   }
 });
 
+test('references stay accessible after jumping and can be closed with the keyboard', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-references-'));
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  try {
+    await mkdir(join(root, 'src'));
+    await writeFile(join(root, 'Cargo.toml'), '[package]\nname="nido_references"\nversion="0.1.0"\nedition="2021"\n');
+    await writeFile(
+      join(root, 'src/main.rs'),
+      'fn greet() -> u32 { 42 }\nfn main() {\n    let answer = greet();\n    println!("{answer}");\n}\n'
+    );
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
+    running = await electron.launch({
+      executablePath,
+      args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+      env
+    });
+    const page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, root);
+    await expect(page.getByRole('treeitem', { name: 'src', exact: true })).toBeVisible();
+    await page.keyboard.press('Control+p');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
+    await expect(page.getByRole('button', { name: /main.rs/ })).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(async () => {
+      await page.keyboard.press('Control+k');
+      await page.keyboard.type('gg0wgr');
+      await expect(page.getByRole('listbox', { name: 'Reference results' }).getByRole('option')).toHaveCount(2, {
+        timeout: 1000
+      });
+    }).toPass({ timeout: 30000 });
+    const list = page.getByRole('listbox', { name: 'Reference results' });
+    await expect(list).toBeFocused();
+    const preview = page.getByRole('region', { name: 'Reference preview', exact: true });
+    await expect(preview).toContainText('fn main()');
+    await expect(preview.locator('[data-current="true"]')).toContainText('fn greet()');
+    await page.keyboard.press('j');
+    await expect(preview.locator('[data-current="true"]')).toContainText('let answer');
+    await expect(
+      page.getByRole('listbox', { name: 'Reference results' }).getByRole('option', { selected: true })
+    ).toContainText('let answer');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await expect(preview).toBeHidden();
+    await expect(page.getByRole('region', { name: 'References' })).toBeVisible();
+    await page.keyboard.press('Control+j');
+    await expect(list).toBeFocused();
+    await expect(preview).toContainText('println!');
+    await expect(
+      page.getByRole('listbox', { name: 'Reference results' }).getByRole('option', { selected: true })
+    ).toContainText('let answer');
+    await page.screenshot({ path: 'test-results/nido-references.png' });
+    await page.keyboard.press('k');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.press('Control+j');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('region', { name: 'References' })).toBeHidden();
+    await page.keyboard.press('Control+j');
+    await expect(list).toBeFocused();
+    await page.keyboard.press('Space');
+    await page.keyboard.press('d');
+    await expect(page.getByRole('region', { name: 'References' })).toBeHidden();
+    await expect(page.getByRole('tab', { name: 'main.rs', exact: true })).toBeVisible();
+    await expect(page.getByRole('tab', { name: '[Untitled]', exact: true })).toHaveCount(0);
+    await page.keyboard.press('Shift+F12');
+    await expect(page.getByRole('region', { name: 'References' })).toBeVisible();
+  } finally {
+    await running?.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('Rust debugger keyboard controls stop, inspect and step in the packaged app', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-debug-ui-'));
   let running: Awaited<ReturnType<typeof electron.launch>> | undefined;

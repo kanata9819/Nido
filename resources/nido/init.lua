@@ -61,14 +61,14 @@ vim.api.nvim_create_autocmd('LspAttach', {
   callback = function(event)
     local opts = { buffer = event.buf }
     vim.keymap.set('n', 'gd', vim.lsp.buf.definition, opts)
-    vim.keymap.set('n', 'gr', vim.lsp.buf.references, opts)
+    vim.keymap.set('n', 'gr', function() require('nido_references').find() end, opts)
+    vim.keymap.set('n', '<S-F12>', function() require('nido_references').find() end, opts)
     for _, key in ipairs({'K', '<C-k>'}) do
       vim.keymap.set('n', key, function()
         vim.lsp.buf.hover(preview_options('Type information · K to focus'))
       end, opts)
     end
     vim.keymap.set('n', '<F12>', vim.lsp.buf.definition, opts)
-    vim.keymap.set('n', '<S-F12>', vim.lsp.buf.references, opts)
     vim.keymap.set('n', 'gI', vim.lsp.buf.implementation, opts)
     vim.keymap.set('n', 'gy', vim.lsp.buf.type_definition, opts)
     vim.keymap.set('n', '<F2>', vim.lsp.buf.rename, opts)

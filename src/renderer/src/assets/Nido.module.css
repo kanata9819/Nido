@@ -360,6 +360,143 @@
   background: #17191b;
   font-size: 12px;
 }
+.referencesPanel {
+  flex-shrink: 0;
+  border-top: 1px solid #34383c;
+  background: #17191b;
+  font-size: 12px;
+}
+.referencePreview {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(820px, calc(100% - 48px));
+  max-height: calc(100% - 100px);
+  overflow: auto;
+  background: #181d21;
+  border: 1px solid #536359;
+  border-radius: 10px;
+  box-shadow: 0 16px 60px #0009;
+  pointer-events: none;
+}
+.referencePreview header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #303a40;
+  font-size: 12px;
+}
+.referencePreview header strong {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.referencePreview header span {
+  color: #a5bd9b;
+  white-space: nowrap;
+}
+.referencePreviewCode {
+  padding: 10px 0;
+  font:
+    13px/1.65 Consolas,
+    monospace;
+}
+.referencePreviewCode > div {
+  display: flex;
+  white-space: pre;
+  min-width: max-content;
+  padding-right: 18px;
+}
+.referencePreviewCode > div[data-current='true'] {
+  background: #304338;
+  box-shadow: inset 3px 0 #a5bd9b;
+}
+.referencePreviewCode > div > span {
+  width: 54px;
+  flex-shrink: 0;
+  padding-right: 16px;
+  text-align: right;
+  color: #84918a;
+  user-select: none;
+}
+.referencePreviewCode code {
+  font: inherit;
+  color: #d5ddd9;
+}
+.referencePreviewCode p {
+  padding: 0 16px;
+}
+.referencesPanel:focus-within {
+  border-top-color: #a8cf9e;
+}
+.referencesToolbar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 9px 16px;
+  border-bottom: 1px solid #292e32;
+}
+.referencesToolbar strong {
+  color: #dce4eb;
+}
+.referencesToolbar strong span {
+  color: #a8cf9e;
+  margin-left: 8px;
+}
+.referencesToolbar > span {
+  color: #8897a5;
+  flex: 1;
+}
+.referencesToolbar button {
+  font-size: 20px;
+  padding: 0 8px;
+}
+.referencesList {
+  min-height: 85px;
+  max-height: 200px;
+  overflow: auto;
+  padding: 5px 0;
+  outline: none;
+}
+.referencesList p {
+  padding: 0 16px;
+  color: #a8b6c1;
+}
+.referenceRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 30px;
+  padding: 4px 16px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+.referenceRow[aria-selected='true'] {
+  background: #25302c;
+  border-left-color: #a8cf9e;
+}
+.referencePath {
+  width: 220px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #b9cbd9;
+}
+.referencePosition {
+  color: #d6bd85;
+  min-width: 55px;
+}
+.referenceRow code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #cbd2d8;
+}
 .debugToolbar {
   display: flex;
   gap: 12px;

@@ -59,6 +59,29 @@ test('Rust syntax and real rust-analyzer navigation, completion and diagnostics'
       await new Promise((done) => setTimeout(done, 200));
     }
     assert.match(JSON.stringify(definition), /lib\.rs/);
+    await lua('vim.api.nvim_win_set_cursor(0, {3, 18}); require("nido_references").find()');
+    for (let attempt = 0; attempt < 100 && session.state.references?.loading !== false; attempt++) {
+      await new Promise((done) => setTimeout(done, 100));
+    }
+    const referenceList = session.state.references!;
+    assert.equal(referenceList.loading, false);
+    assert.equal(referenceList.error, '');
+    const call = referenceList.items.findIndex((item) => item.path.endsWith('main.rs') && item.line === 3);
+    assert.ok(call >= 0, 'References include the call site');
+    const beforePreview = await lua('return {vim.api.nvim_get_current_buf(), vim.api.nvim_win_get_cursor(0)}');
+    const referencePreview = await session.previewReference(call + 1, referenceList.version);
+    assert.equal(referencePreview.line, 3);
+    assert.ok(referencePreview.lines.length > 1);
+    assert.deepEqual(await lua('return {vim.api.nvim_get_current_buf(), vim.api.nvim_win_get_cursor(0)}'), beforePreview);
+    await assert.rejects(session.previewReference(call + 1, referenceList.version + 1), /References changed/);
+    await session.openReference(call + 1, referenceList.version);
+    assert.deepEqual(await lua('return vim.api.nvim_win_get_cursor(0)'), [3, referenceList.items[call].column - 1]);
+    assert.equal(
+      await lua('return #vim.api.nvim_tabpage_list_wins(0)'),
+      1,
+      'References must not open a quickfix split'
+    );
+    await assert.rejects(session.openReference(call + 1, referenceList.version + 1), /References changed/);
     assert.equal(session.state.lsp, 'rust_analyzer');
     assert.deepEqual(
       await lua(

@@ -302,6 +302,17 @@ test('grid updates preserve highlights, wide characters and scroll regions', () 
   );
   assert.equal(
     vimKey({
+      key: 'F12',
+      ctrlKey: false,
+      altKey: false,
+      shiftKey: true,
+      metaKey: false,
+      isComposing: false
+    }),
+    '<S-F12>'
+  );
+  assert.equal(
+    vimKey({
       key: 'Enter',
       ctrlKey: false,
       altKey: false,
