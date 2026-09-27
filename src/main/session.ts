@@ -17,6 +17,30 @@ import { SessionFiles } from './sessionFiles';
 
 const setup = `
 local channel = ...
+-- Single-grid UIs can receive a full repaint instead of grid_scroll on upward scrolling.
+vim.api.nvim_create_autocmd('WinScrolled', {
+  callback = function()
+    for id, change in pairs(vim.v.event) do
+      local win = tonumber(id)
+      if win and change.topline ~= 0 and change.height == 0 and change.width == 0 and change.skipcol == 0 then
+        local info = vim.fn.getwininfo(win)[1]
+        local before = info.topline - change.topline
+        if before >= 1 and before <= vim.api.nvim_buf_line_count(info.bufnr) then
+          local first = math.min(before, info.topline) - 1
+          local last = math.max(before, info.topline) - 2
+          local rows = vim.api.nvim_win_text_height(win, { start_row = first, end_row = last }).all
+          local top = info.winrow - 1
+          if change.topline < 0 then
+            rows = -rows
+          end
+          vim.rpcnotify(channel, 'nido:scroll', {
+            1, top, top + info.height, info.wincol - 1, info.wincol - 1 + info.width, rows, 0
+          })
+        end
+      end
+    end
+  end,
+})
 -- LSP messages belong in Nido's nonblocking notification, not Neovim's hit-enter prompt.
 vim.lsp.handlers['window/showMessage'] = function(_, params, ctx)
   local client = vim.lsp.get_client_by_id(ctx.client_id)
@@ -112,6 +136,7 @@ export class Session {
   private stopped = false;
   private attached = false;
   private inputQueue: Promise<void> = Promise.resolve();
+  private pendingScroll: Redraw = [];
 
   private constructor(
     root: string,
@@ -149,12 +174,17 @@ export class Session {
     this.client = attach({ proc: this.process });
     this.fileService = new SessionFiles(this.workspace.root, this.client);
     this.client.on('notification', (method: string, args: unknown[]) => {
+      if (method === 'nido:scroll') {
+        this.pendingScroll.push(['nido_scroll', args[0] as unknown[]]);
+      }
       if (method === 'nido:message') {
         this.emit({ type: 'error', id: this.workspace.id, message: String(args[0]) });
       }
       if (method === 'redraw') {
         // Other events can contain Neovim Window handles, which cannot cross Electron IPC.
         const events = (args as Redraw).filter(([name]) => gridEvents.has(name));
+        events.unshift(...this.pendingScroll);
+        this.pendingScroll = [];
         if (events.length) {
           this.emit({ type: 'redraw', id: this.workspace.id, events });
         }

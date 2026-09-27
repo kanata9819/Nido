@@ -57,18 +57,27 @@ export function useEditorRendering({
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const previousFrame = document.createElement('canvas');
     const targetFrame = document.createElement('canvas');
-    let lastWheel = -Infinity;
+    let lastScrollInput = -Infinity;
     let motion: { top: number; bottom: number; distance: number; start: number } | undefined;
 
     const rememberWheel = (event: WheelEvent): void => {
       if (!event.ctrlKey) {
-        lastWheel = performance.now();
+        lastScrollInput = performance.now();
       }
     };
     const stopMotion = (): void => {
       motion = undefined;
-      lastWheel = -Infinity;
+      lastScrollInput = -Infinity;
       schedule();
+    };
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      const scrollKey = event.ctrlKey && ['d', 'u', 'e', 'y'].includes(event.key.toLowerCase());
+      const navigationMode = /^(normal|visual)/.test(gridRef.current.mode);
+      if (scrollKey && navigationMode && !event.altKey && !event.metaKey && !event.isComposing) {
+        lastScrollInput = performance.now();
+      } else {
+        stopMotion();
+      }
     };
 
     const render = (): void => {
@@ -180,13 +189,16 @@ export function useEditorRendering({
     reducedMotion.addEventListener('change', resetBlink);
     reducedMotion.addEventListener('change', stopMotion);
     element.addEventListener('wheel', rememberWheel, { passive: true });
-    input.addEventListener('keydown', stopMotion);
+    input.addEventListener('keydown', handleKeyDown);
     input.addEventListener('input', stopMotion);
     input.addEventListener('compositionstart', stopMotion);
     input.addEventListener('blur', stopMotion);
     const unsubscribe = window.nido.onEvent((event) => {
       if (event.type === 'redraw' && event.id === id) {
-        const scrolls = event.events.flatMap(([name, ...calls]) => (name === 'grid_scroll' ? calls : []));
+        const viewportScrolls = event.events.flatMap(([name, ...calls]) => (name === 'nido_scroll' ? calls : []));
+        const scrolls = viewportScrolls.length
+          ? viewportScrolls
+          : event.events.flatMap(([name, ...calls]) => (name === 'grid_scroll' ? calls : []));
         const scroll = scrolls.length === 1 ? (scrolls[0] as number[]) : undefined;
         const now = performance.now();
         if (
@@ -194,12 +206,12 @@ export function useEditorRendering({
           animationsRef.current &&
           !reducedMotion.matches &&
           !element.hidden &&
-          now - lastWheel < 180 &&
+          now - lastScrollInput < 180 &&
           scroll[0] === 1 &&
           scroll[3] === 0 &&
           scroll[4] === gridRef.current.columns &&
           scroll[6] === 0 &&
-          Math.abs(scroll[5]) <= 8 &&
+          Math.abs(scroll[5]) < scroll[2] - scroll[1] &&
           scroll[5] !== 0
         ) {
           const remaining = motion ? scrollOffset(motion.distance, now - motion.start) : 0;
@@ -248,7 +260,7 @@ export function useEditorRendering({
       reducedMotion.removeEventListener('change', resetBlink);
       reducedMotion.removeEventListener('change', stopMotion);
       element.removeEventListener('wheel', rememberWheel);
-      input.removeEventListener('keydown', stopMotion);
+      input.removeEventListener('keydown', handleKeyDown);
       input.removeEventListener('input', stopMotion);
       input.removeEventListener('compositionstart', stopMotion);
       input.removeEventListener('blur', stopMotion);

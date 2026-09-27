@@ -71,9 +71,17 @@ test('wheel scrolling animates briefly and respects reduced motion', async () =>
     await page.mouse.wheel(0, 100);
     await expect.poll(async () => Number(await canvas.getAttribute('data-animation-frames'))).toBeGreaterThan(2);
     await page.waitForTimeout(250);
-    const frames = await canvas.getAttribute('data-animation-frames');
+    let frames = await canvas.getAttribute('data-animation-frames');
     await page.waitForTimeout(150);
     expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
+    for (const key of ['Control+d', 'Control+u', 'Control+e', 'Control+y']) {
+      await page.keyboard.press(key);
+      await expect
+        .poll(async () => Number(await canvas.getAttribute('data-animation-frames')), { message: key })
+        .toBeGreaterThan(Number(frames));
+      await page.waitForTimeout(150);
+      frames = await canvas.getAttribute('data-animation-frames');
+    }
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const before = await canvas.getAttribute('aria-description');
     await page.mouse.wheel(0, 100);
@@ -92,6 +100,12 @@ test('wheel scrolling animates briefly and respects reduced motion', async () =>
     await page.mouse.wheel(0, 100);
     await expect(canvas).not.toHaveAttribute('aria-description', beforeDisabledScroll!);
     expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
+    for (const key of ['Control+d', 'Control+u']) {
+      const beforeKey = await canvas.getAttribute('aria-description');
+      await page.keyboard.press(key);
+      await expect(canvas).not.toHaveAttribute('aria-description', beforeKey!);
+      expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
+    }
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await toggle.check();
     await page.keyboard.press('Escape');
