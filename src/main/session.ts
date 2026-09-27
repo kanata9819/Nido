@@ -599,9 +599,11 @@ return ok and "" or tostring(err)`,
     }
     await this.fileService.openFile(relativePath);
   }
+
   async openReference(index: number, version: number): Promise<void> {
     await this.client.request('nvim_exec_lua', ["require('nido_references').open(...)", [index, version]]);
   }
+
   async openProblem(index: number, version: number): Promise<void> {
     const problem = this.state.problems?.[index - 1];
     if (!problem || version !== this.state.diagnosticsVersion) {
@@ -619,6 +621,7 @@ vim.cmd('normal! zvzz')`,
       [problem.path, problem.line, problem.column]
     ]);
   }
+
   async previewReference(index: number, version: number): Promise<ReferencePreview> {
     return this.client.request('nvim_exec_lua', ["return require('nido_references').preview(...)", [index, version]]);
   }

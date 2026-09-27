@@ -311,6 +311,7 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
     }
     return session(id).scroll(lines, follow !== false);
   });
+
   handle('debug', (id, action, target) => {
     if (
       typeof action !== 'string' ||
@@ -320,6 +321,7 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
     }
     return session(id).debug(action as DebugAction, action === 'launch' ? integer(target) : undefined);
   });
+
   handle('setLineEnding', (id, format) => {
     if (format !== 'LF' && format !== 'CRLF') {
       throw new Error('Invalid line ending');
