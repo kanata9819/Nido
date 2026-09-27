@@ -174,7 +174,8 @@ export class Grid {
     fontFamily: string,
     focused: boolean
   ): { cellWidth: number; cellHeight: number } {
-    const ctx = canvas.getContext('2d')!;
+    // The grid paints its entire background; no transparent surface is needed.
+    const ctx = canvas.getContext('2d', { alpha: false })!;
     const dpr = window.devicePixelRatio || 1;
     if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
       canvas.width = Math.round(width * dpr);
@@ -214,7 +215,12 @@ export class Grid {
           // Box-drawing lines must span the cell, including the line spacing.
           ctx.fillRect(Math.round(x + cellWidth / 2), y, 1, cellHeight);
         } else {
-          ctx.fillText(cell.text, x, y + (cellHeight + fontSize) / 2 - 3);
+          // Keep glyph origins on physical pixels, including fractional Windows scaling.
+          ctx.fillText(
+            cell.text,
+            Math.round(x * dpr) / dpr,
+            Math.round((y + (cellHeight + fontSize) / 2 - 3) * dpr) / dpr
+          );
         }
         if (h.underline || h.undercurl || h.strikethrough) {
           if (h.special !== undefined) {

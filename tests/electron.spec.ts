@@ -88,6 +88,73 @@ test('font family updates the canvas and survives reopening settings and restart
   }
 });
 
+test('Japanese editor text stays legible at fractional display scales', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-legibility-'));
+  const workspace = join(root, 'workspace');
+  await mkdir(workspace);
+  await writeFile(
+    join(workspace, 'sample.ts'),
+    [
+      '// カーソルから画面末尾まで消去する',
+      '// 日本語の描画位置・文字の明るさを確認',
+      'export function setCursor(row: number, col: number) {',
+      '    const message = "画面の表示を更新します";',
+      '    const index = (row - 1) * 80 + col;',
+      '    return { index, message };',
+      '}',
+      ''
+    ].join('\n')
+  );
+  await writeFile(join(workspace, 'tsconfig.json'), '{}');
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const running = await electron.launch({
+    args: ['.', `--user-data-dir=${join(root, 'profile')}`, '--force-device-scale-factor=1.25'],
+    env
+  });
+  try {
+    const page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, workspace);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.press('Control+p');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('sample.ts');
+    await page.keyboard.press('Enter');
+    const canvas = page.locator('canvas:visible');
+    await expect(canvas).toHaveAttribute('aria-description', /日本語の描画位置/);
+    await canvas.evaluate((element: HTMLCanvasElement) => {
+      const ctx = element.getContext('2d')!;
+      const fillText = ctx.fillText.bind(ctx);
+      element.dataset.aligned = 'true';
+      ctx.fillText = (text, x, y) => {
+        const dpr = window.devicePixelRatio;
+        if (Math.abs(x * dpr - Math.round(x * dpr)) > 0.001 || Math.abs(y * dpr - Math.round(y * dpr)) > 0.001) {
+          element.dataset.aligned = 'false';
+        }
+        if (text === '語') element.dataset.japaneseInk = String(ctx.fillStyle);
+        if (ctx.fillStyle === '#ffb300') element.dataset.parameterInk = String(ctx.fillStyle);
+        fillText(text, x, y);
+      };
+    });
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'UI animations' }).uncheck();
+    await page.getByRole('button', { name: 'Close palette' }).click();
+    await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeHidden();
+    await expect(canvas).toHaveAttribute('data-japanese-ink', '#6a9955');
+    await expect(canvas).toHaveAttribute('data-parameter-ink', '#ffb300');
+    await expect(canvas).toHaveAttribute('data-aligned', 'true');
+    expect(
+      await canvas.evaluate((element: HTMLCanvasElement) => element.getContext('2d')!.getContextAttributes().alpha)
+    ).toBe(false);
+    const bounds = (await canvas.boundingBox())!;
+    await page.screenshot({ path: 'test-results/nido-reference-colors.png', clip: { ...bounds, height: 240 } });
+  } finally {
+    await running.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('window size and maximized state survive restart', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-window-'));
   const env = { ...process.env };

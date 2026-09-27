@@ -5,6 +5,52 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Session } from '../src/main/session';
+import { Grid } from '../src/renderer/src/grid';
+
+test('TypeScript functions and parameters retain distinct reference theme colors', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-token-colors-'));
+  const grid = new Grid();
+  let session: Session | undefined;
+  try {
+    await writeFile(join(root, 'tsconfig.json'), '{}');
+    await writeFile(join(root, 'sample.ts'), 'export function greet(name: string) { return name; }\n');
+    session = await Session.create(root, (event) => {
+      if (event.type === 'redraw') grid.apply(event.events);
+    });
+    await session.openFile('sample.ts');
+    await session.attach(90, 25);
+    assert.equal(
+      await session.client.request('nvim_exec_lua', [
+        `return vim.wait(20000, function()
+        local tokens = vim.lsp.semantic_tokens.get_at_pos(0, 0, 22) or {}
+        for _, token in ipairs(tokens) do
+          if token.type == 'parameter' then return true end
+        end
+        return false
+      end, 50)`,
+        []
+      ]),
+      true
+    );
+    await session.client.request('nvim_command', ['redraw!']);
+    await session.client.request('nvim_eval', ['1']);
+    const row = grid.cells.find((cells) =>
+      cells
+        .map((cell) => cell.text)
+        .join('')
+        .includes('function greet')
+    )!;
+    assert.ok(row);
+    const text = row.map((cell) => cell.text).join('');
+    const ink = (word: string): number | undefined =>
+      grid.highlights.get(row[text.indexOf(word)].highlight)?.foreground;
+    assert.equal(ink('greet'), 0xdcdcaa);
+    assert.equal(ink('name'), 0xffb300);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
 
 for (const extension of ['ts', 'js']) {
   test(
