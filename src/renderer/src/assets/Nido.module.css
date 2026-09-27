@@ -313,6 +313,14 @@
 .fileTab .tabClose svg {
   color: #9aa6b0;
 }
+.gitName[data-diagnostic='warning'],
+.gitBadge[data-diagnostic='warning'] {
+  color: #d9b777;
+}
+.gitName[data-diagnostic='error'],
+.gitBadge[data-diagnostic='error'] {
+  color: #e59b96;
+}
 .activeFile {
   background: #141414;
   border-top-color: #a3cc94;

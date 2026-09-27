@@ -179,6 +179,23 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
     await expect(fileTabs.getByLabel('Git: Modified (staged)', { exact: true })).toHaveText('M');
     git('commit', '-m', 'External commit');
     await expect(fileTabs.locator('[data-status]')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    for (const [severity, label, color] of [
+      [1, 'error', 'rgb(229, 155, 150)'],
+      [2, 'warning', 'rgb(217, 183, 119)']
+    ] as const) {
+      await page.keyboard.type(
+        `:lua vim.diagnostic.set(vim.api.nvim_create_namespace('nido-test'), 0, {{lnum=0,col=0,severity=${severity},message='Test diagnostic'}})`
+      );
+      await page.keyboard.press('Enter');
+      await expect(fileTabs.getByLabel(`Diagnostics: ${label}`, { exact: true })).toBeVisible();
+      await expect(fileTabs.getByText('main.rs', { exact: true })).toHaveCSS('color', color);
+      await expect(explorer.getByText('main.rs', { exact: true })).toHaveCSS('color', color);
+    }
+    await page.keyboard.type(":lua vim.diagnostic.reset(vim.api.nvim_create_namespace('nido-test'))");
+    await page.keyboard.press('Enter');
+    await expect(fileTabs.locator('[data-diagnostic]')).toHaveCount(0);
+    await expect(explorer.locator('[data-diagnostic]')).toHaveCount(0);
   } finally {
     await running?.close();
     await rm(root, { recursive: true, force: true });

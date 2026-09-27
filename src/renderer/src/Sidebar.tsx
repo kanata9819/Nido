@@ -73,6 +73,7 @@ export default function Sidebar({
   }, [workspace.id, onError, revision]);
 
   const visible = getVisibleEntries(entries, expanded);
+  const rootDecoration = gitFiles[gitFileKey(workspace.root).replace(/\/$/, '')];
 
   return (
     <aside
@@ -135,7 +136,13 @@ export default function Sidebar({
         }}
       />
       <div className={styles.sidebarHeading}>
-        <span>{workspace.name}</span>
+        <span
+          className={styles.gitName}
+          data-status={rootDecoration?.code || undefined}
+          data-diagnostic={rootDecoration?.diagnostic}
+        >
+          {workspace.name}
+        </span>
         <button title="Refresh files" aria-label="Refresh files" onClick={() => void load('')}>
           <RefreshCw size={14} />
         </button>
@@ -158,7 +165,7 @@ export default function Sidebar({
         })}
       >
         {visible.map((entry) => {
-          const decoration = entry.directory ? undefined : gitFiles[gitFileKey(`${workspace.root}/${entry.path}`)];
+          const decoration = gitFiles[gitFileKey(`${workspace.root}/${entry.path}`)];
           return (
             <div
               key={entry.path}
@@ -189,10 +196,24 @@ export default function Sidebar({
               ) : (
                 <FileIcon path={entry.path} className={styles.fileIcon} />
               )}
-              <span className={`${styles.treeName} ${styles.gitName}`} data-status={decoration?.code}>
+              <span
+                className={`${styles.treeName} ${styles.gitName}`}
+                data-status={decoration?.code || undefined}
+                data-diagnostic={decoration?.diagnostic}
+              >
                 {entry.name}
               </span>
-              {decoration && (
+              {decoration?.diagnostic && (
+                <span
+                  className={styles.gitBadge}
+                  data-diagnostic={decoration.diagnostic}
+                  title={`Diagnostics: ${decoration.diagnostic}`}
+                  aria-label={`Diagnostics: ${decoration.diagnostic}`}
+                >
+                  !
+                </span>
+              )}
+              {decoration?.code && (
                 <span
                   className={styles.gitBadge}
                   data-status={decoration.code}

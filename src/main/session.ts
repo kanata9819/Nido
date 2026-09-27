@@ -67,11 +67,25 @@ vim.lsp.handlers['window/showMessage'] = function(_, params, ctx)
 end
 local pending = false
 local progress = {}
+local diagnostics = vim.empty_dict()
+local diagnostics_dirty = true
 local function publish()
  if pending then return end
  pending = true
  vim.schedule(function()
   pending = false
+  if diagnostics_dirty then
+    diagnostics_dirty = false
+    diagnostics = vim.empty_dict()
+    for _, diagnostic in ipairs(vim.diagnostic.get()) do
+      if diagnostic.severity <= vim.diagnostic.severity.WARN and vim.api.nvim_buf_is_valid(diagnostic.bufnr) then
+        local name = vim.api.nvim_buf_get_name(diagnostic.bufnr)
+        if name ~= '' then
+          diagnostics[name] = math.min(diagnostics[name] or diagnostic.severity, diagnostic.severity)
+        end
+      end
+    end
+  end
   local buffers = {}
   for _, b in ipairs(vim.api.nvim_list_bufs()) do
    if vim.api.nvim_buf_is_valid(b) and vim.bo[b].buflisted then
@@ -105,10 +119,14 @@ local function publish()
     and buffers[1].name == '' and not buffers[1].modified and vim.bo.buftype == ''
     and vim.api.nvim_buf_line_count(0) == 1 and vim.api.nvim_get_current_line() == ''
     and #vim.api.nvim_tabpage_list_wins(0) == 1
-  vim.rpcnotify(channel, 'nido:state', {buffers=buffers, current=vim.api.nvim_get_current_buf(),
+  vim.rpcnotify(channel, 'nido:state', {diagnostics=diagnostics, buffers=buffers, current=vim.api.nvim_get_current_buf(),
    lineEnding=ending, lsp=table.concat(clients, ', '), lspProgress=table.concat(tasks, ' / '), empty=empty, mode=vim.api.nvim_get_mode().mode, line=pos[1], column=pos[2]+1, filetype=vim.bo.filetype})
  end)
 end
+vim.api.nvim_create_autocmd({'DiagnosticChanged', 'BufDelete', 'BufWipeout', 'BufFilePost'}, {callback=function()
+  diagnostics_dirty = true
+  publish()
+end})
 vim.api.nvim_create_autocmd('LspProgress', {callback=function(event)
   local id, params = event.data.client_id, event.data.params
   local value = params.value

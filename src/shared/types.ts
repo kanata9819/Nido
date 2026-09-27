@@ -18,6 +18,7 @@ export interface BufferInfo {
   modified: boolean;
 }
 export interface SessionState {
+  diagnostics?: Record<string, number>;
   references?: ReferenceList;
   debug?: DebugState;
   lineEnding?: 'LF' | 'CRLF' | 'Mixed' | 'CR';

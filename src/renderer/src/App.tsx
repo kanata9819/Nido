@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { fileDecorations } from './fileDecorations';
 import {
   ArrowRight,
   ChevronRight,
@@ -87,13 +88,16 @@ export default function App(): React.JSX.Element {
   const [focusTick, setFocusTick] = useState(0);
   const [sidebar, setSidebar] = useState(true);
   const [animations, setAnimations] = useState(() => localStorage.getItem('nido.animations') !== 'false');
+
   useEffect(() => {
     localStorage.setItem('nido.animations', String(animations));
   }, [animations]);
+
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = Number(localStorage.getItem('nido.sidebarWidth'));
     return Number.isFinite(saved) && saved >= 160 && saved <= 480 ? saved : 243;
   });
+
   const resizeSidebar = (width: number): void => {
     setSidebarWidth(Math.max(160, Math.min(480, width)));
   };
@@ -132,6 +136,10 @@ export default function App(): React.JSX.Element {
           ? 'COMMAND'
           : 'NORMAL';
   const workspace = workspaces.find((w) => w.id === active);
+  const decorations = useMemo(
+    () => fileDecorations(workspace?.root || '', gitFiles, state.diagnostics),
+    [workspace?.root, gitFiles, state.diagnostics]
+  );
   const current = state.buffers.find((b) => b.id === state.current);
   const report = useCallback(
     (message: string): void => setError(message.replace(/^Error: Error invoking remote method '[^']+': Error: /, '')),
@@ -552,7 +560,7 @@ export default function App(): React.JSX.Element {
           workspace?.kind !== 'terminal' &&
           workspaces.map((w) => (
             <Sidebar
-              gitFiles={w.id === active ? gitFiles : {}}
+              gitFiles={w.id === active ? decorations : {}}
               width={sidebarWidth}
               onResize={resizeSidebar}
               key={w.id}
@@ -568,7 +576,7 @@ export default function App(): React.JSX.Element {
             <>
               <div className={styles.fileTabs} role="tablist" aria-label="Files" hidden={workspace.kind === 'terminal'}>
                 {state.buffers.map((buffer) => {
-                  const decoration = gitFiles[gitFileKey(buffer.name)];
+                  const decoration = decorations[gitFileKey(buffer.name)];
                   return (
                     <div
                       key={buffer.id}
@@ -584,10 +592,24 @@ export default function App(): React.JSX.Element {
                         }}
                       >
                         <FileIcon path={buffer.name} />
-                        <span className={styles.gitName} data-status={decoration?.code}>
+                        <span
+                          className={styles.gitName}
+                          data-status={decoration?.code || undefined}
+                          data-diagnostic={decoration?.diagnostic}
+                        >
                           {filename(buffer.name)}
                         </span>
-                        {decoration && (
+                        {decoration?.diagnostic && (
+                          <span
+                            className={styles.gitBadge}
+                            data-diagnostic={decoration.diagnostic}
+                            title={`Diagnostics: ${decoration.diagnostic}`}
+                            aria-label={`Diagnostics: ${decoration.diagnostic}`}
+                          >
+                            !
+                          </span>
+                        )}
+                        {decoration?.code && (
                           <span
                             className={styles.gitBadge}
                             data-status={decoration.code}

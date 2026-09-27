@@ -1,15 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { BufferInfo } from '../../../shared/types';
 
-export interface Decoration {
-  code: string;
-  title: string;
-}
-
-// Neovim and Git can use different separators and drive-letter casing on Windows.
-export function gitFileKey(path: string): string {
-  return path.replaceAll('\\', '/').toLowerCase();
-}
+import { gitFileKey, type Decoration } from '../fileDecorations';
+export { gitFileKey, type Decoration } from '../fileDecorations';
 
 export function useGitFileStatus(
   workspaceId: string,

@@ -7,6 +7,51 @@ import { Session } from '../src/main/session';
 import { Grid, vimKey } from '../src/renderer/src/grid';
 import { accumulateScroll, scrollOffset } from '../src/renderer/src/scroll';
 import { readLayout, writeLayout } from '../src/main/persistence';
+import { fileDecorations, gitFileKey } from '../src/renderer/src/fileDecorations';
+
+test('file decorations propagate to parents and prioritize errors without losing Git status', () => {
+  const git = { 'c:/repo/src/deep/a.rs': { code: 'M', title: 'Git: Modified' } };
+  const result = fileDecorations('C:\\repo', git, {
+    'C:\\repo\\src\\deep\\a.rs': 2,
+    'C:/repo/src/b.rs': 1,
+    'C:/repository/other.rs': 1
+  });
+  assert.equal(result['c:/repo/src/deep'].code, 'M');
+  assert.equal(result['c:/repo/src/deep'].diagnostic, 'warning');
+  assert.equal(result['c:/repo/src'].diagnostic, 'error');
+  assert.equal(result['c:/repo'].diagnostic, 'error');
+  assert.equal(result['c:/repo/src/deep/a.rs'].code, 'M');
+  assert.equal(fileDecorations('C:/repo', git)['c:/repo/src'].diagnostic, undefined);
+  assert.deepEqual(fileDecorations('C:/repo', {}, {}), {});
+  assert.equal(fileDecorations('C:/repo', {}, { 'C:/repository/a.rs': 1 })['c:/repo'], undefined);
+});
+
+test('Neovim publishes and clears diagnostics including unopened files', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-diagnostics-'));
+  let session: Session | undefined;
+  try {
+    session = await Session.create(root, () => {});
+    const path = join(root, 'unopened.txt');
+    await session.client.request('nvim_exec_lua', [
+      "local path = ...; local b = vim.fn.bufadd(path); vim.fn.bufload(b); vim.diagnostic.set(vim.api.nvim_create_namespace('test'), b, {{lnum=0,col=0,severity=2,message='Warning'}, {lnum=0,col=0,severity=1,message='Error'}})",
+      [path]
+    ]);
+    for (let i = 0; i < 50 && !Object.keys(session.state.diagnostics || {}).length; i++) {
+      await new Promise((done) => setTimeout(done, 10));
+    }
+    const entries = Object.entries(session.state.diagnostics || {});
+    assert.equal(gitFileKey(entries[0][0]), gitFileKey(path));
+    assert.equal(entries[0][1], 1);
+    await session.client.request('nvim_exec_lua', ["vim.diagnostic.reset(vim.api.nvim_create_namespace('test'))", []]);
+    for (let i = 0; i < 50 && Object.keys(session.state.diagnostics || {}).length; i++) {
+      await new Promise((done) => setTimeout(done, 10));
+    }
+    assert.deepEqual(session.state.diagnostics, {});
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test(
   'terminal sessions run PowerShell, preserve their shell and stop with their workspace',
