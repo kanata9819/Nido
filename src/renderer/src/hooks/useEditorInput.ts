@@ -9,13 +9,7 @@ interface UseEditorInputOptions {
   onError: (message: string) => void;
 }
 
-export function useEditorInput({
-  id,
-  blocked,
-  composingRef,
-  paintRef,
-  onError
-}: UseEditorInputOptions): {
+export function useEditorInput({ id, blocked, composingRef, paintRef, onError }: UseEditorInputOptions): {
   onFocus: () => void;
   onBlur: () => void;
   onCompositionStart: () => void;

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain } from 'electron';
-import { join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
+import { readdir, realpath } from 'node:fs/promises';
 import { Session } from './session';
 import { readLayout, writeLayout } from './persistence';
 import type { DebugAction, NidoEvent, Workspace } from '../shared/types';
@@ -7,9 +8,7 @@ import type { DebugAction, NidoEvent, Workspace } from '../shared/types';
 export interface AppState {
   order: string[];
   active: string;
-  restoration:
-    | Promise<{ workspaces: Workspace[]; active: string; errors: string[] }>
-    | undefined;
+  restoration: Promise<{ workspaces: Workspace[]; active: string; errors: string[] }> | undefined;
   prompting: boolean;
   closing: boolean;
 }
@@ -22,13 +21,7 @@ export interface HandlerDeps {
   send: (event: NidoEvent) => void;
 }
 
-export function registerHandlers({
-  window,
-  sessions,
-  state,
-  neovimResources,
-  send,
-}: HandlerDeps): void {
+export function registerHandlers({ window, sessions, state, neovimResources, send }: HandlerDeps): void {
   function session(id: unknown): Session {
     if (typeof id !== 'string' || !sessions.has(id)) {
       throw new Error('Workspace is no longer running.');
@@ -62,7 +55,7 @@ export function registerHandlers({
       buttons: ['Save all', 'Cancel', 'Discard changes'],
       defaultId: 0,
       cancelId: 1,
-      noLink: true,
+      noLink: true
     });
     if (response === 1) {
       return false;
@@ -105,12 +98,12 @@ export function registerHandlers({
         }
         const ids = [
           ...state.order.filter((id) => sessions.has(id)),
-          ...[...sessions.keys()].filter((id) => !state.order.includes(id)),
+          ...[...sessions.keys()].filter((id) => !state.order.includes(id))
         ];
         await writeLayout(join(app.getPath('userData'), 'workspaces.json'), {
           version: 1,
           workspaces: await Promise.all(ids.map((id) => session(id).snapshot())),
-          active: Math.max(0, ids.indexOf(state.active)),
+          active: Math.max(0, ids.indexOf(state.active))
         });
         state.closing = true;
         await Promise.all([...sessions.values()].map((s) => s.stop()));
@@ -164,15 +157,28 @@ export function registerHandlers({
     state.active = selected;
   });
 
-  handle('create', async () => {
-    const result = await dialog.showOpenDialog(window, {
-      title: 'Open a workspace in Nido',
-      properties: ['openDirectory'],
-    });
-    if (result.canceled) {
-      return null;
+  handle('browseFolders', async (value) => {
+    const requested = value === undefined || value === '' ? app.getPath('home') : text(value);
+    if (!isAbsolute(requested)) {
+      throw new Error('Enter an absolute folder path.');
     }
-    const s = await Session.create(result.filePaths[0], send, neovimResources);
+    const path = await realpath(requested);
+    const entries = await readdir(path, { withFileTypes: true });
+    return {
+      path,
+      parent: dirname(path),
+      folders: entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => ({ name: entry.name, path: join(path, entry.name), directory: true }))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    };
+  });
+
+  handle('create', async (path) => {
+    if (!isAbsolute(text(path))) {
+      throw new Error('Enter an absolute folder path.');
+    }
+    const s = await Session.create(text(path), send, neovimResources);
     sessions.set(s.workspace.id, s);
     return s.workspace;
   });
@@ -208,7 +214,7 @@ export function registerHandlers({
         buttons: ['Cancel', 'Discard'],
         defaultId: 0,
         cancelId: 0,
-        noLink: true,
+        noLink: true
       });
       if (response !== 1) {
         return false;
@@ -220,17 +226,24 @@ export function registerHandlers({
 
   handle('save', (id) => session(id).save());
   handle('scroll', (id, lines) => {
-    if (typeof lines !== 'number' || !Number.isInteger(lines) || Math.abs(lines) > 1000) throw new Error('Invalid scroll distance');
+    if (typeof lines !== 'number' || !Number.isInteger(lines) || Math.abs(lines) > 1000) {
+      throw new Error('Invalid scroll distance');
+    }
     return session(id).scroll(lines);
   });
   handle('debug', (id, action, target) => {
-    if (typeof action !== 'string' || !['start', 'breakpoint', 'over', 'into', 'out', 'pause', 'stop', 'launch'].includes(action)) {
+    if (
+      typeof action !== 'string' ||
+      !['start', 'breakpoint', 'over', 'into', 'out', 'pause', 'stop', 'launch'].includes(action)
+    ) {
       throw new Error('Invalid debug action');
     }
     return session(id).debug(action as DebugAction, action === 'launch' ? integer(target) : undefined);
   });
   handle('setLineEnding', (id, format) => {
-    if (format !== 'LF' && format !== 'CRLF') throw new Error('Invalid line ending');
+    if (format !== 'LF' && format !== 'CRLF') {
+      throw new Error('Invalid line ending');
+    }
     return session(id).setLineEnding(format);
   });
 

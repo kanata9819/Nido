@@ -20,7 +20,7 @@ export function createOnKeyDown({
   setExpanded,
   load,
   onOpen,
-  workspaceId,
+  workspaceId
 }: KeyboardDeps): (event: React.KeyboardEvent) => void {
   return (event: React.KeyboardEvent): void => {
     const index = visible.findIndex((entry) => entry.path === selected),
@@ -32,15 +32,10 @@ export function createOnKeyDown({
           ? 0
           : event.key === 'End'
             ? visible.length - 1
-            : Math.min(
-                visible.length - 1,
-                Math.max(0, index + (['j', 'ArrowDown'].includes(event.key) ? 1 : -1))
-              );
+            : Math.min(visible.length - 1, Math.max(0, index + (['j', 'ArrowDown'].includes(event.key) ? 1 : -1)));
       if (visible[next]) {
         setSelected(visible[next].path);
-        document
-          .getElementById(`file-${workspaceId}-${visible[next].path}`)
-          ?.scrollIntoView({ block: 'nearest' });
+        document.getElementById(`file-${workspaceId}-${visible[next].path}`)?.scrollIntoView({ block: 'nearest' });
       }
     } else if (item && ['Enter', 'l', 'ArrowRight'].includes(event.key)) {
       event.preventDefault();

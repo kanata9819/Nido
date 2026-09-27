@@ -32,7 +32,6 @@ export function useEditorRendering({
   attachedRef,
   paintRef
 }: UseEditorRenderingOptions): void {
-
   useEffect(() => {
     errorRef.current = onError;
   }, [onError]);
@@ -91,10 +90,16 @@ export function useEditorRendering({
     };
 
     paintRef.current = schedule;
-    const canBlink = (): boolean => document.hasFocus() && !document.hidden &&
-      !element.hidden && document.activeElement === input && !reducedMotion.matches;
+    const canBlink = (): boolean =>
+      document.hasFocus() &&
+      !document.hidden &&
+      !element.hidden &&
+      document.activeElement === input &&
+      !reducedMotion.matches;
     const blink = (): void => {
-      if (!canBlink()) return;
+      if (!canBlink()) {
+        return;
+      }
       gridRef.current.cursorVisible = !gridRef.current.cursorVisible;
       schedule();
       blinkTimer = setTimeout(blink, 550);
@@ -105,7 +110,8 @@ export function useEditorRendering({
       schedule();
       if (canBlink()) blinkTimer = setTimeout(blink, 550);
     };
-    for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart']) input.addEventListener(event, resetBlink);
+    for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart'])
+      input.addEventListener(event, resetBlink);
     window.addEventListener('focus', resetBlink);
     window.addEventListener('blur', resetBlink);
     document.addEventListener('visibilitychange', resetBlink);
@@ -114,8 +120,15 @@ export function useEditorRendering({
       if (event.type === 'redraw' && event.id === id) {
         const { row, column } = gridRef.current.cursor;
         const mode = gridRef.current.mode;
-        if (gridRef.current.apply(event.events)) schedule();
-        if (row !== gridRef.current.cursor.row || column !== gridRef.current.cursor.column || mode !== gridRef.current.mode) resetBlink();
+        if (gridRef.current.apply(event.events)) {
+          schedule();
+        }
+        if (
+          row !== gridRef.current.cursor.row ||
+          column !== gridRef.current.cursor.column ||
+          mode !== gridRef.current.mode
+        )
+          resetBlink();
       }
     });
 
@@ -126,7 +139,8 @@ export function useEditorRendering({
     return () => {
       disposed = true;
       clearTimeout(blinkTimer);
-      for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart']) input.removeEventListener(event, resetBlink);
+      for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart'])
+        input.removeEventListener(event, resetBlink);
       window.removeEventListener('focus', resetBlink);
       window.removeEventListener('blur', resetBlink);
       document.removeEventListener('visibilitychange', resetBlink);

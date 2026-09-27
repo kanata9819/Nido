@@ -360,17 +360,56 @@
   background: #17191b;
   font-size: 12px;
 }
-.debugToolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.debugPanel:focus-within { border-top-color: #a8cf9e; }
-.debugPanel button:focus-visible { outline: 1px solid #a8cf9e; outline-offset: 2px; background: #303b31; }
-.debugPanel [data-debug-target] { padding: 4px 10px; margin: 5px; border: 1px solid #46515c; border-radius: 4px; }
-.debugToolbar button { color: #bfd8b6; padding: 4px; }
-.debugToolbar button:disabled { opacity: 0.35; cursor: default; }
-.debugLocation { color: #e2ca86; margin-top: 6px; }
-.debugDetails { display: flex; gap: 24px; max-height: 140px; overflow: auto; margin-top: 6px; }
-.debugDetails > div { min-width: 240px; }
-.debugDetails span { color: #9cdcfe; }
-.debugDetails pre { white-space: pre-wrap; margin: 0; flex: 1; }
+.debugToolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.debugPanel:focus-within {
+  border-top-color: #a8cf9e;
+}
+.debugPanel button:focus-visible {
+  outline: 1px solid #a8cf9e;
+  outline-offset: 2px;
+  background: #303b31;
+}
+.debugPanel [data-debug-target] {
+  padding: 4px 10px;
+  margin: 5px;
+  border: 1px solid #46515c;
+  border-radius: 4px;
+}
+.debugToolbar button {
+  color: #bfd8b6;
+  padding: 4px;
+}
+.debugToolbar button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.debugLocation {
+  color: #e2ca86;
+  margin-top: 6px;
+}
+.debugDetails {
+  display: flex;
+  gap: 24px;
+  max-height: 140px;
+  overflow: auto;
+  margin-top: 6px;
+}
+.debugDetails > div {
+  min-width: 240px;
+}
+.debugDetails span {
+  color: #9cdcfe;
+}
+.debugDetails pre {
+  white-space: pre-wrap;
+  margin: 0;
+  flex: 1;
+}
 .lineEnding:focus-visible {
   outline: 1px solid #a8cf9e;
 }
@@ -399,9 +438,15 @@
   height: 13px;
   border-left: 1px solid #3a434b;
 }
-.mode[data-mode='INSERT'] { background: #86bddd; }
-.mode[data-mode='VISUAL'] { background: #c9a6e6; }
-.mode[data-mode='COMMAND'] { background: #dbb98b; }
+.mode[data-mode='INSERT'] {
+  background: #86bddd;
+}
+.mode[data-mode='VISUAL'] {
+  background: #c9a6e6;
+}
+.mode[data-mode='COMMAND'] {
+  background: #dbb98b;
+}
 .statusGap {
   flex: 1;
 }
@@ -428,10 +473,14 @@
   animation: progressSpin 1s linear infinite;
 }
 @keyframes progressSpin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .progressSpinner { animation: none; }
+  .progressSpinner {
+    animation: none;
+  }
 }
 .sessionCount {
   color: #71808d;
@@ -652,6 +701,30 @@
 }
 .selectedItem {
   background: #a3cc9412;
+}
+.folderActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 10px 20px;
+  font-size: 12px;
+  color: #a8b6c1;
+}
+.folderPath {
+  width: calc(100% - 24px);
+  box-sizing: border-box;
+}
+.folderPicker {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.folderPicker > :not(.paletteItems) {
+  flex-shrink: 0;
+}
+.folderChoice {
+  padding: 10px 20px;
+  cursor: pointer;
 }
 .itemIcon {
   color: #a3bb9b;

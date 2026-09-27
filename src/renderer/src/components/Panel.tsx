@@ -1,8 +1,12 @@
 import type { Panel, Item } from '../types';
 import { Command, FolderOpen, FileCode2, X } from 'lucide-react';
 import styles from '../assets/Nido.module.css';
+import FolderPicker from './FolderPicker';
 
 interface PanelProps {
+  initialFolder: string;
+  creating: boolean;
+  openWorkspace: (path: string) => Promise<void>;
   panel: Panel;
   filtered: Item[];
   selection: number;
@@ -18,7 +22,19 @@ interface PanelProps {
   setSelection: React.Dispatch<React.SetStateAction<number>>;
 }
 
+const panelTitles = {
+  folders: 'Open a workspace',
+  files: 'Find a file',
+  workspaces: 'Your workspaces',
+  buffers: 'Open files',
+  settings: 'Settings',
+  commands: 'All commands'
+};
+
 export function Panel({
+  initialFolder,
+  creating,
+  openWorkspace,
   panel,
   filtered,
   selection,
@@ -33,7 +49,9 @@ export function Panel({
   setQuery,
   setSelection
 }: PanelProps): React.JSX.Element | null {
-  if (!panel) return null;
+  if (!panel) {
+    return null;
+  }
 
   return (
     <div
@@ -53,22 +71,14 @@ export function Panel({
       >
         <div className={styles.paletteHeading}>
           <Command size={17} />
-          <span>
-            {panel === 'files'
-              ? 'Find a file'
-              : panel === 'workspaces'
-                ? 'Your workspaces'
-                : panel === 'buffers'
-                  ? 'Open files'
-                  : panel === 'settings'
-                    ? 'Settings'
-                    : 'All commands'}
-          </span>
+          <span>{panelTitles[panel]}</span>
           <button aria-label="Close palette" onClick={focusEditor}>
             <X size={17} />
           </button>
         </div>
-        {panel === 'settings' ? (
+        {panel === 'folders' ? (
+          <FolderPicker initialPath={initialFolder} busy={creating} onOpen={(path) => void openWorkspace(path)} />
+        ) : panel === 'settings' ? (
           <div className={styles.settings}>
             <label>
               Editor font size{' '}
@@ -146,9 +156,7 @@ export function Panel({
                 </button>
               ))}
               {!filtered.length && (
-                <p className={styles.noResults}>
-                  {loading ? 'Looking through your project…' : 'No matching items.'}
-                </p>
+                <p className={styles.noResults}>{loading ? 'Looking through your project…' : 'No matching items.'}</p>
               )}
             </div>
             <div className={styles.paletteFooter}>

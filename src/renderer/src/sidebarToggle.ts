@@ -9,14 +9,7 @@ interface ToggleDeps {
   load: (path: string) => Promise<void>;
 }
 
-export function toggle({
-  entry,
-  expanded,
-  setExpanded,
-  setSelected,
-  onOpen,
-  load,
-}: ToggleDeps): void {
+export function toggle({ entry, expanded, setExpanded, setSelected, onOpen, load }: ToggleDeps): void {
   setSelected(entry.path);
   if (!entry.directory) {
     onOpen(entry.path);

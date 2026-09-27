@@ -1,67 +1,121 @@
-import { test, expect, _electron as electron } from '@playwright/test';
+import { test, expect, _electron as electron, type Page } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+async function chooseWorkspace(page: Page, path: string, navigate = false): Promise<void> {
+  await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute('aria-busy', 'false');
+  await page.getByRole('textbox', { name: 'Folder path' }).fill(path);
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute('aria-busy', 'false');
+  if (navigate) {
+    await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
+    await page.keyboard.press('j');
+    await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
+      'aria-activedescendant',
+      'folder-choice-1'
+    );
+    await page.keyboard.press('k');
+    await page.keyboard.press('l');
+    await expect(page.getByRole('textbox', { name: 'Folder path' })).not.toHaveValue(path);
+    await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute('aria-busy', 'false');
+    await page.keyboard.press('h');
+    await expect(page.getByRole('textbox', { name: 'Folder path' })).toHaveValue(path);
+    await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute('aria-busy', 'false');
+    await page.screenshot({ path: 'test-results/nido-folder-picker.png' });
+  }
+  await page.keyboard.press('Control+Enter');
+}
+
 test('Rust debugger keyboard controls stop, inspect and step in the packaged app', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-debug-ui-'));
   let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
-  const env = {...process.env};
+  const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   try {
     await mkdir(join(root, 'src'));
     await mkdir(join(root, 'src/bin'));
     await writeFile(join(root, 'src/bin/other.rs'), 'fn main() {}');
     await writeFile(join(root, 'Cargo.toml'), '[package]\nname="nido_debug_ui"\nversion="0.1.0"\nedition="2021"\n');
-    await writeFile(join(root, 'src/main.rs'), 'fn main() {\n    let number = 21;\n    let answer = number * 2;\n    println!("answer={answer}");\n}\n');
+    await writeFile(
+      join(root, 'src/main.rs'),
+      'fn main() {\n    let number = 21;\n    let answer = number * 2;\n    println!("answer={answer}");\n}\n'
+    );
     const executablePath = process.env.NIDO_PACKAGED_EXE;
-    running = await electron.launch({executablePath, args:[...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`], env});
-    await running.evaluate(({dialog}, path) => {dialog.showOpenDialog = async () => ({canceled:false, filePaths:[path]});}, root);
+    running = await electron.launch({
+      executablePath,
+      args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+      env
+    });
+    await running.evaluate(({ dialog }) => {
+      dialog.showOpenDialog = async () => {
+        throw new Error('Native folder picker must not be used');
+      };
+    });
     const page = await running.firstWindow();
-    await expect(page.getByRole('heading', {name:'Make yourself at home.'})).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
     await page.keyboard.press('Control+Shift+n');
-    await expect(page.getByRole('treeitem', {name:'src', exact:true})).toBeVisible();
-    await page.keyboard.press('Control+p');
-    await page.getByRole('textbox', {name:'Filter items'}).fill('main.rs');
-    await expect(page.getByRole('button', {name:/main.rs.*src/})).toBeVisible();
+    await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute('aria-busy', 'false');
+    await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
+    await page.keyboard.press('Control+l');
+    await expect(page.getByRole('textbox', { name: 'Folder path' })).toBeFocused();
+    await page.keyboard.type('relative-path');
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('tab', {name:'main.rs', exact:true})).toBeVisible();
+    await expect(page.getByRole('alert')).toContainText('absolute folder path');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, root, true);
+    await expect(page.getByRole('treeitem', { name: 'src', exact: true })).toBeVisible();
+    await page.keyboard.press('Control+p');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
+    await expect(page.getByRole('button', { name: /main.rs.*src/ })).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('tab', { name: 'main.rs', exact: true })).toBeVisible();
     await page.keyboard.type('3G');
     await page.keyboard.press('F9');
-    await expect(page.getByRole('region', {name:'Debugger'})).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Debugger' })).toBeVisible();
     await page.keyboard.press('F5');
-    await expect(page.getByRole('region', {name:'Debugger'})).toContainText('Choose a binary:', {timeout:30000});
+    await expect(page.getByRole('region', { name: 'Debugger' })).toContainText('Choose a binary:', { timeout: 30000 });
     await page.keyboard.press('Control+j');
     await expect(page.locator('[data-debug-target]:focus')).toHaveCount(1);
-    for (let i = 0; i < 10 && !(await page.getByRole('button', {name:'nido_debug_ui', exact:true}).evaluate((element) => element === document.activeElement)); i++) await page.keyboard.press('l');
-    await expect(page.getByRole('button', {name:'nido_debug_ui', exact:true})).toBeFocused();
+    for (
+      let i = 0;
+      i < 10 &&
+      !(await page
+        .getByRole('button', { name: 'nido_debug_ui', exact: true })
+        .evaluate((element) => element === document.activeElement));
+      i++
+    )
+      await page.keyboard.press('l');
+    await expect(page.getByRole('button', { name: 'nido_debug_ui', exact: true })).toBeFocused();
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('region', {name:'Debugger'})).toContainText('Debug · paused', {timeout:30000});
+    await expect(page.getByRole('region', { name: 'Debugger' })).toContainText('Debug · paused', { timeout: 30000 });
     await expect(page.getByLabel('Debug variables')).toContainText('number = 21');
     await page.keyboard.press('Control+k');
-    await expect(page.getByRole('textbox', {name:'Neovim input'})).toBeFocused();
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
     await page.keyboard.press('Control+h');
-    await expect(page.getByRole('tree', {name:'Project files'})).toBeFocused();
+    await expect(page.getByRole('tree', { name: 'Project files' })).toBeFocused();
     await page.keyboard.press('Control+l');
-    await expect(page.getByRole('textbox', {name:'Neovim input'})).toBeFocused();
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
     await page.keyboard.press('Control+j');
-    await expect(page.getByRole('button', {name:/Continue/})).toBeFocused();
+    await expect(page.getByRole('button', { name: /Continue/ })).toBeFocused();
     await page.keyboard.press('Space');
     await page.keyboard.press('d');
-    await expect(page.getByRole('region', {name:'Debugger'})).toHaveCount(0);
-    await expect(page.getByRole('textbox', {name:'Neovim input'})).toBeFocused();
-    await expect(page.getByRole('tab', {name:'main.rs', exact:true})).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Debugger' })).toHaveCount(0);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await expect(page.getByRole('tab', { name: 'main.rs', exact: true })).toBeVisible();
     await page.keyboard.press('F10');
-    await expect(page.getByRole('region', {name:'Debugger'})).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Debugger' })).toHaveCount(0);
     await page.keyboard.press('Control+j');
     await expect(page.getByLabel('Debug variables')).toContainText('answer = 42');
-    await page.screenshot({path:'test-results/nido-debugger.png'});
+    await page.screenshot({ path: 'test-results/nido-debugger.png' });
     await page.keyboard.press('Shift+F5');
-    await expect(page.getByRole('region', {name:'Debugger'})).toContainText('Debug · finished');
+    await expect(page.getByRole('region', { name: 'Debugger' })).toContainText('Debug · finished');
   } finally {
     await running?.close();
-    await rm(root, {recursive:true, force:true});
+    await rm(root, { recursive: true, force: true });
   }
 });
 
@@ -90,14 +144,8 @@ test('normal shutdown restores workspace order, active file and cursors', async 
     running = await electron.launch({ executablePath, args, env });
     let page = await running.firstWindow();
     await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await running.evaluate(
-      ({ dialog }, paths) => {
-        let i = 0;
-        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [paths[i++]] });
-      },
-      [join(root, 'One'), join(root, 'Two')]
-    );
     await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, join(root, 'One'));
     await expect(page.getByRole('tab', { name: 'Workspace One', exact: true })).toBeVisible();
     await expect(page.getByRole('treeitem', { name: 'a.txt', exact: true })).toBeVisible();
     await page.keyboard.press('Control+p');
@@ -140,53 +188,79 @@ test('normal shutdown restores workspace order, active file and cursors', async 
       )
       .toBe(true);
     await page.screenshot({ path: 'test-results/nido-rust-highlights.png' });
-    const cursorIsVisible = (): Promise<boolean> => page.locator('canvas:visible').evaluate((element) => {
-      const canvas = element as HTMLCanvasElement;
-      const input = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Neovim input"]')!;
-      const scale = window.devicePixelRatio || 1;
-      const pixel = canvas.getContext('2d')!.getImageData(
-        Math.floor((parseFloat(input.style.left) + 1) * scale),
-        Math.floor((parseFloat(input.style.top) + 3) * scale), 1, 1).data;
-      return pixel[0] > 80;
-    });
+    const cursorIsVisible = (): Promise<boolean> =>
+      page.locator('canvas:visible').evaluate((element) => {
+        const canvas = element as HTMLCanvasElement;
+        const input = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Neovim input"]')!;
+        const scale = window.devicePixelRatio || 1;
+        const pixel = canvas
+          .getContext('2d')!
+          .getImageData(
+            Math.floor((parseFloat(input.style.left) + 1) * scale),
+            Math.floor((parseFloat(input.style.top) + 3) * scale),
+            1,
+            1
+          ).data;
+        return pixel[0] > 80;
+      });
     await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(true);
     await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(false);
     await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(true);
     await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(false);
     await page.keyboard.press('ArrowLeft');
     await expect.poll(cursorIsVisible, { intervals: [20], timeout: 400 }).toBe(true);
-    await expect.poll(() => page.locator('canvas:visible').evaluate((element) => {
-      const canvas = element as HTMLCanvasElement;
-      const scale = window.devicePixelRatio || 1;
-      const ctx = canvas.getContext('2d')!;
-      const sample = (y: number): string => Array.from(ctx.getImageData(canvas.width - 2, Math.floor((y + 0.5) * scale), 1, 1).data).slice(0, 3).join(',');
-      return [sample(0), sample(24), sample(12)];
-    })).toEqual(['70,81,92', '70,81,92', '20,20,20']);
+    await expect
+      .poll(() =>
+        page.locator('canvas:visible').evaluate((element) => {
+          const canvas = element as HTMLCanvasElement;
+          const scale = window.devicePixelRatio || 1;
+          const ctx = canvas.getContext('2d')!;
+          const sample = (y: number): string =>
+            Array.from(ctx.getImageData(canvas.width - 2, Math.floor((y + 0.5) * scale), 1, 1).data)
+              .slice(0, 3)
+              .join(',');
+          return [sample(0), sample(24), sample(12)];
+        })
+      )
+      .toEqual(['70,81,92', '70,81,92', '20,20,20']);
     await expect(page.getByTitle('Rust language server connection')).toHaveText('rust_analyzer');
-    await page.keyboard.type(":lua vim.lsp.handlers['$/progress'](nil, {token='nido-ui-test',value={kind='begin',title='Indexing',message='example_crate',percentage=42}}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})");
+    await page.keyboard.type(
+      ":lua vim.lsp.handlers['$/progress'](nil, {token='nido-ui-test',value={kind='begin',title='Indexing',message='example_crate',percentage=42}}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})"
+    );
     await page.keyboard.press('Enter');
     await expect(page.getByRole('status')).toContainText('Indexing — example_crate (42%)');
     await page.screenshot({ path: 'test-results/nido-lsp-progress.png' });
-    await page.keyboard.type(":lua vim.lsp.handlers['$/progress'](nil, {token='nido-ui-test',value={kind='end'}}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})");
+    await page.keyboard.type(
+      ":lua vim.lsp.handlers['$/progress'](nil, {token='nido-ui-test',value={kind='end'}}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})"
+    );
     await page.keyboard.press('Enter');
     await expect(page.getByRole('status').filter({ hasText: 'example_crate' })).toHaveCount(0);
-    await page.keyboard.type(":lua vim.lsp.handlers['window/showMessage'](nil, {type=2,message='Failed to run build scripts of some packages.'}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})");
+    await page.keyboard.type(
+      ":lua vim.lsp.handlers['window/showMessage'](nil, {type=2,message='Failed to run build scripts of some packages.'}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})"
+    );
     await page.keyboard.press('Enter');
     await expect(page.getByRole('alert')).toContainText('LSP[rust_analyzer][Warning] Failed to run build scripts');
     await expect(page.locator('canvas:visible')).not.toHaveAttribute('aria-description', /Press ENTER/);
     await page.screenshot({ path: 'test-results/nido-lsp-warning.png' });
     await page.getByRole('button', { name: 'Dismiss error' }).click();
     await page.locator('textarea:visible').focus();
-    await page.keyboard.type(":lua vim.lsp.util.open_floating_preview({'# Nido documentation', '', '**Markdown preview**'}, 'markdown', {})");
+    await page.keyboard.type(
+      ":lua vim.lsp.util.open_floating_preview({'# Nido documentation', '', '**Markdown preview**'}, 'markdown', {})"
+    );
     await page.keyboard.press('Enter');
     await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /Markdown preview/);
-    await expect(page.locator('canvas:visible')).not.toHaveAttribute('aria-description', /Parser could not be created|Error executing/);
+    await expect(page.locator('canvas:visible')).not.toHaveAttribute(
+      'aria-description',
+      /Parser could not be created|Error executing/
+    );
     await page.screenshot({ path: 'test-results/nido-documentation.png' });
     await page.keyboard.press('j');
     await page.keyboard.type('gg0w');
     await expect(async () => {
       await page.keyboard.press('K');
-      await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /Type information/, { timeout: 1000 });
+      await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /Type information/, {
+        timeout: 1000
+      });
     }).toPass({ timeout: 20000 });
     await page.screenshot({ path: 'test-results/nido-hover.png' });
     for (const [file, keys] of [
@@ -240,6 +314,7 @@ test('normal shutdown restores workspace order, active file and cursors', async 
     await page.keyboard.press('u');
     await expect(page.getByText('Ln 1, Col 7', { exact: true })).toBeVisible();
     await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, join(root, 'Two'));
     await expect(page.getByRole('tab', { name: 'Workspace Two', exact: true })).toBeVisible();
     await page.keyboard.press('Space');
     await page.keyboard.press('h');
@@ -298,18 +373,11 @@ test('keyboard-only workspace switching, editing, saving and dirty-close guard',
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await app.evaluate(
-      ({ dialog }, paths) => {
-        let index = 0;
-        dialog.showOpenDialog = async () => ({
-          canceled: false,
-          filePaths: [paths[index++]]
-        });
-        dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
-      },
-      [join(root, 'Nido'), join(root, 'Portfolio')]
-    );
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
+    });
     await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, join(root, 'Nido'));
     await expect(page.getByRole('tab', { name: 'Workspace Nido', exact: true })).toBeVisible();
     const welcome = page.getByRole('region', { name: 'Workspace welcome' });
     await expect(welcome).toBeVisible();
@@ -358,6 +426,7 @@ test('keyboard-only workspace switching, editing, saving and dirty-close guard',
     await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /日本語入力/);
     await page.keyboard.type('gg');
     await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, join(root, 'Portfolio'));
     await expect(page.getByRole('tab', { name: 'Workspace Portfolio', exact: true })).toBeVisible();
     await page.keyboard.type('iindependent buffer');
     await page.keyboard.press('Escape');

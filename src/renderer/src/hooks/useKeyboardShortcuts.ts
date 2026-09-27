@@ -87,9 +87,22 @@ export function useKeyboardShortcuts({
     }
     if (active && !event.ctrlKey && !event.altKey && !event.metaKey && ['F5', 'F9', 'F10', 'F11'].includes(event.key)) {
       consume();
-      const action = event.key === 'F9' ? 'breakpoint' : event.key === 'F10' ? 'over' : event.key === 'F11' ? (event.shiftKey ? 'out' : 'into') : (event.shiftKey ? 'stop' : 'start');
+      const action =
+        event.key === 'F9'
+          ? 'breakpoint'
+          : event.key === 'F10'
+            ? 'over'
+            : event.key === 'F11'
+              ? event.shiftKey
+                ? 'out'
+                : 'into'
+              : event.shiftKey
+                ? 'stop'
+                : 'start';
       run(window.nido.debug(active, action));
-      if (!document.activeElement?.closest('[aria-label="Debugger"]')) focusEditor();
+      if (!document.activeElement?.closest('[aria-label="Debugger"]')) {
+        focusEditor();
+      }
       return;
     }
     if (event.ctrlKey && event.key === 'Tab') {

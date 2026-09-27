@@ -13,7 +13,9 @@ export async function readLayout(path: string): Promise<SavedLayout> {
   try {
     data = JSON.parse(await readFile(path, 'utf8'));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, workspaces: [], active: 0 };
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { version: 1, workspaces: [], active: 0 };
+    }
     throw error;
   }
   if (

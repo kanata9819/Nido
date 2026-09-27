@@ -97,12 +97,18 @@ export default function App(): React.JSX.Element {
   const active = workspaces.some((w) => w.id === selectedWorkspace) ? selectedWorkspace : workspaces[0]?.id || '';
   const state = states[active] || defaultState;
   const hasDebugger = !!state.debug;
-  useEffect(() => { if (hasDebugger) setDebugVisible(true); }, [hasDebugger, active]);
+  useEffect(() => {
+    if (hasDebugger) {
+      setDebugVisible(true);
+    }
+  }, [hasDebugger, active]);
   const displayMode = state.mode.startsWith('i')
     ? 'INSERT'
     : state.mode.startsWith('v') || state.mode === 'V' || state.mode === '\u0016'
       ? 'VISUAL'
-      : state.mode.startsWith('c') ? 'COMMAND' : 'NORMAL';
+      : state.mode.startsWith('c')
+        ? 'COMMAND'
+        : 'NORMAL';
   const workspace = workspaces.find((w) => w.id === active);
   const current = state.buffers.find((b) => b.id === state.current);
   const report = useCallback(
@@ -224,15 +230,23 @@ export default function App(): React.JSX.Element {
     if (creating || restoring) {
       return;
     }
+    setLeader(false);
+    setPanel('folders');
+  };
+
+  const openWorkspace = async (path: string): Promise<void> => {
+    if (creating || restoring) {
+      return;
+    }
     setCreating(true);
     setLeader(false);
-    setPanel(null);
 
     try {
-      const added = await window.nido.createWorkspace();
+      const added = await window.nido.createWorkspace(path);
       if (added) {
         setWorkspaces((old) => [...old, added]);
         setActive(added.id);
+        setPanel(null);
       }
     } catch (e) {
       report(String(e));
@@ -557,14 +571,25 @@ export default function App(): React.JSX.Element {
           )}
         </main>
       </div>
-      {active && debugVisible && <DebugPanel state={state.debug} focusTick={debugFocusTick} onClose={() => {
-        setDebugVisible(false);
-        focusEditor();
-      }} action={(action, target) => {
-        run(window.nido.debug(active, action, target));
-      }} />}
+      {active && debugVisible && (
+        <DebugPanel
+          state={state.debug}
+          focusTick={debugFocusTick}
+          onClose={() => {
+            setDebugVisible(false);
+            focusEditor();
+          }}
+          action={(action, target) => {
+            run(window.nido.debug(active, action, target));
+          }}
+        />
+      )}
       <footer className={styles.statusbar}>
-        {active && <button aria-label="Toggle debugger" onClick={() => setDebugVisible(!debugVisible)}>Debug</button>}
+        {active && (
+          <button aria-label="Toggle debugger" onClick={() => setDebugVisible(!debugVisible)}>
+            Debug
+          </button>
+        )}
         <span className={styles.mode} data-mode={displayMode}>
           {displayMode}
         </span>
@@ -596,8 +621,16 @@ export default function App(): React.JSX.Element {
               focusEditor();
             }}
           >
-            {state.lineEnding === 'Mixed' && <option value="Mixed" disabled>Mixed</option>}
-            {state.lineEnding === 'CR' && <option value="CR" disabled>CR</option>}
+            {state.lineEnding === 'Mixed' && (
+              <option value="Mixed" disabled>
+                Mixed
+              </option>
+            )}
+            {state.lineEnding === 'CR' && (
+              <option value="CR" disabled>
+                CR
+              </option>
+            )}
             <option value="LF">LF</option>
             <option value="CRLF">CRLF</option>
           </select>
@@ -622,6 +655,9 @@ export default function App(): React.JSX.Element {
         </div>
       )}
       <PanelComponent
+        initialFolder={workspace?.root || ''}
+        creating={creating}
+        openWorkspace={openWorkspace}
         panel={panel}
         filtered={filtered}
         selection={selection}

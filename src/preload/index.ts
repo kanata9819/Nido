@@ -4,7 +4,8 @@ import type { NidoAPI, NidoEvent } from '../shared/types';
 const api: NidoAPI = {
   restoreWorkspaces: () => ipcRenderer.invoke('nido:restore'),
   workspaceLayout: (ids, active) => ipcRenderer.invoke('nido:layout', ids, active),
-  createWorkspace: () => ipcRenderer.invoke('nido:create'),
+  createWorkspace: (path) => ipcRenderer.invoke('nido:create', path),
+  browseFolders: (path) => ipcRenderer.invoke('nido:browseFolders', path),
   closeWorkspace: (id) => ipcRenderer.invoke('nido:close', id),
   attach: (id, columns, rows) => ipcRenderer.invoke('nido:attach', id, columns, rows),
   resize: (id, columns, rows) => ipcRenderer.invoke('nido:resize', id, columns, rows),

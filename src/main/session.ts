@@ -3,7 +3,16 @@ import { realpath, stat } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { attach, type NeovimClient } from 'neovim';
-import type { DebugAction, DebugState, FileEntry, NidoEvent, Redraw, SavedWorkspace, SessionState, Workspace } from '../shared/types';
+import type {
+  DebugAction,
+  DebugState,
+  FileEntry,
+  NidoEvent,
+  Redraw,
+  SavedWorkspace,
+  SessionState,
+  Workspace
+} from '../shared/types';
 import { SessionFiles } from './sessionFiles';
 
 const setup = `
@@ -274,15 +283,17 @@ export class Session {
   }
 
   async scroll(lines: number): Promise<void> {
-    if (!lines) return;
+    if (!lines) {
+      return;
+    }
     await this.client.request('nvim_exec_lua', [
-      "local n = ...; vim.cmd.normal({args={math.abs(n) .. string.char(n > 0 and 5 or 25)}, bang=true})",
+      'local n = ...; vim.cmd.normal({args={math.abs(n) .. string.char(n > 0 and 5 or 25)}, bang=true})',
       [lines]
     ]);
   }
 
   async debug(action: DebugAction, target?: number): Promise<void> {
-    const [channel] = await this.client.request('nvim_get_api_info', []) as [number, unknown];
+    const [channel] = (await this.client.request('nvim_get_api_info', [])) as [number, unknown];
     await this.client.request('nvim_exec_lua', ["require('nido_debug').action(...)", [action, channel, target ?? 0]]);
   }
 

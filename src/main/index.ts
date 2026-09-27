@@ -34,8 +34,8 @@ app.whenReady().then(() => {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false,
-    },
+      nodeIntegration: false
+    }
   });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event) => event.preventDefault());

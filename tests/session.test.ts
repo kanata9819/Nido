@@ -9,21 +9,22 @@ import { accumulateScroll } from '../src/renderer/src/scroll';
 import { readLayout, writeLayout } from '../src/main/persistence';
 
 test('scroll follows pixel distance and preserves insert mode and file contents', async () => {
-  let remainder = 0, lines = 0;
+  let remainder = 0,
+    lines = 0;
   for (let i = 0; i < 25; i++) {
     const result = accumulateScroll(remainder, 1, 0, 25, 500);
     remainder = result.remainder;
     lines += result.lines;
   }
   assert.equal(lines, 1);
-  assert.deepEqual(accumulateScroll(0, 3, 1, 25, 500), {lines: 3, remainder: 0});
+  assert.deepEqual(accumulateScroll(0, 3, 1, 25, 500), { lines: 3, remainder: 0 });
   assert.equal(accumulateScroll(0, 1, 2, 25, 500).lines, 20);
   assert.equal(accumulateScroll(20, -25, 0, 25, 500).lines, -1);
   assert.equal(accumulateScroll(0, 0, 0, 25, 500).lines, 0);
   const root = await mkdtemp(join(tmpdir(), 'nido-scroll-'));
   let session: Session | undefined;
   try {
-    const content = Array.from({length: 200}, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+    const content = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
     await writeFile(join(root, 'scroll.txt'), content);
     session = await Session.create(root, () => {});
     await session.openFile('scroll.txt');
@@ -39,7 +40,7 @@ test('scroll follows pixel distance and preserves insert mode and file contents'
     assert.equal(await session.client.request('nvim_eval', ["line('w0')"]), 3);
   } finally {
     await session?.stop();
-    await rm(root, {recursive:true, force:true});
+    await rm(root, { recursive: true, force: true });
   }
 });
 
@@ -84,7 +85,7 @@ test('line endings normalize only in memory until saved, preserve content and su
     await assert.rejects(session.setLineEnding('invalid' as 'LF'));
   } finally {
     await session?.stop();
-    await rm(root, {recursive: true, force: true});
+    await rm(root, { recursive: true, force: true });
   }
 });
 

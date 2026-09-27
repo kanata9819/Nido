@@ -178,12 +178,7 @@ export class Grid {
     return { cellWidth, cellHeight };
   }
 
-  private drawCursor(
-    ctx: CanvasRenderingContext2D,
-    cellWidth: number,
-    cellHeight: number,
-    focused: boolean
-  ): void {
+  private drawCursor(ctx: CanvasRenderingContext2D, cellWidth: number, cellHeight: number, focused: boolean): void {
     if (!this.busy && this.cursor.row < this.rows && (!focused || this.cursorVisible)) {
       const x = this.cursor.column * cellWidth;
       const y = this.cursor.row * cellHeight;

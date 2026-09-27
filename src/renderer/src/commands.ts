@@ -40,17 +40,24 @@ export function buildItems(
     },
     ...(active
       ? [
-          ...([
-            ['Start / continue debugging', 'F5', 'start'],
-            ['Toggle breakpoint', 'F9', 'breakpoint'],
-            ['Step over', 'F10', 'over'],
-            ['Step into', 'F11', 'into'],
-            ['Step out', 'Shift+F11', 'out'],
-            ['Pause debugging', '', 'pause'],
-            ['Stop debugging', 'Shift+F5', 'stop']
-          ] as [string, string, DebugAction][]).map(([title, detail, action]) => ({
-            key: '', title, detail,
-            run: () => { run(window.nido.debug(active, action)); focusEditor(); }
+          ...(
+            [
+              ['Start / continue debugging', 'F5', 'start'],
+              ['Toggle breakpoint', 'F9', 'breakpoint'],
+              ['Step over', 'F10', 'over'],
+              ['Step into', 'F11', 'into'],
+              ['Step out', 'Shift+F11', 'out'],
+              ['Pause debugging', '', 'pause'],
+              ['Stop debugging', 'Shift+F5', 'stop']
+            ] as [string, string, DebugAction][]
+          ).map(([title, detail, action]) => ({
+            key: '',
+            title,
+            detail,
+            run: () => {
+              run(window.nido.debug(active, action));
+              focusEditor();
+            }
           })),
           ...(['LF', 'CRLF'] as const).map((format) => ({
             key: '',
