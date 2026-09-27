@@ -1,5 +1,6 @@
 import type { Panel, Item } from '../types';
-import { Command, FolderOpen, FileCode2, X } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { Command, FolderOpen, FileCode2, X, CircleAlert, TriangleAlert, Info } from 'lucide-react';
 import styles from '../assets/Nido.module.css';
 import FolderPicker from './FolderPicker';
 import GitBrowser from './GitBrowser';
@@ -31,6 +32,7 @@ interface PanelProps {
 }
 
 const panelTitles = {
+  problems: 'Problems',
   git: 'Source control',
   folders: 'Open a workspace',
   files: 'Find a file',
@@ -65,6 +67,18 @@ export function Panel({
   setQuery,
   setSelection
 }: PanelProps): React.JSX.Element | null {
+  const results = useRef<HTMLDivElement>(null);
+  const filter = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (panel === 'problems') {
+      results.current?.focus();
+    }
+  }, [panel]);
+  useEffect(() => {
+    if (panel === 'problems') {
+      setSelection((index) => Math.max(0, Math.min(index, filtered.length - 1)));
+    }
+  }, [panel, filtered.length, setSelection]);
   if (!panel) {
     return null;
   }
@@ -147,7 +161,8 @@ export function Panel({
         ) : (
           <>
             <input
-              autoFocus
+              ref={filter}
+              autoFocus={panel !== 'problems'}
               className={styles.paletteInput}
               aria-label="Filter items"
               placeholder={panel === 'files' ? 'Type a filename…' : 'Type to search…'}
@@ -169,10 +184,49 @@ export function Panel({
                 }
               }}
             />
-            <div className={styles.paletteItems}>
+            <div
+              className={styles.paletteItems}
+              ref={results}
+              tabIndex={panel === 'problems' ? 0 : undefined}
+              role={panel === 'problems' ? 'listbox' : undefined}
+              aria-label={panel === 'problems' ? 'Problems' : undefined}
+              aria-activedescendant={panel === 'problems' && filtered[selection] ? `problem-${selection}` : undefined}
+              onKeyDown={(event) => {
+                if (
+                  panel !== 'problems' ||
+                  event.nativeEvent.isComposing ||
+                  event.ctrlKey ||
+                  event.altKey ||
+                  event.metaKey
+                ) {
+                  return;
+                }
+                if (['j', 'k', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+                  event.preventDefault();
+                  const last = Math.max(0, filtered.length - 1);
+                  setSelection((index) =>
+                    event.key === 'Home'
+                      ? 0
+                      : event.key === 'End'
+                        ? last
+                        : Math.max(0, Math.min(last, index + (['j', 'ArrowDown'].includes(event.key) ? 1 : -1)))
+                  );
+                } else if (event.key === 'Enter') {
+                  event.preventDefault();
+                  filtered[selection]?.run();
+                } else if (event.key === '/') {
+                  event.preventDefault();
+                  filter.current?.focus();
+                }
+              }}
+            >
               {filtered.map((item, i) => (
                 <button
                   key={`${item.title}-${i}`}
+                  id={panel === 'problems' ? `problem-${i}` : undefined}
+                  role={panel === 'problems' ? 'option' : undefined}
+                  aria-selected={panel === 'problems' ? i === selection : undefined}
+                  data-severity={item.severity}
                   className={i === selection ? styles.selectedItem : ''}
                   ref={(node) => {
                     if (node && i === selection) {
@@ -182,7 +236,15 @@ export function Panel({
                   onClick={item.run}
                 >
                   <span className={styles.itemIcon}>
-                    {panel === 'workspaces' ? (
+                    {panel === 'problems' ? (
+                      item.severity === 1 ? (
+                        <CircleAlert size={18} />
+                      ) : item.severity === 2 ? (
+                        <TriangleAlert size={18} />
+                      ) : (
+                        <Info size={18} />
+                      )
+                    ) : panel === 'workspaces' ? (
                       <FolderOpen size={18} />
                     ) : panel === 'files' || panel === 'buffers' ? (
                       <FileCode2 size={18} />
@@ -198,11 +260,21 @@ export function Panel({
                 </button>
               ))}
               {!filtered.length && (
-                <p className={styles.noResults}>{loading ? 'Looking through your project…' : 'No matching items.'}</p>
+                <p className={styles.noResults}>
+                  {loading
+                    ? 'Looking through your project…'
+                    : panel === 'problems' && !query
+                      ? 'No problems reported.'
+                      : 'No matching items.'}
+                </p>
               )}
             </div>
             <div className={styles.paletteFooter}>
-              <span>↑ ↓ or Ctrl+j / k to navigate</span>
+              <span>
+                {panel === 'problems'
+                  ? `${filtered.length} problems · j/k Select · / Filter`
+                  : '↑ ↓ or Ctrl+j / k to navigate'}
+              </span>
               <span>Enter to select · Esc to return</span>
             </div>
           </>

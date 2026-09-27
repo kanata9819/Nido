@@ -42,6 +42,12 @@ export function buildItems(
     ...(active
       ? [
           {
+            key: 'm',
+            title: 'Problems',
+            detail: 'Errors, warnings and hints · Ctrl+Shift+M',
+            run: () => showPanel('problems')
+          },
+          {
             key: 'g',
             title: 'Source control',
             detail: 'Git changes, diff and commits · Ctrl+Shift+G',
@@ -171,43 +177,53 @@ export function buildItems(
   ];
 
   const items: Item[] =
-    panel === 'workspaces'
-      ? [
-          ...workspaces.map((w, i) => ({
-            key: String(i + 1),
-            title: w.name,
-            detail: w.root,
-            run: () => activate(w.id)
-          })),
-          {
-            key: '+',
-            title: 'Open workspace',
-            detail: 'Start another independent session',
-            run: () => void create()
-          }
-        ]
-      : panel === 'files'
-        ? fileList.map((f) => ({
-            key: '',
-            title: f.name,
-            detail: f.path,
-            run: () => openFile(f.path)
+    panel === 'problems'
+      ? (state.problems || [])
+          .map((problem, index) => ({
+            key: ['Error', 'Warning', 'Info', 'Hint'][problem.severity - 1] || 'Info',
+            severity: problem.severity,
+            title: problem.message,
+            detail: `${problem.path}:${problem.line}:${problem.column}${problem.source ? ' · ' + problem.source : ''}`,
+            run: () => run(window.nido.openProblem(active, index + 1, state.diagnosticsVersion!).then(focusEditor))
           }))
-        : panel === 'buffers'
-          ? state.buffers.map((b) => ({
-              key: b.modified ? '●' : '',
-              title: filename(b.name),
-              detail: b.name || 'Untitled buffer',
-              run: () => {
-                run(window.nido.selectBuffer(active, b.id));
-                focusEditor();
-              }
+          .sort((a, b) => a.severity - b.severity || a.detail.localeCompare(b.detail))
+      : panel === 'workspaces'
+        ? [
+            ...workspaces.map((w, i) => ({
+              key: String(i + 1),
+              title: w.name,
+              detail: w.root,
+              run: () => activate(w.id)
+            })),
+            {
+              key: '+',
+              title: 'Open workspace',
+              detail: 'Start another independent session',
+              run: () => void create()
+            }
+          ]
+        : panel === 'files'
+          ? fileList.map((f) => ({
+              key: '',
+              title: f.name,
+              detail: f.path,
+              run: () => openFile(f.path)
             }))
-          : commands;
+          : panel === 'buffers'
+            ? state.buffers.map((b) => ({
+                key: b.modified ? '●' : '',
+                title: filename(b.name),
+                detail: b.name || 'Untitled buffer',
+                run: () => {
+                  run(window.nido.selectBuffer(active, b.id));
+                  focusEditor();
+                }
+              }))
+            : commands;
 
   const filtered = items
     .filter((item) => `${item.title} ${item.detail}`.toLowerCase().includes(query.toLowerCase()))
-    .slice(0, 100);
+    .slice(0, panel === 'problems' ? undefined : 100);
 
   return { commands, items, filtered };
 }

@@ -1,6 +1,6 @@
 -- Nido owns this configuration; personal Neovim config is not loaded.
 vim.g.nido = true
-vim.opt.shortmess:append('I')
+vim.opt.shortmess:append('IW')
 vim.o.termguicolors = true
 vim.o.number = true
 vim.o.relativenumber = false
@@ -58,16 +58,30 @@ local function preview_options(title)
     max_height = math.max(4, math.min(20, math.floor(vim.o.lines * 0.45))),
   }
 end
+local function show_type_information()
+  if #vim.lsp.get_clients({ bufnr = 0, method = 'textDocument/hover' }) == 0 then
+    local message = 'Type information is unavailable: no language server with hover support is attached to this file.'
+    if vim.g.nido_channel then
+      vim.rpcnotify(vim.g.nido_channel, 'nido:message', message)
+    else
+      vim.notify(message, vim.log.levels.INFO)
+    end
+    return
+  end
+  vim.lsp.buf.hover(preview_options('Type information · K to focus'))
+end
+-- Always override the built-in K help lookup, including files without an LSP.
+for _, key in ipairs({ 'K', '<C-k>' }) do
+  vim.keymap.set('n', key, show_type_information)
+end
 vim.api.nvim_create_autocmd('LspAttach', {
   callback = function(event)
     local opts = { buffer = event.buf }
     vim.keymap.set('n', 'gd', vim.lsp.buf.definition, opts)
     vim.keymap.set('n', 'gr', function() require('nido_references').find() end, opts)
     vim.keymap.set('n', '<S-F12>', function() require('nido_references').find() end, opts)
-    for _, key in ipairs({'K', '<C-k>'}) do
-      vim.keymap.set('n', key, function()
-        vim.lsp.buf.hover(preview_options('Type information · K to focus'))
-      end, opts)
+    for _, key in ipairs({ 'K', '<C-k>' }) do
+      vim.keymap.set('n', key, show_type_information, opts)
     end
     vim.keymap.set('n', '<F12>', vim.lsp.buf.definition, opts)
     vim.keymap.set('n', 'gI', vim.lsp.buf.implementation, opts)
@@ -86,7 +100,25 @@ vim.api.nvim_create_autocmd('LspAttach', {
   end,
 })
 
--- Language servers are separate executables; use an installed Rust toolchain.
+-- Use Electron's Node runtime and pinned server files outside app.asar.
+if vim.env.NIDO_NODE and vim.env.NIDO_LANGUAGES then
+  local modules = vim.fs.joinpath(vim.env.NIDO_LANGUAGES, 'node_modules')
+  vim.lsp.config('typescript', {
+    cmd = { vim.env.NIDO_NODE, vim.fs.joinpath(modules, 'typescript-language-server/lib/cli.mjs'), '--stdio' },
+    cmd_env = { ELECTRON_RUN_AS_NODE = '1' },
+    filetypes = { 'typescript', 'typescriptreact', 'javascript', 'javascriptreact' },
+    root_dir = vim.fn.getcwd(),
+    init_options = {
+      hostInfo = 'Nido',
+      disableAutomaticTypingAcquisition = true,
+      -- Keep the bundled JS tsserver compatible even in TypeScript 7 projects.
+      tsserver = { path = vim.fs.joinpath(modules, 'typescript/lib/tsserver.js') },
+    },
+  })
+  vim.lsp.enable('typescript')
+end
+
+-- Rust uses the installed toolchain matching the workspace.
 local cargo_home = vim.env.CARGO_HOME or vim.fs.joinpath(vim.fn.expand('~'), '.cargo')
 local cargo_bin = vim.fs.joinpath(cargo_home, 'bin')
 if vim.fn.executable('rust-analyzer') == 0 and vim.fn.isdirectory(cargo_bin) == 1 then

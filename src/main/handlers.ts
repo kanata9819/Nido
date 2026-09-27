@@ -280,6 +280,7 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
   handle('findFiles', (id) => session(id).findFiles());
   handle('openFile', (id, path) => session(id).openFile(text(path)));
   handle('openReference', (id, index, version) => session(id).openReference(integer(index), integer(version)));
+  handle('openProblem', (id, index, version) => session(id).openProblem(integer(index), integer(version)));
   handle('previewReference', (id, index, version) => session(id).previewReference(integer(index), integer(version)));
   handle('selectBuffer', (id, buffer) => session(id).selectBuffer(integer(buffer)));
 

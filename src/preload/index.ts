@@ -28,6 +28,7 @@ const api: NidoAPI = {
   findFiles: (id) => ipcRenderer.invoke('nido:findFiles', id),
   openFile: (id, path) => ipcRenderer.invoke('nido:openFile', id, path),
   openReference: (id, index, version) => ipcRenderer.invoke('nido:openReference', id, index, version),
+  openProblem: (id, index, version) => ipcRenderer.invoke('nido:openProblem', id, index, version),
   previewReference: (id, index, version) => ipcRenderer.invoke('nido:previewReference', id, index, version),
   selectBuffer: (id, buffer) => ipcRenderer.invoke('nido:selectBuffer', id, buffer),
   closeBuffer: (id, buffer) => ipcRenderer.invoke('nido:closeBuffer', id, buffer),

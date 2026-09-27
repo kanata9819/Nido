@@ -30,7 +30,18 @@ Electronの実行ファイルが未取得の場合は `node node_modules/electro
 
 専用設定の編集元は`resources/nido/init.lua`です。個人のinit.lua、プラグイン、ShaDaは読み込みません。
 追加プラグインやプラグインマネージャーは同梱せず、Neovim標準機能を使います。
-RustはPATH上の`rust-analyzer`があれば自動接続します。言語サーバーとRustツールチェーンは別途必要です。
+Tier 1（優先して実装・回帰テストする言語）はRustとTypeScriptです。JavaScriptもTypeScriptと同じサーバーで対応します。
+
+| 言語 | 言語サーバー | 用意するもの |
+| --- | --- | --- |
+| Rust | rust-analyzer | Rustツールチェーン、rust-analyzer、rust-src、rustfmt |
+| TypeScript / TSX / JavaScript / JSX | 同梱のtypescript-language-server 6.0.1 + TypeScript 6.0.3 | プロジェクトの依存パッケージ（Node.jsの別途導入は不要） |
+
+TS/JSはElectron内蔵のNodeランタイムで起動し、`tsconfig.json` / `jsconfig.json`を読み取ります。設定ファイルのない単独ファイルにも接続します。
+言語解析には互換性を確認した同梱TypeScript 6を使用します。TypeScript 7固有の構文・設定への完全対応は対象外です。
+JSの型エラーを検出したい場合は`// @ts-check`または`checkJs: true`を指定してください。
+型定義の自動ダウンロードは無効です。必要な`@types`はプロジェクト側にインストールしてください。
+同梱サーバーは[typescript-language-server](https://github.com/typescript-language-server/typescript-language-server)を使用し、ライセンスも`resources/languages/node_modules`に含めます。
 LSP接続時は`gd`で定義、`gr`で参照、`K`で説明を表示します。`Ctrl+O`でジャンプ前へ戻れます。
 Rustファイルでは右下に接続中の`rust_analyzer`を表示します。`Ctrl+Shift+P`のコマンド一覧からもLSP機能を使えます。
 
@@ -46,6 +57,7 @@ Insertモードで`Ctrl+Space`を押すと補完候補を表示し、`Ctrl+N/P`�
 シンタックスハイライトは同梱のRust構文定義を使い、LSP接続後はセマンティックハイライトで関数・型・引数などを色分けします。
 保存時に`cargo check`で診断します。接続しない場合は`rustup component add rust-analyzer rust-src rustfmt`を実行し、Cargo.tomlを含むプロジェクトを開いてください。
 `pnpm test:rust`は実際のrust-analyzerを使って定義ジャンプ・参照・補完・構文色分け・型エラー検出を検証します。
+`pnpm test:typescript`は同梱サーバーでTS/JSの型情報・定義・参照・補完・名前変更・診断・保存時整形とTSX/JSX接続を検証します。
 コマンド・検索入力は現在Neovim標準の画面下部です。Reactによるコマンド欄・通知表示は今後の対応です。
 
 ## 操作

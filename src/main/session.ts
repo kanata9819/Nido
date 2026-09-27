@@ -69,6 +69,8 @@ local pending = false
 local progress = {}
 local diagnostics = vim.empty_dict()
 local diagnostics_dirty = true
+local problems = {}
+local diagnostics_version = 0
 local function publish()
  if pending then return end
  pending = true
@@ -77,7 +79,16 @@ local function publish()
   if diagnostics_dirty then
     diagnostics_dirty = false
     diagnostics = vim.empty_dict()
+    problems = {}
+    diagnostics_version = diagnostics_version + 1
     for _, diagnostic in ipairs(vim.diagnostic.get()) do
+      if vim.api.nvim_buf_is_valid(diagnostic.bufnr) then
+        local path = vim.api.nvim_buf_get_name(diagnostic.bufnr)
+        if path ~= '' then
+          table.insert(problems, {path=path, line=diagnostic.lnum+1, column=diagnostic.col+1,
+            severity=diagnostic.severity, message=diagnostic.message, source=diagnostic.source or ''})
+        end
+      end
       if diagnostic.severity <= vim.diagnostic.severity.WARN and vim.api.nvim_buf_is_valid(diagnostic.bufnr) then
         local name = vim.api.nvim_buf_get_name(diagnostic.bufnr)
         if name ~= '' then
@@ -120,7 +131,7 @@ local function publish()
     and buffers[1].name == '' and not buffers[1].modified and vim.bo.buftype == ''
     and vim.api.nvim_buf_line_count(0) == 1 and vim.api.nvim_get_current_line() == ''
     and #vim.api.nvim_tabpage_list_wins(0) == 1
-  vim.rpcnotify(channel, 'nido:state', {scrollCursor=scroll.screen_cursor(), diagnostics=diagnostics, buffers=buffers, current=vim.api.nvim_get_current_buf(),
+  vim.rpcnotify(channel, 'nido:state', {problems=problems, diagnosticsVersion=diagnostics_version, scrollCursor=scroll.screen_cursor(), diagnostics=diagnostics, buffers=buffers, current=vim.api.nvim_get_current_buf(),
    lineEnding=ending, lsp=table.concat(clients, ', '), lspProgress=table.concat(tasks, ' / '), empty=empty, mode=vim.api.nvim_get_mode().mode, line=pos[1], column=pos[2]+1, filetype=vim.bo.filetype})
  end)
 end
@@ -200,6 +211,8 @@ export class Session {
           ...process.env,
           NVIM_APPNAME: 'nido',
           NIDO_WORKSPACE_ROOT: root,
+          NIDO_NODE: process.execPath,
+          NIDO_LANGUAGES: resolve(resources, 'languages'),
           VIMRUNTIME: resolve(resources, 'nvim-win64/share/nvim/runtime'),
           VIMINIT: '',
           EXINIT: ''
@@ -237,6 +250,9 @@ export class Session {
         // Lua encodes an empty table as a map rather than an array.
         if (!Array.isArray(this.state.buffers)) {
           this.state.buffers = [];
+        }
+        if (!Array.isArray(this.state.problems)) {
+          this.state.problems = [];
         }
         this.emit({ type: 'state', id: this.workspace.id, state: this.state });
       }
@@ -276,12 +292,17 @@ export class Session {
     if (!(await stat(actual)).isDirectory()) {
       throw new Error('Choose a project folder.');
     }
-    for (const file of ['nvim-win64/bin/nvim.exe', 'nido/init.lua']) {
+    for (const file of [
+      'nvim-win64/bin/nvim.exe',
+      'nido/init.lua',
+      'languages/node_modules/typescript-language-server/lib/cli.mjs',
+      'languages/node_modules/typescript/lib/tsserver.js'
+    ]) {
       try {
         await stat(resolve(resources, file));
       } catch {
         throw new Error(
-          `Bundled Neovim is missing: ${file}. Reinstall Nido, or run pnpm prepare:neovim in development.`
+          `Bundled editor resource is missing: ${file}. Reinstall Nido, or run pnpm prepare:neovim in development.`
         );
       }
     }
@@ -568,6 +589,23 @@ return ok and "" or tostring(err)`,
   }
   async openReference(index: number, version: number): Promise<void> {
     await this.client.request('nvim_exec_lua', ["require('nido_references').open(...)", [index, version]]);
+  }
+  async openProblem(index: number, version: number): Promise<void> {
+    const problem = this.state.problems?.[index - 1];
+    if (!problem || version !== this.state.diagnosticsVersion) {
+      throw new Error('Problems have changed. Select the item again.');
+    }
+    await this.restoreScroll();
+    await this.client.request('nvim_exec_lua', [
+      `local path, line, column = ...
+vim.cmd("normal! m'")
+vim.cmd.edit(vim.fn.fnameescape(path))
+line = math.min(line, vim.api.nvim_buf_line_count(0))
+local text = vim.api.nvim_buf_get_lines(0, line-1, line, false)[1] or ''
+vim.api.nvim_win_set_cursor(0, {line, math.min(column-1, #text)})
+vim.cmd('normal! zvzz')`,
+      [problem.path, problem.line, problem.column]
+    ]);
   }
   async previewReference(index: number, version: number): Promise<ReferencePreview> {
     return this.client.request('nvim_exec_lua', ["return require('nido_references').preview(...)", [index, version]]);

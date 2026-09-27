@@ -18,6 +18,8 @@ export interface BufferInfo {
   modified: boolean;
 }
 export interface SessionState {
+  problems?: { path: string; line: number; column: number; severity: number; message: string; source: string }[];
+  diagnosticsVersion?: number;
   scrollCursor?: { row: number; column: number };
   diagnostics?: Record<string, number>;
   references?: ReferenceList;
@@ -105,6 +107,7 @@ export interface NidoAPI {
   findFiles(id: string): Promise<FileEntry[]>;
   openFile(id: string, relative: string): Promise<void>;
   openReference(id: string, index: number, version: number): Promise<void>;
+  openProblem(id: string, index: number, version: number): Promise<void>;
   previewReference(id: string, index: number, version: number): Promise<ReferencePreview>;
   selectBuffer(id: string, buffer: number): Promise<void>;
   closeBuffer(id: string, buffer: number): Promise<boolean>;

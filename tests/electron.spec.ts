@@ -5,6 +5,38 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+test('typing hides the pointer and moving or clicking restores it', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-pointer-'));
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const executablePath = process.env.NIDO_PACKAGED_EXE;
+  const running = await electron.launch({
+    executablePath,
+    args: [...(executablePath ? [] : ['.']), `--user-data-dir=${root}`],
+    env
+  });
+  try {
+    const page = await running.firstWindow();
+    const settings = page.getByRole('button', { name: 'Settings', exact: true });
+    await settings.click();
+    const slider = page.getByRole('slider');
+    await slider.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(slider).toHaveCSS('cursor', 'none');
+    await expect(settings).toHaveCSS('cursor', 'none');
+    await page.mouse.move(600, 400);
+    await expect(slider).not.toHaveCSS('cursor', 'none');
+    await page.keyboard.press('ArrowLeft');
+    await expect(slider).toHaveCSS('cursor', 'none');
+    await page.mouse.down();
+    await page.mouse.up();
+    await expect(settings).not.toHaveCSS('cursor', 'none');
+  } finally {
+    await running.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('window size and maximized state survive restart', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-window-'));
   const env = { ...process.env };
@@ -237,6 +269,59 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
   } finally {
     await running?.close();
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('Problems can be selected, filtered, opened and cleared with the keyboard', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-problems-'));
+  await writeFile(join(root, 'sample.txt'), 'first line\nsecond line\nthird line\nfourth line\nfifth line\n');
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const executablePath = process.env.NIDO_PACKAGED_EXE;
+  const running = await electron.launch({
+    executablePath,
+    args: [...(executablePath ? [] : ['.']), '--user-data-dir=' + join(root, 'profile')],
+    env
+  });
+  try {
+    const page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, root);
+    await expect(page.getByRole('treeitem', { name: 'sample.txt', exact: true })).toBeVisible();
+    await page.keyboard.press('Control+p');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('sample.txt');
+    await expect(page.getByRole('button', { name: /sample.txt/ })).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.type(
+      ":lua vim.diagnostic.set(vim.api.nvim_create_namespace('nido-test'), 0, {{lnum=2,col=1,severity=2,message='Sample warning'}, {lnum=4,col=2,severity=1,message='Sample error'}})"
+    );
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Control+Shift+m');
+    const problems = page.getByRole('listbox', { name: 'Problems', exact: true });
+    await expect(problems).toBeFocused();
+    await expect(problems.getByRole('option')).toHaveCount(2);
+    await expect(problems.getByRole('option').first()).toContainText('Sample error');
+    await page.keyboard.press('j');
+    await expect(problems.getByRole('option').nth(1)).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('Ln 3, Col 2', { exact: true })).toBeVisible();
+    await page.keyboard.press('Control+Shift+m');
+    await page.keyboard.press('/');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('Sample error');
+    await expect(problems.getByRole('option')).toHaveCount(1);
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('Ln 5, Col 3', { exact: true })).toBeVisible();
+    await page.keyboard.type(":lua vim.diagnostic.reset(vim.api.nvim_create_namespace('nido-test'))");
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Control+Shift+m');
+    await expect(page.getByText('No problems reported.')).toBeVisible();
+    await page.keyboard.press('Control+Shift+m');
+    await expect(problems).toHaveCount(0);
+  } finally {
+    await running.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 

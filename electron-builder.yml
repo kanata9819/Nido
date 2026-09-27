@@ -15,6 +15,12 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 extraResources:
+  - from: resources/languages
+    to: languages
+  - from: resources/languages/node_modules/typescript
+    to: languages/node_modules/typescript
+  - from: resources/languages/node_modules/typescript-language-server
+    to: languages/node_modules/typescript-language-server
   - from: resources/debug
     to: debug
   - from: resources/icon.png

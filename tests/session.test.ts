@@ -10,6 +10,45 @@ import { readLayout, writeLayout } from '../src/main/persistence';
 import { fileDecorations, gitFileKey } from '../src/renderer/src/fileDecorations';
 import type { Redraw } from '../src/shared/types';
 
+test('hover without an LSP never opens help and successful saves stay quiet', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-hover-'));
+  let session: Session | undefined;
+  try {
+    await writeFile(join(root, 'sample.ts'), 'const state = 1;\n');
+    session = await Session.create(root, () => {});
+    await session.openFile('sample.ts');
+    await session.client.request('nvim_exec_lua', [
+      `vim.lsp.enable('typescript', false)
+for _, key in ipairs({'K', '<C-k>'}) do
+  local mapping = vim.fn.maparg(key, 'n', false, true)
+  assert(type(mapping.callback) == 'function')
+  mapping.callback()
+  assert(#vim.api.nvim_list_wins() == 1)
+  assert(vim.bo.filetype == 'typescript')
+end
+local calls = 0
+local get_clients, hover = vim.lsp.get_clients, vim.lsp.buf.hover
+vim.lsp.get_clients = function() return {{}} end
+vim.lsp.buf.hover = function(opts)
+  calls = calls + 1
+  assert(opts.border == 'rounded' and opts.max_height <= 20)
+end
+vim.fn.maparg('K', 'n', false, true).callback()
+vim.lsp.get_clients, vim.lsp.buf.hover = get_clients, hover
+assert(calls == 1)
+vim.cmd('messages clear')`, []
+    ]);
+    await session.save(false);
+    assert.equal(await readFile(join(root, 'sample.ts'), 'utf8'), 'const state = 1;\n');
+    assert.doesNotMatch(JSON.stringify(await session.client.request('nvim_exec2', ['messages', { output: true }])), /written|\[w\]/);
+    await session.client.request('nvim_exec_lua', ['vim.bo.readonly = true', []]);
+    await assert.rejects(session.save(false), /readonly|E45/);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});
+
 test('wheel scrolling can retain the edit position and resumes input and paste at the anchor', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-scroll-anchor-'));
   let session: Session | undefined;
@@ -142,11 +181,17 @@ test('Neovim publishes and clears diagnostics including unopened files', async (
     const entries = Object.entries(session.state.diagnostics || {});
     assert.equal(gitFileKey(entries[0][0]), gitFileKey(path));
     assert.equal(entries[0][1], 1);
+    assert.equal(session.state.problems?.length, 2);
+    const version = session.state.diagnosticsVersion!;
+    await session.openProblem(1, version);
+    assert.equal(await session.client.request('nvim_eval', ["expand('%:p')"]), path);
     await session.client.request('nvim_exec_lua', ["vim.diagnostic.reset(vim.api.nvim_create_namespace('test'))", []]);
     for (let i = 0; i < 50 && Object.keys(session.state.diagnostics || {}).length; i++) {
       await new Promise((done) => setTimeout(done, 10));
     }
     assert.deepEqual(session.state.diagnostics, {});
+    assert.deepEqual(session.state.problems, []);
+    await assert.rejects(session.openProblem(1, version), /Problems have changed/);
   } finally {
     await session?.stop();
     await rm(root, { recursive: true, force: true });

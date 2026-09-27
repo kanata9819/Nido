@@ -66,6 +66,26 @@ function WorkspaceWelcome({ onOpen }: { onOpen: () => void }): React.JSX.Element
 }
 
 export default function App(): React.JSX.Element {
+  const [pointerHidden, setPointerHidden] = useState(false);
+  useEffect(() => {
+    const hide = (): void => setPointerHidden(true);
+    const show = (): void => setPointerHidden(false);
+    const move = (event: PointerEvent): void => {
+      if (event.movementX || event.movementY) {
+        show();
+      }
+    };
+    window.addEventListener('keydown', hide, true);
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerdown', show, true);
+    window.addEventListener('blur', show);
+    return () => {
+      window.removeEventListener('keydown', hide, true);
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerdown', show, true);
+      window.removeEventListener('blur', show);
+    };
+  }, []);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspace, setActive] = useState('');
   const [states, setStates] = useState<Record<string, SessionState>>({});
@@ -478,7 +498,7 @@ export default function App(): React.JSX.Element {
   });
 
   return (
-    <div className={styles.app} data-animations={animations}>
+    <div className={styles.app} data-animations={animations} data-pointer-hidden={pointerHidden}>
       <header className={styles.titlebar}>
         <div className={styles.brand}>
           <Leaf size={22} />

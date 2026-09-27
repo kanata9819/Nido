@@ -4,6 +4,10 @@
   flex-direction: column;
   background: #141414;
 }
+.app[data-pointer-hidden='true'],
+.app[data-pointer-hidden='true'] * {
+  cursor: none !important;
+}
 .titlebar {
   height: 38px;
   flex-shrink: 0;
@@ -12,6 +16,18 @@
   background: #0e1012;
   border-bottom: 1px solid #282c30;
   user-select: none;
+}
+.paletteItems button[data-severity='1'] .itemIcon,
+.paletteItems button[data-severity='1'] kbd {
+  color: #e59b96;
+}
+.paletteItems button[data-severity='2'] .itemIcon,
+.paletteItems button[data-severity='2'] kbd {
+  color: #d9b777;
+}
+.paletteItems button[data-severity] strong {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .brand {
   width: 115px;

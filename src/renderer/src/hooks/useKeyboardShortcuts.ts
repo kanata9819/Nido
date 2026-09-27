@@ -90,6 +90,22 @@ export function useKeyboardShortcuts({
         return;
       }
     }
+    if (
+      active &&
+      event.ctrlKey &&
+      event.shiftKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      event.key.toLowerCase() === 'm'
+    ) {
+      consume();
+      if (panel === 'problems') {
+        focusEditor();
+      } else {
+        showPanel('problems');
+      }
+      return;
+    }
     if (panel) {
       if (event.key === 'Tab' && modal.current) {
         const nodes = [
