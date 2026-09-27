@@ -22,19 +22,32 @@ vim.api.nvim_create_autocmd('WinScrolled', {
   callback = function()
     for id, change in pairs(vim.v.event) do
       local win = tonumber(id)
-      if win and change.topline ~= 0 and change.height == 0 and change.width == 0 and change.skipcol == 0 then
+      if win and change.height == 0 and change.width == 0
+          and (change.topline ~= 0 or change.skipcol ~= 0 or change.leftcol ~= 0) then
         local info = vim.fn.getwininfo(win)[1]
         local before = info.topline - change.topline
         if before >= 1 and before <= vim.api.nvim_buf_line_count(info.bufnr) then
-          local first = math.min(before, info.topline) - 1
-          local last = math.max(before, info.topline) - 2
-          local rows = vim.api.nvim_win_text_height(win, { start_row = first, end_row = last }).all
-          local top = info.winrow - 1
-          if change.topline < 0 then
-            rows = -rows
+          local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+          local old_skip = math.max(0, view.skipcol - change.skipcol)
+          local forward = change.topline > 0 or (change.topline == 0 and change.skipcol > 0)
+          local rows = 0
+          if change.topline ~= 0 or change.skipcol ~= 0 then
+            rows = vim.api.nvim_win_text_height(win, {
+              start_row = (forward and before or info.topline) - 1,
+              end_row = (forward and info.topline or before) - 1,
+              start_vcol = forward and old_skip or view.skipcol,
+              end_vcol = forward and view.skipcol or old_skip,
+            }).all
+            if not forward then
+              rows = -rows
+            end
           end
+          local top = info.winrow - 1
+          local left = info.wincol - 1
+          -- Horizontal scrolling leaves line numbers and signs fixed in place.
+          local text_left = rows == 0 and left + info.textoff or left
           vim.rpcnotify(channel, 'nido:scroll', {
-            1, top, top + info.height, info.wincol - 1, info.wincol - 1 + info.width, rows, 0
+            1, top, top + info.height, text_left, left + info.width, rows, change.leftcol
           })
         end
       end

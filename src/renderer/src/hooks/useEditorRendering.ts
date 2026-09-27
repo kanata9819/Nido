@@ -52,32 +52,18 @@ export function useEditorRendering({
     let disposed = false;
     let lastColumns = 0;
     let lastRows = 0;
+    let cellWidth = 0;
     let blinkTimer: ReturnType<typeof setTimeout> | undefined;
     const input = inputRef.current!;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const previousFrame = document.createElement('canvas');
     const targetFrame = document.createElement('canvas');
-    let lastScrollInput = -Infinity;
-    let motion: { top: number; bottom: number; distance: number; start: number } | undefined;
-
-    const rememberWheel = (event: WheelEvent): void => {
-      if (!event.ctrlKey) {
-        lastScrollInput = performance.now();
-      }
-    };
+    let motion:
+      | { top: number; bottom: number; left: number; right: number; distance: number; distanceX: number; start: number }
+      | undefined;
     const stopMotion = (): void => {
       motion = undefined;
-      lastScrollInput = -Infinity;
       schedule();
-    };
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      const scrollKey = event.ctrlKey && ['d', 'u', 'e', 'y'].includes(event.key.toLowerCase());
-      const navigationMode = /^(normal|visual)/.test(gridRef.current.mode);
-      if (scrollKey && navigationMode && !event.altKey && !event.metaKey && !event.isComposing) {
-        lastScrollInput = performance.now();
-      } else {
-        stopMotion();
-      }
     };
 
     const render = (): void => {
@@ -91,11 +77,13 @@ export function useEditorRendering({
         fontSize,
         document.activeElement === inputRef.current
       );
+      cellWidth = metrics.cellWidth;
 
       if (motion) {
         const offset = scrollOffset(motion.distance, performance.now() - motion.start);
+        const offsetX = scrollOffset(motion.distanceX, performance.now() - motion.start);
         if (
-          Math.abs(offset) < 0.25 ||
+          (Math.abs(offset) < 0.25 && Math.abs(offsetX) < 0.25) ||
           reducedMotion.matches ||
           !animationsRef.current ||
           previousFrame.width !== surface.width ||
@@ -110,18 +98,30 @@ export function useEditorRendering({
           const dpr = window.devicePixelRatio || 1;
           const top = motion.top * metrics.cellHeight;
           const height = (motion.bottom - motion.top) * metrics.cellHeight;
+          const left = motion.left * metrics.cellWidth;
+          const width = (motion.right - motion.left) * metrics.cellWidth;
           ctx.save();
           ctx.beginPath();
-          ctx.rect(0, top, element.clientWidth, height);
+          ctx.rect(left, top, width, height);
           ctx.clip();
           ctx.fillStyle = gridRef.current.background;
-          ctx.fillRect(0, top, element.clientWidth, height);
+          ctx.fillRect(left, top, width, height);
           // Keep the departing rows visible until the incoming rows cover them.
-          for (const [image, shift] of [
-            [previousFrame, offset - motion.distance],
-            [targetFrame, offset]
+          for (const [image, shift, shiftX] of [
+            [previousFrame, offset - motion.distance, offsetX - motion.distanceX],
+            [targetFrame, offset, offsetX]
           ] as const) {
-            ctx.drawImage(image, 0, top * dpr, image.width, height * dpr, 0, top + shift, image.width / dpr, height);
+            ctx.drawImage(
+              image,
+              left * dpr,
+              top * dpr,
+              width * dpr,
+              height * dpr,
+              left + shiftX,
+              top + shift,
+              width,
+              height
+            );
           }
           ctx.restore();
           frame = requestAnimationFrame(render);
@@ -188,8 +188,7 @@ export function useEditorRendering({
     document.addEventListener('visibilitychange', resetBlink);
     reducedMotion.addEventListener('change', resetBlink);
     reducedMotion.addEventListener('change', stopMotion);
-    element.addEventListener('wheel', rememberWheel, { passive: true });
-    input.addEventListener('keydown', handleKeyDown);
+    input.addEventListener('keydown', stopMotion);
     input.addEventListener('input', stopMotion);
     input.addEventListener('compositionstart', stopMotion);
     input.addEventListener('blur', stopMotion);
@@ -206,24 +205,29 @@ export function useEditorRendering({
           animationsRef.current &&
           !reducedMotion.matches &&
           !element.hidden &&
-          now - lastScrollInput < 180 &&
           scroll[0] === 1 &&
-          scroll[3] === 0 &&
-          scroll[4] === gridRef.current.columns &&
-          scroll[6] === 0 &&
-          Math.abs(scroll[5]) < scroll[2] - scroll[1] &&
-          scroll[5] !== 0
+          scroll[2] > scroll[1] &&
+          scroll[4] > scroll[3] &&
+          (scroll[5] !== 0 || scroll[6] !== 0)
         ) {
           const remaining = motion ? scrollOffset(motion.distance, now - motion.start) : 0;
+          const remainingX = motion ? scrollOffset(motion.distanceX, now - motion.start) : 0;
           cancelAnimationFrame(frame);
           render();
           previousFrame.width = surface.width;
           previousFrame.height = surface.height;
           previousFrame.getContext('2d')!.drawImage(surface, 0, 0);
+          const cellHeight = Math.ceil(fontSize * 1.65);
+          const height = (scroll[2] - scroll[1]) * cellHeight;
+          const width = (scroll[4] - scroll[3]) * cellWidth;
           motion = {
             top: scroll[1],
             bottom: scroll[2],
-            distance: scroll[5] * Math.ceil(fontSize * 1.65) + remaining,
+            left: scroll[3],
+            right: scroll[4],
+            // Large jumps use at most one viewport so the animation never exposes an empty gap.
+            distance: Math.max(-height, Math.min(height, scroll[5] * cellHeight + remaining)),
+            distanceX: scroll[5] === 0 ? Math.max(-width, Math.min(width, scroll[6] * cellWidth + remainingX)) : 0,
             start: now
           };
         } else if (scrolls.length) {
@@ -259,8 +263,7 @@ export function useEditorRendering({
       document.removeEventListener('visibilitychange', resetBlink);
       reducedMotion.removeEventListener('change', resetBlink);
       reducedMotion.removeEventListener('change', stopMotion);
-      element.removeEventListener('wheel', rememberWheel);
-      input.removeEventListener('keydown', handleKeyDown);
+      input.removeEventListener('keydown', stopMotion);
       input.removeEventListener('input', stopMotion);
       input.removeEventListener('compositionstart', stopMotion);
       input.removeEventListener('blur', stopMotion);

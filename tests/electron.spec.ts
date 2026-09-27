@@ -28,9 +28,9 @@ async function chooseWorkspace(page: Page, path: string, navigate = false): Prom
   await page.keyboard.press('Control+Enter');
 }
 
-test('wheel scrolling animates briefly and respects reduced motion', async () => {
+test('viewport movement animates with keyboard and wheel and respects settings', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-motion-'));
-  const content = Array.from({ length: 200 }, (_, index) => `line ${index + 1}`).join('\n');
+  const content = Array.from({ length: 200 }, (_, index) => `line ${index + 1} ${'text '.repeat(60)}`).join('\n');
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
@@ -55,6 +55,9 @@ test('wheel scrolling animates briefly and respects reduced motion', async () =>
     await expect(page.getByRole('button', { name: /scroll.txt/ })).toBeVisible();
     await page.keyboard.press('Enter');
     const canvas = page.locator('canvas:visible');
+    await expect(canvas).toHaveAttribute('aria-description', /line 1 /);
+    await page.keyboard.type(':set nowrap');
+    await page.keyboard.press('Enter');
     await expect(canvas).toHaveAttribute('aria-description', /line 20/);
     await canvas.evaluate((surface) => {
       const context = (surface as HTMLCanvasElement).getContext('2d')!;
@@ -74,10 +77,18 @@ test('wheel scrolling animates briefly and respects reduced motion', async () =>
     let frames = await canvas.getAttribute('data-animation-frames');
     await page.waitForTimeout(150);
     expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
-    for (const key of ['Control+d', 'Control+u', 'Control+e', 'Control+y']) {
+    for (const key of ['Control+d', 'Control+u', 'Control+e', 'Control+y', 'Control+f', 'Control+b']) {
       await page.keyboard.press(key);
       await expect
         .poll(async () => Number(await canvas.getAttribute('data-animation-frames')), { message: key })
+        .toBeGreaterThan(Number(frames));
+      await page.waitForTimeout(150);
+      frames = await canvas.getAttribute('data-animation-frames');
+    }
+    for (const command of ['G', 'gg', '100G', 'zt', 'zb', 'zz', '/line 150\n', 'zL', 'zH']) {
+      await page.keyboard.type(command);
+      await expect
+        .poll(async () => Number(await canvas.getAttribute('data-animation-frames')), { message: command })
         .toBeGreaterThan(Number(frames));
       await page.waitForTimeout(150);
       frames = await canvas.getAttribute('data-animation-frames');
@@ -100,7 +111,7 @@ test('wheel scrolling animates briefly and respects reduced motion', async () =>
     await page.mouse.wheel(0, 100);
     await expect(canvas).not.toHaveAttribute('aria-description', beforeDisabledScroll!);
     expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
-    for (const key of ['Control+d', 'Control+u']) {
+    for (const key of ['Control+d', 'Control+u', 'Control+f', 'Control+b']) {
       const beforeKey = await canvas.getAttribute('aria-description');
       await page.keyboard.press(key);
       await expect(canvas).not.toHaveAttribute('aria-description', beforeKey!);
