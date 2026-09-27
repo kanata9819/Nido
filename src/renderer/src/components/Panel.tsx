@@ -2,7 +2,7 @@ import type { Panel, Item } from '../types';
 import { Command, FolderOpen, FileCode2, X } from 'lucide-react';
 import styles from '../assets/Nido.module.css';
 import FolderPicker from './FolderPicker';
-import GitPanel from './GitPanel';
+import GitBrowser from './GitBrowser';
 
 interface PanelProps {
   workspaceId: string;
@@ -85,7 +85,7 @@ export function Panel({
           </button>
         </div>
         {panel === 'git' ? (
-          <GitPanel key={workspaceId} workspaceId={workspaceId} />
+          <GitBrowser key={workspaceId} workspaceId={workspaceId} onClose={focusEditor} />
         ) : panel === 'folders' ? (
           <FolderPicker
             initialPath={initialFolder}

@@ -58,6 +58,7 @@ export interface FileEntry {
 }
 export type Redraw = [string, ...unknown[][]][];
 export type NidoEvent =
+  | { type: 'filesChanged'; id: string }
   | { type: 'redraw'; id: string; events: Redraw }
   | { type: 'state'; id: string; state: SessionState }
   | { type: 'exit'; id: string }
@@ -76,6 +77,11 @@ export interface GitStatus {
 }
 
 export interface NidoAPI {
+  gitHistory(id: string, skip: number): Promise<GitCommitEntry[]>;
+  gitCommitFiles(id: string, hash: string): Promise<string[]>;
+  gitCommitDiff(id: string, hash: string, path: string): Promise<string>;
+  gitBranches(id: string): Promise<GitBranchEntry[]>;
+  gitSwitch(id: string, name: string, create: boolean): Promise<void>;
   gitStatus(id: string): Promise<GitStatus>;
   gitDiff(id: string, path: string, staged: boolean): Promise<string>;
   gitStage(id: string, path: string, staged: boolean): Promise<void>;
@@ -105,4 +111,17 @@ export interface NidoAPI {
   setLineEnding(id: string, format: 'LF' | 'CRLF'): Promise<void>;
   windowAction(action: 'minimize' | 'maximize' | 'close'): Promise<void>;
   onEvent(callback: (event: NidoEvent) => void): () => void;
+}
+
+export interface GitCommitEntry {
+  hash: string;
+  author: string;
+  date: string;
+  subject: string;
+}
+
+export interface GitBranchEntry {
+  name: string;
+  current: boolean;
+  remote: boolean;
 }

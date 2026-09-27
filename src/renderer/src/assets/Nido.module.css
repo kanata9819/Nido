@@ -204,7 +204,9 @@
   white-space: nowrap;
   color: #aeb8c3;
 }
-.treeItem > span:last-child {
+.treeName {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -288,6 +290,25 @@
 .fileTab svg {
   color: #80b9d9;
   flex-shrink: 0;
+}
+.gitBadge {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+}
+.gitName[data-status],
+.gitBadge[data-status] {
+  color: #d9b777;
+}
+.gitName[data-status='U'],
+.gitName[data-status='A'],
+.gitBadge[data-status='U'],
+.gitBadge[data-status='A'] {
+  color: #9fc68e;
+}
+.gitName[data-status='D'],
+.gitBadge[data-status='D'] {
+  color: #e59b96;
 }
 .fileTab .tabClose svg {
   color: #9aa6b0;

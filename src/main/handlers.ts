@@ -2,7 +2,17 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain } from 'electron';
 import { dirname, isAbsolute, join } from 'node:path';
 import { readdir, realpath } from 'node:fs/promises';
 import { Session } from './session';
-import { gitStatus, gitDiff, gitStage, gitCommit } from './git';
+import {
+  gitStatus,
+  gitDiff,
+  gitStage,
+  gitCommit,
+  gitHistory,
+  gitCommitFiles,
+  gitCommitDiff,
+  gitBranches,
+  gitSwitch
+} from './git';
 import { readLayout, writeLayout } from './persistence';
 import type { DebugAction, NidoEvent, Workspace } from '../shared/types';
 
@@ -225,6 +235,31 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
   handle('pasteClipboard', async (id) => session(id).paste(await clipboard.readText()));
   handle('files', (id, path) => session(id).files(text(path)));
   handle('gitStatus', (id) => gitStatus(session(id).workspace.root));
+  handle('gitHistory', (id, skip) => {
+    if (typeof skip !== 'number') {
+      throw new Error('Invalid history offset.');
+    }
+    return gitHistory(session(id).workspace.root, skip);
+  });
+  handle('gitCommitFiles', (id, hash) => gitCommitFiles(session(id).workspace.root, text(hash)));
+  handle('gitCommitDiff', (id, hash, path) => gitCommitDiff(session(id).workspace.root, text(hash), text(path)));
+  handle('gitBranches', (id) => gitBranches(session(id).workspace.root));
+  handle('gitSwitch', async (id, name, create) => {
+    const current = session(id);
+    if (typeof create !== 'boolean') {
+      throw new Error('Invalid branch action.');
+    }
+    for (const open of sessions.values()) {
+      if (await open.modified()) {
+        throw new Error('Save unsaved editor changes before switching branches.');
+      }
+    }
+    await gitSwitch(current.workspace.root, text(name), create);
+    for (const open of sessions.values()) {
+      await open.refreshFiles();
+      send({ type: 'filesChanged', id: open.workspace.id });
+    }
+  });
   for (const [name, action] of [
     ['gitDiff', gitDiff],
     ['gitStage', gitStage]

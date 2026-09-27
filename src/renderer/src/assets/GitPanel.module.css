@@ -27,6 +27,18 @@
 .panel button:disabled {
   opacity: 0.4;
 }
+.panel button[aria-current='page'] {
+  color: #a5ce91;
+  background: #303a40;
+}
+.commit input {
+  flex: 1;
+  min-width: 0;
+  background: #111315;
+  color: inherit;
+  padding: 8px;
+  border: 1px solid #465047;
+}
 .content {
   display: flex;
   height: min(48vh, 480px);

@@ -1,8 +1,119 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { GitChange, GitStatus } from '../shared/types';
+import type { GitChange, GitStatus, GitCommitEntry, GitBranchEntry } from '../shared/types';
 
 const exec = promisify(execFile);
+
+export async function gitHistory(cwd: string, skip: number): Promise<GitCommitEntry[]> {
+  if (!Number.isSafeInteger(skip) || skip < 0) {
+    throw new Error('Invalid history offset.');
+  }
+  // An unborn repository has no commits, but other Git errors must still be reported.
+  const refs = await git(cwd, ['rev-parse', '--is-inside-work-tree']);
+  if (refs.trim() !== 'true') {
+    throw new Error('Open a Git working tree.');
+  }
+  try {
+    await git(cwd, ['rev-parse', '--verify', 'HEAD']);
+  } catch {
+    return [];
+  }
+  const fields = (
+    await git(cwd, ['log', '-z', '--max-count=100', `--skip=${skip}`, '--format=%H%x00%an%x00%aI%x00%s', 'HEAD', '--'])
+  ).split('\0');
+  const commits: GitCommitEntry[] = [];
+  for (let i = 0; i + 3 < fields.length; i += 4) {
+    commits.push({ hash: fields[i], author: fields[i + 1], date: fields[i + 2], subject: fields[i + 3] });
+  }
+  return commits;
+}
+
+function commitHash(hash: string): string {
+  if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(hash)) {
+    throw new Error('Invalid commit.');
+  }
+  return hash;
+}
+
+export async function gitCommitFiles(cwd: string, hash: string): Promise<string[]> {
+  const root = (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
+  return (
+    await git(root, [
+      'show',
+      '--format=',
+      '--first-parent',
+      '--no-renames',
+      '--name-only',
+      '-z',
+      commitHash(hash),
+      '--'
+    ])
+  )
+    .split('\0')
+    .filter(Boolean);
+}
+
+export async function gitCommitDiff(cwd: string, hash: string, path: string): Promise<string> {
+  if (!(await gitCommitFiles(cwd, hash)).includes(path)) {
+    throw new Error('File is not part of this commit.');
+  }
+  const root = (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
+  return git(root, [
+    'show',
+    '--format=',
+    '--first-parent',
+    '--no-renames',
+    '--no-ext-diff',
+    '--no-textconv',
+    '--no-color',
+    commitHash(hash),
+    '--',
+    path
+  ]);
+}
+
+export async function gitBranches(cwd: string): Promise<GitBranchEntry[]> {
+  const output = await git(cwd, [
+    'for-each-ref',
+    '--sort=refname',
+    '--format=%(refname)%00%(HEAD)%00%(symref)',
+    'refs/heads',
+    'refs/remotes'
+  ]);
+  return output
+    .split('\n')
+    .filter(Boolean)
+    .flatMap((line) => {
+      const [ref, head, symbolic] = line.split('\0');
+      if (symbolic?.trim()) {
+        return [];
+      }
+      return [
+        {
+          name: ref.replace(/^refs\/(heads|remotes)\//, ''),
+          current: head === '*',
+          remote: ref.startsWith('refs/remotes/')
+        }
+      ];
+    });
+}
+
+export async function gitSwitch(cwd: string, name: string, create: boolean): Promise<void> {
+  if (!name || name.startsWith('-') || name.length > 1000) {
+    throw new Error('Invalid branch name.');
+  }
+  if (create) {
+    await git(cwd, ['check-ref-format', `refs/heads/${name}`]);
+    await git(cwd, ['switch', '-c', name]);
+    return;
+  }
+  const branches = await gitBranches(cwd);
+  const branch = branches.find((item) => `refs/${item.remote ? 'remotes' : 'heads'}/${item.name}` === name);
+  if (!branch) {
+    throw new Error('Branch no longer exists. Refresh the list.');
+  }
+  await git(cwd, branch.remote ? ['switch', '--track', name] : ['switch', '--no-guess', branch.name]);
+}
 
 async function git(cwd: string, args: string[], diff = false): Promise<string> {
   try {

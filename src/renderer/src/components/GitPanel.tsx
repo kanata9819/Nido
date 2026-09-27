@@ -2,11 +2,20 @@ import { useEffect, useRef, useState } from 'react';
 import type { GitChange, GitStatus } from '../../../shared/types';
 import styles from '../assets/GitPanel.module.css';
 
-export default function GitPanel({ workspaceId }: { workspaceId: string }): React.JSX.Element {
+export default function GitPanel({
+  workspaceId,
+  onBusyChange,
+  message,
+  setMessage
+}: {
+  workspaceId: string;
+  onBusyChange?: (busy: boolean) => void;
+  message: string;
+  setMessage: (message: string) => void;
+}): React.JSX.Element {
   const [status, setStatus] = useState<GitStatus>();
   const [selected, setSelected] = useState('');
   const [diff, setDiff] = useState('');
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -31,6 +40,7 @@ export default function GitPanel({ workspaceId }: { workspaceId: string }): Reac
     }
     locked.current = true;
     setBusy(true);
+    onBusyChange?.(true);
     setError('');
     setNotice('');
     try {
@@ -41,6 +51,7 @@ export default function GitPanel({ workspaceId }: { workspaceId: string }): Reac
     } finally {
       locked.current = false;
       setBusy(false);
+      onBusyChange?.(false);
     }
   }
 
@@ -179,7 +190,7 @@ export default function GitPanel({ workspaceId }: { workspaceId: string }): Reac
           ))}
           {status && !changes.length && <p>Working tree clean.</p>}
         </div>
-        <div className={styles.preview}>
+        <div className={styles.preview} data-git-preview>
           <div className={styles.toolbar}>
             <span>{current ? `${current.staged ? 'Staged' : 'Working tree'} · ${current.path}` : 'Diff'}</span>
             <button disabled={busy || !current} onClick={stage}>
@@ -233,6 +244,8 @@ export default function GitPanel({ workspaceId }: { workspaceId: string }): Reac
       )}
       <footer>
         {busy ? 'Working…' : 'j/k Select · s Stage · u Unstage · r Refresh · c Message · Esc Close'}
+        <br />
+        Ctrl+H/L List / Diff · j/k Scroll diff · Ctrl+D/U Half page · Ctrl+F/B Page · g/G Top / Bottom
         <br />
         Saved files only · Changes cover the entire repository.
       </footer>

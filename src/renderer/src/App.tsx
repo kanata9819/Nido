@@ -24,6 +24,7 @@ import ReferencesPanel from './components/ReferencesPanel';
 import Sidebar from './Sidebar';
 import { buildItems, filename } from './commands';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { gitFileKey, useGitFileStatus } from './hooks/useGitFileStatus';
 import { Panel as PanelComponent } from './components/Panel';
 import styles from './assets/Nido.module.css';
 
@@ -107,6 +108,7 @@ export default function App(): React.JSX.Element {
     mode = useRef<Record<string, string>>({});
   const active = workspaces.some((w) => w.id === selectedWorkspace) ? selectedWorkspace : workspaces[0]?.id || '';
   const state = states[active] || defaultState;
+  const gitFiles = useGitFileStatus(active, state.buffers, panel);
   const hasDebugger = !!state.debug;
   useEffect(() => {
     if (state.references) {
@@ -550,6 +552,7 @@ export default function App(): React.JSX.Element {
           workspace?.kind !== 'terminal' &&
           workspaces.map((w) => (
             <Sidebar
+              gitFiles={w.id === active ? gitFiles : {}}
               width={sidebarWidth}
               onResize={resizeSidebar}
               key={w.id}
@@ -564,33 +567,48 @@ export default function App(): React.JSX.Element {
           {workspace ? (
             <>
               <div className={styles.fileTabs} role="tablist" aria-label="Files" hidden={workspace.kind === 'terminal'}>
-                {state.buffers.map((buffer) => (
-                  <div
-                    key={buffer.id}
-                    className={`${styles.fileTab} ${state.current === buffer.id ? styles.activeFile : ''}`}
-                  >
-                    <button
-                      role="tab"
-                      aria-selected={state.current === buffer.id}
-                      title={buffer.name}
-                      onClick={() => {
-                        run(window.nido.selectBuffer(active, buffer.id));
-                        focusEditor();
-                      }}
+                {state.buffers.map((buffer) => {
+                  const decoration = gitFiles[gitFileKey(buffer.name)];
+                  return (
+                    <div
+                      key={buffer.id}
+                      className={`${styles.fileTab} ${state.current === buffer.id ? styles.activeFile : ''}`}
                     >
-                      <FileIcon path={buffer.name} />
-                      <span>{filename(buffer.name)}</span>
-                      {buffer.modified && <span className={styles.unsaved} aria-label="Unsaved" />}
-                    </button>
-                    <button
-                      className={styles.tabClose}
-                      aria-label={`Close file ${filename(buffer.name)}`}
-                      onClick={() => run(window.nido.closeBuffer(active, buffer.id))}
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
+                      <button
+                        role="tab"
+                        aria-selected={state.current === buffer.id}
+                        title={buffer.name}
+                        onClick={() => {
+                          run(window.nido.selectBuffer(active, buffer.id));
+                          focusEditor();
+                        }}
+                      >
+                        <FileIcon path={buffer.name} />
+                        <span className={styles.gitName} data-status={decoration?.code}>
+                          {filename(buffer.name)}
+                        </span>
+                        {decoration && (
+                          <span
+                            className={styles.gitBadge}
+                            data-status={decoration.code}
+                            title={decoration.title}
+                            aria-label={decoration.title}
+                          >
+                            {decoration.code}
+                          </span>
+                        )}
+                        {buffer.modified && <span className={styles.unsaved} aria-label="Unsaved" />}
+                      </button>
+                      <button
+                        className={styles.tabClose}
+                        aria-label={`Close file ${filename(buffer.name)}`}
+                        onClick={() => run(window.nido.closeBuffer(active, buffer.id))}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
               <div className={styles.breadcrumb}>
                 <span>{workspace.name}</span>

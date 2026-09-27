@@ -64,6 +64,9 @@ export function useKeyboardShortcuts({
     const terminalFocused = document.activeElement?.getAttribute('aria-label') === 'Terminal input';
 
     if (event.key === 'Escape') {
+      if (panel === 'git') {
+        return;
+      }
       if (terminalFocused && !panel) {
         return;
       }

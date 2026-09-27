@@ -6,8 +6,10 @@ import { getVisibleEntries } from './sidebarTree';
 import { toggle } from './sidebarToggle';
 import { createOnKeyDown } from './sidebarKeyboard';
 import styles from './assets/Nido.module.css';
+import { gitFileKey, type Decoration } from './hooks/useGitFileStatus';
 
 interface Props {
+  gitFiles: Record<string, Decoration>;
   width: number;
   onResize: (width: number) => void;
   workspace: Workspace;
@@ -17,6 +19,7 @@ interface Props {
   onError: (message: string) => void;
 }
 export default function Sidebar({
+  gitFiles,
   workspace,
   active,
   currentFile,
@@ -29,6 +32,18 @@ export default function Sidebar({
   const [entries, setEntries] = useState<Record<string, FileEntry[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState('');
+  const [revision, setRevision] = useState(0);
+  useEffect(
+    () =>
+      window.nido.onEvent((event) => {
+        if (event.type === 'filesChanged' && event.id === workspace.id) {
+          setExpanded(new Set());
+          setSelected('');
+          setRevision((value) => value + 1);
+        }
+      }),
+    [workspace.id]
+  );
   const load = async (path: string): Promise<void> => {
     try {
       const files = await window.nido.files(workspace.id, path);
@@ -55,7 +70,7 @@ export default function Sidebar({
     return () => {
       cancelled = true;
     };
-  }, [workspace.id, onError]);
+  }, [workspace.id, onError, revision]);
 
   const visible = getVisibleEntries(entries, expanded);
 
@@ -142,39 +157,54 @@ export default function Sidebar({
           workspaceId: workspace.id
         })}
       >
-        {visible.map((entry) => (
-          <div
-            key={entry.path}
-            id={`file-${workspace.id}-${entry.path}`}
-            role="treeitem"
-            aria-level={entry.depth + 1}
-            aria-expanded={entry.directory ? expanded.has(entry.path) : undefined}
-            aria-selected={selected === entry.path}
-            className={`${styles.treeItem} ${selected === entry.path ? styles.treeSelected : ''} ${currentFile.endsWith(entry.path) ? styles.currentFile : ''}`}
-            style={{ paddingLeft: 14 + entry.depth * 16 }}
-            onClick={() => toggle({ entry, expanded, setExpanded, setSelected, onOpen, load })}
-          >
-            {entry.directory ? (
-              expanded.has(entry.path) ? (
-                <ChevronDown size={13} />
+        {visible.map((entry) => {
+          const decoration = entry.directory ? undefined : gitFiles[gitFileKey(`${workspace.root}/${entry.path}`)];
+          return (
+            <div
+              key={entry.path}
+              id={`file-${workspace.id}-${entry.path}`}
+              role="treeitem"
+              aria-level={entry.depth + 1}
+              aria-expanded={entry.directory ? expanded.has(entry.path) : undefined}
+              aria-selected={selected === entry.path}
+              className={`${styles.treeItem} ${selected === entry.path ? styles.treeSelected : ''} ${currentFile.endsWith(entry.path) ? styles.currentFile : ''}`}
+              style={{ paddingLeft: 14 + entry.depth * 16 }}
+              onClick={() => toggle({ entry, expanded, setExpanded, setSelected, onOpen, load })}
+            >
+              {entry.directory ? (
+                expanded.has(entry.path) ? (
+                  <ChevronDown size={13} />
+                ) : (
+                  <ChevronRight size={13} />
+                )
               ) : (
-                <ChevronRight size={13} />
-              )
-            ) : (
-              <span className={styles.treeSpacer} />
-            )}
-            {entry.directory ? (
-              expanded.has(entry.path) ? (
-                <FolderOpen size={15} />
+                <span className={styles.treeSpacer} />
+              )}
+              {entry.directory ? (
+                expanded.has(entry.path) ? (
+                  <FolderOpen size={15} />
+                ) : (
+                  <Folder size={15} />
+                )
               ) : (
-                <Folder size={15} />
-              )
-            ) : (
-              <FileIcon path={entry.path} className={styles.fileIcon} />
-            )}
-            <span>{entry.name}</span>
-          </div>
-        ))}
+                <FileIcon path={entry.path} className={styles.fileIcon} />
+              )}
+              <span className={`${styles.treeName} ${styles.gitName}`} data-status={decoration?.code}>
+                {entry.name}
+              </span>
+              {decoration && (
+                <span
+                  className={styles.gitBadge}
+                  data-status={decoration.code}
+                  title={decoration.title}
+                  aria-label={decoration.title}
+                >
+                  {decoration.code}
+                </span>
+              )}
+            </div>
+          );
+        })}
         {!visible.length && (
           <p className={styles.emptyTree}>
             No files yet.
