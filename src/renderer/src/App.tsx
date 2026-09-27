@@ -88,7 +88,15 @@ export default function App(): React.JSX.Element {
   const [focusTick, setFocusTick] = useState(0);
   const [sidebar, setSidebar] = useState(true);
   const [animations, setAnimations] = useState(() => localStorage.getItem('nido.animations') !== 'false');
+  const [scrollFollowCursor, setScrollFollowCursor] = useState(
+    () => localStorage.getItem('nido.scrollFollowCursor') !== 'false'
+  );
   const [formatOnSave, setFormatOnSave] = useState(() => localStorage.getItem('nido.formatOnSave') !== 'false');
+
+  useEffect(() => {
+    localStorage.setItem('nido.scrollFollowCursor', String(scrollFollowCursor));
+  }, [scrollFollowCursor]);
+
   useEffect(() => {
     localStorage.setItem('nido.formatOnSave', String(formatOnSave));
   }, [formatOnSave]);
@@ -703,6 +711,8 @@ export default function App(): React.JSX.Element {
               active={w.id === active}
               fontSize={fontSize}
               animations={animations}
+              scrollFollowCursor={scrollFollowCursor}
+              scrollCursor={states[w.id]?.scrollCursor}
               blocked={!!panel || leader}
               focusTick={focusTick}
               onError={report}
@@ -902,6 +912,8 @@ export default function App(): React.JSX.Element {
         workspaceId={active}
         animations={animations}
         setAnimations={setAnimations}
+        scrollFollowCursor={scrollFollowCursor}
+        setScrollFollowCursor={setScrollFollowCursor}
         formatOnSave={formatOnSave}
         setFormatOnSave={setFormatOnSave}
         initialFolder={workspace?.root || ''}

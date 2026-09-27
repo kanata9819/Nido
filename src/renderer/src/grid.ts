@@ -24,6 +24,7 @@ export class Grid {
   columns = 0;
   rows = 0;
   cursor = { row: 0, column: 0 };
+  scrollCursor?: { row: number; column: number };
   foreground = '#d6dce2';
   background = '#191e23';
   mode = 'normal';
@@ -173,8 +174,15 @@ export class Grid {
         }
       }
     }
-    if (focused && !this.busy && /^(normal|insert|replace|visual)/.test(this.mode) && this.cursor.row < this.rows) {
-      const y = this.cursor.row * cellHeight;
+    const cursor = this.scrollCursor ?? this.cursor;
+    if (
+      focused &&
+      !this.busy &&
+      /^(normal|insert|replace|visual)/.test(this.mode) &&
+      cursor.row >= 0 &&
+      cursor.row < this.rows
+    ) {
+      const y = cursor.row * cellHeight;
       ctx.fillStyle = '#46515c';
       ctx.fillRect(0, y, width, 1);
       ctx.fillRect(0, y + cellHeight - 1, width, 1);
@@ -184,9 +192,10 @@ export class Grid {
   }
 
   private drawCursor(ctx: CanvasRenderingContext2D, cellWidth: number, cellHeight: number, focused: boolean): void {
-    if (!this.busy && this.cursor.row < this.rows && (!focused || this.cursorVisible)) {
-      const x = this.cursor.column * cellWidth;
-      const y = this.cursor.row * cellHeight;
+    const cursor = this.scrollCursor ?? this.cursor;
+    if (!this.busy && cursor.row >= 0 && cursor.row < this.rows && (!focused || this.cursorVisible)) {
+      const x = cursor.column * cellWidth;
+      const y = cursor.row * cellHeight;
       ctx.fillStyle = '#b8bec8';
       ctx.strokeStyle = '#8b929c';
       if (!focused) {

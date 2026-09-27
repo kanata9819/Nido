@@ -92,7 +92,8 @@ local function publish()
     table.insert(buffers, {id=b, name=vim.api.nvim_buf_get_name(b), modified=vim.bo[b].modified})
    end
   end
-  local pos = vim.api.nvim_win_get_cursor(0)
+  local scroll = require('nido_scroll')
+  local pos = scroll.cursor() or vim.api.nvim_win_get_cursor(0)
   local ending = vim.g.nido and require('nido_eol').detect() or nil
   if ending == 'Mixed' and not vim.b.nido_mixed_notified then
     vim.b.nido_mixed_notified = true
@@ -119,7 +120,7 @@ local function publish()
     and buffers[1].name == '' and not buffers[1].modified and vim.bo.buftype == ''
     and vim.api.nvim_buf_line_count(0) == 1 and vim.api.nvim_get_current_line() == ''
     and #vim.api.nvim_tabpage_list_wins(0) == 1
-  vim.rpcnotify(channel, 'nido:state', {diagnostics=diagnostics, buffers=buffers, current=vim.api.nvim_get_current_buf(),
+  vim.rpcnotify(channel, 'nido:state', {scrollCursor=scroll.screen_cursor(), diagnostics=diagnostics, buffers=buffers, current=vim.api.nvim_get_current_buf(),
    lineEnding=ending, lsp=table.concat(clients, ', '), lspProgress=table.concat(tasks, ' / '), empty=empty, mode=vim.api.nvim_get_mode().mode, line=pos[1], column=pos[2]+1, filetype=vim.bo.filetype})
  end)
 end
@@ -141,7 +142,7 @@ vim.api.nvim_create_autocmd('LspProgress', {callback=function(event)
   publish()
 end})
 vim.api.nvim_create_autocmd({'BufEnter','BufAdd','BufDelete','BufModifiedSet','BufFilePost','BufWritePost','ModeChanged','CursorMoved','CursorMovedI','FileType','TextChanged','TextChangedI','WinEnter','WinClosed','LspAttach','LspDetach'}, {callback=publish})
-vim.api.nvim_create_autocmd('User', {pattern='NidoLineEndings', callback=publish})
+vim.api.nvim_create_autocmd('User', {pattern={'NidoLineEndings','NidoScroll'}, callback=publish})
 vim.api.nvim_create_autocmd('OptionSet', {pattern={'fileformat','endofline'}, callback=publish})
 publish()
 `;
@@ -171,7 +172,8 @@ export class Session {
   private stopped = false;
   private attached = false;
   private inputQueue: Promise<void> = Promise.resolve();
-  private pendingScroll: Redraw = [];
+  private pendingRedraw: Redraw = [];
+  private scrollDetached = false;
 
   private constructor(
     root: string,
@@ -210,18 +212,24 @@ export class Session {
     this.fileService = new SessionFiles(this.workspace.root, this.client);
     this.client.on('notification', (method: string, args: unknown[]) => {
       if (method === 'nido:scroll') {
-        this.pendingScroll.push(['nido_scroll', args[0] as unknown[]]);
+        this.pendingRedraw.push(['nido_scroll', args[0] as unknown[]]);
       }
       if (method === 'nido:message') {
         this.emit({ type: 'error', id: this.workspace.id, message: String(args[0]) });
       }
       if (method === 'redraw') {
         // Other events can contain Neovim Window handles, which cannot cross Electron IPC.
-        const events = (args as Redraw).filter(([name]) => gridEvents.has(name));
-        events.unshift(...this.pendingScroll);
-        this.pendingScroll = [];
-        if (events.length) {
-          this.emit({ type: 'redraw', id: this.workspace.id, events });
+        for (const event of args as Redraw) {
+          if (!gridEvents.has(event[0])) {
+            continue;
+          }
+          this.pendingRedraw.push(event);
+          // A repaint can span several RPC notifications. Never expose a partial frame.
+          if (event[0] === 'flush') {
+            const events = this.pendingRedraw;
+            this.pendingRedraw = [];
+            this.emit({ type: 'redraw', id: this.workspace.id, events });
+          }
         }
       }
       if (method === 'nido:state') {
@@ -382,6 +390,7 @@ export class Session {
   input(keys: string): Promise<void> {
     // nvim_input can accept only part of a byte sequence when its input queue is full.
     const next = this.inputQueue.then(async () => {
+      await this.restoreScroll();
       if (this.workspace.kind === 'terminal') {
         await this.client.request('nvim_command', ['startinsert']);
       }
@@ -399,6 +408,7 @@ export class Session {
   }
 
   async paste(text: string): Promise<void> {
+    await this.restoreScroll();
     if (this.workspace.kind === 'terminal') {
       await this.client.request('nvim_command', ['startinsert']);
     }
@@ -409,20 +419,27 @@ export class Session {
     await this.write('write', format);
   }
 
-  async scroll(lines: number): Promise<void> {
+  private async restoreScroll(): Promise<void> {
+    if (!this.scrollDetached) {
+      return;
+    }
+    await this.client.request('nvim_exec_lua', ["require('nido_scroll').restore()", []]);
+    this.scrollDetached = false;
+  }
+
+  async scroll(lines: number, follow = true): Promise<void> {
     if (!lines) {
       return;
     }
+    this.scrollDetached = !follow;
     if (this.workspace.kind === 'terminal') {
       await this.client.request('nvim_command', ['stopinsert']);
     }
-    await this.client.request('nvim_exec_lua', [
-      'local n = ...; vim.cmd.normal({args={math.abs(n) .. string.char(n > 0 and 5 or 25)}, bang=true})',
-      [lines]
-    ]);
+    await this.client.request('nvim_exec_lua', ["require('nido_scroll').scroll(...)", [lines, follow]]);
   }
 
   async debug(action: DebugAction, target?: number): Promise<void> {
+    await this.restoreScroll();
     const [channel] = (await this.client.request('nvim_get_api_info', [])) as [number, unknown];
     await this.client.request('nvim_exec_lua', ["require('nido_debug').action(...)", [action, channel, target ?? 0]]);
   }
@@ -432,6 +449,7 @@ export class Session {
   }
 
   async snapshot(): Promise<SavedWorkspace> {
+    await this.restoreScroll();
     if (this.workspace.kind === 'terminal') {
       return { root: this.workspace.root, kind: 'terminal', files: [], current: '' };
     }
@@ -506,6 +524,7 @@ export class Session {
   }
 
   private async write(command: 'write' | 'wall', format = false): Promise<void> {
+    await this.restoreScroll();
     const error = (await this.client.request('nvim_exec_lua', [
       `local command, format = ...
 local ok, err = pcall(function()

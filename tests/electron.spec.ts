@@ -455,6 +455,20 @@ test('viewport movement animates with keyboard and wheel and respects settings',
       .toBeGreaterThan(Number(frames));
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await toggle.uncheck();
+    const cursorFollow = page.getByRole('checkbox', { name: 'Cursor follows scrolling' });
+    await expect(cursorFollow).toBeChecked();
+    await cursorFollow.uncheck();
+    await page.keyboard.press('Escape');
+    await page.keyboard.type('20G0');
+    await expect(page.getByText('Ln 20, Col 1', { exact: true })).toBeVisible();
+    const anchoredView = await canvas.getAttribute('aria-description');
+    await canvas.hover();
+    await page.mouse.wheel(0, 1500);
+    await expect(canvas).not.toHaveAttribute('aria-description', anchoredView!);
+    await expect(page.getByText('Ln 20, Col 1', { exact: true })).toBeVisible();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByText('Ln 20, Col 2', { exact: true })).toBeVisible();
+    await expect(canvas).toHaveAttribute('aria-description', /line 20 /);
     await running.close();
     running = await electron.launch({
       executablePath,
@@ -464,6 +478,7 @@ test('viewport movement animates with keyboard and wheel and respects settings',
     const restoredPage = await running.firstWindow();
     await restoredPage.getByRole('button', { name: 'Settings', exact: true }).click();
     await expect(restoredPage.getByRole('checkbox', { name: 'UI animations' })).not.toBeChecked();
+    await expect(restoredPage.getByRole('checkbox', { name: 'Cursor follows scrolling' })).not.toBeChecked();
     expect(errors).toEqual([]);
   } finally {
     await running?.close();

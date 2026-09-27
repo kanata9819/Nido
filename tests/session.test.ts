@@ -8,6 +8,68 @@ import { Grid, vimKey } from '../src/renderer/src/grid';
 import { accumulateScroll, scrollOffset } from '../src/renderer/src/scroll';
 import { readLayout, writeLayout } from '../src/main/persistence';
 import { fileDecorations, gitFileKey } from '../src/renderer/src/fileDecorations';
+import type { Redraw } from '../src/shared/types';
+
+test('wheel scrolling can retain the edit position and resumes input and paste at the anchor', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-scroll-anchor-'));
+  let session: Session | undefined;
+  try {
+    await writeFile(join(root, 'lines.txt'), Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n'));
+    session = await Session.create(root, () => {});
+    await session.openFile('lines.txt');
+    await session.client.request('nvim_exec_lua', ['vim.api.nvim_win_set_cursor(0, {20, 0})', []]);
+    await session.scroll(60, false);
+    assert.deepEqual(
+      await session.client.request('nvim_exec_lua', ["return require('nido_scroll').cursor()", []]),
+      [20, 0]
+    );
+    assert.equal(
+      await session.client.request('nvim_exec_lua', ["return require('nido_scroll').screen_cursor().row", []]),
+      -1
+    );
+    await session.input('iX<Esc>');
+    await new Promise((done) => setTimeout(done, 50));
+    assert.equal(await session.client.request('nvim_eval', ['getline(20)']), 'Xline 20');
+    await session.scroll(60, false);
+    await session.paste('Y');
+    assert.match(String(await session.client.request('nvim_eval', ['getline(20)'])), /Y/);
+    await session.scroll(60, true);
+    assert.equal(await session.client.request('nvim_exec_lua', ["return require('nido_scroll').cursor()", []]), null);
+    assert.ok(Number(await session.client.request('nvim_eval', ["line('.')"])) > 20);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('split redraw notifications remain invisible until flush and keep scroll metadata', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-redraw-'));
+  const frames: Redraw[] = [];
+  let session: Session | undefined;
+  try {
+    session = await Session.create(root, (event) => {
+      if (event.type === 'redraw') {
+        frames.push(event.events);
+      }
+    });
+    await session.client.request('nvim_eval', ['1']);
+    frames.length = 0;
+    const scroll = [1, 0, 23, 0, 80, -3, 0];
+    const first: Redraw = [['grid_line', [1, 0, 0, [['first', 0]]]]];
+    const second: Redraw = [['grid_line', [1, 1, 0, [['second', 0]]]]];
+    session.client.emit('notification', 'nido:scroll', [scroll]);
+    session.client.emit('notification', 'redraw', first);
+    session.client.emit('notification', 'redraw', second);
+    assert.equal(frames.length, 0);
+    session.client.emit('notification', 'redraw', [['flush', []], ...first]);
+    assert.deepEqual(frames, [[['nido_scroll', scroll], ...first, ...second, ['flush', []]]]);
+    session.client.emit('notification', 'redraw', [['flush', []]]);
+    assert.deepEqual(frames[1], [...first, ['flush', []]]);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test('save formats before writing only when enabled and a formatter is available', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-format-save-'));

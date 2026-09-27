@@ -5,6 +5,8 @@ import FolderPicker from './FolderPicker';
 import GitBrowser from './GitBrowser';
 
 interface PanelProps {
+  scrollFollowCursor: boolean;
+  setScrollFollowCursor: (value: boolean) => void;
   formatOnSave: boolean;
   setFormatOnSave: (value: boolean) => void;
   workspaceId: string;
@@ -39,6 +41,8 @@ const panelTitles = {
 };
 
 export function Panel({
+  scrollFollowCursor,
+  setScrollFollowCursor,
   formatOnSave,
   setFormatOnSave,
   workspaceId,
@@ -120,6 +124,14 @@ export function Panel({
                 type="checkbox"
                 checked={formatOnSave}
                 onChange={(event) => setFormatOnSave(event.target.checked)}
+              />
+            </label>
+            <label>
+              Cursor follows scrolling{' '}
+              <input
+                type="checkbox"
+                checked={scrollFollowCursor}
+                onChange={(event) => setScrollFollowCursor(event.target.checked)}
               />
             </label>
             <label>

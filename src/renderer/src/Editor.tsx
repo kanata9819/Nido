@@ -6,6 +6,8 @@ import { useEditorInput } from './hooks/useEditorInput';
 import styles from './assets/Nido.module.css';
 
 interface Props {
+  scrollFollowCursor?: boolean;
+  scrollCursor?: { row: number; column: number };
   terminal?: boolean;
   children?: ReactNode;
   id: string;
@@ -17,6 +19,8 @@ interface Props {
   onError: (message: string) => void;
 }
 export default function Editor({
+  scrollFollowCursor = true,
+  scrollCursor,
   terminal = false,
   children,
   id,
@@ -39,6 +43,10 @@ export default function Editor({
   }, [active, blocked, fontSize]);
   const paint = useRef<() => void>(() => {});
   const error = useRef(onError);
+  useEffect(() => {
+    grid.current.scrollCursor = scrollCursor;
+    paint.current();
+  }, [scrollCursor]);
 
   useEffect(() => {
     error.current = onError;
@@ -93,7 +101,7 @@ export default function Editor({
         );
         wheel.current = { remainder: result.remainder, time: now };
         if (result.lines) {
-          send(window.nido.scroll(id, Math.max(-1000, Math.min(1000, result.lines))));
+          send(window.nido.scroll(id, Math.max(-1000, Math.min(1000, result.lines)), terminal || scrollFollowCursor));
         }
       }}
     >
