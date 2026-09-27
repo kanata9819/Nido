@@ -37,6 +37,57 @@ test('typing hides the pointer and moving or clicking restores it', async () => 
   }
 });
 
+test('font family updates the canvas and survives reopening settings and restarting', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-font-'));
+  const workspace = join(root, 'workspace');
+  await mkdir(workspace);
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const executablePath = process.env.NIDO_PACKAGED_EXE;
+  const options = {
+    executablePath,
+    args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+    env
+  };
+  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  try {
+    running = await electron.launch(options);
+    let page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, workspace);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    const canvasFont = (): Promise<string> =>
+      page.locator('canvas:visible').evaluate((canvas: HTMLCanvasElement) => canvas.getContext('2d')!.font);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    let input = page.getByRole('textbox', { name: 'Font family', exact: true });
+    const defaultFamily = await input.inputValue();
+    expect(defaultFamily).toContain('Cascadia Code');
+    await input.fill('monospace');
+    await expect.poll(canvasFont).toBe('15px monospace');
+    await input.fill('   ');
+    await expect.poll(canvasFont).toContain('Cascadia Code');
+    await input.fill('Consolas');
+    await expect.poll(canvasFont).toBe('15px Consolas');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(input).toHaveValue('Consolas');
+    await running.close();
+    running = await electron.launch(options);
+    page = await running.firstWindow();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    input = page.getByRole('textbox', { name: 'Font family', exact: true });
+    await expect(input).toHaveValue('Consolas');
+    await expect.poll(canvasFont).toBe('15px Consolas');
+    await expect(input).toHaveCSS('background-color', 'rgb(18, 20, 22)');
+    await input.focus();
+    await page.screenshot({ path: 'test-results/nido-font-settings.png' });
+  } finally {
+    await running?.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('window size and maximized state survive restart', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-window-'));
   const env = { ...process.env };

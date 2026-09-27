@@ -29,6 +29,7 @@ interface PanelProps {
   setSidebar: (value: boolean) => void;
   setQuery: (value: string) => void;
   setSelection: React.Dispatch<React.SetStateAction<number>>;
+  fontFamily: string;
   setFontFamily: React.Dispatch<React.SetStateAction<string>>;
 }
 
@@ -86,6 +87,7 @@ export function Panel({
   setSidebar,
   setQuery,
   setSelection,
+  fontFamily,
   setFontFamily
 }: PanelProps): React.JSX.Element | null {
   const results = useRef<HTMLDivElement>(null);
@@ -149,6 +151,17 @@ export function Panel({
               />
               <span>{fontSize}px</span>
             </label>
+            <label className={styles.fontFamilyField}>
+              Font family
+              <input
+                type="text"
+                value={fontFamily}
+                placeholder="Default editor font"
+                spellCheck={false}
+                autoComplete="off"
+                onChange={(event) => setFontFamily(event.target.value)}
+              />
+            </label>
             <label>
               Show file explorer{' '}
               <input type="checkbox" checked={sidebar} onChange={(e) => setSidebar(e.target.checked)} />
@@ -172,9 +185,6 @@ export function Panel({
             <label>
               UI animations{' '}
               <input type="checkbox" checked={animations} onChange={(event) => setAnimations(event.target.checked)} />
-            </label>
-            <label>
-              Font family <input type="text" onChange={(event) => setFontFamily(event.target.value)} />
             </label>
             <p>
               Vim editing · Space commands · Ctrl+Tab workspaces

@@ -282,7 +282,7 @@ export function useEditorRendering({
       unsubscribe();
       cancelAnimationFrame(frame);
     };
-  }, [id, fontSize]);
+  }, [id, fontSize, fontFamily]);
 
   useEffect(() => {
     if (active && !blocked) {
