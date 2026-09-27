@@ -128,6 +128,7 @@ export default function App(): React.JSX.Element {
     () => localStorage.getItem('nido.scrollFollowCursor') !== 'false'
   );
   const [formatOnSave, setFormatOnSave] = useState(() => localStorage.getItem('nido.formatOnSave') !== 'false');
+  const [fontFamily, setFontFamily] = useState('"Cascadia Code", "Consolas", "Yu Gothic UI", monospace');
 
   useEffect(() => {
     localStorage.setItem('nido.scrollFollowCursor', String(scrollFollowCursor));
@@ -760,6 +761,7 @@ export default function App(): React.JSX.Element {
               scrollCursor={states[w.id]?.scrollCursor}
               blocked={!!panel || leader}
               focusTick={focusTick}
+              fontFamily={fontFamily}
               onError={report}
             >
               {w.kind !== 'terminal' && states[w.id]?.empty && states[w.id]?.mode === 'n' && (
@@ -829,6 +831,7 @@ export default function App(): React.JSX.Element {
                   animations={false}
                   blocked={!!panel || leader}
                   focusTick={terminalFocusTick}
+                  fontFamily={fontFamily}
                   onError={report}
                 />
               </section>
@@ -977,6 +980,7 @@ export default function App(): React.JSX.Element {
         setSidebar={setSidebar}
         setQuery={setQuery}
         setSelection={setSelection}
+        setFontFamily={setFontFamily}
       />
     </div>
   );

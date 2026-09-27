@@ -29,6 +29,7 @@ interface PanelProps {
   setSidebar: (value: boolean) => void;
   setQuery: (value: string) => void;
   setSelection: React.Dispatch<React.SetStateAction<number>>;
+  setFontFamily: React.Dispatch<React.SetStateAction<string>>;
 }
 
 const panelTitles = {
@@ -84,7 +85,8 @@ export function Panel({
   sidebar,
   setSidebar,
   setQuery,
-  setSelection
+  setSelection,
+  setFontFamily
 }: PanelProps): React.JSX.Element | null {
   const results = useRef<HTMLDivElement>(null);
   const filter = useRef<HTMLInputElement>(null);
@@ -170,6 +172,9 @@ export function Panel({
             <label>
               UI animations{' '}
               <input type="checkbox" checked={animations} onChange={(event) => setAnimations(event.target.checked)} />
+            </label>
+            <label>
+              Font family <input type="text" onChange={(event) => setFontFamily(event.target.value)} />
             </label>
             <p>
               Vim editing · Space commands · Ctrl+Tab workspaces

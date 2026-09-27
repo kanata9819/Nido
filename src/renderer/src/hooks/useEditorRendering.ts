@@ -17,6 +17,7 @@ interface UseEditorRenderingOptions {
   gridRef: RefObject<Grid>;
   attachedRef: RefObject<boolean>;
   paintRef: RefObject<() => void>;
+  fontFamily: string;
 }
 
 export function useEditorRendering({
@@ -33,13 +34,15 @@ export function useEditorRendering({
   inputRef,
   gridRef,
   attachedRef,
-  paintRef
+  paintRef,
+  fontFamily
 }: UseEditorRenderingOptions): void {
   const animationsRef = useRef(animations);
   useEffect(() => {
     animationsRef.current = animations;
     paintRef.current();
   }, [animations]);
+
   useEffect(() => {
     errorRef.current = onError;
   }, [onError]);
@@ -61,6 +64,7 @@ export function useEditorRendering({
     let motion:
       | { top: number; bottom: number; left: number; right: number; distance: number; distanceX: number; start: number }
       | undefined;
+
     const stopMotion = (): void => {
       motion = undefined;
       schedule();
@@ -75,6 +79,7 @@ export function useEditorRendering({
         element.clientWidth,
         element.clientHeight,
         fontSize,
+        fontFamily,
         document.activeElement === inputRef.current
       );
       cellWidth = metrics.cellWidth;
@@ -164,6 +169,7 @@ export function useEditorRendering({
       !element.hidden &&
       document.activeElement === input &&
       !reducedMotion.matches;
+
     const blink = (): void => {
       if (!canBlink()) {
         return;
@@ -172,6 +178,7 @@ export function useEditorRendering({
       schedule();
       blinkTimer = setTimeout(blink, 550);
     };
+
     const resetBlink = (): void => {
       clearTimeout(blinkTimer);
       gridRef.current.cursorVisible = true;
@@ -180,9 +187,11 @@ export function useEditorRendering({
         blinkTimer = setTimeout(blink, 550);
       }
     };
+
     for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart']) {
       input.addEventListener(event, resetBlink);
     }
+
     window.addEventListener('focus', resetBlink);
     window.addEventListener('blur', resetBlink);
     document.addEventListener('visibilitychange', resetBlink);
@@ -233,11 +242,13 @@ export function useEditorRendering({
         } else if (scrolls.length) {
           motion = undefined;
         }
+
         const { row, column } = gridRef.current.cursor;
         const mode = gridRef.current.mode;
         if (gridRef.current.apply(event.events)) {
           schedule();
         }
+
         if (
           row !== gridRef.current.cursor.row ||
           column !== gridRef.current.cursor.column ||

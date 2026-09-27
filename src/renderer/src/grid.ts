@@ -171,6 +171,7 @@ export class Grid {
     width: number,
     height: number,
     fontSize: number,
+    fontFamily: string,
     focused: boolean
   ): { cellWidth: number; cellHeight: number } {
     const ctx = canvas.getContext('2d')!;
@@ -180,7 +181,7 @@ export class Grid {
       canvas.height = Math.round(height * dpr);
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const family = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
+    const family = fontFamily;
     ctx.font = `${fontSize}px ${family}`;
     const cellWidth = ctx.measureText('M').width;
     const cellHeight = Math.ceil(fontSize * 1.65);

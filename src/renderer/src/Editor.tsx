@@ -16,6 +16,7 @@ interface Props {
   animations: boolean;
   blocked: boolean;
   focusTick: number;
+  fontFamily: string;
   onError: (message: string) => void;
 }
 export default function Editor({
@@ -29,6 +30,7 @@ export default function Editor({
   animations,
   blocked,
   focusTick,
+  fontFamily,
   onError
 }: Props): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null);
@@ -41,6 +43,7 @@ export default function Editor({
   useEffect(() => {
     wheel.current = { remainder: 0, time: 0 };
   }, [active, blocked, fontSize]);
+
   const paint = useRef<() => void>(() => {});
   const error = useRef(onError);
   useEffect(() => {
@@ -66,7 +69,8 @@ export default function Editor({
     inputRef: input,
     gridRef: grid,
     attachedRef: attached,
-    paintRef: paint
+    paintRef: paint,
+    fontFamily: fontFamily
   });
 
   const inputHandlers = useEditorInput({

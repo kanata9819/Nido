@@ -18,6 +18,7 @@ interface Props {
   onOpen: (path: string) => void;
   onError: (message: string) => void;
 }
+
 export default function Sidebar({
   gitFiles,
   workspace,
