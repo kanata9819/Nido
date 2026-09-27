@@ -60,71 +60,106 @@ export class Grid {
   apply(events: Redraw): boolean {
     let flush = false;
     for (const [name, ...calls] of events) {
-      if (name === 'flush') {
-        flush = true;
-      }
-
-      if (name === 'busy_start') {
-        this.busy = true;
-      }
-
-      if (name === 'busy_stop') {
-        this.busy = false;
+      switch (name) {
+        case 'flush': {
+          flush = true;
+          break;
+        }
+        case 'busy_start': {
+          this.busy = true;
+          break;
+        }
+        case 'busy_stop': {
+          this.busy = false;
+          break;
+        }
       }
 
       for (const args of calls) {
-        if (name === 'grid_resize' && args[0] === 1) {
-          this.columns = Number(args[1]);
-          this.rows = Number(args[2]);
-          this.cells = Array.from({ length: this.rows }, (_, row) =>
-            Array.from({ length: this.columns }, (_, col) => this.cells[row]?.[col] || { text: ' ', highlight: 0 })
-          );
-        } else if (name === 'grid_clear' && args[0] === 1) {
-          this.cells = Array.from({ length: this.rows }, () =>
-            Array.from({ length: this.columns }, () => ({ text: ' ', highlight: 0 }))
-          );
-        } else if (name === 'grid_line' && args[0] === 1) {
-          const row = this.cells[Number(args[1])];
-          let column = Number(args[2]);
-          let highlight = 0;
-          for (const cell of args[3] as [string, number?, number?][]) {
-            if (cell[1] !== undefined) {
-              highlight = cell[1];
+        switch (name) {
+          case 'grid_resize': {
+            if (args[0] !== 1) {
+              break;
             }
-            for (let i = 0; i < (cell[2] ?? 1); i++) {
-              if (row && column < this.columns) {
-                row[column] = { text: cell[0], highlight };
+            this.columns = Number(args[1]);
+            this.rows = Number(args[2]);
+            this.cells = Array.from({ length: this.rows }, (_, row) =>
+              Array.from({ length: this.columns }, (_, col) => this.cells[row]?.[col] || { text: ' ', highlight: 0 })
+            );
+            break;
+          }
+          case 'grid_clear': {
+            if (args[0] !== 1) {
+              break;
+            }
+            this.cells = Array.from({ length: this.rows }, () =>
+              Array.from({ length: this.columns }, () => ({ text: ' ', highlight: 0 }))
+            );
+            break;
+          }
+          case 'grid_line': {
+            if (args[0] !== 1) {
+              break;
+            }
+            const row = this.cells[Number(args[1])];
+            let column = Number(args[2]);
+            let highlight = 0;
+            for (const cell of args[3] as [string, number?, number?][]) {
+              if (cell[1] !== undefined) {
+                highlight = cell[1];
               }
+              for (let i = 0; i < (cell[2] ?? 1); i++) {
+                if (row && column < this.columns) {
+                  row[column] = { text: cell[0], highlight };
+                }
 
-              column++;
+                column++;
+              }
             }
+            break;
           }
-        } else if (name === 'grid_scroll' && args[0] === 1) {
-          const [, top, bottom, left, right, rows, columns] = args as number[];
-          const old = this.cells.map((row) => row.slice());
-          for (let row = top; row < bottom; row++) {
-            for (let col = left; col < right; col++) {
-              const sourceRow = row + rows;
-              const sourceCol = col + columns;
-              this.cells[row][col] =
-                sourceRow >= top && sourceRow < bottom && sourceCol >= left && sourceCol < right
-                  ? old[sourceRow][sourceCol]
-                  : { text: ' ', highlight: 0 };
+          case 'grid_scroll': {
+            if (args[0] !== 1) {
+              break;
             }
+            const [, top, bottom, left, right, rows, columns] = args as number[];
+            const old = this.cells.map((row) => row.slice());
+            for (let row = top; row < bottom; row++) {
+              for (let col = left; col < right; col++) {
+                const sourceRow = row + rows;
+                const sourceCol = col + columns;
+                this.cells[row][col] =
+                  sourceRow >= top && sourceRow < bottom && sourceCol >= left && sourceCol < right
+                    ? old[sourceRow][sourceCol]
+                    : { text: ' ', highlight: 0 };
+              }
+            }
+            break;
           }
-        } else if (name === 'hl_attr_define') {
-          this.highlights.set(Number(args[0]), args[1] as Highlight);
-        } else if (name === 'default_colors_set') {
-          if (Number(args[0]) >= 0) {
-            this.foreground = color(Number(args[0]));
+          case 'hl_attr_define': {
+            this.highlights.set(Number(args[0]), args[1] as Highlight);
+            break;
           }
-          if (Number(args[1]) >= 0) {
-            this.background = color(Number(args[1]));
+          case 'default_colors_set': {
+            if (Number(args[0]) >= 0) {
+              this.foreground = color(Number(args[0]));
+            }
+            if (Number(args[1]) >= 0) {
+              this.background = color(Number(args[1]));
+            }
+            break;
           }
-        } else if (name === 'grid_cursor_goto' && args[0] === 1) {
-          this.cursor = { row: Number(args[1]), column: Number(args[2]) };
-        } else if (name === 'mode_change') {
-          this.mode = String(args[0]);
+          case 'grid_cursor_goto': {
+            if (args[0] !== 1) {
+              break;
+            }
+            this.cursor = { row: Number(args[1]), column: Number(args[2]) };
+            break;
+          }
+          case 'mode_change': {
+            this.mode = String(args[0]);
+            break;
+          }
         }
       }
     }
