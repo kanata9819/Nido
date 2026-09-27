@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import { dirname, isAbsolute, join } from 'node:path';
 import { readdir, realpath } from 'node:fs/promises';
 import { Session } from './session';
@@ -236,6 +236,11 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
   });
   handle('resize', (id, columns, rows) => session(id).resize(integer(columns, 1000), integer(rows, 500)));
   handle('input', (id, keys) => session(id).input(text(keys)));
+  handle('openDocumentation', (value) => {
+    const url = new URL(text(value));
+    if (!['https:', 'http:'].includes(url.protocol)) throw new Error('Unsupported documentation URL.');
+    return shell.openExternal(url.href);
+  });
   handle('click', (id, row, column) => {
     if (typeof row !== 'number' || typeof column !== 'number') throw new Error('Invalid mouse position.');
     return session(id).click(integer(row + 1, 500) - 1, integer(column + 1, 1000) - 1);

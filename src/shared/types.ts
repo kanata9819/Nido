@@ -101,6 +101,7 @@ export interface NidoAPI {
   attach(id: string, columns: number, rows: number): Promise<void>;
   resize(id: string, columns: number, rows: number): Promise<void>;
   input(id: string, keys: string): Promise<void>;
+  openDocumentation(url: string): Promise<void>;
   click(id: string, row: number, column: number): Promise<void>;
   scroll(id: string, lines: number, follow?: boolean, pixel?: boolean): Promise<void>;
   paste(id: string, text: string): Promise<void>;

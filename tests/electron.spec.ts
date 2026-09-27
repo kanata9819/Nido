@@ -167,6 +167,21 @@ test('type information is a selectable Nido card with keyboard scrolling and dis
       ' * カーソル位置を更新します。',
       ' *',
       ' * Returns the **screen position** from `row` and `column`.',
+      ' *',
+      ' * ## Usage',
+      ' *',
+      ' * - **row**: vertical position',
+      ' * - *column*: horizontal position',
+      ' *',
+      ' * > Positions start at zero.',
+      ' *',
+      ' * | Field | Type |',
+      ' * | --- | --- |',
+      ' * | row | number |',
+      ' *',
+      ' * [Documentation](https://example.com/docs)',
+      ' * [Unsafe](javascript:alert(1))',
+      ' * ![Remote illustration](https://example.com/image.png)',
       ' * <script>window.hoverUnsafe = true</script>',
       ...Array.from({ length: 25 }, (_, index) => ` *\n * Detail ${index + 1}: coordinates are measured in cells.`),
       ' */',
@@ -202,15 +217,46 @@ test('type information is a selectable Nido card with keyboard scrolling and dis
     const content = page.getByLabel('Type information content', { exact: true });
     await expect(content).toBeFocused();
     await expect(content).toContainText('カーソル位置を更新します');
+    await expect(content.getByRole('heading', { name: 'Usage' })).toBeVisible();
+    await expect(content.locator('ul li')).toHaveCount(2);
+    await expect(content.locator('blockquote')).toContainText('Positions start at zero');
+    await expect(content.getByRole('table')).toContainText('number');
+    await expect(content.getByRole('link', { name: 'Documentation' })).toHaveAttribute(
+      'href',
+      'https://example.com/docs'
+    );
+    await expect(content.getByRole('link', { name: 'Unsafe' })).toHaveCount(0);
+    await expect(content.locator('img, script')).toHaveCount(0);
+    await running.evaluate(({ shell, app }) => {
+      shell.openExternal = async (url) => {
+        app.setName(url);
+      };
+    });
+    await content.getByRole('link', { name: 'Documentation' }).focus();
+    await page.keyboard.press('Enter');
+    await expect.poll(() => running.evaluate(({ app }) => app.getName())).toBe('https://example.com/docs');
+    expect(
+      await page.evaluate(() =>
+        window.nido.openDocumentation('file:///C:/Windows').then(
+          () => false,
+          () => true
+        )
+      )
+    ).toBe(true);
+    await content.focus();
+    await page.keyboard.press('Home');
     await expect(popup.locator('pre code span span').filter({ hasText: /^function$/ })).toHaveCSS(
       'color',
       'rgb(86, 156, 214)'
     );
-    expect(
-      await popup
-        .locator('pre code span span')
-        .evaluateAll((spans) => new Set(spans.map((span) => getComputedStyle(span).color)).size)
-    ).toBeGreaterThan(1);
+    await expect
+      .poll(
+        async () =>
+          await popup
+            .locator('pre code span span')
+            .evaluateAll((spans) => new Set(spans.map((span) => getComputedStyle(span).color)).size)
+      )
+      .toBeGreaterThan(1);
     expect(await page.evaluate(() => 'hoverUnsafe' in window)).toBe(false);
     await page.keyboard.press('j');
     await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
@@ -228,6 +274,10 @@ test('type information is a selectable Nido card with keyboard scrolling and dis
     }
     await popup.screenshot({ path: 'test-results/nido-type-information.png' });
     await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'Close type information' })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(content.getByRole('link', { name: 'Documentation' })).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
     await expect(page.getByRole('button', { name: 'Close type information' })).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(popup).toBeHidden();
