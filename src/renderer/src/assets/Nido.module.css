@@ -987,6 +987,12 @@
   gap: 15px;
   padding: 15px 0;
 }
+.settings label:focus-within {
+  background: #a3cc9410;
+  outline: 1px solid #a3cc9460;
+  outline-offset: 4px;
+  border-radius: 4px;
+}
 .settings input[type='range'] {
   margin-left: auto;
   accent-color: #a3cc94;

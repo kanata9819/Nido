@@ -8,7 +8,6 @@ import TypeInformation from './components/TypeInformation';
 
 interface Props {
   scrollFollowCursor?: boolean;
-  scrollCursor?: { row: number; column: number };
   terminal?: boolean;
   children?: ReactNode;
   id: string;
@@ -24,7 +23,6 @@ interface Props {
 }
 export default function Editor({
   scrollFollowCursor = true,
-  scrollCursor,
   terminal = false,
   children,
   id,
@@ -51,10 +49,6 @@ export default function Editor({
 
   const paint = useRef<() => void>(() => {});
   const error = useRef(onError);
-  useEffect(() => {
-    grid.current.scrollCursor = scrollCursor;
-    paint.current();
-  }, [scrollCursor]);
 
   useEffect(() => {
     error.current = onError;
@@ -77,7 +71,8 @@ export default function Editor({
     gridRef: grid,
     attachedRef: attached,
     paintRef: paint,
-    fontFamily: fontFamily
+    fontFamily: fontFamily,
+    pixelScroll: !terminal
   });
 
   const inputHandlers = useEditorInput({
@@ -99,7 +94,23 @@ export default function Editor({
       hidden={!active}
       onClick={() => input.current?.focus()}
       onWheel={(event) => {
-        if (blocked || !active || event.ctrlKey || composing.current) {
+        if (
+          blocked ||
+          !active ||
+          event.ctrlKey ||
+          composing.current ||
+          (event.target as Element).closest('[data-type-information]')
+        ) {
+          return;
+        }
+        if (!terminal) {
+          const height = Math.ceil(fontSize * 1.65);
+          const pixels =
+            event.deltaY *
+            (event.deltaMode === 1 ? height : event.deltaMode === 2 ? event.currentTarget.clientHeight : 1);
+          if (Number.isFinite(pixels) && pixels) {
+            send(window.nido.scroll(id, Math.max(-1000, Math.min(1000, pixels / height)), scrollFollowCursor, true));
+          }
           return;
         }
         const now = performance.now();

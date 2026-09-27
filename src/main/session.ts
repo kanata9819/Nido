@@ -184,6 +184,7 @@ export class Session {
   private attached = false;
   private inputQueue: Promise<void> = Promise.resolve();
   private pendingRedraw: Redraw = [];
+  private batchingScroll = false;
   private scrollDetached = false;
 
   private constructor(
@@ -241,6 +242,21 @@ export class Session {
           this.pendingRedraw.push(['nido_scroll', args[0] as unknown[]]);
           break;
         }
+        case 'nido:pixel_scroll': {
+          if (this.batchingScroll) {
+            this.pendingRedraw.push(['nido_pixel_scroll', args]);
+            break;
+          }
+          this.emit({
+            type: 'redraw',
+            id: this.workspace.id,
+            events: [
+              ['nido_pixel_scroll', args],
+              ['flush', []]
+            ]
+          });
+          break;
+        }
         case 'nido:message': {
           this.emit({ type: 'error', id: this.workspace.id, message: String(args[0]) });
           break;
@@ -253,7 +269,7 @@ export class Session {
             }
             this.pendingRedraw.push(event);
             // A repaint can span several RPC notifications. Never expose a partial frame.
-            if (event[0] === 'flush') {
+            if (event[0] === 'flush' && !this.batchingScroll) {
               const events = this.pendingRedraw;
               this.pendingRedraw = [];
               this.emit({ type: 'redraw', id: this.workspace.id, events });
@@ -472,15 +488,30 @@ export class Session {
     this.scrollDetached = false;
   }
 
-  async scroll(lines: number, follow = true): Promise<void> {
+  async scroll(lines: number, follow = true, pixel = false): Promise<void> {
     if (!lines) {
       return;
     }
-    this.scrollDetached = !follow;
-    if (this.workspace.kind === 'terminal') {
-      await this.client.request('nvim_command', ['stopinsert']);
-    }
-    await this.client.request('nvim_exec_lua', ["require('nido_scroll').scroll(...)", [lines, follow]]);
+    const next = this.inputQueue.then(async () => {
+      this.scrollDetached = true;
+      this.batchingScroll = true;
+      try {
+        if (this.workspace.kind === 'terminal') {
+          await this.client.request('nvim_command', ['stopinsert']);
+        }
+        await this.client.request('nvim_exec_lua', ["require('nido_scroll').scroll(...)", [lines, follow, pixel]]);
+        // Neovim emits cursor/WinScrolled updates when the Lua request returns to its event loop.
+        await this.client.request('nvim_eval', ['1']);
+      } finally {
+        // Publish the grid, fractional offset and anchored cursor as one frame, even for sub-line deltas.
+        this.batchingScroll = false;
+        const events = this.pendingRedraw;
+        this.pendingRedraw = [];
+        if (events.length) this.emit({ type: 'redraw', id: this.workspace.id, events: [...events, ['flush', []]] });
+      }
+    });
+    this.inputQueue = next.catch(() => {});
+    return next;
   }
 
   async debug(action: DebugAction, target?: number): Promise<void> {

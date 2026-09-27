@@ -57,6 +57,8 @@ export class Grid {
   busy = false;
   cursorVisible = true;
   cursorOpacity = 1;
+  pixelScrollEnabled = false;
+  scrollFraction = 0;
 
   apply(events: Redraw): boolean {
     let flush = false;
@@ -188,10 +190,19 @@ export class Grid {
     ctx.font = `${fontSize}px ${family}`;
     const cellWidth = ctx.measureText('M').width;
     const cellHeight = Math.ceil(fontSize * 1.65);
+    const scrollPixels = Math.round(this.scrollFraction * cellHeight * dpr) / dpr;
     ctx.fillStyle = this.background;
     ctx.fillRect(0, 0, width, height);
     ctx.textBaseline = 'alphabetic';
     for (let row = 0; row < this.rows; row++) {
+      const offset = this.pixelScrollEnabled ? (row === this.rows - 1 ? cellHeight : scrollPixels) : 0;
+      ctx.save();
+      if (this.pixelScrollEnabled && row < this.rows - 1) {
+        ctx.beginPath();
+        ctx.rect(0, 0, width, (this.rows - 2) * cellHeight);
+        ctx.clip();
+      }
+      ctx.translate(0, -offset);
       // Paint all cell backgrounds first so a wide glyph is not erased by its continuation cell.
       for (let col = 0; col < this.columns; col++) {
         const h = this.highlights.get(this.cells[row]?.[col]?.highlight || 0) || {};
@@ -231,8 +242,18 @@ export class Grid {
           ctx.fillRect(x, y + (h.strikethrough ? cellHeight / 2 : cellHeight - 3), cellWidth, 1);
         }
       }
+      ctx.restore();
     }
     const cursor = this.scrollCursor ?? this.cursor;
+    ctx.save();
+    if (this.pixelScrollEnabled) {
+      if (cursor.row < this.rows - 1) {
+        ctx.beginPath();
+        ctx.rect(0, 0, width, (this.rows - 2) * cellHeight);
+        ctx.clip();
+      }
+      ctx.translate(0, -(cursor.row === this.rows - 1 ? cellHeight : scrollPixels));
+    }
     if (
       focused &&
       !this.busy &&
@@ -246,6 +267,7 @@ export class Grid {
       ctx.fillRect(0, y + cellHeight - 1, width, 1);
     }
     this.drawCursor(ctx, cellWidth, cellHeight, focused, cursorPosition);
+    ctx.restore();
     return { cellWidth, cellHeight };
   }
 

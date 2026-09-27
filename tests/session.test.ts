@@ -98,6 +98,47 @@ test('wheel scrolling can retain the edit position and resumes input and paste a
   }
 });
 
+test('pixel scrolling publishes the grid, offset and anchored cursor in a single frame', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-scroll-frame-'));
+  let session: Session | undefined;
+  const frames: Redraw[] = [];
+  try {
+    await writeFile(join(root, 'lines.txt'), Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n'));
+    session = await Session.create(root, (event) => {
+      if (event.type === 'redraw') frames.push(event.events);
+    });
+    await session.attach(80, 25);
+    await session.openFile('lines.txt');
+    await session.client.request('nvim_exec_lua', ['vim.cmd("normal! 20Gzz"); vim.cmd.redraw()', []]);
+    frames.length = 0;
+    for (const delta of [0.2, 0.9, 0.9, -0.3, -0.8]) {
+      await session.scroll(delta, false, true);
+      assert.equal(frames.length, 1, 'no frame may expose an old grid with a new fractional offset');
+      const offset = frames[0].find(([name]) => name === 'nido_pixel_scroll')![1];
+      assert.deepEqual(
+        offset[2],
+        await session.client.request('nvim_exec_lua', ["return require('nido_scroll').screen_cursor()", []])
+      );
+      assert.equal(frames[0].at(-1)![0], 'flush');
+      frames.length = 0;
+    }
+    await Promise.all([session.scroll(0.4, false, true), session.scroll(0.8, false, true)]);
+    assert.equal(
+      frames.length,
+      2,
+      JSON.stringify(
+        frames.map((frame) =>
+          frame.map(([name, ...calls]) => [name, name === 'nido_pixel_scroll' ? calls : calls.length])
+        )
+      )
+    );
+    assert.ok(frames.every((frame) => frame.filter(([name]) => name === 'nido_pixel_scroll').length === 1));
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('split redraw notifications remain invisible until flush and keep scroll metadata', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-redraw-'));
   const frames: Redraw[] = [];
@@ -367,6 +408,26 @@ test('scroll follows pixel distance and preserves insert mode and file contents'
     assert.equal(await session.modified(), false);
     await session.scroll(-1);
     assert.equal(await session.client.request('nvim_eval', ["line('w0')"]), 3);
+    const offsets: number[] = [];
+    session.client.on('notification', (method: string, args: unknown[]) => {
+      if (method === 'nido:pixel_scroll') offsets.push(Number(args[0]));
+    });
+    await session.scroll(0.2, true, true);
+    assert.equal(await session.client.request('nvim_eval', ["line('w0')"]), 3);
+    assert.ok(Math.abs(offsets.at(-1)! - 0.2) < 0.001);
+    await session.scroll(0.9, true, true);
+    assert.equal(await session.client.request('nvim_eval', ["line('w0')"]), 4);
+    assert.ok(Math.abs(offsets.at(-1)! - 0.1) < 0.001);
+    await session.scroll(-0.2, true, true);
+    assert.equal(await session.client.request('nvim_eval', ["line('w0')"]), 3);
+    assert.ok(Math.abs(offsets.at(-1)! - 0.9) < 0.001);
+    await session.scroll(-100.3, true, true);
+    assert.equal(await session.client.request('nvim_eval', ["line('w0')"]), 1);
+    assert.equal(offsets.at(-1), 0);
+    await session.scroll(1000, true, true);
+    assert.equal(offsets.at(-1), 0);
+    await session.scroll(0.2, true, true);
+    assert.equal(offsets.at(-1), 0);
   } finally {
     await session?.stop();
     await rm(root, { recursive: true, force: true });

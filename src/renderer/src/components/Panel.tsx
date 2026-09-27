@@ -146,7 +146,25 @@ export function Panel({
             onOpen={(path, kind) => void openWorkspace(path, kind)}
           />
         ) : panel === 'settings' ? (
-          <div className={styles.settings}>
+          <div
+            className={styles.settings}
+            onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing || event.altKey || event.metaKey) return;
+              const target = event.target as HTMLInputElement;
+              const text = target.type === 'text';
+              const next = event.key === 'ArrowDown' || ((!text || event.ctrlKey) && event.key === 'j');
+              const previous = event.key === 'ArrowUp' || ((!text || event.ctrlKey) && event.key === 'k');
+              if (next || previous) {
+                event.preventDefault();
+                const inputs = [...event.currentTarget.querySelectorAll('input')];
+                const index = inputs.indexOf(target);
+                inputs[(index + (next ? 1 : -1) + inputs.length) % inputs.length]?.focus();
+              } else if (event.key === 'Enter' && target.type === 'checkbox') {
+                event.preventDefault();
+                target.click();
+              }
+            }}
+          >
             <label>
               Editor font size{' '}
               <input
@@ -207,7 +225,7 @@ export function Panel({
               <input type="checkbox" checked={smoothBlink} onChange={(event) => setSmoothBlink(event.target.checked)} />
             </label>
             <p>
-              Vim editing · Space commands · Ctrl+Tab workspaces
+              Tab / ↑ ↓ / j k: Move · ← →: Adjust · Space / Enter: Toggle · Esc: Close
               <br />
               Nido includes its own Neovim and editor settings. Personal Neovim config is not loaded.
             </p>

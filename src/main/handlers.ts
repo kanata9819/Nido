@@ -305,11 +305,16 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
   });
 
   handle('save', (id, format) => session(id).save(format === true));
-  handle('scroll', (id, lines, follow) => {
-    if (typeof lines !== 'number' || !Number.isInteger(lines) || Math.abs(lines) > 1000) {
+  handle('scroll', (id, lines, follow, pixel) => {
+    if (
+      typeof lines !== 'number' ||
+      !Number.isFinite(lines) ||
+      (pixel !== true && !Number.isInteger(lines)) ||
+      Math.abs(lines) > 1000
+    ) {
       throw new Error('Invalid scroll distance');
     }
-    return session(id).scroll(lines, follow !== false);
+    return session(id).scroll(lines, follow !== false, pixel === true);
   });
 
   handle('debug', (id, action, target) => {

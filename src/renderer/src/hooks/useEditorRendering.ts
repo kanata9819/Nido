@@ -6,6 +6,7 @@ interface UseEditorRenderingOptions {
   animations: boolean;
   smoothCursor: boolean;
   smoothBlink: boolean;
+  pixelScroll: boolean;
   id: string;
   fontSize: number;
   blocked: boolean;
@@ -26,6 +27,7 @@ export function useEditorRendering({
   animations,
   smoothCursor,
   smoothBlink,
+  pixelScroll,
   id,
   fontSize,
   blocked,
@@ -59,9 +61,11 @@ export function useEditorRendering({
   useEffect(() => {
     const element = hostRef.current!;
     const surface = canvasRef.current!;
+    gridRef.current.pixelScrollEnabled = pixelScroll;
 
     let frame = 0;
     let disposed = false;
+    let directScroll = false;
     let lastColumns = 0;
     let lastRows = 0;
     let cellWidth = 0;
@@ -99,6 +103,7 @@ export function useEditorRendering({
       if (
         !cursorPosition ||
         !smoothCursorRef.current ||
+        directScroll ||
         reducedMotion.matches ||
         !focused ||
         !document.hasFocus() ||
@@ -187,11 +192,14 @@ export function useEditorRendering({
 
       if (inputRef.current) {
         inputRef.current.style.left = `${gridRef.current.cursor.column * metrics.cellWidth}px`;
-        inputRef.current.style.top = `${gridRef.current.cursor.row * metrics.cellHeight}px`;
+        const row = gridRef.current.cursor.row;
+        const offset = pixelScroll ? (row === gridRef.current.rows - 1 ? 1 : gridRef.current.scrollFraction) : 0;
+        inputRef.current.style.top = `${(row - offset) * metrics.cellHeight}px`;
       }
 
       const columns = Math.max(20, Math.floor(element.clientWidth / metrics.cellWidth));
-      const rows = Math.max(4, Math.floor(element.clientHeight / metrics.cellHeight));
+      // Keep one extra content row available under the pinned command line for fractional scrolling.
+      const rows = Math.max(4, Math.floor(element.clientHeight / metrics.cellHeight)) + (pixelScroll ? 1 : 0);
       if (!attachedRef.current) {
         attachedRef.current = true;
         lastColumns = columns;
@@ -264,6 +272,12 @@ export function useEditorRendering({
     input.addEventListener('blur', stopMotion);
     const unsubscribe = window.nido.onEvent((event) => {
       if (event.type === 'redraw' && event.id === id) {
+        const pixelOffsets = event.events.flatMap(([name, ...calls]) => (name === 'nido_pixel_scroll' ? calls : []));
+        for (const args of pixelOffsets) {
+          gridRef.current.scrollFraction = Number(args[0]);
+          gridRef.current.scrollCursor = args[2] as { row: number; column: number } | undefined;
+          directScroll = args[1] === true;
+        }
         const viewportScrolls = event.events.flatMap(([name, ...calls]) => (name === 'nido_scroll' ? calls : []));
         const scrolls = viewportScrolls.length
           ? viewportScrolls
@@ -279,6 +293,7 @@ export function useEditorRendering({
         const now = performance.now();
         if (
           scroll &&
+          !directScroll &&
           animationsRef.current &&
           !reducedMotion.matches &&
           !element.hidden &&
@@ -307,7 +322,7 @@ export function useEditorRendering({
             distanceX: scroll[5] === 0 ? Math.max(-width, Math.min(width, scroll[6] * cellWidth + remainingX)) : 0,
             start: now
           };
-        } else if (scrolls.length) {
+        } else if (scrolls.length || directScroll) {
           motion = undefined;
         }
 
@@ -350,7 +365,7 @@ export function useEditorRendering({
       unsubscribe();
       cancelAnimationFrame(frame);
     };
-  }, [id, fontSize, fontFamily, smoothBlink]);
+  }, [id, fontSize, fontFamily, smoothBlink, pixelScroll]);
 
   useEffect(() => {
     if (active && !blocked) {

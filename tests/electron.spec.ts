@@ -248,6 +248,58 @@ test('type information is a selectable Nido card with keyboard scrolling and dis
   }
 });
 
+test('settings can be navigated and changed entirely with the keyboard', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-settings-keys-'));
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const running = await electron.launch({ args: ['.', `--user-data-dir=${root}`], env });
+  try {
+    const page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, root);
+    await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+    await page.keyboard.press('Space');
+    await page.keyboard.press(',');
+    const size = page.getByRole('slider');
+    await expect(size).toBeFocused();
+    const initial = Number(await size.inputValue());
+    await page.keyboard.press('ArrowRight');
+    await expect(size).toHaveValue(String(initial + 1));
+    await page.keyboard.press('j');
+    const family = page.getByRole('textbox', { name: 'Font family' });
+    await expect(family).toBeFocused();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('jk monospace');
+    await expect(family).toHaveValue('jk monospace');
+    await page.keyboard.press('Control+j');
+    const explorer = page.getByRole('checkbox', { name: 'Show file explorer' });
+    await expect(explorer).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(explorer).not.toBeChecked();
+    await page.keyboard.press('Enter');
+    await expect(explorer).toBeChecked();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('checkbox', { name: 'Format on save' })).toBeFocused();
+    await page.keyboard.press('k');
+    await expect(explorer).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(family).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(size).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.getByRole('button', { name: 'Close palette' })).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.getByRole('checkbox', { name: 'Smooth cursor blink' })).toBeFocused();
+    await page.screenshot({ path: 'test-results/settings-keyboard.png' });
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: 'Settings' })).not.toBeVisible();
+  } finally {
+    await running.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('smooth cursor movement and blink animate and persist their settings', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-cursor-'));
   const env = { ...process.env };
@@ -779,7 +831,7 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
   }
 });
 
-test('viewport movement animates with keyboard and wheel and respects settings', async () => {
+test('viewport movement uses pixel wheel deltas and animates keyboard scrolling', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-motion-'));
   const content = Array.from({ length: 200 }, (_, index) => `line ${index + 1} ${'text '.repeat(60)}`).join('\n');
   const env = { ...process.env };
@@ -812,6 +864,13 @@ test('viewport movement animates with keyboard and wheel and respects settings',
     await expect(canvas).toHaveAttribute('aria-description', /line 20/);
     await canvas.evaluate((surface) => {
       const context = (surface as HTMLCanvasElement).getContext('2d')!;
+      const text = context.fillText.bind(context);
+      context.fillText = (value, x, y, ...rest) => {
+        if (value === 'l' && y < 30) {
+          surface.setAttribute('data-first-line-y', String(y + context.getTransform().f / window.devicePixelRatio));
+        }
+        text(value, x, y, ...rest);
+      };
       const draw = context.drawImage.bind(context);
       context.drawImage = ((...args: Parameters<typeof draw>) => {
         surface.setAttribute(
@@ -822,12 +881,75 @@ test('viewport movement animates with keyboard and wheel and respects settings',
       }) as typeof draw;
     });
     await canvas.hover();
+    await page.mouse.wheel(0, 3);
+    await expect.poll(async () => Number(await canvas.getAttribute('data-first-line-y'))).toBeGreaterThan(0);
+    const firstY = Number(await canvas.getAttribute('data-first-line-y'));
+    const dpr = await page.evaluate(() => window.devicePixelRatio);
+    const snap = (pixels: number): number => Math.round(pixels * dpr) / dpr;
+    await page.waitForTimeout(300);
+    await page.mouse.wheel(0, 2);
+    await expect
+      .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
+      .toBeCloseTo(firstY + snap(3) - snap(5), 1);
+    await page.screenshot({ path: 'test-results/pixel-scroll.png' });
+    await page.mouse.wheel(0, -2);
+    await expect.poll(async () => Number(await canvas.getAttribute('data-first-line-y'))).toBeCloseTo(firstY, 1);
+    await page.mouse.wheel(0, -100);
+    await expect
+      .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
+      .toBeCloseTo(firstY + snap(3), 1);
     await page.mouse.wheel(0, 100);
-    await expect.poll(async () => Number(await canvas.getAttribute('data-animation-frames'))).toBeGreaterThan(2);
+    await expect(canvas).not.toHaveAttribute('aria-description', /^.*line 1 /);
     await page.waitForTimeout(250);
     let frames = await canvas.getAttribute('data-animation-frames');
     await page.waitForTimeout(150);
     expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Smooth cursor movement' }).check();
+    await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).uncheck();
+    await page.keyboard.press('Escape');
+    await page.keyboard.type('20Gzz');
+    await page.waitForTimeout(200);
+    await canvas.evaluate((node: HTMLCanvasElement) => {
+      const ctx = node.getContext('2d')!;
+      const fill = ctx.fillRect.bind(ctx);
+      let expected: number | undefined;
+      node.dataset.cursorErrors = '[]';
+      window.nido.onEvent((event) => {
+        if (event.type !== 'redraw') return;
+        for (const [name, ...calls] of event.events) {
+          if (name !== 'nido_pixel_scroll') continue;
+          for (const [fraction, direct, cursor] of calls) {
+            const anchor = cursor as { row: number } | undefined;
+            expected =
+              direct && anchor
+                ? anchor.row * 25 +
+                  1 -
+                  Math.round(Number(fraction) * 25 * window.devicePixelRatio) / window.devicePixelRatio
+                : undefined;
+          }
+        }
+      });
+      ctx.fillRect = (x, y, w, h) => {
+        if (ctx.fillStyle === '#b8bec8' && expected !== undefined && expected > 0) {
+          const actual = y + ctx.getTransform().f / window.devicePixelRatio;
+          const errors = JSON.parse(node.dataset.cursorErrors!) as number[];
+          if (Math.abs(actual - expected) > 0.01) errors.push(actual - expected);
+          node.dataset.cursorErrors = JSON.stringify(errors);
+          node.dataset.checkedCursor = 'true';
+        }
+        fill(x, y, w, h);
+      };
+    });
+    await canvas.hover();
+    for (let i = 0; i < 16; i++) await page.mouse.wheel(0, 3.1);
+    await expect(canvas).toHaveAttribute('data-checked-cursor', 'true');
+    await page.waitForTimeout(150);
+    expect(await canvas.getAttribute('data-cursor-errors')).toBe('[]');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).check();
+    await page.keyboard.press('Escape');
+    frames = await canvas.getAttribute('data-animation-frames');
     for (const key of ['Control+d', 'Control+u', 'Control+e', 'Control+y', 'Control+f', 'Control+b']) {
       await page.keyboard.press(key);
       await expect
@@ -873,9 +995,8 @@ test('viewport movement animates with keyboard and wheel and respects settings',
     await page.keyboard.press('Escape');
     await canvas.hover();
     await page.mouse.wheel(0, 100);
-    await expect
-      .poll(async () => Number(await canvas.getAttribute('data-animation-frames')))
-      .toBeGreaterThan(Number(frames));
+    await page.waitForTimeout(200);
+    expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await toggle.uncheck();
     const cursorFollow = page.getByRole('checkbox', { name: 'Cursor follows scrolling' });
