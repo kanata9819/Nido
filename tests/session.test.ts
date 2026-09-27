@@ -8,6 +8,44 @@ import { Grid, vimKey } from '../src/renderer/src/grid';
 import { accumulateScroll } from '../src/renderer/src/scroll';
 import { readLayout, writeLayout } from '../src/main/persistence';
 
+test('indent guides follow depth, tabs and blank lines without changing text', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-indent-'));
+  const grid = new Grid();
+  let session: Session | undefined;
+  try {
+    const content = 'root\n  child\n    nested\n\n    sibling\n\tchild\nroot\n';
+    await writeFile(join(root, 'indent.txt'), content);
+    session = await Session.create(root, (event) => {
+      if (event.type === 'redraw') {
+        grid.apply(event.events);
+      }
+    });
+    await session.openFile('indent.txt');
+    await session.client.request('nvim_exec_lua', ['vim.bo.shiftwidth = 2; vim.bo.tabstop = 2; vim.cmd("redraw!")', []]);
+    await session.client.request('nvim_eval', ['1']);
+    const guides = (row: number) => grid.cells[row].filter((cell) => cell.text === '│');
+    assert.equal(guides(0).length, 0);
+    assert.equal(guides(1).length, 1);
+    assert.equal(guides(2).length, 2);
+    assert.equal(guides(3).length, 2);
+    assert.equal(guides(5).length, 1);
+    const colors = guides(2).map((cell) => grid.highlights.get(cell.highlight)?.foreground);
+    assert.deepEqual(colors, [0x75633f, 0x476a86]);
+    await session.client.request('nvim_exec_lua', [
+      'vim.wo.wrap = false; vim.api.nvim_win_set_cursor(0, {3, 4}); vim.fn.winrestview({leftcol=2}); vim.cmd("redraw!")',
+      []
+    ]);
+    await session.client.request('nvim_eval', ['1']);
+    assert.equal(guides(2).length, 1);
+    assert.equal(grid.highlights.get(guides(2)[0].highlight)?.foreground, 0x476a86);
+    assert.equal(await session.modified(), false);
+    assert.equal(await readFile(join(root, 'indent.txt'), 'utf8'), content);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('scroll follows pixel distance and preserves insert mode and file contents', async () => {
   let remainder = 0,
     lines = 0;

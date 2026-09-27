@@ -159,7 +159,12 @@ export class Grid {
         const x = col * cellWidth;
         const y = row * cellHeight;
 
-        ctx.fillText(cell.text, x, y + (cellHeight + fontSize) / 2 - 3);
+        if (cell.text === '│') {
+          // Box-drawing lines must span the cell, including the line spacing.
+          ctx.fillRect(Math.round(x + cellWidth / 2), y, 1, cellHeight);
+        } else {
+          ctx.fillText(cell.text, x, y + (cellHeight + fontSize) / 2 - 3);
+        }
         if (h.underline || h.undercurl || h.strikethrough) {
           if (h.special !== undefined) {
             ctx.fillStyle = color(h.special);

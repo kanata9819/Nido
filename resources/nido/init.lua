@@ -31,6 +31,7 @@ vim.diagnostic.config({
 -- Bundle only Azami and its theme dependency; personal plugins stay isolated.
 vim.opt.runtimepath:append(vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':h'))
 vim.cmd('colorscheme azami')
+require('nido_indent')
 -- Darken surfaces without changing Azami's token colors.
 for _, name in ipairs({'Normal', 'NormalNC', 'LineNr', 'CursorLineNr', 'SignColumn', 'EndOfBuffer'}) do
   local attrs = vim.api.nvim_get_hl(0, {name=name, link=false})
