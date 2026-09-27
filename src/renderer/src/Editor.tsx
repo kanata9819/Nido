@@ -10,6 +10,7 @@ interface Props {
   id: string;
   active: boolean;
   fontSize: number;
+  animations: boolean;
   blocked: boolean;
   focusTick: number;
   onError: (message: string) => void;
@@ -19,6 +20,7 @@ export default function Editor({
   id,
   active,
   fontSize,
+  animations,
   blocked,
   focusTick,
   onError
@@ -41,6 +43,7 @@ export default function Editor({
   }, [onError]);
 
   useEditorRendering({
+    animations,
     id,
     fontSize,
     blocked,

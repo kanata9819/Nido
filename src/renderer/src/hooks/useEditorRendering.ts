@@ -1,7 +1,9 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import { Grid } from '../grid';
+import { scrollOffset } from '../scroll';
 
 interface UseEditorRenderingOptions {
+  animations: boolean;
   id: string;
   fontSize: number;
   blocked: boolean;
@@ -18,6 +20,7 @@ interface UseEditorRenderingOptions {
 }
 
 export function useEditorRendering({
+  animations,
   id,
   fontSize,
   blocked,
@@ -32,6 +35,11 @@ export function useEditorRendering({
   attachedRef,
   paintRef
 }: UseEditorRenderingOptions): void {
+  const animationsRef = useRef(animations);
+  useEffect(() => {
+    animationsRef.current = animations;
+    paintRef.current();
+  }, [animations]);
   useEffect(() => {
     errorRef.current = onError;
   }, [onError]);
@@ -47,6 +55,21 @@ export function useEditorRendering({
     let blinkTimer: ReturnType<typeof setTimeout> | undefined;
     const input = inputRef.current!;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const previousFrame = document.createElement('canvas');
+    const targetFrame = document.createElement('canvas');
+    let lastWheel = -Infinity;
+    let motion: { top: number; bottom: number; distance: number; start: number } | undefined;
+
+    const rememberWheel = (event: WheelEvent): void => {
+      if (!event.ctrlKey) {
+        lastWheel = performance.now();
+      }
+    };
+    const stopMotion = (): void => {
+      motion = undefined;
+      lastWheel = -Infinity;
+      schedule();
+    };
 
     const render = (): void => {
       if (disposed || !element.clientWidth || !element.clientHeight) {
@@ -59,6 +82,42 @@ export function useEditorRendering({
         fontSize,
         document.activeElement === inputRef.current
       );
+
+      if (motion) {
+        const offset = scrollOffset(motion.distance, performance.now() - motion.start);
+        if (
+          Math.abs(offset) < 0.25 ||
+          reducedMotion.matches ||
+          !animationsRef.current ||
+          previousFrame.width !== surface.width ||
+          previousFrame.height !== surface.height
+        ) {
+          motion = undefined;
+        } else {
+          targetFrame.width = surface.width;
+          targetFrame.height = surface.height;
+          targetFrame.getContext('2d')!.drawImage(surface, 0, 0);
+          const ctx = surface.getContext('2d')!;
+          const dpr = window.devicePixelRatio || 1;
+          const top = motion.top * metrics.cellHeight;
+          const height = (motion.bottom - motion.top) * metrics.cellHeight;
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(0, top, element.clientWidth, height);
+          ctx.clip();
+          ctx.fillStyle = gridRef.current.background;
+          ctx.fillRect(0, top, element.clientWidth, height);
+          // Keep the departing rows visible until the incoming rows cover them.
+          for (const [image, shift] of [
+            [previousFrame, offset - motion.distance],
+            [targetFrame, offset]
+          ] as const) {
+            ctx.drawImage(image, 0, top * dpr, image.width, height * dpr, 0, top + shift, image.width / dpr, height);
+          }
+          ctx.restore();
+          frame = requestAnimationFrame(render);
+        }
+      }
 
       surface.setAttribute(
         'aria-description',
@@ -108,16 +167,56 @@ export function useEditorRendering({
       clearTimeout(blinkTimer);
       gridRef.current.cursorVisible = true;
       schedule();
-      if (canBlink()) blinkTimer = setTimeout(blink, 550);
+      if (canBlink()) {
+        blinkTimer = setTimeout(blink, 550);
+      }
     };
-    for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart'])
+    for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart']) {
       input.addEventListener(event, resetBlink);
+    }
     window.addEventListener('focus', resetBlink);
     window.addEventListener('blur', resetBlink);
     document.addEventListener('visibilitychange', resetBlink);
     reducedMotion.addEventListener('change', resetBlink);
+    reducedMotion.addEventListener('change', stopMotion);
+    element.addEventListener('wheel', rememberWheel, { passive: true });
+    input.addEventListener('keydown', stopMotion);
+    input.addEventListener('input', stopMotion);
+    input.addEventListener('compositionstart', stopMotion);
+    input.addEventListener('blur', stopMotion);
     const unsubscribe = window.nido.onEvent((event) => {
       if (event.type === 'redraw' && event.id === id) {
+        const scrolls = event.events.flatMap(([name, ...calls]) => (name === 'grid_scroll' ? calls : []));
+        const scroll = scrolls.length === 1 ? (scrolls[0] as number[]) : undefined;
+        const now = performance.now();
+        if (
+          scroll &&
+          animationsRef.current &&
+          !reducedMotion.matches &&
+          !element.hidden &&
+          now - lastWheel < 180 &&
+          scroll[0] === 1 &&
+          scroll[3] === 0 &&
+          scroll[4] === gridRef.current.columns &&
+          scroll[6] === 0 &&
+          Math.abs(scroll[5]) <= 8 &&
+          scroll[5] !== 0
+        ) {
+          const remaining = motion ? scrollOffset(motion.distance, now - motion.start) : 0;
+          cancelAnimationFrame(frame);
+          render();
+          previousFrame.width = surface.width;
+          previousFrame.height = surface.height;
+          previousFrame.getContext('2d')!.drawImage(surface, 0, 0);
+          motion = {
+            top: scroll[1],
+            bottom: scroll[2],
+            distance: scroll[5] * Math.ceil(fontSize * 1.65) + remaining,
+            start: now
+          };
+        } else if (scrolls.length) {
+          motion = undefined;
+        }
         const { row, column } = gridRef.current.cursor;
         const mode = gridRef.current.mode;
         if (gridRef.current.apply(event.events)) {
@@ -127,24 +226,32 @@ export function useEditorRendering({
           row !== gridRef.current.cursor.row ||
           column !== gridRef.current.cursor.column ||
           mode !== gridRef.current.mode
-        )
+        ) {
           resetBlink();
+        }
       }
     });
 
-    const observer = new ResizeObserver(schedule);
+    const observer = new ResizeObserver(stopMotion);
     observer.observe(element);
     resetBlink();
 
     return () => {
       disposed = true;
       clearTimeout(blinkTimer);
-      for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart'])
+      for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart']) {
         input.removeEventListener(event, resetBlink);
+      }
       window.removeEventListener('focus', resetBlink);
       window.removeEventListener('blur', resetBlink);
       document.removeEventListener('visibilitychange', resetBlink);
       reducedMotion.removeEventListener('change', resetBlink);
+      reducedMotion.removeEventListener('change', stopMotion);
+      element.removeEventListener('wheel', rememberWheel);
+      input.removeEventListener('keydown', stopMotion);
+      input.removeEventListener('input', stopMotion);
+      input.removeEventListener('compositionstart', stopMotion);
+      input.removeEventListener('blur', stopMotion);
       observer.disconnect();
       unsubscribe();
       cancelAnimationFrame(frame);

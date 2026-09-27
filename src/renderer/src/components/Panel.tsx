@@ -4,6 +4,8 @@ import styles from '../assets/Nido.module.css';
 import FolderPicker from './FolderPicker';
 
 interface PanelProps {
+  animations: boolean;
+  setAnimations: (value: boolean) => void;
   initialFolder: string;
   creating: boolean;
   openWorkspace: (path: string) => Promise<void>;
@@ -32,6 +34,8 @@ const panelTitles = {
 };
 
 export function Panel({
+  animations,
+  setAnimations,
   initialFolder,
   creating,
   openWorkspace,
@@ -95,6 +99,10 @@ export function Panel({
             <label>
               Show file explorer{' '}
               <input type="checkbox" checked={sidebar} onChange={(e) => setSidebar(e.target.checked)} />
+            </label>
+            <label>
+              UI animations{' '}
+              <input type="checkbox" checked={animations} onChange={(event) => setAnimations(event.target.checked)} />
             </label>
             <p>
               Vim editing · Space commands · Ctrl+Tab workspaces

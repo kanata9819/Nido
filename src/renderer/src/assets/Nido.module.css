@@ -482,6 +482,28 @@
     animation: none;
   }
 }
+@media (prefers-reduced-motion: no-preference) {
+  .app[data-animations='true'] .palette {
+    animation: panelAppear 130ms ease-out;
+  }
+  .app[data-animations='true'] .fileTab,
+  .app[data-animations='true'] .workspaceTab,
+  .app[data-animations='true'] .treeItem {
+    transition:
+      background-color 100ms ease-out,
+      color 100ms ease-out;
+  }
+}
+@keyframes panelAppear {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 .sessionCount {
   color: #71808d;
 }

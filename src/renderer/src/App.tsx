@@ -78,6 +78,10 @@ export default function App(): React.JSX.Element {
   const [debugFocusTick, setDebugFocusTick] = useState(0);
   const [focusTick, setFocusTick] = useState(0);
   const [sidebar, setSidebar] = useState(true);
+  const [animations, setAnimations] = useState(() => localStorage.getItem('nido.animations') !== 'false');
+  useEffect(() => {
+    localStorage.setItem('nido.animations', String(animations));
+  }, [animations]);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = Number(localStorage.getItem('nido.sidebarWidth'));
     return Number.isFinite(saved) && saved >= 160 && saved <= 480 ? saved : 243;
@@ -355,7 +359,7 @@ export default function App(): React.JSX.Element {
   });
 
   return (
-    <div className={styles.app}>
+    <div className={styles.app} data-animations={animations}>
       <header className={styles.titlebar}>
         <div className={styles.brand}>
           <Leaf size={22} />
@@ -535,6 +539,7 @@ export default function App(): React.JSX.Element {
               id={w.id}
               active={w.id === active}
               fontSize={fontSize}
+              animations={animations}
               blocked={!!panel || leader}
               focusTick={focusTick}
               onError={report}
@@ -655,6 +660,8 @@ export default function App(): React.JSX.Element {
         </div>
       )}
       <PanelComponent
+        animations={animations}
+        setAnimations={setAnimations}
         initialFolder={workspace?.root || ''}
         creating={creating}
         openWorkspace={openWorkspace}

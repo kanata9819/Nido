@@ -1,3 +1,8 @@
+export function scrollOffset(distance: number, elapsed: number): number {
+  const progress = Math.min(1, Math.max(0, elapsed / 120));
+  return distance * (1 - progress) ** 3;
+}
+
 export function accumulateScroll(
   remainder: number,
   delta: number,

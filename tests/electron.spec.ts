@@ -28,6 +28,96 @@ async function chooseWorkspace(page: Page, path: string, navigate = false): Prom
   await page.keyboard.press('Control+Enter');
 }
 
+test('wheel scrolling animates briefly and respects reduced motion', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-motion-'));
+  const content = Array.from({ length: 200 }, (_, index) => `line ${index + 1}`).join('\n');
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  try {
+    await writeFile(join(root, 'scroll.txt'), content);
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
+    running = await electron.launch({
+      executablePath,
+      args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+      env
+    });
+    const page = await running.firstWindow();
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, root);
+    await expect(page.getByRole('treeitem', { name: 'scroll.txt', exact: true })).toBeVisible();
+    await page.keyboard.press('Control+p');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('scroll.txt');
+    await expect(page.getByRole('button', { name: /scroll.txt/ })).toBeVisible();
+    await page.keyboard.press('Enter');
+    const canvas = page.locator('canvas:visible');
+    await expect(canvas).toHaveAttribute('aria-description', /line 20/);
+    await canvas.evaluate((surface) => {
+      const context = (surface as HTMLCanvasElement).getContext('2d')!;
+      const draw = context.drawImage.bind(context);
+      context.drawImage = ((...args: Parameters<typeof draw>) => {
+        surface.setAttribute(
+          'data-animation-frames',
+          String(Number(surface.getAttribute('data-animation-frames') || 0) + 1)
+        );
+        draw(...args);
+      }) as typeof draw;
+    });
+    await canvas.hover();
+    await page.mouse.wheel(0, 100);
+    await expect.poll(async () => Number(await canvas.getAttribute('data-animation-frames'))).toBeGreaterThan(2);
+    await page.waitForTimeout(250);
+    const frames = await canvas.getAttribute('data-animation-frames');
+    await page.waitForTimeout(150);
+    expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const before = await canvas.getAttribute('aria-description');
+    await page.mouse.wheel(0, 100);
+    await expect(canvas).not.toHaveAttribute('aria-description', before!);
+    expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
+    expect(await readFile(join(root, 'scroll.txt'), 'utf8')).toBe(content);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const toggle = page.getByRole('checkbox', { name: 'UI animations' });
+    await expect(toggle).toBeChecked();
+    await toggle.uncheck();
+    await expect(page.getByRole('dialog', { name: 'Settings' })).toHaveCSS('animation-name', 'none');
+    await page.keyboard.press('Escape');
+    const beforeDisabledScroll = await canvas.getAttribute('aria-description');
+    await canvas.hover();
+    await page.mouse.wheel(0, 100);
+    await expect(canvas).not.toHaveAttribute('aria-description', beforeDisabledScroll!);
+    expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await toggle.check();
+    await page.keyboard.press('Escape');
+    await canvas.hover();
+    await page.mouse.wheel(0, 100);
+    await expect
+      .poll(async () => Number(await canvas.getAttribute('data-animation-frames')))
+      .toBeGreaterThan(Number(frames));
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await toggle.uncheck();
+    await running.close();
+    running = await electron.launch({
+      executablePath,
+      args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+      env
+    });
+    const restoredPage = await running.firstWindow();
+    await restoredPage.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(restoredPage.getByRole('checkbox', { name: 'UI animations' })).not.toBeChecked();
+    expect(errors).toEqual([]);
+  } finally {
+    await running?.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('Rust debugger keyboard controls stop, inspect and step in the packaged app', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-debug-ui-'));
   let running: Awaited<ReturnType<typeof electron.launch>> | undefined;

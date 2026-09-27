@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Session } from '../src/main/session';
 import { Grid, vimKey } from '../src/renderer/src/grid';
-import { accumulateScroll } from '../src/renderer/src/scroll';
+import { accumulateScroll, scrollOffset } from '../src/renderer/src/scroll';
 import { readLayout, writeLayout } from '../src/main/persistence';
 
 test('indent guides follow depth, tabs and blank lines without changing text', async () => {
@@ -47,6 +47,11 @@ test('indent guides follow depth, tabs and blank lines without changing text', a
 });
 
 test('scroll follows pixel distance and preserves insert mode and file contents', async () => {
+  assert.equal(scrollOffset(100, 0), 100);
+  assert.equal(scrollOffset(100, 60), 12.5);
+  assert.equal(scrollOffset(-100, 60), -12.5);
+  assert.equal(scrollOffset(100, 120), 0);
+  assert.equal(scrollOffset(100, 500), 0);
   let remainder = 0,
     lines = 0;
   for (let i = 0; i < 25; i++) {
