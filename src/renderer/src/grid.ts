@@ -59,6 +59,8 @@ export class Grid {
   cursorOpacity = 1;
   pixelScrollEnabled = false;
   scrollFraction = 0;
+  cellWidth = 0;
+  cellHeight = 0;
 
   apply(events: Redraw): boolean {
     let flush = false;
@@ -190,6 +192,8 @@ export class Grid {
     ctx.font = `${fontSize}px ${family}`;
     const cellWidth = ctx.measureText('M').width;
     const cellHeight = Math.ceil(fontSize * 1.65);
+    this.cellWidth = cellWidth;
+    this.cellHeight = cellHeight;
     const scrollPixels = Math.round(this.scrollFraction * cellHeight * dpr) / dpr;
     ctx.fillStyle = this.background;
     ctx.fillRect(0, 0, width, height);

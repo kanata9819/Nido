@@ -468,6 +468,18 @@ export class Session {
     return next;
   }
 
+  click(row: number, column: number): Promise<void> {
+    const next = this.inputQueue.then(async () => {
+      // Mouse coordinates refer to the visible viewport, not the pre-scroll editing anchor.
+      await this.client.request('nvim_exec_lua', ["require('nido_scroll').restore(true)", []]);
+      this.scrollDetached = false;
+      await this.client.request('nvim_input_mouse', ['left', 'press', '', 1, row, column]);
+      await this.client.request('nvim_input_mouse', ['left', 'release', '', 1, row, column]);
+    });
+    this.inputQueue = next.catch(() => {});
+    return next;
+  }
+
   async paste(text: string): Promise<void> {
     await this.restoreScroll();
     if (this.workspace.kind === 'terminal') {

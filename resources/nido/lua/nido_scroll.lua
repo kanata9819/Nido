@@ -30,14 +30,14 @@ function M.screen_cursor()
   return { row = screen.row == 0 and -1 or screen.row - 1, column = screen.col - 1 }
 end
 
-function M.restore()
+function M.restore(keep_view)
   fraction = 0
   local pos = M.cursor()
   local saved = anchor
   anchor = nil
   if saved and api.nvim_buf_is_valid(saved.buffer) then
     api.nvim_buf_clear_namespace(saved.buffer, namespace, 0, -1)
-    if pos and api.nvim_win_is_valid(saved.window) and api.nvim_win_get_buf(saved.window) == saved.buffer then
+    if not keep_view and pos and api.nvim_win_is_valid(saved.window) and api.nvim_win_get_buf(saved.window) == saved.buffer then
       api.nvim_win_call(saved.window, function()
         saved.view.lnum = pos[1]
         saved.view.col = pos[2]

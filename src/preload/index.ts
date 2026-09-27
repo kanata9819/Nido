@@ -21,6 +21,7 @@ const api: NidoAPI = {
   attach: (id, columns, rows) => ipcRenderer.invoke('nido:attach', id, columns, rows),
   resize: (id, columns, rows) => ipcRenderer.invoke('nido:resize', id, columns, rows),
   input: (id, keys) => ipcRenderer.invoke('nido:input', id, keys),
+  click: (id, row, column) => ipcRenderer.invoke('nido:click', id, row, column),
   scroll: (id, lines, follow, pixel) => ipcRenderer.invoke('nido:scroll', id, lines, follow, pixel),
   paste: (id, text) => ipcRenderer.invoke('nido:paste', id, text),
   pasteClipboard: (id) => ipcRenderer.invoke('nido:pasteClipboard', id),

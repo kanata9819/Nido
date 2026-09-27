@@ -248,6 +248,76 @@ test('type information is a selectable Nido card with keyboard scrolling and dis
   }
 });
 
+test('clicking editor glyphs moves the cursor, including wide text and detached pixel scrolling', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-click-'));
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const lines = Array.from({ length: 100 }, (_, index) => `line ${index + 1}`);
+  lines[1] = 'ab日本語xyz';
+  lines[29] = '\tΩtarget';
+  await writeFile(join(root, 'click.txt'), lines.join('\n'));
+  const running = await electron.launch({ args: ['.', `--user-data-dir=${join(root, 'profile')}`], env });
+  try {
+    const page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, root);
+    await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+    await page.keyboard.press('Control+p');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('click.txt');
+    await page.keyboard.press('Enter');
+    const canvas = page.locator('canvas:visible');
+    await expect(canvas).toHaveAttribute('aria-description', /ab日本語xyz/);
+    await canvas.evaluate((node: HTMLCanvasElement) => {
+      const ctx = node.getContext('2d')!;
+      const draw = ctx.fillText.bind(ctx);
+      ctx.fillText = (value, x, y, ...rest) => {
+        if (value === '本' || value === 'Ω') {
+          const offset = ctx.getTransform().f / window.devicePixelRatio;
+          node.setAttribute(
+            value === '本' ? 'data-wide-point' : 'data-tab-point',
+            JSON.stringify({
+              x: x + ctx.measureText('M').width * (value === '本' ? 1.25 : 0.5),
+              y: y + offset - 4
+            })
+          );
+        }
+        draw(value, x, y, ...rest);
+      };
+    });
+    await canvas.hover();
+    await page.mouse.wheel(0, 3);
+    await expect(canvas).toHaveAttribute('data-wide-point', /x/);
+    await canvas.click({ position: JSON.parse((await canvas.getAttribute('data-wide-point'))!) });
+    await expect(page.getByText('Ln 2, Col 6', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).uncheck();
+    await page.keyboard.press('Escape');
+    await canvas.hover();
+    await canvas.evaluate((node) => node.removeAttribute('data-tab-point'));
+    await page.mouse.wheel(0, 507);
+    await expect(canvas).toHaveAttribute('data-tab-point', /x/);
+    await expect(page.getByText('Ln 2, Col 6', { exact: true })).toBeVisible();
+    await canvas.click({ position: JSON.parse((await canvas.getAttribute('data-tab-point'))!) });
+    await expect(page.getByText('Ln 30, Col 2', { exact: true })).toBeVisible();
+    // Separate the next click from Neovim's double-click selection interval.
+    await page.waitForTimeout(600);
+    await page.keyboard.press('i');
+    await canvas.click({ position: JSON.parse((await canvas.getAttribute('data-tab-point'))!) });
+    await page.keyboard.type('X');
+    await page.keyboard.press('Escape');
+    await page.keyboard.type(':w');
+    await page.keyboard.press('Enter');
+    await expect.poll(() => readFile(join(root, 'click.txt'), 'utf8')).toContain('\tXΩtarget');
+  } catch (error) {
+    running.process().kill();
+    throw error;
+  } finally {
+    await running.close().catch(() => {});
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('settings can be navigated and changed entirely with the keyboard', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-settings-keys-'));
   const env = { ...process.env };

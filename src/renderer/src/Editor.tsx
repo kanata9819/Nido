@@ -92,7 +92,21 @@ export default function Editor({
       ref={host}
       className={styles.editor}
       hidden={!active}
-      onClick={() => input.current?.focus()}
+      onClick={(event) => {
+        if (blocked || !active || composing.current || event.target !== canvas.current) return;
+        input.current?.focus();
+        if (terminal) return;
+        const { cellWidth, cellHeight, rows, columns, scrollFraction } = grid.current;
+        if (!cellWidth || !cellHeight) return;
+        const bounds = canvas.current.getBoundingClientRect();
+        const x = event.clientX - bounds.left;
+        const y = event.clientY - bounds.top;
+        // The last grid row is the pinned command line; the row above it supplies scroll overscan.
+        if (y < 0 || y >= (rows - 2) * cellHeight || x < 0 || x >= columns * cellWidth) return;
+        const dpr = window.devicePixelRatio || 1;
+        const offset = Math.round(scrollFraction * cellHeight * dpr) / dpr;
+        send(window.nido.click(id, Math.floor((y + offset) / cellHeight), Math.floor(x / cellWidth)));
+      }}
       onWheel={(event) => {
         if (
           blocked ||

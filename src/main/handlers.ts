@@ -236,6 +236,10 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
   });
   handle('resize', (id, columns, rows) => session(id).resize(integer(columns, 1000), integer(rows, 500)));
   handle('input', (id, keys) => session(id).input(text(keys)));
+  handle('click', (id, row, column) => {
+    if (typeof row !== 'number' || typeof column !== 'number') throw new Error('Invalid mouse position.');
+    return session(id).click(integer(row + 1, 500) - 1, integer(column + 1, 1000) - 1);
+  });
   handle('paste', (id, value) => session(id).paste(text(value)));
   handle('pasteClipboard', async (id) => session(id).paste(await clipboard.readText()));
   handle('files', (id, path) => session(id).files(text(path)));
