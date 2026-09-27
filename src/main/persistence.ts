@@ -44,8 +44,9 @@ export async function readLayout(path: string): Promise<SavedLayout> {
             f.column >= 0
         )
     )
-  )
+  ) {
     throw new Error('Invalid saved workspace data.');
+  }
   return data;
 }
 

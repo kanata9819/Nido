@@ -58,8 +58,9 @@ export default function DebugPanel({
           event.altKey ||
           event.metaKey ||
           !['h', 'j', 'k', 'l', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
-        )
+        ) {
           return;
+        }
         const buttons = Array.from(panel.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') || []);
         const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
         const direction = ['h', 'k', 'ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1;
