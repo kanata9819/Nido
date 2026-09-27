@@ -1,6 +1,6 @@
 local api = vim.api
 local namespace = api.nvim_create_namespace('nido_brackets')
-local colors = { '#d9b777', '#c586c0', '#7fbdde', '#80c5ad' }
+local colors = { '#FFD700', '#DA70D6', '#179FFF' }
 local closing = { [')'] = '(', [']'] = '[', ['}'] = '{' }
 local pending = {}
 

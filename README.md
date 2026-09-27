@@ -109,7 +109,44 @@ PowerShell 7があれば使用し、なければWindows PowerShellを起動し�
 新規ファイルは `:e filename`、名前のないバッファの保存は `:w filename` です。
 ワークスペースを切り替えても、編集中の内容とUndo履歴はそれぞれのNeovimに残ります。
 
-## 検証
+## TypeScript 6 / 7 と外部LSP
+
+TypeScriptの解析エンジンはワークスペースを開く際に選びます。既定の `auto` では、ワークスペースから親フォルダーへ `node_modules` を探し、プロジェクトのTypeScriptを優先します。
+
+- TypeScript 7以降、または `@typescript/native-preview`：パッケージのCLIを `--lsp --stdio` で起動。
+- TypeScript 6以前：プロジェクトの `tsserver.js` を同梱の `typescript-language-server` から利用。
+- プロジェクトにない場合：PATH上のTS7対応 `tsc` / `tsgo` を探し、見つからなければ同梱のTS6にフォールバック。
+
+プロジェクト側で `npm install -D typescript@latest` など、普段使うパッケージマネージャーで更新し、Nidoのワークスペースを開き直せば反映されます。Nidoのソース修正・再ビルドは不要です。Nido自身が外部LSPをダウンロードしたり、自動更新したりすることはありません。
+
+明示的に選ぶ場合はユーザー設定 `%LOCALAPPDATA%\nido\lsp.json` を作成します（`NIDO_LSP_CONFIG` 環境変数で別のファイルも指定可能）。プロジェクト内の設定ファイルではなく、ユーザーが管理する設定です。
+
+```json
+{
+  "typescript": {
+    "server": "auto"
+  }
+}
+```
+
+`server` は `auto`、`native`（TS7）、`legacy`（従来のtsserver方式）から選べます。`native` を指定してTS7が見つからない場合はエラーを表示し、TS6には切り替えません。
+
+自分で管理する外部LSPは、実行ファイルと引数を `command` 配列で指定できます。これは自動検出より優先されます。以下のパスは利用する実行ファイルに置き換えてください。
+
+```json
+{
+  "typescript": {
+    "server": "native",
+    "command": ["C:/tools/typescript/tsgo.exe", "--lsp", "--stdio"]
+  }
+}
+```
+
+JavaScriptのCLIを指定する場合は `["C:/path/to/node.exe", "C:/path/to/typescript/bin/tsc", "--lsp", "--stdio"]` のようにNodeのパスも含めます。シェルコマンド文字列ではなく、各引数を個別に指定してください。設定変更後はワークスペースを開き直します。
+
+外部LSPが同じ起動方法・LSP互換性を保つ更新なら、LSP側の更新だけで利用できます。起動引数の変更はこの設定で対応できますが、プロトコルの非互換変更や新しい独自機能にはNido側の対応が必要な場合があります。
+
+## 検証コマンド
 
 ```powershell
 pnpm lint

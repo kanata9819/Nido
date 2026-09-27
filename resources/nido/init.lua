@@ -36,8 +36,8 @@ require('nido_brackets')
 -- Darken surfaces without changing Azami's token colors.
 for _, name in ipairs({'Normal', 'NormalNC', 'LineNr', 'CursorLineNr', 'SignColumn', 'EndOfBuffer'}) do
   local attrs = vim.api.nvim_get_hl(0, {name=name, link=false})
-  attrs.bg = '#141414'
-  if name == 'EndOfBuffer' then attrs.fg = '#141414' end
+  attrs.bg = '#121212'
+  if name == 'EndOfBuffer' then attrs.fg = '#121212' end
   vim.api.nvim_set_hl(0, name, attrs)
 end
 -- Native Rust syntax and LSP use these groups without a Rust Tree-sitter parser.
@@ -82,22 +82,10 @@ vim.api.nvim_create_autocmd('LspAttach', {
   end,
 })
 
--- Use Electron's Node runtime and pinned server files outside app.asar.
+-- Prefer independently updated project/external language servers, with a bundled fallback.
 if vim.env.NIDO_NODE and vim.env.NIDO_LANGUAGES then
-  local modules = vim.fs.joinpath(vim.env.NIDO_LANGUAGES, 'node_modules')
-  vim.lsp.config('typescript', {
-    cmd = { vim.env.NIDO_NODE, vim.fs.joinpath(modules, 'typescript-language-server/lib/cli.mjs'), '--stdio' },
-    cmd_env = { ELECTRON_RUN_AS_NODE = '1' },
-    filetypes = { 'typescript', 'typescriptreact', 'javascript', 'javascriptreact' },
-    root_dir = vim.fn.getcwd(),
-    init_options = {
-      hostInfo = 'Nido',
-      disableAutomaticTypingAcquisition = true,
-      -- Keep the bundled JS tsserver compatible even in TypeScript 7 projects.
-      tsserver = { path = vim.fs.joinpath(modules, 'typescript/lib/tsserver.js') },
-    },
-  })
-  vim.lsp.enable('typescript')
+  local ok, err = pcall(function() require('nido_typescript').setup() end)
+  if not ok then vim.schedule(function() vim.notify(tostring(err), vim.log.levels.ERROR) end) end
 end
 
 -- Rust uses the installed toolchain matching the workspace.

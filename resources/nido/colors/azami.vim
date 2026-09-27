@@ -64,9 +64,9 @@ hl(0, 'EndOfBuffer', { fg = '#1E1E1E', bg = '#1E1E1E' })
 hl(0, 'SignColumn', { fg = 'NONE', bg = '#1E1E1E' })
 hl(0, '@lsp.type.keyword', { fg = c.vscBlue, bg = 'NONE' })
 hl(0, '@keyword', { fg = c.vscBlue, bg = 'NONE' })
-hl(0, '@keyword.import', { fg = c.vscBlue, bg = 'NONE' })
+hl(0, '@keyword.import', { fg = c.vscPink, bg = 'NONE' })
 hl(0, '@keyword.function', { fg = c.vscBlue, bg = 'NONE' })
-hl(0, '@keyword.return', { fg = c.vscBlue, bg = 'NONE' })
+hl(0, '@keyword.return', { fg = c.vscPink, bg = 'NONE' })
 hl(0, '@module', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, '@azami_visibility', { fg = c.vscBlue, bg = 'NONE' })
 hl(0, '@azami_self', { fg = c.vscBlue, bg = 'NONE' })
@@ -97,6 +97,36 @@ hl(0, '@constant.macro', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, '@variable.builtin', { fg = c.vscBlue, bg = 'NONE' })
 hl(0, '@label', { fg = c.vscBlue, bg = 'NONE' })
 hl(0, '@lsp.mod.deprecated', { strikethrough = true })
+-- Dark Modern token categories, including Vim's legacy syntax group names.
+-- Keep parameter names aligned with the user's VS Code override (#FFB300).
+for color, groups in pairs({
+  [c.vscPink] = {
+    'typescriptTry', 'typescriptExceptions', 'typescriptBranch', 'typescriptCase', 'typescriptDefault',
+    'typescriptConditional', 'typescriptConditionalElse', 'typescriptRepeat', 'typescriptStatementKeyword',
+    'typescriptImport', 'typescriptExport', 'typescriptAsyncFunc',
+    '@keyword.conditional', '@keyword.repeat', '@keyword.exception', '@lsp.typemod.keyword.controlFlow',
+  },
+  [c.vscBlue] = {
+    'typescriptVariable', 'typescriptFuncKeyword', 'typescriptAsyncFuncKeyword', 'typescriptObjectAsyncKeyword',
+    'typescriptClassKeyword', 'typescriptInterfaceKeyword', 'typescriptAliasKeyword', 'typescriptEnumKeyword',
+    'typescriptPredefinedType', 'typescriptAccessibilityModifier', 'typescriptReadonlyModifier',
+    'typescriptClassStatic', 'typescriptAbstract', 'typescriptAmbientDeclaration', 'typescriptCastKeyword',
+    'typescriptKeywordOp', 'javaScriptFunction', 'javaScriptNull', 'javaScriptIdentifier',
+    '@type.builtin.typescript', '@type.builtin.javascript',
+  },
+  [c.vscFront] = {
+    'typescriptBinaryOp', 'typescriptAssign', 'typescriptUnaryOp', 'typescriptTernaryOp',
+    'typescriptEndColons', 'typescriptFuncComma', 'typescriptBraces', 'typescriptParens',
+    'typescriptBlock', 'typescriptClassBlock', 'typescriptObjectLiteral', 'typescriptArray',
+    'typescriptFuncTypeArrow', 'javaScriptBraces',
+  },
+  [c.vscLightBlue] = {'typescriptVariableDeclaration', 'typescriptLabel', 'typescriptCall', 'typescriptDestructureVariable'},
+  [c.vscBlueGreen] = {'typescriptTypeReference', 'typescriptInterfaceName', 'typescriptClassName', 'typescriptAliasDeclaration'},
+  [c.vscYellow] = {'typescriptFuncName', 'typescriptMember', '@lsp.type.function', '@lsp.type.method'},
+  ['#FFB300'] = {'typescriptParamImpl', 'typescriptArrowFuncArg', 'typescriptDocParamName'},
+}) do
+  for _, group in ipairs(groups) do hl(0, group, {fg=color}) end
+end
 hl(0, 'NeoTreeNormal', { fg = c.vscFront, bg = '#181818' })
 hl(0, 'NeoTreeNormalNC', { fg = c.vscFront, bg = '#181818' })
 hl(0, 'NeoTreeEndOfBuffer', { fg = '#181818', bg = '#181818' })
