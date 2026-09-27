@@ -139,6 +139,40 @@ test('pixel scrolling publishes the grid, offset and anchored cursor in a single
   }
 });
 
+test('clipboard sharing switches Vim yank, delete and paste between private and system registers', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-clipboard-'));
+  let session: Session | undefined;
+  try {
+    session = await Session.create(root, () => {});
+    const lua = (code: string): Promise<unknown> => session!.client.request('nvim_exec_lua', [code, []]);
+    // Exercise the real Vim provider contract without replacing the user's OS clipboard.
+    await lua(`
+      vim.g.test_clipboard = {{'outside'}, 'V'}
+      local copy = function(lines, kind) vim.g.test_clipboard = {lines, kind} end
+      local paste = function() return vim.g.test_clipboard end
+      vim.g.clipboard = {name='test', copy={['+']=copy, ['*']=copy}, paste={['+']=paste, ['*']=paste}, cache_enabled=0}
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, {'first', 'second'})
+    `);
+    await session.setClipboardSharing(false);
+    await lua('vim.cmd("normal! ggyy")');
+    assert.deepEqual(await lua('return vim.g.test_clipboard[1]'), ['outside']);
+    await session.setClipboardSharing(true);
+    await lua('vim.cmd("normal! ggyy")');
+    assert.deepEqual(await lua('return vim.g.test_clipboard[1]'), ['first', '']);
+    await lua('vim.cmd("normal! jdd")');
+    assert.deepEqual(await lua('return vim.g.test_clipboard[1]'), ['second', '']);
+    await lua(`vim.g.test_clipboard = {{'pasted'}, 'V'}; vim.cmd('normal! p')`);
+    assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)'), ['first', 'pasted']);
+    await session.setClipboardSharing(false);
+    await lua(`vim.cmd('normal! ggyy'); vim.g.test_clipboard = {{'outside again'}, 'V'}; vim.cmd('normal! p')`);
+    assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)'), ['first', 'first', 'pasted']);
+    assert.deepEqual(await lua('return vim.g.test_clipboard[1]'), ['outside again']);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('split redraw notifications remain invisible until flush and keep scroll metadata', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-redraw-'));
   const frames: Redraw[] = [];

@@ -236,6 +236,10 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
   });
   handle('resize', (id, columns, rows) => session(id).resize(integer(columns, 1000), integer(rows, 500)));
   handle('input', (id, keys) => session(id).input(text(keys)));
+  handle('clipboardSharing', (id, enabled) => {
+    if (typeof enabled !== 'boolean') throw new Error('Invalid clipboard setting.');
+    return session(id).setClipboardSharing(enabled);
+  });
   handle('openDocumentation', (value) => {
     const url = new URL(text(value));
     if (!['https:', 'http:'].includes(url.protocol)) throw new Error('Unsupported documentation URL.');

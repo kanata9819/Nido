@@ -9,6 +9,8 @@ interface PanelProps {
   scrollFollowCursor: boolean;
   setScrollFollowCursor: (value: boolean) => void;
   formatOnSave: boolean;
+  clipboardSharing: boolean;
+  setClipboardSharing: (value: boolean) => void;
   setFormatOnSave: (value: boolean) => void;
   workspaceId: string;
   animations: boolean;
@@ -71,6 +73,8 @@ export function Panel({
   scrollFollowCursor,
   setScrollFollowCursor,
   formatOnSave,
+  clipboardSharing,
+  setClipboardSharing,
   setFormatOnSave,
   workspaceId,
   animations,
@@ -200,6 +204,15 @@ export function Panel({
                 onChange={(event) => setFormatOnSave(event.target.checked)}
               />
             </label>
+            <label>
+              Share system clipboard{' '}
+              <input
+                type="checkbox"
+                checked={clipboardSharing}
+                onChange={(event) => setClipboardSharing(event.target.checked)}
+              />
+            </label>
+            <small>Sync Vim copy, cut and paste (yy / dd / p) with the system clipboard.</small>
             <label>
               Cursor follows scrolling{' '}
               <input

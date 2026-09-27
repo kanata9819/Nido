@@ -448,6 +448,10 @@ export class Session {
     }
   }
 
+  async setClipboardSharing(enabled: boolean): Promise<void> {
+    await this.client.request('nvim_set_option_value', ['clipboard', enabled ? 'unnamedplus' : '', {}]);
+  }
+
   input(keys: string): Promise<void> {
     // nvim_input can accept only part of a byte sequence when its input queue is full.
     const next = this.inputQueue.then(async () => {

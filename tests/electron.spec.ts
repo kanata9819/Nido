@@ -444,6 +444,9 @@ test('smooth cursor movement and blink animate and persist their settings', asyn
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     const setting = page.getByRole('checkbox', { name: 'Smooth cursor movement' });
     const blinkSetting = page.getByRole('checkbox', { name: 'Smooth cursor blink' });
+    const clipboardSetting = page.getByRole('checkbox', { name: 'Share system clipboard' });
+    await expect(clipboardSetting).not.toBeChecked();
+    await clipboardSetting.check();
     await expect(blinkSetting).not.toBeChecked();
     await expect(setting).not.toBeChecked();
     await setting.check();
@@ -517,6 +520,7 @@ test('smooth cursor movement and blink animate and persist their settings', asyn
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await expect(page.getByRole('checkbox', { name: 'Smooth cursor movement' })).toBeChecked();
     await expect(page.getByRole('checkbox', { name: 'Smooth cursor blink' })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Share system clipboard' })).toBeChecked();
   } finally {
     await running.close();
     await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

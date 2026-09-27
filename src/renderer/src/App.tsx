@@ -138,6 +138,17 @@ export default function App(): React.JSX.Element {
     () => localStorage.getItem('nido.scrollFollowCursor') !== 'false'
   );
   const [formatOnSave, setFormatOnSave] = useState(() => localStorage.getItem('nido.formatOnSave') !== 'false');
+  const [clipboardSharing, setClipboardSharing] = useState(
+    () => localStorage.getItem('nido.clipboardSharing') === 'true'
+  );
+  useEffect(() => {
+    localStorage.setItem('nido.clipboardSharing', String(clipboardSharing));
+    for (const workspace of workspaces) {
+      for (const id of [workspace.id, workspace.terminalId]) {
+        if (id) void window.nido.setClipboardSharing(id, clipboardSharing).catch((error) => setError(String(error)));
+      }
+    }
+  }, [clipboardSharing, workspaces]);
   const [fontFamily, setFontFamily] = useState(() => localStorage.getItem('nido.fontFamily') ?? defaultFontFamily);
 
   useEffect(() => {
@@ -990,6 +1001,8 @@ export default function App(): React.JSX.Element {
         scrollFollowCursor={scrollFollowCursor}
         setScrollFollowCursor={setScrollFollowCursor}
         formatOnSave={formatOnSave}
+        clipboardSharing={clipboardSharing}
+        setClipboardSharing={setClipboardSharing}
         setFormatOnSave={setFormatOnSave}
         initialFolder={workspace?.root || ''}
         creating={creating || restoring}
