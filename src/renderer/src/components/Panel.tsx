@@ -42,6 +42,25 @@ const panelTitles = {
   commands: 'All commands'
 };
 
+function itemIcon(panel: Exclude<Panel, null>, severity: number | undefined): React.JSX.Element {
+  if (panel === 'problems') {
+    if (severity === 1) {
+      return <CircleAlert size={18} />;
+    }
+    if (severity === 2) {
+      return <TriangleAlert size={18} />;
+    }
+    return <Info size={18} />;
+  }
+  if (panel === 'workspaces') {
+    return <FolderOpen size={18} />;
+  }
+  if (panel === 'files' || panel === 'buffers') {
+    return <FileCode2 size={18} />;
+  }
+  return <Command size={17} />;
+}
+
 export function Panel({
   scrollFollowCursor,
   setScrollFollowCursor,
@@ -204,13 +223,16 @@ export function Panel({
                 if (['j', 'k', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
                   event.preventDefault();
                   const last = Math.max(0, filtered.length - 1);
-                  setSelection((index) =>
-                    event.key === 'Home'
-                      ? 0
-                      : event.key === 'End'
-                        ? last
-                        : Math.max(0, Math.min(last, index + (['j', 'ArrowDown'].includes(event.key) ? 1 : -1)))
-                  );
+                  setSelection((index) => {
+                    if (event.key === 'Home') {
+                      return 0;
+                    }
+                    if (event.key === 'End') {
+                      return last;
+                    }
+                    const step = ['j', 'ArrowDown'].includes(event.key) ? 1 : -1;
+                    return Math.max(0, Math.min(last, index + step));
+                  });
                 } else if (event.key === 'Enter') {
                   event.preventDefault();
                   filtered[selection]?.run();
@@ -235,23 +257,7 @@ export function Panel({
                   }}
                   onClick={item.run}
                 >
-                  <span className={styles.itemIcon}>
-                    {panel === 'problems' ? (
-                      item.severity === 1 ? (
-                        <CircleAlert size={18} />
-                      ) : item.severity === 2 ? (
-                        <TriangleAlert size={18} />
-                      ) : (
-                        <Info size={18} />
-                      )
-                    ) : panel === 'workspaces' ? (
-                      <FolderOpen size={18} />
-                    ) : panel === 'files' || panel === 'buffers' ? (
-                      <FileCode2 size={18} />
-                    ) : (
-                      <Command size={17} />
-                    )}
-                  </span>
+                  <span className={styles.itemIcon}>{itemIcon(panel, item.severity)}</span>
                   <span>
                     <strong>{item.title}</strong>
                     <small>{item.detail}</small>

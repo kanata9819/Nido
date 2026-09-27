@@ -266,8 +266,12 @@ export class Session {
       }
       if (method === 'nido:debug') {
         const debug = args[0] as DebugState;
-        if (!Array.isArray(debug.variables)) debug.variables = [];
-        if (!Array.isArray(debug.targets)) debug.targets = [];
+        if (!Array.isArray(debug.variables)) {
+          debug.variables = [];
+        }
+        if (!Array.isArray(debug.targets)) {
+          debug.targets = [];
+        }
         this.state = { ...this.state, debug };
         this.emit({ type: 'state', id: this.workspace.id, state: this.state });
       }

@@ -10,7 +10,13 @@ export function accumulateScroll(
   lineHeight: number,
   pageHeight: number
 ): { lines: number; remainder: number } {
-  const pixels = delta * (mode === 1 ? lineHeight : mode === 2 ? pageHeight : 1);
+  let unit = 1;
+  if (mode === 1) {
+    unit = lineHeight;
+  } else if (mode === 2) {
+    unit = pageHeight;
+  }
+  const pixels = delta * unit;
   if (!pixels || !Number.isFinite(pixels)) {
     return { lines: 0, remainder };
   }

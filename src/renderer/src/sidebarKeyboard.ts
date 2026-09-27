@@ -23,8 +23,8 @@ export function createOnKeyDown({
   workspaceId
 }: KeyboardDeps): (event: React.KeyboardEvent) => void {
   return (event: React.KeyboardEvent): void => {
-    const index = visible.findIndex((entry) => entry.path === selected),
-      item = visible[Math.max(0, index)];
+    const index = visible.findIndex((entry) => entry.path === selected);
+    const item = visible[Math.max(0, index)];
     if (['j', 'k', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
       event.preventDefault();
       const next =

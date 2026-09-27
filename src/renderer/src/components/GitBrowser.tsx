@@ -156,13 +156,22 @@ export default function GitBrowser({
     }
   }
 
-  const labels =
-    view === 2
-      ? branches.map((branch) => `${branch.current ? '● ' : ''}${branch.remote ? '[remote] ' : ''}${branch.name}`)
-      : commit
-        ? files
-        : history.map((entry) => `${entry.hash.slice(0, 8)}  ${entry.subject}`);
-  const listLabel = view === 2 ? 'Branches' : commit ? 'Commit files' : 'Commit history';
+  let labels: string[];
+  if (view === 2) {
+    labels = branches.map(
+      (branch) => `${branch.current ? '● ' : ''}${branch.remote ? '[remote] ' : ''}${branch.name}`
+    );
+  } else if (commit) {
+    labels = files;
+  } else {
+    labels = history.map((entry) => `${entry.hash.slice(0, 8)}  ${entry.subject}`);
+  }
+  let listLabel = 'Commit history';
+  if (view === 2) {
+    listLabel = 'Branches';
+  } else if (commit) {
+    listLabel = 'Commit files';
+  }
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {

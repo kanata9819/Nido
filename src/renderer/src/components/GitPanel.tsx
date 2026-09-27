@@ -29,9 +29,16 @@ export default function GitPanel({
   async function refresh(): Promise<void> {
     const next = await window.nido.gitStatus(workspaceId);
     setStatus(next);
-    setSelected((previous) =>
-      next.changes.some((change) => key(change) === previous) ? previous : next.changes[0] ? key(next.changes[0]) : ''
-    );
+    setSelected((previous) => {
+      if (next.changes.some((change) => key(change) === previous)) {
+        return previous;
+      }
+      const first = next.changes[0];
+      if (first) {
+        return key(first);
+      }
+      return '';
+    });
   }
 
   async function run(action: () => Promise<unknown>): Promise<void> {

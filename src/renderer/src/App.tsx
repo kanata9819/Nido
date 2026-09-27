@@ -65,6 +65,22 @@ function WorkspaceWelcome({ onOpen }: { onOpen: () => void }): React.JSX.Element
   );
 }
 
+function modeLabel(mode: string): string {
+  if (mode.startsWith('t')) {
+    return 'TERMINAL';
+  }
+  if (mode.startsWith('i')) {
+    return 'INSERT';
+  }
+  if (mode.startsWith('v') || mode === 'V' || mode === '\u0016') {
+    return 'VISUAL';
+  }
+  if (mode.startsWith('c')) {
+    return 'COMMAND';
+  }
+  return 'NORMAL';
+}
+
 export default function App(): React.JSX.Element {
   const [pointerHidden, setPointerHidden] = useState(false);
   useEffect(() => {
@@ -133,15 +149,18 @@ export default function App(): React.JSX.Element {
   const resizeSidebar = (width: number): void => {
     setSidebarWidth(Math.max(160, Math.min(480, width)));
   };
+
   useEffect(() => {
     localStorage.setItem('nido.sidebarWidth', String(sidebarWidth));
   }, [sidebarWidth]);
+
   const [fontSize, setFontSize] = useState(() => {
     const value = Number(localStorage.getItem('nido.fontSize'));
     return value >= 8 && value <= 24 ? value : 15;
   });
-  const modal = useRef<HTMLDivElement>(null),
-    mode = useRef<Record<string, string>>({});
+
+  const modal = useRef<HTMLDivElement>(null);
+  const mode = useRef<Record<string, string>>({});
   const active = workspaces.some((w) => w.id === selectedWorkspace) ? selectedWorkspace : workspaces[0]?.id || '';
   const state = states[active] || defaultState;
   const gitFiles = useGitFileStatus(active, state.buffers, panel);
@@ -153,20 +172,14 @@ export default function App(): React.JSX.Element {
       setReferencesFocusTick((value) => value + 1);
     }
   }, [active, state.references?.version, state.references?.loading]);
+
   useEffect(() => {
     if (hasDebugger) {
       setDebugVisible(true);
     }
   }, [hasDebugger, active]);
-  const displayMode = state.mode.startsWith('t')
-    ? 'TERMINAL'
-    : state.mode.startsWith('i')
-      ? 'INSERT'
-      : state.mode.startsWith('v') || state.mode === 'V' || state.mode === '\u0016'
-        ? 'VISUAL'
-        : state.mode.startsWith('c')
-          ? 'COMMAND'
-          : 'NORMAL';
+
+  const displayMode = modeLabel(state.mode);
   const workspace = workspaces.find((w) => w.id === active);
   const decorations = useMemo(
     () => fileDecorations(workspace?.root || '', gitFiles, state.diagnostics),
@@ -183,6 +196,7 @@ export default function App(): React.JSX.Element {
     setLeader(false);
     setFocusTick((n) => n + 1);
   };
+
   const closeReferences = (): void => {
     setReferencesVisible(false);
     focusEditor();
@@ -217,6 +231,7 @@ export default function App(): React.JSX.Element {
       })
     );
   };
+
   const toggleTerminal = (): void => {
     if (terminalVisible && bottomPanel === 'terminal' && workspace?.kind !== 'terminal') {
       setTerminalVisible(false);
@@ -383,8 +398,8 @@ export default function App(): React.JSX.Element {
 
   const moveWorkspace = (offset: number): void => {
     setWorkspaces((old) => {
-      const index = old.findIndex((w) => w.id === active),
-        target = index + offset;
+      const index = old.findIndex((w) => w.id === active);
+      const target = index + offset;
       if (target < 0 || target >= old.length) {
         return old;
       }

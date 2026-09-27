@@ -285,8 +285,8 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
   handle('selectBuffer', (id, buffer) => session(id).selectBuffer(integer(buffer)));
 
   handle('closeBuffer', async (id, value) => {
-    const s = session(id),
-      buffer = integer(value);
+    const s = session(id);
+    const buffer = integer(value);
     if (await s.bufferModified(buffer)) {
       const { response } = await dialog.showMessageBox(window, {
         type: 'warning',
@@ -331,7 +331,11 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
     if (action === 'minimize') {
       window.minimize();
     } else if (action === 'maximize') {
-      window.isMaximized() ? window.unmaximize() : window.maximize();
+      if (window.isMaximized()) {
+        window.unmaximize();
+      } else {
+        window.maximize();
+      }
     } else if (action === 'close') {
       window.close();
     } else {

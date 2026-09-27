@@ -1,5 +1,5 @@
 import type { Panel, Item } from '../types';
-import type { Workspace } from '../../../shared/types';
+import type { DebugAction, Workspace } from '../../../shared/types';
 
 interface UseKeyboardShortcutsParams {
   save: () => void;
@@ -63,7 +63,9 @@ export function useKeyboardShortcuts({
       event.preventDefault();
       event.stopPropagation();
     };
-    const terminalFocused = document.activeElement?.getAttribute('aria-label') === 'Terminal input';
+    const focusedLabel = document.activeElement?.getAttribute('aria-label');
+    const terminalFocused = focusedLabel === 'Terminal input';
+    const isNormalMode = (mode.current[active] || 'normal') === 'normal';
 
     if (event.key === 'Escape') {
       if (panel === 'git') {
@@ -84,7 +86,7 @@ export function useKeyboardShortcuts({
         return;
       }
 
-      if (panel || leader || (document.activeElement as HTMLElement)?.getAttribute('aria-label') !== 'Neovim input') {
+      if (panel || leader || focusedLabel !== 'Neovim input') {
         consume();
         focusEditor();
         return;
@@ -113,8 +115,8 @@ export function useKeyboardShortcuts({
             'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]'
           )
         ];
-        const first = nodes[0],
-          last = nodes[nodes.length - 1];
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
         if (event.shiftKey && document.activeElement === first) {
           consume();
           last?.focus();
@@ -134,18 +136,16 @@ export function useKeyboardShortcuts({
       ['F5', 'F9', 'F10', 'F11'].includes(event.key)
     ) {
       consume();
-      const action =
-        event.key === 'F9'
-          ? 'breakpoint'
-          : event.key === 'F10'
-            ? 'over'
-            : event.key === 'F11'
-              ? event.shiftKey
-                ? 'out'
-                : 'into'
-              : event.shiftKey
-                ? 'stop'
-                : 'start';
+      let action: DebugAction = 'start';
+      if (event.key === 'F9') {
+        action = 'breakpoint';
+      } else if (event.key === 'F10') {
+        action = 'over';
+      } else if (event.key === 'F11') {
+        action = event.shiftKey ? 'out' : 'into';
+      } else if (event.shiftKey) {
+        action = 'stop';
+      }
       run(window.nido.debug(active, action));
       if (!document.activeElement?.closest('[aria-label="Debugger"]')) {
         focusEditor();
@@ -244,8 +244,8 @@ export function useKeyboardShortcuts({
       !event.altKey &&
       !event.metaKey &&
       ['H', 'L'].includes(event.key) &&
-      document.activeElement?.getAttribute('aria-label') === 'Neovim input' &&
-      (mode.current[active] || 'normal') === 'normal' &&
+      focusedLabel === 'Neovim input' &&
+      isNormalMode &&
       state.buffers.length > 0
     ) {
       consume();
@@ -259,8 +259,8 @@ export function useKeyboardShortcuts({
       event.key === ' ' &&
       !event.ctrlKey &&
       !event.altKey &&
-      document.activeElement?.getAttribute('aria-label') === 'Neovim input' &&
-      (mode.current[active] || 'normal') === 'normal'
+      focusedLabel === 'Neovim input' &&
+      isNormalMode
     ) {
       consume();
       setLeader(true);

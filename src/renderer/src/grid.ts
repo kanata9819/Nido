@@ -18,6 +18,32 @@ interface Highlight {
   strikethrough?: boolean;
 }
 
+function cellBackground(h: Highlight, background: string, foreground: string): string {
+  if (h.reverse) {
+    if (h.foreground === undefined) {
+      return foreground;
+    }
+    return color(h.foreground);
+  }
+  if (h.background === undefined) {
+    return background;
+  }
+  return color(h.background);
+}
+
+function cellForeground(h: Highlight, background: string, foreground: string): string {
+  if (h.reverse) {
+    if (h.background === undefined) {
+      return background;
+    }
+    return color(h.background);
+  }
+  if (h.foreground === undefined) {
+    return foreground;
+  }
+  return color(h.foreground);
+}
+
 export class Grid {
   cells: Cell[][] = [];
   highlights = new Map<number, Highlight>();
@@ -59,8 +85,8 @@ export class Grid {
           );
         } else if (name === 'grid_line' && args[0] === 1) {
           const row = this.cells[Number(args[1])];
-          let column = Number(args[2]),
-            highlight = 0;
+          let column = Number(args[2]);
+          let highlight = 0;
           for (const cell of args[3] as [string, number?, number?][]) {
             if (cell[1] !== undefined) {
               highlight = cell[1];
@@ -130,13 +156,7 @@ export class Grid {
       // Paint all cell backgrounds first so a wide glyph is not erased by its continuation cell.
       for (let col = 0; col < this.columns; col++) {
         const h = this.highlights.get(this.cells[row]?.[col]?.highlight || 0) || {};
-        ctx.fillStyle = h.reverse
-          ? h.foreground === undefined
-            ? this.foreground
-            : color(h.foreground)
-          : h.background === undefined
-            ? this.background
-            : color(h.background);
+        ctx.fillStyle = cellBackground(h, this.background, this.foreground);
 
         ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight);
       }
@@ -149,13 +169,7 @@ export class Grid {
 
         const h = this.highlights.get(cell.highlight) || {};
         ctx.font = `${h.italic ? 'italic ' : ''}${h.bold ? 'bold ' : ''}${fontSize}px ${family}`;
-        ctx.fillStyle = h.reverse
-          ? h.background === undefined
-            ? this.background
-            : color(h.background)
-          : h.foreground === undefined
-            ? this.foreground
-            : color(h.foreground);
+        ctx.fillStyle = cellForeground(h, this.background, this.foreground);
 
         const x = col * cellWidth;
         const y = row * cellHeight;
@@ -237,7 +251,9 @@ export function vimKey(
 
   let key = special[event.key] || event.key;
   if (/^F\d+$/.test(key) || special[event.key] || event.ctrlKey || event.altKey || event.metaKey) {
-    if (key === ' ') key = 'Space';
+    if (key === ' ') {
+      key = 'Space';
+    }
     const modifiers =
       (event.ctrlKey ? 'C-' : '') +
       (event.altKey ? 'M-' : '') +
