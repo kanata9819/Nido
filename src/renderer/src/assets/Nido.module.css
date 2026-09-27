@@ -361,6 +361,9 @@
   font-size: 12px;
 }
 .debugToolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.debugPanel:focus-within { border-top-color: #a8cf9e; }
+.debugPanel button:focus-visible { outline: 1px solid #a8cf9e; outline-offset: 2px; background: #303b31; }
+.debugPanel [data-debug-target] { padding: 4px 10px; margin: 5px; border: 1px solid #46515c; border-radius: 4px; }
 .debugToolbar button { color: #bfd8b6; padding: 4px; }
 .debugToolbar button:disabled { opacity: 0.35; cursor: default; }
 .debugLocation { color: #e2ca86; margin-top: 6px; }

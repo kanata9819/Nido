@@ -11,6 +11,8 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
   delete env.ELECTRON_RUN_AS_NODE;
   try {
     await mkdir(join(root, 'src'));
+    await mkdir(join(root, 'src/bin'));
+    await writeFile(join(root, 'src/bin/other.rs'), 'fn main() {}');
     await writeFile(join(root, 'Cargo.toml'), '[package]\nname="nido_debug_ui"\nversion="0.1.0"\nedition="2021"\n');
     await writeFile(join(root, 'src/main.rs'), 'fn main() {\n    let number = 21;\n    let answer = number * 2;\n    println!("answer={answer}");\n}\n');
     const executablePath = process.env.NIDO_PACKAGED_EXE;
@@ -29,9 +31,30 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
     await page.keyboard.press('F9');
     await expect(page.getByRole('region', {name:'Debugger'})).toBeVisible();
     await page.keyboard.press('F5');
+    await expect(page.getByRole('region', {name:'Debugger'})).toContainText('Choose a binary:', {timeout:30000});
+    await page.keyboard.press('Control+j');
+    await expect(page.locator('[data-debug-target]:focus')).toHaveCount(1);
+    for (let i = 0; i < 10 && !(await page.getByRole('button', {name:'nido_debug_ui', exact:true}).evaluate((element) => element === document.activeElement)); i++) await page.keyboard.press('l');
+    await expect(page.getByRole('button', {name:'nido_debug_ui', exact:true})).toBeFocused();
+    await page.keyboard.press('Enter');
     await expect(page.getByRole('region', {name:'Debugger'})).toContainText('Debug · paused', {timeout:30000});
     await expect(page.getByLabel('Debug variables')).toContainText('number = 21');
+    await page.keyboard.press('Control+k');
+    await expect(page.getByRole('textbox', {name:'Neovim input'})).toBeFocused();
+    await page.keyboard.press('Control+h');
+    await expect(page.getByRole('tree', {name:'Project files'})).toBeFocused();
+    await page.keyboard.press('Control+l');
+    await expect(page.getByRole('textbox', {name:'Neovim input'})).toBeFocused();
+    await page.keyboard.press('Control+j');
+    await expect(page.getByRole('button', {name:/Continue/})).toBeFocused();
+    await page.keyboard.press('Space');
+    await page.keyboard.press('d');
+    await expect(page.getByRole('region', {name:'Debugger'})).toHaveCount(0);
+    await expect(page.getByRole('textbox', {name:'Neovim input'})).toBeFocused();
+    await expect(page.getByRole('tab', {name:'main.rs', exact:true})).toBeVisible();
     await page.keyboard.press('F10');
+    await expect(page.getByRole('region', {name:'Debugger'})).toHaveCount(0);
+    await page.keyboard.press('Control+j');
     await expect(page.getByLabel('Debug variables')).toContainText('answer = 42');
     await page.screenshot({path:'test-results/nido-debugger.png'});
     await page.keyboard.press('Shift+F5');
@@ -162,7 +185,7 @@ test('normal shutdown restores workspace order, active file and cursors', async 
     await page.keyboard.press('j');
     await page.keyboard.type('gg0w');
     await expect(async () => {
-      await page.keyboard.press('Control+k');
+      await page.keyboard.press('K');
       await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /Type information/, { timeout: 1000 });
     }).toPass({ timeout: 20000 });
     await page.screenshot({ path: 'test-results/nido-hover.png' });

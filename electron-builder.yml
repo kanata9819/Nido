@@ -3,6 +3,7 @@ productName: nido
 directories:
   buildResources: build
 files:
+  - '!dist/**'
   - '!resources/**'
   - '!scripts/**'
   - '!tests/**'

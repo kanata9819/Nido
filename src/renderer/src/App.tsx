@@ -75,6 +75,7 @@ export default function App(): React.JSX.Element {
   const [restoring, setRestoring] = useState(true);
   const [error, setError] = useState('');
   const [debugVisible, setDebugVisible] = useState(false);
+  const [debugFocusTick, setDebugFocusTick] = useState(0);
   const [focusTick, setFocusTick] = useState(0);
   const [sidebar, setSidebar] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -95,7 +96,8 @@ export default function App(): React.JSX.Element {
     mode = useRef<Record<string, string>>({});
   const active = workspaces.some((w) => w.id === selectedWorkspace) ? selectedWorkspace : workspaces[0]?.id || '';
   const state = states[active] || defaultState;
-  useEffect(() => { if (state.debug) setDebugVisible(true); }, [state.debug?.status]);
+  const hasDebugger = !!state.debug;
+  useEffect(() => { if (hasDebugger) setDebugVisible(true); }, [hasDebugger, active]);
   const displayMode = state.mode.startsWith('i')
     ? 'INSERT'
     : state.mode.startsWith('v') || state.mode === 'V' || state.mode === '\u0016'
@@ -307,6 +309,11 @@ export default function App(): React.JSX.Element {
   });
 
   const keydown = useKeyboardShortcuts({
+    showDebugger: () => {
+      setLeader(false);
+      setDebugVisible(true);
+      setDebugFocusTick((value) => value + 1);
+    },
     panel,
     leader,
     error,
@@ -550,9 +557,11 @@ export default function App(): React.JSX.Element {
           )}
         </main>
       </div>
-      {active && debugVisible && <DebugPanel state={state.debug} action={(action, target) => {
-        run(window.nido.debug(active, action, target));
+      {active && debugVisible && <DebugPanel state={state.debug} focusTick={debugFocusTick} onClose={() => {
+        setDebugVisible(false);
         focusEditor();
+      }} action={(action, target) => {
+        run(window.nido.debug(active, action, target));
       }} />}
       <footer className={styles.statusbar}>
         {active && <button aria-label="Toggle debugger" onClick={() => setDebugVisible(!debugVisible)}>Debug</button>}

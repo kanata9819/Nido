@@ -14,6 +14,7 @@ interface UseKeyboardShortcutsParams {
   workspaces: Workspace[];
   nextWorkspace: (offset: number) => void;
   showExplorer: () => void;
+  showDebugger: () => void;
   create: () => Promise<void>;
   showPanel: (value: Panel) => void;
   commands: Item[];
@@ -36,6 +37,7 @@ export function useKeyboardShortcuts({
   workspaces,
   nextWorkspace,
   showExplorer,
+  showDebugger,
   create,
   showPanel,
   commands,
@@ -87,7 +89,7 @@ export function useKeyboardShortcuts({
       consume();
       const action = event.key === 'F9' ? 'breakpoint' : event.key === 'F10' ? 'over' : event.key === 'F11' ? (event.shiftKey ? 'out' : 'into') : (event.shiftKey ? 'stop' : 'start');
       run(window.nido.debug(active, action));
-      focusEditor();
+      if (!document.activeElement?.closest('[aria-label="Debugger"]')) focusEditor();
       return;
     }
     if (event.ctrlKey && event.key === 'Tab') {
@@ -101,11 +103,13 @@ export function useKeyboardShortcuts({
       !event.altKey &&
       !event.metaKey &&
       !event.shiftKey &&
-      ['h', 'l'].includes(event.key.toLowerCase())
+      ['h', 'j', 'k', 'l'].includes(event.key.toLowerCase())
     ) {
       consume();
       if (event.key.toLowerCase() === 'h') {
         showExplorer();
+      } else if (event.key.toLowerCase() === 'j') {
+        showDebugger();
       } else {
         focusEditor();
       }
