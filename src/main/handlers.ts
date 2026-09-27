@@ -117,6 +117,11 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
         ];
         await writeLayout(join(app.getPath('userData'), 'workspaces.json'), {
           version: 1,
+          window: {
+            width: window.getNormalBounds().width,
+            height: window.getNormalBounds().height,
+            maximized: window.isMaximized()
+          },
           workspaces: await Promise.all(ids.map((id) => session(id).snapshot())),
           active: Math.max(0, ids.indexOf(state.active))
         });
@@ -298,7 +303,7 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
     return true;
   });
 
-  handle('save', (id) => session(id).save());
+  handle('save', (id, format) => session(id).save(format === true));
   handle('scroll', (id, lines) => {
     if (typeof lines !== 'number' || !Number.isInteger(lines) || Math.abs(lines) > 1000) {
       throw new Error('Invalid scroll distance');

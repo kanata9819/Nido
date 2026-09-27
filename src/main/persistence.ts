@@ -4,6 +4,7 @@ import type { SavedWorkspace } from '../shared/types';
 
 export interface SavedLayout {
   version: 1;
+  window?: { width: number; height: number; maximized: boolean };
   workspaces: SavedWorkspace[];
   active: number;
 }

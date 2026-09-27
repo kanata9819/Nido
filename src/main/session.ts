@@ -405,8 +405,8 @@ export class Session {
     await this.client.request('nvim_paste', [text, true, -1]);
   }
 
-  async save(): Promise<void> {
-    await this.write('write');
+  async save(format = false): Promise<void> {
+    await this.write('write', format);
   }
 
   async scroll(lines: number): Promise<void> {
@@ -505,10 +505,17 @@ export class Session {
     await this.write('wall');
   }
 
-  private async write(command: 'write' | 'wall'): Promise<void> {
+  private async write(command: 'write' | 'wall', format = false): Promise<void> {
     const error = (await this.client.request('nvim_exec_lua', [
-      'local ok, err = pcall(vim.cmd, ...); return ok and "" or tostring(err)',
-      [command]
+      `local command, format = ...
+local ok, err = pcall(function()
+  if format and #vim.lsp.get_clients({bufnr=0, method='textDocument/formatting'}) > 0 then
+    vim.lsp.buf.format({bufnr=0, async=false, timeout_ms=3000})
+  end
+  vim.cmd(command)
+end)
+return ok and "" or tostring(err)`,
+      [command, format]
     ])) as string;
     if (error) {
       throw new Error(error);

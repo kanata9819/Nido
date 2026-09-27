@@ -5,6 +5,8 @@ import FolderPicker from './FolderPicker';
 import GitBrowser from './GitBrowser';
 
 interface PanelProps {
+  formatOnSave: boolean;
+  setFormatOnSave: (value: boolean) => void;
   workspaceId: string;
   animations: boolean;
   setAnimations: (value: boolean) => void;
@@ -37,6 +39,8 @@ const panelTitles = {
 };
 
 export function Panel({
+  formatOnSave,
+  setFormatOnSave,
   workspaceId,
   animations,
   setAnimations,
@@ -109,6 +113,14 @@ export function Panel({
             <label>
               Show file explorer{' '}
               <input type="checkbox" checked={sidebar} onChange={(e) => setSidebar(e.target.checked)} />
+            </label>
+            <label>
+              Format on save{' '}
+              <input
+                type="checkbox"
+                checked={formatOnSave}
+                onChange={(event) => setFormatOnSave(event.target.checked)}
+              />
             </label>
             <label>
               UI animations{' '}

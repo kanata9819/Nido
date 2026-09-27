@@ -88,6 +88,10 @@ export default function App(): React.JSX.Element {
   const [focusTick, setFocusTick] = useState(0);
   const [sidebar, setSidebar] = useState(true);
   const [animations, setAnimations] = useState(() => localStorage.getItem('nido.animations') !== 'false');
+  const [formatOnSave, setFormatOnSave] = useState(() => localStorage.getItem('nido.formatOnSave') !== 'false');
+  useEffect(() => {
+    localStorage.setItem('nido.formatOnSave', String(formatOnSave));
+  }, [formatOnSave]);
 
   useEffect(() => {
     localStorage.setItem('nido.animations', String(animations));
@@ -398,7 +402,9 @@ export default function App(): React.JSX.Element {
     requestAnimationFrame(() => document.querySelector<HTMLElement>('aside:not([hidden]) [role="tree"]')?.focus());
   };
 
+  const save = (): void => run(window.nido.save(active, formatOnSave));
   const { commands, filtered } = buildItems(active, panel, workspaces, fileList, state, query, {
+    save,
     showPanel,
     moveWorkspace,
     run,
@@ -411,6 +417,7 @@ export default function App(): React.JSX.Element {
   });
 
   const keydown = useKeyboardShortcuts({
+    save,
     restartShell: () => {
       const id = workspace?.kind === 'terminal' ? active : workspace?.terminalId;
       if (id) {
@@ -895,6 +902,8 @@ export default function App(): React.JSX.Element {
         workspaceId={active}
         animations={animations}
         setAnimations={setAnimations}
+        formatOnSave={formatOnSave}
+        setFormatOnSave={setFormatOnSave}
         initialFolder={workspace?.root || ''}
         creating={creating || restoring}
         openWorkspace={openWorkspace}

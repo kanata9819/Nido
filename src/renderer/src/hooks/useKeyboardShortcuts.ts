@@ -2,6 +2,7 @@ import type { Panel, Item } from '../types';
 import type { Workspace } from '../../../shared/types';
 
 interface UseKeyboardShortcutsParams {
+  save: () => void;
   panel: Panel;
   leader: boolean;
   error: string;
@@ -28,6 +29,7 @@ interface UseKeyboardShortcutsParams {
 }
 
 export function useKeyboardShortcuts({
+  save,
   panel,
   leader,
   error,
@@ -208,7 +210,7 @@ export function useKeyboardShortcuts({
     }
     if (event.ctrlKey && event.key.toLowerCase() === 's' && active) {
       consume();
-      run(window.nido.save(active));
+      save();
       return;
     }
     if (leader) {

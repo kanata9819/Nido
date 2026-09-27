@@ -2,6 +2,7 @@ import type { Panel, Item } from './types';
 import type { DebugAction, FileEntry, SessionState, Workspace } from '../../shared/types';
 
 interface CommandsCallbacks {
+  save: () => void;
   showPanel: (value: Panel) => void;
   moveWorkspace: (offset: number) => void;
   run: (promise: Promise<unknown>) => void;
@@ -119,7 +120,7 @@ export function buildItems(
             title: 'Save file',
             detail: ':w · Ctrl+S',
             run: () => {
-              run(window.nido.save(active));
+              callbacks.save();
               focusEditor();
             }
           },

@@ -5,6 +5,44 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+test('window size and maximized state survive restart', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-window-'));
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const executablePath = process.env.NIDO_PACKAGED_EXE;
+  const options = { executablePath, args: [...(executablePath ? [] : ['.']), `--user-data-dir=${root}`], env };
+  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  try {
+    running = await electron.launch(options);
+    await running.firstWindow();
+    await running.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1040, 680));
+    const originalSize = await running.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getSize());
+    await running.close();
+    running = await electron.launch(options);
+    await running.firstWindow();
+    await expect
+      .poll(() => running!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getSize()))
+      .toEqual(originalSize);
+    await running.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].maximize());
+    await expect
+      .poll(() => running!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized()))
+      .toBe(true);
+    await running.close();
+    running = await electron.launch(options);
+    await running.firstWindow();
+    await expect
+      .poll(() => running!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized()))
+      .toBe(true);
+    await running.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].unmaximize());
+    await expect
+      .poll(() => running!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getSize()))
+      .toEqual(originalSize);
+  } finally {
+    await running?.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('Git changes can be reviewed, staged and committed with the keyboard', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-git-ui-'));
   const repository = join(root, 'repo');

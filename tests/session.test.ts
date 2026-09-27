@@ -9,6 +9,44 @@ import { accumulateScroll, scrollOffset } from '../src/renderer/src/scroll';
 import { readLayout, writeLayout } from '../src/main/persistence';
 import { fileDecorations, gitFileKey } from '../src/renderer/src/fileDecorations';
 
+test('save formats before writing only when enabled and a formatter is available', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-format-save-'));
+  let session: Session | undefined;
+  try {
+    const path = join(root, 'sample.txt');
+    await writeFile(path, 'original\n');
+    session = await Session.create(root, () => {});
+    await session.openFile('sample.txt');
+    await session.client.request('nvim_exec_lua', [
+      `local get_clients = vim.lsp.get_clients
+vim.lsp.get_clients = function(opts)
+  if opts and opts.bufnr == 0 and opts.method == 'textDocument/formatting' then
+    return { {} }
+  end
+  return get_clients(opts)
+end
+vim.lsp.buf.format = function(opts)
+  assert(opts.async == false and opts.timeout_ms == 3000)
+  vim.api.nvim_buf_set_lines(0, 0, -1, false, {'formatted'})
+end`,
+      []
+    ]);
+    await session.save(false);
+    assert.equal(await readFile(path, 'utf8'), 'original\n');
+    await session.save(true);
+    assert.equal(await readFile(path, 'utf8'), 'formatted\n');
+    await session.client.request('nvim_exec_lua', [
+      "vim.lsp.get_clients = function() return {} end; vim.api.nvim_buf_set_lines(0, 0, -1, false, {'no formatter'})",
+      []
+    ]);
+    await session.save(true);
+    assert.equal(await readFile(path, 'utf8'), 'no formatter\n');
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('file decorations propagate to parents and prioritize errors without losing Git status', () => {
   const git = { 'c:/repo/src/deep/a.rs': { code: 'M', title: 'Git: Modified' } };
   const result = fileDecorations('C:\\repo', git, {
@@ -90,6 +128,44 @@ test(
     }
   }
 );
+
+test('bracket pairs share depth colors, ignore strings and comments, and refresh after edits', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-brackets-'));
+  let session: Session | undefined;
+  try {
+    const content = 'fn main() {\n  let x = ([1]);\n  let s = "([{}])"; // []\n  /* {\n  } */\n}\n';
+    await writeFile(join(root, 'pairs.txt'), content);
+    session = await Session.create(root, () => {});
+    await session.openFile('pairs.txt');
+    await session.client.request('nvim_exec_lua', ['vim.bo.syntax = "rust"', []]);
+    const marks = async (): Promise<[number, number, number, { hl_group: string }][]> => {
+      await session!.client.request('nvim_exec_lua', ['vim.wait(150); vim.cmd("redraw!")', []]);
+      return session!.client.request('nvim_exec_lua', [
+        "return vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_create_namespace('nido_brackets'), 0, -1, {details=true})",
+        []
+      ]) as Promise<[number, number, number, { hl_group: string }][]>;
+    };
+    const result = await marks();
+    assert.equal(result.length, 8);
+    const color = (row: number, column: number): string | undefined =>
+      result.find((mark) => mark[1] === row && mark[2] === column)?.[3].hl_group;
+    assert.equal(color(0, 7), color(0, 8));
+    assert.equal(color(0, 10), color(5, 0));
+    assert.equal(color(1, 10), color(1, 14));
+    assert.equal(color(1, 11), color(1, 13));
+    assert.notEqual(color(0, 10), color(1, 10));
+    assert.notEqual(color(1, 10), color(1, 11));
+    await session.client.request('nvim_exec_lua', [
+      "vim.api.nvim_buf_set_lines(0, 0, -1, false, {'()'}); vim.api.nvim_exec_autocmds('TextChanged', {buffer=0})",
+      []
+    ]);
+    assert.equal((await marks()).length, 2);
+    assert.equal(await readFile(join(root, 'pairs.txt'), 'utf8'), content);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test('indent guides follow depth, tabs and blank lines without changing text', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-indent-'));

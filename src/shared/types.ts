@@ -107,7 +107,7 @@ export interface NidoAPI {
   previewReference(id: string, index: number, version: number): Promise<ReferencePreview>;
   selectBuffer(id: string, buffer: number): Promise<void>;
   closeBuffer(id: string, buffer: number): Promise<boolean>;
-  save(id: string): Promise<void>;
+  save(id: string, format?: boolean): Promise<void>;
   debug(id: string, action: DebugAction, target?: number): Promise<void>;
   setLineEnding(id: string, format: 'LF' | 'CRLF'): Promise<void>;
   windowAction(action: 'minimize' | 'maximize' | 'close'): Promise<void>;
