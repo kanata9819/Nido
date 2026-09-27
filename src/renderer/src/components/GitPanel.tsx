@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GitChange, GitStatus } from '../../../shared/types';
-import styles from './GitPanel.module.css';
+import styles from '../assets/GitPanel.module.css';
 
 export default function GitPanel({ workspaceId }: { workspaceId: string }): React.JSX.Element {
   const [status, setStatus] = useState<GitStatus>();
