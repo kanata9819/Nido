@@ -126,6 +126,10 @@ export default function App(): React.JSX.Element {
   const [focusTick, setFocusTick] = useState(0);
   const [sidebar, setSidebar] = useState(true);
   const [animations, setAnimations] = useState(() => localStorage.getItem('nido.animations') !== 'false');
+  const [smoothCursor, setSmoothCursor] = useState(() => localStorage.getItem('nido.smoothCursor') === 'true');
+  useEffect(() => {
+    localStorage.setItem('nido.smoothCursor', String(smoothCursor));
+  }, [smoothCursor]);
   const [scrollFollowCursor, setScrollFollowCursor] = useState(
     () => localStorage.getItem('nido.scrollFollowCursor') !== 'false'
   );
@@ -769,6 +773,7 @@ export default function App(): React.JSX.Element {
               active={w.id === active}
               fontSize={fontSize}
               animations={animations}
+              smoothCursor={smoothCursor}
               scrollFollowCursor={scrollFollowCursor}
               scrollCursor={states[w.id]?.scrollCursor}
               blocked={!!panel || leader}
@@ -841,6 +846,7 @@ export default function App(): React.JSX.Element {
                   active={w.id === active && terminalVisible && bottomPanel === 'terminal'}
                   fontSize={fontSize}
                   animations={false}
+                  smoothCursor={smoothCursor}
                   blocked={!!panel || leader}
                   focusTick={terminalFocusTick}
                   fontFamily={fontFamily.trim() || defaultFontFamily}
@@ -971,6 +977,8 @@ export default function App(): React.JSX.Element {
       <PanelComponent
         workspaceId={active}
         animations={animations}
+        smoothCursor={smoothCursor}
+        setSmoothCursor={setSmoothCursor}
         setAnimations={setAnimations}
         scrollFollowCursor={scrollFollowCursor}
         setScrollFollowCursor={setScrollFollowCursor}

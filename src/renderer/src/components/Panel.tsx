@@ -12,6 +12,8 @@ interface PanelProps {
   setFormatOnSave: (value: boolean) => void;
   workspaceId: string;
   animations: boolean;
+  smoothCursor: boolean;
+  setSmoothCursor: (value: boolean) => void;
   setAnimations: (value: boolean) => void;
   initialFolder: string;
   creating: boolean;
@@ -70,6 +72,8 @@ export function Panel({
   setFormatOnSave,
   workspaceId,
   animations,
+  smoothCursor,
+  setSmoothCursor,
   setAnimations,
   initialFolder,
   creating,
@@ -185,6 +189,14 @@ export function Panel({
             <label>
               UI animations{' '}
               <input type="checkbox" checked={animations} onChange={(event) => setAnimations(event.target.checked)} />
+            </label>
+            <label>
+              Smooth cursor movement{' '}
+              <input
+                type="checkbox"
+                checked={smoothCursor}
+                onChange={(event) => setSmoothCursor(event.target.checked)}
+              />
             </label>
             <p>
               Vim editing · Space commands · Ctrl+Tab workspaces

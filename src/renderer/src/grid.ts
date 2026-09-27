@@ -172,7 +172,8 @@ export class Grid {
     height: number,
     fontSize: number,
     fontFamily: string,
-    focused: boolean
+    focused: boolean,
+    cursorPosition?: { row: number; column: number }
   ): { cellWidth: number; cellHeight: number } {
     // The grid paints its entire background; no transparent surface is needed.
     const ctx = canvas.getContext('2d', { alpha: false })!;
@@ -243,12 +244,18 @@ export class Grid {
       ctx.fillRect(0, y, width, 1);
       ctx.fillRect(0, y + cellHeight - 1, width, 1);
     }
-    this.drawCursor(ctx, cellWidth, cellHeight, focused);
+    this.drawCursor(ctx, cellWidth, cellHeight, focused, cursorPosition);
     return { cellWidth, cellHeight };
   }
 
-  private drawCursor(ctx: CanvasRenderingContext2D, cellWidth: number, cellHeight: number, focused: boolean): void {
-    const cursor = this.scrollCursor ?? this.cursor;
+  private drawCursor(
+    ctx: CanvasRenderingContext2D,
+    cellWidth: number,
+    cellHeight: number,
+    focused: boolean,
+    position?: { row: number; column: number }
+  ): void {
+    const cursor = position ?? this.scrollCursor ?? this.cursor;
     if (!this.busy && cursor.row >= 0 && cursor.row < this.rows && (!focused || this.cursorVisible)) {
       const x = cursor.column * cellWidth;
       const y = cursor.row * cellHeight;

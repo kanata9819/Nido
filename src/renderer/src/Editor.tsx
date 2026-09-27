@@ -15,6 +15,7 @@ interface Props {
   active: boolean;
   fontSize: number;
   animations: boolean;
+  smoothCursor: boolean;
   blocked: boolean;
   focusTick: number;
   fontFamily: string;
@@ -29,6 +30,7 @@ export default function Editor({
   active,
   fontSize,
   animations,
+  smoothCursor,
   blocked,
   focusTick,
   fontFamily,
@@ -58,6 +60,7 @@ export default function Editor({
 
   useEditorRendering({
     animations,
+    smoothCursor,
     id,
     fontSize,
     blocked,

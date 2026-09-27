@@ -248,6 +248,85 @@ test('type information is a selectable Nido card with keyboard scrolling and dis
   }
 });
 
+test('smooth cursor moves through intermediate positions and persists its setting', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-cursor-'));
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const options = { args: ['.', `--user-data-dir=${join(root, 'profile')}`], env };
+  let running = await electron.launch(options);
+  try {
+    let page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, root);
+    const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+    await expect(editor).toBeFocused();
+    await page.keyboard.type('iabcdefghijklmnopqrstuvwxyz');
+    await page.keyboard.press('Escape');
+    await page.keyboard.type(':w cursor.txt');
+    await page.keyboard.press('Enter');
+    await expect
+      .poll(() => readFile(join(root, 'cursor.txt'), 'utf8').catch(() => ''))
+      .toContain('abcdefghijklmnopqrstuvwxyz');
+    await page.keyboard.press('Home');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const setting = page.getByRole('checkbox', { name: 'Smooth cursor movement' });
+    await expect(setting).not.toBeChecked();
+    await setting.check();
+    await page.getByRole('checkbox', { name: 'UI animations', exact: true }).uncheck();
+    await page.getByRole('button', { name: 'Close palette' }).click();
+    await expect(editor).toBeFocused();
+    const canvas = page.locator('canvas:visible');
+    await canvas.evaluate((node: HTMLCanvasElement) => {
+      const ctx = node.getContext('2d')!;
+      const fill = ctx.fillRect.bind(ctx);
+      node.dataset.cursorXs = '[]';
+      ctx.fillRect = (x, y, w, h) => {
+        if (ctx.fillStyle === '#b8bec8') {
+          const xs = JSON.parse(node.dataset.cursorXs!) as number[];
+          node.dataset.cursorXs = JSON.stringify([...xs.slice(-99), x]);
+        }
+        fill(x, y, w, h);
+      };
+    });
+    const move = async (keys: string): Promise<number[]> => {
+      const before = await editor.evaluate((node) => node.style.left);
+      await canvas.evaluate((node: HTMLCanvasElement) => {
+        node.dataset.cursorXs = '[]';
+      });
+      await page.keyboard.type(keys);
+      await expect.poll(() => editor.evaluate((node) => node.style.left)).not.toBe(before);
+      await expect
+        .poll(async () => {
+          const xs = JSON.parse((await canvas.getAttribute('data-cursor-xs'))!) as number[];
+          const target = await editor.evaluate((node) => parseFloat(node.style.left));
+          return Math.abs((xs.at(-1) ?? -1000) - target);
+        })
+        .toBeLessThan(0.01);
+      return JSON.parse((await canvas.getAttribute('data-cursor-xs'))!);
+    };
+    expect(new Set((await move('10l')).map((x) => x.toFixed(2))).size).toBeGreaterThan(2);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    expect(new Set((await move('10h')).map((x) => x.toFixed(2))).size).toBeLessThanOrEqual(2);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await setting.uncheck();
+    await page.getByRole('button', { name: 'Close palette' }).click();
+    expect(new Set((await move('10l')).map((x) => x.toFixed(2))).size).toBeLessThanOrEqual(2);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await setting.check();
+    await page.getByRole('button', { name: 'Close palette' }).click();
+    await running.close();
+    running = await electron.launch(options);
+    page = await running.firstWindow();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(page.getByRole('checkbox', { name: 'Smooth cursor movement' })).toBeChecked();
+  } finally {
+    await running.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('window size and maximized state survive restart', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-window-'));
   const env = { ...process.env };
@@ -613,11 +692,15 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
     await expect(terminal).toBeHidden();
     await page.keyboard.press('Control+@');
     await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
-    await page.keyboard.press('Control+k');
+    await page.keyboard.press('Control+@');
+    await expect(terminal).toBeHidden();
     await page.keyboard.press('Space');
     await expect(
       page.getByRole('dialog', { name: 'Keyboard commands' }).getByRole('button', { name: 'Shift+D Open debug panel' })
     ).toBeVisible();
+    await page
+      .getByRole('dialog', { name: 'Keyboard commands' })
+      .screenshot({ path: 'test-results/nido-keyboard-commands.png' });
     await page.keyboard.press('D');
     await expect(debuggerPanel).toBeVisible();
     await expect.poll(() => debuggerPanel.evaluate((node) => node.contains(document.activeElement))).toBe(true);

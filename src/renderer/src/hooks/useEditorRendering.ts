@@ -4,6 +4,7 @@ import { scrollOffset } from '../scroll';
 
 interface UseEditorRenderingOptions {
   animations: boolean;
+  smoothCursor: boolean;
   id: string;
   fontSize: number;
   blocked: boolean;
@@ -22,6 +23,7 @@ interface UseEditorRenderingOptions {
 
 export function useEditorRendering({
   animations,
+  smoothCursor,
   id,
   fontSize,
   blocked,
@@ -38,6 +40,11 @@ export function useEditorRendering({
   fontFamily
 }: UseEditorRenderingOptions): void {
   const animationsRef = useRef(animations);
+  const smoothCursorRef = useRef(smoothCursor);
+  useEffect(() => {
+    smoothCursorRef.current = smoothCursor;
+    paintRef.current();
+  }, [smoothCursor]);
   useEffect(() => {
     animationsRef.current = animations;
     paintRef.current();
@@ -56,6 +63,9 @@ export function useEditorRendering({
     let lastColumns = 0;
     let lastRows = 0;
     let cellWidth = 0;
+    let cursorPosition: { row: number; column: number } | undefined;
+    let cursorMotion:
+      { from: { row: number; column: number }; to: { row: number; column: number }; start: number } | undefined;
     let blinkTimer: ReturnType<typeof setTimeout> | undefined;
     const input = inputRef.current!;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -74,15 +84,45 @@ export function useEditorRendering({
       if (disposed || !element.clientWidth || !element.clientHeight) {
         return;
       }
+      const focused = document.activeElement === input;
+      const target = gridRef.current.scrollCursor ?? gridRef.current.cursor;
+      const now = performance.now();
+      if (
+        !cursorPosition ||
+        !smoothCursorRef.current ||
+        reducedMotion.matches ||
+        !focused ||
+        !document.hasFocus() ||
+        motion
+      ) {
+        cursorPosition = { ...target };
+        cursorMotion = undefined;
+      } else {
+        const previousTarget = cursorMotion?.to ?? cursorPosition;
+        if (target.row !== previousTarget.row || target.column !== previousTarget.column) {
+          cursorMotion = { from: { ...cursorPosition }, to: { ...target }, start: now };
+        }
+        if (cursorMotion) {
+          const progress = Math.min(1, (now - cursorMotion.start) / 100);
+          const eased = 1 - (1 - progress) ** 3;
+          cursorPosition = {
+            row: cursorMotion.from.row + (cursorMotion.to.row - cursorMotion.from.row) * eased,
+            column: cursorMotion.from.column + (cursorMotion.to.column - cursorMotion.from.column) * eased
+          };
+          if (progress === 1) cursorMotion = undefined;
+        }
+      }
       const metrics = gridRef.current.draw(
         surface,
         element.clientWidth,
         element.clientHeight,
         fontSize,
         fontFamily,
-        document.activeElement === inputRef.current
+        focused,
+        cursorPosition
       );
       cellWidth = metrics.cellWidth;
+      if (cursorMotion) frame = requestAnimationFrame(render);
 
       if (motion) {
         const offset = scrollOffset(motion.distance, performance.now() - motion.start);
@@ -208,6 +248,13 @@ export function useEditorRendering({
           ? viewportScrolls
           : event.events.flatMap(([name, ...calls]) => (name === 'grid_scroll' ? calls : []));
         const scroll = scrolls.length === 1 ? (scrolls[0] as number[]) : undefined;
+        if (
+          scrolls.length ||
+          event.events.some(([name]) => name === 'grid_resize' || name === 'grid_clear' || name === 'mode_change')
+        ) {
+          cursorPosition = undefined;
+          cursorMotion = undefined;
+        }
         const now = performance.now();
         if (
           scroll &&
