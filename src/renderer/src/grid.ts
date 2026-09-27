@@ -56,6 +56,7 @@ export class Grid {
   mode = 'normal';
   busy = false;
   cursorVisible = true;
+  cursorOpacity = 1;
 
   apply(events: Redraw): boolean {
     let flush = false;
@@ -261,15 +262,16 @@ export class Grid {
       const y = cursor.row * cellHeight;
       ctx.fillStyle = '#b8bec8';
       ctx.strokeStyle = '#8b929c';
+      ctx.globalAlpha = focused ? this.cursorOpacity : 1;
       if (!focused) {
         ctx.strokeRect(x + 0.5, y + 1, cellWidth - 1, cellHeight - 2);
       } else if (this.mode.startsWith('insert')) {
         ctx.fillRect(x, y + 1, 2, cellHeight - 2);
       } else {
-        ctx.globalAlpha = 0.55;
+        ctx.globalAlpha *= 0.55;
         ctx.fillRect(x, y + 1, cellWidth, cellHeight - 2);
-        ctx.globalAlpha = 1;
       }
+      ctx.globalAlpha = 1;
     }
   }
 }

@@ -5,6 +5,7 @@ import { scrollOffset } from '../scroll';
 interface UseEditorRenderingOptions {
   animations: boolean;
   smoothCursor: boolean;
+  smoothBlink: boolean;
   id: string;
   fontSize: number;
   blocked: boolean;
@@ -24,6 +25,7 @@ interface UseEditorRenderingOptions {
 export function useEditorRendering({
   animations,
   smoothCursor,
+  smoothBlink,
   id,
   fontSize,
   blocked,
@@ -67,6 +69,7 @@ export function useEditorRendering({
     let cursorMotion:
       { from: { row: number; column: number }; to: { row: number; column: number }; start: number } | undefined;
     let blinkTimer: ReturnType<typeof setTimeout> | undefined;
+    let blinkFade: { from: number; to: number; start: number } | undefined;
     const input = inputRef.current!;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const previousFrame = document.createElement('canvas');
@@ -87,6 +90,12 @@ export function useEditorRendering({
       const focused = document.activeElement === input;
       const target = gridRef.current.scrollCursor ?? gridRef.current.cursor;
       const now = performance.now();
+      if (blinkFade) {
+        const progress = canBlink() ? Math.min(1, (now - blinkFade.start) / 180) : 1;
+        const eased = progress * progress * (3 - 2 * progress);
+        gridRef.current.cursorOpacity = canBlink() ? blinkFade.from + (blinkFade.to - blinkFade.from) * eased : 1;
+        if (progress === 1) blinkFade = undefined;
+      }
       if (
         !cursorPosition ||
         !smoothCursorRef.current ||
@@ -122,7 +131,6 @@ export function useEditorRendering({
         cursorPosition
       );
       cellWidth = metrics.cellWidth;
-      if (cursorMotion) frame = requestAnimationFrame(render);
 
       if (motion) {
         const offset = scrollOffset(motion.distance, performance.now() - motion.start);
@@ -169,7 +177,6 @@ export function useEditorRendering({
             );
           }
           ctx.restore();
-          frame = requestAnimationFrame(render);
         }
       }
 
@@ -195,6 +202,10 @@ export function useEditorRendering({
         lastRows = rows;
         void window.nido.resize(id, columns, rows).catch((e) => errorRef.current(String(e)));
       }
+      if (cursorMotion || motion || blinkFade) {
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(render);
+      }
     };
 
     const schedule = (): void => {
@@ -214,7 +225,15 @@ export function useEditorRendering({
       if (!canBlink()) {
         return;
       }
-      gridRef.current.cursorVisible = !gridRef.current.cursorVisible;
+      if (smoothBlink) {
+        blinkFade = {
+          from: gridRef.current.cursorOpacity,
+          to: gridRef.current.cursorOpacity > 0.5 ? 0 : 1,
+          start: performance.now()
+        };
+      } else {
+        gridRef.current.cursorVisible = !gridRef.current.cursorVisible;
+      }
       schedule();
       blinkTimer = setTimeout(blink, 550);
     };
@@ -222,6 +241,8 @@ export function useEditorRendering({
     const resetBlink = (): void => {
       clearTimeout(blinkTimer);
       gridRef.current.cursorVisible = true;
+      gridRef.current.cursorOpacity = 1;
+      blinkFade = undefined;
       schedule();
       if (canBlink()) {
         blinkTimer = setTimeout(blink, 550);
@@ -329,7 +350,7 @@ export function useEditorRendering({
       unsubscribe();
       cancelAnimationFrame(frame);
     };
-  }, [id, fontSize, fontFamily]);
+  }, [id, fontSize, fontFamily, smoothBlink]);
 
   useEffect(() => {
     if (active && !blocked) {

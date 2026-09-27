@@ -248,7 +248,7 @@ test('type information is a selectable Nido card with keyboard scrolling and dis
   }
 });
 
-test('smooth cursor moves through intermediate positions and persists its setting', async () => {
+test('smooth cursor movement and blink animate and persist their settings', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-cursor-'));
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
@@ -271,6 +271,8 @@ test('smooth cursor moves through intermediate positions and persists its settin
     await page.keyboard.press('Home');
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     const setting = page.getByRole('checkbox', { name: 'Smooth cursor movement' });
+    const blinkSetting = page.getByRole('checkbox', { name: 'Smooth cursor blink' });
+    await expect(blinkSetting).not.toBeChecked();
     await expect(setting).not.toBeChecked();
     await setting.check();
     await page.getByRole('checkbox', { name: 'UI animations', exact: true }).uncheck();
@@ -281,10 +283,13 @@ test('smooth cursor moves through intermediate positions and persists its settin
       const ctx = node.getContext('2d')!;
       const fill = ctx.fillRect.bind(ctx);
       node.dataset.cursorXs = '[]';
+      node.dataset.cursorAlphas = '[]';
       ctx.fillRect = (x, y, w, h) => {
         if (ctx.fillStyle === '#b8bec8') {
           const xs = JSON.parse(node.dataset.cursorXs!) as number[];
           node.dataset.cursorXs = JSON.stringify([...xs.slice(-99), x]);
+          const alphas = JSON.parse(node.dataset.cursorAlphas!) as number[];
+          node.dataset.cursorAlphas = JSON.stringify([...alphas.slice(-99), ctx.globalAlpha]);
         }
         fill(x, y, w, h);
       };
@@ -313,14 +318,33 @@ test('smooth cursor moves through intermediate positions and persists its settin
     await setting.uncheck();
     await page.getByRole('button', { name: 'Close palette' }).click();
     expect(new Set((await move('10l')).map((x) => x.toFixed(2))).size).toBeLessThanOrEqual(2);
+    const hasFade = async (): Promise<boolean> => {
+      const alphas = JSON.parse((await canvas.getAttribute('data-cursor-alphas'))!) as number[];
+      return alphas.some((alpha) => alpha > 0.01 && alpha < 0.54);
+    };
+    await page.waitForTimeout(1200);
+    expect(await hasFade()).toBe(false);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await setting.check();
+    await blinkSetting.check();
     await page.getByRole('button', { name: 'Close palette' }).click();
+    await expect.poll(hasFade).toBe(true);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await canvas.evaluate((node: HTMLCanvasElement) => {
+      node.dataset.cursorAlphas = '[]';
+    });
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForTimeout(1200);
+    expect(await hasFade()).toBe(false);
+    await expect
+      .poll(async () => JSON.parse((await canvas.getAttribute('data-cursor-alphas'))!).length)
+      .toBeGreaterThan(0);
     await running.close();
     running = await electron.launch(options);
     page = await running.firstWindow();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await expect(page.getByRole('checkbox', { name: 'Smooth cursor movement' })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Smooth cursor blink' })).toBeChecked();
   } finally {
     await running.close();
     await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

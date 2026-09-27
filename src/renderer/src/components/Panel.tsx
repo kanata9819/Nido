@@ -13,6 +13,8 @@ interface PanelProps {
   workspaceId: string;
   animations: boolean;
   smoothCursor: boolean;
+  smoothBlink: boolean;
+  setSmoothBlink: (value: boolean) => void;
   setSmoothCursor: (value: boolean) => void;
   setAnimations: (value: boolean) => void;
   initialFolder: string;
@@ -73,6 +75,8 @@ export function Panel({
   workspaceId,
   animations,
   smoothCursor,
+  smoothBlink,
+  setSmoothBlink,
   setSmoothCursor,
   setAnimations,
   initialFolder,
@@ -197,6 +201,10 @@ export function Panel({
                 checked={smoothCursor}
                 onChange={(event) => setSmoothCursor(event.target.checked)}
               />
+            </label>
+            <label>
+              Smooth cursor blink{' '}
+              <input type="checkbox" checked={smoothBlink} onChange={(event) => setSmoothBlink(event.target.checked)} />
             </label>
             <p>
               Vim editing · Space commands · Ctrl+Tab workspaces
