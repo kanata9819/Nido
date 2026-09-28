@@ -109,6 +109,28 @@ export default function TypeInformation({
                         (['d', 'f'].includes(key) ? 1 : -1) *
                         content.clientHeight *
                         (['d', 'u'].includes(key) ? 0.5 : 1);
+                } else if (
+                    !event.ctrlKey &&
+                    !event.altKey &&
+                    !event.metaKey &&
+                    !event.nativeEvent.isComposing &&
+                    ['h', 'l', 'ArrowLeft', 'ArrowRight'].includes(event.key)
+                ) {
+                    event.preventDefault();
+                    const bounds = body.current!.getBoundingClientRect();
+                    const content = [
+                        ...body.current!.querySelectorAll<HTMLElement>('pre, table')
+                    ].find((node) => {
+                        const rect = node.getBoundingClientRect();
+                        return (
+                            node.scrollWidth > node.clientWidth &&
+                            rect.bottom > bounds.top &&
+                            rect.top < bounds.bottom
+                        );
+                    });
+                    if (content) {
+                        content.scrollLeft += ['l', 'ArrowRight'].includes(event.key) ? 48 : -48;
+                    }
                 } else if (event.key === 'Tab') {
                     event.preventDefault();
                     const nodes = [
@@ -214,8 +236,8 @@ export default function TypeInformation({
                 {linkError && <p role="alert">{linkError}</p>}
             </div>
             <footer>
-                <span title="↑ ↓ / j k: line · Ctrl+D/U: half page · Ctrl+F/B: page">
-                    Ctrl D / U · Scroll
+                <span title="h/l / ← →: horizontal · j/k: line · Ctrl+D/U: half page · Ctrl+F/B: page">
+                    h / l · Horizontal · Ctrl D / U · Scroll
                 </span>
                 <span>Esc / Ctrl C · Back to editor</span>
             </footer>

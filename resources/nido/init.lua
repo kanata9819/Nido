@@ -4,9 +4,19 @@ vim.opt.shortmess:append('IWF')
 vim.o.termguicolors = true
 vim.o.number = true
 vim.o.relativenumber = false
+-- Buffer switches can restore cached window options from before a settings change.
+vim.api.nvim_create_autocmd({ 'BufWinEnter', 'WinEnter' }, {
+  callback = function()
+    if vim.bo.buftype == '' and vim.api.nvim_win_get_config(0).relative == '' then
+      vim.wo.relativenumber = vim.go.relativenumber
+    end
+  end,
+})
 vim.o.showmode = false
 vim.o.ruler = false
 vim.o.showcmd = false
+-- Normal-mode Ctrl+C should cancel without Neovim's terminal quit hint.
+vim.keymap.set('n', '<C-c>', '<Esc>', { silent = true })
 vim.o.laststatus = 0
 vim.o.showtabline = 0
 vim.o.mouse = 'a'

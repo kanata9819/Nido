@@ -332,7 +332,7 @@ test('type information is a selectable Nido card with keyboard scrolling and dis
                 (_, index) => ` *\n * Detail ${index + 1}: coordinates are measured in cells.`
             ),
             ' */',
-            'export function setCursor(row: number, column: number): number {',
+            'export function setCursor(row: number, column: number, coordinateSpaceOptionsForViewportAndDocumentPositionCalculation?: { coordinateSpace: "viewport" | "document" }): number {',
             '  return row * 80 + column;',
             '}',
             'setCursor(1, 2);',
@@ -418,6 +418,16 @@ test('type information is a selectable Nido card with keyboard scrolling and dis
             )
             .toBeGreaterThan(1);
         expect(await page.evaluate(() => 'hoverUnsafe' in window)).toBe(false);
+        const signature = popup.locator('pre').first();
+        expect(await signature.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(true);
+        await page.keyboard.press('l');
+        await expect.poll(() => signature.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+        await page.keyboard.press('h');
+        await expect.poll(() => signature.evaluate((node) => node.scrollLeft)).toBe(0);
+        await page.keyboard.press('ArrowRight');
+        await expect.poll(() => signature.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+        await page.keyboard.press('ArrowLeft');
+        await expect.poll(() => signature.evaluate((node) => node.scrollLeft)).toBe(0);
         await page.keyboard.press('j');
         await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
         await page.keyboard.press('Home');

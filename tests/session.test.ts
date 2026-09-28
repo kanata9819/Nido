@@ -446,6 +446,60 @@ test('split redraw notifications remain invisible until flush and keep scroll me
     }
 });
 
+test('relative line numbers follow the setting when switching previously opened files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-relative-files-'));
+    let session: Session | undefined;
+    try {
+        await writeFile(join(root, 'first.txt'), 'first\n');
+        await writeFile(join(root, 'second.txt'), 'second\n');
+        await writeFile(join(root, 'new.txt'), 'new\n');
+        session = await Session.create(root, () => {});
+        await session.openFile('first.txt');
+        await session.openFile('second.txt');
+        await session.setRelativeLineNumbers(true);
+        await session.openFile('first.txt');
+        assert.equal(await session.client.request('nvim_eval', ['&l:relativenumber']), 1);
+        await session.openFile('second.txt');
+        assert.equal(await session.client.request('nvim_eval', ['&l:relativenumber']), 1);
+        await session.openFile('new.txt');
+        assert.equal(await session.client.request('nvim_eval', ['&l:relativenumber']), 1);
+        await session.setRelativeLineNumbers(false);
+        await session.openFile('first.txt');
+        assert.equal(await session.client.request('nvim_eval', ['&l:relativenumber']), 0);
+        await session.openFile('second.txt');
+        assert.equal(await session.client.request('nvim_eval', ['&l:relativenumber']), 0);
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test('normal Ctrl+C avoids the Neovim quit hint while command entry remains visible', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-quit-hint-'));
+    const grid = new Grid();
+    let session: Session | undefined;
+    try {
+        session = await Session.create(root, (event) => {
+            if (event.type === 'redraw') grid.apply(event.events);
+        });
+        await session.attach(80, 24);
+        await session.input('<C-c>');
+        await new Promise((done) => setTimeout(done, 30));
+        const text = () =>
+            grid.cells.map((row) => row.map((cell) => cell.text).join('')).join('\n');
+        assert.doesNotMatch(text(), /Type.*:qa.*exit Nvim/);
+        await session.input(':echo');
+        await new Promise((done) => setTimeout(done, 30));
+        assert.match(text(), /:echo/);
+        await session.input('<C-c>');
+        await session.client.request('nvim_eval', ['1']);
+        assert.equal(await session.client.request('nvim_eval', ['mode()']), 'n');
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('saving keeps the grid cursor still and viewport progress updates without Vim footer text', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-save-cursor-'));
     let session: Session | undefined;
