@@ -3,191 +3,220 @@ import type { FileEntry } from '../../../shared/types';
 import styles from '../assets/Nido.module.css';
 
 export default function FolderPicker({
-  initialPath,
-  busy,
-  onOpen
+    initialPath,
+    busy,
+    onOpen
 }: {
-  initialPath: string;
-  busy: boolean;
-  onOpen: (path: string, kind: 'editor' | 'terminal') => void;
+    initialPath: string;
+    busy: boolean;
+    onOpen: (path: string, kind: 'editor' | 'terminal') => void;
 }): React.JSX.Element {
-  const [path, setPath] = useState(initialPath);
-  const [kind, setKind] = useState<'editor' | 'terminal'>('editor');
-  const [directory, setDirectory] = useState('');
-  const [parent, setParent] = useState('');
-  const [folders, setFolders] = useState<FileEntry[]>([]);
-  const [selected, setSelected] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const list = useRef<HTMLDivElement>(null);
-  const address = useRef<HTMLInputElement>(null);
-  const request = useRef(0);
-  async function browse(next: string): Promise<void> {
-    const id = ++request.current;
-    setLoading(true);
-    setError('');
-    try {
-      const result = await window.nido.browseFolders(next);
-      if (id !== request.current) {
-        return;
-      }
-      setPath(result.path);
-      setDirectory(result.path);
-      setParent(result.parent);
-      setFolders(result.folders);
-      setSelected(0);
-      requestAnimationFrame(() => {
-        if (id === request.current) {
-          list.current?.focus();
-        }
-      });
-    } catch (err) {
-      if (id === request.current) {
-        setError(String(err));
-      }
-    } finally {
-      if (id === request.current) {
-        setLoading(false);
-      }
-    }
-  }
-  useEffect(() => {
-    void browse(initialPath);
-    return () => {
-      request.current++;
-    };
-  }, []);
-  useEffect(() => {
-    list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
-  }, [selected]);
-  return (
-    <div
-      className={styles.folderPicker}
-      onKeyDown={(event) => {
-        if (event.ctrlKey && event.key.toLowerCase() === 'l') {
-          event.preventDefault();
-          address.current?.focus();
-          address.current?.select();
-        }
-        if (event.ctrlKey && event.key === 'Enter' && !busy && !loading) {
-          event.preventDefault();
-          onOpen(path, kind);
-        }
-      }}
-    >
-      <input
-        ref={address}
-        className={`${styles.paletteInput} ${styles.folderPath}`}
-        aria-label="Folder path"
-        value={path}
-        disabled={busy}
-        onChange={(event) => setPath(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.ctrlKey) {
-            event.preventDefault();
-            void browse(path);
-          }
-          if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            list.current?.focus();
-          }
-        }}
-      />
-      <div className={styles.folderActions}>
-        <label>
-          Session type{' '}
-          <select
-            aria-label="Session type"
-            value={kind}
-            disabled={busy}
-            onChange={(event) => setKind(event.target.value as 'editor' | 'terminal')}
-          >
-            <option value="editor">Editor</option>
-            <option value="terminal">Terminal</option>
-          </select>
-        </label>
-        <button disabled={loading || busy || parent === directory} onClick={() => void browse(parent)}>
-          ↑ Parent
-        </button>
-        <button disabled={loading || busy || !directory} onClick={() => onOpen(directory, kind)}>
-          {busy ? 'Opening…' : 'Open current folder'}
-        </button>
-      </div>
-      {error && <p role="alert">{error}</p>}
-      <div
-        ref={list}
-        role="listbox"
-        aria-label="Folders"
-        tabIndex={0}
-        aria-busy={loading || busy}
-        aria-activedescendant={folders[selected] ? `folder-choice-${selected}` : undefined}
-        className={styles.paletteItems}
-        onKeyDown={(event) => {
-          if (event.ctrlKey || event.altKey || event.metaKey || event.nativeEvent.isComposing || loading || busy) {
-            return;
-          }
-          const key = event.key;
-          if (
-            !['j', 'k', 'h', 'l', 'ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Enter', 'Backspace'].includes(key)
-          ) {
-            return;
-          }
-          event.preventDefault();
-          switch (key) {
-            case 'j':
-            case 'ArrowDown': {
-              setSelected((value) => Math.max(0, Math.min(folders.length - 1, value + 1)));
-              break;
+    const [path, setPath] = useState(initialPath);
+    const [kind, setKind] = useState<'editor' | 'terminal'>('editor');
+    const [directory, setDirectory] = useState('');
+    const [parent, setParent] = useState('');
+    const [folders, setFolders] = useState<FileEntry[]>([]);
+    const [selected, setSelected] = useState(0);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const list = useRef<HTMLDivElement>(null);
+    const address = useRef<HTMLInputElement>(null);
+    const request = useRef(0);
+    async function browse(next: string): Promise<void> {
+        const id = ++request.current;
+        setLoading(true);
+        setError('');
+        try {
+            const result = await window.nido.browseFolders(next);
+            if (id !== request.current) {
+                return;
             }
-            case 'k':
-            case 'ArrowUp': {
-              setSelected((value) => Math.max(0, value - 1));
-              break;
-            }
-            case 'h':
-            case 'ArrowLeft':
-            case 'Backspace': {
-              void browse(parent);
-              break;
-            }
-            default: {
-              if (folders[selected]) {
-                if (key === 'Enter') {
-                  onOpen(folders[selected].path, kind);
-                } else {
-                  void browse(folders[selected].path);
+            setPath(result.path);
+            setDirectory(result.path);
+            setParent(result.parent);
+            setFolders(result.folders);
+            setSelected(0);
+            requestAnimationFrame(() => {
+                if (id === request.current) {
+                    list.current?.focus();
                 }
-              }
-              break;
+            });
+        } catch (err) {
+            if (id === request.current) {
+                setError(String(err));
             }
-          }
-        }}
-      >
-        {loading ? (
-          <p>Loading folders…</p>
-        ) : (
-          folders.map((folder, index) => (
-            <div
-              key={folder.path}
-              id={`folder-choice-${index}`}
-              role="option"
-              aria-selected={index === selected}
-              className={`${styles.folderChoice} ${index === selected ? styles.selectedItem : ''}`}
-              onClick={() => {
-                setSelected(index);
-                list.current?.focus();
-              }}
-              onDoubleClick={() => void browse(folder.path)}
-            >
-              ▸ {folder.name}
+        } finally {
+            if (id === request.current) {
+                setLoading(false);
+            }
+        }
+    }
+    useEffect(() => {
+        void browse(initialPath);
+        return () => {
+            request.current++;
+        };
+    }, []);
+    useEffect(() => {
+        list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+    }, [selected]);
+    return (
+        <div
+            className={styles.folderPicker}
+            onKeyDown={(event) => {
+                if (event.ctrlKey && event.key.toLowerCase() === 'l') {
+                    event.preventDefault();
+                    address.current?.focus();
+                    address.current?.select();
+                }
+                if (event.ctrlKey && event.key === 'Enter' && !busy && !loading) {
+                    event.preventDefault();
+                    onOpen(path, kind);
+                }
+            }}
+        >
+            <input
+                ref={address}
+                className={`${styles.paletteInput} ${styles.folderPath}`}
+                aria-label="Folder path"
+                value={path}
+                disabled={busy}
+                onChange={(event) => setPath(event.target.value)}
+                onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.ctrlKey) {
+                        event.preventDefault();
+                        void browse(path);
+                    }
+                    if (event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        list.current?.focus();
+                    }
+                }}
+            />
+            <div className={styles.folderActions}>
+                <label>
+                    Session type{' '}
+                    <select
+                        aria-label="Session type"
+                        value={kind}
+                        disabled={busy}
+                        onChange={(event) => setKind(event.target.value as 'editor' | 'terminal')}
+                    >
+                        <option value="editor">Editor</option>
+                        <option value="terminal">Terminal</option>
+                    </select>
+                </label>
+                <button
+                    disabled={loading || busy || parent === directory}
+                    onClick={() => void browse(parent)}
+                >
+                    ↑ Parent
+                </button>
+                <button
+                    disabled={loading || busy || !directory}
+                    onClick={() => onOpen(directory, kind)}
+                >
+                    {busy ? 'Opening…' : 'Open current folder'}
+                </button>
             </div>
-          ))
-        )}
-        {!loading && !folders.length && <p>No subfolders. Open this folder with Ctrl+Enter.</p>}
-      </div>
-      <p className={styles.folderActions}>
-        j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Esc Cancel
-      </p>
-    </div>
-  );
+            {error && <p role="alert">{error}</p>}
+            <div
+                ref={list}
+                role="listbox"
+                aria-label="Folders"
+                tabIndex={0}
+                aria-busy={loading || busy}
+                aria-activedescendant={folders[selected] ? `folder-choice-${selected}` : undefined}
+                className={styles.paletteItems}
+                onKeyDown={(event) => {
+                    if (
+                        event.ctrlKey ||
+                        event.altKey ||
+                        event.metaKey ||
+                        event.nativeEvent.isComposing ||
+                        loading ||
+                        busy
+                    ) {
+                        return;
+                    }
+                    const key = event.key;
+                    if (
+                        ![
+                            'j',
+                            'k',
+                            'h',
+                            'l',
+                            'ArrowDown',
+                            'ArrowUp',
+                            'ArrowLeft',
+                            'ArrowRight',
+                            'Enter',
+                            'Backspace'
+                        ].includes(key)
+                    ) {
+                        return;
+                    }
+                    event.preventDefault();
+                    switch (key) {
+                        case 'j':
+                        case 'ArrowDown': {
+                            setSelected((value) =>
+                                Math.max(0, Math.min(folders.length - 1, value + 1))
+                            );
+                            break;
+                        }
+                        case 'k':
+                        case 'ArrowUp': {
+                            setSelected((value) => Math.max(0, value - 1));
+                            break;
+                        }
+                        case 'h':
+                        case 'ArrowLeft':
+                        case 'Backspace': {
+                            void browse(parent);
+                            break;
+                        }
+                        default: {
+                            if (folders[selected]) {
+                                if (key === 'Enter') {
+                                    onOpen(folders[selected].path, kind);
+                                } else {
+                                    void browse(folders[selected].path);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }}
+            >
+                {loading ? (
+                    <p>Loading folders…</p>
+                ) : (
+                    folders.map((folder, index) => (
+                        <div
+                            key={folder.path}
+                            id={`folder-choice-${index}`}
+                            role="option"
+                            aria-selected={index === selected}
+                            className={`${styles.folderChoice} ${index === selected ? styles.selectedItem : ''}`}
+                            onClick={() => {
+                                setSelected(index);
+                                list.current?.focus();
+                            }}
+                            onDoubleClick={() => void browse(folder.path)}
+                        >
+                            ▸ {folder.name}
+                        </div>
+                    ))
+                )}
+                {!loading && !folders.length && (
+                    <p>No subfolders. Open this folder with Ctrl+Enter.</p>
+                )}
+            </div>
+            <p className={styles.folderActions}>
+                j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L
+                Path · Esc Cancel
+            </p>
+        </div>
+    );
 }

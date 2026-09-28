@@ -6,1908 +6,2238 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 test('explorer supports half-page, page and first/last selection with Vim keys', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-explorer-keys-'));
-  const workspace = join(root, 'workspace');
-  await mkdir(workspace);
-  await Promise.all(
-    Array.from({ length: 80 }, (_, index) =>
-      writeFile(join(workspace, `file-${String(index).padStart(2, '0')}.txt`), 'sample\n')
-    )
-  );
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const executablePath = process.env.NIDO_PACKAGED_EXE;
-  const running = await electron.launch({
-    executablePath,
-    args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
-    env
-  });
-  try {
-    const page = await running.firstWindow();
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, workspace);
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await page.keyboard.press('Control+h');
-    const tree = page.getByRole('tree', { name: 'Project files' });
-    await expect(tree).toBeFocused();
-    await expect(tree.getByRole('treeitem')).toHaveCount(80);
-    const selected = tree.locator('[aria-selected="true"]');
-    await page.keyboard.type('gg');
-    await expect(selected).toHaveText('file-00.txt');
-    const step = await tree.evaluate((node) =>
-      Math.max(
-        1,
-        Math.floor(node.clientHeight / node.querySelector('[role="treeitem"]')!.getBoundingClientRect().height / 2)
-      )
+    const root = await mkdtemp(join(tmpdir(), 'nido-explorer-keys-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+    await Promise.all(
+        Array.from({ length: 80 }, (_, index) =>
+            writeFile(join(workspace, `file-${String(index).padStart(2, '0')}.txt`), 'sample\n')
+        )
     );
-    await page.keyboard.press('Control+d');
-    await expect(selected).toHaveText(`file-${String(step).padStart(2, '0')}.txt`);
-    await page.keyboard.press('Control+u');
-    await expect(selected).toHaveText('file-00.txt');
-    await page.keyboard.press('Control+f');
-    await expect(selected).not.toHaveText(`file-${String(step).padStart(2, '0')}.txt`);
-    await expect.poll(() => tree.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
-    await page.keyboard.press('Control+b');
-    await expect(selected).toHaveText('file-00.txt');
-    await page.keyboard.press('Shift+g');
-    await expect(selected).toHaveText('file-79.txt');
-    await page.keyboard.press('Control+d');
-    await expect(selected).toHaveText('file-79.txt');
-    await page.keyboard.press('Control+g');
-    await expect(selected).toHaveText('file-79.txt');
-    await tree.dispatchEvent('keydown', { key: 'g', isComposing: true });
-    await expect(selected).toHaveText('file-79.txt');
-    await page.keyboard.type('gg');
-    await expect(selected).toHaveText('file-00.txt');
-    await page.keyboard.press('PageDown');
-    await expect(selected).not.toHaveText('file-00.txt');
-    await page.keyboard.press('PageUp');
-    await expect(selected).toHaveText('file-00.txt');
-    await expect(tree).toBeFocused();
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('tab', { name: 'file-00.txt', exact: true })).toBeVisible();
-  } finally {
-    await running.close();
-    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  }
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
+    const running = await electron.launch({
+        executablePath,
+        args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+        env
+    });
+    try {
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+h');
+        const tree = page.getByRole('tree', { name: 'Project files' });
+        await expect(tree).toBeFocused();
+        await expect(tree.getByRole('treeitem')).toHaveCount(80);
+        const selected = tree.locator('[aria-selected="true"]');
+        await page.keyboard.type('gg');
+        await expect(selected).toHaveText('file-00.txt');
+        const step = await tree.evaluate((node) =>
+            Math.max(
+                1,
+                Math.floor(
+                    node.clientHeight /
+                        node.querySelector('[role="treeitem"]')!.getBoundingClientRect().height /
+                        2
+                )
+            )
+        );
+        await page.keyboard.press('Control+d');
+        await expect(selected).toHaveText(`file-${String(step).padStart(2, '0')}.txt`);
+        await page.keyboard.press('Control+u');
+        await expect(selected).toHaveText('file-00.txt');
+        await page.keyboard.press('Control+f');
+        await expect(selected).not.toHaveText(`file-${String(step).padStart(2, '0')}.txt`);
+        await expect.poll(() => tree.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+        await page.keyboard.press('Control+b');
+        await expect(selected).toHaveText('file-00.txt');
+        await page.keyboard.press('Shift+g');
+        await expect(selected).toHaveText('file-79.txt');
+        await page.keyboard.press('Control+d');
+        await expect(selected).toHaveText('file-79.txt');
+        await page.keyboard.press('Control+g');
+        await expect(selected).toHaveText('file-79.txt');
+        await tree.dispatchEvent('keydown', { key: 'g', isComposing: true });
+        await expect(selected).toHaveText('file-79.txt');
+        await page.keyboard.type('gg');
+        await expect(selected).toHaveText('file-00.txt');
+        await page.keyboard.press('PageDown');
+        await expect(selected).not.toHaveText('file-00.txt');
+        await page.keyboard.press('PageUp');
+        await expect(selected).toHaveText('file-00.txt');
+        await expect(tree).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('tab', { name: 'file-00.txt', exact: true })).toBeVisible();
+    } finally {
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
 });
 
 test('typing hides the pointer and moving or clicking restores it', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-pointer-'));
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const executablePath = process.env.NIDO_PACKAGED_EXE;
-  const running = await electron.launch({
-    executablePath,
-    args: [...(executablePath ? [] : ['.']), `--user-data-dir=${root}`],
-    env
-  });
-  try {
-    const page = await running.firstWindow();
-    const settings = page.getByRole('button', { name: 'Settings', exact: true });
-    await settings.click();
-    const slider = page.getByRole('slider');
-    await slider.focus();
-    await page.keyboard.press('ArrowRight');
-    await expect(slider).toHaveCSS('cursor', 'none');
-    await expect(settings).toHaveCSS('cursor', 'none');
-    await page.mouse.move(600, 400);
-    await expect(slider).not.toHaveCSS('cursor', 'none');
-    await page.keyboard.press('ArrowLeft');
-    await expect(slider).toHaveCSS('cursor', 'none');
-    await page.mouse.down();
-    await page.mouse.up();
-    await expect(settings).not.toHaveCSS('cursor', 'none');
-  } finally {
-    await running.close();
-    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  }
+    const root = await mkdtemp(join(tmpdir(), 'nido-pointer-'));
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
+    const running = await electron.launch({
+        executablePath,
+        args: [...(executablePath ? [] : ['.']), `--user-data-dir=${root}`],
+        env
+    });
+    try {
+        const page = await running.firstWindow();
+        const settings = page.getByRole('button', { name: 'Settings', exact: true });
+        await settings.click();
+        const slider = page.getByRole('slider');
+        await slider.focus();
+        await page.keyboard.press('ArrowRight');
+        await expect(slider).toHaveCSS('cursor', 'none');
+        await expect(settings).toHaveCSS('cursor', 'none');
+        await page.mouse.move(600, 400);
+        await expect(slider).not.toHaveCSS('cursor', 'none');
+        await page.keyboard.press('ArrowLeft');
+        await expect(slider).toHaveCSS('cursor', 'none');
+        await page.mouse.down();
+        await page.mouse.up();
+        await expect(settings).not.toHaveCSS('cursor', 'none');
+    } finally {
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
 });
 
 test('font family updates the canvas and survives reopening settings and restarting', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-font-'));
-  const workspace = join(root, 'workspace');
-  await mkdir(workspace);
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const executablePath = process.env.NIDO_PACKAGED_EXE;
-  const options = {
-    executablePath,
-    args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
-    env
-  };
-  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
-  try {
-    running = await electron.launch(options);
-    let page = await running.firstWindow();
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, workspace);
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    const canvasFont = (): Promise<string> =>
-      page.locator('canvas:visible').evaluate((canvas: HTMLCanvasElement) => canvas.getContext('2d')!.font);
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    let input = page.getByRole('textbox', { name: 'Font family', exact: true });
-    const defaultFamily = await input.inputValue();
-    expect(defaultFamily).toContain('Cascadia Code');
-    await input.fill('monospace');
-    await expect.poll(canvasFont).toBe('15px monospace');
-    await input.fill('   ');
-    await expect.poll(canvasFont).toContain('Cascadia Code');
-    await input.fill('Consolas');
-    await expect.poll(canvasFont).toBe('15px Consolas');
-    await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await expect(input).toHaveValue('Consolas');
-    await running.close();
-    running = await electron.launch(options);
-    page = await running.firstWindow();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    input = page.getByRole('textbox', { name: 'Font family', exact: true });
-    await expect(input).toHaveValue('Consolas');
-    await expect.poll(canvasFont).toBe('15px Consolas');
-    await expect(input).toHaveCSS('background-color', 'rgb(18, 20, 22)');
-    await input.focus();
-    await page.screenshot({ path: 'test-results/nido-font-settings.png' });
-  } finally {
-    await running?.close();
-    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  }
+    const root = await mkdtemp(join(tmpdir(), 'nido-font-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
+    const options = {
+        executablePath,
+        args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+        env
+    };
+    let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    try {
+        running = await electron.launch(options);
+        let page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        const canvasFont = (): Promise<string> =>
+            page
+                .locator('canvas:visible')
+                .evaluate((canvas: HTMLCanvasElement) => canvas.getContext('2d')!.font);
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        let input = page.getByRole('textbox', { name: 'Font family', exact: true });
+        const defaultFamily = await input.inputValue();
+        expect(defaultFamily).toContain('Cascadia Code');
+        await input.fill('monospace');
+        await expect.poll(canvasFont).toBe('15px monospace');
+        await input.fill('   ');
+        await expect.poll(canvasFont).toContain('Cascadia Code');
+        await input.fill('Consolas');
+        await expect.poll(canvasFont).toBe('15px Consolas');
+        await page.keyboard.press('Escape');
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await expect(input).toHaveValue('Consolas');
+        await running.close();
+        running = await electron.launch(options);
+        page = await running.firstWindow();
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        input = page.getByRole('textbox', { name: 'Font family', exact: true });
+        await expect(input).toHaveValue('Consolas');
+        await expect.poll(canvasFont).toBe('15px Consolas');
+        await expect(input).toHaveCSS('background-color', 'rgb(18, 20, 22)');
+        await input.focus();
+        await page.screenshot({ path: 'test-results/nido-font-settings.png' });
+    } finally {
+        await running?.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
 });
 
 test('Japanese editor text stays legible at fractional display scales', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-legibility-'));
-  const workspace = join(root, 'workspace');
-  await mkdir(workspace);
-  await writeFile(
-    join(workspace, 'sample.ts'),
-    [
-      '// カーソルから画面末尾まで消去する',
-      '// 日本語の描画位置・文字の明るさを確認',
-      'export function setCursor(row: number, col: number) {',
-      '    const message = "画面の表示を更新します";',
-      '    const index = (row - 1) * 80 + col;',
-      '    return { index, message };',
-      '}',
-      ''
-    ].join('\n')
-  );
-  await writeFile(join(workspace, 'tsconfig.json'), '{}');
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const running = await electron.launch({
-    args: ['.', `--user-data-dir=${join(root, 'profile')}`, '--force-device-scale-factor=1.25'],
-    env
-  });
-  try {
-    const page = await running.firstWindow();
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, workspace);
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await page.keyboard.press('Control+p');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('sample.ts');
-    await page.keyboard.press('Enter');
-    const canvas = page.locator('canvas:visible');
-    await expect(canvas).toHaveAttribute('aria-description', /日本語の描画位置/);
-    await canvas.evaluate((element: HTMLCanvasElement) => {
-      const ctx = element.getContext('2d')!;
-      const fillText = ctx.fillText.bind(ctx);
-      element.dataset.aligned = 'true';
-      ctx.fillText = (text, x, y) => {
-        const dpr = window.devicePixelRatio;
-        if (Math.abs(x * dpr - Math.round(x * dpr)) > 0.001 || Math.abs(y * dpr - Math.round(y * dpr)) > 0.001) {
-          element.dataset.aligned = 'false';
-        }
-        if (text === '語') element.dataset.japaneseInk = String(ctx.fillStyle);
-        if (ctx.fillStyle === '#ffb300') element.dataset.parameterInk = String(ctx.fillStyle);
-        fillText(text, x, y);
-      };
+    const root = await mkdtemp(join(tmpdir(), 'nido-legibility-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+    await writeFile(
+        join(workspace, 'sample.ts'),
+        [
+            '// カーソルから画面末尾まで消去する',
+            '// 日本語の描画位置・文字の明るさを確認',
+            'export function setCursor(row: number, col: number) {',
+            '    const message = "画面の表示を更新します";',
+            '    const index = (row - 1) * 80 + col;',
+            '    return { index, message };',
+            '}',
+            ''
+        ].join('\n')
+    );
+    await writeFile(join(workspace, 'tsconfig.json'), '{}');
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`, '--force-device-scale-factor=1.25'],
+        env
     });
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByRole('checkbox', { name: 'UI animations' }).uncheck();
-    await page.getByRole('button', { name: 'Close palette' }).click();
-    await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeHidden();
-    await expect(canvas).toHaveAttribute('data-japanese-ink', '#6a9955');
-    await expect(canvas).toHaveAttribute('data-parameter-ink', '#ffb300');
-    await expect(canvas).toHaveAttribute('data-aligned', 'true');
-    expect(
-      await canvas.evaluate((element: HTMLCanvasElement) => element.getContext('2d')!.getContextAttributes().alpha)
-    ).toBe(false);
-    const bounds = (await canvas.boundingBox())!;
-    await page.screenshot({ path: 'test-results/nido-reference-colors.png', clip: { ...bounds, height: 240 } });
-  } finally {
-    await running.close();
-    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  }
+    try {
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('sample.ts');
+        await page.keyboard.press('Enter');
+        const canvas = page.locator('canvas:visible');
+        await expect(canvas).toHaveAttribute('aria-description', /日本語の描画位置/);
+        await canvas.evaluate((element: HTMLCanvasElement) => {
+            const ctx = element.getContext('2d')!;
+            const fillText = ctx.fillText.bind(ctx);
+            element.dataset.aligned = 'true';
+            ctx.fillText = (text, x, y) => {
+                const dpr = window.devicePixelRatio;
+                if (
+                    Math.abs(x * dpr - Math.round(x * dpr)) > 0.001 ||
+                    Math.abs(y * dpr - Math.round(y * dpr)) > 0.001
+                ) {
+                    element.dataset.aligned = 'false';
+                }
+                if (text === '語') element.dataset.japaneseInk = String(ctx.fillStyle);
+                if (ctx.fillStyle === '#ffb300')
+                    element.dataset.parameterInk = String(ctx.fillStyle);
+                fillText(text, x, y);
+            };
+        });
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page.getByRole('checkbox', { name: 'UI animations' }).uncheck();
+        await page.getByRole('button', { name: 'Close palette' }).click();
+        await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeHidden();
+        await expect(canvas).toHaveAttribute('data-japanese-ink', '#6a9955');
+        await expect(canvas).toHaveAttribute('data-parameter-ink', '#ffb300');
+        await expect(canvas).toHaveAttribute('data-aligned', 'true');
+        expect(
+            await canvas.evaluate(
+                (element: HTMLCanvasElement) =>
+                    element.getContext('2d')!.getContextAttributes().alpha
+            )
+        ).toBe(false);
+        const bounds = (await canvas.boundingBox())!;
+        await page.screenshot({
+            path: 'test-results/nido-reference-colors.png',
+            clip: { ...bounds, height: 240 }
+        });
+    } finally {
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
 });
 
 test('type information is a selectable Nido card with keyboard scrolling and dismissal', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-hover-card-'));
-  const workspace = join(root, 'workspace');
-  await mkdir(workspace);
-  await writeFile(join(workspace, 'tsconfig.json'), '{}');
-  await writeFile(
-    join(workspace, 'sample.ts'),
-    [
-      '/**',
-      ' * カーソル位置を更新します。',
-      ' *',
-      ' * Returns the **screen position** from `row` and `column`.',
-      ' *',
-      ' * ## Usage',
-      ' *',
-      ' * - **row**: vertical position',
-      ' * - *column*: horizontal position',
-      ' *',
-      ' * > Positions start at zero.',
-      ' *',
-      ' * | Field | Type |',
-      ' * | --- | --- |',
-      ' * | row | number |',
-      ' *',
-      ' * [Documentation](https://example.com/docs)',
-      ' * [Unsafe](javascript:alert(1))',
-      ' * ![Remote illustration](https://example.com/image.png)',
-      ' * <script>window.hoverUnsafe = true</script>',
-      ...Array.from({ length: 25 }, (_, index) => ` *\n * Detail ${index + 1}: coordinates are measured in cells.`),
-      ' */',
-      'export function setCursor(row: number, column: number): number {',
-      '  return row * 80 + column;',
-      '}',
-      'setCursor(1, 2);',
-      ''
-    ].join('\n')
-  );
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const running = await electron.launch({ args: ['.', `--user-data-dir=${join(root, 'profile')}`], env });
-  try {
-    const page = await running.firstWindow();
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, workspace);
-    const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
-    await expect(editor).toBeFocused();
-    await page.keyboard.press('Control+p');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('sample.ts');
-    await page.keyboard.press('Enter');
-    await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /カーソル位置/);
-    await page.keyboard.type('G0');
-    await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /setCursor/);
-    const popup = page.getByRole('dialog', { name: 'Type information', exact: true });
-    await expect(async () => {
-      await editor.focus();
-      await page.keyboard.press('Control+k');
-      await expect(popup.locator('pre')).toContainText('setCursor', { timeout: 1000 });
-    }).toPass({ timeout: 15000 });
-    const content = page.getByLabel('Type information content', { exact: true });
-    await expect(content).toBeFocused();
-    await expect(content).toContainText('カーソル位置を更新します');
-    await expect(content.getByRole('heading', { name: 'Usage' })).toBeVisible();
-    await expect(content.locator('ul li')).toHaveCount(2);
-    await expect(content.locator('blockquote')).toContainText('Positions start at zero');
-    await expect(content.getByRole('table')).toContainText('number');
-    await expect(content.getByRole('link', { name: 'Documentation' })).toHaveAttribute(
-      'href',
-      'https://example.com/docs'
+    const root = await mkdtemp(join(tmpdir(), 'nido-hover-card-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+    await writeFile(join(workspace, 'tsconfig.json'), '{}');
+    await writeFile(
+        join(workspace, 'sample.ts'),
+        [
+            '/**',
+            ' * カーソル位置を更新します。',
+            ' *',
+            ' * Returns the **screen position** from `row` and `column`.',
+            ' *',
+            ' * ## Usage',
+            ' *',
+            ' * - **row**: vertical position',
+            ' * - *column*: horizontal position',
+            ' *',
+            ' * > Positions start at zero.',
+            ' *',
+            ' * | Field | Type |',
+            ' * | --- | --- |',
+            ' * | row | number |',
+            ' *',
+            ' * [Documentation](https://example.com/docs)',
+            ' * [Unsafe](javascript:alert(1))',
+            ' * ![Remote illustration](https://example.com/image.png)',
+            ' * <script>window.hoverUnsafe = true</script>',
+            ...Array.from(
+                { length: 25 },
+                (_, index) => ` *\n * Detail ${index + 1}: coordinates are measured in cells.`
+            ),
+            ' */',
+            'export function setCursor(row: number, column: number): number {',
+            '  return row * 80 + column;',
+            '}',
+            'setCursor(1, 2);',
+            ''
+        ].join('\n')
     );
-    await expect(content.getByRole('link', { name: 'Unsafe' })).toHaveCount(0);
-    await expect(content.locator('img, script')).toHaveCount(0);
-    await running.evaluate(({ shell, app }) => {
-      shell.openExternal = async (url) => {
-        app.setName(url);
-      };
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        env
     });
-    await content.getByRole('link', { name: 'Documentation' }).focus();
-    await page.keyboard.press('Enter');
-    await expect.poll(() => running.evaluate(({ app }) => app.getName())).toBe('https://example.com/docs');
-    expect(
-      await page.evaluate(() =>
-        window.nido.openDocumentation('file:///C:/Windows').then(
-          () => false,
-          () => true
-        )
-      )
-    ).toBe(true);
-    await content.focus();
-    await page.keyboard.press('Home');
-    await expect(popup.locator('pre code span span').filter({ hasText: /^function$/ })).toHaveCSS(
-      'color',
-      'rgb(86, 156, 214)'
-    );
-    await expect
-      .poll(
-        async () =>
-          await popup
-            .locator('pre code span span')
-            .evaluateAll((spans) => new Set(spans.map((span) => getComputedStyle(span).color)).size)
-      )
-      .toBeGreaterThan(1);
-    expect(await page.evaluate(() => 'hoverUnsafe' in window)).toBe(false);
-    await page.keyboard.press('j');
-    await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
-    await page.keyboard.press('Home');
-    await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
-    for (const [down, up, fraction] of [
-      ['d', 'u', 0.5],
-      ['f', 'b', 1]
-    ] as const) {
-      const height = await content.evaluate((node) => node.clientHeight);
-      await page.keyboard.press(`Control+${down}`);
-      await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeCloseTo(height * fraction, 0);
-      await page.keyboard.press(`Control+${up}`);
-      await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
+    try {
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+        await expect(editor).toBeFocused();
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('sample.ts');
+        await page.keyboard.press('Enter');
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /カーソル位置/
+        );
+        await page.keyboard.type('G0');
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /setCursor/
+        );
+        const popup = page.getByRole('dialog', { name: 'Type information', exact: true });
+        await expect(async () => {
+            await editor.focus();
+            await page.keyboard.press('Control+k');
+            await expect(popup.locator('pre')).toContainText('setCursor', { timeout: 1000 });
+        }).toPass({ timeout: 15000 });
+        const content = page.getByLabel('Type information content', { exact: true });
+        await expect(content).toBeFocused();
+        await expect(content).toContainText('カーソル位置を更新します');
+        await expect(content.getByRole('heading', { name: 'Usage' })).toBeVisible();
+        await expect(content.locator('ul li')).toHaveCount(2);
+        await expect(content.locator('blockquote')).toContainText('Positions start at zero');
+        await expect(content.getByRole('table')).toContainText('number');
+        await expect(content.getByRole('link', { name: 'Documentation' })).toHaveAttribute(
+            'href',
+            'https://example.com/docs'
+        );
+        await expect(content.getByRole('link', { name: 'Unsafe' })).toHaveCount(0);
+        await expect(content.locator('img, script')).toHaveCount(0);
+        await running.evaluate(({ shell, app }) => {
+            shell.openExternal = async (url) => {
+                app.setName(url);
+            };
+        });
+        await content.getByRole('link', { name: 'Documentation' }).focus();
+        await page.keyboard.press('Enter');
+        await expect
+            .poll(() => running.evaluate(({ app }) => app.getName()))
+            .toBe('https://example.com/docs');
+        expect(
+            await page.evaluate(() =>
+                window.nido.openDocumentation('file:///C:/Windows').then(
+                    () => false,
+                    () => true
+                )
+            )
+        ).toBe(true);
+        await content.focus();
+        await page.keyboard.press('Home');
+        await expect(
+            popup.locator('pre code span span').filter({ hasText: /^function$/ })
+        ).toHaveCSS('color', 'rgb(86, 156, 214)');
+        await expect
+            .poll(
+                async () =>
+                    await popup
+                        .locator('pre code span span')
+                        .evaluateAll(
+                            (spans) =>
+                                new Set(spans.map((span) => getComputedStyle(span).color)).size
+                        )
+            )
+            .toBeGreaterThan(1);
+        expect(await page.evaluate(() => 'hoverUnsafe' in window)).toBe(false);
+        await page.keyboard.press('j');
+        await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+        await page.keyboard.press('Home');
+        await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
+        for (const [down, up, fraction] of [
+            ['d', 'u', 0.5],
+            ['f', 'b', 1]
+        ] as const) {
+            const height = await content.evaluate((node) => node.clientHeight);
+            await page.keyboard.press(`Control+${down}`);
+            await expect
+                .poll(() => content.evaluate((node) => node.scrollTop))
+                .toBeCloseTo(height * fraction, 0);
+            await page.keyboard.press(`Control+${up}`);
+            await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
+        }
+        await popup.screenshot({ path: 'test-results/nido-type-information.png' });
+        await page.keyboard.press('Tab');
+        await expect(page.getByRole('button', { name: 'Close type information' })).toBeFocused();
+        await page.keyboard.press('Tab');
+        await expect(content.getByRole('link', { name: 'Documentation' })).toBeFocused();
+        await page.keyboard.press('Shift+Tab');
+        await expect(page.getByRole('button', { name: 'Close type information' })).toBeFocused();
+        await page.keyboard.press('Escape');
+        await expect(popup).toBeHidden();
+        await expect(editor).toBeFocused();
+        await page.keyboard.press('K');
+        await expect(popup.locator('pre')).toContainText('setCursor');
+        await page.keyboard.press('Control+c');
+        await expect(popup).toBeHidden();
+        await expect(editor).toBeFocused();
+        await page.keyboard.press('Control+k');
+        await expect(popup.locator('pre')).toContainText('setCursor');
+        await page.getByRole('button', { name: 'Close type information' }).click();
+        await expect(popup).toBeHidden();
+        await expect(editor).toBeFocused();
+    } finally {
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
-    await popup.screenshot({ path: 'test-results/nido-type-information.png' });
-    await page.keyboard.press('Tab');
-    await expect(page.getByRole('button', { name: 'Close type information' })).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(content.getByRole('link', { name: 'Documentation' })).toBeFocused();
-    await page.keyboard.press('Shift+Tab');
-    await expect(page.getByRole('button', { name: 'Close type information' })).toBeFocused();
-    await page.keyboard.press('Escape');
-    await expect(popup).toBeHidden();
-    await expect(editor).toBeFocused();
-    await page.keyboard.press('K');
-    await expect(popup.locator('pre')).toContainText('setCursor');
-    await page.keyboard.press('Control+c');
-    await expect(popup).toBeHidden();
-    await expect(editor).toBeFocused();
-    await page.keyboard.press('Control+k');
-    await expect(popup.locator('pre')).toContainText('setCursor');
-    await page.getByRole('button', { name: 'Close type information' }).click();
-    await expect(popup).toBeHidden();
-    await expect(editor).toBeFocused();
-  } finally {
-    await running.close();
-    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  }
 });
 
 test('clicking editor glyphs moves the cursor, including wide text and detached pixel scrolling', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-click-'));
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const lines = Array.from({ length: 100 }, (_, index) => `line ${index + 1}`);
-  lines[1] = 'ab日本語xyz';
-  lines[29] = '\tΩtarget';
-  await writeFile(join(root, 'click.txt'), lines.join('\n'));
-  const running = await electron.launch({ args: ['.', `--user-data-dir=${join(root, 'profile')}`], env });
-  try {
-    const page = await running.firstWindow();
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, root);
-    await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
-    await page.keyboard.press('Control+p');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('click.txt');
-    await expect(page.getByRole('button', { name: 'click.txt click.txt', exact: true })).toBeVisible();
-    await page.keyboard.press('Enter');
-    const canvas = page.locator('canvas:visible');
-    await expect(canvas).toHaveAttribute('aria-description', /ab日本語xyz/);
-    await canvas.evaluate((node: HTMLCanvasElement) => {
-      const ctx = node.getContext('2d')!;
-      const draw = ctx.fillText.bind(ctx);
-      ctx.fillText = (value, x, y, ...rest) => {
-        if (value === '本' || value === 'Ω') {
-          const offset = ctx.getTransform().f / window.devicePixelRatio;
-          node.setAttribute(
-            value === '本' ? 'data-wide-point' : 'data-tab-point',
-            JSON.stringify({
-              x: x + ctx.measureText('M').width * (value === '本' ? 1.25 : 0.5),
-              y: y + offset - 4
-            })
-          );
-        }
-        draw(value, x, y, ...rest);
-      };
+    const root = await mkdtemp(join(tmpdir(), 'nido-click-'));
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const lines = Array.from({ length: 100 }, (_, index) => `line ${index + 1}`);
+    lines[1] = 'ab日本語xyz';
+    lines[29] = '\tΩtarget';
+    await writeFile(join(root, 'click.txt'), lines.join('\n'));
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        env
     });
-    await canvas.hover();
-    await page.mouse.wheel(0, 3);
-    await expect(canvas).toHaveAttribute('data-wide-point', /x/);
-    const point = JSON.parse((await canvas.getAttribute('data-wide-point'))!);
-    const bounds = (await canvas.boundingBox())!;
-    await page.mouse.move(bounds.x + point.x, bounds.y + point.y);
-    await page.mouse.down();
     try {
-      await expect(page.getByText('Ln 2, Col 6', { exact: true })).toBeVisible({ timeout: 1000 });
-      await expect.poll(async () => JSON.parse((await canvas.getAttribute('data-wide-point'))!).y).toBe(point.y);
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, root);
+        await expect(
+            page.getByRole('textbox', { name: 'Neovim input', exact: true })
+        ).toBeFocused();
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('click.txt');
+        await expect(
+            page.getByRole('button', { name: 'click.txt click.txt', exact: true })
+        ).toBeVisible();
+        await page.keyboard.press('Enter');
+        const canvas = page.locator('canvas:visible');
+        await expect(canvas).toHaveAttribute('aria-description', /ab日本語xyz/);
+        await canvas.evaluate((node: HTMLCanvasElement) => {
+            const ctx = node.getContext('2d')!;
+            const draw = ctx.fillText.bind(ctx);
+            ctx.fillText = (value, x, y, ...rest) => {
+                if (value === '本' || value === 'Ω') {
+                    const offset = ctx.getTransform().f / window.devicePixelRatio;
+                    node.setAttribute(
+                        value === '本' ? 'data-wide-point' : 'data-tab-point',
+                        JSON.stringify({
+                            x: x + ctx.measureText('M').width * (value === '本' ? 1.25 : 0.5),
+                            y: y + offset - 4
+                        })
+                    );
+                }
+                draw(value, x, y, ...rest);
+            };
+        });
+        await canvas.hover();
+        await page.mouse.wheel(0, 3);
+        await expect(canvas).toHaveAttribute('data-wide-point', /x/);
+        const point = JSON.parse((await canvas.getAttribute('data-wide-point'))!);
+        const bounds = (await canvas.boundingBox())!;
+        await page.mouse.move(bounds.x + point.x, bounds.y + point.y);
+        await page.mouse.down();
+        try {
+            await expect(page.getByText('Ln 2, Col 6', { exact: true })).toBeVisible({
+                timeout: 1000
+            });
+            await expect
+                .poll(async () => JSON.parse((await canvas.getAttribute('data-wide-point'))!).y)
+                .toBe(point.y);
+        } finally {
+            await page.mouse.up();
+        }
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).uncheck();
+        await page.keyboard.press('Escape');
+        await canvas.hover();
+        await canvas.evaluate((node) => node.removeAttribute('data-tab-point'));
+        await page.mouse.wheel(0, 507);
+        await expect(canvas).toHaveAttribute('data-tab-point', /x/);
+        await expect(page.getByText('Ln 2, Col 6', { exact: true })).toBeVisible();
+        const tabPoint = JSON.parse((await canvas.getAttribute('data-tab-point'))!);
+        await canvas.click({ position: tabPoint });
+        await expect(page.getByText('Ln 30, Col 2', { exact: true })).toBeVisible();
+        await expect
+            .poll(async () => JSON.parse((await canvas.getAttribute('data-tab-point'))!).y)
+            .toBe(tabPoint.y);
+        // Separate the next click from Neovim's double-click selection interval.
+        await page.waitForTimeout(600);
+        await page.keyboard.press('i');
+        await canvas.click({
+            position: JSON.parse((await canvas.getAttribute('data-tab-point'))!)
+        });
+        await page.keyboard.type('X');
+        await page.keyboard.press('Escape');
+        await page.keyboard.type(':w');
+        await page.keyboard.press('Enter');
+        await expect.poll(() => readFile(join(root, 'click.txt'), 'utf8')).toContain('\tXΩtarget');
+    } catch (error) {
+        running.process().kill();
+        throw error;
     } finally {
-      await page.mouse.up();
+        await running.close().catch(() => {});
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).uncheck();
-    await page.keyboard.press('Escape');
-    await canvas.hover();
-    await canvas.evaluate((node) => node.removeAttribute('data-tab-point'));
-    await page.mouse.wheel(0, 507);
-    await expect(canvas).toHaveAttribute('data-tab-point', /x/);
-    await expect(page.getByText('Ln 2, Col 6', { exact: true })).toBeVisible();
-    const tabPoint = JSON.parse((await canvas.getAttribute('data-tab-point'))!);
-    await canvas.click({ position: tabPoint });
-    await expect(page.getByText('Ln 30, Col 2', { exact: true })).toBeVisible();
-    await expect.poll(async () => JSON.parse((await canvas.getAttribute('data-tab-point'))!).y).toBe(tabPoint.y);
-    // Separate the next click from Neovim's double-click selection interval.
-    await page.waitForTimeout(600);
-    await page.keyboard.press('i');
-    await canvas.click({ position: JSON.parse((await canvas.getAttribute('data-tab-point'))!) });
-    await page.keyboard.type('X');
-    await page.keyboard.press('Escape');
-    await page.keyboard.type(':w');
-    await page.keyboard.press('Enter');
-    await expect.poll(() => readFile(join(root, 'click.txt'), 'utf8')).toContain('\tXΩtarget');
-  } catch (error) {
-    running.process().kill();
-    throw error;
-  } finally {
-    await running.close().catch(() => {});
-    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  }
 });
 
 test('settings can be navigated and changed entirely with the keyboard', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-settings-keys-'));
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const running = await electron.launch({ args: ['.', `--user-data-dir=${root}`], env });
-  try {
-    const page = await running.firstWindow();
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, root);
-    await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
-    await page.keyboard.press('Space');
-    await page.keyboard.press(',');
-    const size = page.getByRole('slider');
-    await expect(size).toBeFocused();
-    const initial = Number(await size.inputValue());
-    await page.keyboard.press('ArrowRight');
-    await expect(size).toHaveValue(String(initial + 1));
-    await page.keyboard.press('j');
-    const family = page.getByRole('textbox', { name: 'Font family' });
-    await expect(family).toBeFocused();
-    await page.keyboard.press('Control+a');
-    await page.keyboard.type('jk monospace');
-    await expect(family).toHaveValue('jk monospace');
-    await page.keyboard.press('Control+j');
-    const explorer = page.getByRole('checkbox', { name: 'Show file explorer' });
-    await expect(explorer).toBeFocused();
-    await page.keyboard.press('Space');
-    await expect(explorer).not.toBeChecked();
-    await page.keyboard.press('Enter');
-    await expect(explorer).toBeChecked();
-    await page.keyboard.press('ArrowDown');
-    await expect(page.getByRole('checkbox', { name: 'Format on save' })).toBeFocused();
-    await page.keyboard.press('k');
-    await expect(explorer).toBeFocused();
-    await page.keyboard.press('Shift+Tab');
-    await expect(family).toBeFocused();
-    await page.keyboard.press('Shift+Tab');
-    await expect(size).toBeFocused();
-    await page.keyboard.press('Shift+Tab');
-    await expect(page.getByRole('button', { name: 'Close palette' })).toBeFocused();
-    await page.keyboard.press('Shift+Tab');
-    await expect(page.getByRole('checkbox', { name: 'Smooth cursor blink' })).toBeFocused();
-    await page.screenshot({ path: 'test-results/settings-keyboard.png' });
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog', { name: 'Settings' })).not.toBeVisible();
-  } finally {
-    await running.close();
-    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  }
+    const root = await mkdtemp(join(tmpdir(), 'nido-settings-keys-'));
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({ args: ['.', `--user-data-dir=${root}`], env });
+    try {
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, root);
+        await expect(
+            page.getByRole('textbox', { name: 'Neovim input', exact: true })
+        ).toBeFocused();
+        await page.keyboard.press('Space');
+        await page.keyboard.press(',');
+        const size = page.getByRole('slider');
+        await expect(size).toBeFocused();
+        const initial = Number(await size.inputValue());
+        await page.keyboard.press('ArrowRight');
+        await expect(size).toHaveValue(String(initial + 1));
+        await page.keyboard.press('j');
+        const family = page.getByRole('textbox', { name: 'Font family' });
+        await expect(family).toBeFocused();
+        await page.keyboard.press('Control+a');
+        await page.keyboard.type('jk monospace');
+        await expect(family).toHaveValue('jk monospace');
+        await page.keyboard.press('Control+j');
+        const explorer = page.getByRole('checkbox', { name: 'Show file explorer' });
+        await expect(explorer).toBeFocused();
+        await page.keyboard.press('Space');
+        await expect(explorer).not.toBeChecked();
+        await page.keyboard.press('Enter');
+        await expect(explorer).toBeChecked();
+        await page.keyboard.press('ArrowDown');
+        await expect(page.getByRole('checkbox', { name: 'Format on save' })).toBeFocused();
+        await page.keyboard.press('k');
+        await expect(explorer).toBeFocused();
+        await page.keyboard.press('Shift+Tab');
+        await expect(family).toBeFocused();
+        await page.keyboard.press('Shift+Tab');
+        await expect(size).toBeFocused();
+        await page.keyboard.press('Shift+Tab');
+        await expect(page.getByRole('button', { name: 'Close palette' })).toBeFocused();
+        await page.keyboard.press('Shift+Tab');
+        await expect(page.getByRole('checkbox', { name: 'Smooth cursor blink' })).toBeFocused();
+        await page.screenshot({ path: 'test-results/settings-keyboard.png' });
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('dialog', { name: 'Settings' })).not.toBeVisible();
+    } finally {
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
 });
 
 test('smooth cursor movement and blink animate and persist their settings', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-cursor-'));
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const options = { args: ['.', `--user-data-dir=${join(root, 'profile')}`], env };
-  let running = await electron.launch(options);
-  try {
-    let page = await running.firstWindow();
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, root);
-    const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
-    await expect(editor).toBeFocused();
-    await page.keyboard.type('iabcdefghijklmnopqrstuvwxyz');
-    await page.keyboard.press('Escape');
-    await page.keyboard.type(':w cursor.txt');
-    await page.keyboard.press('Enter');
-    await expect
-      .poll(() => readFile(join(root, 'cursor.txt'), 'utf8').catch(() => ''))
-      .toContain('abcdefghijklmnopqrstuvwxyz');
-    await page.keyboard.press('Home');
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    const setting = page.getByRole('checkbox', { name: 'Smooth cursor movement' });
-    const blinkSetting = page.getByRole('checkbox', { name: 'Smooth cursor blink' });
-    const clipboardSetting = page.getByRole('checkbox', { name: 'Share system clipboard' });
-    await expect(clipboardSetting).not.toBeChecked();
-    await clipboardSetting.check();
-    await expect(blinkSetting).not.toBeChecked();
-    await expect(setting).not.toBeChecked();
-    await setting.check();
-    await page.getByRole('checkbox', { name: 'UI animations', exact: true }).uncheck();
-    await page.getByRole('button', { name: 'Close palette' }).click();
-    await expect(editor).toBeFocused();
-    const canvas = page.locator('canvas:visible');
-    await canvas.evaluate((node: HTMLCanvasElement) => {
-      const ctx = node.getContext('2d')!;
-      const fill = ctx.fillRect.bind(ctx);
-      node.dataset.cursorXs = '[]';
-      node.dataset.cursorAlphas = '[]';
-      node.dataset.cursorYs = '[]';
-      ctx.fillRect = (x, y, w, h) => {
-        if (ctx.fillStyle === '#f5f5f5') {
-          const xs = JSON.parse(node.dataset.cursorXs!) as number[];
-          node.dataset.cursorXs = JSON.stringify([...xs.slice(-99), x]);
-          const ys = JSON.parse(node.dataset.cursorYs!) as number[];
-          node.dataset.cursorYs = JSON.stringify([...ys.slice(-99), y]);
-          const alphas = JSON.parse(node.dataset.cursorAlphas!) as number[];
-          node.dataset.cursorAlphas = JSON.stringify([...alphas.slice(-99), ctx.globalAlpha]);
-        }
-        fill(x, y, w, h);
-      };
-    });
-    const move = async (keys: string): Promise<number[]> => {
-      const before = await editor.evaluate((node) => node.style.left);
-      await canvas.evaluate((node: HTMLCanvasElement) => {
-        node.dataset.cursorXs = '[]';
-      });
-      await page.keyboard.type(keys);
-      await expect.poll(() => editor.evaluate((node) => node.style.left)).not.toBe(before);
-      await expect
-        .poll(async () => {
-          const xs = JSON.parse((await canvas.getAttribute('data-cursor-xs'))!) as number[];
-          const target = await editor.evaluate((node) => parseFloat(node.style.left));
-          return Math.abs((xs.at(-1) ?? -1000) - target);
-        })
-        .toBeLessThan(0.01);
-      return JSON.parse((await canvas.getAttribute('data-cursor-xs'))!);
-    };
-    expect(new Set((await move('10l')).map((x) => x.toFixed(2))).size).toBeGreaterThan(2);
-    const previous = await editor.evaluate((node) => parseFloat(node.style.left));
-    const clickPoint = await canvas.evaluate((node: HTMLCanvasElement) => {
-      node.dataset.cursorXs = '[]';
-      const input = document.querySelector<HTMLTextAreaElement>('[aria-label="Neovim input"]')!;
-      return {
-        x: parseFloat(input.style.left) + node.getContext('2d')!.measureText('M').width * 8.5,
-        y: parseFloat(input.style.top) + 8
-      };
-    });
-    const bounds = (await canvas.boundingBox())!;
-    await page.mouse.move(bounds.x + clickPoint.x, bounds.y + clickPoint.y);
-    await page.mouse.down();
+    const root = await mkdtemp(join(tmpdir(), 'nido-cursor-'));
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const options = { args: ['.', `--user-data-dir=${join(root, 'profile')}`], env };
+    let running = await electron.launch(options);
     try {
-      await expect.poll(() => editor.evaluate((node) => parseFloat(node.style.left))).not.toBe(previous);
-      await expect
-        .poll(async () => {
-          const xs = JSON.parse((await canvas.getAttribute('data-cursor-xs'))!) as number[];
-          const target = await editor.evaluate((node) => parseFloat(node.style.left));
-          return Math.abs((xs.at(-1) ?? -1000) - target);
-        })
-        .toBeLessThan(0.01);
-      const xs = JSON.parse((await canvas.getAttribute('data-cursor-xs'))!) as number[];
-      expect(new Set(xs.map((x) => x.toFixed(2))).size).toBeGreaterThan(2);
+        let page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, root);
+        const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+        await expect(editor).toBeFocused();
+        await page.keyboard.type('iabcdefghijklmnopqrstuvwxyz');
+        await page.keyboard.press('Escape');
+        await page.keyboard.type(':w cursor.txt');
+        await page.keyboard.press('Enter');
+        await expect
+            .poll(() => readFile(join(root, 'cursor.txt'), 'utf8').catch(() => ''))
+            .toContain('abcdefghijklmnopqrstuvwxyz');
+        await page.keyboard.press('Home');
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        const setting = page.getByRole('checkbox', { name: 'Smooth cursor movement' });
+        const blinkSetting = page.getByRole('checkbox', { name: 'Smooth cursor blink' });
+        const clipboardSetting = page.getByRole('checkbox', { name: 'Share system clipboard' });
+        await expect(clipboardSetting).not.toBeChecked();
+        await clipboardSetting.check();
+        await expect(blinkSetting).not.toBeChecked();
+        await expect(setting).not.toBeChecked();
+        await setting.check();
+        await page.getByRole('checkbox', { name: 'UI animations', exact: true }).uncheck();
+        await page.getByRole('button', { name: 'Close palette' }).click();
+        await expect(editor).toBeFocused();
+        const canvas = page.locator('canvas:visible');
+        await canvas.evaluate((node: HTMLCanvasElement) => {
+            const ctx = node.getContext('2d')!;
+            const fill = ctx.fillRect.bind(ctx);
+            node.dataset.cursorXs = '[]';
+            node.dataset.cursorAlphas = '[]';
+            node.dataset.cursorYs = '[]';
+            ctx.fillRect = (x, y, w, h) => {
+                if (ctx.fillStyle === '#f5f5f5') {
+                    const xs = JSON.parse(node.dataset.cursorXs!) as number[];
+                    node.dataset.cursorXs = JSON.stringify([...xs.slice(-99), x]);
+                    const ys = JSON.parse(node.dataset.cursorYs!) as number[];
+                    node.dataset.cursorYs = JSON.stringify([...ys.slice(-99), y]);
+                    const alphas = JSON.parse(node.dataset.cursorAlphas!) as number[];
+                    node.dataset.cursorAlphas = JSON.stringify([
+                        ...alphas.slice(-99),
+                        ctx.globalAlpha
+                    ]);
+                }
+                fill(x, y, w, h);
+            };
+        });
+        const move = async (keys: string): Promise<number[]> => {
+            const before = await editor.evaluate((node) => node.style.left);
+            await canvas.evaluate((node: HTMLCanvasElement) => {
+                node.dataset.cursorXs = '[]';
+            });
+            await page.keyboard.type(keys);
+            await expect.poll(() => editor.evaluate((node) => node.style.left)).not.toBe(before);
+            await expect
+                .poll(async () => {
+                    const xs = JSON.parse(
+                        (await canvas.getAttribute('data-cursor-xs'))!
+                    ) as number[];
+                    const target = await editor.evaluate((node) => parseFloat(node.style.left));
+                    return Math.abs((xs.at(-1) ?? -1000) - target);
+                })
+                .toBeLessThan(0.01);
+            return JSON.parse((await canvas.getAttribute('data-cursor-xs'))!);
+        };
+        expect(new Set((await move('10l')).map((x) => x.toFixed(2))).size).toBeGreaterThan(2);
+        const previous = await editor.evaluate((node) => parseFloat(node.style.left));
+        const clickPoint = await canvas.evaluate((node: HTMLCanvasElement) => {
+            node.dataset.cursorXs = '[]';
+            const input = document.querySelector<HTMLTextAreaElement>(
+                '[aria-label="Neovim input"]'
+            )!;
+            return {
+                x:
+                    parseFloat(input.style.left) +
+                    node.getContext('2d')!.measureText('M').width * 8.5,
+                y: parseFloat(input.style.top) + 8
+            };
+        });
+        const bounds = (await canvas.boundingBox())!;
+        await page.mouse.move(bounds.x + clickPoint.x, bounds.y + clickPoint.y);
+        await page.mouse.down();
+        try {
+            await expect
+                .poll(() => editor.evaluate((node) => parseFloat(node.style.left)))
+                .not.toBe(previous);
+            await expect
+                .poll(async () => {
+                    const xs = JSON.parse(
+                        (await canvas.getAttribute('data-cursor-xs'))!
+                    ) as number[];
+                    const target = await editor.evaluate((node) => parseFloat(node.style.left));
+                    return Math.abs((xs.at(-1) ?? -1000) - target);
+                })
+                .toBeLessThan(0.01);
+            const xs = JSON.parse((await canvas.getAttribute('data-cursor-xs'))!) as number[];
+            expect(new Set(xs.map((x) => x.toFixed(2))).size).toBeGreaterThan(2);
+        } finally {
+            await page.mouse.up();
+        }
+        expect(new Set((await move('10h')).map((x) => x.toFixed(2))).size).toBeGreaterThan(2);
+        await canvas.evaluate((node: HTMLCanvasElement) => {
+            node.dataset.cursorXs = '[]';
+            node.dataset.cursorYs = '[]';
+        });
+        await page.keyboard.press('Control+s');
+        await page.waitForTimeout(200);
+        expect(
+            new Set(JSON.parse((await canvas.getAttribute('data-cursor-xs'))!) as number[]).size
+        ).toBeLessThanOrEqual(1);
+        expect(
+            new Set(JSON.parse((await canvas.getAttribute('data-cursor-ys'))!) as number[]).size
+        ).toBeLessThanOrEqual(1);
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        expect(new Set((await move('10h')).map((x) => x.toFixed(2))).size).toBeLessThanOrEqual(2);
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await setting.uncheck();
+        await page.getByRole('button', { name: 'Close palette' }).click();
+        expect(new Set((await move('10l')).map((x) => x.toFixed(2))).size).toBeLessThanOrEqual(2);
+        await canvas.evaluate((node) => {
+            node.dataset.cursorXs = '[]';
+        });
+        await canvas.click({ position: clickPoint });
+        await expect
+            .poll(() => editor.evaluate((node) => parseFloat(node.style.left)))
+            .not.toBe(previous);
+        const clickXs = JSON.parse((await canvas.getAttribute('data-cursor-xs'))!) as number[];
+        expect(new Set(clickXs.map((x) => x.toFixed(2))).size).toBeLessThanOrEqual(2);
+        const hasFade = async (): Promise<boolean> => {
+            const alphas = JSON.parse(
+                (await canvas.getAttribute('data-cursor-alphas'))!
+            ) as number[];
+            return alphas.some((alpha) => alpha > 0.01 && alpha < 0.54);
+        };
+        await page.waitForTimeout(1200);
+        expect(await hasFade()).toBe(false);
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await setting.check();
+        await blinkSetting.check();
+        await page.getByRole('button', { name: 'Close palette' }).click();
+        await expect.poll(hasFade).toBe(true);
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await canvas.evaluate((node: HTMLCanvasElement) => {
+            node.dataset.cursorAlphas = '[]';
+        });
+        await page.keyboard.press('ArrowLeft');
+        await page.waitForTimeout(1200);
+        expect(await hasFade()).toBe(false);
+        await expect
+            .poll(async () => JSON.parse((await canvas.getAttribute('data-cursor-alphas'))!).length)
+            .toBeGreaterThan(0);
+        await running.close();
+        running = await electron.launch(options);
+        page = await running.firstWindow();
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await expect(page.getByRole('checkbox', { name: 'Smooth cursor movement' })).toBeChecked();
+        await expect(page.getByRole('checkbox', { name: 'Smooth cursor blink' })).toBeChecked();
+        await expect(page.getByRole('checkbox', { name: 'Share system clipboard' })).toBeChecked();
     } finally {
-      await page.mouse.up();
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
-    expect(new Set((await move('10h')).map((x) => x.toFixed(2))).size).toBeGreaterThan(2);
-    await canvas.evaluate((node: HTMLCanvasElement) => {
-      node.dataset.cursorXs = '[]';
-      node.dataset.cursorYs = '[]';
-    });
-    await page.keyboard.press('Control+s');
-    await page.waitForTimeout(200);
-    expect(new Set(JSON.parse((await canvas.getAttribute('data-cursor-xs'))!) as number[]).size).toBeLessThanOrEqual(1);
-    expect(new Set(JSON.parse((await canvas.getAttribute('data-cursor-ys'))!) as number[]).size).toBeLessThanOrEqual(1);
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    expect(new Set((await move('10h')).map((x) => x.toFixed(2))).size).toBeLessThanOrEqual(2);
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await setting.uncheck();
-    await page.getByRole('button', { name: 'Close palette' }).click();
-    expect(new Set((await move('10l')).map((x) => x.toFixed(2))).size).toBeLessThanOrEqual(2);
-    await canvas.evaluate((node) => {
-      node.dataset.cursorXs = '[]';
-    });
-    await canvas.click({ position: clickPoint });
-    await expect.poll(() => editor.evaluate((node) => parseFloat(node.style.left))).not.toBe(previous);
-    const clickXs = JSON.parse((await canvas.getAttribute('data-cursor-xs'))!) as number[];
-    expect(new Set(clickXs.map((x) => x.toFixed(2))).size).toBeLessThanOrEqual(2);
-    const hasFade = async (): Promise<boolean> => {
-      const alphas = JSON.parse((await canvas.getAttribute('data-cursor-alphas'))!) as number[];
-      return alphas.some((alpha) => alpha > 0.01 && alpha < 0.54);
-    };
-    await page.waitForTimeout(1200);
-    expect(await hasFade()).toBe(false);
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await setting.check();
-    await blinkSetting.check();
-    await page.getByRole('button', { name: 'Close palette' }).click();
-    await expect.poll(hasFade).toBe(true);
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    await canvas.evaluate((node: HTMLCanvasElement) => {
-      node.dataset.cursorAlphas = '[]';
-    });
-    await page.keyboard.press('ArrowLeft');
-    await page.waitForTimeout(1200);
-    expect(await hasFade()).toBe(false);
-    await expect
-      .poll(async () => JSON.parse((await canvas.getAttribute('data-cursor-alphas'))!).length)
-      .toBeGreaterThan(0);
-    await running.close();
-    running = await electron.launch(options);
-    page = await running.firstWindow();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await expect(page.getByRole('checkbox', { name: 'Smooth cursor movement' })).toBeChecked();
-    await expect(page.getByRole('checkbox', { name: 'Smooth cursor blink' })).toBeChecked();
-    await expect(page.getByRole('checkbox', { name: 'Share system clipboard' })).toBeChecked();
-  } finally {
-    await running.close();
-    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  }
 });
 
 test('window size and maximized state survive restart', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-window-'));
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const executablePath = process.env.NIDO_PACKAGED_EXE;
-  const options = { executablePath, args: [...(executablePath ? [] : ['.']), `--user-data-dir=${root}`], env };
-  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
-  try {
-    running = await electron.launch(options);
-    await running.firstWindow();
-    await running.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1040, 680));
-    const originalSize = await running.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getSize());
-    await running.close();
-    running = await electron.launch(options);
-    await running.firstWindow();
-    await expect
-      .poll(() => running!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getSize()))
-      .toEqual(originalSize);
-    await running.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].maximize());
-    await expect
-      .poll(() => running!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized()))
-      .toBe(true);
-    await running.close();
-    running = await electron.launch(options);
-    await running.firstWindow();
-    await expect
-      .poll(() => running!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized()))
-      .toBe(true);
-    await running.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].unmaximize());
-    await expect
-      .poll(() => running!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getSize()))
-      .toEqual(originalSize);
-  } finally {
-    await running?.close();
-    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  }
+    const root = await mkdtemp(join(tmpdir(), 'nido-window-'));
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
+    const options = {
+        executablePath,
+        args: [...(executablePath ? [] : ['.']), `--user-data-dir=${root}`],
+        env
+    };
+    let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    try {
+        running = await electron.launch(options);
+        await running.firstWindow();
+        await running.evaluate(({ BrowserWindow }) =>
+            BrowserWindow.getAllWindows()[0].setSize(1040, 680)
+        );
+        const originalSize = await running.evaluate(({ BrowserWindow }) =>
+            BrowserWindow.getAllWindows()[0].getSize()
+        );
+        await running.close();
+        running = await electron.launch(options);
+        await running.firstWindow();
+        await expect
+            .poll(() =>
+                running!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getSize())
+            )
+            .toEqual(originalSize);
+        await running.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].maximize());
+        await expect
+            .poll(() =>
+                running!.evaluate(({ BrowserWindow }) =>
+                    BrowserWindow.getAllWindows()[0].isMaximized()
+                )
+            )
+            .toBe(true);
+        await running.close();
+        running = await electron.launch(options);
+        await running.firstWindow();
+        await expect
+            .poll(() =>
+                running!.evaluate(({ BrowserWindow }) =>
+                    BrowserWindow.getAllWindows()[0].isMaximized()
+                )
+            )
+            .toBe(true);
+        await running.evaluate(({ BrowserWindow }) =>
+            BrowserWindow.getAllWindows()[0].unmaximize()
+        );
+        await expect
+            .poll(() =>
+                running!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getSize())
+            )
+            .toEqual(originalSize);
+    } finally {
+        await running?.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
 });
 
 test('Git changes can be reviewed, staged and committed with the keyboard', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-git-ui-'));
-  const repository = join(root, 'repo');
-  await mkdir(repository);
-  const git = (...args: string[]): string =>
-    execFileSync('git', args, { cwd: repository, encoding: 'utf8', windowsHide: true });
-  git('init');
-  git('config', 'user.name', 'Nido Test');
-  git('config', 'user.email', 'nido-test@example.invalid');
-  git('config', 'commit.gpgsign', 'false');
-  await writeFile(
-    join(repository, 'main.rs'),
-    'fn main() {}\n' + Array.from({ length: 150 }, (_, i) => `// ${i} ${'long diff line '.repeat(20)}\n`).join('')
-  );
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
-  try {
-    const executablePath = process.env.NIDO_PACKAGED_EXE;
-    running = await electron.launch({
-      executablePath,
-      args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
-      env
-    });
-    const page = await running.firstWindow();
-    async function checkDiffKeys(label: string, listLabel: string): Promise<void> {
-      const preview = page.getByLabel(label, { exact: true });
-      await page.keyboard.press('Control+l');
-      await expect(preview).toBeFocused();
-      const top = (): Promise<number> => preview.evaluate((node) => node.scrollTop);
-      const original = page.getByLabel(`${label} original`, { exact: true });
-      await page.keyboard.press('g');
-      await page.keyboard.press('j');
-      await expect.poll(top).toBeGreaterThan(0);
-      await page.keyboard.press('k');
-      await expect.poll(top).toBe(0);
-      for (const [down, up] of [
-        ['Control+d', 'Control+u'],
-        ['Control+f', 'Control+b']
-      ]) {
-        await page.keyboard.press(down);
-        await expect.poll(top).toBeGreaterThan(100);
-        await page.keyboard.press(up);
-        await expect.poll(top).toBeLessThan(1);
-      }
-      await page.keyboard.press('Shift+g');
-      await expect.poll(top).toBeGreaterThan(1000);
-      await expect
-        .poll(async () => Math.abs((await top()) - (await original.evaluate((node) => node.scrollTop))))
-        .toBeLessThanOrEqual(1);
-      await page.keyboard.press('g');
-      await expect.poll(top).toBe(0);
-      await page.keyboard.press('l');
-      await expect.poll(() => preview.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
-      await page.keyboard.press('h');
-      await expect.poll(() => preview.evaluate((node) => node.scrollLeft)).toBe(0);
-      await page.keyboard.press('Control+h');
-      await expect(page.getByRole('listbox', { name: listLabel })).toBeFocused();
-    }
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, repository);
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    const explorer = page.getByRole('complementary', { name: 'File explorer' });
-    await expect(explorer.getByLabel('Git: Untracked', { exact: true })).toHaveText('U');
-    await expect(explorer.getByText('main.rs', { exact: true })).toHaveCSS('color', 'rgb(159, 198, 142)');
-    await page.keyboard.press('Control+p');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
-    await page.keyboard.press('Enter');
-    const fileTabs = page.getByRole('tablist', { name: 'Files', exact: true });
-    await expect(fileTabs.getByLabel('Git: Untracked', { exact: true })).toHaveText('U');
-    await expect(fileTabs.getByText('main.rs', { exact: true })).toHaveCSS('color', 'rgb(159, 198, 142)');
-    const gitButton = page.getByRole('button', { name: 'Source control', exact: true });
-    await gitButton.click();
-    const panel = page.getByRole('region', { name: 'Git changes' });
-    await expect(panel).toHaveAttribute('aria-busy', 'false');
-    await gitButton.focus();
-    await expect(gitButton).toBeFocused();
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog', { name: 'git palette' })).toHaveCount(0);
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await page.keyboard.press('Control+Shift+g');
-    await expect(panel).toHaveAttribute('aria-busy', 'false');
-    await expect(page.getByRole('listbox', { name: 'Changed files' })).toBeFocused();
-    await expect(page.getByLabel('Git diff', { exact: true })).toContainText('fn main() {}');
-    await expect(panel.getByText('Before', { exact: true })).toBeVisible();
-    await expect(panel.getByText('After', { exact: true })).toBeVisible();
-    await expect(page.getByLabel('Git diff', { exact: true }).locator('code span').first()).toBeVisible();
-    const dialog = page.getByRole('dialog', { name: 'git palette' });
-    const bounds = await dialog.boundingBox();
-    const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
-    expect(bounds!.width).toBeGreaterThan(viewport.width * 0.75);
-    expect(bounds!.width).toBeLessThan(viewport.width * 0.95);
-    expect(bounds!.height).toBeGreaterThan(viewport.height * 0.6);
-    expect(bounds!.height).toBeLessThan(viewport.height * 0.85);
-    const original = page.getByLabel('Git diff original', { exact: true });
-    const updated = page.getByLabel('Git diff', { exact: true });
-    expect((await original.boundingBox())!.x).toBeLessThan((await updated.boundingBox())!.x);
-    await checkDiffKeys('Git diff', 'Changed files');
-    await page.keyboard.press('s');
-    await expect(page.getByRole('heading', { name: 'Staged changes' })).toBeVisible();
-    await expect(fileTabs.getByLabel('Git: Added (staged)', { exact: true })).toHaveText('A');
-    await expect(explorer.getByLabel('Git: Added (staged)', { exact: true })).toHaveText('A');
-    await expect(panel).toHaveAttribute('aria-busy', 'false');
-    await page.keyboard.press('u');
-    await expect(page.getByRole('heading', { name: 'Staged changes' })).toHaveCount(0);
-    await expect(panel).toHaveAttribute('aria-busy', 'false');
-    await page.keyboard.press('s');
-    await expect(panel.getByRole('heading', { name: 'Staged changes' })).toBeVisible();
-    await expect(panel).toHaveAttribute('aria-busy', 'false');
-    await page.screenshot({ path: 'test-results/nido-git.png' });
-    await page.keyboard.press('c');
-    await expect(page.getByRole('textbox', { name: 'Commit message' })).toBeFocused();
-    await page.keyboard.type('First commit');
-    await page.keyboard.press('Control+Enter');
-    await expect(panel.getByText('Working tree clean.')).toBeVisible();
-    await expect(fileTabs.locator('[data-status]')).toHaveCount(0);
-    await expect(explorer.locator('[data-status]')).toHaveCount(0);
-    expect(git('log', '-1', '--format=%s').trim()).toBe('First commit');
-    const originalBranch = git('branch', '--show-current').trim();
-    await writeFile(join(repository, 'notes.txt'), 'extra file\n');
-    git('add', 'notes.txt');
-    git('commit', '--amend', '--no-edit');
-    await page.keyboard.press('Tab');
-    await page.keyboard.press('2');
-    const browser = page.getByRole('region', { name: 'Git browser' });
-    await expect(browser).toHaveAttribute('aria-busy', 'false');
-    await expect(page.getByRole('listbox', { name: 'Commit history' })).toBeFocused();
-    await expect(page.getByRole('option', { name: /First commit/ })).toBeVisible();
-    const details = page.getByRole('region', { name: 'Commit details' });
-    await expect(details.getByRole('heading', { name: 'First commit' })).toBeVisible();
-    await expect(details.locator('code')).toHaveText(git('rev-parse', 'HEAD').trim());
-    await page.keyboard.press('Control+l');
-    await expect(details).toBeFocused();
-    await page.screenshot({ path: 'test-results/nido-commit-details.png' });
-    await page.keyboard.press('Control+h');
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('listbox', { name: 'Commit files' })).toBeVisible();
-    await expect(page.getByLabel('Commit diff', { exact: true })).toContainText('fn main() {}');
-    await expect(page.getByLabel('Commit diff', { exact: true }).locator('code span').first()).toBeVisible();
-    await checkDiffKeys('Commit diff', 'Commit files');
-    await page.keyboard.press('Control+l');
-    await page.keyboard.press('n');
-    await expect(browser.getByText('Change 1 / 1 · n / N', { exact: true })).toBeVisible();
-    await page.keyboard.press('Shift+n');
-    await expect(browser.getByText('Change 1 / 1 · n / N', { exact: true })).toBeVisible();
-    await page.keyboard.press('Control+h');
-    await page.keyboard.press('j');
-    await expect(page.getByLabel('Commit diff', { exact: true })).toContainText('extra file');
-    await page.keyboard.press('k');
-    await expect(page.getByLabel('Commit diff', { exact: true })).toContainText('fn main() {}');
-    await page.screenshot({ path: 'test-results/nido-git-history.png' });
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('listbox', { name: 'Commit history' })).toBeFocused();
-    const source = await readFile(join(repository, 'main.rs'), 'utf8');
+    const root = await mkdtemp(join(tmpdir(), 'nido-git-ui-'));
+    const repository = join(root, 'repo');
+    await mkdir(repository);
+    const git = (...args: string[]): string =>
+        execFileSync('git', args, { cwd: repository, encoding: 'utf8', windowsHide: true });
+    git('init');
+    git('config', 'user.name', 'Nido Test');
+    git('config', 'user.email', 'nido-test@example.invalid');
+    git('config', 'commit.gpgsign', 'false');
     await writeFile(
-      join(repository, 'main.rs'),
-      source
-        .replace('fn main() {}', 'fn main() { println!("Nido"); }')
-        .replace('// 70 ', '// updated 70 ')
-        .replace('// 140 ', '// updated 140 ')
+        join(repository, 'main.rs'),
+        'fn main() {}\n' +
+            Array.from({ length: 150 }, (_, i) => `// ${i} ${'long diff line '.repeat(20)}\n`).join(
+                ''
+            )
     );
-    await page.keyboard.press('1');
-    await expect(panel).toHaveAttribute('aria-busy', 'false');
-    await expect(page.getByLabel('Git diff original', { exact: true })).toContainText('fn main() {}');
-    await expect(page.getByLabel('Git diff', { exact: true })).toContainText('fn main() { println!("Nido"); }');
-    await expect(page.getByLabel('Git diff original', { exact: true })).toContainText('// 149');
-    await expect(page.getByLabel('Git diff', { exact: true })).toContainText('// 149');
-    for (const label of ['Git diff original', 'Git diff']) {
-      const code = page.getByLabel(label, { exact: true }).locator('code').first();
-      await expect(code.locator('span').first()).toHaveText('fn');
-      await expect
-        .poll(() =>
-          code.locator('span').evaluateAll((spans) => new Set(spans.map((span) => getComputedStyle(span).color)).size)
-        )
-        .toBeGreaterThan(1);
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    try {
+        const executablePath = process.env.NIDO_PACKAGED_EXE;
+        running = await electron.launch({
+            executablePath,
+            args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+            env
+        });
+        const page = await running.firstWindow();
+        async function checkDiffKeys(label: string, listLabel: string): Promise<void> {
+            const preview = page.getByLabel(label, { exact: true });
+            await page.keyboard.press('Control+l');
+            await expect(preview).toBeFocused();
+            const top = (): Promise<number> => preview.evaluate((node) => node.scrollTop);
+            const original = page.getByLabel(`${label} original`, { exact: true });
+            await page.keyboard.press('g');
+            await page.keyboard.press('j');
+            await expect.poll(top).toBeGreaterThan(0);
+            await page.keyboard.press('k');
+            await expect.poll(top).toBe(0);
+            for (const [down, up] of [
+                ['Control+d', 'Control+u'],
+                ['Control+f', 'Control+b']
+            ]) {
+                await page.keyboard.press(down);
+                await expect.poll(top).toBeGreaterThan(100);
+                await page.keyboard.press(up);
+                await expect.poll(top).toBeLessThan(1);
+            }
+            await page.keyboard.press('Shift+g');
+            await expect.poll(top).toBeGreaterThan(1000);
+            await expect
+                .poll(async () =>
+                    Math.abs((await top()) - (await original.evaluate((node) => node.scrollTop)))
+                )
+                .toBeLessThanOrEqual(1);
+            await page.keyboard.press('g');
+            await expect.poll(top).toBe(0);
+            await page.keyboard.press('l');
+            await expect.poll(() => preview.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+            await page.keyboard.press('h');
+            await expect.poll(() => preview.evaluate((node) => node.scrollLeft)).toBe(0);
+            await page.keyboard.press('Control+h');
+            await expect(page.getByRole('listbox', { name: listLabel })).toBeFocused();
+        }
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, repository);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        const explorer = page.getByRole('complementary', { name: 'File explorer' });
+        await expect(explorer.getByLabel('Git: Untracked', { exact: true })).toHaveText('U');
+        await expect(explorer.getByText('main.rs', { exact: true })).toHaveCSS(
+            'color',
+            'rgb(159, 198, 142)'
+        );
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
+        await page.keyboard.press('Enter');
+        const fileTabs = page.getByRole('tablist', { name: 'Files', exact: true });
+        await expect(fileTabs.getByLabel('Git: Untracked', { exact: true })).toHaveText('U');
+        await expect(fileTabs.getByText('main.rs', { exact: true })).toHaveCSS(
+            'color',
+            'rgb(159, 198, 142)'
+        );
+        const gitButton = page.getByRole('button', { name: 'Source control', exact: true });
+        await gitButton.click();
+        const panel = page.getByRole('region', { name: 'Git changes' });
+        await expect(panel).toHaveAttribute('aria-busy', 'false');
+        await gitButton.focus();
+        await expect(gitButton).toBeFocused();
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('dialog', { name: 'git palette' })).toHaveCount(0);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+Shift+g');
+        await expect(panel).toHaveAttribute('aria-busy', 'false');
+        await expect(page.getByRole('listbox', { name: 'Changed files' })).toBeFocused();
+        await expect(page.getByLabel('Git diff', { exact: true })).toContainText('fn main() {}');
+        await expect(panel.getByText('Before', { exact: true })).toBeVisible();
+        await expect(panel.getByText('After', { exact: true })).toBeVisible();
+        await expect(
+            page.getByLabel('Git diff', { exact: true }).locator('code span').first()
+        ).toBeVisible();
+        const dialog = page.getByRole('dialog', { name: 'git palette' });
+        const bounds = await dialog.boundingBox();
+        const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+        expect(bounds!.width).toBeGreaterThan(viewport.width * 0.75);
+        expect(bounds!.width).toBeLessThan(viewport.width * 0.95);
+        expect(bounds!.height).toBeGreaterThan(viewport.height * 0.6);
+        expect(bounds!.height).toBeLessThan(viewport.height * 0.85);
+        const original = page.getByLabel('Git diff original', { exact: true });
+        const updated = page.getByLabel('Git diff', { exact: true });
+        expect((await original.boundingBox())!.x).toBeLessThan((await updated.boundingBox())!.x);
+        await checkDiffKeys('Git diff', 'Changed files');
+        await page.keyboard.press('s');
+        await expect(page.getByRole('heading', { name: 'Staged changes' })).toBeVisible();
+        await expect(fileTabs.getByLabel('Git: Added (staged)', { exact: true })).toHaveText('A');
+        await expect(explorer.getByLabel('Git: Added (staged)', { exact: true })).toHaveText('A');
+        await expect(panel).toHaveAttribute('aria-busy', 'false');
+        await page.keyboard.press('u');
+        await expect(page.getByRole('heading', { name: 'Staged changes' })).toHaveCount(0);
+        await expect(panel).toHaveAttribute('aria-busy', 'false');
+        await page.keyboard.press('s');
+        await expect(panel.getByRole('heading', { name: 'Staged changes' })).toBeVisible();
+        await expect(panel).toHaveAttribute('aria-busy', 'false');
+        await page.screenshot({ path: 'test-results/nido-git.png' });
+        await page.keyboard.press('c');
+        await expect(page.getByRole('textbox', { name: 'Commit message' })).toBeFocused();
+        await page.keyboard.type('First commit');
+        await page.keyboard.press('Control+Enter');
+        await expect(panel.getByText('Working tree clean.')).toBeVisible();
+        await expect(fileTabs.locator('[data-status]')).toHaveCount(0);
+        await expect(explorer.locator('[data-status]')).toHaveCount(0);
+        expect(git('log', '-1', '--format=%s').trim()).toBe('First commit');
+        const originalBranch = git('branch', '--show-current').trim();
+        await writeFile(join(repository, 'notes.txt'), 'extra file\n');
+        git('add', 'notes.txt');
+        git('commit', '--amend', '--no-edit');
+        await page.keyboard.press('Tab');
+        await page.keyboard.press('2');
+        const browser = page.getByRole('region', { name: 'Git browser' });
+        await expect(browser).toHaveAttribute('aria-busy', 'false');
+        await expect(page.getByRole('listbox', { name: 'Commit history' })).toBeFocused();
+        await expect(page.getByRole('option', { name: /First commit/ })).toBeVisible();
+        const details = page.getByRole('region', { name: 'Commit details' });
+        await expect(details.getByRole('heading', { name: 'First commit' })).toBeVisible();
+        await expect(details.locator('code')).toHaveText(git('rev-parse', 'HEAD').trim());
+        await page.keyboard.press('Control+l');
+        await expect(details).toBeFocused();
+        await page.screenshot({ path: 'test-results/nido-commit-details.png' });
+        await page.keyboard.press('Control+h');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('listbox', { name: 'Commit files' })).toBeVisible();
+        await expect(page.getByLabel('Commit diff', { exact: true })).toContainText('fn main() {}');
+        await expect(
+            page.getByLabel('Commit diff', { exact: true }).locator('code span').first()
+        ).toBeVisible();
+        await checkDiffKeys('Commit diff', 'Commit files');
+        await page.keyboard.press('Control+l');
+        await page.keyboard.press('n');
+        await expect(browser.getByText('Change 1 / 1 · n / N', { exact: true })).toBeVisible();
+        await page.keyboard.press('Shift+n');
+        await expect(browser.getByText('Change 1 / 1 · n / N', { exact: true })).toBeVisible();
+        await page.keyboard.press('Control+h');
+        await page.keyboard.press('j');
+        await expect(page.getByLabel('Commit diff', { exact: true })).toContainText('extra file');
+        await page.keyboard.press('k');
+        await expect(page.getByLabel('Commit diff', { exact: true })).toContainText('fn main() {}');
+        await page.screenshot({ path: 'test-results/nido-git-history.png' });
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('listbox', { name: 'Commit history' })).toBeFocused();
+        const source = await readFile(join(repository, 'main.rs'), 'utf8');
+        await writeFile(
+            join(repository, 'main.rs'),
+            source
+                .replace('fn main() {}', 'fn main() { println!("Nido"); }')
+                .replace('// 70 ', '// updated 70 ')
+                .replace('// 140 ', '// updated 140 ')
+        );
+        await page.keyboard.press('1');
+        await expect(panel).toHaveAttribute('aria-busy', 'false');
+        await expect(page.getByLabel('Git diff original', { exact: true })).toContainText(
+            'fn main() {}'
+        );
+        await expect(page.getByLabel('Git diff', { exact: true })).toContainText(
+            'fn main() { println!("Nido"); }'
+        );
+        await expect(page.getByLabel('Git diff original', { exact: true })).toContainText('// 149');
+        await expect(page.getByLabel('Git diff', { exact: true })).toContainText('// 149');
+        for (const label of ['Git diff original', 'Git diff']) {
+            const code = page.getByLabel(label, { exact: true }).locator('code').first();
+            await expect(code.locator('span').first()).toHaveText('fn');
+            await expect
+                .poll(() =>
+                    code
+                        .locator('span')
+                        .evaluateAll(
+                            (spans) =>
+                                new Set(spans.map((span) => getComputedStyle(span).color)).size
+                        )
+                )
+                .toBeGreaterThan(1);
+        }
+        await checkDiffKeys('Git diff', 'Changed files');
+        await page.keyboard.press('Control+l');
+        await page.keyboard.press('n');
+        await expect(panel.getByText('Change 1 / 3 · n / N', { exact: true })).toBeVisible();
+        await expect.poll(() => updated.evaluate((node) => node.scrollTop)).toBeLessThan(1);
+        await page.keyboard.press('n');
+        await expect(panel.getByText('Change 2 / 3 · n / N', { exact: true })).toBeVisible();
+        await expect.poll(() => updated.evaluate((node) => node.scrollTop)).toBeGreaterThan(1000);
+        await expect
+            .poll(() =>
+                page
+                    .getByLabel('Git diff original', { exact: true })
+                    .evaluate((node) => node.scrollTop)
+            )
+            .toBeGreaterThan(1000);
+        await page.keyboard.press('n');
+        await expect(panel.getByText('Change 3 / 3 · n / N', { exact: true })).toBeVisible();
+        await page.getByLabel('Git diff original', { exact: true }).focus();
+        await page.keyboard.press('Shift+n');
+        await expect(panel.getByText('Change 2 / 3 · n / N', { exact: true })).toBeVisible();
+        await page.keyboard.press('Shift+n');
+        await expect(panel.getByText('Change 1 / 3 · n / N', { exact: true })).toBeVisible();
+        await page.keyboard.press('Shift+n');
+        await expect(panel.getByText('Change 3 / 3 · n / N', { exact: true })).toBeVisible();
+        await page.keyboard.press('n');
+        await expect(panel.getByText('Change 1 / 3 · n / N', { exact: true })).toBeVisible();
+        await page.keyboard.press('Control+h');
+        await page.screenshot({ path: 'test-results/nido-git-side-by-side.png' });
+        await page.keyboard.press('3');
+        await expect(browser).toHaveAttribute('aria-busy', 'false');
+        await expect(page.getByRole('listbox', { name: 'Branches' })).toBeFocused();
+        const branchDetails = page.getByRole('region', { name: 'Branch details' });
+        await expect(
+            branchDetails.getByRole('heading', { name: originalBranch, exact: true })
+        ).toBeVisible();
+        await expect(branchDetails.getByText('Currently checked out')).toBeVisible();
+        await page.keyboard.press('Control+l');
+        await expect(branchDetails).toBeFocused();
+        await page.screenshot({ path: 'test-results/nido-branch-details.png' });
+        await page.keyboard.press('Control+h');
+        await page.keyboard.press('n');
+        await expect(page.getByRole('textbox', { name: 'New branch name' })).toBeFocused();
+        await page.keyboard.type('feature-123');
+        await page.keyboard.press('Enter');
+        await expect(browser).toHaveAttribute('aria-busy', 'false');
+        await expect(browser.locator('strong').first()).toHaveText('feature-123');
+        expect(git('branch', '--show-current').trim()).toBe('feature-123');
+        await expect(page.getByRole('listbox', { name: 'Branches' })).toBeFocused();
+        await page.keyboard.press('End');
+        await page.keyboard.press('Enter');
+        await expect(browser).toHaveAttribute('aria-busy', 'false');
+        expect(git('branch', '--show-current').trim()).toBe(originalBranch);
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Space');
+        await page.keyboard.press('g');
+        await expect(panel).toBeVisible();
+        await expect(panel).toHaveAttribute('aria-busy', 'false');
+        await page.keyboard.press('c');
+        await page.keyboard.type('Draft 123');
+        await page.keyboard.press('Tab');
+        await page.keyboard.press('2');
+        await expect(browser).toHaveAttribute('aria-busy', 'false');
+        await page.keyboard.press('1');
+        await expect(page.getByRole('textbox', { name: 'Commit message' })).toHaveValue(
+            'Draft 123'
+        );
+        await expect(panel).toHaveAttribute('aria-busy', 'false');
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('i');
+        await page.keyboard.type('unsaved');
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Control+Shift+g');
+        await expect(panel).toHaveAttribute('aria-busy', 'false');
+        await page.keyboard.press('3');
+        await expect(browser).toHaveAttribute('aria-busy', 'false');
+        await page.keyboard.press('Home');
+        await page.keyboard.press('Enter');
+        await expect(browser.getByRole('alert')).toContainText('Save unsaved editor changes');
+        expect(git('branch', '--show-current').trim()).toBe(originalBranch);
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+s');
+        await expect.poll(() => readFile(join(repository, 'main.rs'), 'utf8')).toContain('unsaved');
+        await expect(fileTabs.getByLabel('Git: Modified', { exact: true })).toHaveText('M');
+        await expect(explorer.getByLabel('Git: Modified', { exact: true })).toHaveText('M');
+        await expect(explorer.getByText('main.rs', { exact: true })).toHaveCSS(
+            'color',
+            'rgb(217, 183, 119)'
+        );
+        await expect(fileTabs.getByText('main.rs', { exact: true })).toHaveCSS(
+            'color',
+            'rgb(217, 183, 119)'
+        );
+        await expect(fileTabs.getByLabel('Unsaved', { exact: true })).toHaveCount(0);
+        await page.screenshot({ path: 'test-results/nido-git-tab-status.png' });
+        git('add', 'main.rs');
+        await expect(fileTabs.getByLabel('Git: Modified (staged)', { exact: true })).toHaveText(
+            'M'
+        );
+        git('commit', '-m', 'External commit');
+        await expect(fileTabs.locator('[data-status]')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        for (const [severity, label, color] of [
+            [1, 'error', 'rgb(229, 155, 150)'],
+            [2, 'warning', 'rgb(217, 183, 119)']
+        ] as const) {
+            await page.keyboard.type(
+                `:lua vim.diagnostic.set(vim.api.nvim_create_namespace('nido-test'), 0, {{lnum=0,col=0,severity=${severity},message='Test diagnostic'}})`
+            );
+            await page.keyboard.press('Enter');
+            await expect(
+                fileTabs.getByLabel(`Diagnostics: ${label}`, { exact: true })
+            ).toBeVisible();
+            await expect(fileTabs.getByText('main.rs', { exact: true })).toHaveCSS('color', color);
+            await expect(explorer.getByText('main.rs', { exact: true })).toHaveCSS('color', color);
+        }
+        await page.keyboard.type(
+            ":lua vim.diagnostic.reset(vim.api.nvim_create_namespace('nido-test'))"
+        );
+        await page.keyboard.press('Enter');
+        await expect(fileTabs.locator('[data-diagnostic]')).toHaveCount(0);
+        await expect(explorer.locator('[data-diagnostic]')).toHaveCount(0);
+    } finally {
+        await running?.close();
+        await rm(root, { recursive: true, force: true });
     }
-    await checkDiffKeys('Git diff', 'Changed files');
-    await page.keyboard.press('Control+l');
-    await page.keyboard.press('n');
-    await expect(panel.getByText('Change 1 / 3 · n / N', { exact: true })).toBeVisible();
-    await expect.poll(() => updated.evaluate((node) => node.scrollTop)).toBeLessThan(1);
-    await page.keyboard.press('n');
-    await expect(panel.getByText('Change 2 / 3 · n / N', { exact: true })).toBeVisible();
-    await expect.poll(() => updated.evaluate((node) => node.scrollTop)).toBeGreaterThan(1000);
-    await expect
-      .poll(() => page.getByLabel('Git diff original', { exact: true }).evaluate((node) => node.scrollTop))
-      .toBeGreaterThan(1000);
-    await page.keyboard.press('n');
-    await expect(panel.getByText('Change 3 / 3 · n / N', { exact: true })).toBeVisible();
-    await page.getByLabel('Git diff original', { exact: true }).focus();
-    await page.keyboard.press('Shift+n');
-    await expect(panel.getByText('Change 2 / 3 · n / N', { exact: true })).toBeVisible();
-    await page.keyboard.press('Shift+n');
-    await expect(panel.getByText('Change 1 / 3 · n / N', { exact: true })).toBeVisible();
-    await page.keyboard.press('Shift+n');
-    await expect(panel.getByText('Change 3 / 3 · n / N', { exact: true })).toBeVisible();
-    await page.keyboard.press('n');
-    await expect(panel.getByText('Change 1 / 3 · n / N', { exact: true })).toBeVisible();
-    await page.keyboard.press('Control+h');
-    await page.screenshot({ path: 'test-results/nido-git-side-by-side.png' });
-    await page.keyboard.press('3');
-    await expect(browser).toHaveAttribute('aria-busy', 'false');
-    await expect(page.getByRole('listbox', { name: 'Branches' })).toBeFocused();
-    const branchDetails = page.getByRole('region', { name: 'Branch details' });
-    await expect(branchDetails.getByRole('heading', { name: originalBranch, exact: true })).toBeVisible();
-    await expect(branchDetails.getByText('Currently checked out')).toBeVisible();
-    await page.keyboard.press('Control+l');
-    await expect(branchDetails).toBeFocused();
-    await page.screenshot({ path: 'test-results/nido-branch-details.png' });
-    await page.keyboard.press('Control+h');
-    await page.keyboard.press('n');
-    await expect(page.getByRole('textbox', { name: 'New branch name' })).toBeFocused();
-    await page.keyboard.type('feature-123');
-    await page.keyboard.press('Enter');
-    await expect(browser).toHaveAttribute('aria-busy', 'false');
-    await expect(browser.locator('strong').first()).toHaveText('feature-123');
-    expect(git('branch', '--show-current').trim()).toBe('feature-123');
-    await expect(page.getByRole('listbox', { name: 'Branches' })).toBeFocused();
-    await page.keyboard.press('End');
-    await page.keyboard.press('Enter');
-    await expect(browser).toHaveAttribute('aria-busy', 'false');
-    expect(git('branch', '--show-current').trim()).toBe(originalBranch);
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await page.keyboard.press('Space');
-    await page.keyboard.press('g');
-    await expect(panel).toBeVisible();
-    await expect(panel).toHaveAttribute('aria-busy', 'false');
-    await page.keyboard.press('c');
-    await page.keyboard.type('Draft 123');
-    await page.keyboard.press('Tab');
-    await page.keyboard.press('2');
-    await expect(browser).toHaveAttribute('aria-busy', 'false');
-    await page.keyboard.press('1');
-    await expect(page.getByRole('textbox', { name: 'Commit message' })).toHaveValue('Draft 123');
-    await expect(panel).toHaveAttribute('aria-busy', 'false');
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Control+p');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await page.keyboard.press('i');
-    await page.keyboard.type('unsaved');
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Control+Shift+g');
-    await expect(panel).toHaveAttribute('aria-busy', 'false');
-    await page.keyboard.press('3');
-    await expect(browser).toHaveAttribute('aria-busy', 'false');
-    await page.keyboard.press('Home');
-    await page.keyboard.press('Enter');
-    await expect(browser.getByRole('alert')).toContainText('Save unsaved editor changes');
-    expect(git('branch', '--show-current').trim()).toBe(originalBranch);
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await page.keyboard.press('Control+s');
-    await expect.poll(() => readFile(join(repository, 'main.rs'), 'utf8')).toContain('unsaved');
-    await expect(fileTabs.getByLabel('Git: Modified', { exact: true })).toHaveText('M');
-    await expect(explorer.getByLabel('Git: Modified', { exact: true })).toHaveText('M');
-    await expect(explorer.getByText('main.rs', { exact: true })).toHaveCSS('color', 'rgb(217, 183, 119)');
-    await expect(fileTabs.getByText('main.rs', { exact: true })).toHaveCSS('color', 'rgb(217, 183, 119)');
-    await expect(fileTabs.getByLabel('Unsaved', { exact: true })).toHaveCount(0);
-    await page.screenshot({ path: 'test-results/nido-git-tab-status.png' });
-    git('add', 'main.rs');
-    await expect(fileTabs.getByLabel('Git: Modified (staged)', { exact: true })).toHaveText('M');
-    git('commit', '-m', 'External commit');
-    await expect(fileTabs.locator('[data-status]')).toHaveCount(0);
-    await page.keyboard.press('Escape');
-    for (const [severity, label, color] of [
-      [1, 'error', 'rgb(229, 155, 150)'],
-      [2, 'warning', 'rgb(217, 183, 119)']
-    ] as const) {
-      await page.keyboard.type(
-        `:lua vim.diagnostic.set(vim.api.nvim_create_namespace('nido-test'), 0, {{lnum=0,col=0,severity=${severity},message='Test diagnostic'}})`
-      );
-      await page.keyboard.press('Enter');
-      await expect(fileTabs.getByLabel(`Diagnostics: ${label}`, { exact: true })).toBeVisible();
-      await expect(fileTabs.getByText('main.rs', { exact: true })).toHaveCSS('color', color);
-      await expect(explorer.getByText('main.rs', { exact: true })).toHaveCSS('color', color);
-    }
-    await page.keyboard.type(":lua vim.diagnostic.reset(vim.api.nvim_create_namespace('nido-test'))");
-    await page.keyboard.press('Enter');
-    await expect(fileTabs.locator('[data-diagnostic]')).toHaveCount(0);
-    await expect(explorer.locator('[data-diagnostic]')).toHaveCount(0);
-  } finally {
-    await running?.close();
-    await rm(root, { recursive: true, force: true });
-  }
 });
 
 test('Problems can be selected, filtered, opened and cleared with the keyboard', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-problems-'));
-  await writeFile(join(root, 'sample.txt'), 'first line\nsecond line\nthird line\nfourth line\nfifth line\n');
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const executablePath = process.env.NIDO_PACKAGED_EXE;
-  const running = await electron.launch({
-    executablePath,
-    args: [...(executablePath ? [] : ['.']), '--user-data-dir=' + join(root, 'profile')],
-    env
-  });
-  try {
-    const page = await running.firstWindow();
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, root);
-    await expect(page.getByRole('treeitem', { name: 'sample.txt', exact: true })).toBeVisible();
-    await page.keyboard.press('Control+p');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('sample.txt');
-    await expect(page.getByRole('button', { name: /sample.txt/ })).toBeVisible();
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await page.keyboard.type(
-      ":lua vim.diagnostic.set(vim.api.nvim_create_namespace('nido-test'), 0, {{lnum=2,col=1,severity=2,message='Sample warning'}, {lnum=4,col=2,severity=1,message='Sample error'}})"
+    const root = await mkdtemp(join(tmpdir(), 'nido-problems-'));
+    await writeFile(
+        join(root, 'sample.txt'),
+        'first line\nsecond line\nthird line\nfourth line\nfifth line\n'
     );
-    await page.keyboard.press('Enter');
-    await page.keyboard.press('Control+Shift+m');
-    const problems = page.getByRole('listbox', { name: 'Problems', exact: true });
-    await expect(problems).toBeFocused();
-    await expect(problems.getByRole('option')).toHaveCount(2);
-    await expect(problems.getByRole('option').first()).toContainText('Sample error');
-    await page.keyboard.press('j');
-    await expect(problems.getByRole('option').nth(1)).toHaveAttribute('aria-selected', 'true');
-    await page.keyboard.press('Enter');
-    await expect(page.getByText('Ln 3, Col 2', { exact: true })).toBeVisible();
-    await page.keyboard.press('Control+Shift+m');
-    await page.keyboard.press('/');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('Sample error');
-    await expect(problems.getByRole('option')).toHaveCount(1);
-    await page.keyboard.press('Enter');
-    await expect(page.getByText('Ln 5, Col 3', { exact: true })).toBeVisible();
-    await page.keyboard.type(":lua vim.diagnostic.reset(vim.api.nvim_create_namespace('nido-test'))");
-    await page.keyboard.press('Enter');
-    await page.keyboard.press('Control+Shift+m');
-    await expect(page.getByText('No problems reported.')).toBeVisible();
-    await page.keyboard.press('Control+Shift+m');
-    await expect(problems).toHaveCount(0);
-  } finally {
-    await running.close();
-    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  }
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
+    const running = await electron.launch({
+        executablePath,
+        args: [...(executablePath ? [] : ['.']), '--user-data-dir=' + join(root, 'profile')],
+        env
+    });
+    try {
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, root);
+        await expect(page.getByRole('treeitem', { name: 'sample.txt', exact: true })).toBeVisible();
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('sample.txt');
+        await expect(page.getByRole('button', { name: /sample.txt/ })).toBeVisible();
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.type(
+            ":lua vim.diagnostic.set(vim.api.nvim_create_namespace('nido-test'), 0, {{lnum=2,col=1,severity=2,message='Sample warning'}, {lnum=4,col=2,severity=1,message='Sample error'}})"
+        );
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Control+Shift+m');
+        const problems = page.getByRole('listbox', { name: 'Problems', exact: true });
+        await expect(problems).toBeFocused();
+        await expect(problems.getByRole('option')).toHaveCount(2);
+        await expect(problems.getByRole('option').first()).toContainText('Sample error');
+        await page.keyboard.press('j');
+        await expect(problems.getByRole('option').nth(1)).toHaveAttribute('aria-selected', 'true');
+        await page.keyboard.press('Enter');
+        await expect(page.getByText('Ln 3, Col 2', { exact: true })).toBeVisible();
+        await page.keyboard.press('Control+Shift+m');
+        await page.keyboard.press('/');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('Sample error');
+        await expect(problems.getByRole('option')).toHaveCount(1);
+        await page.keyboard.press('Enter');
+        await expect(page.getByText('Ln 5, Col 3', { exact: true })).toBeVisible();
+        await page.keyboard.type(
+            ":lua vim.diagnostic.reset(vim.api.nvim_create_namespace('nido-test'))"
+        );
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Control+Shift+m');
+        await expect(page.getByText('No problems reported.')).toBeVisible();
+        await page.keyboard.press('Control+Shift+m');
+        await expect(problems).toHaveCount(0);
+    } finally {
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
 });
 
 async function chooseWorkspace(page: Page, path: string, navigate = false): Promise<void> {
-  await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute('aria-busy', 'false');
-  await page.getByRole('textbox', { name: 'Folder path' }).fill(path);
-  await page.keyboard.press('Enter');
-  await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute('aria-busy', 'false');
-  if (navigate) {
-    await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
-    await page.keyboard.press('j');
     await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
-      'aria-activedescendant',
-      'folder-choice-1'
+        'aria-busy',
+        'false'
     );
-    await page.keyboard.press('k');
-    await page.keyboard.press('l');
-    await expect(page.getByRole('textbox', { name: 'Folder path' })).not.toHaveValue(path);
-    await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute('aria-busy', 'false');
-    await page.keyboard.press('h');
-    await expect(page.getByRole('textbox', { name: 'Folder path' })).toHaveValue(path);
-    await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute('aria-busy', 'false');
-    await page.screenshot({ path: 'test-results/nido-folder-picker.png' });
-  }
-  await page.keyboard.press('Control+Enter');
+    await page.getByRole('textbox', { name: 'Folder path' }).fill(path);
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
+        'aria-busy',
+        'false'
+    );
+    if (navigate) {
+        await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
+        await page.keyboard.press('j');
+        await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
+            'aria-activedescendant',
+            'folder-choice-1'
+        );
+        await page.keyboard.press('k');
+        await page.keyboard.press('l');
+        await expect(page.getByRole('textbox', { name: 'Folder path' })).not.toHaveValue(path);
+        await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
+            'aria-busy',
+            'false'
+        );
+        await page.keyboard.press('h');
+        await expect(page.getByRole('textbox', { name: 'Folder path' })).toHaveValue(path);
+        await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
+            'aria-busy',
+            'false'
+        );
+        await page.screenshot({ path: 'test-results/nido-folder-picker.png' });
+    }
+    await page.keyboard.press('Control+Enter');
 }
 
 test('terminal toggle, focus, background execution and standalone terminal sessions', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-terminal-ui-'));
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
-  try {
-    const executablePath = process.env.NIDO_PACKAGED_EXE;
-    running = await electron.launch({
-      executablePath,
-      args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
-      env
-    });
-    const page = await running.firstWindow();
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, root);
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await page.keyboard.press('Control+@');
-    const terminal = page.getByRole('region', { name: 'Terminal', exact: true });
-    await expect(terminal).toBeVisible();
-    const explorerBounds = await page.getByRole('complementary', { name: 'File explorer' }).boundingBox();
-    const terminalBounds = await terminal.boundingBox();
-    assert.ok(explorerBounds && terminalBounds);
-    assert.ok(terminalBounds.x >= explorerBounds.x + explorerBounds.width);
-    assert.ok(explorerBounds.y + explorerBounds.height >= terminalBounds.y + terminalBounds.height - 1);
-    await expect(page.getByRole('contentinfo').locator(':scope > :first-child')).toHaveText('NORMAL');
-    await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
-    await page.keyboard.type(
-      "$nidoValue = 'alive'; Start-Sleep -Milliseconds 500; Set-Content background.txt $nidoValue"
-    );
-    await page.keyboard.press('Enter');
-    await page.keyboard.press('Control+@');
-    await expect(terminal).toBeHidden();
-    await expect.poll(async () => readFile(join(root, 'background.txt'), 'utf8').catch(() => '')).toContain('alive');
-    await page.keyboard.press('Control+j');
-    await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
-    await page.keyboard.press('Control+k');
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await page.keyboard.press('Control+j');
-    await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
-    await page.keyboard.type('Set-Content preserved.txt $nidoValue');
-    await page.keyboard.press('Enter');
-    await expect.poll(async () => readFile(join(root, 'preserved.txt'), 'utf8').catch(() => '')).toContain('alive');
-    await page.keyboard.press('Control+Shift+p');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('Open debug panel');
-    await page.keyboard.press('Enter');
-    const debuggerPanel = page.getByRole('region', { name: 'Debugger', exact: true });
-    await expect(debuggerPanel).toBeVisible();
-    await expect(debuggerPanel).toContainText('Debug · idle');
-    await expect.poll(() => debuggerPanel.evaluate((node) => node.contains(document.activeElement))).toBe(true);
-    await expect(terminal).toBeHidden();
-    await page.keyboard.press('Control+@');
-    await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
-    await page.keyboard.press('Control+@');
-    await expect(terminal).toBeHidden();
-    await page.keyboard.press('Space');
-    await expect(
-      page.getByRole('dialog', { name: 'Keyboard commands' }).getByRole('button', { name: 'Shift+D Open debug panel' })
-    ).toBeVisible();
-    await page
-      .getByRole('dialog', { name: 'Keyboard commands' })
-      .screenshot({ path: 'test-results/nido-keyboard-commands.png' });
-    await page.keyboard.press('D');
-    await expect(debuggerPanel).toBeVisible();
-    await expect.poll(() => debuggerPanel.evaluate((node) => node.contains(document.activeElement))).toBe(true);
-    await page.keyboard.press('Control+@');
-    await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
-    await expect(terminal.getByRole('button', { name: /Restart shell/ })).toHaveCSS('font-size', '12px');
-    await page.keyboard.press('Control+Shift+r');
-    await page.keyboard.type('Set-Content restarted.txt ([string]::IsNullOrEmpty($nidoValue))');
-    await page.keyboard.press('Enter');
-    await expect
-      .poll(async () => readFile(join(root, 'restarted.txt'), 'utf8').catch(() => ''))
-      .toContain('True')
-      .catch(async (error) => {
-        await page.screenshot({ path: 'test-results/restart-failure.png' });
-        throw error;
-      });
-    await page.screenshot({ path: 'test-results/nido-terminal.png' });
-    await page.keyboard.press('Control+Shift+n');
-    await expect(page.getByRole('combobox', { name: 'Session type' })).toBeVisible();
-    await page.getByRole('combobox', { name: 'Session type' }).focus();
-    await page.keyboard.press('End');
-    await chooseWorkspace(page, root);
-    const input = page.getByRole('textbox', { name: 'Terminal input' });
-    await expect(input).toHaveCount(1);
-    await expect(input).toBeFocused();
-    await page.keyboard.type("Set-Content standalone.txt 'separate'");
-    await page.keyboard.press('Enter');
-    await expect.poll(async () => readFile(join(root, 'standalone.txt'), 'utf8').catch(() => '')).toContain('separate');
-    await page.keyboard.press('Control+Tab');
-    await page.keyboard.press('Control+j');
-    await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
-    const closed = running.waitForEvent('close');
-    await page.evaluate(() => {
-      void window.nido.windowAction('close');
-    });
-    await closed;
-    running = await electron.launch({
-      executablePath,
-      args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
-      env
-    });
-    const restored = await running.firstWindow();
-    await expect(restored.getByRole('tab', { name: /^Workspace / })).toHaveCount(2, { timeout: 15000 });
-    await restored.keyboard.press('Alt+2');
-    await expect(restored.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
-    await restored.keyboard.type("Set-Content restored.txt 'restored'");
-    await restored.keyboard.press('Enter');
-    await expect.poll(async () => readFile(join(root, 'restored.txt'), 'utf8').catch(() => '')).toContain('restored');
-  } finally {
-    await running?.close();
-    await rm(root, { recursive: true, force: true });
-  }
+    const root = await mkdtemp(join(tmpdir(), 'nido-terminal-ui-'));
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    try {
+        const executablePath = process.env.NIDO_PACKAGED_EXE;
+        running = await electron.launch({
+            executablePath,
+            args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+            env
+        });
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, root);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+@');
+        const terminal = page.getByRole('region', { name: 'Terminal', exact: true });
+        await expect(terminal).toBeVisible();
+        const explorerBounds = await page
+            .getByRole('complementary', { name: 'File explorer' })
+            .boundingBox();
+        const terminalBounds = await terminal.boundingBox();
+        assert.ok(explorerBounds && terminalBounds);
+        assert.ok(terminalBounds.x >= explorerBounds.x + explorerBounds.width);
+        assert.ok(
+            explorerBounds.y + explorerBounds.height >= terminalBounds.y + terminalBounds.height - 1
+        );
+        await expect(page.getByRole('contentinfo').locator(':scope > :first-child')).toHaveText(
+            'NORMAL'
+        );
+        await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+        await page.keyboard.type(
+            "$nidoValue = 'alive'; Start-Sleep -Milliseconds 500; Set-Content background.txt $nidoValue"
+        );
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Control+@');
+        await expect(terminal).toBeHidden();
+        await expect
+            .poll(async () => readFile(join(root, 'background.txt'), 'utf8').catch(() => ''))
+            .toContain('alive');
+        await page.keyboard.press('Control+j');
+        await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+        await page.keyboard.press('Control+k');
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+j');
+        await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+        await page.keyboard.type('Set-Content preserved.txt $nidoValue');
+        await page.keyboard.press('Enter');
+        await expect
+            .poll(async () => readFile(join(root, 'preserved.txt'), 'utf8').catch(() => ''))
+            .toContain('alive');
+        await page.keyboard.press('Control+Shift+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('Open debug panel');
+        await page.keyboard.press('Enter');
+        const debuggerPanel = page.getByRole('region', { name: 'Debugger', exact: true });
+        await expect(debuggerPanel).toBeVisible();
+        await expect(debuggerPanel).toContainText('Debug · idle');
+        await expect
+            .poll(() => debuggerPanel.evaluate((node) => node.contains(document.activeElement)))
+            .toBe(true);
+        await expect(terminal).toBeHidden();
+        await page.keyboard.press('Control+@');
+        await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+        await page.keyboard.press('Control+@');
+        await expect(terminal).toBeHidden();
+        await page.keyboard.press('Space');
+        await expect(
+            page
+                .getByRole('dialog', { name: 'Keyboard commands' })
+                .getByRole('button', { name: 'Shift+D Open debug panel' })
+        ).toBeVisible();
+        await page
+            .getByRole('dialog', { name: 'Keyboard commands' })
+            .screenshot({ path: 'test-results/nido-keyboard-commands.png' });
+        await page.keyboard.press('D');
+        await expect(debuggerPanel).toBeVisible();
+        await expect
+            .poll(() => debuggerPanel.evaluate((node) => node.contains(document.activeElement)))
+            .toBe(true);
+        await page.keyboard.press('Control+@');
+        await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+        await expect(terminal.getByRole('button', { name: /Restart shell/ })).toHaveCSS(
+            'font-size',
+            '12px'
+        );
+        await page.keyboard.press('Control+Shift+r');
+        await page.keyboard.type('Set-Content restarted.txt ([string]::IsNullOrEmpty($nidoValue))');
+        await page.keyboard.press('Enter');
+        await expect
+            .poll(async () => readFile(join(root, 'restarted.txt'), 'utf8').catch(() => ''))
+            .toContain('True')
+            .catch(async (error) => {
+                await page.screenshot({ path: 'test-results/restart-failure.png' });
+                throw error;
+            });
+        await page.screenshot({ path: 'test-results/nido-terminal.png' });
+        await page.keyboard.press('Control+Shift+n');
+        await expect(page.getByRole('combobox', { name: 'Session type' })).toBeVisible();
+        await page.getByRole('combobox', { name: 'Session type' }).focus();
+        await page.keyboard.press('End');
+        await chooseWorkspace(page, root);
+        const input = page.getByRole('textbox', { name: 'Terminal input' });
+        await expect(input).toHaveCount(1);
+        await expect(input).toBeFocused();
+        await page.keyboard.type("Set-Content standalone.txt 'separate'");
+        await page.keyboard.press('Enter');
+        await expect
+            .poll(async () => readFile(join(root, 'standalone.txt'), 'utf8').catch(() => ''))
+            .toContain('separate');
+        await page.keyboard.press('Control+Tab');
+        await page.keyboard.press('Control+j');
+        await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+        const closed = running.waitForEvent('close');
+        await page.evaluate(() => {
+            void window.nido.windowAction('close');
+        });
+        await closed;
+        running = await electron.launch({
+            executablePath,
+            args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+            env
+        });
+        const restored = await running.firstWindow();
+        await expect(restored.getByRole('tab', { name: /^Workspace / })).toHaveCount(2, {
+            timeout: 15000
+        });
+        await restored.keyboard.press('Alt+2');
+        await expect(restored.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+        await restored.keyboard.type("Set-Content restored.txt 'restored'");
+        await restored.keyboard.press('Enter');
+        await expect
+            .poll(async () => readFile(join(root, 'restored.txt'), 'utf8').catch(() => ''))
+            .toContain('restored');
+    } finally {
+        await running?.close();
+        await rm(root, { recursive: true, force: true });
+    }
 });
 
 test('viewport movement uses pixel wheel deltas and animates keyboard scrolling', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-motion-'));
-  const content = Array.from({ length: 200 }, (_, index) => `line ${index + 1} ${'text '.repeat(60)}`).join('\n');
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
-  try {
-    await writeFile(join(root, 'scroll.txt'), content);
-    const executablePath = process.env.NIDO_PACKAGED_EXE;
-    running = await electron.launch({
-      executablePath,
-      args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
-      env
-    });
-    const page = await running.firstWindow();
-    const errors: string[] = [];
-    page.on('pageerror', (error) => errors.push(error.message));
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, root);
-    await expect(page.getByRole('treeitem', { name: 'scroll.txt', exact: true })).toBeVisible();
-    await page.keyboard.press('Control+p');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('scroll.txt');
-    await expect(page.getByRole('button', { name: /scroll.txt/ })).toBeVisible();
-    await page.keyboard.press('Enter');
-    const canvas = page.locator('canvas:visible');
-    await expect(canvas).toHaveAttribute('aria-description', /line 1 /);
-    await expect(page.getByLabel('File position 0%', { exact: true })).toBeVisible();
-    await page.keyboard.type(':set nowrap');
-    await page.keyboard.press('Enter');
-    await expect(canvas).toHaveAttribute('aria-description', /line 20/);
-    await canvas.evaluate((surface) => {
-      const context = (surface as HTMLCanvasElement).getContext('2d')!;
-      const text = context.fillText.bind(context);
-      context.fillText = (value, x, y, ...rest) => {
-        if (value === 'l' && y < 30) {
-          surface.setAttribute('data-first-line-y', String(y + context.getTransform().f / window.devicePixelRatio));
-        }
-        text(value, x, y, ...rest);
-      };
-      const draw = context.drawImage.bind(context);
-      context.drawImage = ((...args: Parameters<typeof draw>) => {
-        surface.setAttribute(
-          'data-animation-frames',
-          String(Number(surface.getAttribute('data-animation-frames') || 0) + 1)
+    const root = await mkdtemp(join(tmpdir(), 'nido-motion-'));
+    const content = Array.from(
+        { length: 200 },
+        (_, index) => `line ${index + 1} ${'text '.repeat(60)}`
+    ).join('\n');
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    try {
+        await writeFile(join(root, 'scroll.txt'), content);
+        const executablePath = process.env.NIDO_PACKAGED_EXE;
+        running = await electron.launch({
+            executablePath,
+            args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+            env
+        });
+        const page = await running.firstWindow();
+        const errors: string[] = [];
+        page.on('pageerror', (error) => errors.push(error.message));
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, root);
+        await expect(page.getByRole('treeitem', { name: 'scroll.txt', exact: true })).toBeVisible();
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('scroll.txt');
+        await expect(page.getByRole('button', { name: /scroll.txt/ })).toBeVisible();
+        await page.keyboard.press('Enter');
+        const canvas = page.locator('canvas:visible');
+        await expect(canvas).toHaveAttribute('aria-description', /line 1 /);
+        await expect(page.getByLabel('File position 0%', { exact: true })).toBeVisible();
+        await page.keyboard.type(':set nowrap');
+        await page.keyboard.press('Enter');
+        await expect(canvas).toHaveAttribute('aria-description', /line 20/);
+        await canvas.evaluate((surface) => {
+            const context = (surface as HTMLCanvasElement).getContext('2d')!;
+            const text = context.fillText.bind(context);
+            context.fillText = (value, x, y, ...rest) => {
+                if (value === 'l' && y < 30) {
+                    surface.setAttribute(
+                        'data-first-line-y',
+                        String(y + context.getTransform().f / window.devicePixelRatio)
+                    );
+                }
+                text(value, x, y, ...rest);
+            };
+            const draw = context.drawImage.bind(context);
+            context.drawImage = ((...args: Parameters<typeof draw>) => {
+                surface.setAttribute(
+                    'data-animation-frames',
+                    String(Number(surface.getAttribute('data-animation-frames') || 0) + 1)
+                );
+                draw(...args);
+            }) as typeof draw;
+        });
+        await canvas.hover();
+        await page.mouse.wheel(0, 3);
+        await expect
+            .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
+            .toBeGreaterThan(0);
+        const firstY = Number(await canvas.getAttribute('data-first-line-y'));
+        const dpr = await page.evaluate(() => window.devicePixelRatio);
+        const snap = (pixels: number): number => Math.round(pixels * dpr) / dpr;
+        await page.waitForTimeout(300);
+        await page.mouse.wheel(0, 2);
+        await expect
+            .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
+            .toBeCloseTo(firstY + snap(3) - snap(5), 1);
+        await page.screenshot({ path: 'test-results/pixel-scroll.png' });
+        await page.mouse.wheel(0, -2);
+        await expect
+            .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
+            .toBeCloseTo(firstY, 1);
+        await page.mouse.wheel(0, -100);
+        await expect
+            .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
+            .toBeCloseTo(firstY + snap(3), 1);
+        await page.mouse.wheel(0, 100);
+        await expect(canvas).not.toHaveAttribute('aria-description', /^.*line 1 /);
+        await page.waitForTimeout(250);
+        let frames = await canvas.getAttribute('data-animation-frames');
+        await page.waitForTimeout(150);
+        expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page.getByRole('checkbox', { name: 'Smooth cursor movement' }).check();
+        await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).uncheck();
+        await page.keyboard.press('Escape');
+        await page.keyboard.type('20Gzz');
+        await page.waitForTimeout(200);
+        await expect(page.locator('[aria-label^="File position "]')).toHaveAttribute(
+            'aria-label',
+            /File position [1-9]\d*%/
         );
-        draw(...args);
-      }) as typeof draw;
-    });
-    await canvas.hover();
-    await page.mouse.wheel(0, 3);
-    await expect.poll(async () => Number(await canvas.getAttribute('data-first-line-y'))).toBeGreaterThan(0);
-    const firstY = Number(await canvas.getAttribute('data-first-line-y'));
-    const dpr = await page.evaluate(() => window.devicePixelRatio);
-    const snap = (pixels: number): number => Math.round(pixels * dpr) / dpr;
-    await page.waitForTimeout(300);
-    await page.mouse.wheel(0, 2);
-    await expect
-      .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
-      .toBeCloseTo(firstY + snap(3) - snap(5), 1);
-    await page.screenshot({ path: 'test-results/pixel-scroll.png' });
-    await page.mouse.wheel(0, -2);
-    await expect.poll(async () => Number(await canvas.getAttribute('data-first-line-y'))).toBeCloseTo(firstY, 1);
-    await page.mouse.wheel(0, -100);
-    await expect
-      .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
-      .toBeCloseTo(firstY + snap(3), 1);
-    await page.mouse.wheel(0, 100);
-    await expect(canvas).not.toHaveAttribute('aria-description', /^.*line 1 /);
-    await page.waitForTimeout(250);
-    let frames = await canvas.getAttribute('data-animation-frames');
-    await page.waitForTimeout(150);
-    expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByRole('checkbox', { name: 'Smooth cursor movement' }).check();
-    await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).uncheck();
-    await page.keyboard.press('Escape');
-    await page.keyboard.type('20Gzz');
-    await page.waitForTimeout(200);
-    await expect(page.locator('[aria-label^="File position "]')).toHaveAttribute(
-      'aria-label',
-      /File position [1-9]\d*%/
-    );
-    expect(await canvas.getAttribute('aria-description')).not.toContain(join(root, 'scroll.txt'));
-    const center = await canvas.evaluate((node) => {
-      const input = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Neovim input"]')!;
-      const rows = node.getAttribute('aria-description')!.split('\n').length;
-      return { actual: parseFloat(input.style.top) + 12.5, expected: ((rows - 2) * 25) / 2 };
-    });
-    expect(center.actual).toBeCloseTo(center.expected, 1);
-    await page.keyboard.type('gg');
-    await expect
-      .poll(() => page.locator('textarea[aria-label="Neovim input"]').evaluate((input) => parseFloat(input.style.top)))
-      .toBe(0);
-    await page.keyboard.type('20Gzz');
-    await page.waitForTimeout(200);
-    await canvas.evaluate((node: HTMLCanvasElement) => {
-      const ctx = node.getContext('2d')!;
-      const fill = ctx.fillRect.bind(ctx);
-      let expected: number | undefined;
-      node.dataset.cursorErrors = '[]';
-      window.nido.onEvent((event) => {
-        if (event.type !== 'redraw') return;
-        for (const [name, ...calls] of event.events) {
-          if (name !== 'nido_pixel_scroll') continue;
-          for (const [fraction, direct, cursor] of calls) {
-            const anchor = cursor as { row: number } | undefined;
-            expected =
-              direct && anchor
-                ? anchor.row * 25 +
-                  1 -
-                  Math.round(Number(fraction) * 25 * window.devicePixelRatio) / window.devicePixelRatio
-                : undefined;
-          }
+        expect(await canvas.getAttribute('aria-description')).not.toContain(
+            join(root, 'scroll.txt')
+        );
+        const center = await canvas.evaluate((node) => {
+            const input = document.querySelector<HTMLTextAreaElement>(
+                'textarea[aria-label="Neovim input"]'
+            )!;
+            const rows = node.getAttribute('aria-description')!.split('\n').length;
+            return { actual: parseFloat(input.style.top) + 12.5, expected: ((rows - 2) * 25) / 2 };
+        });
+        expect(center.actual).toBeCloseTo(center.expected, 1);
+        await page.keyboard.type('gg');
+        await expect
+            .poll(() =>
+                page
+                    .locator('textarea[aria-label="Neovim input"]')
+                    .evaluate((input) => parseFloat(input.style.top))
+            )
+            .toBe(0);
+        await page.keyboard.type('20Gzz');
+        await page.waitForTimeout(200);
+        await canvas.evaluate((node: HTMLCanvasElement) => {
+            const ctx = node.getContext('2d')!;
+            const fill = ctx.fillRect.bind(ctx);
+            let expected: number | undefined;
+            node.dataset.cursorErrors = '[]';
+            window.nido.onEvent((event) => {
+                if (event.type !== 'redraw') return;
+                for (const [name, ...calls] of event.events) {
+                    if (name !== 'nido_pixel_scroll') continue;
+                    for (const [fraction, direct, cursor] of calls) {
+                        const anchor = cursor as { row: number } | undefined;
+                        expected =
+                            direct && anchor
+                                ? anchor.row * 25 +
+                                  1 -
+                                  Math.round(Number(fraction) * 25 * window.devicePixelRatio) /
+                                      window.devicePixelRatio
+                                : undefined;
+                    }
+                }
+            });
+            ctx.fillRect = (x, y, w, h) => {
+                if (ctx.fillStyle === '#f5f5f5' && expected !== undefined && expected > 0) {
+                    const actual = y + ctx.getTransform().f / window.devicePixelRatio;
+                    const errors = JSON.parse(node.dataset.cursorErrors!) as number[];
+                    if (Math.abs(actual - expected) > 0.01) errors.push(actual - expected);
+                    node.dataset.cursorErrors = JSON.stringify(errors);
+                    node.dataset.checkedCursor = 'true';
+                }
+                fill(x, y, w, h);
+            };
+        });
+        await canvas.hover();
+        for (let i = 0; i < 16; i++) await page.mouse.wheel(0, 3.1);
+        await expect(canvas).toHaveAttribute('data-checked-cursor', 'true');
+        await page.waitForTimeout(150);
+        expect(await canvas.getAttribute('data-cursor-errors')).toBe('[]');
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).check();
+        await page.keyboard.press('Escape');
+        frames = await canvas.getAttribute('data-animation-frames');
+        for (const key of [
+            'Control+d',
+            'Control+u',
+            'Control+e',
+            'Control+y',
+            'Control+f',
+            'Control+b'
+        ]) {
+            await page.keyboard.press(key);
+            await expect
+                .poll(async () => Number(await canvas.getAttribute('data-animation-frames')), {
+                    message: key
+                })
+                .toBeGreaterThan(Number(frames));
+            await page.waitForTimeout(150);
+            frames = await canvas.getAttribute('data-animation-frames');
         }
-      });
-      ctx.fillRect = (x, y, w, h) => {
-        if (ctx.fillStyle === '#f5f5f5' && expected !== undefined && expected > 0) {
-          const actual = y + ctx.getTransform().f / window.devicePixelRatio;
-          const errors = JSON.parse(node.dataset.cursorErrors!) as number[];
-          if (Math.abs(actual - expected) > 0.01) errors.push(actual - expected);
-          node.dataset.cursorErrors = JSON.stringify(errors);
-          node.dataset.checkedCursor = 'true';
+        for (const command of ['G', 'gg', '100G', 'zt', 'zb', 'zz', '/line 150\n', 'zL', 'zH']) {
+            await page.keyboard.type(command);
+            await expect
+                .poll(async () => Number(await canvas.getAttribute('data-animation-frames')), {
+                    message: command
+                })
+                .toBeGreaterThan(Number(frames));
+            await page.waitForTimeout(150);
+            frames = await canvas.getAttribute('data-animation-frames');
         }
-        fill(x, y, w, h);
-      };
-    });
-    await canvas.hover();
-    for (let i = 0; i < 16; i++) await page.mouse.wheel(0, 3.1);
-    await expect(canvas).toHaveAttribute('data-checked-cursor', 'true');
-    await page.waitForTimeout(150);
-    expect(await canvas.getAttribute('data-cursor-errors')).toBe('[]');
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).check();
-    await page.keyboard.press('Escape');
-    frames = await canvas.getAttribute('data-animation-frames');
-    for (const key of ['Control+d', 'Control+u', 'Control+e', 'Control+y', 'Control+f', 'Control+b']) {
-      await page.keyboard.press(key);
-      await expect
-        .poll(async () => Number(await canvas.getAttribute('data-animation-frames')), { message: key })
-        .toBeGreaterThan(Number(frames));
-      await page.waitForTimeout(150);
-      frames = await canvas.getAttribute('data-animation-frames');
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        const before = await canvas.getAttribute('aria-description');
+        await page.mouse.wheel(0, 100);
+        await expect(canvas).not.toHaveAttribute('aria-description', before!);
+        expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
+        expect(await readFile(join(root, 'scroll.txt'), 'utf8')).toBe(content);
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        const toggle = page.getByRole('checkbox', { name: 'UI animations' });
+        await expect(toggle).toBeChecked();
+        await toggle.uncheck();
+        await expect(page.getByRole('dialog', { name: 'Settings' })).toHaveCSS(
+            'animation-name',
+            'none'
+        );
+        await page.keyboard.press('Escape');
+        const beforeDisabledScroll = await canvas.getAttribute('aria-description');
+        await canvas.hover();
+        await page.mouse.wheel(0, 100);
+        await expect(canvas).not.toHaveAttribute('aria-description', beforeDisabledScroll!);
+        expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
+        for (const key of ['Control+d', 'Control+u', 'Control+f', 'Control+b']) {
+            const beforeKey = await canvas.getAttribute('aria-description');
+            await page.keyboard.press(key);
+            await expect(canvas).not.toHaveAttribute('aria-description', beforeKey!);
+            expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
+        }
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await toggle.check();
+        await page.keyboard.press('Escape');
+        await canvas.hover();
+        await page.mouse.wheel(0, 100);
+        await page.waitForTimeout(200);
+        expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await toggle.uncheck();
+        const cursorFollow = page.getByRole('checkbox', { name: 'Cursor follows scrolling' });
+        await expect(cursorFollow).toBeChecked();
+        await cursorFollow.uncheck();
+        await page.keyboard.press('Escape');
+        await page.keyboard.type('20G0');
+        await expect(page.getByText('Ln 20, Col 1', { exact: true })).toBeVisible();
+        const anchoredView = await canvas.getAttribute('aria-description');
+        await canvas.hover();
+        await page.mouse.wheel(0, 1500);
+        await expect(canvas).not.toHaveAttribute('aria-description', anchoredView!);
+        await expect(page.getByText('Ln 20, Col 1', { exact: true })).toBeVisible();
+        await page.keyboard.press('ArrowRight');
+        await expect(page.getByText('Ln 20, Col 2', { exact: true })).toBeVisible();
+        await expect(canvas).toHaveAttribute('aria-description', /line 20 /);
+        await running.close();
+        running = await electron.launch({
+            executablePath,
+            args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+            env
+        });
+        const restoredPage = await running.firstWindow();
+        await restoredPage.getByRole('button', { name: 'Settings', exact: true }).click();
+        await expect(
+            restoredPage.getByRole('checkbox', { name: 'UI animations' })
+        ).not.toBeChecked();
+        await expect(
+            restoredPage.getByRole('checkbox', { name: 'Cursor follows scrolling' })
+        ).not.toBeChecked();
+        expect(errors).toEqual([]);
+    } finally {
+        await running?.close();
+        await rm(root, { recursive: true, force: true });
     }
-    for (const command of ['G', 'gg', '100G', 'zt', 'zb', 'zz', '/line 150\n', 'zL', 'zH']) {
-      await page.keyboard.type(command);
-      await expect
-        .poll(async () => Number(await canvas.getAttribute('data-animation-frames')), { message: command })
-        .toBeGreaterThan(Number(frames));
-      await page.waitForTimeout(150);
-      frames = await canvas.getAttribute('data-animation-frames');
-    }
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    const before = await canvas.getAttribute('aria-description');
-    await page.mouse.wheel(0, 100);
-    await expect(canvas).not.toHaveAttribute('aria-description', before!);
-    expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
-    expect(await readFile(join(root, 'scroll.txt'), 'utf8')).toBe(content);
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    const toggle = page.getByRole('checkbox', { name: 'UI animations' });
-    await expect(toggle).toBeChecked();
-    await toggle.uncheck();
-    await expect(page.getByRole('dialog', { name: 'Settings' })).toHaveCSS('animation-name', 'none');
-    await page.keyboard.press('Escape');
-    const beforeDisabledScroll = await canvas.getAttribute('aria-description');
-    await canvas.hover();
-    await page.mouse.wheel(0, 100);
-    await expect(canvas).not.toHaveAttribute('aria-description', beforeDisabledScroll!);
-    expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
-    for (const key of ['Control+d', 'Control+u', 'Control+f', 'Control+b']) {
-      const beforeKey = await canvas.getAttribute('aria-description');
-      await page.keyboard.press(key);
-      await expect(canvas).not.toHaveAttribute('aria-description', beforeKey!);
-      expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
-    }
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await toggle.check();
-    await page.keyboard.press('Escape');
-    await canvas.hover();
-    await page.mouse.wheel(0, 100);
-    await page.waitForTimeout(200);
-    expect(await canvas.getAttribute('data-animation-frames')).toBe(frames);
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await toggle.uncheck();
-    const cursorFollow = page.getByRole('checkbox', { name: 'Cursor follows scrolling' });
-    await expect(cursorFollow).toBeChecked();
-    await cursorFollow.uncheck();
-    await page.keyboard.press('Escape');
-    await page.keyboard.type('20G0');
-    await expect(page.getByText('Ln 20, Col 1', { exact: true })).toBeVisible();
-    const anchoredView = await canvas.getAttribute('aria-description');
-    await canvas.hover();
-    await page.mouse.wheel(0, 1500);
-    await expect(canvas).not.toHaveAttribute('aria-description', anchoredView!);
-    await expect(page.getByText('Ln 20, Col 1', { exact: true })).toBeVisible();
-    await page.keyboard.press('ArrowRight');
-    await expect(page.getByText('Ln 20, Col 2', { exact: true })).toBeVisible();
-    await expect(canvas).toHaveAttribute('aria-description', /line 20 /);
-    await running.close();
-    running = await electron.launch({
-      executablePath,
-      args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
-      env
-    });
-    const restoredPage = await running.firstWindow();
-    await restoredPage.getByRole('button', { name: 'Settings', exact: true }).click();
-    await expect(restoredPage.getByRole('checkbox', { name: 'UI animations' })).not.toBeChecked();
-    await expect(restoredPage.getByRole('checkbox', { name: 'Cursor follows scrolling' })).not.toBeChecked();
-    expect(errors).toEqual([]);
-  } finally {
-    await running?.close();
-    await rm(root, { recursive: true, force: true });
-  }
 });
 
 test('references stay accessible after jumping and can be closed with the keyboard', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-references-'));
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
-  try {
-    await mkdir(join(root, 'src'));
-    await writeFile(join(root, 'Cargo.toml'), '[package]\nname="nido_references"\nversion="0.1.0"\nedition="2021"\n');
-    await writeFile(
-      join(root, 'src/main.rs'),
-      'fn greet() -> u32 { 42 }\nfn main() {\n    let answer = greet();\n    println!("{answer}");\n}\n'
-    );
-    const executablePath = process.env.NIDO_PACKAGED_EXE;
-    running = await electron.launch({
-      executablePath,
-      args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
-      env
-    });
-    const page = await running.firstWindow();
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, root);
-    await expect(page.getByRole('treeitem', { name: 'src', exact: true })).toBeVisible();
-    await page.keyboard.press('Control+p');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
-    await expect(page.getByRole('button', { name: /main.rs/ })).toBeVisible();
-    await page.keyboard.press('Enter');
-    await expect(async () => {
-      await page.keyboard.press('Control+k');
-      await page.keyboard.type('gg0wgr');
-      await expect(page.getByRole('listbox', { name: 'Reference results' }).getByRole('option')).toHaveCount(2, {
-        timeout: 1000
-      });
-    }).toPass({ timeout: 30000 });
-    const list = page.getByRole('listbox', { name: 'Reference results' });
-    await expect(list).toBeFocused();
-    const preview = page.getByRole('region', { name: 'Reference preview', exact: true });
-    await expect(preview).toContainText('fn main()');
-    await expect(preview.locator('[data-current="true"]')).toContainText('fn greet()');
-    await page.keyboard.press('j');
-    await expect(preview.locator('[data-current="true"]')).toContainText('let answer');
-    await expect(
-      page.getByRole('listbox', { name: 'Reference results' }).getByRole('option', { selected: true })
-    ).toContainText('let answer');
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await expect(preview).toBeHidden();
-    await expect(page.getByRole('region', { name: 'References' })).toBeVisible();
-    await page.keyboard.press('Control+j');
-    await expect(list).toBeFocused();
-    await expect(preview).toContainText('println!');
-    await expect(
-      page.getByRole('listbox', { name: 'Reference results' }).getByRole('option', { selected: true })
-    ).toContainText('let answer');
-    await page.screenshot({ path: 'test-results/nido-references.png' });
-    await page.keyboard.press('k');
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await page.keyboard.press('Control+j');
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('region', { name: 'References' })).toBeHidden();
-    await page.keyboard.press('Control+j');
-    await expect(list).toBeFocused();
-    await page.keyboard.press('Space');
-    await page.keyboard.press('d');
-    await expect(page.getByRole('region', { name: 'References' })).toBeHidden();
-    await expect(page.getByRole('tab', { name: 'main.rs', exact: true })).toBeVisible();
-    await expect(page.getByRole('tab', { name: '[Untitled]', exact: true })).toHaveCount(0);
-    await page.keyboard.press('Shift+F12');
-    await expect(page.getByRole('region', { name: 'References' })).toBeVisible();
-  } finally {
-    await running?.close();
-    await rm(root, { recursive: true, force: true });
-  }
+    const root = await mkdtemp(join(tmpdir(), 'nido-references-'));
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    try {
+        await mkdir(join(root, 'src'));
+        await writeFile(
+            join(root, 'Cargo.toml'),
+            '[package]\nname="nido_references"\nversion="0.1.0"\nedition="2021"\n'
+        );
+        await writeFile(
+            join(root, 'src/main.rs'),
+            'fn greet() -> u32 { 42 }\nfn main() {\n    let answer = greet();\n    println!("{answer}");\n}\n'
+        );
+        const executablePath = process.env.NIDO_PACKAGED_EXE;
+        running = await electron.launch({
+            executablePath,
+            args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+            env
+        });
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, root);
+        await expect(page.getByRole('treeitem', { name: 'src', exact: true })).toBeVisible();
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
+        await expect(page.getByRole('button', { name: /main.rs/ })).toBeVisible();
+        await page.keyboard.press('Enter');
+        await expect(async () => {
+            await page.keyboard.press('Control+k');
+            await page.keyboard.type('gg0wgr');
+            await expect(
+                page.getByRole('listbox', { name: 'Reference results' }).getByRole('option')
+            ).toHaveCount(2, {
+                timeout: 1000
+            });
+        }).toPass({ timeout: 30000 });
+        const list = page.getByRole('listbox', { name: 'Reference results' });
+        await expect(list).toBeFocused();
+        const preview = page.getByRole('region', { name: 'Reference preview', exact: true });
+        await expect(preview).toContainText('fn main()');
+        await expect(preview.locator('[data-current="true"]')).toContainText('fn greet()');
+        await page.keyboard.press('j');
+        await expect(preview.locator('[data-current="true"]')).toContainText('let answer');
+        await expect(
+            page
+                .getByRole('listbox', { name: 'Reference results' })
+                .getByRole('option', { selected: true })
+        ).toContainText('let answer');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await expect(preview).toBeHidden();
+        await expect(page.getByRole('region', { name: 'References' })).toBeVisible();
+        await page.keyboard.press('Control+j');
+        await expect(list).toBeFocused();
+        await expect(preview).toContainText('println!');
+        await expect(
+            page
+                .getByRole('listbox', { name: 'Reference results' })
+                .getByRole('option', { selected: true })
+        ).toContainText('let answer');
+        await page.screenshot({ path: 'test-results/nido-references.png' });
+        await page.keyboard.press('k');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+j');
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('region', { name: 'References' })).toBeHidden();
+        await page.keyboard.press('Control+j');
+        await expect(list).toBeFocused();
+        await page.keyboard.press('Space');
+        await page.keyboard.press('d');
+        await expect(page.getByRole('region', { name: 'References' })).toBeHidden();
+        await expect(page.getByRole('tab', { name: 'main.rs', exact: true })).toBeVisible();
+        await expect(page.getByRole('tab', { name: '[Untitled]', exact: true })).toHaveCount(0);
+        await page.keyboard.press('Shift+F12');
+        await expect(page.getByRole('region', { name: 'References' })).toBeVisible();
+    } finally {
+        await running?.close();
+        await rm(root, { recursive: true, force: true });
+    }
 });
 
 test('Rust debugger keyboard controls stop, inspect and step in the packaged app', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-debug-ui-'));
-  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  try {
-    await mkdir(join(root, 'src'));
-    await mkdir(join(root, 'src/bin'));
-    await writeFile(join(root, 'src/bin/other.rs'), 'fn main() {}');
-    await writeFile(join(root, 'Cargo.toml'), '[package]\nname="nido_debug_ui"\nversion="0.1.0"\nedition="2021"\n');
-    await writeFile(
-      join(root, 'src/main.rs'),
-      'fn main() {\n    let number = 21;\n    let answer = number * 2;\n    println!("answer={answer}");\n}\n'
-    );
-    const executablePath = process.env.NIDO_PACKAGED_EXE;
-    running = await electron.launch({
-      executablePath,
-      args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
-      env
-    });
-    await running.evaluate(({ dialog }) => {
-      dialog.showOpenDialog = async () => {
-        throw new Error('Native folder picker must not be used');
-      };
-    });
-    const page = await running.firstWindow();
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute('aria-busy', 'false');
-    await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
-    await page.keyboard.press('Control+l');
-    await expect(page.getByRole('textbox', { name: 'Folder path' })).toBeFocused();
-    await page.keyboard.type('relative-path');
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('alert')).toContainText('absolute folder path');
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, root, true);
-    await expect(page.getByRole('treeitem', { name: 'src', exact: true })).toBeVisible();
-    await page.keyboard.press('Control+p');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
-    await expect(page.getByRole('button', { name: /main.rs.*src/ })).toBeVisible();
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('tab', { name: 'main.rs', exact: true })).toBeVisible();
-    await page.keyboard.type('3G');
-    await page.keyboard.press('F9');
-    await expect(page.getByRole('region', { name: 'Debugger' })).toBeVisible();
-    await page.keyboard.press('F5');
-    await expect(page.getByRole('region', { name: 'Debugger' })).toContainText('Choose a binary:', { timeout: 30000 });
-    await page.keyboard.press('Control+j');
-    await expect(page.locator('[data-debug-target]:focus')).toHaveCount(1);
-    for (
-      let i = 0;
-      i < 10 &&
-      !(await page
-        .getByRole('button', { name: 'nido_debug_ui', exact: true })
-        .evaluate((element) => element === document.activeElement));
-      i++
-    )
-      await page.keyboard.press('l');
-    await expect(page.getByRole('button', { name: 'nido_debug_ui', exact: true })).toBeFocused();
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('region', { name: 'Debugger' })).toContainText('Debug · paused', { timeout: 30000 });
-    await expect(page.getByLabel('Debug variables')).toContainText('number = 21');
-    await page.keyboard.press('Control+k');
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await page.keyboard.press('Control+h');
-    await expect(page.getByRole('tree', { name: 'Project files' })).toBeFocused();
-    await page.keyboard.press('Control+l');
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await page.keyboard.press('Control+j');
-    await expect(page.getByRole('button', { name: /Continue/ })).toBeFocused();
-    await page.keyboard.press('Space');
-    await page.keyboard.press('d');
-    await expect(page.getByRole('region', { name: 'Debugger' })).toHaveCount(0);
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await expect(page.getByRole('tab', { name: 'main.rs', exact: true })).toBeVisible();
-    await page.keyboard.press('F10');
-    await expect(page.getByRole('region', { name: 'Debugger' })).toHaveCount(0);
-    await page.keyboard.press('Control+j');
-    await expect(page.getByLabel('Debug variables')).toContainText('answer = 42');
-    await page.screenshot({ path: 'test-results/nido-debugger.png' });
-    await page.keyboard.press('Shift+F5');
-    await expect(page.getByRole('region', { name: 'Debugger' })).toContainText('Debug · finished');
-  } finally {
-    await running?.close();
-    await rm(root, { recursive: true, force: true });
-  }
+    const root = await mkdtemp(join(tmpdir(), 'nido-debug-ui-'));
+    let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    try {
+        await mkdir(join(root, 'src'));
+        await mkdir(join(root, 'src/bin'));
+        await writeFile(join(root, 'src/bin/other.rs'), 'fn main() {}');
+        await writeFile(
+            join(root, 'Cargo.toml'),
+            '[package]\nname="nido_debug_ui"\nversion="0.1.0"\nedition="2021"\n'
+        );
+        await writeFile(
+            join(root, 'src/main.rs'),
+            'fn main() {\n    let number = 21;\n    let answer = number * 2;\n    println!("answer={answer}");\n}\n'
+        );
+        const executablePath = process.env.NIDO_PACKAGED_EXE;
+        running = await electron.launch({
+            executablePath,
+            args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+            env
+        });
+        await running.evaluate(({ dialog }) => {
+            dialog.showOpenDialog = async () => {
+                throw new Error('Native folder picker must not be used');
+            };
+        });
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
+            'aria-busy',
+            'false'
+        );
+        await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
+        await page.keyboard.press('Control+l');
+        await expect(page.getByRole('textbox', { name: 'Folder path' })).toBeFocused();
+        await page.keyboard.type('relative-path');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('alert')).toContainText('absolute folder path');
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('dialog')).toHaveCount(0);
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, root, true);
+        await expect(page.getByRole('treeitem', { name: 'src', exact: true })).toBeVisible();
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
+        await expect(page.getByRole('button', { name: /main.rs.*src/ })).toBeVisible();
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('tab', { name: 'main.rs', exact: true })).toBeVisible();
+        await page.keyboard.type('3G');
+        await page.keyboard.press('F9');
+        await expect(page.getByRole('region', { name: 'Debugger' })).toBeVisible();
+        await page.keyboard.press('F5');
+        await expect(page.getByRole('region', { name: 'Debugger' })).toContainText(
+            'Choose a binary:',
+            { timeout: 30000 }
+        );
+        await page.keyboard.press('Control+j');
+        await expect(page.locator('[data-debug-target]:focus')).toHaveCount(1);
+        for (
+            let i = 0;
+            i < 10 &&
+            !(await page
+                .getByRole('button', { name: 'nido_debug_ui', exact: true })
+                .evaluate((element) => element === document.activeElement));
+            i++
+        )
+            await page.keyboard.press('l');
+        await expect(
+            page.getByRole('button', { name: 'nido_debug_ui', exact: true })
+        ).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('region', { name: 'Debugger' })).toContainText(
+            'Debug · paused',
+            { timeout: 30000 }
+        );
+        await expect(page.getByLabel('Debug variables')).toContainText('number = 21');
+        await page.keyboard.press('Control+k');
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+h');
+        await expect(page.getByRole('tree', { name: 'Project files' })).toBeFocused();
+        await page.keyboard.press('Control+l');
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+j');
+        await expect(page.getByRole('button', { name: /Continue/ })).toBeFocused();
+        await page.keyboard.press('Space');
+        await page.keyboard.press('d');
+        await expect(page.getByRole('region', { name: 'Debugger' })).toHaveCount(0);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await expect(page.getByRole('tab', { name: 'main.rs', exact: true })).toBeVisible();
+        await page.keyboard.press('F10');
+        await expect(page.getByRole('region', { name: 'Debugger' })).toHaveCount(0);
+        await page.keyboard.press('Control+j');
+        await expect(page.getByLabel('Debug variables')).toContainText('answer = 42');
+        await page.screenshot({ path: 'test-results/nido-debugger.png' });
+        await page.keyboard.press('Shift+F5');
+        await expect(page.getByRole('region', { name: 'Debugger' })).toContainText(
+            'Debug · finished'
+        );
+    } finally {
+        await running?.close();
+        await rm(root, { recursive: true, force: true });
+    }
 });
 
 test('normal shutdown restores workspace order, active file and cursors', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-restart-'));
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const executablePath = process.env.NIDO_PACKAGED_EXE;
-  if (executablePath) {
-    for (const key of Object.keys(env)) if (key.toLowerCase() === 'path') env[key] = '';
-    env.VIMINIT = 'lua error("Personal configuration must not run")';
-  }
-  const args = [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`];
-  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
-  try {
-    await mkdir(join(root, 'One'));
-    await mkdir(join(root, 'Two'));
-    await writeFile(join(root, 'One', 'a.txt'), 'first line\nsecond line\nthird line\n');
-    await writeFile(join(root, 'One', 'b.txt'), 'another line\n');
-    await writeFile(join(root, 'One', 'mixed.txt'), 'first\r\nsecond\n');
-    await writeFile(join(root, 'One', 'highlight.rs'), 'fn main() { let greeting = "hello"; }\n');
-    await writeFile(
-      join(root, 'One', 'Cargo.toml'),
-      '[package]\nname = "nido_highlight_fixture"\nversion = "0.1.0"\nedition = "2021"\n[lib]\npath = "highlight.rs"\n'
-    );
-    running = await electron.launch({ executablePath, args, env });
-    let page = await running.firstWindow();
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, join(root, 'One'));
-    await expect(page.getByRole('tab', { name: 'Workspace One', exact: true })).toBeVisible();
-    await expect(page.getByRole('treeitem', { name: 'a.txt', exact: true })).toBeVisible();
-    await page.keyboard.press('Control+p');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('mixed.txt');
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('combobox', { name: 'Line endings' })).toHaveValue('Mixed');
-    await expect(page.getByRole('alert')).toContainText('Mixed line endings detected');
-    await page.getByRole('button', { name: 'Dismiss error' }).click();
-    await page.getByRole('combobox', { name: 'Line endings' }).selectOption('LF');
-    await expect(page.getByRole('combobox', { name: 'Line endings' })).toHaveValue('LF');
-    assert.equal(await readFile(join(root, 'One', 'mixed.txt'), 'utf8'), 'first\r\nsecond\n');
-    await page.keyboard.press('Control+s');
-    await expect.poll(() => readFile(join(root, 'One', 'mixed.txt'), 'utf8')).toBe('first\nsecond\n');
-    await page.keyboard.press('Control+Shift+p');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('Convert line endings to CRLF');
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('combobox', { name: 'Line endings' })).toHaveValue('CRLF');
-    await page.keyboard.press('Control+s');
-    await expect.poll(() => readFile(join(root, 'One', 'mixed.txt'), 'utf8')).toBe('first\r\nsecond\r\n');
-    await page.keyboard.press('Space');
-    await page.keyboard.press('d');
-    await expect(page.getByRole('tab', { name: 'mixed.txt', exact: true })).toHaveCount(0);
-    await page.keyboard.press('Control+p');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('highlight.rs');
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('tab', { name: 'highlight.rs', exact: true })).toBeVisible();
-    await expect
-      .poll(() =>
-        page.locator('canvas:visible').evaluate((element) => {
-          const canvas = element as HTMLCanvasElement;
-          const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
-          let keyword = false,
-            string = false;
-          for (let i = 0; i < pixels.length; i += 4) {
-            if (pixels[i] === 86 && pixels[i + 1] === 156 && pixels[i + 2] === 214) keyword = true;
-            if (pixels[i] === 206 && pixels[i + 1] === 145 && pixels[i + 2] === 120) string = true;
-          }
-          return keyword && string;
-        })
-      )
-      .toBe(true);
-    await page.screenshot({ path: 'test-results/nido-rust-highlights.png' });
-    const cursorIsVisible = (): Promise<boolean> =>
-      page.locator('canvas:visible').evaluate((element) => {
-        const canvas = element as HTMLCanvasElement;
-        const input = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Neovim input"]')!;
-        const scale = window.devicePixelRatio || 1;
-        const pixel = canvas
-          .getContext('2d')!
-          .getImageData(
-            Math.floor((parseFloat(input.style.left) + 1) * scale),
-            Math.floor((parseFloat(input.style.top) + 3) * scale),
-            1,
-            1
-          ).data;
-        return pixel[0] > 80;
-      });
-    await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(true);
-    await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(false);
-    await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(true);
-    await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(false);
-    await page.keyboard.press('ArrowLeft');
-    await expect.poll(cursorIsVisible, { intervals: [20], timeout: 400 }).toBe(true);
-    await expect
-      .poll(() =>
-        page.locator('canvas:visible').evaluate((element) => {
-          const canvas = element as HTMLCanvasElement;
-          const scale = window.devicePixelRatio || 1;
-          const ctx = canvas.getContext('2d')!;
-          const sample = (y: number): string =>
-            Array.from(ctx.getImageData(canvas.width - 2, Math.floor((y + 0.5) * scale), 1, 1).data)
-              .slice(0, 3)
-              .join(',');
-          return [sample(0), sample(24), sample(12)];
-        })
-      )
-      .toEqual(['70,81,92', '70,81,92', '20,20,20']);
-    await expect(page.getByTitle('Rust language server connection')).toHaveText('rust_analyzer');
-    await page.keyboard.type(
-      ":lua vim.lsp.handlers['$/progress'](nil, {token='nido-ui-test',value={kind='begin',title='Indexing',message='example_crate',percentage=42}}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})"
-    );
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('status')).toContainText('Indexing — example_crate (42%)');
-    await page.screenshot({ path: 'test-results/nido-lsp-progress.png' });
-    await page.keyboard.type(
-      ":lua vim.lsp.handlers['$/progress'](nil, {token='nido-ui-test',value={kind='end'}}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})"
-    );
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('status').filter({ hasText: 'example_crate' })).toHaveCount(0);
-    await page.keyboard.type(
-      ":lua vim.lsp.handlers['window/showMessage'](nil, {type=2,message='Failed to run build scripts of some packages.'}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})"
-    );
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('alert')).toContainText('LSP[rust_analyzer][Warning] Failed to run build scripts');
-    await expect(page.locator('canvas:visible')).not.toHaveAttribute('aria-description', /Press ENTER/);
-    await page.screenshot({ path: 'test-results/nido-lsp-warning.png' });
-    await page.getByRole('button', { name: 'Dismiss error' }).click();
-    await page.locator('textarea:visible').focus();
-    await page.keyboard.type(
-      ":lua vim.lsp.util.open_floating_preview({'# Nido documentation', '', '**Markdown preview**'}, 'markdown', {})"
-    );
-    await page.keyboard.press('Enter');
-    await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /Markdown preview/);
-    await expect(page.locator('canvas:visible')).not.toHaveAttribute(
-      'aria-description',
-      /Parser could not be created|Error executing/
-    );
-    await page.screenshot({ path: 'test-results/nido-documentation.png' });
-    await page.keyboard.press('j');
-    await page.keyboard.type('gg0w');
-    await expect(async () => {
-      await page.keyboard.press('K');
-      await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /Type information/, {
-        timeout: 1000
-      });
-    }).toPass({ timeout: 20000 });
-    await page.screenshot({ path: 'test-results/nido-hover.png' });
-    for (const [file, keys] of [
-      ['a.txt', '3G4l'],
-      ['b.txt', 'gg6l']
-    ]) {
-      await page.keyboard.press('Control+p');
-      await page.getByRole('textbox', { name: 'Filter items' }).fill(file);
-      await expect(page.getByRole('button', { name: `${file} ${file}`, exact: true })).toBeVisible();
-      await page.keyboard.press('Enter');
-      await expect(page.getByRole('tab', { name: file, exact: true })).toBeVisible();
-      await page.keyboard.type(keys);
+    const root = await mkdtemp(join(tmpdir(), 'nido-restart-'));
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
+    if (executablePath) {
+        for (const key of Object.keys(env)) if (key.toLowerCase() === 'path') env[key] = '';
+        env.VIMINIT = 'lua error("Personal configuration must not run")';
     }
-    await expect(page.getByText('Ln 1, Col 7', { exact: true })).toBeVisible();
-    await page.keyboard.press('Shift+H');
-    await expect(page.getByRole('tab', { name: 'a.txt', exact: true })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByText('Ln 3, Col 5', { exact: true })).toBeVisible();
-    await page.keyboard.press('Shift+L');
-    await expect(page.getByRole('tab', { name: 'b.txt', exact: true })).toHaveAttribute('aria-selected', 'true');
-    await page.keyboard.press('Shift+L');
-    await expect(page.getByRole('tab', { name: 'highlight.rs', exact: true })).toHaveAttribute('aria-selected', 'true');
-    await page.keyboard.press('Shift+H');
-    await expect(page.getByRole('tab', { name: 'b.txt', exact: true })).toHaveAttribute('aria-selected', 'true');
-    await page.keyboard.press('Control+h');
-    await expect(page.getByRole('tree', { name: 'Project files' })).toBeFocused();
-    const explorer = page.getByRole('complementary', { name: 'File explorer' });
-    await page.keyboard.press('Shift+L');
-    await expect(explorer).toHaveCSS('width', '263px');
-    await page.keyboard.press('Shift+H');
-    await expect(explorer).toHaveCSS('width', '243px');
-    const edge = await page.getByRole('separator', { name: 'Explorer width' }).boundingBox();
-    assert.ok(edge);
-    await page.mouse.move(edge.x + edge.width / 2, edge.y + 100);
-    await page.mouse.down();
-    await page.mouse.move(edge.x + edge.width / 2 + 40, edge.y + 100);
-    await page.mouse.up();
-    await expect(explorer).toHaveCSS('width', '283px');
-    await page.keyboard.press('Control+l');
-    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
-    await page.keyboard.press('i');
-    await expect(page.getByText('INSERT', { exact: true })).toBeVisible();
-    await expect(page.getByText('INSERT', { exact: true })).toHaveCSS('background-color', 'rgb(134, 189, 221)');
-    await page.keyboard.press('Shift+H');
-    await page.keyboard.press('Shift+L');
-    await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /HL/);
-    await expect(page.getByRole('tab', { name: 'b.txt Unsaved', exact: true })).toHaveAttribute(
-      'aria-selected',
-      'true'
-    );
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('u');
-    await expect(page.getByText('Ln 1, Col 7', { exact: true })).toBeVisible();
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, join(root, 'Two'));
-    await expect(page.getByRole('tab', { name: 'Workspace Two', exact: true })).toBeVisible();
-    await page.keyboard.press('Space');
-    await page.keyboard.press('h');
-    const closed = running.waitForEvent('close');
-    await page.evaluate(() => {
-      void window.nido.windowAction('close');
-    });
-    await closed;
-    running = await electron.launch({ executablePath, args, env });
-    page = await running.firstWindow();
-    await expect(page.getByRole('complementary', { name: 'File explorer' })).toHaveCSS('width', '283px');
-    await expect(page.getByRole('tab', { name: 'Workspace Two', exact: true })).toHaveAttribute(
-      'aria-selected',
-      'true'
-    );
-    await page.keyboard.press('Alt+2');
-    await expect(page.getByRole('tab', { name: 'Workspace One', exact: true })).toHaveAttribute(
-      'aria-selected',
-      'true'
-    );
-    await expect(page.getByText('Ln 1, Col 7', { exact: true })).toBeVisible();
-    await page.getByRole('tab', { name: 'a.txt', exact: true }).click();
-    await expect(page.getByText('Ln 3, Col 5', { exact: true })).toBeVisible();
-  } finally {
-    if (running) {
-      await running.evaluate(({ app }) => app.exit(0)).catch(() => {});
-      await running.close();
+    const args = [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`];
+    let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    try {
+        await mkdir(join(root, 'One'));
+        await mkdir(join(root, 'Two'));
+        await writeFile(join(root, 'One', 'a.txt'), 'first line\nsecond line\nthird line\n');
+        await writeFile(join(root, 'One', 'b.txt'), 'another line\n');
+        await writeFile(join(root, 'One', 'mixed.txt'), 'first\r\nsecond\n');
+        await writeFile(
+            join(root, 'One', 'highlight.rs'),
+            'fn main() { let greeting = "hello"; }\n'
+        );
+        await writeFile(
+            join(root, 'One', 'Cargo.toml'),
+            '[package]\nname = "nido_highlight_fixture"\nversion = "0.1.0"\nedition = "2021"\n[lib]\npath = "highlight.rs"\n'
+        );
+        running = await electron.launch({ executablePath, args, env });
+        let page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, join(root, 'One'));
+        await expect(page.getByRole('tab', { name: 'Workspace One', exact: true })).toBeVisible();
+        await expect(page.getByRole('treeitem', { name: 'a.txt', exact: true })).toBeVisible();
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('mixed.txt');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('combobox', { name: 'Line endings' })).toHaveValue('Mixed');
+        await expect(page.getByRole('alert')).toContainText('Mixed line endings detected');
+        await page.getByRole('button', { name: 'Dismiss error' }).click();
+        await page.getByRole('combobox', { name: 'Line endings' }).selectOption('LF');
+        await expect(page.getByRole('combobox', { name: 'Line endings' })).toHaveValue('LF');
+        assert.equal(await readFile(join(root, 'One', 'mixed.txt'), 'utf8'), 'first\r\nsecond\n');
+        await page.keyboard.press('Control+s');
+        await expect
+            .poll(() => readFile(join(root, 'One', 'mixed.txt'), 'utf8'))
+            .toBe('first\nsecond\n');
+        await page.keyboard.press('Control+Shift+p');
+        await page
+            .getByRole('textbox', { name: 'Filter items' })
+            .fill('Convert line endings to CRLF');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('combobox', { name: 'Line endings' })).toHaveValue('CRLF');
+        await page.keyboard.press('Control+s');
+        await expect
+            .poll(() => readFile(join(root, 'One', 'mixed.txt'), 'utf8'))
+            .toBe('first\r\nsecond\r\n');
+        await page.keyboard.press('Space');
+        await page.keyboard.press('d');
+        await expect(page.getByRole('tab', { name: 'mixed.txt', exact: true })).toHaveCount(0);
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('highlight.rs');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('tab', { name: 'highlight.rs', exact: true })).toBeVisible();
+        await expect
+            .poll(() =>
+                page.locator('canvas:visible').evaluate((element) => {
+                    const canvas = element as HTMLCanvasElement;
+                    const pixels = canvas
+                        .getContext('2d')!
+                        .getImageData(0, 0, canvas.width, canvas.height).data;
+                    let keyword = false,
+                        string = false;
+                    for (let i = 0; i < pixels.length; i += 4) {
+                        if (pixels[i] === 86 && pixels[i + 1] === 156 && pixels[i + 2] === 214)
+                            keyword = true;
+                        if (pixels[i] === 206 && pixels[i + 1] === 145 && pixels[i + 2] === 120)
+                            string = true;
+                    }
+                    return keyword && string;
+                })
+            )
+            .toBe(true);
+        await page.screenshot({ path: 'test-results/nido-rust-highlights.png' });
+        const cursorIsVisible = (): Promise<boolean> =>
+            page.locator('canvas:visible').evaluate((element) => {
+                const canvas = element as HTMLCanvasElement;
+                const input = document.querySelector<HTMLTextAreaElement>(
+                    'textarea[aria-label="Neovim input"]'
+                )!;
+                const scale = window.devicePixelRatio || 1;
+                const pixel = canvas
+                    .getContext('2d')!
+                    .getImageData(
+                        Math.floor((parseFloat(input.style.left) + 1) * scale),
+                        Math.floor((parseFloat(input.style.top) + 3) * scale),
+                        1,
+                        1
+                    ).data;
+                return pixel[0] > 80;
+            });
+        await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(true);
+        await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(false);
+        await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(true);
+        await expect.poll(cursorIsVisible, { intervals: [50] }).toBe(false);
+        await page.keyboard.press('ArrowLeft');
+        await expect.poll(cursorIsVisible, { intervals: [20], timeout: 400 }).toBe(true);
+        await expect
+            .poll(() =>
+                page.locator('canvas:visible').evaluate((element) => {
+                    const canvas = element as HTMLCanvasElement;
+                    const scale = window.devicePixelRatio || 1;
+                    const ctx = canvas.getContext('2d')!;
+                    const sample = (y: number): string =>
+                        Array.from(
+                            ctx.getImageData(canvas.width - 2, Math.floor((y + 0.5) * scale), 1, 1)
+                                .data
+                        )
+                            .slice(0, 3)
+                            .join(',');
+                    return [sample(0), sample(24), sample(12)];
+                })
+            )
+            .toEqual(['70,81,92', '70,81,92', '20,20,20']);
+        await expect(page.getByTitle('Rust language server connection')).toHaveText(
+            'rust_analyzer'
+        );
+        await page.keyboard.type(
+            ":lua vim.lsp.handlers['$/progress'](nil, {token='nido-ui-test',value={kind='begin',title='Indexing',message='example_crate',percentage=42}}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})"
+        );
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('status')).toContainText('Indexing — example_crate (42%)');
+        await page.screenshot({ path: 'test-results/nido-lsp-progress.png' });
+        await page.keyboard.type(
+            ":lua vim.lsp.handlers['$/progress'](nil, {token='nido-ui-test',value={kind='end'}}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})"
+        );
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('status').filter({ hasText: 'example_crate' })).toHaveCount(0);
+        await page.keyboard.type(
+            ":lua vim.lsp.handlers['window/showMessage'](nil, {type=2,message='Failed to run build scripts of some packages.'}, {client_id=vim.lsp.get_clients({name='rust_analyzer'})[1].id})"
+        );
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('alert')).toContainText(
+            'LSP[rust_analyzer][Warning] Failed to run build scripts'
+        );
+        await expect(page.locator('canvas:visible')).not.toHaveAttribute(
+            'aria-description',
+            /Press ENTER/
+        );
+        await page.screenshot({ path: 'test-results/nido-lsp-warning.png' });
+        await page.getByRole('button', { name: 'Dismiss error' }).click();
+        await page.locator('textarea:visible').focus();
+        await page.keyboard.type(
+            ":lua vim.lsp.util.open_floating_preview({'# Nido documentation', '', '**Markdown preview**'}, 'markdown', {})"
+        );
+        await page.keyboard.press('Enter');
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /Markdown preview/
+        );
+        await expect(page.locator('canvas:visible')).not.toHaveAttribute(
+            'aria-description',
+            /Parser could not be created|Error executing/
+        );
+        await page.screenshot({ path: 'test-results/nido-documentation.png' });
+        await page.keyboard.press('j');
+        await page.keyboard.type('gg0w');
+        await expect(async () => {
+            await page.keyboard.press('K');
+            await expect(page.locator('canvas:visible')).toHaveAttribute(
+                'aria-description',
+                /Type information/,
+                {
+                    timeout: 1000
+                }
+            );
+        }).toPass({ timeout: 20000 });
+        await page.screenshot({ path: 'test-results/nido-hover.png' });
+        for (const [file, keys] of [
+            ['a.txt', '3G4l'],
+            ['b.txt', 'gg6l']
+        ]) {
+            await page.keyboard.press('Control+p');
+            await page.getByRole('textbox', { name: 'Filter items' }).fill(file);
+            await expect(
+                page.getByRole('button', { name: `${file} ${file}`, exact: true })
+            ).toBeVisible();
+            await page.keyboard.press('Enter');
+            await expect(page.getByRole('tab', { name: file, exact: true })).toBeVisible();
+            await page.keyboard.type(keys);
+        }
+        await expect(page.getByText('Ln 1, Col 7', { exact: true })).toBeVisible();
+        await page.keyboard.press('Shift+H');
+        await expect(page.getByRole('tab', { name: 'a.txt', exact: true })).toHaveAttribute(
+            'aria-selected',
+            'true'
+        );
+        await expect(page.getByText('Ln 3, Col 5', { exact: true })).toBeVisible();
+        await page.keyboard.press('Shift+L');
+        await expect(page.getByRole('tab', { name: 'b.txt', exact: true })).toHaveAttribute(
+            'aria-selected',
+            'true'
+        );
+        await page.keyboard.press('Shift+L');
+        await expect(page.getByRole('tab', { name: 'highlight.rs', exact: true })).toHaveAttribute(
+            'aria-selected',
+            'true'
+        );
+        await page.keyboard.press('Shift+H');
+        await expect(page.getByRole('tab', { name: 'b.txt', exact: true })).toHaveAttribute(
+            'aria-selected',
+            'true'
+        );
+        await page.keyboard.press('Control+h');
+        await expect(page.getByRole('tree', { name: 'Project files' })).toBeFocused();
+        const explorer = page.getByRole('complementary', { name: 'File explorer' });
+        await page.keyboard.press('Shift+L');
+        await expect(explorer).toHaveCSS('width', '263px');
+        await page.keyboard.press('Shift+H');
+        await expect(explorer).toHaveCSS('width', '243px');
+        const edge = await page.getByRole('separator', { name: 'Explorer width' }).boundingBox();
+        assert.ok(edge);
+        await page.mouse.move(edge.x + edge.width / 2, edge.y + 100);
+        await page.mouse.down();
+        await page.mouse.move(edge.x + edge.width / 2 + 40, edge.y + 100);
+        await page.mouse.up();
+        await expect(explorer).toHaveCSS('width', '283px');
+        await page.keyboard.press('Control+l');
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('i');
+        await expect(page.getByText('INSERT', { exact: true })).toBeVisible();
+        await expect(page.getByText('INSERT', { exact: true })).toHaveCSS(
+            'background-color',
+            'rgb(134, 189, 221)'
+        );
+        await page.keyboard.press('Shift+H');
+        await page.keyboard.press('Shift+L');
+        await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /HL/);
+        await expect(page.getByRole('tab', { name: 'b.txt Unsaved', exact: true })).toHaveAttribute(
+            'aria-selected',
+            'true'
+        );
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('u');
+        await expect(page.getByText('Ln 1, Col 7', { exact: true })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, join(root, 'Two'));
+        await expect(page.getByRole('tab', { name: 'Workspace Two', exact: true })).toBeVisible();
+        await page.keyboard.press('Space');
+        await page.keyboard.press('h');
+        const closed = running.waitForEvent('close');
+        await page.evaluate(() => {
+            void window.nido.windowAction('close');
+        });
+        await closed;
+        running = await electron.launch({ executablePath, args, env });
+        page = await running.firstWindow();
+        await expect(page.getByRole('complementary', { name: 'File explorer' })).toHaveCSS(
+            'width',
+            '283px'
+        );
+        await expect(page.getByRole('tab', { name: 'Workspace Two', exact: true })).toHaveAttribute(
+            'aria-selected',
+            'true'
+        );
+        await page.keyboard.press('Alt+2');
+        await expect(page.getByRole('tab', { name: 'Workspace One', exact: true })).toHaveAttribute(
+            'aria-selected',
+            'true'
+        );
+        await expect(page.getByText('Ln 1, Col 7', { exact: true })).toBeVisible();
+        await page.getByRole('tab', { name: 'a.txt', exact: true }).click();
+        await expect(page.getByText('Ln 3, Col 5', { exact: true })).toBeVisible();
+    } finally {
+        if (running) {
+            await running.evaluate(({ app }) => app.exit(0)).catch(() => {});
+            await running.close();
+        }
+        await rm(root, { recursive: true, force: true });
     }
-    await rm(root, { recursive: true, force: true });
-  }
 });
 
 test('keyboard-only workspace switching, editing, saving and dirty-close guard', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-e2e-'));
-  await mkdir(join(root, 'Nido'));
-  await mkdir(join(root, 'Portfolio'));
-  await writeFile(
-    join(root, 'Nido', 'WorkspaceTabs.tsx'),
-    `import { useState } from 'react'\n\ninterface Workspace {\n  id: string\n  name: string\n}\n\nexport function WorkspaceTabs() {\n  const [active, setActive] = useState('nido')\n  const workspaces: Workspace[] = [\n    { id: 'nido', name: 'Nido' },\n    { id: 'portfolio', name: 'Portfolio' }\n  ]\n\n  return (\n    <nav aria-label="Workspaces">\n      {workspaces.map((workspace) => (\n        <button\n          key={workspace.id}\n          onClick={() => setActive(workspace.id)}\n          aria-selected={active === workspace.id}\n        >\n          {workspace.name}\n        </button>\n      ))}\n    </nav>\n  )\n}\n`
-  );
-  await writeFile(join(root, 'Nido', 'App.tsx'), 'export default function App() { return null }\n');
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const executablePath = process.env.NIDO_PACKAGED_EXE;
-  if (executablePath) {
-    for (const key of Object.keys(env)) if (key.toLowerCase() === 'path') env[key] = '';
-    env.VIMINIT = 'lua error("Personal configuration must not run")';
-  }
-  const app = await electron.launch({
-    executablePath,
-    args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
-    env
-  });
-  try {
-    const page = await app.firstWindow();
-    const errors: string[] = [];
-    page.on('pageerror', (e) => errors.push(e.message));
-    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
-    await app.evaluate(({ dialog }) => {
-      dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
-    });
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, join(root, 'Nido'));
-    await expect(page.getByRole('tab', { name: 'Workspace Nido', exact: true })).toBeVisible();
-    const welcome = page.getByRole('region', { name: 'Workspace welcome' });
-    await expect(welcome).toBeVisible();
-    await expect(page.locator('canvas:visible')).not.toHaveAttribute('aria-description', /NVIM v/);
-    await page.screenshot({ path: 'test-results/nido-workspace-welcome.png' });
-    await page.keyboard.press('i');
-    await expect(welcome).toBeHidden();
-    await page.keyboard.type('draft');
-    await page.keyboard.press('Escape');
-    await expect(welcome).toBeHidden();
-    await page.keyboard.press('u');
-    await expect(welcome).toBeVisible();
-    await page.keyboard.type(':');
-    await expect(welcome).toBeHidden();
-    await page.keyboard.press('Escape');
-    await expect(welcome).toBeVisible();
-    await page.getByRole('button', { name: 'Open a file' }).click();
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('WorkspaceTabs');
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('tab', { name: 'WorkspaceTabs.tsx' })).toBeVisible();
-    await expect(welcome).toBeHidden();
-    await page.keyboard.type('gg0i// smoke test');
-    await page.keyboard.press('Enter');
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Control+s');
-    await expect.poll(() => readFile(join(root, 'Nido', 'WorkspaceTabs.tsx'), 'utf8')).toContain('// smoke test');
-    await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /smoke test/);
-    await page.keyboard.press('Control+v');
-    await expect(page.getByText('VISUAL', { exact: true })).toBeVisible();
-    await expect(page.getByText('VISUAL', { exact: true })).toHaveCSS('background-color', 'rgb(201, 166, 230)');
-    await page.keyboard.press('Escape');
-    await page.keyboard.type('Go');
-    await page.locator('textarea:visible').evaluate((element) => {
-      const input = element as HTMLTextAreaElement;
-      input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
-      input.value = '日本語入力';
-      input.dispatchEvent(new InputEvent('input', { bubbles: true, data: '日本語入力', isComposing: true }));
-      input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '日本語入力' }));
-      input.dispatchEvent(new InputEvent('input', { bubbles: true, data: '日本語入力' }));
-    });
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Control+s');
-    await expect
-      .poll(async () => (await readFile(join(root, 'Nido', 'WorkspaceTabs.tsx'), 'utf8')).match(/日本語入力/g)?.length)
-      .toBe(1);
-    await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /日本語入力/);
-    await page.keyboard.type('gg');
-    await page.keyboard.press('Control+Shift+n');
-    await chooseWorkspace(page, join(root, 'Portfolio'));
-    await expect(page.getByRole('tab', { name: 'Workspace Portfolio', exact: true })).toBeVisible();
-    await page.keyboard.type('iindependent buffer');
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Control+Tab');
-    await expect(page.getByRole('tab', { name: 'Workspace Nido', exact: true })).toHaveAttribute(
-      'aria-selected',
-      'true'
+    const root = await mkdtemp(join(tmpdir(), 'nido-e2e-'));
+    await mkdir(join(root, 'Nido'));
+    await mkdir(join(root, 'Portfolio'));
+    await writeFile(
+        join(root, 'Nido', 'WorkspaceTabs.tsx'),
+        `import { useState } from 'react'\n\ninterface Workspace {\n  id: string\n  name: string\n}\n\nexport function WorkspaceTabs() {\n  const [active, setActive] = useState('nido')\n  const workspaces: Workspace[] = [\n    { id: 'nido', name: 'Nido' },\n    { id: 'portfolio', name: 'Portfolio' }\n  ]\n\n  return (\n    <nav aria-label="Workspaces">\n      {workspaces.map((workspace) => (\n        <button\n          key={workspace.id}\n          onClick={() => setActive(workspace.id)}\n          aria-selected={active === workspace.id}\n        >\n          {workspace.name}\n        </button>\n      ))}\n    </nav>\n  )\n}\n`
     );
-    await page.keyboard.press('Space');
-    await expect(page.getByRole('dialog', { name: 'Keyboard commands' })).toBeVisible();
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Space');
-    await page.keyboard.press('e');
-    await expect(page.getByRole('tree', { name: 'Project files' })).toBeFocused();
-    await page.keyboard.press('Home');
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('tab', { name: 'App.tsx', exact: true })).toBeVisible();
-    await page.keyboard.press('Space');
-    await page.keyboard.press('b');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('WorkspaceTabs');
-    await page.keyboard.press('Enter');
-    await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /smoke test/);
-    await page.keyboard.press('Space');
-    await page.screenshot({ path: 'test-results/nido-editor.png' });
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Alt+2');
-    await page.keyboard.press('Space');
-    await page.keyboard.press('x');
-    await expect(page.getByRole('tab', { name: 'Workspace Portfolio', exact: true })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Workspace Portfolio', exact: true })).toHaveAttribute(
-      'aria-selected',
-      'true'
+    await writeFile(
+        join(root, 'Nido', 'App.tsx'),
+        'export default function App() { return null }\n'
     );
-    await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /independent buffer/);
-    await app.evaluate(({ dialog }) => {
-      dialog.showMessageBox = async () => ({ response: 2, checkboxChecked: false });
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
+    if (executablePath) {
+        for (const key of Object.keys(env)) if (key.toLowerCase() === 'path') env[key] = '';
+        env.VIMINIT = 'lua error("Personal configuration must not run")';
+    }
+    const app = await electron.launch({
+        executablePath,
+        args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+        env
     });
-    await page.keyboard.press('Space');
-    await page.keyboard.press('x');
-    await expect(page.getByRole('tab', { name: 'Workspace Portfolio', exact: true })).toHaveCount(0);
-    expect(errors).toEqual([]);
-  } finally {
-    await app.evaluate(({ app }) => app.exit(0));
-    await app.close();
-    await rm(root, { recursive: true, force: true });
-  }
+    try {
+        const page = await app.firstWindow();
+        const errors: string[] = [];
+        page.on('pageerror', (e) => errors.push(e.message));
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await app.evaluate(({ dialog }) => {
+            dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
+        });
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, join(root, 'Nido'));
+        await expect(page.getByRole('tab', { name: 'Workspace Nido', exact: true })).toBeVisible();
+        const welcome = page.getByRole('region', { name: 'Workspace welcome' });
+        await expect(welcome).toBeVisible();
+        await expect(page.locator('canvas:visible')).not.toHaveAttribute(
+            'aria-description',
+            /NVIM v/
+        );
+        await page.screenshot({ path: 'test-results/nido-workspace-welcome.png' });
+        await page.keyboard.press('i');
+        await expect(welcome).toBeHidden();
+        await page.keyboard.type('draft');
+        await page.keyboard.press('Escape');
+        await expect(welcome).toBeHidden();
+        await page.keyboard.press('u');
+        await expect(welcome).toBeVisible();
+        await page.keyboard.type(':');
+        await expect(welcome).toBeHidden();
+        await page.keyboard.press('Escape');
+        await expect(welcome).toBeVisible();
+        await page.getByRole('button', { name: 'Open a file' }).click();
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('WorkspaceTabs');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('tab', { name: 'WorkspaceTabs.tsx' })).toBeVisible();
+        await expect(welcome).toBeHidden();
+        await page.keyboard.type('gg0i// smoke test');
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Control+s');
+        await expect
+            .poll(() => readFile(join(root, 'Nido', 'WorkspaceTabs.tsx'), 'utf8'))
+            .toContain('// smoke test');
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /smoke test/
+        );
+        await page.keyboard.press('Control+v');
+        await expect(page.getByText('VISUAL', { exact: true })).toBeVisible();
+        await expect(page.getByText('VISUAL', { exact: true })).toHaveCSS(
+            'background-color',
+            'rgb(201, 166, 230)'
+        );
+        await page.keyboard.press('Escape');
+        await page.keyboard.type('Go');
+        await page.locator('textarea:visible').evaluate((element) => {
+            const input = element as HTMLTextAreaElement;
+            input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+            input.value = '日本語入力';
+            input.dispatchEvent(
+                new InputEvent('input', { bubbles: true, data: '日本語入力', isComposing: true })
+            );
+            input.dispatchEvent(
+                new CompositionEvent('compositionend', { bubbles: true, data: '日本語入力' })
+            );
+            input.dispatchEvent(new InputEvent('input', { bubbles: true, data: '日本語入力' }));
+        });
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Control+s');
+        await expect
+            .poll(
+                async () =>
+                    (await readFile(join(root, 'Nido', 'WorkspaceTabs.tsx'), 'utf8')).match(
+                        /日本語入力/g
+                    )?.length
+            )
+            .toBe(1);
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /日本語入力/
+        );
+        await page.keyboard.type('gg');
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, join(root, 'Portfolio'));
+        await expect(
+            page.getByRole('tab', { name: 'Workspace Portfolio', exact: true })
+        ).toBeVisible();
+        await page.keyboard.type('iindependent buffer');
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Control+Tab');
+        await expect(
+            page.getByRole('tab', { name: 'Workspace Nido', exact: true })
+        ).toHaveAttribute('aria-selected', 'true');
+        await page.keyboard.press('Space');
+        await expect(page.getByRole('dialog', { name: 'Keyboard commands' })).toBeVisible();
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Space');
+        await page.keyboard.press('e');
+        await expect(page.getByRole('tree', { name: 'Project files' })).toBeFocused();
+        await page.keyboard.press('Home');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('tab', { name: 'App.tsx', exact: true })).toBeVisible();
+        await page.keyboard.press('Space');
+        await page.keyboard.press('b');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('WorkspaceTabs');
+        await page.keyboard.press('Enter');
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /smoke test/
+        );
+        await page.keyboard.press('Space');
+        await page.screenshot({ path: 'test-results/nido-editor.png' });
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Alt+2');
+        await page.keyboard.press('Space');
+        await page.keyboard.press('x');
+        await expect(
+            page.getByRole('tab', { name: 'Workspace Portfolio', exact: true })
+        ).toBeVisible();
+        await expect(
+            page.getByRole('tab', { name: 'Workspace Portfolio', exact: true })
+        ).toHaveAttribute('aria-selected', 'true');
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /independent buffer/
+        );
+        await app.evaluate(({ dialog }) => {
+            dialog.showMessageBox = async () => ({ response: 2, checkboxChecked: false });
+        });
+        await page.keyboard.press('Space');
+        await page.keyboard.press('x');
+        await expect(
+            page.getByRole('tab', { name: 'Workspace Portfolio', exact: true })
+        ).toHaveCount(0);
+        expect(errors).toEqual([]);
+    } finally {
+        await app.evaluate(({ app }) => app.exit(0));
+        await app.close();
+        await rm(root, { recursive: true, force: true });
+    }
 });

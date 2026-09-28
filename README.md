@@ -123,9 +123,9 @@ TypeScriptの解析エンジンはワークスペースを開く際に選びま�
 
 ```json
 {
-  "typescript": {
-    "server": "auto"
-  }
+    "typescript": {
+        "server": "auto"
+    }
 }
 ```
 
@@ -135,10 +135,10 @@ TypeScriptの解析エンジンはワークスペースを開く際に選びま�
 
 ```json
 {
-  "typescript": {
-    "server": "native",
-    "command": ["C:/tools/typescript/tsgo.exe", "--lsp", "--stdio"]
-  }
+    "typescript": {
+        "server": "native",
+        "command": ["C:/tools/typescript/tsgo.exe", "--lsp", "--stdio"]
+    }
 }
 ```
 

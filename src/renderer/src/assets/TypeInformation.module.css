@@ -1,87 +1,87 @@
 .card {
-  position: absolute;
-  z-index: 8;
-  display: flex;
-  flex-direction: column;
-  width: min(540px, calc(100% - 24px));
-  max-height: min(420px, calc(100% - 24px));
-  color: #dce3e8;
-  background: #1b2025;
-  border: 1px solid #46574c;
-  border-radius: 12px;
-  box-shadow: 0 14px 42px #0008;
-  overflow: hidden;
-  user-select: text;
+    position: absolute;
+    z-index: 8;
+    display: flex;
+    flex-direction: column;
+    width: min(540px, calc(100% - 24px));
+    max-height: min(420px, calc(100% - 24px));
+    color: #dce3e8;
+    background: #1b2025;
+    border: 1px solid #46574c;
+    border-radius: 12px;
+    box-shadow: 0 14px 42px #0008;
+    overflow: hidden;
+    user-select: text;
 }
 .card header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 15px;
-  border-bottom: 1px solid #ffffff0d;
-  color: #afd2a3;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 15px;
+    border-bottom: 1px solid #ffffff0d;
+    color: #afd2a3;
 }
 .card strong {
-  font-weight: 600;
+    font-weight: 600;
 }
 .card header > span {
-  margin-left: auto;
-  color: #a6b3bd;
-  font-size: 11px;
+    margin-left: auto;
+    color: #a6b3bd;
+    font-size: 11px;
 }
 .card button {
-  display: grid;
-  place-items: center;
-  padding: 5px;
-  border-radius: 5px;
+    display: grid;
+    place-items: center;
+    padding: 5px;
+    border-radius: 5px;
 }
 .body {
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  padding: 14px;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 14px;
 }
 .body:focus-visible {
-  outline: 1px solid #a8cf9e66;
-  outline-offset: -1px;
+    outline: 1px solid #a8cf9e66;
+    outline-offset: -1px;
 }
 .code {
-  background: #12171b;
-  border: 1px solid #ffffff0b;
-  border-radius: 7px;
-  overflow: hidden;
+    background: #12171b;
+    border: 1px solid #ffffff0b;
+    border-radius: 7px;
+    overflow: hidden;
 }
 .code > span {
-  display: block;
-  color: #9eacb6;
-  font-size: 10px;
-  padding: 9px 12px 0;
+    display: block;
+    color: #9eacb6;
+    font-size: 10px;
+    padding: 9px 12px 0;
 }
 .code pre {
-  margin: 0;
-  padding: 12px;
-  font-size: 13px;
-  line-height: 1.65;
-  overflow-x: auto;
-  color: #dcdcab;
-  tab-size: 2;
+    margin: 0;
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.65;
+    overflow-x: auto;
+    color: #dcdcab;
+    tab-size: 2;
 }
 .prose {
-  overflow-wrap: anywhere;
-  line-height: 1.75;
-  font-size: 13px;
+    overflow-wrap: anywhere;
+    line-height: 1.75;
+    font-size: 13px;
 }
 .prose code {
-  color: #a9d7f2;
-  background: #ffffff08;
-  border-radius: 3px;
-  padding: 1px 4px;
+    color: #a9d7f2;
+    background: #ffffff08;
+    border-radius: 3px;
+    padding: 1px 4px;
 }
 .prose > :first-child {
-  margin-top: 0;
+    margin-top: 0;
 }
 .prose > :last-child {
-  margin-bottom: 0;
+    margin-bottom: 0;
 }
 .prose h1,
 .prose h2,
@@ -89,77 +89,77 @@
 .prose h4,
 .prose h5,
 .prose h6 {
-  font-size: 14px;
-  line-height: 1.4;
-  margin: 18px 0 8px;
-  color: #e2eadf;
+    font-size: 14px;
+    line-height: 1.4;
+    margin: 18px 0 8px;
+    color: #e2eadf;
 }
 .prose h1 {
-  font-size: 18px;
+    font-size: 18px;
 }
 .prose h2 {
-  font-size: 16px;
+    font-size: 16px;
 }
 .prose p,
 .prose ul,
 .prose ol {
-  margin: 8px 0;
+    margin: 8px 0;
 }
 .prose ul,
 .prose ol {
-  padding-left: 24px;
+    padding-left: 24px;
 }
 .prose blockquote {
-  margin: 12px 0;
-  padding-left: 12px;
-  border-left: 3px solid #74906b;
-  color: #b8c5ce;
+    margin: 12px 0;
+    padding-left: 12px;
+    border-left: 3px solid #74906b;
+    color: #b8c5ce;
 }
 .prose a {
-  color: #8bc9f2;
-  text-decoration: underline;
+    color: #8bc9f2;
+    text-decoration: underline;
 }
 .prose a:focus-visible {
-  outline: 1px solid #a8cf9e;
-  outline-offset: 3px;
+    outline: 1px solid #a8cf9e;
+    outline-offset: 3px;
 }
 .prose hr {
-  border: 0;
-  border-top: 1px solid #ffffff20;
-  margin: 14px 0;
+    border: 0;
+    border-top: 1px solid #ffffff20;
+    margin: 14px 0;
 }
 .prose table {
-  display: block;
-  overflow-x: auto;
-  border-collapse: collapse;
-  margin: 12px 0;
+    display: block;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin: 12px 0;
 }
 .prose th,
 .prose td {
-  border: 1px solid #ffffff20;
-  padding: 6px 10px;
-  text-align: left;
+    border: 1px solid #ffffff20;
+    padding: 6px 10px;
+    text-align: left;
 }
 .prose th {
-  background: #ffffff08;
+    background: #ffffff08;
 }
 .prose pre code {
-  color: inherit;
-  background: none;
-  padding: 0;
+    color: inherit;
+    background: none;
+    padding: 0;
 }
 .prose .code {
-  margin: 12px 0;
+    margin: 12px 0;
 }
 .body > * + * {
-  margin-top: 14px;
+    margin-top: 14px;
 }
 .card footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 9px 14px;
-  color: #98a7b2;
-  font-size: 10px;
-  border-top: 1px solid #ffffff0d;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 9px 14px;
+    color: #98a7b2;
+    font-size: 10px;
+    border-top: 1px solid #ffffff0d;
 }
