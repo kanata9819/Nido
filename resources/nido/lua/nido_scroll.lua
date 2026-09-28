@@ -31,7 +31,8 @@ function M.screen_cursor()
 end
 
 function M.restore(keep_view)
-  fraction = 0
+  -- A mouse click changes the editing anchor, not the visible pixel offset.
+  if not keep_view then fraction = 0 end
   local pos = M.cursor()
   local saved = anchor
   anchor = nil

@@ -261,6 +261,16 @@ export function useEditorRendering({
       }
     };
 
+    const pointerDown = (event: PointerEvent): void => {
+      if (event.button !== 0) {
+        return;
+      }
+      stopMotion();
+      resetBlink();
+    };
+
+    surface.addEventListener('pointerdown', pointerDown);
+
     for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart']) {
       input.addEventListener(event, resetBlink);
     }
@@ -353,6 +363,7 @@ export function useEditorRendering({
     return () => {
       disposed = true;
       clearTimeout(blinkTimer);
+      surface.removeEventListener('pointerdown', pointerDown);
       for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart']) {
         input.removeEventListener(event, resetBlink);
       }

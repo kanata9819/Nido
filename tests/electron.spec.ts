@@ -383,6 +383,7 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
     await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
     await page.keyboard.press('Control+p');
     await page.getByRole('textbox', { name: 'Filter items' }).fill('click.txt');
+    await expect(page.getByRole('button', { name: 'click.txt click.txt', exact: true })).toBeVisible();
     await page.keyboard.press('Enter');
     const canvas = page.locator('canvas:visible');
     await expect(canvas).toHaveAttribute('aria-description', /ab日本語xyz/);
@@ -406,8 +407,16 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
     await canvas.hover();
     await page.mouse.wheel(0, 3);
     await expect(canvas).toHaveAttribute('data-wide-point', /x/);
-    await canvas.click({ position: JSON.parse((await canvas.getAttribute('data-wide-point'))!) });
-    await expect(page.getByText('Ln 2, Col 6', { exact: true })).toBeVisible();
+    const point = JSON.parse((await canvas.getAttribute('data-wide-point'))!);
+    const bounds = (await canvas.boundingBox())!;
+    await page.mouse.move(bounds.x + point.x, bounds.y + point.y);
+    await page.mouse.down();
+    try {
+      await expect(page.getByText('Ln 2, Col 6', { exact: true })).toBeVisible({ timeout: 1000 });
+      await expect.poll(async () => JSON.parse((await canvas.getAttribute('data-wide-point'))!).y).toBe(point.y);
+    } finally {
+      await page.mouse.up();
+    }
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).uncheck();
     await page.keyboard.press('Escape');
@@ -416,8 +425,10 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
     await page.mouse.wheel(0, 507);
     await expect(canvas).toHaveAttribute('data-tab-point', /x/);
     await expect(page.getByText('Ln 2, Col 6', { exact: true })).toBeVisible();
-    await canvas.click({ position: JSON.parse((await canvas.getAttribute('data-tab-point'))!) });
+    const tabPoint = JSON.parse((await canvas.getAttribute('data-tab-point'))!);
+    await canvas.click({ position: tabPoint });
     await expect(page.getByText('Ln 30, Col 2', { exact: true })).toBeVisible();
+    await expect.poll(async () => JSON.parse((await canvas.getAttribute('data-tab-point'))!).y).toBe(tabPoint.y);
     // Separate the next click from Neovim's double-click selection interval.
     await page.waitForTimeout(600);
     await page.keyboard.press('i');
@@ -554,6 +565,33 @@ test('smooth cursor movement and blink animate and persist their settings', asyn
       return JSON.parse((await canvas.getAttribute('data-cursor-xs'))!);
     };
     expect(new Set((await move('10l')).map((x) => x.toFixed(2))).size).toBeGreaterThan(2);
+    const previous = await editor.evaluate((node) => parseFloat(node.style.left));
+    const clickPoint = await canvas.evaluate((node: HTMLCanvasElement) => {
+      node.dataset.cursorXs = '[]';
+      const input = document.querySelector<HTMLTextAreaElement>('[aria-label="Neovim input"]')!;
+      return {
+        x: parseFloat(input.style.left) + node.getContext('2d')!.measureText('M').width * 8.5,
+        y: parseFloat(input.style.top) + 8
+      };
+    });
+    const bounds = (await canvas.boundingBox())!;
+    await page.mouse.move(bounds.x + clickPoint.x, bounds.y + clickPoint.y);
+    await page.mouse.down();
+    try {
+      await expect.poll(() => editor.evaluate((node) => parseFloat(node.style.left))).not.toBe(previous);
+      await expect
+        .poll(async () => {
+          const xs = JSON.parse((await canvas.getAttribute('data-cursor-xs'))!) as number[];
+          const target = await editor.evaluate((node) => parseFloat(node.style.left));
+          return Math.abs((xs.at(-1) ?? -1000) - target);
+        })
+        .toBeLessThan(0.01);
+      const xs = JSON.parse((await canvas.getAttribute('data-cursor-xs'))!) as number[];
+      expect(new Set(xs.map((x) => x.toFixed(2))).size).toBeGreaterThan(2);
+    } finally {
+      await page.mouse.up();
+    }
+    expect(new Set((await move('10h')).map((x) => x.toFixed(2))).size).toBeGreaterThan(2);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     expect(new Set((await move('10h')).map((x) => x.toFixed(2))).size).toBeLessThanOrEqual(2);
     await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -561,6 +599,13 @@ test('smooth cursor movement and blink animate and persist their settings', asyn
     await setting.uncheck();
     await page.getByRole('button', { name: 'Close palette' }).click();
     expect(new Set((await move('10l')).map((x) => x.toFixed(2))).size).toBeLessThanOrEqual(2);
+    await canvas.evaluate((node) => {
+      node.dataset.cursorXs = '[]';
+    });
+    await canvas.click({ position: clickPoint });
+    await expect.poll(() => editor.evaluate((node) => parseFloat(node.style.left))).not.toBe(previous);
+    const clickXs = JSON.parse((await canvas.getAttribute('data-cursor-xs'))!) as number[];
+    expect(new Set(clickXs.map((x) => x.toFixed(2))).size).toBeLessThanOrEqual(2);
     const hasFade = async (): Promise<boolean> => {
       const alphas = JSON.parse((await canvas.getAttribute('data-cursor-alphas'))!) as number[];
       return alphas.some((alpha) => alpha > 0.01 && alpha < 0.54);

@@ -93,11 +93,12 @@ export default function Editor({
       ref={host}
       className={styles.editor}
       hidden={!active}
-      onClick={(event) => {
-        if (blocked || !active || composing.current || event.target !== canvas.current) {
+      onPointerDown={(event) => {
+        if (event.button !== 0 || blocked || !active || composing.current || event.target !== canvas.current) {
           return;
         }
 
+        event.preventDefault();
         input.current?.focus();
         if (terminal) {
           return;
