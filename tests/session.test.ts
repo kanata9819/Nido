@@ -224,6 +224,61 @@ vim.cmd('messages clear')`,
     }
 });
 
+test('relative gutter numbers stay based on the edit anchor during detached pixel scrolling', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-relative-scroll-'));
+    const grid = new Grid();
+    let session: Session | undefined;
+    try {
+        await writeFile(
+            join(root, 'lines.txt'),
+            Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n')
+        );
+        session = await Session.create(root, (event) => {
+            if (event.type === 'redraw') grid.apply(event.events);
+        });
+        await session.attach(80, 24);
+        await session.openFile('lines.txt');
+        await session.setRelativeLineNumbers(true);
+        await session.input('80Gzz');
+        for (const [lines, relative] of [
+            [26.25, true],
+            [-24.5, true],
+            [0.1, false],
+            [0.1, true]
+        ] as const) {
+            await session.setRelativeLineNumbers(relative);
+            await session.scroll(lines, false, true);
+            await new Promise((done) => setTimeout(done, 30));
+            let checked = 0;
+            for (const row of grid.cells) {
+                const match = row
+                    .map((cell) => cell.text)
+                    .join('')
+                    .match(/^\s*(\d+)\s+line (\d+)\s*$/);
+                if (!match) continue;
+                const line = Number(match[2]);
+                assert.equal(
+                    Number(match[1]),
+                    !relative || line === 80 ? line : Math.abs(line - 80),
+                    `gutter for line ${line}`
+                );
+                checked++;
+            }
+            assert.ok(checked > 10);
+        }
+        await session.input('j');
+        await session.client.request('nvim_eval', ['1']);
+        assert.equal(await session.client.request('nvim_eval', ["line('.')"]), 81);
+        assert.equal(await session.client.request('nvim_eval', ['&statuscolumn']), '');
+        await session.scroll(30, false, true);
+        await session.scroll(1, true, true);
+        assert.equal(await session.client.request('nvim_eval', ['&statuscolumn']), '');
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('wheel scrolling can retain the edit position and resumes input and paste at the anchor', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-scroll-anchor-'));
     let session: Session | undefined;

@@ -31,6 +31,18 @@ function M.screen_cursor()
   return { row = screen.row == 0 and -1 or screen.row - 1, column = screen.col - 1 }
 end
 
+function M.statuscolumn()
+  local pos = M.cursor()
+  if not pos or api.nvim_get_current_win() ~= anchor.window or not vim.wo.relativenumber then
+    return '%s%C%=%l '
+  end
+  -- Neovim moves its internal cursor to keep it visible; relative numbers use the edit anchor.
+  if vim.v.virtnum ~= 0 then return '%s%C' end
+  local current = vim.v.lnum == pos[1]
+  local number = current and (vim.wo.number and pos[1] or 0) or math.abs(vim.v.lnum - pos[1])
+  return '%s%C%=' .. (current and '%#CursorLineNr#' or '%#LineNr#') .. number .. '%* '
+end
+
 function M.restore(keep_view)
   -- A mouse click changes the editing anchor, not the visible pixel offset.
   if not keep_view then
@@ -40,6 +52,9 @@ function M.restore(keep_view)
   local pos = M.cursor()
   local saved = anchor
   anchor = nil
+  if saved and api.nvim_win_is_valid(saved.window) then
+    vim.wo[saved.window].statuscolumn = saved.statuscolumn
+  end
   if saved and api.nvim_buf_is_valid(saved.buffer) then
     api.nvim_buf_clear_namespace(saved.buffer, namespace, 0, -1)
     if not keep_view and pos and api.nvim_win_is_valid(saved.window) and api.nvim_win_get_buf(saved.window) == saved.buffer then
@@ -78,8 +93,10 @@ function M.scroll(lines, follow, pixel)
     anchor = {
       buffer = api.nvim_get_current_buf(), window = api.nvim_get_current_win(),
       view = vim.fn.winsaveview(),
+      statuscolumn = vim.wo.statuscolumn,
       mark = api.nvim_buf_set_extmark(0, namespace, pos[1] - 1, pos[2], {right_gravity=false}),
     }
+    vim.wo.statuscolumn = "%!v:lua.require'nido_scroll'.statuscolumn()"
   end
   if pixel then
     local total = fraction + lines
