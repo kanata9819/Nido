@@ -1027,6 +1027,13 @@
     gap: 15px;
     padding: 15px 0;
 }
+.settings h3 {
+    margin: 20px 0 0;
+    padding-top: 18px;
+    border-top: 1px solid #354049;
+    color: #a3cc94;
+    font-size: 13px;
+}
 .settings label:focus-within {
     background: #a3cc9410;
     outline: 1px solid #a3cc9460;

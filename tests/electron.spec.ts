@@ -134,6 +134,9 @@ test('relative line numbers update immediately and persist after restarting', as
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         const setting = page.getByRole('checkbox', { name: 'Relative line numbers' });
         await expect(setting).not.toBeChecked();
+        const editorConfig = page.getByRole('checkbox', { name: 'Use EditorConfig' });
+        await expect(editorConfig).toBeChecked();
+        await editorConfig.uncheck();
         await setting.check();
         await expect(page.locator('canvas:visible')).toHaveAttribute(
             'aria-description',
@@ -159,6 +162,7 @@ test('relative line numbers update immediately and persist after restarting', as
         );
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await expect(page.getByRole('checkbox', { name: 'Relative line numbers' })).toBeChecked();
+        await expect(page.getByRole('checkbox', { name: 'Use EditorConfig' })).not.toBeChecked();
     } finally {
         await running?.close();
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -596,7 +600,7 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await page.keyboard.press('Shift+Tab');
         await expect(page.getByRole('button', { name: 'Close palette' })).toBeFocused();
         await page.keyboard.press('Shift+Tab');
-        await expect(page.getByRole('checkbox', { name: 'Smooth cursor blink' })).toBeFocused();
+        await expect(page.getByRole('checkbox', { name: 'Use EditorConfig' })).toBeFocused();
         await page.screenshot({ path: 'test-results/settings-keyboard.png' });
         await page.keyboard.press('Escape');
         await expect(page.getByRole('dialog', { name: 'Settings' })).not.toBeVisible();

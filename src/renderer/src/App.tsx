@@ -67,6 +67,7 @@ export default function App(): React.JSX.Element {
         formatOnSave,
         clipboardSharing,
         relativeLineNumbers,
+        editorConfig,
         fontFamily,
         fontSize,
         sidebarWidth,
@@ -92,6 +93,15 @@ export default function App(): React.JSX.Element {
             }
         }
     }, [relativeLineNumbers, workspaces]);
+    useEffect(() => {
+        for (const workspace of workspaces) {
+            if (workspace.kind !== 'terminal') {
+                void window.nido
+                    .setEditorConfig(workspace.id, editorConfig)
+                    .catch((error) => setError(String(error)));
+            }
+        }
+    }, [editorConfig, workspaces]);
 
     const modal = useRef<HTMLDivElement>(null);
     const state = states[active] || defaultState;

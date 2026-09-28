@@ -20,6 +20,8 @@ export default function SettingsPanel({
     setClipboardSharing,
     relativeLineNumbers,
     setRelativeLineNumbers,
+    editorConfig,
+    setEditorConfig,
     fontFamily,
     setFontFamily,
     fontSize,
@@ -141,6 +143,18 @@ export default function SettingsPanel({
                     onChange={(event) => setSmoothBlink(event.target.checked)}
                 />
             </label>
+            <h3>Extensions</h3>
+            <label>
+                Use EditorConfig{' '}
+                <input
+                    type="checkbox"
+                    checked={editorConfig}
+                    onChange={(event) => setEditorConfig(event.target.checked)}
+                />
+            </label>
+            <small>
+                Apply the project's .editorconfig to indentation, line endings and save rules.
+            </small>
             <p>
                 Tab / ↑ ↓ / j k: Move · ← →: Adjust · Space / Enter: Toggle · Esc: Close
                 <br />

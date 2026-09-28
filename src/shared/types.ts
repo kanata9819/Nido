@@ -125,6 +125,7 @@ export interface NidoAPI {
     input(id: string, keys: string): Promise<void>;
     setClipboardSharing(id: string, enabled: boolean): Promise<void>;
     setRelativeLineNumbers(id: string, enabled: boolean): Promise<void>;
+    setEditorConfig(id: string, enabled: boolean): Promise<void>;
     openDocumentation(url: string): Promise<void>;
     click(id: string, row: number, column: number): Promise<void>;
     scroll(id: string, lines: number, follow?: boolean, pixel?: boolean): Promise<void>;

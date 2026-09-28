@@ -270,6 +270,10 @@ export function registerHandlers({
         }
         return session(id).setRelativeLineNumbers(enabled);
     });
+    handle('editorConfig', (id, enabled) => {
+        if (typeof enabled !== 'boolean') throw new Error('Invalid EditorConfig setting.');
+        return session(id).setEditorConfig(enabled);
+    });
     handle('openDocumentation', (value) => {
         const url = new URL(text(value));
         if (!['https:', 'http:'].includes(url.protocol)) {

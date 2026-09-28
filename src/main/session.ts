@@ -363,6 +363,14 @@ end`,
         ]);
     }
 
+    async setEditorConfig(enabled: boolean): Promise<void> {
+        if (this.workspace.kind === 'terminal') return;
+        await this.client.request('nvim_exec_lua', [
+            "require('nido_editorconfig').set_enabled(...)",
+            [enabled]
+        ]);
+    }
+
     input(keys: string): Promise<void> {
         // nvim_input can accept only part of a byte sequence when its input queue is full.
         const next = this.inputQueue.then(async () => {

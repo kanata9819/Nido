@@ -34,6 +34,7 @@ vim.diagnostic.config({
 vim.opt.runtimepath:append(vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':h'))
 vim.cmd('colorscheme azami')
 require('nido_indent')
+require('nido_editorconfig')
 require('nido_brackets')
 -- Darken surfaces without changing Azami's token colors.
 for _, name in ipairs({'Normal', 'NormalNC', 'LineNr', 'CursorLineNr', 'SignColumn', 'EndOfBuffer'}) do

@@ -671,6 +671,62 @@ test('bracket pairs share depth colors, ignore strings and comments, and refresh
     }
 });
 
+test('EditorConfig toggles existing buffers, indentation guides and save rules', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-editorconfig-'));
+    const grid = new Grid();
+    let session: Session | undefined;
+    try {
+        await writeFile(
+            join(root, '.editorconfig'),
+            'root = true\n[*]\nindent_style = space\nindent_size = 4\ntrim_trailing_whitespace = true\n[other.txt]\nindent_size = 8\n'
+        );
+        await writeFile(join(root, 'indent.txt'), 'root\n    child  \n        nested\n');
+        await writeFile(join(root, 'other.txt'), '        other\n');
+        session = await Session.create(root, (event) => {
+            if (event.type === 'redraw') grid.apply(event.events);
+        });
+        await session.openFile('indent.txt');
+        const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
+        const baseline = await lua('return {vim.bo.shiftwidth, vim.bo.tabstop, vim.bo.expandtab}');
+        await session.setEditorConfig(true);
+        await session.client.request('nvim_eval', ['1']);
+        assert.deepEqual(
+            await lua('return {vim.bo.shiftwidth, vim.bo.tabstop, vim.bo.expandtab}'),
+            [4, 4, true]
+        );
+        assert.equal(grid.cells[1].filter((cell) => cell.text === '│').length, 1);
+        assert.equal(grid.cells[2].filter((cell) => cell.text === '│').length, 2);
+        assert.equal(await lua('return vim.bo.modified'), false);
+        await session.save();
+        assert.equal(
+            await readFile(join(root, 'indent.txt'), 'utf8'),
+            'root\n    child\n        nested\n'
+        );
+        await session.openFile('other.txt');
+        assert.equal(await lua('return vim.bo.shiftwidth'), 8);
+        await session.setEditorConfig(false);
+        await session.openFile('indent.txt');
+        assert.deepEqual(
+            await lua('return {vim.bo.shiftwidth, vim.bo.tabstop, vim.bo.expandtab}'),
+            baseline
+        );
+        await lua("vim.api.nvim_buf_set_lines(0, 1, 2, false, {'    child  '})");
+        await session.save();
+        assert.match(await readFile(join(root, 'indent.txt'), 'utf8'), /child  \n/);
+        await session.setEditorConfig(true);
+        await session.setEditorConfig(true);
+        assert.equal(
+            await lua(
+                "return #vim.api.nvim_get_autocmds({group='nvim.editorconfig', event='BufWritePre', buffer=0})"
+            ),
+            1
+        );
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('indent guides follow depth, tabs and blank lines without changing text', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-indent-'));
     const grid = new Grid();

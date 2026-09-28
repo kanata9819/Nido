@@ -24,6 +24,7 @@ const api: NidoAPI = {
     resize: (id, columns, rows) => ipcRenderer.invoke('nido:resize', id, columns, rows),
     input: (id, keys) => ipcRenderer.invoke('nido:input', id, keys),
     setClipboardSharing: (id, enabled) => ipcRenderer.invoke('nido:clipboardSharing', id, enabled),
+    setEditorConfig: (id, enabled) => ipcRenderer.invoke('nido:editorConfig', id, enabled),
     setRelativeLineNumbers: (id, enabled) =>
         ipcRenderer.invoke('nido:relativeLineNumbers', id, enabled),
     openDocumentation: (url) => ipcRenderer.invoke('nido:openDocumentation', url),

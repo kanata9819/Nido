@@ -3,6 +3,12 @@ import { useEffect, useState } from 'react';
 export const defaultFontFamily = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
 
 export function useEditorSettings() {
+    const [editorConfig, setEditorConfig] = useState(
+        () => localStorage.getItem('nido.editorConfig') !== 'false'
+    );
+    useEffect(() => {
+        localStorage.setItem('nido.editorConfig', String(editorConfig));
+    }, [editorConfig]);
     const [relativeLineNumbers, setRelativeLineNumbers] = useState(
         () => localStorage.getItem('nido.relativeLineNumbers') === 'true'
     );
@@ -80,6 +86,8 @@ export function useEditorSettings() {
     }, [fontSize]);
 
     return {
+        editorConfig,
+        setEditorConfig,
         relativeLineNumbers,
         setRelativeLineNumbers,
         sidebar,
