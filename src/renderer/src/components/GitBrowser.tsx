@@ -174,11 +174,7 @@ export default function GitBrowser({
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {
-      if (
-        event.isComposing ||
-        event.keyCode === 229 ||
-        !(event.target as HTMLElement).closest('[aria-label="git palette"]')
-      ) {
+      if (event.isComposing || event.keyCode === 229) {
         return;
       }
       if (event.key === 'Escape') {
@@ -186,6 +182,9 @@ export default function GitBrowser({
         if (!busy) {
           back();
         }
+        return;
+      }
+      if (!(event.target as HTMLElement).closest('[aria-label="git palette"]')) {
         return;
       }
       const editing = (event.target as HTMLElement).matches('input, textarea, [contenteditable="true"]');
