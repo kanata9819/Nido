@@ -153,6 +153,7 @@ export default function Sidebar({
         role="tree"
         tabIndex={0}
         aria-label="Project files"
+        title="j/k Select · Ctrl+D/U Half page · Ctrl+F/B Page · gg/G First / Last"
         aria-activedescendant={selected ? `file-${workspace.id}-${selected}` : undefined}
         onKeyDown={createOnKeyDown({
           visible,

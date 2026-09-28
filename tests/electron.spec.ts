@@ -5,6 +5,74 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+test('explorer supports half-page, page and first/last selection with Vim keys', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-explorer-keys-'));
+  const workspace = join(root, 'workspace');
+  await mkdir(workspace);
+  await Promise.all(
+    Array.from({ length: 80 }, (_, index) =>
+      writeFile(join(workspace, `file-${String(index).padStart(2, '0')}.txt`), 'sample\n')
+    )
+  );
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const executablePath = process.env.NIDO_PACKAGED_EXE;
+  const running = await electron.launch({
+    executablePath,
+    args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+    env
+  });
+  try {
+    const page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, workspace);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.press('Control+h');
+    const tree = page.getByRole('tree', { name: 'Project files' });
+    await expect(tree).toBeFocused();
+    await expect(tree.getByRole('treeitem')).toHaveCount(80);
+    const selected = tree.locator('[aria-selected="true"]');
+    await page.keyboard.type('gg');
+    await expect(selected).toHaveText('file-00.txt');
+    const step = await tree.evaluate((node) =>
+      Math.max(
+        1,
+        Math.floor(node.clientHeight / node.querySelector('[role="treeitem"]')!.getBoundingClientRect().height / 2)
+      )
+    );
+    await page.keyboard.press('Control+d');
+    await expect(selected).toHaveText(`file-${String(step).padStart(2, '0')}.txt`);
+    await page.keyboard.press('Control+u');
+    await expect(selected).toHaveText('file-00.txt');
+    await page.keyboard.press('Control+f');
+    await expect(selected).not.toHaveText(`file-${String(step).padStart(2, '0')}.txt`);
+    await expect.poll(() => tree.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    await page.keyboard.press('Control+b');
+    await expect(selected).toHaveText('file-00.txt');
+    await page.keyboard.press('Shift+g');
+    await expect(selected).toHaveText('file-79.txt');
+    await page.keyboard.press('Control+d');
+    await expect(selected).toHaveText('file-79.txt');
+    await page.keyboard.press('Control+g');
+    await expect(selected).toHaveText('file-79.txt');
+    await tree.dispatchEvent('keydown', { key: 'g', isComposing: true });
+    await expect(selected).toHaveText('file-79.txt');
+    await page.keyboard.type('gg');
+    await expect(selected).toHaveText('file-00.txt');
+    await page.keyboard.press('PageDown');
+    await expect(selected).not.toHaveText('file-00.txt');
+    await page.keyboard.press('PageUp');
+    await expect(selected).toHaveText('file-00.txt');
+    await expect(tree).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('tab', { name: 'file-00.txt', exact: true })).toBeVisible();
+  } finally {
+    await running.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('typing hides the pointer and moving or clicking restores it', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-pointer-'));
   const env = { ...process.env };
@@ -689,6 +757,12 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
     await expect(page.getByLabel('Commit diff', { exact: true })).toContainText('fn main() {}');
     await expect(page.getByLabel('Commit diff', { exact: true }).locator('code span').first()).toBeVisible();
     await checkDiffKeys('Commit diff', 'Commit files');
+    await page.keyboard.press('Control+l');
+    await page.keyboard.press('n');
+    await expect(browser.getByText('Change 1 / 1 · n / N', { exact: true })).toBeVisible();
+    await page.keyboard.press('Shift+n');
+    await expect(browser.getByText('Change 1 / 1 · n / N', { exact: true })).toBeVisible();
+    await page.keyboard.press('Control+h');
     await page.keyboard.press('j');
     await expect(page.getByLabel('Commit diff', { exact: true })).toContainText('extra file');
     await page.keyboard.press('k');
@@ -697,7 +771,13 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
     await page.keyboard.press('Escape');
     await expect(page.getByRole('listbox', { name: 'Commit history' })).toBeFocused();
     const source = await readFile(join(repository, 'main.rs'), 'utf8');
-    await writeFile(join(repository, 'main.rs'), source.replace('fn main() {}', 'fn main() { println!("Nido"); }'));
+    await writeFile(
+      join(repository, 'main.rs'),
+      source
+        .replace('fn main() {}', 'fn main() { println!("Nido"); }')
+        .replace('// 70 ', '// updated 70 ')
+        .replace('// 140 ', '// updated 140 ')
+    );
     await page.keyboard.press('1');
     await expect(panel).toHaveAttribute('aria-busy', 'false');
     await expect(page.getByLabel('Git diff original', { exact: true })).toContainText('fn main() {}');
@@ -714,6 +794,28 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
         .toBeGreaterThan(1);
     }
     await checkDiffKeys('Git diff', 'Changed files');
+    await page.keyboard.press('Control+l');
+    await page.keyboard.press('n');
+    await expect(panel.getByText('Change 1 / 3 · n / N', { exact: true })).toBeVisible();
+    await expect.poll(() => updated.evaluate((node) => node.scrollTop)).toBeLessThan(1);
+    await page.keyboard.press('n');
+    await expect(panel.getByText('Change 2 / 3 · n / N', { exact: true })).toBeVisible();
+    await expect.poll(() => updated.evaluate((node) => node.scrollTop)).toBeGreaterThan(1000);
+    await expect
+      .poll(() => page.getByLabel('Git diff original', { exact: true }).evaluate((node) => node.scrollTop))
+      .toBeGreaterThan(1000);
+    await page.keyboard.press('n');
+    await expect(panel.getByText('Change 3 / 3 · n / N', { exact: true })).toBeVisible();
+    await page.getByLabel('Git diff original', { exact: true }).focus();
+    await page.keyboard.press('Shift+n');
+    await expect(panel.getByText('Change 2 / 3 · n / N', { exact: true })).toBeVisible();
+    await page.keyboard.press('Shift+n');
+    await expect(panel.getByText('Change 1 / 3 · n / N', { exact: true })).toBeVisible();
+    await page.keyboard.press('Shift+n');
+    await expect(panel.getByText('Change 3 / 3 · n / N', { exact: true })).toBeVisible();
+    await page.keyboard.press('n');
+    await expect(panel.getByText('Change 1 / 3 · n / N', { exact: true })).toBeVisible();
+    await page.keyboard.press('Control+h');
     await page.screenshot({ path: 'test-results/nido-git-side-by-side.png' });
     await page.keyboard.press('3');
     await expect(browser).toHaveAttribute('aria-busy', 'false');

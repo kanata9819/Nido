@@ -259,7 +259,8 @@ export default function GitPanel({
       <footer>
         {busy ? 'Working…' : 'j/k Select · s Stage · u Unstage · r Refresh · c Message · Esc Close'}
         <br />
-        Ctrl+H/L List / Diff · j/k Scroll diff · Ctrl+D/U Half page · Ctrl+F/B Page · g/G Top / Bottom
+        Ctrl+H/L List / Diff · j/k Scroll diff · Ctrl+D/U Half page · Ctrl+F/B Page · g/G Top / Bottom · n/N Next /
+        Previous change
         <br />
         Saved files only · Changes cover the entire repository.
       </footer>

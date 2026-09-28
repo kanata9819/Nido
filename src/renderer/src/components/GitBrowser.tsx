@@ -415,7 +415,7 @@ export default function GitBrowser({
           )}
           <footer>
             1/2/3 Views · Ctrl+H/L List / Diff · j/k Select / Scroll · Ctrl+D/U Half page · Ctrl+F/B Page · g/G Top /
-            Bottom · Tab Move focus · Esc Back / Close
+            Bottom · n/N Next / Previous change · Tab Move focus · Esc Back / Close
           </footer>
         </section>
       )}

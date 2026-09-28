@@ -19,6 +19,14 @@ export default function GitDiff({
   afterLabel: string;
 }): React.JSX.Element {
   const rows = useMemo(() => splitDiff(diff), [diff]);
+  const changes = rows.flatMap((row, index) =>
+    (row.before?.changed || row.after?.changed) &&
+    !(rows[index - 1]?.before?.changed || rows[index - 1]?.after?.changed)
+      ? [index]
+      : []
+  );
+  const [selectedChange, setSelectedChange] = useState<{ diff: string; row: number }>();
+  const activeChange = selectedChange?.diff === diff ? changes.indexOf(selectedChange.row) : -1;
   const [highlighted, setHighlighted] = useState<{ diff: string; lines: ReferencePreview['lines'][] }>();
   const [error, setError] = useState('');
   const before = useRef<HTMLPreElement>(null);
@@ -55,6 +63,12 @@ export default function GitDiff({
           <div className={styles.diffHeading}>
             <strong>{side === 'before' ? 'Before' : 'After'}</strong>
             <span>{side === 'before' ? beforeLabel : afterLabel}</span>
+            {side === 'after' && changes.length > 0 && (
+              <span>
+                {activeChange < 0 ? `${changes.length} changes` : `Change ${activeChange + 1} / ${changes.length}`} · n
+                / N
+              </span>
+            )}
             {side === 'after' && error && <span role="status">{error}</span>}
           </div>
           <pre
@@ -62,6 +76,37 @@ export default function GitDiff({
             tabIndex={0}
             aria-label={side === 'before' ? `${label} original` : label}
             data-git-scroll={side}
+            onKeyDown={(event) => {
+              if (
+                event.ctrlKey ||
+                event.altKey ||
+                event.metaKey ||
+                event.nativeEvent.isComposing ||
+                !['n', 'N'].includes(event.key)
+              ) {
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              if (!changes.length) {
+                return;
+              }
+              const direction = event.shiftKey || event.key === 'N' ? -1 : 1;
+              const next =
+                activeChange < 0
+                  ? direction === 1
+                    ? 0
+                    : changes.length - 1
+                  : (activeChange + direction + changes.length) % changes.length;
+              const row = changes[next];
+              setSelectedChange({ diff, row });
+              const preview = event.currentTarget;
+              const target = preview.children[row] as HTMLElement;
+              const top = target.getBoundingClientRect().top - preview.getBoundingClientRect().top + preview.scrollTop;
+              for (const pane of [before.current, after.current]) {
+                pane?.scrollTo({ top, behavior: 'instant' });
+              }
+            }}
             onScroll={(event) => {
               const other = side === 'before' ? after.current : before.current;
               if (other && Math.abs(other.scrollTop - event.currentTarget.scrollTop) > 1) {
@@ -72,6 +117,7 @@ export default function GitDiff({
             {rows.map((row, index) => (
               <div
                 key={index}
+                data-diff-active={selectedChange?.diff === diff && selectedChange.row === index ? 'true' : undefined}
                 className={`${styles.diffLine} ${row.heading ? styles.hunk : row[side]?.changed ? (side === 'before' ? styles.removed : styles.added) : !row[side] ? styles.emptyLine : ''}`}
               >
                 <span className={styles.lineNumber} aria-hidden="true">

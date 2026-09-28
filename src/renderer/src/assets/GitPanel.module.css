@@ -162,6 +162,9 @@
 .emptyLine {
   background: #ffffff03;
 }
+.diffLine[data-diff-active='true'] {
+  box-shadow: inset 0 2px #80bad5;
+}
 .preview pre:focus-visible,
 .list:focus-visible {
   outline: 1px solid #9fc68e;
