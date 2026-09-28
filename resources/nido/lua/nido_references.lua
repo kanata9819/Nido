@@ -158,7 +158,8 @@ function M.open(index, expected_version)
   local line = math.min(item.lnum, vim.api.nvim_buf_line_count(0))
   local text = vim.api.nvim_buf_get_lines(0, line - 1, line, false)[1] or ''
   vim.api.nvim_win_set_cursor(0, { line, math.min(item.col - 1, #text) })
-  vim.cmd('normal! zvzz')
+  vim.cmd('normal! zv')
+  require('nido_scroll').center()
 end
 
 return M

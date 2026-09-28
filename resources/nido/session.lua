@@ -147,6 +147,8 @@ local function publish()
       problems = problems,
       diagnosticsVersion = diagnostics_version,
       scrollCursor = scroll.screen_cursor(),
+      scrollPercent = math.min(100, math.floor(100 * (vim.fn.line('w0') - 1)
+        / math.max(1, vim.api.nvim_buf_line_count(0) - (vim.fn.line('w$') - vim.fn.line('w0') + 1)) + 0.5)),
       diagnostics = diagnostics,
       buffers = buffers,
       current = vim.api.nvim_get_current_buf(),
@@ -190,7 +192,7 @@ vim.api.nvim_create_autocmd('LspProgress', {
 vim.api.nvim_create_autocmd({
   'BufEnter', 'BufAdd', 'BufDelete', 'BufModifiedSet', 'BufFilePost', 'BufWritePost',
   'ModeChanged', 'CursorMoved', 'CursorMovedI', 'FileType', 'TextChanged', 'TextChangedI',
-  'WinEnter', 'WinClosed', 'LspAttach', 'LspDetach',
+  'WinEnter', 'WinClosed', 'WinScrolled', 'WinResized', 'LspAttach', 'LspDetach',
 }, { callback = publish })
 vim.api.nvim_create_autocmd('User', { pattern = { 'NidoLineEndings', 'NidoScroll' }, callback = publish })
 vim.api.nvim_create_autocmd('OptionSet', { pattern = { 'fileformat', 'endofline' }, callback = publish })

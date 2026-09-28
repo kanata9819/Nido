@@ -3,6 +3,7 @@ local M = {}
 local namespace = api.nvim_create_namespace('nido_scroll_anchor')
 local anchor
 local fraction = 0
+local centered_view
 
 local function publish_offset(pixel)
   for _, ui in ipairs(api.nvim_list_uis()) do
@@ -32,7 +33,10 @@ end
 
 function M.restore(keep_view)
   -- A mouse click changes the editing anchor, not the visible pixel offset.
-  if not keep_view then fraction = 0 end
+  if not keep_view then
+    fraction = 0
+    centered_view = nil
+  end
   local pos = M.cursor()
   local saved = anchor
   anchor = nil
@@ -52,7 +56,21 @@ function M.restore(keep_view)
   publish_offset()
 end
 
+function M.center(count)
+  M.restore()
+  vim.cmd.normal({args={(count and count > 0 and tostring(count) or '') .. 'zz'}, bang=true})
+  vim.cmd.redraw()
+  local view = vim.fn.winsaveview()
+  if vim.bo.buftype ~= 'terminal' and (view.topline > 1 or view.skipcol > 0) then
+    -- The renderer hides one overscan row below the visible code viewport.
+    fraction = math.max(0, math.min(0.5, vim.fn.winline() - api.nvim_win_get_height(0) / 2))
+    centered_view = view
+  end
+  publish_offset()
+end
+
 function M.scroll(lines, follow, pixel)
+  centered_view = nil
   if follow then
     if anchor then M.restore() end
   elseif not anchor and vim.bo.buftype == '' then
@@ -91,4 +109,13 @@ function M.scroll(lines, follow, pixel)
 end
 
 api.nvim_create_autocmd('BufLeave', {callback=M.restore})
+api.nvim_create_autocmd('WinScrolled', {callback=function()
+  if not centered_view then return end
+  local view = vim.fn.winsaveview()
+  if view.topline ~= centered_view.topline or view.skipcol ~= centered_view.skipcol then
+    fraction = 0
+    centered_view = nil
+    publish_offset()
+  end
+end})
 return M

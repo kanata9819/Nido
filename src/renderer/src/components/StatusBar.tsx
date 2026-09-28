@@ -101,6 +101,18 @@ export default function StatusBar({
       <span>
         Ln {state.line}, Col {state.column}
       </span>
+      {active && workspace?.kind !== 'terminal' && state.scrollPercent !== undefined && (
+        <span
+          className={styles.scrollPosition}
+          title="Position in file"
+          aria-label={`File position ${state.scrollPercent}%`}
+        >
+          <span className={styles.scrollTrack} aria-hidden="true">
+            <span style={{ width: `${state.scrollPercent}%` }} />
+          </span>
+          {state.scrollPercent}%
+        </span>
+      )}
       <Code2 size={15} />
     </footer>
   );

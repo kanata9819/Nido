@@ -1,10 +1,12 @@
 -- Nido owns this configuration; personal Neovim config is not loaded.
 vim.g.nido = true
-vim.opt.shortmess:append('IW')
+vim.opt.shortmess:append('IWF')
 vim.o.termguicolors = true
 vim.o.number = true
 vim.o.relativenumber = false
 vim.o.showmode = false
+vim.o.ruler = false
+vim.o.showcmd = false
 vim.o.laststatus = 0
 vim.o.showtabline = 0
 vim.o.mouse = 'a'
@@ -52,6 +54,7 @@ vim.api.nvim_set_hl(0, 'NormalFloat', {fg='#d4d4d4', bg='#1b1e21'})
 vim.api.nvim_set_hl(0, 'FloatBorder', {fg='#65717d', bg='#1b1e21'})
 vim.api.nvim_set_hl(0, 'FloatTitle', {fg='#a8cf9e', bg='#1b1e21', bold=true})
 local show_type_information = require('nido_hover').show
+vim.keymap.set('n', 'zz', function() require('nido_scroll').center(vim.v.count) end)
 -- Always override the built-in K help lookup, including files without an LSP.
 for _, key in ipairs({ 'K', '<C-k>' }) do
   vim.keymap.set('n', key, show_type_information)

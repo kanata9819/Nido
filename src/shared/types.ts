@@ -21,6 +21,7 @@ export interface SessionState {
   problems?: { path: string; line: number; column: number; severity: number; message: string; source: string }[];
   diagnosticsVersion?: number;
   scrollCursor?: { row: number; column: number };
+  scrollPercent?: number;
   diagnostics?: Record<string, number>;
   references?: ReferenceList;
   debug?: DebugState;

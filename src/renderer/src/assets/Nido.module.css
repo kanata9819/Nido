@@ -664,6 +664,25 @@
 .statusGap {
   flex: 1;
 }
+.scrollPosition {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 76px;
+  font-variant-numeric: tabular-nums;
+}
+.scrollTrack {
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: #343b41;
+  overflow: hidden;
+}
+.scrollTrack > span {
+  display: block;
+  height: 100%;
+  background: #a8cf9e;
+}
 .lspProgress {
   display: flex;
   align-items: center;

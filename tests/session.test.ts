@@ -138,6 +138,44 @@ test('wheel scrolling can retain the edit position and resumes input and paste a
   }
 });
 
+test('zz centers the cursor in the visible viewport for odd and even grid heights', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-center-'));
+  let session: Session | undefined;
+  let fraction = 0;
+  try {
+    session = await Session.create(root, (event) => {
+      if (event.type !== 'redraw') return;
+      for (const [name, ...calls] of event.events) {
+        if (name === 'nido_pixel_scroll') fraction = Number(calls.at(-1)![0]);
+      }
+    });
+    await session.attach(80, 34);
+    await session.client.request('nvim_exec_lua', [
+      'vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.tbl_map(tostring, vim.fn.range(1, 300)))',
+      []
+    ]);
+    for (const rows of [34, 35, 36, 37]) {
+      await session.resize(80, rows);
+      await session.scroll(0.3, false, true);
+      await session.input('150zz');
+      await session.client.request('nvim_eval', ['1']);
+      const row = Number(await session.client.request('nvim_eval', ['winline() - 1']));
+      assert.equal(row + 0.5 - fraction, (rows - 2) / 2, `grid height ${rows}`);
+      assert.equal(await session.client.request('nvim_eval', ["line('.')"]), 150);
+      await session.input('gg');
+      await session.client.request('nvim_eval', ['1']);
+      assert.equal(fraction, 0, 'returning to the first line clears the centering offset');
+      await session.input(`${Math.floor((rows - 2) / 2) + 1}zz`);
+      await session.client.request('nvim_eval', ['1']);
+      assert.equal(await session.client.request('nvim_eval', ["line('w0')"]), 1);
+      assert.equal(fraction, 0, 'centering near the file start never clips the first line');
+    }
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('pixel scrolling publishes the grid, offset and anchored cursor in a single frame', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-scroll-frame-'));
   let session: Session | undefined;
@@ -236,6 +274,52 @@ test('split redraw notifications remain invisible until flush and keep scroll me
     assert.deepEqual(frames, [[['nido_scroll', scroll], ...first, ...second, ['flush', []]]]);
     session.client.emit('notification', 'redraw', [['flush', []]]);
     assert.deepEqual(frames[1], [...first, ['flush', []]]);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('saving keeps the grid cursor still and viewport progress updates without Vim footer text', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-save-cursor-'));
+  let session: Session | undefined;
+  const frames: Redraw[] = [];
+  try {
+    await writeFile(join(root, 'lines.txt'), Array.from({ length: 300 }, (_, i) => `line ${i + 1}`).join('\n'));
+    session = await Session.create(root, (event) => {
+      if (event.type === 'redraw') frames.push(event.events);
+    });
+    await session.attach(80, 34);
+    await session.openFile('lines.txt');
+    await session.input('150Gzz');
+    await session.client.request('nvim_eval', ['1']);
+    const cursor = await session.client.request('nvim_eval', ['[winline()-1, wincol()-1]']);
+    frames.length = 0;
+    await session.save();
+    await session.client.request('nvim_eval', ['1']);
+    for (const frame of frames) {
+      for (const [name, ...calls] of frame) {
+        if (name === 'grid_cursor_goto') {
+          for (const call of calls) assert.deepEqual(call.slice(1), cursor);
+        }
+      }
+    }
+    assert.equal(await session.client.request('nvim_eval', ['&ruler || &showcmd']), 0);
+    assert.match(String(await session.client.request('nvim_eval', ['&shortmess'])), /F/);
+    const middle = session.state.scrollPercent!;
+    assert.ok(middle > 0 && middle < 100);
+    await session.scroll(8, false, true);
+    await new Promise((done) => setTimeout(done, 30));
+    assert.ok(
+      session.state.scrollPercent! > middle,
+      'viewport progress follows scrolling while the edit anchor stays fixed'
+    );
+    await session.input('gg');
+    await new Promise((done) => setTimeout(done, 30));
+    assert.equal(session.state.scrollPercent, 0);
+    await session.input('G');
+    await new Promise((done) => setTimeout(done, 30));
+    assert.equal(session.state.scrollPercent, 100);
   } finally {
     await session?.stop();
     await rm(root, { recursive: true, force: true });

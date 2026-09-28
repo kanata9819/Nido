@@ -497,7 +497,7 @@ local ok, err = pcall(function()
   if format and #vim.lsp.get_clients({bufnr=0, method='textDocument/formatting'}) > 0 then
     vim.lsp.buf.format({bufnr=0, async=false, timeout_ms=3000})
   end
-  vim.cmd(command)
+  vim.cmd({cmd=command, mods={silent=true}})
 end)
 return ok and "" or tostring(err)`,
       [command, format]
@@ -550,7 +550,8 @@ vim.cmd.edit(vim.fn.fnameescape(path))
 line = math.min(line, vim.api.nvim_buf_line_count(0))
 local text = vim.api.nvim_buf_get_lines(0, line-1, line, false)[1] or ''
 vim.api.nvim_win_set_cursor(0, {line, math.min(column-1, #text)})
-vim.cmd('normal! zvzz')`,
+vim.cmd('normal! zv')
+require('nido_scroll').center()`,
       [problem.path, problem.line, problem.column]
     ]);
   }

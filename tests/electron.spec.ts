@@ -538,10 +538,13 @@ test('smooth cursor movement and blink animate and persist their settings', asyn
       const fill = ctx.fillRect.bind(ctx);
       node.dataset.cursorXs = '[]';
       node.dataset.cursorAlphas = '[]';
+      node.dataset.cursorYs = '[]';
       ctx.fillRect = (x, y, w, h) => {
         if (ctx.fillStyle === '#b8bec8') {
           const xs = JSON.parse(node.dataset.cursorXs!) as number[];
           node.dataset.cursorXs = JSON.stringify([...xs.slice(-99), x]);
+          const ys = JSON.parse(node.dataset.cursorYs!) as number[];
+          node.dataset.cursorYs = JSON.stringify([...ys.slice(-99), y]);
           const alphas = JSON.parse(node.dataset.cursorAlphas!) as number[];
           node.dataset.cursorAlphas = JSON.stringify([...alphas.slice(-99), ctx.globalAlpha]);
         }
@@ -592,6 +595,14 @@ test('smooth cursor movement and blink animate and persist their settings', asyn
       await page.mouse.up();
     }
     expect(new Set((await move('10h')).map((x) => x.toFixed(2))).size).toBeGreaterThan(2);
+    await canvas.evaluate((node: HTMLCanvasElement) => {
+      node.dataset.cursorXs = '[]';
+      node.dataset.cursorYs = '[]';
+    });
+    await page.keyboard.press('Control+s');
+    await page.waitForTimeout(200);
+    expect(new Set(JSON.parse((await canvas.getAttribute('data-cursor-xs'))!) as number[]).size).toBeLessThanOrEqual(1);
+    expect(new Set(JSON.parse((await canvas.getAttribute('data-cursor-ys'))!) as number[]).size).toBeLessThanOrEqual(1);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     expect(new Set((await move('10h')).map((x) => x.toFixed(2))).size).toBeLessThanOrEqual(2);
     await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -1175,6 +1186,7 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
     await page.keyboard.press('Enter');
     const canvas = page.locator('canvas:visible');
     await expect(canvas).toHaveAttribute('aria-description', /line 1 /);
+    await expect(page.getByLabel('File position 0%', { exact: true })).toBeVisible();
     await page.keyboard.type(':set nowrap');
     await page.keyboard.press('Enter');
     await expect(canvas).toHaveAttribute('aria-description', /line 20/);
@@ -1224,6 +1236,23 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
     await page.getByRole('checkbox', { name: 'Smooth cursor movement' }).check();
     await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).uncheck();
     await page.keyboard.press('Escape');
+    await page.keyboard.type('20Gzz');
+    await page.waitForTimeout(200);
+    await expect(page.locator('[aria-label^="File position "]')).toHaveAttribute(
+      'aria-label',
+      /File position [1-9]\d*%/
+    );
+    expect(await canvas.getAttribute('aria-description')).not.toContain(join(root, 'scroll.txt'));
+    const center = await canvas.evaluate((node) => {
+      const input = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Neovim input"]')!;
+      const rows = node.getAttribute('aria-description')!.split('\n').length;
+      return { actual: parseFloat(input.style.top) + 12.5, expected: ((rows - 2) * 25) / 2 };
+    });
+    expect(center.actual).toBeCloseTo(center.expected, 1);
+    await page.keyboard.type('gg');
+    await expect
+      .poll(() => page.locator('textarea[aria-label="Neovim input"]').evaluate((input) => parseFloat(input.style.top)))
+      .toBe(0);
     await page.keyboard.type('20Gzz');
     await page.waitForTimeout(200);
     await canvas.evaluate((node: HTMLCanvasElement) => {
