@@ -111,7 +111,7 @@ for color, groups in pairs({
     'typescriptClassKeyword', 'typescriptInterfaceKeyword', 'typescriptAliasKeyword', 'typescriptEnumKeyword',
     'typescriptPredefinedType', 'typescriptAccessibilityModifier', 'typescriptReadonlyModifier',
     'typescriptClassStatic', 'typescriptAbstract', 'typescriptAmbientDeclaration', 'typescriptCastKeyword',
-    'typescriptKeywordOp', 'javaScriptFunction', 'javaScriptNull', 'javaScriptIdentifier',
+    'typescriptKeywordOp', 'typescriptImportType', 'javaScriptFunction', 'javaScriptNull', 'javaScriptIdentifier',
     '@type.builtin.typescript', '@type.builtin.javascript',
   },
   [c.vscFront] = {
@@ -120,8 +120,8 @@ for color, groups in pairs({
     'typescriptBlock', 'typescriptClassBlock', 'typescriptObjectLiteral', 'typescriptArray',
     'typescriptFuncTypeArrow', 'javaScriptBraces',
   },
-  [c.vscLightBlue] = {'typescriptVariableDeclaration', 'typescriptLabel', 'typescriptCall', 'typescriptDestructureVariable'},
-  [c.vscBlueGreen] = {'typescriptTypeReference', 'typescriptInterfaceName', 'typescriptClassName', 'typescriptAliasDeclaration'},
+  [c.vscLightBlue] = {'typescriptVariableDeclaration', 'typescriptLabel', 'typescriptCall', 'typescriptDestructureVariable', 'typescriptTypeBlock', 'typescriptDefaultImportName'},
+  [c.vscBlueGreen] = {'typescriptTypeReference', 'typescriptInterfaceName', 'typescriptClassName', 'typescriptAliasDeclaration', 'nidoTypeImportBlock'},
   [c.vscYellow] = {'typescriptFuncName', 'typescriptMember', '@lsp.type.function', '@lsp.type.method'},
   ['#FFB300'] = {'typescriptParamImpl', 'typescriptArrowFuncArg', 'typescriptDocParamName'},
 }) do

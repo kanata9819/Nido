@@ -50,6 +50,27 @@ vim.api.nvim_create_autocmd('FileType', {callback=function() vim.g.preview_filet
   }
 });
 
+test('TypeScript import bindings and type-only keywords use the reference theme colors', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-import-colors-'));
+  let session: Session | undefined;
+  try {
+    session = await Session.create(root, () => {});
+    const source = "import { run } from './lib';\nimport type {\n  Shape\n} from './lib';";
+    for (const path of ['sample.ts', 'sample.tsx']) {
+      const [lines] = await session.highlightSources(path, source, '');
+      const ink = (row: number, word: string): string | undefined =>
+        lines[row].find((span) => span.text.includes(word))?.color;
+      assert.equal(ink(0, 'import'), '#c586c0', path);
+      assert.equal(ink(0, 'run'), '#9cdcfe', path);
+      assert.equal(ink(1, 'type'), '#569cd6', path);
+      assert.equal(ink(2, 'Shape'), '#4ec9b0', path);
+    }
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('hover without an LSP never opens help and successful saves stay quiet', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-hover-'));
   let session: Session | undefined;
