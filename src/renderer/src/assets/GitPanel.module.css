@@ -87,6 +87,100 @@
 .change[aria-selected='true'] {
   background: #303a40;
 }
+.historyList {
+  width: clamp(240px, 27vw, 360px);
+}
+.historyEntry {
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #ffffff06;
+}
+.commitSubject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: #e3e8ed;
+}
+.commitMeta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #8b9aa6;
+  font-size: 11px;
+  min-width: 0;
+}
+.hashBadge {
+  flex-shrink: 0;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #ffffff08;
+  color: #a5ce91;
+  font:
+    11px Consolas,
+    monospace;
+}
+.commitSummary {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 28px 32px;
+}
+.summaryLabel {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: #a5ce91;
+}
+.commitSummary h2 {
+  margin: 10px 0 24px;
+  max-width: 760px;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  color: #e3e8ed;
+}
+.commitDetails {
+  margin: 0 0 28px;
+  padding: 18px 20px;
+  max-width: 760px;
+  border: 1px solid #2b333a;
+  border-radius: 8px;
+  background: #191d21;
+}
+.commitDetails > div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 12px;
+  padding: 7px 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.commitDetails dt {
+  color: #8b9aa6;
+}
+.commitDetails dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.commitDetails code {
+  font:
+    12px Consolas,
+    monospace;
+  color: #a5ce91;
+}
+.commitSummary kbd {
+  margin-left: 12px;
+  color: #8b9aa6;
+  font-size: 11px;
+  font-family: inherit;
+}
+.commitSummary:focus-visible {
+  outline: 1px solid #9fc68e;
+  outline-offset: -1px;
+}
 .preview {
   flex: 1;
   min-width: 0;

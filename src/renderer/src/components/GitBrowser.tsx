@@ -196,11 +196,12 @@ export default function GitBrowser({
       const key = event.key.toLowerCase();
       if (event.ctrlKey && !event.shiftKey && (key === 'h' || key === 'l')) {
         event.preventDefault();
-        const selector = key === 'h' ? '[role="listbox"]' : '[data-git-scroll="after"], [data-git-preview] > pre';
+        const selector =
+          key === 'h' ? '[role="listbox"]' : '[data-git-scroll="after"], [data-git-preview] > [tabindex]';
         dialog?.querySelector<HTMLElement>(selector)?.focus();
         return;
       }
-      const preview = target.closest<HTMLElement>('[data-git-preview] pre');
+      const preview = target.closest<HTMLElement>('[data-git-preview] pre, [data-git-summary]');
       if (preview) {
         const line = parseFloat(getComputedStyle(preview).lineHeight) || 20;
         let vertical = 0;
@@ -286,7 +287,7 @@ export default function GitBrowser({
           </div>
           <div className={styles.content}>
             <div
-              className={styles.list}
+              className={`${styles.list} ${view === 1 && !commit ? styles.historyList : ''}`}
               ref={list}
               role="listbox"
               aria-label={listLabel}
@@ -321,7 +322,7 @@ export default function GitBrowser({
                   id={`git-entry-${position}`}
                   role="option"
                   aria-selected={index === position}
-                  className={styles.change}
+                  className={`${styles.change} ${view === 1 && !commit ? styles.historyEntry : ''}`}
                   title={label}
                   ref={(node) => {
                     if (node && index === position) {
@@ -334,7 +335,17 @@ export default function GitBrowser({
                   }}
                   onDoubleClick={open}
                 >
-                  <span>{label}</span>
+                  {view === 1 && !commit ? (
+                    <>
+                      <strong className={styles.commitSubject}>{history[position].subject}</strong>
+                      <div className={styles.commitMeta}>
+                        <code className={styles.hashBadge}>{history[position].hash.slice(0, 8)}</code>
+                        <span>{history[position].author}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <span>{label}</span>
+                  )}
                 </div>
               ))}
               {!labels.length && !busy && (
@@ -358,13 +369,42 @@ export default function GitBrowser({
                   beforeLabel="First parent"
                   afterLabel={commit.hash.slice(0, 8)}
                 />
+              ) : view === 1 && history[index] ? (
+                <section className={styles.commitSummary} data-git-summary tabIndex={0} aria-label="Commit details">
+                  <span className={styles.summaryLabel}>COMMIT</span>
+                  <h2>{history[index].subject}</h2>
+                  <dl className={styles.commitDetails}>
+                    <div>
+                      <dt>Author</dt>
+                      <dd>{history[index].author}</dd>
+                    </div>
+                    <div>
+                      <dt>Committed</dt>
+                      <dd>
+                        <time dateTime={history[index].date}>
+                          {new Date(history[index].date).toLocaleString(undefined, {
+                            dateStyle: 'medium',
+                            timeStyle: 'short'
+                          })}
+                        </time>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Hash</dt>
+                      <dd>
+                        <code>{history[index].hash}</code>
+                      </dd>
+                    </div>
+                  </dl>
+                  <button disabled={busy} onClick={open}>
+                    Browse changed files <kbd>Enter</kbd>
+                  </button>
+                </section>
               ) : (
                 <pre tabIndex={0}>
-                  {view === 1 && history[index]
-                    ? `${history[index].subject}\n\n${history[index].hash}\n${history[index].author}\n${history[index].date}\n\nEnter to browse changed files.`
-                    : view === 2
-                      ? `${labels[index] || ''}\n\nEnter to switch branches.\nRemote branches create a local tracking branch.\nn to create a branch from HEAD.`
-                      : ''}
+                  {view === 2
+                    ? `${labels[index] || ''}\n\nEnter to switch branches.\nRemote branches create a local tracking branch.\nn to create a branch from HEAD.`
+                    : ''}
                 </pre>
               )}
             </div>
