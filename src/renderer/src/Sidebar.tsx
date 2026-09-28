@@ -186,6 +186,7 @@ export default function Sidebar({
                             aria-level={entry.depth + 1}
                             aria-expanded={entry.directory ? expanded.has(entry.path) : undefined}
                             aria-selected={selected === entry.path}
+                            data-ignored={entry.ignored || undefined}
                             className={`${styles.treeItem} ${selected === entry.path ? styles.treeSelected : ''} ${currentFile.endsWith(entry.path) ? styles.currentFile : ''}`}
                             style={{ '--tree-depth': entry.depth } as CSSProperties}
                             onClick={() =>

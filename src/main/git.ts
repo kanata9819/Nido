@@ -134,9 +134,14 @@ export async function gitSwitch(cwd: string, name: string, create: boolean): Pro
     );
 }
 
-async function git(cwd: string, args: string[], diff = false): Promise<string> {
+async function git(
+    cwd: string,
+    args: string[],
+    allowExitOne = false,
+    input?: string
+): Promise<string> {
     try {
-        const { stdout } = await exec('git', ['--no-pager', '--literal-pathspecs', ...args], {
+        const task = exec('git', ['--no-pager', '--literal-pathspecs', ...args], {
             cwd,
             encoding: 'utf8',
             windowsHide: true,
@@ -144,6 +149,8 @@ async function git(cwd: string, args: string[], diff = false): Promise<string> {
             timeout: 60_000,
             env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
         });
+        if (input !== undefined) task.child.stdin?.end(input);
+        const { stdout } = await task;
         return stdout;
     } catch (error) {
         const failure = error as Error & {
@@ -151,7 +158,7 @@ async function git(cwd: string, args: string[], diff = false): Promise<string> {
             stdout?: string;
             stderr?: string;
         };
-        if (diff && failure.code === 1) {
+        if (allowExitOne && failure.code === 1) {
             return failure.stdout || '';
         }
         throw new Error(
@@ -160,6 +167,17 @@ async function git(cwd: string, args: string[], diff = false): Promise<string> {
                 : failure.stderr?.trim() || failure.message
         );
     }
+}
+
+export async function gitIgnored(cwd: string, paths: string[]): Promise<Set<string>> {
+    if (!paths.length) return new Set();
+    const output = await git(
+        cwd,
+        ['--no-literal-pathspecs', 'check-ignore', '-z', '--stdin'],
+        true,
+        `${paths.join('\0')}\0`
+    );
+    return new Set(output.split('\0').filter(Boolean));
 }
 
 export async function gitStatus(cwd: string): Promise<GitStatus> {

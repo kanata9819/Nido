@@ -69,6 +69,7 @@ export interface FileEntry {
     name: string;
     path: string;
     directory: boolean;
+    ignored?: boolean;
 }
 export type Redraw = [string, ...unknown[][]][];
 export type NidoEvent =

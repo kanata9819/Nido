@@ -256,6 +256,13 @@
 .treeItem:hover {
     background: #ffffff04;
 }
+.treeItem[data-ignored='true'] .treeName {
+    color: #77818b;
+}
+.treeItem[data-ignored='true'] > svg,
+.treeItem[data-ignored='true'] .fileIcon {
+    opacity: 0.55;
+}
 .treeSelected {
     background: #2b333b !important;
     color: #edf0f3;

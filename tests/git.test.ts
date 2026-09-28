@@ -14,8 +14,38 @@ import {
     gitCommitFiles,
     gitCommitDiff,
     gitBranches,
-    gitSwitch
+    gitSwitch,
+    gitIgnored
 } from '../src/main/git';
+
+test('ignore decorations follow Git rules, exceptions and tracked files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-ignore-'));
+    try {
+        execFileSync('git', ['init', '-q'], { cwd: root });
+        await mkdir(join(root, 'build'));
+        await writeFile(join(root, 'tracked.log'), 'tracked\n');
+        execFileSync('git', ['add', 'tracked.log'], { cwd: root });
+        await writeFile(join(root, '.gitignore'), 'build/\n*.log\n!keep.log\n');
+        await writeFile(join(root, 'build', 'output.txt'), 'generated\n');
+        await writeFile(join(root, 'debug.log'), 'ignored\n');
+        await writeFile(join(root, 'keep.log'), 'kept\n');
+        assert.deepEqual(
+            await gitIgnored(root, [
+                'build',
+                'build/output.txt',
+                'debug.log',
+                'keep.log',
+                'tracked.log',
+                '.gitignore'
+            ]),
+            new Set(['build', 'build/output.txt', 'debug.log'])
+        );
+        assert.deepEqual(await gitIgnored(root, ['keep.log', 'tracked.log']), new Set());
+        assert.deepEqual(await gitIgnored(root, []), new Set());
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
 
 test('side-by-side diffs align replacements, additions, deletions and source line numbers', () => {
     const rows = splitDiff(
