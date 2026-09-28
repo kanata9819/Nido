@@ -639,6 +639,10 @@
   font-size: 11px;
   color: #91a0ad;
 }
+.statusbar > * {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .mode {
   background: #9ac78b;
   color: #18271b;
@@ -685,6 +689,7 @@
 }
 .lspProgress {
   display: flex;
+  flex-shrink: 1;
   align-items: center;
   gap: 7px;
   min-width: 0;
