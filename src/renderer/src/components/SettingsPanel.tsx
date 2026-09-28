@@ -18,6 +18,8 @@ export default function SettingsPanel({
     setFormatOnSave,
     clipboardSharing,
     setClipboardSharing,
+    relativeLineNumbers,
+    setRelativeLineNumbers,
     fontFamily,
     setFontFamily,
     fontSize,
@@ -103,6 +105,18 @@ export default function SettingsPanel({
                     onChange={(event) => setScrollFollowCursor(event.target.checked)}
                 />
             </label>
+            <label>
+                Relative line numbers{' '}
+                <input
+                    type="checkbox"
+                    checked={relativeLineNumbers}
+                    onChange={(event) => setRelativeLineNumbers(event.target.checked)}
+                />
+            </label>
+            <small>
+                Off: absolute line numbers. On: distance from the cursor, with the current line
+                shown as an absolute number.
+            </small>
             <label>
                 UI animations{' '}
                 <input

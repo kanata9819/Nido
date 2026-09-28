@@ -349,6 +349,20 @@ export class Session {
         ]);
     }
 
+    async setRelativeLineNumbers(enabled: boolean): Promise<void> {
+        if (this.workspace.kind === 'terminal') return;
+        await this.client.request('nvim_exec_lua', [
+            `local enabled = ...
+vim.go.relativenumber = enabled
+for _, win in ipairs(vim.api.nvim_list_wins()) do
+  if vim.api.nvim_win_get_config(win).relative == '' then
+    vim.api.nvim_set_option_value('relativenumber', enabled, {win=win})
+  end
+end`,
+            [enabled]
+        ]);
+    }
+
     input(keys: string): Promise<void> {
         // nvim_input can accept only part of a byte sequence when its input queue is full.
         const next = this.inputQueue.then(async () => {

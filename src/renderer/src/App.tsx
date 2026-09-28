@@ -66,6 +66,7 @@ export default function App(): React.JSX.Element {
         scrollFollowCursor,
         formatOnSave,
         clipboardSharing,
+        relativeLineNumbers,
         fontFamily,
         fontSize,
         sidebarWidth,
@@ -82,6 +83,15 @@ export default function App(): React.JSX.Element {
             }
         }
     }, [clipboardSharing, workspaces]);
+    useEffect(() => {
+        for (const workspace of workspaces) {
+            if (workspace.kind !== 'terminal') {
+                void window.nido
+                    .setRelativeLineNumbers(workspace.id, relativeLineNumbers)
+                    .catch((error) => setError(String(error)));
+            }
+        }
+    }, [relativeLineNumbers, workspaces]);
 
     const modal = useRef<HTMLDivElement>(null);
     const state = states[active] || defaultState;

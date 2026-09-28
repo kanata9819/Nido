@@ -109,6 +109,62 @@ test('typing hides the pointer and moving or clicking restores it', async () => 
     }
 });
 
+test('relative line numbers update immediately and persist after restarting', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-line-numbers-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+    await writeFile(join(workspace, 'lines.txt'), 'line 1\nline 2\nline 3\nline 4\nline 5\n');
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const options = { args: ['.', `--user-data-dir=${join(root, 'profile')}`], env };
+    let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    try {
+        running = await electron.launch(options);
+        let page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('lines.txt');
+        await expect(page.getByRole('button', { name: /lines.txt/ })).toBeVisible();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /line 1/);
+        await page.keyboard.type('3G');
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        const setting = page.getByRole('checkbox', { name: 'Relative line numbers' });
+        await expect(setting).not.toBeChecked();
+        await setting.check();
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /^\s*2\s+line 1/
+        );
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /\n\s*3\s+line 3/
+        );
+        await setting.uncheck();
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /^\s*1\s+line 1/
+        );
+        await setting.check();
+        await page.keyboard.press('Escape');
+        await running.close();
+        running = await electron.launch(options);
+        page = await running.firstWindow();
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /^\s*2\s+line 1/
+        );
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await expect(page.getByRole('checkbox', { name: 'Relative line numbers' })).toBeChecked();
+    } finally {
+        await running?.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('font family updates the canvas and survives reopening settings and restarting', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-font-'));
     const workspace = join(root, 'workspace');

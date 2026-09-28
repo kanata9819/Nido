@@ -264,6 +264,12 @@ export function registerHandlers({
         }
         return session(id).setClipboardSharing(enabled);
     });
+    handle('relativeLineNumbers', (id, enabled) => {
+        if (typeof enabled !== 'boolean') {
+            throw new Error('Invalid line number setting.');
+        }
+        return session(id).setRelativeLineNumbers(enabled);
+    });
     handle('openDocumentation', (value) => {
         const url = new URL(text(value));
         if (!['https:', 'http:'].includes(url.protocol)) {
