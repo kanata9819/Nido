@@ -211,11 +211,12 @@
   padding: 5px 0;
 }
 .treeItem {
-  height: 31px;
+  height: 26px;
+  font-size: 12px;
   padding-right: 14px;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   cursor: pointer;
   white-space: nowrap;
   color: #aeb8c3;
@@ -228,6 +229,11 @@
 }
 .treeItem > svg {
   flex-shrink: 0;
+}
+.treeItem .fileIcon,
+.treeItem > svg:nth-child(2) {
+  width: 14px;
+  height: 14px;
 }
 .treeItem:hover {
   background: #ffffff04;
