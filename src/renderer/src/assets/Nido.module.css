@@ -195,7 +195,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 18px 0 22px;
+    padding: 0 10px;
     text-transform: uppercase;
     letter-spacing: 1.2px;
     font-size: 11px;
@@ -206,20 +206,38 @@
     padding: 6px;
 }
 .tree {
+    --tree-indent: 12px;
+    --tree-inset: 6px;
     flex: 1;
     overflow: auto;
     padding: 5px 0;
 }
 .treeItem {
+    position: relative;
     height: 26px;
     font-size: 12px;
-    padding-right: 14px;
+    padding-left: calc(var(--tree-inset) + var(--tree-depth) * var(--tree-indent));
+    padding-right: 8px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     cursor: pointer;
     white-space: nowrap;
     color: #aeb8c3;
+}
+.treeItem::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--tree-inset) + 6px);
+    width: calc(var(--tree-depth) * var(--tree-indent));
+    background: repeating-linear-gradient(
+        to right,
+        #aeb8c326 0 1px,
+        transparent 1px var(--tree-indent)
+    );
+    pointer-events: none;
 }
 .treeName {
     flex: 1;
@@ -919,6 +937,7 @@
     border-bottom: 1px solid #30363d;
 }
 .paletteHeading {
+    flex-shrink: 0;
     padding: 16px 19px;
     display: flex;
     align-items: center;
@@ -1019,6 +1038,8 @@
     color: #84939e;
 }
 .settings {
+    min-height: 0;
+    overflow-y: auto;
     padding: 5px 22px 24px;
 }
 .settings label {

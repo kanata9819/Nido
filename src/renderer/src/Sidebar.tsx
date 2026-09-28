@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { ChevronDown, ChevronRight, Folder, FolderOpen, RefreshCw } from 'lucide-react';
 import FileIcon from './components/FileIcon';
 import type { FileEntry, Workspace } from '../../shared/types';
@@ -187,7 +187,7 @@ export default function Sidebar({
                             aria-expanded={entry.directory ? expanded.has(entry.path) : undefined}
                             aria-selected={selected === entry.path}
                             className={`${styles.treeItem} ${selected === entry.path ? styles.treeSelected : ''} ${currentFile.endsWith(entry.path) ? styles.currentFile : ''}`}
-                            style={{ paddingLeft: 14 + entry.depth * 16 }}
+                            style={{ '--tree-depth': entry.depth } as CSSProperties}
                             onClick={() =>
                                 toggle({ entry, expanded, setExpanded, setSelected, onOpen, load })
                             }
