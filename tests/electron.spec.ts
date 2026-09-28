@@ -109,6 +109,66 @@ test('typing hides the pointer and moving or clicking restores it', async () => 
     }
 });
 
+test('Markdown preview renders unsaved edits and supports keyboard scrolling and dismissal', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-markdown-preview-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+    const source =
+        '# Preview\n\n**Bold** and *italic*.\n\n| Name | Value |\n| --- | --- |\n| Nido | 42 |\n\n```ts\nconst value = 42;\n```\n\n- [x] Done\n\n[Unsafe](javascript:alert(1))\n<script>window.previewUnsafe = true</script>\n\n' +
+        Array.from({ length: 50 }, (_, index) => `Paragraph ${index + 1}.\n\n`).join('');
+    await writeFile(join(workspace, 'preview.md'), source);
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        env
+    });
+    try {
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('preview.md');
+        await expect(page.getByRole('button', { name: /preview.md/ })).toBeVisible();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /Preview/);
+        await page.keyboard.type('Go## Unsaved heading');
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Control+Shift+v');
+        const popup = page.getByRole('dialog', { name: 'markdown palette' });
+        const content = page.getByLabel('Markdown preview content', { exact: true });
+        await expect(popup).toBeVisible();
+        await expect(content).toBeFocused();
+        await expect(content.getByRole('heading', { name: 'Preview', exact: true })).toBeVisible();
+        await expect(content.locator('strong')).toHaveText('Bold');
+        await expect(content.getByRole('table')).toContainText('42');
+        await expect(content.locator('pre')).toContainText('const value = 42');
+        await expect(content.getByRole('heading', { name: 'Unsaved heading' })).toHaveCount(1);
+        await expect(content.locator('script')).toHaveCount(0);
+        await expect(content.getByRole('link', { name: 'Unsafe' })).toHaveCount(0);
+        expect(await page.evaluate(() => 'previewUnsafe' in window)).toBe(false);
+        expect(await readFile(join(workspace, 'preview.md'), 'utf8')).toBe(source);
+        await page.keyboard.press('Control+d');
+        await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+        await page.keyboard.press('Control+u');
+        await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
+        await popup.screenshot({ path: 'test-results/nido-markdown-preview.png' });
+        await page.keyboard.press('Control+Shift+v');
+        await expect(popup).toBeHidden();
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+Shift+v');
+        await expect(popup).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(popup).toBeHidden();
+    } finally {
+        await running.evaluate(({ app }) => app.exit(0));
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('relative line numbers update immediately and persist after restarting', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-line-numbers-'));
     const workspace = join(root, 'workspace');

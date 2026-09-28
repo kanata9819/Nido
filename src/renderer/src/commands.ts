@@ -64,6 +64,16 @@ export function buildItems(
                       detail: 'Git changes, diff and commits · Ctrl+Shift+G',
                       run: () => showPanel('git')
                   },
+                  ...(state.filetype === 'markdown'
+                      ? [
+                            {
+                                key: 'v',
+                                title: 'Markdown preview',
+                                detail: 'Preview current edits · Ctrl+Shift+V',
+                                run: () => showPanel('markdown')
+                            }
+                        ]
+                      : []),
                   ...(workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal'
                       ? [
                             {

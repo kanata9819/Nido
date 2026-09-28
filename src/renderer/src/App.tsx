@@ -377,7 +377,7 @@ export default function App(): React.JSX.Element {
         create,
         showPanel,
         commands,
-        state: { buffers: state.buffers, current: state.current },
+        state: { buffers: state.buffers, current: state.current, filetype: state.filetype },
         run,
         setLeader,
         activate

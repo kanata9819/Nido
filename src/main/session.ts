@@ -349,6 +349,14 @@ export class Session {
         ]);
     }
 
+    async markdownPreview(): Promise<string> {
+        return this.client.request('nvim_exec_lua', [
+            `if vim.bo.filetype ~= 'markdown' then error('Open a Markdown file to preview.') end
+return table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\\n')`,
+            []
+        ]);
+    }
+
     async setRelativeLineNumbers(enabled: boolean): Promise<void> {
         if (this.workspace.kind === 'terminal') return;
         await this.client.request('nvim_exec_lua', [

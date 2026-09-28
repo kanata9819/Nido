@@ -258,6 +258,7 @@ export function registerHandlers({
         session(id).resize(integer(columns, 1000), integer(rows, 500))
     );
     handle('input', (id, keys) => session(id).input(text(keys)));
+    handle('markdownPreview', (id) => session(id).markdownPreview());
     handle('clipboardSharing', (id, enabled) => {
         if (typeof enabled !== 'boolean') {
             throw new Error('Invalid clipboard setting.');

@@ -5,6 +5,7 @@ import PaletteItems from './PaletteItems';
 import styles from '../assets/Nido.module.css';
 import FolderPicker from './FolderPicker';
 import GitBrowser from './GitBrowser';
+import MarkdownPreview from './MarkdownPreview';
 
 interface PanelProps {
     settings: SettingsPanelProps;
@@ -24,6 +25,7 @@ interface PanelProps {
 }
 
 const panelTitles = {
+    markdown: 'Markdown preview',
     problems: 'Problems',
     git: 'Source control',
     folders: 'Open a workspace',
@@ -56,6 +58,9 @@ export function Panel({
 
     let content: React.JSX.Element;
     switch (panel) {
+        case 'markdown':
+            content = <MarkdownPreview key={workspaceId} workspaceId={workspaceId} />;
+            break;
         case 'git':
             content = (
                 <GitBrowser key={workspaceId} workspaceId={workspaceId} onClose={focusEditor} />
@@ -89,7 +94,7 @@ export function Panel({
 
     return (
         <div
-            className={`${styles.scrim} ${panel === 'git' ? styles.gitScrim : ''}`}
+            className={`${styles.scrim} ${['git', 'markdown'].includes(panel) ? styles.gitScrim : ''}`}
             onMouseDown={(event) => {
                 if (event.target === event.currentTarget) {
                     focusEditor();
@@ -97,7 +102,7 @@ export function Panel({
             }}
         >
             <div
-                className={`${styles.palette} ${panel === 'git' ? styles.gitPalette : ''}`}
+                className={`${styles.palette} ${panel === 'git' ? styles.gitPalette : ''} ${panel === 'markdown' ? styles.markdownPalette : ''}`}
                 role="dialog"
                 aria-modal="true"
                 aria-label={panel === 'settings' ? 'Settings' : `${panel} palette`}

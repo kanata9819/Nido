@@ -123,6 +123,7 @@ export interface NidoAPI {
     attach(id: string, columns: number, rows: number): Promise<void>;
     resize(id: string, columns: number, rows: number): Promise<void>;
     input(id: string, keys: string): Promise<void>;
+    markdownPreview(id: string): Promise<string>;
     setClipboardSharing(id: string, enabled: boolean): Promise<void>;
     setRelativeLineNumbers(id: string, enabled: boolean): Promise<void>;
     setEditorConfig(id: string, enabled: boolean): Promise<void>;

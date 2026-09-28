@@ -22,7 +22,7 @@ interface UseKeyboardShortcutsParams {
     create: () => Promise<void>;
     showPanel: (value: Panel) => void;
     commands: Item[];
-    state: { buffers: { id: number }[]; current: number };
+    state: { buffers: { id: number }[]; current: number; filetype: string };
     run: (promise: Promise<unknown>) => void;
     setLeader: (value: boolean) => void;
     activate: (id: string) => void;
@@ -109,6 +109,22 @@ export function useKeyboardShortcuts({
             } else {
                 showPanel('problems');
             }
+            return;
+        }
+        if (
+            active &&
+            !terminalFocused &&
+            state.filetype === 'markdown' &&
+            event.ctrlKey &&
+            event.shiftKey &&
+            !event.altKey &&
+            !event.metaKey &&
+            event.key.toLowerCase() === 'v' &&
+            (!panel || panel === 'markdown')
+        ) {
+            consume();
+            if (panel === 'markdown') focusEditor();
+            else showPanel('markdown');
             return;
         }
         if (panel) {
