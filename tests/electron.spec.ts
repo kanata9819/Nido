@@ -540,7 +540,7 @@ test('smooth cursor movement and blink animate and persist their settings', asyn
       node.dataset.cursorAlphas = '[]';
       node.dataset.cursorYs = '[]';
       ctx.fillRect = (x, y, w, h) => {
-        if (ctx.fillStyle === '#b8bec8') {
+        if (ctx.fillStyle === '#f5f5f5') {
           const xs = JSON.parse(node.dataset.cursorXs!) as number[];
           node.dataset.cursorXs = JSON.stringify([...xs.slice(-99), x]);
           const ys = JSON.parse(node.dataset.cursorYs!) as number[];
@@ -1276,7 +1276,7 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
         }
       });
       ctx.fillRect = (x, y, w, h) => {
-        if (ctx.fillStyle === '#b8bec8' && expected !== undefined && expected > 0) {
+        if (ctx.fillStyle === '#f5f5f5' && expected !== undefined && expected > 0) {
           const actual = y + ctx.getTransform().f / window.devicePixelRatio;
           const errors = JSON.parse(node.dataset.cursorErrors!) as number[];
           if (Math.abs(actual - expected) > 0.01) errors.push(actual - expected);

@@ -286,15 +286,15 @@ export class Grid {
     if (!this.busy && cursor.row >= 0 && cursor.row < this.rows && (!focused || this.cursorVisible)) {
       const x = cursor.column * cellWidth;
       const y = cursor.row * cellHeight;
-      ctx.fillStyle = '#b8bec8';
-      ctx.strokeStyle = '#8b929c';
+      ctx.fillStyle = '#f5f5f5';
+      ctx.strokeStyle = '#d4d4d4';
       ctx.globalAlpha = focused ? this.cursorOpacity : 1;
       if (!focused) {
         ctx.strokeRect(x + 0.5, y + 1, cellWidth - 1, cellHeight - 2);
       } else if (this.mode.startsWith('insert')) {
         ctx.fillRect(x, y + 1, 2, cellHeight - 2);
       } else {
-        ctx.globalAlpha *= 0.55;
+        ctx.globalAlpha *= 0.7;
         ctx.fillRect(x, y + 1, cellWidth, cellHeight - 2);
       }
       ctx.globalAlpha = 1;
