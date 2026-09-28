@@ -71,6 +71,70 @@ test('TypeScript import bindings and type-only keywords use the reference theme 
   }
 });
 
+test('Dark Modern syntax colors match the official palette in TypeScript, TSX and Rust previews', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-dark-modern-'));
+  let session: Session | undefined;
+  try {
+    session = await Session.create(root, () => {});
+    const cases: [string, string, [number, string, string][]][] = [
+      [
+        'sample.ts',
+        '/** Documentation */\nfunction pick<T>(value: T): T { return value; }\nconst upper = "ok".toUpperCase();\nconst pattern = /hello/;\nconst escaped = "a\\nb";\nconst length = upper.length;',
+        [
+          [0, 'Documentation', '#6a9955'],
+          [1, 'pick', '#dcdcaa'],
+          [1, 'T', '#4ec9b0'],
+          [1, 'value', '#9cdcfe'],
+          [1, 'return', '#c586c0'],
+          [2, 'toUpperCase', '#dcdcaa'],
+          [3, 'hello', '#d16969'],
+          [4, '\\n', '#d7ba7d'],
+          [5, 'length', '#9cdcfe']
+        ]
+      ],
+      [
+        'sample.tsx',
+        'const view = <div title="ok">Hello</div>;',
+        [
+          [0, 'div', '#569cd6'],
+          [0, 'title', '#9cdcfe'],
+          [0, 'ok', '#ce9178']
+        ]
+      ],
+      [
+        'sample.rs',
+        'fn greet(value: u32) -> bool { true }\nlet text: &str = "ok";\n// Documentation',
+        [
+          [0, 'fn', '#569cd6'],
+          [0, 'greet', '#dcdcaa'],
+          [0, 'u32', '#4ec9b0'],
+          [0, 'bool', '#4ec9b0'],
+          [0, 'true', '#569cd6'],
+          [1, 'str', '#4ec9b0'],
+          [1, 'ok', '#ce9178'],
+          [2, 'Documentation', '#6a9955']
+        ]
+      ]
+    ];
+    for (const [path, source, colors] of cases) {
+      const [lines] = await session.highlightSources(path, source, '');
+      for (const [row, word, color] of colors) {
+        assert.equal(lines[row].find((span) => span.text.includes(word))?.color, color, `${path}: ${word}`);
+      }
+    }
+    assert.equal(
+      await session.client.request('nvim_exec_lua', [
+        "return vim.api.nvim_get_hl(0, {name='Normal', link=false}).fg",
+        []
+      ]),
+      0xcccccc
+    );
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('hover without an LSP never opens help and successful saves stay quiet', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-hover-'));
   let session: Session | undefined;

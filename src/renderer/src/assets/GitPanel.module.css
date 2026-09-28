@@ -122,6 +122,24 @@
     11px Consolas,
     monospace;
 }
+.branchBadge,
+.currentBadge {
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  background: #ffffff08;
+  color: #93a2ad;
+}
+.currentBadge {
+  background: #a5ce9118;
+  color: #a5ce91;
+}
+.summaryHint {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #93a2ad;
+  line-height: 1.6;
+}
 .commitSummary {
   flex: 1;
   min-height: 0;

@@ -58,8 +58,8 @@ vscode.load('dark')
 local c = require('vscode.colors').get_colors()
 local hl = vim.api.nvim_set_hl
 
-hl(0, 'Normal', { fg = c.vscFront, bg = '#1E1E1E' })
-hl(0, 'NormalNC', { fg = c.vscFront, bg = '#1E1E1E' })
+hl(0, 'Normal', { fg = '#CCCCCC', bg = '#1E1E1E' })
+hl(0, 'NormalNC', { fg = '#CCCCCC', bg = '#1E1E1E' })
 hl(0, 'EndOfBuffer', { fg = '#1E1E1E', bg = '#1E1E1E' })
 hl(0, 'SignColumn', { fg = 'NONE', bg = '#1E1E1E' })
 hl(0, '@lsp.type.keyword', { fg = c.vscBlue, bg = 'NONE' })
@@ -73,10 +73,10 @@ hl(0, '@azami_self', { fg = c.vscBlue, bg = 'NONE' })
 hl(0, '@type', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, '@type.builtin', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, '@function.method', { fg = c.vscYellow, bg = 'NONE' })
--- Match the parameter override in the reference VS Code theme.
-hl(0, '@variable.parameter', { fg = '#FFB300', bg = 'NONE' })
-hl(0, '@lsp.type.parameter', { fg = '#FFB300', bg = 'NONE' })
-hl(0, '@constructor', { fg = c.vscAccentBlue, bg = 'NONE' })
+-- Dark Modern inherits its syntax palette from Dark+ and Dark (Visual Studio).
+hl(0, '@variable.parameter', { fg = c.vscLightBlue, bg = 'NONE' })
+hl(0, '@lsp.type.parameter', { fg = c.vscLightBlue, bg = 'NONE' })
+hl(0, '@constructor', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, '@lsp.type.enum', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, '@lsp.type.enumMember', { fg = c.vscAccentBlue, bg = 'NONE' })
 hl(0, 'rustEnum', { fg = c.vscBlueGreen, bg = 'NONE' })
@@ -85,7 +85,7 @@ hl(0, 'rustConstant', { fg = c.vscAccentBlue, bg = 'NONE' })
 hl(0, 'rustStorage', { fg = c.vscBlue, bg = 'NONE' })
 hl(0, 'rustTrait', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, 'rustSelf', { fg = c.vscBlue, bg = 'NONE' })
-hl(0, 'rustType', { fg = c.vscBlue, bg = 'NONE' })
+hl(0, 'rustType', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, 'rustTypedef', { fg = c.vscBlue, bg = 'NONE' })
 hl(0, 'rustModPath', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, 'rustModPathSep', { fg = c.vscFront, bg = 'NONE' })
@@ -95,10 +95,11 @@ hl(0, 'rustDeriveTrait', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, '@function.macro', { fg = c.vscYellow, bg = 'NONE' })
 hl(0, '@constant.macro', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, '@variable.builtin', { fg = c.vscBlue, bg = 'NONE' })
-hl(0, '@label', { fg = c.vscBlue, bg = 'NONE' })
+hl(0, '@label', { fg = '#C8C8C8', bg = 'NONE' })
+hl(0, '@string.regexp', { fg = c.vscLightRed, bg = 'NONE' })
+hl(0, '@string.escape', { fg = c.vscYellowOrange, bg = 'NONE' })
 hl(0, '@lsp.mod.deprecated', { strikethrough = true })
 -- Dark Modern token categories, including Vim's legacy syntax group names.
--- Keep parameter names aligned with the user's VS Code override (#FFB300).
 for color, groups in pairs({
   [c.vscPink] = {
     'typescriptTry', 'typescriptExceptions', 'typescriptBranch', 'typescriptCase', 'typescriptDefault',
@@ -109,21 +110,22 @@ for color, groups in pairs({
   [c.vscBlue] = {
     'typescriptVariable', 'typescriptFuncKeyword', 'typescriptAsyncFuncKeyword', 'typescriptObjectAsyncKeyword',
     'typescriptClassKeyword', 'typescriptInterfaceKeyword', 'typescriptAliasKeyword', 'typescriptEnumKeyword',
-    'typescriptPredefinedType', 'typescriptAccessibilityModifier', 'typescriptReadonlyModifier',
+    'typescriptAccessibilityModifier', 'typescriptReadonlyModifier',
     'typescriptClassStatic', 'typescriptAbstract', 'typescriptAmbientDeclaration', 'typescriptCastKeyword',
     'typescriptKeywordOp', 'typescriptImportType', 'javaScriptFunction', 'javaScriptNull', 'javaScriptIdentifier',
-    '@type.builtin.typescript', '@type.builtin.javascript',
   },
   [c.vscFront] = {
     'typescriptBinaryOp', 'typescriptAssign', 'typescriptUnaryOp', 'typescriptTernaryOp',
     'typescriptEndColons', 'typescriptFuncComma', 'typescriptBraces', 'typescriptParens',
     'typescriptBlock', 'typescriptClassBlock', 'typescriptObjectLiteral', 'typescriptArray',
-    'typescriptFuncTypeArrow', 'javaScriptBraces',
+    'typescriptFuncTypeArrow', 'typescriptLogicSymbols', 'javaScriptBraces',
   },
-  [c.vscLightBlue] = {'typescriptVariableDeclaration', 'typescriptLabel', 'typescriptCall', 'typescriptDestructureVariable', 'typescriptTypeBlock', 'typescriptDefaultImportName'},
-  [c.vscBlueGreen] = {'typescriptTypeReference', 'typescriptInterfaceName', 'typescriptClassName', 'typescriptAliasDeclaration', 'nidoTypeImportBlock'},
-  [c.vscYellow] = {'typescriptFuncName', 'typescriptMember', '@lsp.type.function', '@lsp.type.method'},
-  ['#FFB300'] = {'typescriptParamImpl', 'typescriptArrowFuncArg', 'typescriptDocParamName'},
+  [c.vscLightBlue] = {'typescriptVariableDeclaration', 'typescriptLabel', 'typescriptCall', 'typescriptDestructureVariable', 'typescriptTypeBlock', 'typescriptDefaultImportName', 'typescriptMember', 'typescriptParamImpl', 'typescriptArrowFuncArg', 'typescriptDocParamName', 'tsxAttrib'},
+  [c.vscBlueGreen] = {'typescriptTypeReference', 'typescriptInterfaceName', 'typescriptClassName', 'typescriptAliasDeclaration', 'nidoTypeImportBlock', 'typescriptPredefinedType', 'typescriptTypeParameter', '@lsp.type.typeParameter', '@type.builtin.typescript', '@type.builtin.javascript'},
+  [c.vscYellow] = {'typescriptFuncName', 'typescriptStringMethod', 'typescriptArrayMethod', 'typescriptObjectMethod', 'typescriptNumberMethod', 'typescriptMathMethod', 'typescriptJSONMethod', 'typescriptDateMethod', 'typescriptRegExpMethod', 'typescriptFunctionMethod', '@lsp.type.function', '@lsp.type.method'},
+  [c.vscGreen] = {'typescriptDocComment'},
+  [c.vscLightRed] = {'typescriptRegexpString'},
+  [c.vscYellowOrange] = {'typescriptSpecial'},
 }) do
   for _, group in ipairs(groups) do hl(0, group, {fg=color}) end
 end

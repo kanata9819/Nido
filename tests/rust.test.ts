@@ -38,7 +38,7 @@ test('Rust syntax and real rust-analyzer navigation, completion and diagnostics'
       await lua("return vim.api.nvim_get_hl(0, {name='@lsp.type.namespace.rust', link=false}).fg"),
       0x4ec9b0
     );
-    assert.equal(await lua("return vim.api.nvim_get_hl(0, {name='@lsp.type.parameter', link=false}).fg"), 0xffd602);
+    assert.equal(await lua("return vim.api.nvim_get_hl(0, {name='@lsp.type.parameter', link=false}).fg"), 0x9cdcfe);
     const params = {
       textDocument: { uri: pathToFileURL(join(root, 'src/main.rs')).href },
       position: { line: 2, character: 18 }

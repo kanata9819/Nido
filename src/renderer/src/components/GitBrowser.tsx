@@ -287,7 +287,7 @@ export default function GitBrowser({
           </div>
           <div className={styles.content}>
             <div
-              className={`${styles.list} ${view === 1 && !commit ? styles.historyList : ''}`}
+              className={`${styles.list} ${view === 2 || (view === 1 && !commit) ? styles.historyList : ''}`}
               ref={list}
               role="listbox"
               aria-label={listLabel}
@@ -322,7 +322,7 @@ export default function GitBrowser({
                   id={`git-entry-${position}`}
                   role="option"
                   aria-selected={index === position}
-                  className={`${styles.change} ${view === 1 && !commit ? styles.historyEntry : ''}`}
+                  className={`${styles.change} ${view === 2 || (view === 1 && !commit) ? styles.historyEntry : ''}`}
                   title={label}
                   ref={(node) => {
                     if (node && index === position) {
@@ -341,6 +341,14 @@ export default function GitBrowser({
                       <div className={styles.commitMeta}>
                         <code className={styles.hashBadge}>{history[position].hash.slice(0, 8)}</code>
                         <span>{history[position].author}</span>
+                      </div>
+                    </>
+                  ) : view === 2 ? (
+                    <>
+                      <strong className={styles.commitSubject}>{branches[position].name}</strong>
+                      <div className={styles.commitMeta}>
+                        <span className={styles.branchBadge}>{branches[position].remote ? 'Remote' : 'Local'}</span>
+                        {branches[position].current && <span className={styles.currentBadge}>Current</span>}
                       </div>
                     </>
                   ) : (
@@ -400,12 +408,39 @@ export default function GitBrowser({
                     Browse changed files <kbd>Enter</kbd>
                   </button>
                 </section>
+              ) : view === 2 && branches[index] ? (
+                <section className={styles.commitSummary} data-git-summary tabIndex={0} aria-label="Branch details">
+                  <span className={styles.summaryLabel}>BRANCH</span>
+                  <h2>{branches[index].name}</h2>
+                  <dl className={styles.commitDetails}>
+                    <div>
+                      <dt>Type</dt>
+                      <dd>{branches[index].remote ? 'Remote-tracking branch' : 'Local branch'}</dd>
+                    </div>
+                    <div>
+                      <dt>Status</dt>
+                      <dd>{branches[index].current ? 'Currently checked out' : 'Available to switch'}</dd>
+                    </div>
+                    <div>
+                      <dt>On switch</dt>
+                      <dd>
+                        {branches[index].remote
+                          ? 'Create a local branch that tracks this remote branch.'
+                          : 'Check out this branch in the workspace.'}
+                      </dd>
+                    </div>
+                  </dl>
+                  <p className={styles.summaryHint}>
+                    {branches[index].current
+                      ? 'You are already working on this branch.'
+                      : 'Switch to this branch to continue working on it.'}
+                  </p>
+                  <button disabled={busy || branches[index].current} onClick={open}>
+                    Switch branch <kbd>Enter</kbd>
+                  </button>
+                </section>
               ) : (
-                <pre tabIndex={0}>
-                  {view === 2
-                    ? `${labels[index] || ''}\n\nEnter to switch branches.\nRemote branches create a local tracking branch.\nn to create a branch from HEAD.`
-                    : ''}
-                </pre>
+                <pre tabIndex={0} />
               )}
             </div>
           </div>

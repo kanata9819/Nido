@@ -52,7 +52,8 @@ test('TypeScript functions and parameters retain distinct reference theme colors
         'export function greet(name: string) {',
         '  try { const count = 42; if (name) return "ok"; throw new Error("bad"); }',
         '  catch (error) { return name; } finally { /* done */ }',
-        '}'
+        '}',
+        'interface Props { enabled: boolean; count: number; onDone: () => void; }'
       ].join('\n')
     );
     session = await Session.create(root, (event) => {
@@ -86,7 +87,7 @@ test('TypeScript functions and parameters retain distinct reference theme colors
     const ink = (word: string): number | undefined =>
       grid.highlights.get(row[text.indexOf(word)].highlight)?.foreground;
     assert.equal(ink('greet'), 0xdcdcaa);
-    assert.equal(ink('name'), 0xffb300);
+    assert.equal(ink('name'), 0x9cdcfe);
     const tokenInk = (word: string): number | undefined => {
       const cells = grid.cells.find((cells) =>
         cells
@@ -100,7 +101,8 @@ test('TypeScript functions and parameters retain distinct reference theme colors
     for (const word of ['export', 'try', 'if', 'return', 'throw', 'catch', 'finally']) {
       assert.equal(tokenInk(word), 0xc586c0, word);
     }
-    for (const word of ['function', 'const', 'string']) assert.equal(tokenInk(word), 0x569cd6, word);
+    for (const word of ['function', 'const']) assert.equal(tokenInk(word), 0x569cd6, word);
+    for (const word of ['string', 'boolean', 'number', 'void']) assert.equal(tokenInk(word), 0x4ec9b0, word);
     assert.equal(tokenInk('42'), 0xb5cea8);
     assert.equal(tokenInk('"ok"'), 0xce9178);
     assert.equal(tokenInk('/* done */'), 0x6a9955);
