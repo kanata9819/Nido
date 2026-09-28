@@ -188,50 +188,55 @@ export function buildItems(
   ];
 
   let items: Item[];
-  if (panel === 'problems') {
-    items = (state.problems || [])
-      .map((problem, index) => ({
-        key: ['Error', 'Warning', 'Info', 'Hint'][problem.severity - 1] || 'Info',
-        severity: problem.severity,
-        title: problem.message,
-        detail: `${problem.path}:${problem.line}:${problem.column}${problem.source ? ' · ' + problem.source : ''}`,
-        run: () => run(window.nido.openProblem(active, index + 1, state.diagnosticsVersion!).then(focusEditor))
-      }))
-      .sort((a, b) => a.severity - b.severity || a.detail.localeCompare(b.detail));
-  } else if (panel === 'workspaces') {
-    items = [
-      ...workspaces.map((w, i) => ({
-        key: String(i + 1),
-        title: w.name,
-        detail: w.root,
-        run: () => activate(w.id)
-      })),
-      {
-        key: '+',
-        title: 'Open workspace',
-        detail: 'Start another independent session',
-        run: () => void create()
-      }
-    ];
-  } else if (panel === 'files') {
-    items = fileList.map((f) => ({
-      key: '',
-      title: f.name,
-      detail: f.path,
-      run: () => openFile(f.path)
-    }));
-  } else if (panel === 'buffers') {
-    items = state.buffers.map((b) => ({
-      key: b.modified ? '●' : '',
-      title: filename(b.name),
-      detail: b.name || 'Untitled buffer',
-      run: () => {
-        run(window.nido.selectBuffer(active, b.id));
-        focusEditor();
-      }
-    }));
-  } else {
-    items = commands;
+  switch (panel) {
+    case 'problems':
+      items = (state.problems || [])
+        .map((problem, index) => ({
+          key: ['Error', 'Warning', 'Info', 'Hint'][problem.severity - 1] || 'Info',
+          severity: problem.severity,
+          title: problem.message,
+          detail: `${problem.path}:${problem.line}:${problem.column}${problem.source ? ' · ' + problem.source : ''}`,
+          run: () => run(window.nido.openProblem(active, index + 1, state.diagnosticsVersion!).then(focusEditor))
+        }))
+        .sort((a, b) => a.severity - b.severity || a.detail.localeCompare(b.detail));
+      break;
+    case 'workspaces':
+      items = [
+        ...workspaces.map((w, i) => ({
+          key: String(i + 1),
+          title: w.name,
+          detail: w.root,
+          run: () => activate(w.id)
+        })),
+        {
+          key: '+',
+          title: 'Open workspace',
+          detail: 'Start another independent session',
+          run: () => void create()
+        }
+      ];
+      break;
+    case 'files':
+      items = fileList.map((f) => ({
+        key: '',
+        title: f.name,
+        detail: f.path,
+        run: () => openFile(f.path)
+      }));
+      break;
+    case 'buffers':
+      items = state.buffers.map((b) => ({
+        key: b.modified ? '●' : '',
+        title: filename(b.name),
+        detail: b.name || 'Untitled buffer',
+        run: () => {
+          run(window.nido.selectBuffer(active, b.id));
+          focusEditor();
+        }
+      }));
+      break;
+    default:
+      items = commands;
   }
 
   const filtered = items

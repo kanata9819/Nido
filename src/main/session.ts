@@ -1,8 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { realpath, stat } from 'node:fs/promises';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { attach, type NeovimClient } from 'neovim';
 import type {
   DebugAction,
   DebugState,
@@ -15,148 +14,7 @@ import type {
   Workspace
 } from '../shared/types';
 import { SessionFiles } from './sessionFiles';
-
-const setup = `
-local channel = ...
-vim.g.nido_channel = channel
--- Single-grid UIs can receive a full repaint instead of grid_scroll on upward scrolling.
-vim.api.nvim_create_autocmd('WinScrolled', {
-  callback = function()
-    for id, change in pairs(vim.v.event) do
-      local win = tonumber(id)
-      if win and change.height == 0 and change.width == 0
-          and (change.topline ~= 0 or change.skipcol ~= 0 or change.leftcol ~= 0) then
-        local info = vim.fn.getwininfo(win)[1]
-        local before = info.topline - change.topline
-        if before >= 1 and before <= vim.api.nvim_buf_line_count(info.bufnr) then
-          local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
-          local old_skip = math.max(0, view.skipcol - change.skipcol)
-          local forward = change.topline > 0 or (change.topline == 0 and change.skipcol > 0)
-          local rows = 0
-          if change.topline ~= 0 or change.skipcol ~= 0 then
-            rows = vim.api.nvim_win_text_height(win, {
-              start_row = (forward and before or info.topline) - 1,
-              end_row = (forward and info.topline or before) - 1,
-              start_vcol = forward and old_skip or view.skipcol,
-              end_vcol = forward and view.skipcol or old_skip,
-            }).all
-            if not forward then
-              rows = -rows
-            end
-          end
-          local top = info.winrow - 1
-          local left = info.wincol - 1
-          -- Horizontal scrolling leaves line numbers and signs fixed in place.
-          local text_left = rows == 0 and left + info.textoff or left
-          vim.rpcnotify(channel, 'nido:scroll', {
-            1, top, top + info.height, text_left, left + info.width, rows, change.leftcol
-          })
-        end
-      end
-    end
-  end,
-})
--- LSP messages belong in Nido's nonblocking notification, not Neovim's hit-enter prompt.
-vim.lsp.handlers['window/showMessage'] = function(_, params, ctx)
-  local client = vim.lsp.get_client_by_id(ctx.client_id)
-  local severity = vim.lsp.protocol.MessageType[params.type] or 'Info'
-  local message = ('LSP[%s][%s] %s'):format(client and client.name or ctx.client_id, severity, params.message)
-  local log = ({vim.lsp.log.error, vim.lsp.log.warn, vim.lsp.log.info, vim.lsp.log.debug})[params.type]
-  if log then log(message) end
-  vim.rpcnotify(channel, 'nido:message', message)
-end
-local pending = false
-local progress = {}
-local diagnostics = vim.empty_dict()
-local diagnostics_dirty = true
-local problems = {}
-local diagnostics_version = 0
-local function publish()
- if pending then return end
- pending = true
- vim.schedule(function()
-  pending = false
-  if diagnostics_dirty then
-    diagnostics_dirty = false
-    diagnostics = vim.empty_dict()
-    problems = {}
-    diagnostics_version = diagnostics_version + 1
-    for _, diagnostic in ipairs(vim.diagnostic.get()) do
-      if vim.api.nvim_buf_is_valid(diagnostic.bufnr) then
-        local path = vim.api.nvim_buf_get_name(diagnostic.bufnr)
-        if path ~= '' then
-          table.insert(problems, {path=path, line=diagnostic.lnum+1, column=diagnostic.col+1,
-            severity=diagnostic.severity, message=diagnostic.message, source=diagnostic.source or ''})
-        end
-      end
-      if diagnostic.severity <= vim.diagnostic.severity.WARN and vim.api.nvim_buf_is_valid(diagnostic.bufnr) then
-        local name = vim.api.nvim_buf_get_name(diagnostic.bufnr)
-        if name ~= '' then
-          diagnostics[name] = math.min(diagnostics[name] or diagnostic.severity, diagnostic.severity)
-        end
-      end
-    end
-  end
-  local buffers = {}
-  for _, b in ipairs(vim.api.nvim_list_bufs()) do
-   if vim.api.nvim_buf_is_valid(b) and vim.bo[b].buflisted then
-    table.insert(buffers, {id=b, name=vim.api.nvim_buf_get_name(b), modified=vim.bo[b].modified})
-   end
-  end
-  local scroll = require('nido_scroll')
-  local pos = scroll.cursor() or vim.api.nvim_win_get_cursor(0)
-  local ending = vim.g.nido and require('nido_eol').detect() or nil
-  if ending == 'Mixed' and not vim.b.nido_mixed_notified then
-    vim.b.nido_mixed_notified = true
-    vim.rpcnotify(channel, 'nido:message', 'Mixed line endings detected. Choose LF or CRLF in the status bar to normalize, then save.')
-  end
-  local clients = {}
-  local tasks = {}
-  for _, client in ipairs(vim.lsp.get_clients()) do
-    if not client.initialized then
-      table.insert(tasks, client.name .. ': 起動中…')
-    end
-    for _, value in pairs(progress[client.id] or {}) do
-      local message = client.name .. ': ' .. (value.title or '読み込み中')
-      if value.message and value.message ~= '' then message = message .. ' — ' .. value.message end
-      if value.percentage then message = message .. ' (' .. value.percentage .. '%)' end
-      table.insert(tasks, message)
-    end
-  end
-  table.sort(tasks)
-  for _, client in ipairs(vim.lsp.get_clients({bufnr=0})) do
-    if client.initialized then table.insert(clients, client.name) end
-  end
-  local empty = #buffers == 1 and buffers[1].id == vim.api.nvim_get_current_buf()
-    and buffers[1].name == '' and not buffers[1].modified and vim.bo.buftype == ''
-    and vim.api.nvim_buf_line_count(0) == 1 and vim.api.nvim_get_current_line() == ''
-    and #vim.api.nvim_tabpage_list_wins(0) == 1
-  vim.rpcnotify(channel, 'nido:state', {problems=problems, diagnosticsVersion=diagnostics_version, scrollCursor=scroll.screen_cursor(), diagnostics=diagnostics, buffers=buffers, current=vim.api.nvim_get_current_buf(),
-   lineEnding=ending, lsp=table.concat(clients, ', '), lspProgress=table.concat(tasks, ' / '), empty=empty, mode=vim.api.nvim_get_mode().mode, line=pos[1], column=pos[2]+1, filetype=vim.bo.filetype})
- end)
-end
-vim.api.nvim_create_autocmd({'DiagnosticChanged', 'BufDelete', 'BufWipeout', 'BufFilePost'}, {callback=function()
-  diagnostics_dirty = true
-  publish()
-end})
-vim.api.nvim_create_autocmd('LspProgress', {callback=function(event)
-  local id, params = event.data.client_id, event.data.params
-  local value = params.value
-  if type(value) ~= 'table' or not value.kind then return end
-  progress[id] = progress[id] or {}
-  if value.kind == 'end' then
-    progress[id][params.token] = nil
-    if next(progress[id]) == nil then progress[id] = nil end
-  else
-    progress[id][params.token] = vim.tbl_extend('force', progress[id][params.token] or {}, value)
-  end
-  publish()
-end})
-vim.api.nvim_create_autocmd({'BufEnter','BufAdd','BufDelete','BufModifiedSet','BufFilePost','BufWritePost','ModeChanged','CursorMoved','CursorMovedI','FileType','TextChanged','TextChangedI','WinEnter','WinClosed','LspAttach','LspDetach'}, {callback=publish})
-vim.api.nvim_create_autocmd('User', {pattern={'NidoLineEndings','NidoScroll'}, callback=publish})
-vim.api.nvim_create_autocmd('OptionSet', {pattern={'fileformat','endofline'}, callback=publish})
-publish()
-`;
+import { SessionClient } from './sessionClient';
 
 const gridEvents = new Set([
   'grid_resize',
@@ -177,10 +35,12 @@ export class Session {
   private terminalStarting?: Promise<Session>;
   readonly workspace: Workspace;
   readonly process: ChildProcessWithoutNullStreams;
-  readonly client: NeovimClient;
+  readonly client: SessionClient;
   private readonly fileService: SessionFiles;
   state: SessionState = { buffers: [], current: 0, mode: 'n', line: 1, column: 1, filetype: '' };
   private stopped = false;
+  private processClosed = false;
+  private stopping?: Promise<void>;
   private attached = false;
   private inputQueue: Promise<void> = Promise.resolve();
   private pendingRedraw: Redraw = [];
@@ -222,7 +82,11 @@ export class Session {
         stdio: 'pipe'
       }
     );
-    this.client = attach({ proc: this.process });
+    this.client = new SessionClient(this.process, (error) => {
+      if (!this.stopped) {
+        this.emit({ type: 'error', id: this.workspace.id, message: `Neovim connection closed: ${error.message}` });
+      }
+    });
     this.fileService = new SessionFiles(this.workspace.root, this.client);
     this.client.on('notification', (method: string, args: unknown[]) => {
       switch (method) {
@@ -320,6 +184,9 @@ export class Session {
       void this.terminal?.stop();
       this.emit({ type: 'exit', id: this.workspace.id });
     });
+    this.process.once('close', () => {
+      this.processClosed = true;
+    });
     this.process.on('error', (error) => this.emit({ type: 'error', id: this.workspace.id, message: error.message }));
   }
 
@@ -335,6 +202,7 @@ export class Session {
     for (const file of [
       'nvim-win64/bin/nvim.exe',
       'nido/init.lua',
+      'nido/session.lua',
       'languages/node_modules/typescript-language-server/lib/cli.mjs',
       'languages/node_modules/typescript/lib/tsserver.js'
     ]) {
@@ -346,6 +214,7 @@ export class Session {
         );
       }
     }
+    const setup = await readFile(resolve(resources, 'nido/session.lua'), 'utf8');
     const session = new Session(actual, emit, resources);
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -455,6 +324,9 @@ export class Session {
   input(keys: string): Promise<void> {
     // nvim_input can accept only part of a byte sequence when its input queue is full.
     const next = this.inputQueue.then(async () => {
+      if (this.stopped) {
+        throw new Error('Neovim session is closed.');
+      }
       await this.restoreScroll();
       if (this.workspace.kind === 'terminal') {
         await this.client.request('nvim_command', ['startinsert']);
@@ -523,7 +395,9 @@ export class Session {
         this.batchingScroll = false;
         const events = this.pendingRedraw;
         this.pendingRedraw = [];
-        if (events.length) this.emit({ type: 'redraw', id: this.workspace.id, events: [...events, ['flush', []]] });
+        if (events.length) {
+          this.emit({ type: 'redraw', id: this.workspace.id, events: [...events, ['flush', []]] });
+        }
       }
     });
     this.inputQueue = next.catch(() => {});
@@ -685,6 +559,19 @@ vim.cmd('normal! zvzz')`,
     return this.client.request('nvim_exec_lua', ["return require('nido_references').preview(...)", [index, version]]);
   }
 
+  async highlightSources(path: string, before: string, after: string): Promise<ReferencePreview['lines'][]> {
+    return this.client.request('nvim_exec_lua', [
+      `local path, before, after = ...
+local language = vim.filetype.match({filename=path})
+local function highlight(source)
+  if source == '' then return {} end
+  return require('nido_references').highlight_text(vim.split(source, '\\n', {plain=true}), language)
+end
+return {highlight(before), highlight(after)}`,
+      [path, before, after]
+    ]);
+  }
+
   async files(relativePath: string): Promise<FileEntry[]> {
     return this.fileService.files(relativePath);
   }
@@ -693,23 +580,27 @@ vim.cmd('normal! zvzz')`,
     return this.fileService.findFiles();
   }
 
-  async stop(): Promise<void> {
-    await this.terminal?.stop();
-    if (this.stopped || !this.process.pid) {
-      return;
+  stop(): Promise<void> {
+    if (this.stopping) {
+      return this.stopping;
     }
     this.stopped = true;
-    await new Promise<void>((done) => {
-      const timer = setTimeout(() => {
-        this.process.kill();
-        done();
-      }, 2000);
-      this.process.once('exit', () => {
-        clearTimeout(timer);
-        done();
+    this.client.cancelRequests();
+    this.stopping = (async () => {
+      await this.terminal?.stop();
+      if (!this.process.pid || this.processClosed) {
+        return;
+      }
+      await new Promise<void>((done) => {
+        const timer = setTimeout(() => this.process.kill(), 2000);
+        // Wait for pipe handles to close as well as the process, including forced termination.
+        this.process.once('close', () => {
+          clearTimeout(timer);
+          done();
+        });
+        this.client.quit();
       });
-      // Let Neovim remove its swap files before terminating the process.
-      this.client.notify('nvim_command', ['qa!']);
-    });
+    })();
+    return this.stopping;
   }
 }

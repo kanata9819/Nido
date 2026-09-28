@@ -162,13 +162,23 @@ pnpm start
 
 ## 構成
 
-- `src/main/session.ts`: Neovimの起動、RPC、ファイル操作、正常終了
-- `src/main/index.ts`: Electronウィンドウ、確認ダイアログ、限定されたIPC
+- `src/main/session.ts`: Neovimの起動・終了、RPC、入力キュー
+- `src/main/sessionFiles.ts`: ワークスペース内のファイル検索・パス検証
+- `resources/nido/session.lua`: Neovim側のスクロール・診断・LSP進捗・状態通知
+- `src/main/index.ts` / `handlers.ts`: ElectronウィンドウとIPCの登録・入力検証
 - `src/preload`: sandbox / contextIsolationを保ったGUI向けAPI
-- `src/renderer/src/App.tsx`: ワークスペース、ファイルタブ、操作メニュー
+- `src/renderer/src/App.tsx`: 画面の組み立て、操作とフォーカスの連携
+- `src/renderer/src/hooks/useWorkspaceSessions.ts`: セッション通知、ワークスペースの復元・配置保存
+- `src/renderer/src/hooks/useEditorSettings.ts`: 設定の初期値・状態・保存
+- `src/renderer/src/components/TitleBar.tsx` / `FileHeader.tsx` / `StatusBar.tsx`: 各バーの表示と操作
+- `src/renderer/src/components/Panel.tsx`: 共通ダイアログと表示するパネルの選択
+- `src/renderer/src/components/SettingsPanel.tsx` / `PaletteItems.tsx`: 設定項目と検索候補、それぞれのキーボード操作
 - `src/renderer/src/Sidebar.tsx`: ファイル一覧
 - `src/renderer/src/Editor.tsx` / `grid.ts`: Canvas描画、キー入力、IME確定文字
-- `src/renderer/src/Nido.module.css`: ダークテーマとGUIの見た目
+- `src/renderer/src/assets/Nido.module.css`: ダークテーマとGUIの見た目
+
+分岐・ループは波括弧を省略せず、同じ値の種類で分ける分岐は`switch`で整理します。
+複数の条件を組み合わせる判定や早期リターンには`if`を使います。
 
 ## 初版の範囲
 

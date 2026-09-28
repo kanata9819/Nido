@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
 import GitPanel from './GitPanel';
+import GitDiff from './GitDiff';
 import styles from '../assets/GitPanel.module.css';
 
 export default function GitBrowser({
@@ -196,7 +197,7 @@ export default function GitBrowser({
       const key = event.key.toLowerCase();
       if (event.ctrlKey && !event.shiftKey && (key === 'h' || key === 'l')) {
         event.preventDefault();
-        const selector = key === 'h' ? '[role="listbox"]' : '[data-git-preview] pre';
+        const selector = key === 'h' ? '[role="listbox"]' : '[data-git-scroll="after"], [data-git-preview] > pre';
         dialog?.querySelector<HTMLElement>(selector)?.focus();
         return;
       }
@@ -349,24 +350,15 @@ export default function GitBrowser({
             </div>
             <div className={styles.preview} data-git-preview>
               {view === 1 && commit ? (
-                <pre tabIndex={0} aria-label="Commit diff">
-                  {diff.split('\n').map((line, i) => (
-                    <div
-                      key={i}
-                      className={
-                        line.startsWith('+')
-                          ? styles.added
-                          : line.startsWith('-')
-                            ? styles.removed
-                            : line.startsWith('@@')
-                              ? styles.hunk
-                              : ''
-                      }
-                    >
-                      {line || ' '}
-                    </div>
-                  ))}
-                </pre>
+                <GitDiff
+                  key={`${commit.hash}:${path}`}
+                  workspaceId={workspaceId}
+                  path={path}
+                  diff={diff}
+                  label="Commit diff"
+                  beforeLabel="First parent"
+                  afterLabel={commit.hash.slice(0, 8)}
+                />
               ) : (
                 <pre tabIndex={0}>
                   {view === 1 && history[index]

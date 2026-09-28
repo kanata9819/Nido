@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rename, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { splitDiff } from '../src/renderer/src/gitDiff';
 import {
   gitStatus,
   gitStage,
@@ -16,6 +17,39 @@ import {
   gitSwitch
 } from '../src/main/git';
 
+test('side-by-side diffs align replacements, additions, deletions and source line numbers', () => {
+  const rows = splitDiff(
+    'diff --git a/file b/file\n--- a/file\n+++ b/file\n@@ -1,4 +1,5 @@\n context\n-old\n+new\n+extra\n tail\n-last\n+end\n+final\n\\ No newline at end of file\n'
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.before?.text, row.after?.text]),
+    [
+      ['context', 'context'],
+      ['old', 'new'],
+      [undefined, 'extra'],
+      ['tail', 'tail'],
+      ['last', 'end'],
+      [undefined, 'final']
+    ]
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.before?.number, row.after?.number]),
+    [
+      [1, 1],
+      [2, 2],
+      [undefined, 3],
+      [3, 4],
+      [4, 5],
+      [undefined, 6]
+    ]
+  );
+  assert.equal(rows[0].before?.changed, undefined);
+  assert.equal(rows[1].before?.changed, true);
+  assert.deepEqual(splitDiff('@@ -0,0 +1 @@\n+new\n')[0].after, { number: 1, text: 'new', changed: true });
+  assert.deepEqual(splitDiff('@@ -9 +8,0 @@\n-old\n')[0].before, { number: 9, text: 'old', changed: true });
+  assert.equal(splitDiff('Binary files a/file and b/file differ')[0].heading, 'Binary files a/file and b/file differ');
+});
+
 test('history, first-parent diffs and branch switches preserve conflicting edits', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-history-'));
   const git = (...args: string[]): string =>
@@ -27,7 +61,9 @@ test('history, first-parent diffs and branch switches preserve conflicting edits
     git('config', 'user.email', 'test@example.invalid');
     git('config', 'commit.gpgsign', 'false');
     assert.deepEqual(await gitHistory(root, 0), []);
-    await writeFile(join(root, '日本語.txt'), 'initial\n');
+    const context = Array.from({ length: 12 }, (_, i) => `context ${i}\n`).join('');
+    const initialSource = `initial\n${context}`;
+    await writeFile(join(root, '日本語.txt'), initialSource);
     git('add', '.');
     git('commit', '-m', 'Initial subject');
     const initial = (await gitHistory(root, 0))[0];
@@ -35,7 +71,7 @@ test('history, first-parent diffs and branch switches preserve conflicting edits
     assert.deepEqual(await gitCommitFiles(root, initial.hash), ['日本語.txt']);
     assert.match(await gitCommitDiff(root, initial.hash, '日本語.txt'), /\+initial/);
     await gitSwitch(root, 'feature', true);
-    await writeFile(join(root, '日本語.txt'), 'feature\n');
+    await writeFile(join(root, '日本語.txt'), `feature\n${context}`);
     git('commit', '-am', 'Feature subject');
     assert.equal((await gitHistory(root, 1))[0].hash, initial.hash);
     assert.ok((await gitBranches(root)).some((branch) => branch.name === 'feature' && branch.current));
@@ -43,10 +79,16 @@ test('history, first-parent diffs and branch switches preserve conflicting edits
     await writeFile(join(root, '日本語.txt'), 'unsaved work on disk\n');
     await assert.rejects(gitSwitch(root, 'refs/heads/feature', false), /overwritten/);
     assert.equal(await readFile(join(root, '日本語.txt'), 'utf8'), 'unsaved work on disk\n');
-    await writeFile(join(root, '日本語.txt'), 'initial\n');
+    await writeFile(join(root, '日本語.txt'), initialSource);
     git('merge', '--no-ff', 'feature', '-m', 'Merge feature');
     const merge = (await gitHistory(root, 0))[0];
     assert.match(await gitCommitDiff(root, merge.hash, '日本語.txt'), /\+feature/);
+    assert.match(await gitCommitDiff(root, merge.hash, '日本語.txt'), / context 11/);
+    await writeFile(join(root, '日本語.txt'), `working\n${context}`);
+    assert.match(await gitDiff(root, '日本語.txt', false), / context 11/);
+    await gitStage(root, '日本語.txt', false);
+    assert.match(await gitDiff(root, '日本語.txt', true), / context 11/);
+    git('reset', '--hard', 'HEAD');
     git('update-ref', 'refs/remotes/origin/remote-test', 'HEAD');
     git('config', 'remote.origin.url', root);
     git('config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*');

@@ -21,6 +21,7 @@ interface Props {
   fontFamily: string;
   onError: (message: string) => void;
 }
+
 export default function Editor({
   scrollFollowCursor = true,
   terminal = false,
@@ -43,12 +44,12 @@ export default function Editor({
   const composing = useRef(false);
   const attached = useRef(false);
   const wheel = useRef({ remainder: 0, time: 0 });
+  const paint = useRef<() => void>(() => {});
+  const error = useRef(onError);
+
   useEffect(() => {
     wheel.current = { remainder: 0, time: 0 };
   }, [active, blocked, fontSize]);
-
-  const paint = useRef<() => void>(() => {});
-  const error = useRef(onError);
 
   useEffect(() => {
     error.current = onError;
@@ -93,16 +94,28 @@ export default function Editor({
       className={styles.editor}
       hidden={!active}
       onClick={(event) => {
-        if (blocked || !active || composing.current || event.target !== canvas.current) return;
+        if (blocked || !active || composing.current || event.target !== canvas.current) {
+          return;
+        }
+
         input.current?.focus();
-        if (terminal) return;
+        if (terminal) {
+          return;
+        }
+
         const { cellWidth, cellHeight, rows, columns, scrollFraction } = grid.current;
-        if (!cellWidth || !cellHeight) return;
+        if (!cellWidth || !cellHeight) {
+          return;
+        }
+
         const bounds = canvas.current.getBoundingClientRect();
         const x = event.clientX - bounds.left;
         const y = event.clientY - bounds.top;
         // The last grid row is the pinned command line; the row above it supplies scroll overscan.
-        if (y < 0 || y >= (rows - 2) * cellHeight || x < 0 || x >= columns * cellWidth) return;
+        if (y < 0 || y >= (rows - 2) * cellHeight || x < 0 || x >= columns * cellWidth) {
+          return;
+        }
+
         const dpr = window.devicePixelRatio || 1;
         const offset = Math.round(scrollFraction * cellHeight * dpr) / dpr;
         send(window.nido.click(id, Math.floor((y + offset) / cellHeight), Math.floor(x / cellWidth)));
@@ -117,6 +130,7 @@ export default function Editor({
         ) {
           return;
         }
+
         if (!terminal) {
           const height = Math.ceil(fontSize * 1.65);
           const pixels =
@@ -127,6 +141,7 @@ export default function Editor({
           }
           return;
         }
+
         const now = performance.now();
         const result = accumulateScroll(
           now - wheel.current.time > 200 ? 0 : wheel.current.remainder,
@@ -135,6 +150,7 @@ export default function Editor({
           Math.ceil(fontSize * 1.65),
           event.currentTarget.clientHeight
         );
+
         wheel.current = { remainder: result.remainder, time: now };
         if (result.lines) {
           send(window.nido.scroll(id, Math.max(-1000, Math.min(1000, result.lines)), terminal || scrollFollowCursor));

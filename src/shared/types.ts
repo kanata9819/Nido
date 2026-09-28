@@ -82,6 +82,7 @@ export interface GitStatus {
 }
 
 export interface NidoAPI {
+  highlightSources(id: string, path: string, before: string, after: string): Promise<ReferencePreview['lines'][]>;
   gitHistory(id: string, skip: number): Promise<GitCommitEntry[]>;
   gitCommitFiles(id: string, hash: string): Promise<string[]>;
   gitCommitDiff(id: string, hash: string, path: string): Promise<string>;

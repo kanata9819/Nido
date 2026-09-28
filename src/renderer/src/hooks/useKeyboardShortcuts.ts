@@ -55,7 +55,9 @@ export function useKeyboardShortcuts({
   activate
 }: UseKeyboardShortcutsParams): (event: KeyboardEvent) => void {
   const keydown = (event: KeyboardEvent): void => {
-    if (document.activeElement?.closest('[data-type-information]')) return;
+    if (document.activeElement?.closest('[data-type-information]')) {
+      return;
+    }
     if (event.isComposing || event.keyCode === 229) {
       return;
     }

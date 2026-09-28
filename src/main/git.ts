@@ -66,6 +66,7 @@ export async function gitCommitDiff(cwd: string, hash: string, path: string): Pr
     '--no-ext-diff',
     '--no-textconv',
     '--no-color',
+    '--unified=2147483647',
     commitHash(hash),
     '--',
     path
@@ -180,7 +181,7 @@ async function selectedChange(
 
 export async function gitDiff(cwd: string, path: string, staged: boolean): Promise<string> {
   const { root, change } = await selectedChange(cwd, path, staged);
-  const options = ['--no-ext-diff', '--no-textconv', '--no-color'];
+  const options = ['--no-ext-diff', '--no-textconv', '--no-color', '--unified=2147483647'];
   if (change.status === '?') {
     return git(root, ['diff', ...options, '--no-index', '--', '/dev/null', change.path], true);
   }

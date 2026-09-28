@@ -98,7 +98,9 @@ export function useEditorRendering({
         const progress = canBlink() ? Math.min(1, (now - blinkFade.start) / 180) : 1;
         const eased = progress * progress * (3 - 2 * progress);
         gridRef.current.cursorOpacity = canBlink() ? blinkFade.from + (blinkFade.to - blinkFade.from) * eased : 1;
-        if (progress === 1) blinkFade = undefined;
+        if (progress === 1) {
+          blinkFade = undefined;
+        }
       }
       if (
         !cursorPosition ||
@@ -123,7 +125,9 @@ export function useEditorRendering({
             row: cursorMotion.from.row + (cursorMotion.to.row - cursorMotion.from.row) * eased,
             column: cursorMotion.from.column + (cursorMotion.to.column - cursorMotion.from.column) * eased
           };
-          if (progress === 1) cursorMotion = undefined;
+          if (progress === 1) {
+            cursorMotion = undefined;
+          }
         }
       }
       const metrics = gridRef.current.draw(

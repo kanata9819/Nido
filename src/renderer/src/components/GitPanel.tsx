@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GitChange, GitStatus } from '../../../shared/types';
 import styles from '../assets/GitPanel.module.css';
+import GitDiff from './GitDiff';
 
 export default function GitPanel({
   workspaceId,
@@ -219,24 +220,15 @@ export default function GitPanel({
               {current?.staged ? 'Unstage (u)' : 'Stage (s)'}
             </button>
           </div>
-          <pre tabIndex={0} aria-label="Git diff">
-            {diff.split('\n').map((line, index) => (
-              <div
-                key={index}
-                className={
-                  line.startsWith('+')
-                    ? styles.added
-                    : line.startsWith('-')
-                      ? styles.removed
-                      : line.startsWith('@@')
-                        ? styles.hunk
-                        : ''
-                }
-              >
-                {line || ' '}
-              </div>
-            ))}
-          </pre>
+          <GitDiff
+            key={selected}
+            workspaceId={workspaceId}
+            path={current?.path || ''}
+            diff={diff}
+            label="Git diff"
+            beforeLabel={current?.staged ? 'HEAD' : 'Index'}
+            afterLabel={current?.staged ? 'Index · Staged' : 'Working tree'}
+          />
         </div>
       </div>
       <div className={styles.commit}>

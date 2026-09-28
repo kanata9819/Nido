@@ -26,9 +26,13 @@ export default function TypeInformation({
   useEffect(
     () =>
       window.nido.onEvent((event) => {
-        if (event.type !== 'hover' || event.id !== id) return;
+        if (event.type !== 'hover' || event.id !== id) {
+          return;
+        }
         setLinkError('');
-        if (!event.markdown && card.current?.contains(document.activeElement)) input.current?.focus();
+        if (!event.markdown && card.current?.contains(document.activeElement)) {
+          input.current?.focus();
+        }
         setInfo(event.markdown ? event : undefined);
       }),
     [id, input]
@@ -37,13 +41,23 @@ export default function TypeInformation({
   useLayoutEffect(() => {
     const element = card.current;
     const anchor = input.current;
-    if (!info || !element || !anchor) return;
+    if (!info || !element || !anchor) {
+      return;
+    }
     const host = element.parentElement!;
     const position = (): void => {
       const below = anchor.offsetTop + anchor.offsetHeight + 10;
       const above = anchor.offsetTop - element.offsetHeight - 10;
       element.style.left = `${Math.max(12, Math.min(anchor.offsetLeft, host.clientWidth - element.offsetWidth - 12))}px`;
-      element.style.top = `${Math.max(12, Math.min(below + element.offsetHeight <= host.clientHeight - 12 ? below : above, host.clientHeight - element.offsetHeight - 12))}px`;
+      element.style.top = `
+        ${Math.max(
+          12,
+          Math.min(
+            below + element.offsetHeight <= host.clientHeight - 12 ? below : above,
+            host.clientHeight - element.offsetHeight - 12
+          )
+        )}px
+      `;
     };
     position();
     body.current?.focus();
@@ -51,7 +65,9 @@ export default function TypeInformation({
     observer.observe(host);
     observer.observe(element);
     const outside = (event: PointerEvent): void => {
-      if (!element.contains(event.target as Node)) setInfo(undefined);
+      if (!element.contains(event.target as Node)) {
+        setInfo(undefined);
+      }
     };
     document.addEventListener('pointerdown', outside, true);
     return () => {
@@ -60,7 +76,9 @@ export default function TypeInformation({
     };
   }, [info, input]);
 
-  if (!info) return null;
+  if (!info) {
+    return null;
+  }
   // Match existing Neovim highlights to source positions, leaving other Markdown code blocks as plain text.
   const highlights = new Map(
     [...info.markdown.matchAll(/^```([^\n]*)\n([\s\S]*?)^```[ \t]*$/gm)].map((match, index) => [
@@ -101,12 +119,15 @@ export default function TypeInformation({
         ) {
           event.preventDefault();
           const content = body.current!;
-          if (event.key === 'Home') content.scrollTop = 0;
-          else if (event.key === 'End') content.scrollTop = content.scrollHeight;
-          else
+          if (event.key === 'Home') {
+            content.scrollTop = 0;
+          } else if (event.key === 'End') {
+            content.scrollTop = content.scrollHeight;
+          } else {
             content.scrollTop +=
               (['j', 'PageDown'].includes(event.key) ? 1 : -1) *
               (event.key.length === 1 ? 32 : content.clientHeight * 0.8);
+          }
         }
       }}
     >

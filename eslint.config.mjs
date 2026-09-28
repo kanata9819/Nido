@@ -28,5 +28,11 @@ export default defineConfig(
       ...eslintPluginReactRefresh.configs.vite.rules
     }
   },
-  eslintConfigPrettier
+  eslintConfigPrettier,
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    rules: {
+      curly: ['error', 'all']
+    }
+  }
 );

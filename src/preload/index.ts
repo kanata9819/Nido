@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { NidoAPI, NidoEvent } from '../shared/types';
 
 const api: NidoAPI = {
+  highlightSources: (id, path, before, after) => ipcRenderer.invoke('nido:highlightSources', id, path, before, after),
   gitHistory: (id, skip) => ipcRenderer.invoke('nido:gitHistory', id, skip),
   gitCommitFiles: (id, hash) => ipcRenderer.invoke('nido:gitCommitFiles', id, hash),
   gitCommitDiff: (id, hash, path) => ipcRenderer.invoke('nido:gitCommitDiff', id, hash, path),

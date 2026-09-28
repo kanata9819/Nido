@@ -595,6 +595,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
       await page.keyboard.press('Control+l');
       await expect(preview).toBeFocused();
       const top = (): Promise<number> => preview.evaluate((node) => node.scrollTop);
+      const original = page.getByLabel(`${label} original`, { exact: true });
       await page.keyboard.press('g');
       await page.keyboard.press('j');
       await expect.poll(top).toBeGreaterThan(0);
@@ -607,10 +608,13 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
         await page.keyboard.press(down);
         await expect.poll(top).toBeGreaterThan(100);
         await page.keyboard.press(up);
-        await expect.poll(top).toBe(0);
+        await expect.poll(top).toBeLessThan(1);
       }
       await page.keyboard.press('Shift+g');
       await expect.poll(top).toBeGreaterThan(1000);
+      await expect
+        .poll(async () => Math.abs((await top()) - (await original.evaluate((node) => node.scrollTop))))
+        .toBeLessThanOrEqual(1);
       await page.keyboard.press('g');
       await expect.poll(top).toBe(0);
       await page.keyboard.press('l');
@@ -637,7 +641,18 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
     const panel = page.getByRole('region', { name: 'Git changes' });
     await expect(panel).toHaveAttribute('aria-busy', 'false');
     await expect(page.getByRole('listbox', { name: 'Changed files' })).toBeFocused();
-    await expect(page.getByLabel('Git diff')).toContainText('+fn main() {}');
+    await expect(page.getByLabel('Git diff', { exact: true })).toContainText('fn main() {}');
+    await expect(panel.getByText('Before', { exact: true })).toBeVisible();
+    await expect(panel.getByText('After', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Git diff', { exact: true }).locator('code span').first()).toBeVisible();
+    const dialog = page.getByRole('dialog', { name: 'git palette' });
+    const bounds = await dialog.boundingBox();
+    const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+    expect(bounds!.width).toBeGreaterThan(viewport.width * 0.95);
+    expect(bounds!.height).toBeGreaterThan(viewport.height * 0.85);
+    const original = page.getByLabel('Git diff original', { exact: true });
+    const updated = page.getByLabel('Git diff', { exact: true });
+    expect((await original.boundingBox())!.x).toBeLessThan((await updated.boundingBox())!.x);
     await checkDiffKeys('Git diff', 'Changed files');
     await page.keyboard.press('s');
     await expect(page.getByRole('heading', { name: 'Staged changes' })).toBeVisible();
@@ -671,15 +686,35 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
     await expect(page.getByRole('option', { name: /First commit/ })).toBeVisible();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('listbox', { name: 'Commit files' })).toBeVisible();
-    await expect(page.getByLabel('Commit diff')).toContainText('+fn main() {}');
+    await expect(page.getByLabel('Commit diff', { exact: true })).toContainText('fn main() {}');
+    await expect(page.getByLabel('Commit diff', { exact: true }).locator('code span').first()).toBeVisible();
     await checkDiffKeys('Commit diff', 'Commit files');
     await page.keyboard.press('j');
-    await expect(page.getByLabel('Commit diff')).toContainText('+extra file');
+    await expect(page.getByLabel('Commit diff', { exact: true })).toContainText('extra file');
     await page.keyboard.press('k');
-    await expect(page.getByLabel('Commit diff')).toContainText('+fn main() {}');
+    await expect(page.getByLabel('Commit diff', { exact: true })).toContainText('fn main() {}');
     await page.screenshot({ path: 'test-results/nido-git-history.png' });
     await page.keyboard.press('Escape');
     await expect(page.getByRole('listbox', { name: 'Commit history' })).toBeFocused();
+    const source = await readFile(join(repository, 'main.rs'), 'utf8');
+    await writeFile(join(repository, 'main.rs'), source.replace('fn main() {}', 'fn main() { println!("Nido"); }'));
+    await page.keyboard.press('1');
+    await expect(panel).toHaveAttribute('aria-busy', 'false');
+    await expect(page.getByLabel('Git diff original', { exact: true })).toContainText('fn main() {}');
+    await expect(page.getByLabel('Git diff', { exact: true })).toContainText('fn main() { println!("Nido"); }');
+    await expect(page.getByLabel('Git diff original', { exact: true })).toContainText('// 149');
+    await expect(page.getByLabel('Git diff', { exact: true })).toContainText('// 149');
+    for (const label of ['Git diff original', 'Git diff']) {
+      const code = page.getByLabel(label, { exact: true }).locator('code').first();
+      await expect(code.locator('span').first()).toHaveText('fn');
+      await expect
+        .poll(() =>
+          code.locator('span').evaluateAll((spans) => new Set(spans.map((span) => getComputedStyle(span).color)).size)
+        )
+        .toBeGreaterThan(1);
+    }
+    await checkDiffKeys('Git diff', 'Changed files');
+    await page.screenshot({ path: 'test-results/nido-git-side-by-side.png' });
     await page.keyboard.press('3');
     await expect(browser).toHaveAttribute('aria-busy', 'false');
     await expect(page.getByRole('listbox', { name: 'Branches' })).toBeFocused();

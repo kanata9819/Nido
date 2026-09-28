@@ -7,17 +7,7 @@ local function highlight_blocks(markdown)
   for _, line in ipairs(vim.split(markdown, '\n', {plain=true})) do
     if lines then
       if line:match('^```%s*$') then
-        local buffer = vim.api.nvim_create_buf(false, true)
-        local ok, spans = pcall(function()
-          vim.api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
-          vim.api.nvim_buf_call(buffer, function()
-            -- Syntax only: snippets must not start language servers or FileType plugins.
-            if language:match('^[%w_]+$') then vim.bo[buffer].syntax = aliases[language] or language end
-            vim.cmd('syntax sync fromstart')
-          end)
-          return require('nido_references').highlight(buffer, 1, lines)
-        end)
-        vim.api.nvim_buf_delete(buffer, {force=true})
+        local ok, spans = pcall(require('nido_references').highlight_text, lines, aliases[language] or language)
         blocks[#blocks + 1] = ok and spans or {}
         lines = nil
       else

@@ -237,22 +237,31 @@ export function registerHandlers({ window, sessions, state, neovimResources, sen
   handle('resize', (id, columns, rows) => session(id).resize(integer(columns, 1000), integer(rows, 500)));
   handle('input', (id, keys) => session(id).input(text(keys)));
   handle('clipboardSharing', (id, enabled) => {
-    if (typeof enabled !== 'boolean') throw new Error('Invalid clipboard setting.');
+    if (typeof enabled !== 'boolean') {
+      throw new Error('Invalid clipboard setting.');
+    }
     return session(id).setClipboardSharing(enabled);
   });
   handle('openDocumentation', (value) => {
     const url = new URL(text(value));
-    if (!['https:', 'http:'].includes(url.protocol)) throw new Error('Unsupported documentation URL.');
+    if (!['https:', 'http:'].includes(url.protocol)) {
+      throw new Error('Unsupported documentation URL.');
+    }
     return shell.openExternal(url.href);
   });
   handle('click', (id, row, column) => {
-    if (typeof row !== 'number' || typeof column !== 'number') throw new Error('Invalid mouse position.');
+    if (typeof row !== 'number' || typeof column !== 'number') {
+      throw new Error('Invalid mouse position.');
+    }
     return session(id).click(integer(row + 1, 500) - 1, integer(column + 1, 1000) - 1);
   });
   handle('paste', (id, value) => session(id).paste(text(value)));
   handle('pasteClipboard', async (id) => session(id).paste(await clipboard.readText()));
   handle('files', (id, path) => session(id).files(text(path)));
   handle('gitStatus', (id) => gitStatus(session(id).workspace.root));
+  handle('highlightSources', (id, path, before, after) =>
+    session(id).highlightSources(text(path), text(before), text(after))
+  );
   handle('gitHistory', (id, skip) => {
     if (typeof skip !== 'number') {
       throw new Error('Invalid history offset.');

@@ -81,7 +81,23 @@ function M.preview(index, expected_version)
   return { first = first, line = line, lines = M.highlight(buffer, first, lines) }
 end
 
-function M.highlight(buffer, first, lines)
+function M.highlight_text(lines, language)
+  local buffer = vim.api.nvim_create_buf(false, true)
+  local ok, spans = pcall(function()
+    vim.api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
+    return vim.api.nvim_buf_call(buffer, function()
+      -- Syntax only: previews must not start language servers or FileType plugins.
+      if language and language:match('^[%w_]+$') then vim.bo[buffer].syntax = language end
+      vim.cmd('syntax sync fromstart')
+      return M.highlight(buffer, 1, lines, true)
+    end)
+  end)
+  vim.api.nvim_buf_delete(buffer, {force=true})
+  if not ok then error(spans) end
+  return spans
+end
+
+function M.highlight(buffer, first, lines, syntax_only)
   local colors = {}
   local function color(group)
     if colors[group] == nil then
@@ -96,7 +112,11 @@ function M.highlight(buffer, first, lines)
     local column = 0
     -- Inspect byte positions, but never split a UTF-8 character in the response.
     for character in text:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
-      local groups = vim.inspect_pos(buffer, first + offset - 2, column, { extmarks = false })
+      -- Scratch previews have no LSP tokens; avoid the full inspector for every character.
+      local groups = syntax_only and {
+        syntax = {{hl_group = vim.fn.synIDattr(vim.fn.synID(first + offset - 1, column + 1, true), 'name')}},
+        treesitter = {}, semantic_tokens = {},
+      } or vim.inspect_pos(buffer, first + offset - 2, column, { extmarks = false })
       local foreground = color('Normal') or '#d4d4d4'
       local priority = -1
       local function apply(group, rank)

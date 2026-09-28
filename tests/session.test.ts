@@ -10,6 +10,46 @@ import { readLayout, writeLayout } from '../src/main/persistence';
 import { fileDecorations, gitFileKey } from '../src/renderer/src/fileDecorations';
 import type { Redraw } from '../src/shared/types';
 
+test('source previews use Neovim syntax colors without changing editor buffers or starting FileType plugins', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-source-colors-'));
+  let session: Session | undefined;
+  try {
+    session = await Session.create(root, () => {});
+    await session.client.request('nvim_exec_lua', [
+      `vim.g.preview_filetypes = 0
+vim.api.nvim_create_autocmd('FileType', {callback=function() vim.g.preview_filetypes = vim.g.preview_filetypes + 1 end})`,
+      []
+    ]);
+    const snapshot = 'return {vim.api.nvim_list_bufs(), vim.api.nvim_get_current_buf(), vim.bo.modified}';
+    const buffers = await session.client.request('nvim_exec_lua', [snapshot, []]);
+    for (const [path, source] of [
+      ['sample.rs', 'fn main() {\n/* comment\n日本語 🐱 */\nlet message = "<script>";\n}'],
+      ['sample.ts', 'const message = "日本語 🐱";\n/* comment\ncontinued */\nexport function run() { return 42; }'],
+      ['sample.tsx', 'const view = <div title="日本語">Hello</div>;']
+    ]) {
+      const [before, after] = await session.highlightSources(path, source, source);
+      assert.equal(before.map((line) => line.map((span) => span.text).join('')).join('\n'), source);
+      assert.deepEqual(after, before);
+      assert.ok(new Set(before.flat().map((span) => span.color)).size > 1, `${path} needs syntax colors`);
+      if (!path.endsWith('.tsx')) {
+        assert.equal(before[1][0].color, before[2][0].color, `${path} keeps multiline comment state`);
+      }
+    }
+    const plain = await session.highlightSources('unknown.nido-unknown', '', 'plain <script>日本語</script>');
+    assert.deepEqual(plain[0], []);
+    assert.equal(plain[1][0].map((span) => span.text).join(''), 'plain <script>日本語</script>');
+    const longSource =
+      'fn main() {}\n' + Array.from({ length: 150 }, (_, i) => `// ${i} ${'long diff line '.repeat(20)}`).join('\n');
+    const longPreview = await session.highlightSources('main.rs', '', longSource);
+    assert.equal(longPreview[1].map((line) => line.map((span) => span.text).join('')).join('\n'), longSource);
+    assert.deepEqual(await session.client.request('nvim_exec_lua', [snapshot, []]), buffers);
+    assert.equal(await session.client.request('nvim_eval', ['g:preview_filetypes']), 0);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});
+
 test('hover without an LSP never opens help and successful saves stay quiet', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-hover-'));
   let session: Session | undefined;

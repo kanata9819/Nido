@@ -1,35 +1,25 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { fileDecorations } from './fileDecorations';
-import {
-  ArrowRight,
-  ChevronRight,
-  Code2,
-  Files,
-  FolderOpen,
-  GitBranch,
-  Keyboard,
-  Leaf,
-  Minus,
-  Plus,
-  Search,
-  Settings2,
-  Square,
-  X
-} from 'lucide-react';
-import type { FileEntry, SessionState, Workspace } from '../../shared/types';
+import { Files, GitBranch, Keyboard, Search, Settings2, Square, X } from 'lucide-react';
+import type { FileEntry, SessionState } from '../../shared/types';
 import type { Panel } from './types';
 import Editor from './Editor';
-import FileIcon from './components/FileIcon';
-import DebugPanel from './components/DebugPanel';
-import ReferencesPanel from './components/ReferencesPanel';
 import Sidebar from './Sidebar';
-import { buildItems, filename } from './commands';
-import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import { gitFileKey, useGitFileStatus } from './hooks/useGitFileStatus';
+import DebugPanel from './components/DebugPanel';
+import FileHeader from './components/FileHeader';
+import KeyboardGuide from './components/KeyboardGuide';
 import { Panel as PanelComponent } from './components/Panel';
+import ReferencesPanel from './components/ReferencesPanel';
+import StatusBar from './components/StatusBar';
+import TitleBar from './components/TitleBar';
+import { Welcome, WorkspaceWelcome } from './components/Welcome';
+import { buildItems } from './commands';
+import { fileDecorations } from './fileDecorations';
+import { defaultFontFamily, useEditorSettings } from './hooks/useEditorSettings';
+import { useGitFileStatus } from './hooks/useGitFileStatus';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { usePointerVisibility } from './hooks/usePointerVisibility';
+import { useWorkspaceSessions } from './hooks/useWorkspaceSessions';
 import styles from './assets/Nido.module.css';
-
-const defaultFontFamily = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
 
 const defaultState: SessionState = {
   buffers: [],
@@ -40,73 +30,8 @@ const defaultState: SessionState = {
   filetype: ''
 };
 
-function WorkspaceWelcome({ onOpen }: { onOpen: () => void }): React.JSX.Element {
-  return (
-    <section className={`${styles.welcome} ${styles.workspaceWelcome}`} aria-label="Workspace welcome">
-      <div className={styles.welcomeMark}>
-        <Leaf size={43} strokeWidth={1.4} />
-      </div>
-      <h1>Nido</h1>
-      <p>
-        A place for your code.
-        <br />
-        Open a file to get started.
-      </p>
-      <button className={styles.primary} onClick={onOpen}>
-        <FolderOpen size={18} /> Open a file <kbd>Ctrl P</kbd>
-      </button>
-      <div className={styles.welcomeKeys}>
-        <span>
-          <kbd>Space</kbd> Commands
-        </span>
-        <span>
-          <kbd>i</kbd> Start writing
-        </span>
-      </div>
-    </section>
-  );
-}
-
-function modeLabel(mode: string): string {
-  if (mode.startsWith('t')) {
-    return 'TERMINAL';
-  }
-  if (mode.startsWith('i')) {
-    return 'INSERT';
-  }
-  if (mode.startsWith('v') || mode === 'V' || mode === '\u0016') {
-    return 'VISUAL';
-  }
-  if (mode.startsWith('c')) {
-    return 'COMMAND';
-  }
-  return 'NORMAL';
-}
-
 export default function App(): React.JSX.Element {
-  const [pointerHidden, setPointerHidden] = useState(false);
-  useEffect(() => {
-    const hide = (): void => setPointerHidden(true);
-    const show = (): void => setPointerHidden(false);
-    const move = (event: PointerEvent): void => {
-      if (event.movementX || event.movementY) {
-        show();
-      }
-    };
-    window.addEventListener('keydown', hide, true);
-    window.addEventListener('pointermove', move, true);
-    window.addEventListener('pointerdown', show, true);
-    window.addEventListener('blur', show);
-    return () => {
-      window.removeEventListener('keydown', hide, true);
-      window.removeEventListener('pointermove', move, true);
-      window.removeEventListener('pointerdown', show, true);
-      window.removeEventListener('blur', show);
-    };
-  }, []);
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [selectedWorkspace, setActive] = useState('');
-  const [states, setStates] = useState<Record<string, SessionState>>({});
+  const pointerHidden = usePointerVisibility();
   const [panel, setPanel] = useState<Panel>(null);
   const [leader, setLeader] = useState(false);
   const [query, setQuery] = useState('');
@@ -114,8 +39,13 @@ export default function App(): React.JSX.Element {
   const [fileList, setFileList] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [restoring, setRestoring] = useState(true);
   const [error, setError] = useState('');
+  const report = useCallback(
+    (message: string): void => setError(message.replace(/^Error: Error invoking remote method '[^']+': Error: /, '')),
+    []
+  );
+
+  const { workspaces, setWorkspaces, active, setActive, states, mode, restoring } = useWorkspaceSessions(report);
   const [debugVisible, setDebugVisible] = useState(false);
   const [debugFocusTick, setDebugFocusTick] = useState(0);
   const [referencesVisible, setReferencesVisible] = useState(false);
@@ -124,70 +54,32 @@ export default function App(): React.JSX.Element {
   const [terminalVisible, setTerminalVisible] = useState(false);
   const [terminalFocusTick, setTerminalFocusTick] = useState(0);
   const [focusTick, setFocusTick] = useState(0);
-  const [sidebar, setSidebar] = useState(true);
-  const [animations, setAnimations] = useState(() => localStorage.getItem('nido.animations') !== 'false');
-  const [smoothCursor, setSmoothCursor] = useState(() => localStorage.getItem('nido.smoothCursor') === 'true');
-  const [smoothBlink, setSmoothBlink] = useState(() => localStorage.getItem('nido.smoothBlink') === 'true');
+  const settings = useEditorSettings();
+  const {
+    sidebar,
+    setSidebar,
+    animations,
+    smoothCursor,
+    smoothBlink,
+    scrollFollowCursor,
+    formatOnSave,
+    clipboardSharing,
+    fontFamily,
+    fontSize,
+    sidebarWidth,
+    resizeSidebar
+  } = settings;
   useEffect(() => {
-    localStorage.setItem('nido.smoothBlink', String(smoothBlink));
-  }, [smoothBlink]);
-  useEffect(() => {
-    localStorage.setItem('nido.smoothCursor', String(smoothCursor));
-  }, [smoothCursor]);
-  const [scrollFollowCursor, setScrollFollowCursor] = useState(
-    () => localStorage.getItem('nido.scrollFollowCursor') !== 'false'
-  );
-  const [formatOnSave, setFormatOnSave] = useState(() => localStorage.getItem('nido.formatOnSave') !== 'false');
-  const [clipboardSharing, setClipboardSharing] = useState(
-    () => localStorage.getItem('nido.clipboardSharing') === 'true'
-  );
-  useEffect(() => {
-    localStorage.setItem('nido.clipboardSharing', String(clipboardSharing));
     for (const workspace of workspaces) {
       for (const id of [workspace.id, workspace.terminalId]) {
-        if (id) void window.nido.setClipboardSharing(id, clipboardSharing).catch((error) => setError(String(error)));
+        if (id) {
+          void window.nido.setClipboardSharing(id, clipboardSharing).catch((error) => setError(String(error)));
+        }
       }
     }
   }, [clipboardSharing, workspaces]);
-  const [fontFamily, setFontFamily] = useState(() => localStorage.getItem('nido.fontFamily') ?? defaultFontFamily);
-
-  useEffect(() => {
-    localStorage.setItem('nido.fontFamily', fontFamily);
-  }, [fontFamily]);
-
-  useEffect(() => {
-    localStorage.setItem('nido.scrollFollowCursor', String(scrollFollowCursor));
-  }, [scrollFollowCursor]);
-
-  useEffect(() => {
-    localStorage.setItem('nido.formatOnSave', String(formatOnSave));
-  }, [formatOnSave]);
-
-  useEffect(() => {
-    localStorage.setItem('nido.animations', String(animations));
-  }, [animations]);
-
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    const saved = Number(localStorage.getItem('nido.sidebarWidth'));
-    return Number.isFinite(saved) && saved >= 160 && saved <= 480 ? saved : 243;
-  });
-
-  const resizeSidebar = (width: number): void => {
-    setSidebarWidth(Math.max(160, Math.min(480, width)));
-  };
-
-  useEffect(() => {
-    localStorage.setItem('nido.sidebarWidth', String(sidebarWidth));
-  }, [sidebarWidth]);
-
-  const [fontSize, setFontSize] = useState(() => {
-    const value = Number(localStorage.getItem('nido.fontSize'));
-    return value >= 8 && value <= 24 ? value : 15;
-  });
 
   const modal = useRef<HTMLDivElement>(null);
-  const mode = useRef<Record<string, string>>({});
-  const active = workspaces.some((w) => w.id === selectedWorkspace) ? selectedWorkspace : workspaces[0]?.id || '';
   const state = states[active] || defaultState;
   const gitFiles = useGitFileStatus(active, state.buffers, panel);
   const hasDebugger = !!state.debug;
@@ -205,18 +97,11 @@ export default function App(): React.JSX.Element {
     }
   }, [hasDebugger, active]);
 
-  const displayMode = modeLabel(state.mode);
   const workspace = workspaces.find((w) => w.id === active);
   const decorations = useMemo(
     () => fileDecorations(workspace?.root || '', gitFiles, state.diagnostics),
     [workspace?.root, gitFiles, state.diagnostics]
   );
-  const current = state.buffers.find((b) => b.id === state.current);
-  const report = useCallback(
-    (message: string): void => setError(message.replace(/^Error: Error invoking remote method '[^']+': Error: /, '')),
-    []
-  );
-
   const focusEditor = (): void => {
     setPanel(null);
     setLeader(false);
@@ -283,88 +168,6 @@ export default function App(): React.JSX.Element {
     setActive(id);
     focusEditor();
   };
-
-  useEffect(
-    () =>
-      window.nido.onEvent((event) => {
-        switch (event.type) {
-          case 'state': {
-            setStates((old) => ({ ...old, [event.id]: event.state }));
-            break;
-          }
-          case 'redraw': {
-            for (const [name, ...calls] of event.events) {
-              if (name === 'mode_change') {
-                mode.current[event.id] = String(calls.at(-1)?.[0]);
-              }
-            }
-            break;
-          }
-          case 'error': {
-            report(event.message);
-            break;
-          }
-          case 'exit': {
-            setWorkspaces((old) =>
-              old
-                .filter((w) => w.id !== event.id)
-                .map((w) => (w.terminalId === event.id ? { ...w, terminalId: undefined } : w))
-            );
-            setStates((old) => {
-              const next = { ...old };
-              delete next[event.id];
-              return next;
-            });
-            break;
-          }
-        }
-      }),
-    [report]
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    void window.nido
-      .restoreWorkspaces()
-      .then((result) => {
-        if (cancelled) {
-          return;
-        }
-        setWorkspaces(result.workspaces);
-        setActive(result.active);
-        if (result.errors.length) {
-          report(result.errors.join('\n'));
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          report(String(e));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setRestoring(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [report]);
-
-  useEffect(() => {
-    if (!restoring) {
-      void window.nido
-        .workspaceLayout(
-          workspaces.map((w) => w.id),
-          active
-        )
-        .catch((e) => report(String(e)));
-    }
-  }, [workspaces, active, restoring, report]);
-
-  useEffect(() => {
-    localStorage.setItem('nido.fontSize', String(fontSize));
-  }, [fontSize]);
 
   useEffect(() => {
     if (panel !== 'files' || !active) {
@@ -556,61 +359,15 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className={styles.app} data-animations={animations} data-pointer-hidden={pointerHidden}>
-      <header className={styles.titlebar}>
-        <div className={styles.brand}>
-          <Leaf size={22} />
-          <span>Nido</span>
-        </div>
-        <div className={styles.workspaces} role="tablist" aria-label="Workspaces">
-          {workspaces.map((w, i) => (
-            <div key={w.id} className={`${styles.workspaceTab} ${active === w.id ? styles.activeWorkspace : ''}`}>
-              <button
-                role="tab"
-                aria-selected={active === w.id}
-                aria-label={`Workspace ${w.name}`}
-                onClick={() => activate(w.id)}
-              >
-                <span
-                  className={styles.workspaceDot}
-                  style={{
-                    background: ['#a3cc94', '#b5a0dd', '#d5b77f', '#83bcd0'][i % 4]
-                  }}
-                />
-                <span>{w.name}</span>
-                <kbd>Alt+{i + 1}</kbd>
-              </button>
-              <button
-                className={styles.tabClose}
-                aria-label={`Close workspace ${w.name}`}
-                onClick={() => closeWorkspace(w.id)}
-              >
-                <X size={12} />
-              </button>
-            </div>
-          ))}
-          <button
-            className={styles.addWorkspace}
-            title="Open workspace (Ctrl+Shift+N)"
-            aria-label="Open workspace"
-            disabled={creating}
-            onClick={() => void create()}
-          >
-            <Plus size={19} />
-          </button>
-        </div>
-        <div className={styles.dragArea} />
-        <div className={styles.windowControls}>
-          <button aria-label="Minimize" onClick={() => run(window.nido.windowAction('minimize'))}>
-            <Minus size={15} />
-          </button>
-          <button aria-label="Maximize or restore" onClick={() => run(window.nido.windowAction('maximize'))}>
-            <Square size={12} />
-          </button>
-          <button aria-label="Close Nido" onClick={() => run(window.nido.windowAction('close'))}>
-            <X size={17} />
-          </button>
-        </div>
-      </header>
+      <TitleBar
+        workspaces={workspaces}
+        active={active}
+        creating={creating}
+        activate={activate}
+        closeWorkspace={closeWorkspace}
+        create={create}
+        run={run}
+      />
       <div className={styles.body}>
         <nav className={styles.rail} aria-label="Navigation">
           <button
@@ -665,120 +422,16 @@ export default function App(): React.JSX.Element {
           ))}
         <main id="editor-preview-host" className={styles.main}>
           {workspace ? (
-            <>
-              <div className={styles.fileTabs} role="tablist" aria-label="Files" hidden={workspace.kind === 'terminal'}>
-                {state.buffers.map((buffer) => {
-                  const decoration = decorations[gitFileKey(buffer.name)];
-                  return (
-                    <div
-                      key={buffer.id}
-                      className={`${styles.fileTab} ${state.current === buffer.id ? styles.activeFile : ''}`}
-                    >
-                      <button
-                        role="tab"
-                        aria-selected={state.current === buffer.id}
-                        title={buffer.name}
-                        onClick={() => {
-                          run(window.nido.selectBuffer(active, buffer.id));
-                          focusEditor();
-                        }}
-                      >
-                        <FileIcon path={buffer.name} />
-                        <span
-                          className={styles.gitName}
-                          data-status={decoration?.code || undefined}
-                          data-diagnostic={decoration?.diagnostic}
-                        >
-                          {filename(buffer.name)}
-                        </span>
-                        {decoration?.diagnostic && (
-                          <span
-                            className={styles.gitBadge}
-                            data-diagnostic={decoration.diagnostic}
-                            title={`Diagnostics: ${decoration.diagnostic}`}
-                            aria-label={`Diagnostics: ${decoration.diagnostic}`}
-                          >
-                            !
-                          </span>
-                        )}
-                        {decoration?.code && (
-                          <span
-                            className={styles.gitBadge}
-                            data-status={decoration.code}
-                            title={decoration.title}
-                            aria-label={decoration.title}
-                          >
-                            {decoration.code}
-                          </span>
-                        )}
-                        {buffer.modified && <span className={styles.unsaved} aria-label="Unsaved" />}
-                      </button>
-                      <button
-                        className={styles.tabClose}
-                        aria-label={`Close file ${filename(buffer.name)}`}
-                        onClick={() => run(window.nido.closeBuffer(active, buffer.id))}
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className={styles.breadcrumb}>
-                <span>{workspace.name}</span>
-                <ChevronRight size={13} />
-                <span>
-                  {workspace.kind === 'terminal'
-                    ? workspace.root
-                    : current?.name
-                      ? current.name
-                          .replace(workspace.root, '')
-                          .replace(/^[\\/]/, '')
-                          .replaceAll('\\', ' / ')
-                      : 'Untitled'}
-                </span>
-                {workspace.kind === 'terminal' ? (
-                  <button
-                    className={styles.restartShell}
-                    title="Restart shell (Ctrl+Shift+R)"
-                    onClick={() => restartShell(active)}
-                  >
-                    Restart shell <kbd>Ctrl Shift R</kbd>
-                  </button>
-                ) : (
-                  <span className={styles.breadcrumbHint}>SPACE for commands</span>
-                )}
-              </div>
-            </>
+            <FileHeader
+              workspace={workspace}
+              state={state}
+              decorations={decorations}
+              focusEditor={focusEditor}
+              restartShell={restartShell}
+              run={run}
+            />
           ) : (
-            <section className={styles.welcome}>
-              <div className={styles.welcomeMark}>
-                <Leaf size={43} strokeWidth={1.4} />
-              </div>
-              <p className={styles.eyebrow}>A PLACE FOR YOUR CODE</p>
-              <h1>Make yourself at home.</h1>
-              <p>
-                Your projects, together.
-                <br />
-                The Neovim you know. A little more room to think.
-              </p>
-              <button className={styles.primary} disabled={creating} onClick={() => void create()}>
-                <FolderOpen size={18} />
-                {creating ? 'Starting Neovim…' : 'Open a workspace'}
-                <ArrowRight size={17} />
-              </button>
-              <div className={styles.welcomeKeys}>
-                <span>
-                  <kbd>Ctrl Shift N</kbd> Open workspace
-                </span>
-                <span>
-                  <kbd>Ctrl Shift P</kbd> All commands
-                </span>
-              </div>
-              <div className={styles.welcomeNote}>
-                <span className={styles.liveDot} /> Every workspace runs its own Neovim session.
-              </div>
-            </section>
+            <Welcome creating={creating} create={create} />
           )}
           {workspaces.map((w) => (
             <Editor
@@ -801,31 +454,7 @@ export default function App(): React.JSX.Element {
               )}
             </Editor>
           ))}
-          {leader && (
-            <div className={styles.leader} role="dialog" aria-label="Keyboard commands">
-              <div className={styles.leaderTitle}>
-                <kbd>SPACE</kbd>
-                <span>Where to?</span>
-                <button aria-label="Dismiss commands" onClick={focusEditor}>
-                  <X size={14} />
-                </button>
-              </div>
-              <div className={styles.leaderGrid}>
-                {commands
-                  .filter((c) => ['w', 'f', 'b', 'e', 'n', ',', 's', 'x', 'g', 'D'].includes(c.key))
-                  .map((c) => (
-                    <button key={c.key} onClick={c.run}>
-                      <kbd>{c.key === 'D' ? 'Shift+D' : c.key}</kbd>
-                      {c.title}
-                    </button>
-                  ))}
-              </div>
-              <footer>
-                <span>Space again for all commands</span>
-                <span>Esc to dismiss</span>
-              </footer>
-            </div>
-          )}
+          {leader && <KeyboardGuide commands={commands} focusEditor={focusEditor} />}
           {workspaces
             .filter((w) => w.terminalId)
             .map((w) => (
@@ -897,85 +526,26 @@ export default function App(): React.JSX.Element {
           }}
         />
       )}
-      <footer className={styles.statusbar}>
-        <span className={styles.mode} data-mode={displayMode}>
-          {displayMode}
-        </span>
-        {active && (
-          <button aria-label="Toggle terminal" onClick={toggleTerminal}>
-            Terminal
-          </button>
-        )}
-        {active && (
-          <button
-            aria-label="Toggle debugger"
-            onClick={() => {
-              setBottomPanel('debug');
-              setDebugVisible(bottomPanel !== 'debug' || !debugVisible);
-            }}
-          >
-            Debug
-          </button>
-        )}
-        {state.references && (
-          <button
-            aria-label="Toggle references"
-            onClick={() => {
-              setBottomPanel('references');
-              setReferencesVisible(bottomPanel !== 'references' || !referencesVisible);
-              setReferencesFocusTick((value) => value + 1);
-            }}
-          >
-            References
-          </button>
-        )}
-        <span className={styles.statusWorkspace}>{workspace?.name || 'Welcome to Nido'}</span>
-        <span className={styles.statusDivider} />
-        <span className={styles.sessionCount}>
-          {workspaces.length} {workspaces.length === 1 ? 'session' : 'sessions'}
-        </span>
-        <span className={styles.statusGap} />
-        {state.lspProgress && (
-          <span className={styles.lspProgress} role="status" title={state.lspProgress}>
-            <span className={styles.progressSpinner} aria-hidden="true" />
-            <span>{state.lspProgress}</span>
-          </span>
-        )}
-        <span>{state.filetype || 'Plain text'}</span>
-        {state.filetype === 'rust' && (
-          <span title="Rust language server connection">{state.lsp || 'Rust LSP: not connected'}</span>
-        )}
-        <span>UTF-8</span>
-        {active && workspace?.kind !== 'terminal' && state.lineEnding && (
-          <select
-            className={styles.lineEnding}
-            aria-label="Line endings"
-            title="Convert line endings (save to apply to disk)"
-            value={state.lineEnding}
-            onChange={(event) => {
-              run(window.nido.setLineEnding(active, event.target.value as 'LF' | 'CRLF'));
-              focusEditor();
-            }}
-          >
-            {state.lineEnding === 'Mixed' && (
-              <option value="Mixed" disabled>
-                Mixed
-              </option>
-            )}
-            {state.lineEnding === 'CR' && (
-              <option value="CR" disabled>
-                CR
-              </option>
-            )}
-            <option value="LF">LF</option>
-            <option value="CRLF">CRLF</option>
-          </select>
-        )}
-        <span>
-          Ln {state.line}, Col {state.column}
-        </span>
-        <Code2 size={15} />
-      </footer>
+      <StatusBar
+        active={active}
+        workspace={workspace}
+        state={state}
+        sessionCount={workspaces.length}
+        onToggleTerminal={toggleTerminal}
+        onToggleDebugger={() => {
+          setBottomPanel('debug');
+          setDebugVisible(bottomPanel !== 'debug' || !debugVisible);
+        }}
+        onToggleReferences={() => {
+          setBottomPanel('references');
+          setReferencesVisible(bottomPanel !== 'references' || !referencesVisible);
+          setReferencesFocusTick((value) => value + 1);
+        }}
+        onLineEnding={(format) => {
+          run(window.nido.setLineEnding(active, format));
+          focusEditor();
+        }}
+      />
       {error && (
         <div className={styles.error} role="alert">
           <span>{error}</span>
@@ -991,19 +561,8 @@ export default function App(): React.JSX.Element {
         </div>
       )}
       <PanelComponent
+        settings={settings}
         workspaceId={active}
-        animations={animations}
-        smoothCursor={smoothCursor}
-        smoothBlink={smoothBlink}
-        setSmoothBlink={setSmoothBlink}
-        setSmoothCursor={setSmoothCursor}
-        setAnimations={setAnimations}
-        scrollFollowCursor={scrollFollowCursor}
-        setScrollFollowCursor={setScrollFollowCursor}
-        formatOnSave={formatOnSave}
-        clipboardSharing={clipboardSharing}
-        setClipboardSharing={setClipboardSharing}
-        setFormatOnSave={setFormatOnSave}
         initialFolder={workspace?.root || ''}
         creating={creating || restoring}
         openWorkspace={openWorkspace}
@@ -1014,14 +573,8 @@ export default function App(): React.JSX.Element {
         loading={loading}
         modal={modal}
         focusEditor={focusEditor}
-        fontSize={fontSize}
-        setFontSize={setFontSize}
-        sidebar={sidebar}
-        setSidebar={setSidebar}
         setQuery={setQuery}
         setSelection={setSelection}
-        fontFamily={fontFamily}
-        setFontFamily={setFontFamily}
       />
     </div>
   );
