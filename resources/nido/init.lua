@@ -32,6 +32,29 @@ vim.o.fillchars = 'eob: '
 vim.cmd('syntax enable')
 vim.cmd('filetype plugin indent on')
 vim.opt.completeopt = { 'menu', 'menuone', 'noselect' }
+vim.o.pumheight = 10
+vim.keymap.set('i', '<Tab>', function()
+  if vim.fn.pumvisible() == 1 then
+    return vim.fn.complete_info({'selected'}).selected < 0 and '<C-n><C-y>' or '<C-y>'
+  end
+  return '<Tab>'
+end, { expr = true, silent = true })
+vim.api.nvim_create_autocmd('TextChangedI', {
+  callback = function(event)
+    local buffer = event.buf
+    local tick = vim.api.nvim_buf_get_changedtick(buffer)
+    if not vim.api.nvim_get_current_line():sub(1, vim.fn.col('.') - 1):match('[%w_\128-\255]$') then return end
+    vim.defer_fn(function()
+      if vim.api.nvim_buf_is_valid(buffer) and vim.api.nvim_get_current_buf() == buffer
+          and vim.api.nvim_buf_get_changedtick(buffer) == tick and vim.fn.mode() == 'i'
+          and vim.fn.pumvisible() == 0
+          and #vim.lsp.get_clients({bufnr=buffer, method='textDocument/completion'}) > 0 then
+        -- Ordinary text uses an invoked request: servers may reject letters as trigger characters.
+        vim.lsp.completion.get()
+      end
+    end, 120)
+  end,
+})
 vim.diagnostic.config({
   virtual_text = { spacing = 2, prefix = '●' },
   signs = { text = { [1] = 'E', [2] = 'W', [3] = 'I', [4] = 'H' } },

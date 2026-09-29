@@ -17,6 +17,9 @@ import { SessionFiles } from './sessionFiles';
 import { SessionClient } from './sessionClient';
 
 const gridEvents = new Set([
+    'popupmenu_show',
+    'popupmenu_select',
+    'popupmenu_hide',
     'grid_resize',
     'grid_clear',
     'grid_line',
@@ -279,7 +282,7 @@ export class Session {
             await this.client.request('nvim_ui_attach', [
                 columns,
                 rows,
-                { rgb: true, ext_linegrid: true }
+                { rgb: true, ext_linegrid: true, ext_popupmenu: true }
             ]);
             this.emit({ type: 'state', id: this.workspace.id, state: this.state });
         } catch (error) {

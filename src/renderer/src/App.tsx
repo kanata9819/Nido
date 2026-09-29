@@ -123,8 +123,8 @@ export default function App(): React.JSX.Element {
 
     const workspace = workspaces.find((w) => w.id === active);
     const decorations = useMemo(
-        () => fileDecorations(workspace?.root || '', gitFiles, state.diagnostics),
-        [workspace?.root, gitFiles, state.diagnostics]
+        () => fileDecorations(workspace?.root || '', gitFiles, state.diagnostics, state.problems),
+        [workspace?.root, gitFiles, state.diagnostics, state.problems]
     );
     const focusEditor = (): void => {
         setPanel(null);

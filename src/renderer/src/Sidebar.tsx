@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { ChevronDown, ChevronRight, Folder, FolderOpen, RefreshCw } from 'lucide-react';
 import FileIcon from './components/FileIcon';
+import DiagnosticBadges from './components/DiagnosticBadges';
 import type { FileEntry, Workspace } from '../../shared/types';
 import { getVisibleEntries } from './sidebarTree';
 import { toggle } from './sidebarToggle';
@@ -218,16 +219,7 @@ export default function Sidebar({
                             >
                                 {entry.name}
                             </span>
-                            {decoration?.diagnostic && (
-                                <span
-                                    className={styles.gitBadge}
-                                    data-diagnostic={decoration.diagnostic}
-                                    title={`Diagnostics: ${decoration.diagnostic}`}
-                                    aria-label={`Diagnostics: ${decoration.diagnostic}`}
-                                >
-                                    !
-                                </span>
-                            )}
+                            <DiagnosticBadges decoration={decoration} />
                             {decoration?.code && (
                                 <span
                                     className={styles.gitBadge}

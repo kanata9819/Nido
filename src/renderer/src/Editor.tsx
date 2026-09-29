@@ -5,6 +5,7 @@ import { useEditorRendering } from './hooks/useEditorRendering';
 import { useEditorInput } from './hooks/useEditorInput';
 import styles from './assets/Nido.module.css';
 import TypeInformation from './components/TypeInformation';
+import CompletionMenu from './components/CompletionMenu';
 
 interface Props {
     scrollFollowCursor?: boolean;
@@ -193,6 +194,9 @@ export default function Editor({
                 aria-label={terminal ? 'Terminal display' : 'Neovim editor display'}
             />
             {children}
+            {!terminal && (
+                <CompletionMenu id={id} grid={grid} input={input} fontFamily={fontFamily} onError={onError} hidden={blocked} />
+            )}
             {active && !blocked && !terminal && (
                 <TypeInformation id={id} input={input} fontFamily={fontFamily} />
             )}

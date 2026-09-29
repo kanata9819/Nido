@@ -361,10 +361,12 @@
     color: #9aa6b0;
 }
 .gitName[data-diagnostic='warning'],
+.diagnosticCount[data-diagnostic='warning'],
 .gitBadge[data-diagnostic='warning'] {
     color: #d9b777;
 }
 .gitName[data-diagnostic='error'],
+.diagnosticCount[data-diagnostic='error'],
 .gitBadge[data-diagnostic='error'] {
     color: #e59b96;
 }
@@ -372,6 +374,17 @@
     background: #141414;
     border-top-color: #a3cc94;
     color: #f0f1f4;
+}
+.diagnosticCount {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+.diagnosticCount svg {
+    color: currentColor;
 }
 .unsaved {
     width: 7px;

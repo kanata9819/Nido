@@ -4,6 +4,7 @@ import type { Workspace, SessionState } from '../../../shared/types';
 import { gitFileKey, type Decoration } from '../fileDecorations';
 import { filename } from '../commands';
 import FileIcon from './FileIcon';
+import DiagnosticBadges from './DiagnosticBadges';
 import styles from '../assets/Nido.module.css';
 
 interface FileHeaderProps {
@@ -63,16 +64,7 @@ export default function FileHeader({
                                 >
                                     {filename(buffer.name)}
                                 </span>
-                                {decoration?.diagnostic && (
-                                    <span
-                                        className={styles.gitBadge}
-                                        data-diagnostic={decoration.diagnostic}
-                                        title={`Diagnostics: ${decoration.diagnostic}`}
-                                        aria-label={`Diagnostics: ${decoration.diagnostic}`}
-                                    >
-                                        !
-                                    </span>
-                                )}
+                                <DiagnosticBadges decoration={decoration} />
                                 {decoration?.code && (
                                     <span
                                         className={styles.gitBadge}

@@ -715,6 +715,11 @@ test('Neovim publishes and clears diagnostics including unopened files', async (
         assert.equal(gitFileKey(entries[0][0]), gitFileKey(path));
         assert.equal(entries[0][1], 1);
         assert.equal(session.state.problems?.length, 2);
+        const decorations = fileDecorations(root, {}, session.state.diagnostics, session.state.problems);
+        assert.equal(decorations[gitFileKey(path)].errors, 1);
+        assert.equal(decorations[gitFileKey(path)].warnings, 1);
+        assert.equal(decorations[gitFileKey(root)].errors, 1);
+        assert.equal(decorations[gitFileKey(root)].warnings, 1);
         const version = session.state.diagnosticsVersion!;
         await session.openProblem(1, version);
         assert.equal(await session.client.request('nvim_eval', ["expand('%:p')"]), path);
@@ -727,6 +732,7 @@ test('Neovim publishes and clears diagnostics including unopened files', async (
         }
         assert.deepEqual(session.state.diagnostics, {});
         assert.deepEqual(session.state.problems, []);
+        assert.deepEqual(fileDecorations(root, {}, session.state.diagnostics, session.state.problems), {});
         await assert.rejects(session.openProblem(1, version), /Problems have changed/);
     } finally {
         await session?.stop();

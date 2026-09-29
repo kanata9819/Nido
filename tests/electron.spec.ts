@@ -127,6 +127,79 @@ test('file tabs scroll into view when switching hidden buffers with Shift H and 
     }
 });
 
+test('completion opens on typing and Ctrl Space, accepts with Tab, and files show diagnostic counts', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-completion-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+    await writeFile(join(workspace, 'tsconfig.json'), '{}');
+    await writeFile(join(workspace, 'main.ts'), 'const amount = 1;\n');
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`], env
+    });
+    try {
+        const page = await running.firstWindow();
+        await page.setViewportSize({ width: 1100, height: 720 });
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        const input = page.getByRole('textbox', { name: 'Neovim input' });
+        await expect(input).toBeFocused();
+        await page.keyboard.type(':edit main.ts');
+        await page.keyboard.press('Enter');
+        const canvas = page.locator('canvas:visible');
+        await expect(canvas).toHaveAttribute('aria-description', /const amount/);
+        await page.keyboard.type(":lua assert(vim.wait(20000, function() local c = vim.lsp.get_clients({bufnr=0})[1]; return c and c.initialized end, 50)); print('COMPLETION_READY')");
+        await page.keyboard.press('Enter');
+        await expect(canvas).toHaveAttribute('aria-description', /COMPLETION_READY/, { timeout: 25000 });
+        await page.keyboard.type(":lua vim.diagnostic.set(vim.api.nvim_create_namespace('nido-test'), 0, {{lnum=0,col=0,severity=1,message='Error 1'}, {lnum=0,col=0,severity=1,message='Error 2'}, {lnum=0,col=0,severity=2,message='Warning 1'}, {lnum=0,col=0,severity=2,message='Warning 2'}, {lnum=0,col=0,severity=2,message='Warning 3'}})");
+        await page.keyboard.press('Enter');
+        const tabs = page.getByRole('tablist', { name: 'Files', exact: true });
+        const tree = page.getByRole('tree', { name: 'Project files' });
+        for (const host of [tabs, tree]) {
+            await expect(host.getByLabel('2 errors', { exact: true })).toBeVisible();
+            await expect(host.getByLabel('3 warnings', { exact: true })).toBeVisible();
+        }
+        await page.keyboard.type('Goam');
+        const menu = page.getByRole('listbox', { name: 'Code completion' });
+        await expect(menu).toBeVisible({ timeout: 15000 });
+        await expect(menu.getByRole('option').first()).toContainText('amount');
+        await page.keyboard.press('Tab');
+        await expect(menu).toHaveCount(0);
+        await expect(canvas).toHaveAttribute('aria-description', /amount/);
+        await page.keyboard.type('.to');
+        await expect(menu.getByRole('option').filter({ hasText: 'toFixed' })).toBeVisible();
+        await page.keyboard.press('Control+e');
+        await expect(menu).toHaveCount(0);
+        await page.keyboard.press('Control+Space');
+        await expect(menu).toBeVisible();
+        const index = (await menu.getByRole('option').allTextContents()).findIndex(text => text.includes('toFixed'));
+        expect(index).toBeGreaterThanOrEqual(0);
+        for (let step = 0; step <= index; step++) await page.keyboard.press('ArrowDown');
+        await expect(menu.getByRole('option').nth(index)).toHaveAttribute('aria-selected', 'true');
+        await expect(input).toBeFocused();
+        await page.screenshot({ path: 'test-results/nido-completion.png' });
+        await page.keyboard.press('Tab');
+        await expect(menu).toHaveCount(0);
+        await expect(canvas).toHaveAttribute('aria-description', /amount.toFixed/);
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Control+s');
+        await expect.poll(() => readFile(join(workspace, 'main.ts'), 'utf8')).toContain('amount.toFixed');
+        await page.keyboard.type(':edit note.txt');
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('i');
+        await page.keyboard.press('Tab');
+        await page.keyboard.type('plain');
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Control+s');
+        await expect.poll(() => readFile(join(workspace, 'note.txt'), 'utf8')).toMatch(/^  plain\r?\n$/);
+    } finally {
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('typing hides the pointer and moving or clicking restores it', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-pointer-'));
     const env = { ...process.env };
@@ -1280,7 +1353,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
             );
             await page.keyboard.press('Enter');
             await expect(
-                fileTabs.getByLabel(`Diagnostics: ${label}`, { exact: true })
+                fileTabs.getByLabel(`1 ${label}`, { exact: true })
             ).toBeVisible();
             await expect(fileTabs.getByText('main.rs', { exact: true })).toHaveCSS('color', color);
             await expect(explorer.getByText('main.rs', { exact: true })).toHaveCSS('color', color);
