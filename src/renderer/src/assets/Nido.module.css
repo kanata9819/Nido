@@ -681,6 +681,9 @@
     flex-shrink: 0;
     white-space: nowrap;
 }
+.searchStatus { display: inline-flex; align-items: center; gap: 7px; padding: 2px 7px; border: 1px solid #49644e; border-radius: 6px; background: #26372b; color: #bddab4; }
+.searchStatus strong { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.searchStatus button { display: inline-flex; padding: 1px; }
 .mode {
     background: #9ac78b;
     color: #18271b;
@@ -1004,6 +1007,23 @@
     margin-left: auto;
     color: #7d8b97;
 }
+.explorerDialog {
+    margin: auto;
+    color: #e0e7eb;
+    padding: 0;
+    max-width: calc(100vw - 40px);
+}
+.explorerDialog:not([open]) { display: none; }
+.explorerDialog::backdrop { background: #090d1280; }
+.explorerDialog button:focus-visible { outline: 1px solid #a8cf9e; outline-offset: -2px; }
+.explorerDialog button:disabled { opacity: 0.4; }
+.explorerForm { display: flex; flex-direction: column; gap: 12px; padding: 0 16px 16px; font-size: 13px; }
+.explorerForm label { color: #94a39a; }
+.explorerForm .paletteInput { margin: 0; }
+.explorerForm [role='alert'] { color: #ef9a9a; }
+.explorerActions { display: flex; justify-content: flex-end; gap: 10px; }
+.explorerActions button { padding: 9px 14px; border: 1px solid #435049; border-radius: 6px; }
+.explorerActions button[type='submit'] { background: #304538; }
 .paletteInput {
     background: #121416;
     color: #e0e7eb;

@@ -55,7 +55,7 @@ export function useKeyboardShortcuts({
     activate
 }: UseKeyboardShortcutsParams): (event: KeyboardEvent) => void {
     const keydown = (event: KeyboardEvent): void => {
-        if (document.activeElement?.closest('[data-type-information]')) {
+        if (document.activeElement?.closest('[data-type-information], [data-explorer-commands]')) {
             return;
         }
         if (event.isComposing || event.keyCode === 229) {
@@ -69,6 +69,11 @@ export function useKeyboardShortcuts({
         const focusedLabel = document.activeElement?.getAttribute('aria-label');
         const terminalFocused = focusedLabel === 'Terminal input';
         const isNormalMode = (mode.current[active] || 'normal') === 'normal';
+        if (focusedLabel === 'Neovim input' && isNormalMode && event.ctrlKey && !event.altKey && !event.metaKey && ['*', '#'].includes(event.key)) {
+            consume();
+            run(window.nido.input(active, event.key));
+            return;
+        }
 
         if (event.key === 'Escape') {
             if (panel === 'git') {

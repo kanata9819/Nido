@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { ChevronDown, ChevronRight, Folder, FolderOpen, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, FolderOpen, RefreshCw, Command } from 'lucide-react';
+import ExplorerCommands, { type FileRequest } from './components/ExplorerCommands';
 import FileIcon from './components/FileIcon';
 import DiagnosticBadges from './components/DiagnosticBadges';
 import type { FileEntry, Workspace } from '../../shared/types';
@@ -35,12 +36,13 @@ export default function Sidebar({
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
     const [selected, setSelected] = useState('');
     const [revision, setRevision] = useState(0);
+    const tree = useRef<HTMLDivElement>(null);
+    const [operation, setOperation] = useState<{ request?: FileRequest }>();
+    const [clipboard, setClipboard] = useState<{ path: string; name: string; cut: boolean }>();
     useEffect(
         () =>
             window.nido.onEvent((event) => {
                 if (event.type === 'filesChanged' && event.id === workspace.id) {
-                    setExpanded(new Set());
-                    setSelected('');
                     setRevision((value) => value + 1);
                 }
             }),
@@ -57,11 +59,19 @@ export default function Sidebar({
 
     useEffect(() => {
         let cancelled = false;
-        window.nido
-            .files(workspace.id, '')
+        Promise.all(
+            ['', ...expanded].map(async (path) => {
+                try {
+                    return [path, await window.nido.files(workspace.id, path)] as const;
+                } catch (error) {
+                    if (!path || !String(error).includes('ENOENT')) throw error;
+                    return [path, []] as const;
+                }
+            })
+        )
             .then((files) => {
                 if (!cancelled) {
-                    setEntries({ '': files });
+                    setEntries(Object.fromEntries(files));
                 }
             })
             .catch((e) => {
@@ -76,6 +86,73 @@ export default function Sidebar({
 
     const visible = getVisibleEntries(entries, expanded);
     const rootDecoration = gitFiles[gitFileKey(workspace.root).replace(/\/$/, '')];
+    const item = visible.find((entry) => entry.path === selected);
+    const parent = item
+        ? item.directory
+            ? item.path
+            : item.path.replace(/[\\/]?[^\\/]+$/, '')
+        : '';
+    const child = (name: string): string => (parent ? `${parent}/${name}` : name);
+    const treePath = (path: string): string =>
+        path.replace(/[\\/]/g, workspace.root.includes('\\') ? '\\' : '/');
+    const closeOperation = (): void => {
+        setOperation(undefined);
+        requestAnimationFrame(() => tree.current?.focus());
+    };
+    const request = (
+        action: FileRequest['action'],
+        title: string,
+        value: string,
+        path = item?.path || ''
+    ): void => setOperation({ request: { action, title, value, path } });
+    const copy = (cut: boolean): void => {
+        if (!item) return;
+        setClipboard({ path: item.path, name: item.name, cut });
+        closeOperation();
+    };
+    const paste = (): void => {
+        if (!clipboard) return;
+        const destination = child(clipboard.name);
+        const value =
+            destination.replace(/\\/g, '/') === clipboard.path.replace(/\\/g, '/')
+                ? child(clipboard.name.replace(/(\.[^.]*)?$/, ' copy$1'))
+                : destination;
+        request(
+            clipboard.cut ? 'rename' : 'copy',
+            clipboard.cut ? 'Move here' : 'Paste copy',
+            value,
+            clipboard.path
+        );
+    };
+    const commands = [
+        { title: 'New file', key: 'a', run: () => request('createFile', 'New file', child('')) },
+        {
+            title: 'New folder',
+            key: 'A',
+            run: () => request('createDirectory', 'New folder', child(''))
+        },
+        {
+            title: 'Rename',
+            key: 'r',
+            disabled: !item,
+            run: () => request('rename', 'Rename', item!.name)
+        },
+        {
+            title: 'Move to…',
+            key: 'm',
+            disabled: !item,
+            run: () => request('rename', 'Move to…', item!.path)
+        },
+        { title: 'Copy', key: 'c', disabled: !item, run: () => copy(false) },
+        { title: 'Cut', key: 'x', disabled: !item, run: () => copy(true) },
+        { title: 'Paste', key: 'p', disabled: !clipboard, run: paste },
+        {
+            title: 'Delete',
+            key: 'd',
+            disabled: !item,
+            run: () => request('delete', 'Delete', '', item!.path)
+        }
+    ];
 
     return (
         <aside
@@ -85,6 +162,7 @@ export default function Sidebar({
             style={{ width }}
             onKeyDownCapture={(event) => {
                 if (
+                    (event.target as Element).closest('[data-explorer-commands]') ||
                     event.nativeEvent.isComposing ||
                     event.keyCode === 229 ||
                     event.ctrlKey ||
@@ -152,6 +230,13 @@ export default function Sidebar({
                     {workspace.name}
                 </span>
                 <button
+                    title="Explorer commands (:)"
+                    aria-label="Explorer commands"
+                    onClick={() => setOperation({})}
+                >
+                    <Command size={14} />
+                </button>
+                <button
                     title="Refresh files"
                     aria-label="Refresh files"
                     onClick={() => void load('')}
@@ -160,22 +245,52 @@ export default function Sidebar({
                 </button>
             </div>
             <div
+                ref={tree}
                 className={styles.tree}
                 role="tree"
                 tabIndex={0}
                 aria-label="Project files"
-                title="j/k Select · Ctrl+D/U Half page · Ctrl+F/B Page · gg/G First / Last"
+                title="j/k Select · : Commands · a/A New file/folder · F2 Rename · Ctrl+C/X/V Copy/Cut/Paste · Delete"
                 aria-activedescendant={selected ? `file-${workspace.id}-${selected}` : undefined}
-                onKeyDown={createOnKeyDown({
-                    visible,
-                    selected,
-                    expanded,
-                    setSelected,
-                    setExpanded,
-                    load,
-                    onOpen,
-                    workspaceId: workspace.id
-                })}
+                onKeyDown={(event) => {
+                    if (event.nativeEvent.isComposing || event.altKey || event.metaKey) return;
+                    if (
+                        event.key === ':' ||
+                        event.key === 'ContextMenu' ||
+                        (event.shiftKey && event.key === 'F10')
+                    ) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setOperation({});
+                        return;
+                    }
+                    const key = event.ctrlKey
+                        ? ({ c: 'c', x: 'x', v: 'p' } as Record<string, string>)[
+                              event.key.toLowerCase()
+                          ]
+                        : event.key === 'F2'
+                          ? 'r'
+                          : event.key === 'Delete'
+                            ? 'd'
+                            : event.key;
+                    const command = commands.find((command) => command.key === key);
+                    if (command) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (!command.disabled) command.run();
+                        return;
+                    }
+                    createOnKeyDown({
+                        visible,
+                        selected,
+                        expanded,
+                        setSelected,
+                        setExpanded,
+                        load,
+                        onOpen,
+                        workspaceId: workspace.id
+                    })(event);
+                }}
             >
                 {visible.map((entry) => {
                     const decoration = gitFiles[gitFileKey(`${workspace.root}/${entry.path}`)];
@@ -190,6 +305,11 @@ export default function Sidebar({
                             data-ignored={entry.ignored || undefined}
                             className={`${styles.treeItem} ${selected === entry.path ? styles.treeSelected : ''} ${currentFile.endsWith(entry.path) ? styles.currentFile : ''}`}
                             style={{ '--tree-depth': entry.depth } as CSSProperties}
+                            onContextMenu={(event) => {
+                                event.preventDefault();
+                                setSelected(entry.path);
+                                setOperation({});
+                            }}
                             onClick={() =>
                                 toggle({ entry, expanded, setExpanded, setSelected, onOpen, load })
                             }
@@ -237,13 +357,45 @@ export default function Sidebar({
                     <p className={styles.emptyTree}>
                         No files yet.
                         <br />
-                        Use <code>:e filename</code> to create one.
+                        Press <kbd>a</kbd> for a file or <kbd>A</kbd> for a folder.
                     </p>
                 )}
             </div>
             <div className={styles.sidebarFooter}>
-                <span className={styles.liveDot} /> Independent session <kbd>Space w</kbd>
+                <span className={styles.liveDot} />{' '}
+                {clipboard
+                    ? `${clipboard.cut ? 'Cut' : 'Copied'}: ${clipboard.name}`
+                    : 'File commands'}{' '}
+                <kbd>:</kbd>
             </div>
+            {operation && (
+                <ExplorerCommands
+                    workspaceId={workspace.id}
+                    request={operation.request}
+                    commands={commands}
+                    onClose={closeOperation}
+                    onDone={(path) => {
+                        setRevision(value => value + 1);
+                        setSelected(treePath(path));
+                        setExpanded((old) => {
+                            const next = new Set(old);
+                            const parts = path.split(/[\\/]/);
+                            parts.pop();
+                            while (parts.length) {
+                                next.add(treePath(parts.join('/')));
+                                parts.pop();
+                            }
+                            return next;
+                        });
+                        if (
+                            clipboard?.cut &&
+                            operation.request?.action === 'rename' &&
+                            operation.request.path === clipboard.path
+                        )
+                            setClipboard(undefined);
+                    }}
+                />
+            )}
         </aside>
     );
 }

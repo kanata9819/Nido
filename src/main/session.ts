@@ -6,6 +6,7 @@ import type {
     DebugAction,
     DebugState,
     FileEntry,
+    FileAction,
     NidoEvent,
     Redraw,
     ReferencePreview,
@@ -619,6 +620,10 @@ return ok and "" or tostring(err)`,
             throw new Error('Open an Editor session to edit files.');
         }
         await this.fileService.openFile(relativePath);
+    }
+
+    async fileAction(action: FileAction, path: string, target: string, trash: (path: string) => Promise<void>): Promise<void> {
+        await this.fileService.fileAction(action, path, target, trash);
     }
 
     async openReference(index: number, version: number): Promise<void> {

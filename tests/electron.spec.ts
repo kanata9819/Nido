@@ -5,6 +5,128 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+test('Ctrl star and hash searches show readable matches, counts and controls', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-word-search-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+    await writeFile(join(workspace, 'words.txt'), 'alpha beta alpha\nalpha\n');
+    const env = {...process.env};
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({args:['.', `--user-data-dir=${join(root, 'profile')}`], env});
+    try {
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', {name:'Make yourself at home.'})).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        const input = page.getByRole('textbox', {name:'Neovim input'});
+        await expect(input).toBeFocused();
+        await page.keyboard.type(':edit words.txt');
+        await page.keyboard.press('Enter');
+        await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /alpha beta alpha/);
+        await page.keyboard.press('Escape');
+        await page.keyboard.type('gg0');
+        await page.keyboard.press('Control+Shift+*');
+        const search = page.getByRole('status', {name:'Search matches'});
+        await expect(search).toContainText('alpha');
+        await expect(search).toContainText('2 / 3');
+        await page.keyboard.press('Control+Shift+#');
+        await expect(search).toContainText('1 / 3');
+        await search.getByRole('button', {name:'Next search match', exact:true}).click();
+        await expect(search).toContainText('3 / 3');
+        await expect(input).toBeFocused();
+        await page.screenshot({path:'test-results/word-search.png'});
+        await page.keyboard.press('Escape');
+        await expect(search).toHaveCount(0);
+        await page.keyboard.type('/beta');
+        await page.keyboard.press('Enter');
+        await expect(search).toContainText('beta');
+        await expect(search).toContainText('1 / 1');
+        await search.getByRole('button', {name:'Clear search highlights', exact:true}).click();
+        await expect(search).toHaveCount(0);
+        expect(await readFile(join(workspace, 'words.txt'), 'utf8')).toBe('alpha beta alpha\nalpha\n');
+    } finally {
+        await running.evaluate(({app}) => app.exit(0));
+        await running.close();
+        await rm(root, {recursive:true, force:true, maxRetries:5, retryDelay:100});
+    }
+});
+
+test('explorer commands create, rename, copy, move and recycle files from the keyboard', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-explorer-actions-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+    await writeFile(join(workspace, 'original.txt'), 'hello\n');
+    const env = {...process.env};
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({args: ['.', `--user-data-dir=${join(root, 'profile')}`], env});
+    try {
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', {name: 'Make yourself at home.'})).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        await expect(page.getByRole('textbox', {name: 'Neovim input'})).toBeFocused();
+        const tree = page.getByRole('tree', {name: 'Project files'});
+        const menu = page.getByRole('dialog', {name: 'Explorer commands', exact:true});
+        const path = menu.getByRole('textbox', {name: /^(Workspace-relative path|Name)$/});
+        const apply = async (value: string): Promise<void> => {
+            await expect(menu).toBeVisible();
+            await path.fill(value);
+            await page.keyboard.press('Enter');
+            await expect(menu).toHaveCount(0);
+            await expect(tree).toBeFocused();
+        };
+        const select = async (name: string): Promise<void> => {
+            await tree.getByRole('treeitem', {name, exact:true}).click();
+            await tree.focus();
+        };
+        await expect(tree.getByRole('treeitem', {name:'original.txt', exact:true})).toBeVisible();
+        await select('original.txt');
+        await page.keyboard.press('F2');
+        await apply('renamed.txt');
+        await expect(page.getByRole('tab', {name:'renamed.txt', exact:true})).toBeVisible();
+        await page.keyboard.press('Control+l');
+        await page.keyboard.type('A!');
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Control+s');
+        await expect.poll(() => readFile(join(workspace, 'renamed.txt'), 'utf8')).toBe('hello!\n');
+        await tree.focus();
+        await page.keyboard.press('Control+c');
+        await page.keyboard.press('Control+v');
+        await apply('copy.txt');
+        await expect.poll(() => readFile(join(workspace, 'copy.txt'), 'utf8')).toBe('hello!\n');
+        await page.keyboard.type(':');
+        await expect(menu).toBeVisible();
+        await menu.screenshot({path: 'test-results/explorer-commands.png'});
+        await page.keyboard.type('A');
+        await apply('nested');
+        await page.keyboard.type('a');
+        await apply('nested/new.txt');
+        await expect(tree.getByRole('treeitem', {name:'new.txt', exact:true})).toBeVisible();
+        await select('renamed.txt');
+        await page.keyboard.press('Control+x');
+        await select('nested');
+        await page.keyboard.press('Control+v');
+        await apply('nested/renamed.txt');
+        await expect.poll(() => readFile(join(workspace, 'nested/renamed.txt'), 'utf8')).toBe('hello!\n');
+        await expect(tree.getByRole('treeitem', {name:'renamed.txt', exact:true})).toBeVisible();
+        await select('copy.txt');
+        await page.keyboard.press('Delete');
+        await expect(menu).toContainText('Move copy.txt to the recycle bin?');
+        await menu.getByRole('button', {name:'Cancel', exact:true}).click();
+        await expect(tree.getByRole('treeitem', {name:'copy.txt', exact:true})).toBeVisible();
+        await page.keyboard.press('Delete');
+        await menu.getByRole('button', {name:'Move to recycle bin', exact:true}).click();
+        await expect(menu).toHaveCount(0);
+        await expect(tree.getByRole('treeitem', {name:'copy.txt', exact:true})).toHaveCount(0);
+        await expect(page.getByRole('tab', {name:'copy.txt', exact:true})).toHaveCount(0);
+        await assert.rejects(readFile(join(workspace, 'copy.txt'), 'utf8'), /ENOENT/);
+    } finally {
+        await running.evaluate(({app}) => app.exit(0));
+        await running.close();
+        await rm(root, {recursive:true, force:true, maxRetries:5, retryDelay:100});
+    }
+});
+
 test('explorer supports half-page, page and first/last selection with Vim keys', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-explorer-keys-'));
     const workspace = join(root, 'workspace');

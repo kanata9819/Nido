@@ -1,6 +1,18 @@
 -- Nido owns this configuration; personal Neovim config is not loaded.
 vim.g.nido = true
-vim.opt.shortmess:append('IWF')
+vim.opt.shortmess:append('IWFSs')
+vim.o.hlsearch = true
+vim.o.incsearch = true
+for _, key in ipairs({'*', '#', 'n', 'N', 'g*', 'g#'}) do
+  vim.keymap.set('n', key, function()
+    vim.cmd.normal({args={(vim.v.count > 0 and tostring(vim.v.count) or '') .. key}, bang=true, mods={silent=true}})
+    vim.api.nvim_exec_autocmds('User', {pattern='NidoSearch'})
+  end, {silent=true})
+end
+vim.keymap.set('n', '<Esc>', function()
+  vim.cmd.nohlsearch()
+  vim.api.nvim_exec_autocmds('User', {pattern='NidoSearch'})
+end, {silent=true})
 vim.o.termguicolors = true
 vim.o.number = true
 vim.o.relativenumber = false
@@ -77,6 +89,9 @@ vim.diagnostic.config({
 -- Bundle only Azami and its theme dependency; personal plugins stay isolated.
 vim.opt.runtimepath:append(vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':h'))
 vim.cmd('colorscheme azami')
+vim.api.nvim_set_hl(0, 'Search', {fg='#ffe5a3', bg='#514020'})
+vim.api.nvim_set_hl(0, 'CurSearch', {fg='#152219', bg='#a8cf9e', bold=true})
+vim.api.nvim_set_hl(0, 'IncSearch', {link='CurSearch'})
 require('nido_indent')
 require('nido_editorconfig')
 require('nido_brackets')

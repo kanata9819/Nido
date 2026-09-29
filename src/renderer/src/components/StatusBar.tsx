@@ -1,4 +1,4 @@
-import { Code2 } from 'lucide-react';
+import { Code2, Search, ChevronUp, ChevronDown, X } from 'lucide-react';
 import type { Workspace, SessionState } from '../../../shared/types';
 import styles from '../assets/Nido.module.css';
 
@@ -11,6 +11,7 @@ interface StatusBarProps {
     onToggleDebugger: () => void;
     onToggleReferences: () => void;
     onLineEnding: (format: 'LF' | 'CRLF') => void;
+    onSearch: (key: 'n' | 'N' | '<Esc>') => void;
 }
 
 function modeLabel(mode: string): string {
@@ -36,7 +37,8 @@ export default function StatusBar({
     onToggleTerminal,
     onToggleDebugger,
     onToggleReferences,
-    onLineEnding
+    onLineEnding,
+    onSearch
 }: StatusBarProps): React.JSX.Element {
     const displayMode = modeLabel(state.mode);
     return (
@@ -60,6 +62,40 @@ export default function StatusBar({
                 </button>
             )}
             <span className={styles.statusWorkspace}>{workspace?.name || 'Welcome to Nido'}</span>
+            {state.search && (
+                <span className={styles.searchStatus} role="status" aria-label="Search matches">
+                    <Search size={13} />
+                    <strong title={state.search.pattern}>
+                        {state.search.pattern.replace(/^\\</, '').replace(/\\>$/, '')}
+                    </strong>
+                    <span>
+                        {state.search.incomplete === 1
+                            ? 'Counting…'
+                            : `${state.search.current} / ${state.search.total}${state.search.incomplete === 2 ? '+' : ''}`}
+                    </span>
+                    <button
+                        aria-label="Previous search match"
+                        title="Previous (N)"
+                        onClick={() => onSearch('N')}
+                    >
+                        <ChevronUp size={14} />
+                    </button>
+                    <button
+                        aria-label="Next search match"
+                        title="Next (n)"
+                        onClick={() => onSearch('n')}
+                    >
+                        <ChevronDown size={14} />
+                    </button>
+                    <button
+                        aria-label="Clear search highlights"
+                        title="Clear (Esc)"
+                        onClick={() => onSearch('<Esc>')}
+                    >
+                        <X size={13} />
+                    </button>
+                </span>
+            )}
             <span className={styles.statusDivider} />
             <span className={styles.sessionCount}>
                 {sessionCount} {sessionCount === 1 ? 'session' : 'sessions'}

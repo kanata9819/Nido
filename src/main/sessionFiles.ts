@@ -1,8 +1,8 @@
-import { realpath, readdir, stat } from 'node:fs/promises';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { realpath, readdir, stat, lstat, mkdir, writeFile, rename, cp } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { type NeovimClient } from 'neovim';
 import { gitIgnored } from './git';
-import type { FileEntry } from '../shared/types';
+import type { FileAction, FileEntry } from '../shared/types';
 
 export class SessionFiles {
     constructor(
@@ -31,6 +31,106 @@ export class SessionFiles {
             'vim.cmd.edit(vim.fn.fnameescape(...))',
             [file]
         ]);
+    }
+
+    async fileAction(
+        action: FileAction,
+        path: string,
+        target: string,
+        trash: (path: string) => Promise<void>
+    ): Promise<void> {
+        const validate = (value: string): void => {
+            const rel = relative(this.root, resolve(this.root, value));
+            if (
+                !value ||
+                isAbsolute(value) ||
+                !rel ||
+                rel === '..' ||
+                rel.startsWith(`..${sep}`) ||
+                isAbsolute(rel) ||
+                value.split(/[\\/]/).some((part) => part.toLowerCase() === '.git')
+            ) {
+                throw new Error('Choose a path inside this workspace, outside .git.');
+            }
+        };
+        validate(path);
+        const destination = async (value: string): Promise<string> => {
+            validate(value);
+            const parent = await this.path(dirname(value));
+            const result = resolve(parent, basename(value));
+            validate(relative(this.root, result));
+            try {
+                await lstat(result);
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code === 'ENOENT') return result;
+                throw error;
+            }
+            throw new Error('A file or folder already exists at that path.');
+        };
+        if (action === 'createFile' || action === 'createDirectory') {
+            const result = await destination(path);
+            if (action === 'createFile') await writeFile(result, '', { flag: 'wx' });
+            else await mkdir(result);
+            return;
+        }
+        const source = await this.path(path);
+        validate(relative(this.root, source));
+        const buffers = (await this.client.request('nvim_exec_lua', [
+            `local result = {}
+for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+  table.insert(result, {id=buf, name=vim.api.nvim_buf_get_name(buf), modified=vim.bo[buf].modified})
+end
+return result`,
+            []
+        ])) as { id: number; name: string; modified: boolean }[];
+        const affected = buffers.filter((buf) => {
+            if (!buf.name) return false;
+            const rel = relative(source, buf.name);
+            return !isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`);
+        });
+        if (affected.some((buf) => buf.modified))
+            throw new Error('Save unsaved changes in this file or folder first.');
+        if (action === 'delete') {
+            await trash(source);
+            for (const buf of affected)
+                await this.client.request('nvim_buf_delete', [buf.id, { force: true }]);
+            return;
+        }
+        const result = await destination(target);
+        const child = relative(source, result);
+        if (!isAbsolute(child) && child !== '..' && !child.startsWith(`..${sep}`)) {
+            throw new Error('Cannot place a folder inside itself.');
+        }
+        if (action === 'copy') {
+            await cp(source, result, { recursive: true, force: false, errorOnExist: true });
+        } else if (action === 'rename') {
+            const renamed = affected.map((buf) => ({
+                id: buf.id,
+                name: resolve(result, relative(source, buf.name))
+            }));
+            if (
+                buffers.some(
+                    (buf) =>
+                        !affected.includes(buf) &&
+                        renamed.some((item) => item.name.toLowerCase() === buf.name.toLowerCase())
+                )
+            ) {
+                throw new Error('Close the destination file tab first.');
+            }
+            await rename(source, result);
+            for (const buf of renamed)
+                await this.client.request('nvim_exec_lua', [
+                    `local buf, name = ...
+vim.api.nvim_buf_set_name(buf, name)
+-- Reload the clean buffer so Neovim recognizes the moved file as an existing file.
+if vim.api.nvim_buf_is_loaded(buf) then
+  vim.api.nvim_buf_call(buf, function() vim.cmd.edit({bang=true}) end)
+end`,
+                    [buf.id, buf.name]
+                ]);
+        } else {
+            throw new Error('Unknown file action.');
+        }
     }
 
     async files(relativePath: string, checkIgnored = true): Promise<FileEntry[]> {

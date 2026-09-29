@@ -35,6 +35,7 @@ const api: NidoAPI = {
     paste: (id, text) => ipcRenderer.invoke('nido:paste', id, text),
     pasteClipboard: (id) => ipcRenderer.invoke('nido:pasteClipboard', id),
     files: (id, path) => ipcRenderer.invoke('nido:files', id, path),
+    fileAction: (id, action, path, target) => ipcRenderer.invoke('nido:fileAction', id, action, path, target),
     findFiles: (id) => ipcRenderer.invoke('nido:findFiles', id),
     openFile: (id, path) => ipcRenderer.invoke('nido:openFile', id, path),
     openReference: (id, index, version) =>

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
-import { dirname, isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { readdir, realpath } from 'node:fs/promises';
 import { Session } from './session';
 import {
@@ -14,7 +14,7 @@ import {
     gitSwitch
 } from './git';
 import { readLayout, writeLayout } from './persistence';
-import type { DebugAction, NidoEvent, Workspace } from '../shared/types';
+import type { DebugAction, FileAction, NidoEvent, Workspace } from '../shared/types';
 
 export interface AppState {
     order: string[];
@@ -336,6 +336,27 @@ export function registerHandlers({
     handle('gitCommit', (id, message) => gitCommit(session(id).workspace.root, text(message)));
     handle('findFiles', (id) => session(id).findFiles());
     handle('openFile', (id, path) => session(id).openFile(text(path)));
+    handle('fileAction', async (id, action, path, target) => {
+        if (typeof action !== 'string' || !['createFile', 'createDirectory', 'rename', 'copy', 'delete'].includes(action)) {
+            throw new Error('Invalid file action.');
+        }
+        const current = session(id);
+        if (action === 'rename' || action === 'delete' || action === 'copy') {
+            const source = await current.path(text(path));
+            for (const open of sessions.values()) {
+                if (open === current) continue;
+                if (open.state.buffers.some(buffer => {
+                    if (!buffer.name) return false;
+                    const child = relative(source, buffer.name);
+                    return child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child);
+                })) throw new Error('Close this file or folder in the other workspace session first.');
+            }
+        }
+        await current.fileAction(action as FileAction, text(path), target === undefined ? '' : text(target), file => shell.trashItem(file));
+        for (const open of sessions.values()) {
+            if (open.workspace.root === current.workspace.root) send({type: 'filesChanged', id: open.workspace.id});
+        }
+    });
     handle('openReference', (id, index, version) =>
         session(id).openReference(integer(index), integer(version))
     );

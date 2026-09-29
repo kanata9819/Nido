@@ -18,6 +18,7 @@ export interface BufferInfo {
     modified: boolean;
 }
 export interface SessionState {
+    search?: false | {pattern: string; current: number; total: number; incomplete: number};
     problems?: {
         path: string;
         line: number;
@@ -71,6 +72,7 @@ export interface FileEntry {
     directory: boolean;
     ignored?: boolean;
 }
+export type FileAction = 'createFile' | 'createDirectory' | 'rename' | 'copy' | 'delete';
 export type Redraw = [string, ...unknown[][]][];
 export type NidoEvent =
     | {
@@ -134,6 +136,7 @@ export interface NidoAPI {
     paste(id: string, text: string): Promise<void>;
     pasteClipboard(id: string): Promise<void>;
     files(id: string, relative: string): Promise<FileEntry[]>;
+    fileAction(id: string, action: FileAction, path: string, target?: string): Promise<void>;
     findFiles(id: string): Promise<FileEntry[]>;
     openFile(id: string, relative: string): Promise<void>;
     openReference(id: string, index: number, version: number): Promise<void>;

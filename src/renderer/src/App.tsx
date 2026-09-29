@@ -597,6 +597,7 @@ export default function App(): React.JSX.Element {
                     />
                 )}
             <StatusBar
+                onSearch={key => {run(window.nido.input(active, '<Esc>' + key)); focusEditor();}}
                 active={active}
                 workspace={workspace}
                 state={state}

@@ -147,6 +147,13 @@ local function publish()
       and vim.api.nvim_buf_line_count(0) == 1 and vim.api.nvim_get_current_line() == ''
       and #vim.api.nvim_tabpage_list_wins(0) == 1
     vim.rpcnotify(channel, 'nido:state', {
+      search = (function()
+        if vim.v.hlsearch ~= 1 or vim.fn.getreg('/') == '' or vim.bo.buftype ~= '' then return false end
+        -- ponytail: cap counting at 9999 matches/10 ms; show a partial count for huge files.
+        local ok, count = pcall(vim.fn.searchcount, {recompute=1, maxcount=9999, timeout=10})
+        if not ok then return false end
+        return {pattern=vim.fn.getreg('/'), current=count.current or 0, total=count.total or 0, incomplete=count.incomplete or 0}
+      end)(),
       problems = problems,
       diagnosticsVersion = diagnostics_version,
       scrollCursor = scroll.screen_cursor(),
@@ -194,9 +201,9 @@ vim.api.nvim_create_autocmd('LspProgress', {
 })
 vim.api.nvim_create_autocmd({
   'BufEnter', 'BufAdd', 'BufDelete', 'BufModifiedSet', 'BufFilePost', 'BufWritePost',
-  'ModeChanged', 'CursorMoved', 'CursorMovedI', 'FileType', 'TextChanged', 'TextChangedI',
+  'ModeChanged', 'CursorMoved', 'CursorMovedI', 'FileType', 'TextChanged', 'TextChangedI', 'CmdlineLeave',
   'WinEnter', 'WinClosed', 'WinScrolled', 'WinResized', 'LspAttach', 'LspDetach',
 }, { callback = publish })
-vim.api.nvim_create_autocmd('User', { pattern = { 'NidoLineEndings', 'NidoScroll' }, callback = publish })
+vim.api.nvim_create_autocmd('User', { pattern = { 'NidoLineEndings', 'NidoScroll', 'NidoSearch' }, callback = publish })
 vim.api.nvim_create_autocmd('OptionSet', { pattern = { 'fileformat', 'endofline' }, callback = publish })
 publish()

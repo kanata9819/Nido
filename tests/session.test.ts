@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile, rename, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Session } from '../src/main/session';
@@ -792,6 +792,80 @@ test(
         }
     }
 );
+
+test('word searches publish counts, distinguish current matches and clear on Escape', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-search-'));
+    const grid = new Grid();
+    let session: Session | undefined;
+    try {
+        await writeFile(join(root, 'words.txt'), 'alpha beta alpha\nalpha\n');
+        session = await Session.create(root, event => {if (event.type === 'redraw') grid.apply(event.events);});
+        await session.openFile('words.txt');
+        const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
+        await session.input('gg0*');
+        await lua('return 1');
+        assert.deepEqual(session.state.search, {pattern:'\\<alpha\\>', current:2, total:3, incomplete:0});
+        await lua('vim.cmd.redraw()');
+        await lua('return 1');
+        const row = grid.cells.find(cells => cells.map(cell => cell.text).join('').includes('alpha beta alpha'))!;
+        const text = row.map(cell => cell.text).join('');
+        assert.equal(grid.highlights.get(row[text.indexOf('alpha')].highlight)?.background, 0x514020);
+        assert.equal(grid.highlights.get(row[text.lastIndexOf('alpha')].highlight)?.background, 0xa8cf9e);
+        await session.input('#');
+        await lua('return 1');
+        assert.equal(session.state.search && session.state.search.current, 1);
+        await session.input('<Esc>');
+        await lua('return 1');
+        assert.equal(session.state.search, false);
+        await session.input('n');
+        await lua('return 1');
+        assert.equal(session.state.search && session.state.search.total, 3);
+    } finally {
+        await session?.stop();
+        await rm(root, {recursive:true, force:true});
+    }
+});
+
+test('explorer file actions preserve buffers, reject overwrites and protect workspace boundaries', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-file-actions-'));
+    const outside = await mkdtemp(join(tmpdir(), 'nido-file-outside-'));
+    let session: Session | undefined;
+    try {
+        session = await Session.create(root, () => {});
+        const action = (operation: import('../src/shared/types').FileAction, path: string, target = '') =>
+            session!.fileAction(operation, path, target, source => rename(source, join(root, 'trashed')));
+        await action('createDirectory', 'src');
+        await action('createFile', 'src/first.txt');
+        await writeFile(join(root, 'src/first.txt'), 'hello\n');
+        await session.openFile('src/first.txt');
+        const buffer = await session.client.request('nvim_get_current_buf', []);
+        await action('rename', 'src', 'renamed');
+        assert.equal(await session.client.request('nvim_buf_get_name', [buffer]), join(root, 'renamed/first.txt'));
+        await action('copy', 'renamed', 'copied');
+        assert.equal(await readFile(join(root, 'copied/first.txt'), 'utf8'), 'hello\n');
+        await assert.rejects(action('rename', 'renamed/first.txt', 'copied/first.txt'), /already exists/);
+        await assert.rejects(action('createFile', '../escape.txt'), /inside this workspace/);
+        await assert.rejects(action('delete', ''), /inside this workspace/);
+        await mkdir(join(root, '.git'));
+        await assert.rejects(action('delete', '.git'), /outside .git/);
+        await assert.rejects(action('copy', 'renamed', 'renamed/inside'), /inside itself/);
+        await symlink(outside, join(root, 'link'), 'junction');
+        await assert.rejects(action('createFile', 'link/escape.txt'), /outside this workspace/);
+        await session.input('AX<Esc>');
+        await session.client.request('nvim_eval', ['1']);
+        await assert.rejects(action('delete', 'renamed'), /unsaved changes/);
+        await assert.rejects(action('copy', 'renamed', 'dirty-copy'), /unsaved changes/);
+        await session.save();
+        await action('delete', 'renamed');
+        assert.equal(await session.client.request('nvim_buf_is_valid', [buffer]), false);
+        assert.equal(await readFile(join(root, 'trashed/first.txt'), 'utf8'), 'helloX\n');
+    } finally {
+        await session?.stop();
+        await rm(join(root, 'link'), {force: true, recursive: true});
+        await rm(root, {recursive: true, force: true});
+        await rm(outside, {recursive: true, force: true});
+    }
+});
 
 test('Ctrl Z undoes in normal, insert and visual modes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-undo-key-'));
