@@ -210,7 +210,7 @@
     --tree-inset: 6px;
     flex: 1;
     overflow: auto;
-    padding: 5px 0;
+    padding: 5px 2px;
 }
 .treeItem {
     position: relative;
