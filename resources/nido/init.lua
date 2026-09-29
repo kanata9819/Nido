@@ -27,7 +27,7 @@ vim.o.tabstop = 2
 vim.o.ignorecase = true
 vim.o.smartcase = true
 vim.o.scrolloff = 5
-vim.o.signcolumn = 'yes'
+vim.o.signcolumn = 'yes:2'
 vim.o.fillchars = 'eob: '
 vim.cmd('syntax enable')
 vim.cmd('filetype plugin indent on')
@@ -46,6 +46,7 @@ vim.cmd('colorscheme azami')
 require('nido_indent')
 require('nido_editorconfig')
 require('nido_brackets')
+require('nido_git_signs')
 -- Darken surfaces without changing Azami's token colors.
 for _, name in ipairs({'Normal', 'NormalNC', 'LineNr', 'CursorLineNr', 'SignColumn', 'EndOfBuffer'}) do
   local attrs = vim.api.nvim_get_hl(0, {name=name, link=false})

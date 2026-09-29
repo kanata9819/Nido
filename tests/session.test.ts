@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -835,6 +836,91 @@ test('EditorConfig toggles existing buffers, indentation guides and save rules',
     } finally {
         await session?.stop();
         await rm(root, { recursive: true, force: true });
+    }
+});
+
+test('Git gutter signs track HEAD, unsaved edits, deletions, new files and commits', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-git-signs-'));
+    let session: Session | undefined;
+    const git = (...args: string[]): void => {
+        execFileSync('git', args, { cwd: root });
+    };
+    try {
+        git('init', '-q');
+        await writeFile(join(root, 'tracked.txt'), 'first\r\nsecond\r\nthird\r\n');
+        await writeFile(join(root, '.gitignore'), 'ignored.txt\n');
+        git('add', '.');
+        git('-c', 'user.name=Nido Test', '-c', 'user.email=nido@example.test', 'commit', '-qm', 'base');
+        const grid = new Grid();
+        session = await Session.create(root, (event) => {
+            if (event.type === 'redraw') grid.apply(event.events);
+        });
+        const lua = (code: string, args: unknown[] = []) =>
+            session!.client.request('nvim_exec_lua', [code, args]);
+        const signs = async (expected: [number, string][], refresh = true): Promise<void> => {
+            await lua(`
+local expected, refresh = ...
+local buffer = vim.api.nvim_get_current_buf()
+local namespace = vim.api.nvim_get_namespaces().nido_git_signs
+local function signs()
+  local result = {}
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buffer, namespace, 0, -1, {details=true})) do
+    table.insert(result, {mark[2], mark[4].sign_hl_group})
+  end
+  return result
+end
+if refresh then require('nido_git_signs').refresh(buffer) end
+assert(vim.wait(5000, function() return vim.deep_equal(signs(), expected) end, 20), vim.inspect(signs()))
+vim.cmd('redraw!')`, [expected, refresh]);
+        };
+        const edit = (lines: string[]) => lua(
+            'vim.api.nvim_buf_set_lines(0, 0, -1, false, ...)', [lines]
+        );
+        await session.openFile('tracked.txt');
+        await signs([]);
+        await edit(['first', 'changed', 'third', 'added']);
+        await signs([[1, 'NidoGitChanged'], [3, 'NidoGitAdded']]);
+        await lua('return 1');
+        const ink = (row: number) => grid.cells[row]
+            .filter((cell) => cell.text === '▎' || cell.text === '▸')
+            .map((cell) => grid.highlights.get(cell.highlight)?.foreground);
+        assert.deepEqual(ink(1), [0x0078d4]);
+        assert.deepEqual(ink(3), [0x2ea043]);
+        await edit(['second', 'third']);
+        await signs([[0, 'NidoGitDeleted']]);
+        await lua('return 1');
+        assert.deepEqual(ink(0), [0xf85149]);
+        await edit(['first', 'second']);
+        await signs([[1, 'NidoGitDeleted']]);
+        await edit(['first', 'third']);
+        await signs([[1, 'NidoGitDeleted']]);
+        await edit(['changed']);
+        await signs([[0, 'NidoGitChanged'], [0, 'NidoGitDeleted']]);
+        await edit([]);
+        await signs([[0, 'NidoGitDeleted']]);
+        await edit(['first', 'second', 'third']);
+        await signs([]);
+        await edit(['first', 'changed', 'third']);
+        await session.save();
+        git('add', 'tracked.txt');
+        await signs([[1, 'NidoGitChanged']]);
+        git('-c', 'user.name=Nido Test', '-c', 'user.email=nido@example.test', 'commit', '-qm', 'update');
+        await signs([], false);
+        await writeFile(join(root, 'new.txt'), 'new\nfile\n');
+        await session.openFile('new.txt');
+        await signs([[0, 'NidoGitAdded'], [1, 'NidoGitAdded']]);
+        await writeFile(join(root, 'ignored.txt'), 'ignored\n');
+        await session.openFile('ignored.txt');
+        await signs([]);
+        await mkdir(join(root, 'fresh'));
+        execFileSync('git', ['init', '-q'], { cwd: join(root, 'fresh') });
+        await writeFile(join(root, 'fresh/new.txt'), 'unborn\n');
+        await session.openFile('fresh/new.txt');
+        await signs([[0, 'NidoGitAdded']]);
+        assert.equal(await session.modified(), false);
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
 });
 
