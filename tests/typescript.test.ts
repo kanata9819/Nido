@@ -87,7 +87,7 @@ test('TypeScript functions and parameters retain distinct reference theme colors
         const ink = (word: string): number | undefined =>
             grid.highlights.get(row[text.indexOf(word)].highlight)?.foreground;
         assert.equal(ink('greet'), 0xdcdcaa);
-        assert.equal(ink('name'), 0x9cdcfe);
+        assert.equal(ink('name'), 0xffb300);
         const tokenInk = (word: string): number | undefined => {
             const cells = grid.cells.find((cells) =>
                 cells

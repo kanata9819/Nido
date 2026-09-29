@@ -73,9 +73,9 @@ hl(0, '@azami_self', { fg = c.vscBlue, bg = 'NONE' })
 hl(0, '@type', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, '@type.builtin', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, '@function.method', { fg = c.vscYellow, bg = 'NONE' })
--- Dark Modern inherits its syntax palette from Dark+ and Dark (Visual Studio).
-hl(0, '@variable.parameter', { fg = c.vscLightBlue, bg = 'NONE' })
-hl(0, '@lsp.type.parameter', { fg = c.vscLightBlue, bg = 'NONE' })
+-- Match the user's VS Code parameter color customization.
+hl(0, '@variable.parameter', { fg = '#FFB300', bg = 'NONE' })
+hl(0, '@lsp.type.parameter', { fg = '#FFB300', bg = 'NONE' })
 hl(0, '@constructor', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, '@lsp.type.enum', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, '@lsp.type.enumMember', { fg = c.vscAccentBlue, bg = 'NONE' })
