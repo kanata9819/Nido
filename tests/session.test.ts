@@ -793,6 +793,34 @@ test(
     }
 );
 
+test('Ctrl Z undoes in normal, insert and visual modes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-undo-key-'));
+    let session: Session | undefined;
+    try {
+        session = await Session.create(root, () => {});
+        const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
+        await session.input('ihello<Esc>');
+        await lua('return 1');
+        await session.input('dd');
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), '');
+        await session.input('<C-z>');
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'hello');
+        await session.input('A world');
+        await lua('return 1');
+        await session.input('<C-z>');
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'hello');
+        assert.equal(await lua('return vim.fn.mode()'), 'i');
+        await session.input('<Esc>dd');
+        await lua('return 1');
+        await session.input('V<C-z>');
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'hello');
+        assert.equal(await lua('return vim.fn.mode()'), 'n');
+    } finally {
+        await session?.stop();
+        await rm(root, {recursive: true, force: true});
+    }
+});
+
 test('completion navigation leaves text unchanged until Tab accepts', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-completion-ranking-'));
     let session: Session | undefined;

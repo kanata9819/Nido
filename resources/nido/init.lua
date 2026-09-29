@@ -25,6 +25,9 @@ for _, key in ipairs({'u', 'U', '<C-r>', 'g-', 'g+'}) do
   end, { silent = true })
 end
 vim.o.laststatus = 0
+vim.keymap.set('n', '<C-z>', 'u', {remap=true, silent=true})
+vim.keymap.set('x', '<C-z>', '<Esc>u', {remap=true, silent=true})
+vim.keymap.set('i', '<C-z>', '<C-o>u', {remap=true, silent=true})
 vim.o.showtabline = 0
 vim.o.mouse = 'a'
 vim.o.hidden = true
