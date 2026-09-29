@@ -106,7 +106,7 @@ test('Dark Modern syntax colors match the official palette in TypeScript, TSX an
         const cases: [string, string, [number, string, string][]][] = [
             [
                 'sample.ts',
-                '/** Documentation */\nfunction pick<T>(value: T): T { return value; }\nconst upper = "ok".toUpperCase();\nconst pattern = /hello/;\nconst escaped = "a\\nb";\nconst length = upper.length;',
+                '/** Documentation */\nfunction pick<T>(value: T): T { return value; }\nconst upper = "ok".toUpperCase();\nconst pattern = /hello/;\nconst escaped = "a\\nb";\nconst length = upper.length;\nclass Example { apply() { this.busy = true; } }',
                 [
                     [0, 'Documentation', '#6a9955'],
                     [1, 'pick', '#dcdcaa'],
@@ -116,16 +116,18 @@ test('Dark Modern syntax colors match the official palette in TypeScript, TSX an
                     [2, 'toUpperCase', '#dcdcaa'],
                     [3, 'hello', '#d16969'],
                     [4, '\\n', '#d7ba7d'],
-                    [5, 'length', '#9cdcfe']
+                    [5, 'length', '#9cdcfe'],
+                    [6, 'this', '#569cd6']
                 ]
             ],
             [
                 'sample.tsx',
-                'const view = <div title="ok">Hello</div>;',
+                'const view = <div title="ok">Hello</div>;\nclass Example { apply() { this.busy = true; } }',
                 [
                     [0, 'div', '#569cd6'],
                     [0, 'title', '#9cdcfe'],
-                    [0, 'ok', '#ce9178']
+                    [0, 'ok', '#ce9178'],
+                    [1, 'this', '#569cd6']
                 ]
             ],
             [

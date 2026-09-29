@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react';
 import { ChevronRight, X } from 'lucide-react';
 import type { Workspace, SessionState } from '../../../shared/types';
 import { gitFileKey, type Decoration } from '../fileDecorations';
@@ -24,6 +25,10 @@ export default function FileHeader({
 }: FileHeaderProps): React.JSX.Element {
     const active = workspace.id;
     const current = state.buffers.find((buffer) => buffer.id === state.current);
+    const selectedTab = useRef<HTMLDivElement>(null);
+    useLayoutEffect(() => {
+        selectedTab.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }, [active, state.current]);
     return (
         <>
             {' '}
@@ -38,6 +43,7 @@ export default function FileHeader({
                     return (
                         <div
                             key={buffer.id}
+                            ref={state.current === buffer.id ? selectedTab : undefined}
                             className={`${styles.fileTab} ${state.current === buffer.id ? styles.activeFile : ''}`}
                         >
                             <button

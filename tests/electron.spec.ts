@@ -77,6 +77,56 @@ test('explorer supports half-page, page and first/last selection with Vim keys',
     }
 });
 
+test('file tabs scroll into view when switching hidden buffers with Shift H and L', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-tab-scroll-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+    const files = Array.from({ length: 15 }, (_, index) => `file-${String(index).padStart(2, '0')}.txt`);
+    await Promise.all(files.map((file) => writeFile(join(workspace, file), 'sample\n')));
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
+    const running = await electron.launch({
+        executablePath,
+        args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
+        env
+    });
+    try {
+        const page = await running.firstWindow();
+        await page.setViewportSize({ width: 900, height: 650 });
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        const tabs = page.getByRole('tablist', { name: 'Files', exact: true });
+        const selected = tabs.locator('[role="tab"][aria-selected="true"]');
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        const expectSelectedVisible = async (file: string): Promise<void> => {
+            await expect(selected).toHaveText(file);
+            await expect.poll(() => selected.evaluate((node) => {
+                const tab = node.parentElement!.getBoundingClientRect();
+                const list = node.closest('[role="tablist"]')!.getBoundingClientRect();
+                return tab.left >= list.left - 1 && tab.right <= list.right + 1;
+            })).toBe(true);
+            await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        };
+        for (const file of files) {
+            await page.keyboard.type(`:edit ${file}`);
+            await page.keyboard.press('Enter');
+            await expect(selected).toHaveText(file);
+        }
+        await expectSelectedVisible(files.at(-1)!);
+        await expect.poll(() => tabs.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+        await page.keyboard.press('Shift+L');
+        await expectSelectedVisible(files[0]);
+        await expect.poll(() => tabs.evaluate((node) => node.scrollLeft)).toBe(0);
+        await page.keyboard.press('Shift+H');
+        await expectSelectedVisible(files.at(-1)!);
+    } finally {
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('typing hides the pointer and moving or clicking restores it', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-pointer-'));
     const env = { ...process.env };
