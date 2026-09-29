@@ -1627,6 +1627,76 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
     }
 });
 
+test('line deletion slides remaining rows upward only when animations are enabled', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-delete-motion-'));
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    await writeFile(join(root, 'lines.txt'), Array.from({length: 100}, (_, i) => `line ${i + 1}`).join('\n'));
+    const running = await electron.launch({args: ['.', `--user-data-dir=${join(root, 'profile')}`], env});
+    try {
+        const page = await running.firstWindow();
+        await page.emulateMedia({reducedMotion: 'no-preference'});
+        await expect(page.getByRole('heading', {name: 'Make yourself at home.'})).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, root);
+        await expect(page.getByRole('textbox', {name: 'Neovim input'})).toBeFocused();
+        await expect(page.getByRole('treeitem', {name: 'lines.txt', exact:true})).toBeVisible();
+        await page.keyboard.type(':edit lines.txt');
+        await page.keyboard.press('Enter');
+        const canvas = page.locator('canvas:visible');
+        await expect(canvas).toHaveAttribute('aria-description', /line 10\s/);
+        await page.keyboard.press('Escape');
+        await canvas.evaluate((surface) => {
+            const context = (surface as HTMLCanvasElement).getContext('2d')!;
+            const draw = context.drawImage.bind(context);
+            context.drawImage = ((...args: Parameters<typeof draw>) => {
+                surface.setAttribute('data-motion-frames', String(Number(surface.getAttribute('data-motion-frames')) + 1));
+                const offsets = JSON.parse(surface.getAttribute('data-motion-offsets') || '[]') as number[];
+                offsets.push(Number(args[6]) - Number(args[2]) / window.devicePixelRatio);
+                surface.setAttribute('data-motion-offsets', JSON.stringify(offsets));
+                draw(...args);
+            }) as typeof draw;
+        });
+        for (const command of ['10Gdd', 'uggdd']) {
+            const before = Number(await canvas.getAttribute('data-motion-frames'));
+            await canvas.evaluate(node => node.removeAttribute('data-motion-offsets'));
+            await page.keyboard.type(command);
+            await expect(canvas).not.toHaveAttribute('aria-description', command === '10Gdd' ? /line 10\s/ : /line 1\s/);
+            await page.waitForTimeout(150);
+            expect(Number(await canvas.getAttribute('data-motion-frames'))).toBeGreaterThan(before);
+            const offsets = JSON.parse((await canvas.getAttribute('data-motion-offsets'))!) as number[];
+            expect(offsets.every(offset => offset >= 0)).toBe(true);
+            expect(offsets.at(-1)!).toBeLessThan(offsets[0]);
+        }
+        const beforeUndo = Number(await canvas.getAttribute('data-motion-frames'));
+        await page.keyboard.type('u');
+        await expect(canvas).toHaveAttribute('aria-description', /line 1\s/);
+        await page.waitForTimeout(150);
+        expect(Number(await canvas.getAttribute('data-motion-frames'))).toBe(beforeUndo);
+        await page.getByRole('button', {name: 'Settings', exact:true}).click();
+        await page.getByRole('checkbox', {name: 'UI animations', exact:true}).uncheck();
+        await page.keyboard.press('Escape');
+        await page.keyboard.type('dd');
+        await expect(canvas).not.toHaveAttribute('aria-description', /line 1\s/);
+        await page.waitForTimeout(150);
+        expect(Number(await canvas.getAttribute('data-motion-frames'))).toBe(beforeUndo);
+        await page.keyboard.type('u');
+        await page.getByRole('button', {name: 'Settings', exact:true}).click();
+        await page.getByRole('checkbox', {name: 'UI animations', exact:true}).check();
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Control+d');
+        await expect.poll(async () => Number(await canvas.getAttribute('data-motion-frames'))).toBeGreaterThan(0);
+        await page.waitForTimeout(150);
+        const frames = Number(await canvas.getAttribute('data-motion-frames'));
+        await page.keyboard.type('G');
+        await expect.poll(async () => Number(await canvas.getAttribute('data-motion-frames'))).toBeGreaterThan(frames);
+    } finally {
+        await running.evaluate(({app}) => app.exit(0));
+        await running.close();
+        await rm(root, {recursive: true, force: true});
+    }
+});
+
 test('viewport movement uses pixel wheel deltas and animates keyboard scrolling', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-motion-'));
     const content = Array.from(

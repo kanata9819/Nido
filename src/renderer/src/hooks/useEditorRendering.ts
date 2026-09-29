@@ -92,6 +92,7 @@ export function useEditorRendering({
                   distance: number;
                   distanceX: number;
                   start: number;
+                  edit: boolean;
               }
             | undefined;
 
@@ -161,8 +162,9 @@ export function useEditorRendering({
             cellWidth = metrics.cellWidth;
 
             if (motion) {
-                const offset = scrollOffset(motion.distance, performance.now() - motion.start);
-                const offsetX = scrollOffset(motion.distanceX, performance.now() - motion.start);
+                const elapsed = (performance.now() - motion.start) * (motion.edit ? 120 / 90 : 1);
+                const offset = scrollOffset(motion.distance, elapsed);
+                const offsetX = scrollOffset(motion.distanceX, elapsed);
                 if (
                     (Math.abs(offset) < 0.25 && Math.abs(offsetX) < 0.25) ||
                     reducedMotion.matches ||
@@ -187,11 +189,12 @@ export function useEditorRendering({
                     ctx.clip();
                     ctx.fillStyle = gridRef.current.background;
                     ctx.fillRect(left, top, width, height);
-                    // Keep the departing rows visible until the incoming rows cover them.
-                    for (const [image, shift, shiftX] of [
-                        [previousFrame, offset - motion.distance, offsetX - motion.distanceX],
+                    // Deleted rows disappear; the remaining rows slide into the gap without an old-frame overlay.
+                    const layers = [
+                        ...(motion.edit ? [] : [[previousFrame, offset - motion.distance, offsetX - motion.distanceX] as const]),
                         [targetFrame, offset, offsetX]
-                    ] as const) {
+                    ] as const;
+                    for (const [image, shift, shiftX] of layers) {
                         ctx.drawImage(
                             image,
                             left * dpr,
@@ -315,6 +318,9 @@ export function useEditorRendering({
         input.addEventListener('blur', stopMotion);
         const unsubscribe = window.nido.onEvent((event) => {
             if (event.type === 'redraw' && event.id === id) {
+                // Editing can shift grid rows without scrolling the viewport.
+                const edited = event.events.some(([name]) => name === 'nido_edit');
+                if (edited) stopMotion();
                 const pixelOffsets = event.events.flatMap(([name, ...calls]) =>
                     name === 'nido_pixel_scroll' ? calls : []
                 );
@@ -348,6 +354,7 @@ export function useEditorRendering({
                 const now = performance.now();
                 if (
                     scroll &&
+                    (!edited || (scroll[5] > 0 && scroll[6] === 0)) &&
                     !directScroll &&
                     animationsRef.current &&
                     !reducedMotion.matches &&
@@ -388,7 +395,8 @@ export function useEditorRendering({
                                       Math.min(width, scroll[6] * cellWidth + remainingX)
                                   )
                                 : 0,
-                        start: now
+                        start: now,
+                        edit: edited
                     };
                 } else if (scrolls.length || directScroll) {
                     motion = undefined;

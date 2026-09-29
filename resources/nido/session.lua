@@ -1,5 +1,8 @@
 local channel = ...
 vim.g.nido_channel = channel
+vim.api.nvim_create_autocmd({'TextChanged', 'TextChangedI', 'TextChangedP'}, {
+  callback = function() vim.rpcnotify(channel, 'nido:edit') end,
+})
 -- Single-grid UIs can receive a full repaint instead of grid_scroll on upward scrolling.
 vim.api.nvim_create_autocmd('WinScrolled', {
   callback = function()
