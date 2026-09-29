@@ -84,6 +84,23 @@ function M.center(count)
   publish_offset()
 end
 
+function M.page(key, count)
+  M.restore()
+  local keys = api.nvim_replace_termcodes(key, true, false, true)
+  vim.cmd.normal({args={(count and count > 0 and tostring(count) or '') .. keys}, bang=true})
+  vim.cmd.redraw()
+  if vim.bo.buftype ~= '' or api.nvim_win_get_config(0).relative ~= '' then return end
+  local window = api.nvim_get_current_win()
+  local info = vim.fn.getwininfo(window)[1]
+  local last = api.nvim_buf_line_count(0)
+  local column = vim.wo.wrap and math.max(1, #vim.fn.getline(last)) or 1
+  local bottom = vim.fn.screenpos(window, last, column).row
+  -- The final content row is overscan, so EOF there still needs one screen row of scrolling.
+  if bottom == info.winrow + info.height - 1 then
+    vim.cmd.normal({args={string.char(5)}, bang=true})
+  end
+end
+
 function M.scroll(lines, follow, pixel)
   centered_view = nil
   if follow then

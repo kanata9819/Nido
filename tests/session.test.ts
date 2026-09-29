@@ -332,6 +332,42 @@ test('wheel scrolling can retain the edit position and resumes input and paste a
     }
 });
 
+test('keyboard page scrolling reveals the last row hidden by pixel-scroll overscan', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-page-end-'));
+    let session: Session | undefined;
+    try {
+        session = await Session.create(root, () => {});
+        await session.client.request('nvim_exec_lua', [
+            'vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.tbl_map(tostring, vim.fn.range(1, 46)))',
+            []
+        ]);
+        for (const rows of [24, 25, 44, 45]) {
+            await session.resize(80, rows);
+            for (const key of ['<C-d>', '2<C-d>', '<C-f>', '<PageDown>']) {
+                await session.input('gg');
+                for (let step = 0; step < 46; step++) await session.input(key);
+                const screen = Number(await session.client.request('nvim_eval', [
+                    "screenpos(win_getid(), line('$'), 1).row"
+                ]));
+                assert.ok(screen > 0 && screen <= rows - 2, `${key}, ${rows} rows: EOF at screen row ${screen}`);
+            }
+        }
+        await session.client.request('nvim_exec_lua', [
+            "vim.api.nvim_buf_set_lines(0, 45, 46, false, {string.rep('x', 160)})",
+            []
+        ]);
+        await session.input('gg');
+        for (let step = 0; step < 46; step++) await session.input('<C-d>');
+        const wrappedEnd = Number(await session.client.request('nvim_eval', [
+            "screenpos(win_getid(), line('$'), 160).row"
+        ]));
+        assert.ok(wrappedEnd > 0 && wrappedEnd <= 43, `wrapped EOF at screen row ${wrappedEnd}`);
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('zz centers the cursor in the visible viewport for odd and even grid heights', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-center-'));
     let session: Session | undefined;
