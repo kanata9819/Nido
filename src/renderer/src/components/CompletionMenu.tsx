@@ -107,9 +107,7 @@ export default function CompletionMenu({
                         aria-selected={menu.selected === index}
                         title={detail || word}
                         onClick={() => {
-                            const delta = index - menu.selected;
-                            const keys =
-                                (delta >= 0 ? '<C-n>' : '<C-p>').repeat(Math.abs(delta)) + '<C-y>';
+                            const keys = `<Cmd>lua vim.api.nvim_select_popupmenu_item(${index}, false, false, {})<CR>`;
                             void window.nido
                                 .input(id, keys)
                                 .catch((error) => onError(String(error)));

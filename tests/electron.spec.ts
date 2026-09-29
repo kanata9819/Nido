@@ -132,7 +132,7 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
     const workspace = join(root, 'workspace');
     await mkdir(workspace);
     await writeFile(join(workspace, 'tsconfig.json'), '{}');
-    await writeFile(join(workspace, 'main.ts'), 'const amount = 1;\n');
+    await writeFile(join(workspace, 'main.ts'), 'const amount = 1;\nconst getOldUser = 1;\nconst getUserName = 1;\nconst getUser = 1;\n');
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
     const running = await electron.launch({
@@ -176,8 +176,19 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await expect(menu).toBeVisible();
         const index = (await menu.getByRole('option').allTextContents()).findIndex(text => text.includes('toFixed'));
         expect(index).toBeGreaterThanOrEqual(0);
-        for (let step = 0; step <= index; step++) await page.keyboard.press('ArrowDown');
+        for (let step = 0; step <= index; step++) {
+            await page.keyboard.press('ArrowDown');
+            await expect(canvas).not.toHaveAttribute('aria-description', /amount.toFixed/);
+        }
         await expect(menu.getByRole('option').nth(index)).toHaveAttribute('aria-selected', 'true');
+        await page.keyboard.press('Control+n');
+        await expect(canvas).not.toHaveAttribute('aria-description', /amount.toFixed/);
+        await page.keyboard.press('Control+p');
+        await expect(menu.getByRole('option').nth(index)).toHaveAttribute('aria-selected', 'true');
+        await expect(canvas).not.toHaveAttribute('aria-description', /amount.toFixed/);
+        await menu.getByRole('option').nth(index).click();
+        await expect(menu).toBeVisible();
+        await expect(canvas).not.toHaveAttribute('aria-description', /amount.toFixed/);
         await expect(input).toBeFocused();
         await page.screenshot({ path: 'test-results/nido-completion.png' });
         await page.keyboard.press('Tab');
@@ -194,6 +205,17 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
         await expect.poll(() => readFile(join(workspace, 'note.txt'), 'utf8')).toMatch(/^  plain\r?\n$/);
+        await page.keyboard.type(':edit main.ts');
+        await page.keyboard.press('Enter');
+        await expect(canvas).toHaveAttribute('aria-description', /getOldUser/);
+        await page.keyboard.press('Escape');
+        await page.keyboard.type('GogetU');
+        await expect(menu).toBeVisible();
+        await expect(menu.getByRole('option').first().getByText('getUser', {exact:true})).toBeVisible();
+        await page.keyboard.press('Tab');
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Control+s');
+        await expect.poll(() => readFile(join(workspace, 'main.ts'), 'utf8')).toMatch(/\ngetUser\r?\n$/);
     } finally {
         await running.close();
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

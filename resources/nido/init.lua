@@ -38,11 +38,12 @@ vim.o.signcolumn = 'yes:2'
 vim.o.fillchars = 'eob: '
 vim.cmd('syntax enable')
 vim.cmd('filetype plugin indent on')
-vim.opt.completeopt = { 'menu', 'menuone', 'noselect' }
+vim.opt.completeopt = { 'menu', 'menuone', 'noselect', 'noinsert', 'fuzzy' }
 vim.o.pumheight = 10
 vim.keymap.set('i', '<Tab>', function()
   if vim.fn.pumvisible() == 1 then
-    return vim.fn.complete_info({'selected'}).selected < 0 and '<C-n><C-y>' or '<C-y>'
+    local selected = math.max(0, vim.fn.complete_info({'selected'}).selected)
+    return '<Cmd>lua vim.api.nvim_select_popupmenu_item(' .. selected .. ', true, true, {})<CR>'
   end
   return '<Tab>'
 end, { expr = true, silent = true })
@@ -124,7 +125,18 @@ vim.api.nvim_create_autocmd('LspAttach', {
     vim.keymap.set('n', '[d', function() vim.diagnostic.jump({ count = -1, float = true }) end, opts)
     local client = vim.lsp.get_client_by_id(event.data.client_id)
     if client and client:supports_method('textDocument/completion') then
-      vim.lsp.completion.enable(true, client.id, event.buf, { autotrigger = true })
+      vim.lsp.completion.enable(true, client.id, event.buf, {
+        autotrigger = true,
+        convert = function(item)
+          local prefix = vim.api.nvim_get_current_line():sub(1, vim.fn.col('.') - 1):match('[%w_\128-\255]+$') or ''
+          if prefix ~= '' then
+            local score = vim.fn.matchfuzzypos({item.filterText or item.label}, prefix)[3][1] or 0
+            -- Preserve the server's contextual order when matching scores are equal.
+            item.sortText = string.format('%09d:', 999999999 - score) .. (item.sortText or item.label)
+          end
+          return {}
+        end,
+      })
       vim.keymap.set('i', '<C-Space>', vim.lsp.completion.get, opts)
     end
   end,

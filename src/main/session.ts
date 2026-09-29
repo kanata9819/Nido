@@ -389,6 +389,11 @@ end`,
                 throw new Error('Neovim session is closed.');
             }
             await this.restoreScroll();
+            // Native completion bypasses insert mappings for Ctrl+N/P and inserts previews.
+            if ((keys === '<C-n>' || keys === '<C-p>') &&
+                await this.client.request('nvim_eval', ['pumvisible()'])) {
+                keys = keys === '<C-n>' ? '<Down>' : '<Up>';
+            }
             if (this.workspace.kind === 'terminal') {
                 await this.client.request('nvim_command', ['startinsert']);
             }

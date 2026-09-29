@@ -793,6 +793,36 @@ test(
     }
 );
 
+test('completion navigation leaves text unchanged until Tab accepts', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-completion-ranking-'));
+    let session: Session | undefined;
+    let candidates: string[] = [];
+    try {
+        session = await Session.create(root, event => {
+            if (event.type !== 'redraw') return;
+            for (const [name, ...calls] of event.events) {
+                if (name === 'popupmenu_show') candidates = (calls.at(-1)![0] as string[][]).map(item => item[0]);
+            }
+        });
+        const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
+        await session.input('igetU');
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'getU');
+        await session.input("<Cmd>lua vim.fn.complete(1, {'getOldUser', 'setUser', 'getUserName', 'getUser'})<CR>");
+        await lua('return 1');
+        assert.equal(candidates.length, 4);
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'getU');
+        for (const key of ['<Down>', '<Down>', '<Up>', '<C-n>', '<C-p>']) {
+            await session.input(key);
+            assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'getU', key);
+        }
+        await session.input('<Tab>');
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), candidates[0]);
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('typing brackets inserts pairs, skips closing brackets and deletes empty pairs without changing paste', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-auto-brackets-'));
     let session: Session | undefined;
