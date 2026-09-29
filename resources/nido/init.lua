@@ -17,6 +17,13 @@ vim.o.ruler = false
 vim.o.showcmd = false
 -- Normal-mode Ctrl+C should cancel without Neovim's terminal quit hint.
 vim.keymap.set('n', '<C-c>', '<Esc>', { silent = true })
+-- Keep undo/redo progress out of the command line while retaining errors.
+for _, key in ipairs({'u', 'U', '<C-r>', 'g-', 'g+'}) do
+  vim.keymap.set('n', key, function()
+    local keys = vim.api.nvim_replace_termcodes(key, true, false, true)
+    vim.cmd.normal({args={vim.v.count1 .. keys}, bang=true, mods={silent=true}})
+  end, { silent = true })
+end
 vim.o.laststatus = 0
 vim.o.showtabline = 0
 vim.o.mouse = 'a'

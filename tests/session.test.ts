@@ -219,6 +219,16 @@ vim.cmd('messages clear')`,
             ),
             /written|\[w\]/
         );
+        await session.input('AX<Esc>');
+        await session.client.request('nvim_eval', ['1']);
+        await session.input('u');
+        assert.equal(await session.client.request('nvim_eval', ['getline(1)']), 'const state = 1;');
+        await session.input('<C-r>');
+        assert.equal(await session.client.request('nvim_eval', ['getline(1)']), 'const state = 1;X');
+        assert.doesNotMatch(
+            JSON.stringify(await session.client.request('nvim_exec2', ['messages', { output: true }])),
+            /before #|after #/
+        );
         await session.client.request('nvim_exec_lua', ['vim.bo.readonly = true', []]);
         await assert.rejects(session.save(false), /readonly|E45/);
     } finally {
@@ -782,6 +792,46 @@ test(
         }
     }
 );
+
+test('typing brackets inserts pairs, skips closing brackets and deletes empty pairs without changing paste', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-auto-brackets-'));
+    let session: Session | undefined;
+    try {
+        session = await Session.create(root, () => {});
+        const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
+        const reset = async (): Promise<void> => {
+            await session!.input('<Esc>');
+            await lua("vim.api.nvim_buf_set_lines(0, 0, -1, false, {''}); vim.api.nvim_win_set_cursor(0, {1, 0})");
+            await session!.input('i');
+        };
+        for (const [left, right] of [['(', ')'], ['[', ']'], ['{', '}']]) {
+            await reset();
+            await session.input(left);
+            assert.deepEqual(await lua('return {vim.api.nvim_get_current_line(), vim.fn.col(".")}'), [left + right, 2]);
+            await session.input(right);
+            assert.equal(await lua('return vim.api.nvim_get_current_line()'), left + right);
+            assert.equal(await lua('return vim.fn.col(".")'), 3);
+            await reset();
+            await session.input(left + '<BS>');
+            assert.equal(await lua('return vim.api.nvim_get_current_line()'), '');
+        }
+        await reset();
+        await session.input('([{value}])');
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), '([{value}])');
+        await reset();
+        await session.paste('([{');
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), '([{');
+        await reset();
+        await lua("vim.bo.syntax = 'typescript'");
+        await session.input('// ');
+        await lua('return vim.api.nvim_get_current_line()');
+        await session.input('(');
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), '// (');
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
 
 test('bracket pairs share depth colors, ignore strings and comments, and refresh after edits', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-brackets-'));

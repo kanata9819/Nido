@@ -4,6 +4,41 @@ local colors = { '#FFD700', '#DA70D6', '#179FFF' }
 local closing = { [')'] = '(', [']'] = '[', ['}'] = '{' }
 local pending = {}
 
+local function ignored(row, column)
+  for _, id in ipairs(vim.fn.synstack(row, column)) do
+    local name = vim.fn.synIDattr(id, 'name'):lower()
+    if name:find('comment') or name:find('string') or name:find('character') then return true end
+  end
+  return false
+end
+
+for right, left in pairs(closing) do
+  vim.keymap.set('i', left, function()
+    local column = vim.fn.col('.') - 1
+    local next = api.nvim_get_current_line():sub(column + 1, column + 1)
+    if vim.bo.buftype == '' and not ignored(vim.fn.line('.'), math.max(1, column))
+        and (next == '' or next:match('[%s%)%]%}]')) then
+      return left .. right .. '<Left>'
+    end
+    return left
+  end, {expr=true})
+  vim.keymap.set('i', right, function()
+    local column = vim.fn.col('.')
+    if vim.bo.buftype == '' and api.nvim_get_current_line():sub(column, column) == right then
+      return '<Right>'
+    end
+    return right
+  end, {expr=true})
+end
+vim.keymap.set('i', '<BS>', function()
+  local column = vim.fn.col('.') - 1
+  local line = api.nvim_get_current_line()
+  if vim.bo.buftype == '' and closing[line:sub(column + 1, column + 1)] == line:sub(column, column) then
+    return '<Del><BS>'
+  end
+  return '<BS>'
+end, {expr=true})
+
 local function set_colors()
   for level, color in ipairs(colors) do
     api.nvim_set_hl(0, 'NidoBracket' .. level, { fg = color })
@@ -26,15 +61,7 @@ local function update(buffer)
     local stack = {}
     for row, line in ipairs(api.nvim_buf_get_lines(buffer, 0, -1, false)) do
       for column, bracket in line:gmatch('()([%(%)%[%]{}])') do
-        local ignored = false
-        for _, id in ipairs(vim.fn.synstack(row, column)) do
-          local name = vim.fn.synIDattr(id, 'name'):lower()
-          if name:find('comment') or name:find('string') or name:find('character') then
-            ignored = true
-            break
-          end
-        end
-        if not ignored then
+        if not ignored(row, column) then
           if not closing[bracket] then
             stack[#stack + 1] = { row = row - 1, column = column - 1, bracket = bracket }
           elseif #stack > 0 and stack[#stack].bracket == closing[bracket] then
