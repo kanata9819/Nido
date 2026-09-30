@@ -97,14 +97,16 @@ export function registerWorkspaceHandlers({
             try {
                 const saved = await readLayout(join(app.getPath('userData'), 'workspaces.json'));
                 for (const [index, workspace] of saved.workspaces.entries()) {
+                    let s: Session | undefined;
                     try {
-                        const s = await Session.create(workspace.root, send, neovimResources);
-                        sessions.set(s.workspace.id, s);
+                        s = await Session.create(workspace.root, send, neovimResources);
                         errors.push(...(await s.restore(workspace, selectedShell)));
+                        sessions.set(s.workspace.id, s);
                         if (index === saved.active) {
                             state.active = s.workspace.id;
                         }
                     } catch (error) {
+                        await s?.stop();
                         errors.push(`${workspace.root}: ${String(error)}`);
                     }
                 }
@@ -169,6 +171,9 @@ export function registerWorkspaceHandlers({
         try {
             if (kind === 'terminal') {
                 await s.startTerminal(selectedShell);
+            }
+            if (state.prompting || state.closing || window.isDestroyed()) {
+                throw new Error('The window is closing.');
             }
         } catch (error) {
             await s.stop();

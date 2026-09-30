@@ -5,6 +5,7 @@ import { gitIgnored } from './git';
 import type { FileAction, FileEntry } from '../shared/types';
 
 export class SessionFiles {
+    private mutations: Promise<void> = Promise.resolve();
     constructor(
         private readonly root: string,
         private readonly client: NeovimClient
@@ -33,7 +34,18 @@ export class SessionFiles {
         ]);
     }
 
-    async fileAction(
+    fileAction(
+        action: FileAction,
+        path: string,
+        target: string,
+        trash: (path: string) => Promise<void>
+    ): Promise<void> {
+        const next = this.mutations.then(() => this.mutate(action, path, target, trash));
+        this.mutations = next.catch(() => {});
+        return next;
+    }
+
+    private async mutate(
         action: FileAction,
         path: string,
         target: string,
@@ -93,7 +105,8 @@ return result`,
         if (action === 'delete') {
             await trash(source);
             for (const buf of affected)
-                await this.client.request('nvim_buf_delete', [buf.id, { force: true }]);
+                // Edits can arrive while the OS is moving the file to the trash.
+                await this.client.request('nvim_buf_delete', [buf.id, { force: false }]);
             return;
         }
         const result = await destination(target);
@@ -118,16 +131,31 @@ return result`,
                 throw new Error('Close the destination file tab first.');
             }
             await rename(source, result);
-            for (const buf of renamed)
-                await this.client.request('nvim_exec_lua', [
-                    `local buf, name = ...
-vim.api.nvim_buf_set_name(buf, name)
--- Reload the clean buffer so Neovim recognizes the moved file as an existing file.
-if vim.api.nvim_buf_is_loaded(buf) then
-  vim.api.nvim_buf_call(buf, function() vim.cmd.edit({bang=true}) end)
-end`,
-                    [buf.id, buf.name]
-                ]);
+            const edited = await this.client.request('nvim_exec_lua', [
+                `local renamed = ...
+for _, item in ipairs(renamed) do
+  if vim.api.nvim_buf_is_valid(item.id) and vim.bo[item.id].modified then return true end
+end
+-- Check every buffer and update names in one RPC, without yielding to editor input.
+for _, item in ipairs(renamed) do
+  if vim.api.nvim_buf_is_valid(item.id) then
+    vim.api.nvim_buf_set_name(item.id, item.name)
+    if vim.api.nvim_buf_is_loaded(item.id) then
+      vim.api.nvim_buf_call(item.id, function() vim.cmd.edit() end)
+    end
+  end
+end
+return false`,
+                [renamed]
+            ]);
+            if (edited) {
+                // Undo the disk move before touching buffer names; never overwrite a new source.
+                await destination(relative(this.root, source));
+                await rename(result, source);
+                throw new Error(
+                    'File changed during the move. The move was cancelled; save and try again.'
+                );
+            }
         } else {
             throw new Error('Unknown file action.');
         }

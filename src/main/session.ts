@@ -212,6 +212,7 @@ export class Session {
     }
 
     async openTerminal(shell = 'auto'): Promise<Session> {
+        if (this.stopped) throw new Error('Workspace was closed.');
         if (this.workspace.kind === 'terminal') {
             return this;
         }
@@ -591,6 +592,8 @@ return {highlight(before), highlight(after)}`,
         this.stopped = true;
         this.client.cancelRequests();
         this.stopping = (async () => {
+            // A child being created must finish its own cancellation and cleanup first.
+            await this.terminalStarting?.catch(() => {});
             await this.terminal?.stop();
             if (!this.process.pid || this.processClosed) {
                 return;

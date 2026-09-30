@@ -2617,8 +2617,9 @@ test('normal shutdown restores workspace order, active file and cursors', async 
             /Press ENTER/
         );
         await page.screenshot({ path: 'test-results/nido-lsp-warning.png' });
-        await page.getByRole('button', { name: 'Dismiss error' }).click();
-        await page.locator('textarea:visible').focus();
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('alert', { name: 'Language server' })).toHaveCount(0);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
         await page.keyboard.type(
             ":lua vim.lsp.util.open_floating_preview({'# Nido documentation', '', '**Markdown preview**'}, 'markdown', {})"
         );

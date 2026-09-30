@@ -5,6 +5,45 @@ import { Session } from '../src/main/session';
 import type { NidoEvent } from '../src/shared/types';
 
 test(
+    'closing during terminal creation waits for child cleanup and rejects later opens',
+    { timeout: 15000 },
+    async () => {
+        const session = await Session.create(process.cwd(), () => {});
+        const originalCreate = Session.create;
+        let child: Session | undefined;
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        try {
+            Session.create = async (...args) => {
+                child = await originalCreate(...args);
+                await gate;
+                return child;
+            };
+            const opening = assert.rejects(session.openTerminal('auto'), /Workspace was closed/);
+            for (let i = 0; !child && i < 100; i++)
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            assert.ok(child);
+            let childClosed = false;
+            child.process.once('close', () => {
+                childClosed = true;
+            });
+            const stopping = session.stop();
+            release();
+            await Promise.all([opening, stopping]);
+            assert.equal(childClosed, true);
+            await assert.rejects(session.openTerminal('auto'), /Workspace was closed/);
+        } finally {
+            release();
+            Session.create = originalCreate;
+            await session.stop();
+            await child?.stop();
+        }
+    }
+);
+
+test(
     'unexpected Neovim exit rejects pending and subsequent requests',
     { timeout: 15000 },
     async () => {

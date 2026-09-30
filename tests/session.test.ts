@@ -984,6 +984,71 @@ test('explorer file actions preserve buffers, reject overwrites and protect work
     }
 });
 
+test('file mutations serialize and retain edits arriving during OS operations', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-file-race-'));
+    const session = await Session.create(root, () => {});
+    try {
+        await writeFile(join(root, 'source.txt'), 'saved\n');
+        await session.openFile('source.txt');
+        const lua = (code: string) => session.client.request('nvim_exec_lua', [code, []]);
+        const buffer = await session.client.request('nvim_get_current_buf', []);
+        let release!: () => void;
+        let started!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const ready = new Promise<void>((resolve) => {
+            started = resolve;
+        });
+        const deletion = assert.rejects(
+            session.fileAction('delete', 'source.txt', '', async (source) => {
+                started();
+                await gate;
+                await lua("vim.api.nvim_buf_set_lines(0, 0, -1, false, {'keep these edits'})");
+                await rename(source, join(root, 'trashed.txt'));
+            }),
+            /Failed to unload buffer/
+        );
+        await ready;
+        // A second mutation must wait until the first operation releases its OS boundary.
+        const creation = session.fileAction('createFile', 'source.txt', '', async () => {});
+        release();
+        await Promise.all([deletion, creation]);
+        assert.equal(await session.client.request('nvim_buf_is_valid', [buffer]), true);
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'keep these edits');
+        assert.equal(await readFile(join(root, 'trashed.txt'), 'utf8'), 'saved\n');
+        assert.equal(await readFile(join(root, 'source.txt'), 'utf8'), '');
+        // Inject an edit between the disk rename and the buffer name update.
+        await writeFile(join(root, 'rename-source.txt'), 'rename saved\n');
+        await session.openFile('rename-source.txt');
+        const request = session.client.request.bind(session.client);
+        session.client.request = async (method, args = []) => {
+            if (method === 'nvim_exec_lua' && String(args[0]).includes('local renamed = ...')) {
+                await request('nvim_exec_lua', [
+                    "vim.api.nvim_buf_set_lines(0, 0, -1, false, {'edited during rename'})",
+                    []
+                ]);
+            }
+            return request(method, args);
+        };
+        await assert.rejects(
+            session.fileAction('rename', 'rename-source.txt', 'moved.txt', async () => {}),
+            /move was cancelled/
+        );
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'edited during rename');
+        assert.equal(await session.modified(), true);
+        await session.save();
+        assert.equal(
+            await readFile(join(root, 'rename-source.txt'), 'utf8'),
+            'edited during rename\n'
+        );
+        await assert.rejects(readFile(join(root, 'moved.txt')), /ENOENT/);
+    } finally {
+        await session.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('Ctrl Z undoes in normal, insert and visual modes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-undo-key-'));
     let session: Session | undefined;
