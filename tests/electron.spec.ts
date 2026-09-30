@@ -1634,6 +1634,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
         await expect(fileTabs.locator('[data-diagnostic]')).toHaveCount(0);
         await expect(explorer.locator('[data-diagnostic]')).toHaveCount(0);
     } finally {
+        await running?.evaluate(({app}) => app.exit(0));
         await running?.close();
         await rm(root, { recursive: true, force: true });
     }
@@ -3001,6 +3002,82 @@ test('half-page direction changes animate once per press', async () => {
             expect(scrolls).toHaveLength(1);
             expect(Math.sign(scrolls[0])).toBe(key === 'Control+d' ? 1 : -1);
         }
+    } finally {
+        await running.evaluate(({ app }) => app.exit(0));
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
+test('stage all keeps HEAD gutter marks until commit and preserves unsaved edits', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-stage-all-ui-'));
+    const workspace = join(root, 'repo');
+    await mkdir(workspace);
+    const git = (...args: string[]): string =>
+        execFileSync('git', args, { cwd: workspace, encoding: 'utf8', windowsHide: true });
+    git('init', '-q');
+    git('config', 'user.name', 'Nido Test');
+    git('config', 'user.email', 'nido@example.test');
+    git('config', 'commit.gpgsign', 'false');
+    await writeFile(join(workspace, 'main.txt'), 'before\n');
+    await writeFile(join(workspace, 'deleted.txt'), 'deleted\n');
+    git('add', '.');
+    git('commit', '-qm', 'Initial');
+    await writeFile(join(workspace, 'main.txt'), 'changed\n');
+    await writeFile(join(workspace, 'new.txt'), 'new\n');
+    await rm(join(workspace, 'deleted.txt'));
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        env
+    });
+    try {
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        const input = page.getByRole('textbox', { name: 'Neovim input' });
+        await expect(input).toBeFocused();
+        await page.keyboard.type(':edit main.txt');
+        await page.keyboard.press('Enter');
+        const canvas = page.locator('canvas:visible');
+        await expect(canvas).toHaveAttribute('aria-description', /▎.*changed/);
+        await page.keyboard.type('A unsaved');
+        await page.keyboard.press('Escape');
+        await expect(canvas).toHaveAttribute('aria-description', /changed unsaved/);
+        await page.keyboard.press('Control+Shift+g');
+        const panel = page.getByRole('region', { name: 'Git changes' });
+        await expect(
+            panel.getByRole('button', { name: 'Stage all (S)', exact: true })
+        ).toBeEnabled();
+        await expect(page.getByRole('listbox', { name: 'Changed files' })).toBeFocused();
+        await page.keyboard.press('Shift+s');
+        await expect(
+            panel.getByRole('heading', { name: 'Staged changes', exact: true })
+        ).toBeVisible();
+        await expect(
+            panel.getByRole('button', { name: 'Stage all (S)', exact: true })
+        ).toBeDisabled();
+        expect(git('diff', '--cached', '--name-only').trim().split('\n')).toEqual([
+            'deleted.txt',
+            'main.txt',
+            'new.txt'
+        ]);
+        await page.keyboard.press('Escape');
+        await expect(canvas).toHaveAttribute('aria-description', /▎.*changed unsaved/);
+        await page.keyboard.press('Control+Shift+g');
+        await expect(panel).toHaveAttribute('aria-busy', 'false');
+        await page.getByRole('textbox', { name: 'Commit message' }).fill('Stage all commit');
+        await page.keyboard.press('Control+Enter');
+        await expect(panel.getByText('Working tree clean.', { exact: true })).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(canvas).toHaveAttribute('aria-description', /▎.*changed unsaved/);
+        expect(git('show', 'HEAD:main.txt')).toBe('changed\n');
+        await page.keyboard.type('u');
+        await expect(canvas).toHaveAttribute('aria-description', /changed/);
+        await expect(canvas).not.toHaveAttribute('aria-description', /▎|▸/);
+        expect(git('log', '--format=%s', '-1').trim()).toBe('Stage all commit');
     } finally {
         await running.evaluate(({ app }) => app.exit(0));
         await running.close();

@@ -452,6 +452,13 @@ end`,
         await this.client.request('nvim_command', ['checktime']);
     }
 
+    async refreshGitSigns(): Promise<void> {
+        await this.client.request('nvim_exec_lua', [
+            "local signs = require('nido_git_signs'); if signs.refresh_all then signs.refresh_all() end",
+            []
+        ]);
+    }
+
     async modified(): Promise<boolean> {
         return (await this.client.request('nvim_exec_lua', [
             "for _,b in ipairs(vim.api.nvim_list_bufs()) do if (vim.bo[b].buftype == '' or vim.bo[b].buftype == 'acwrite') and vim.bo[b].modified then return true end end return false",

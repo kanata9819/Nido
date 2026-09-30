@@ -114,6 +114,12 @@ export default function GitPanel({
         });
     }
 
+    function stageAll(): void {
+        if (changes.some((change) => !change.staged)) {
+            void run(() => window.nido.gitStageAll(workspaceId));
+        }
+    }
+
     return (
         <section
             className={styles.panel}
@@ -132,6 +138,12 @@ export default function GitPanel({
             <div className={styles.toolbar}>
                 <strong>{status?.branch || 'Source control'}</strong>
                 <span title={status?.root}>{status?.root}</span>
+                <button
+                    disabled={busy || !changes.some((change) => !change.staged)}
+                    onClick={stageAll}
+                >
+                    Stage all (S)
+                </button>
                 <button disabled={busy} onClick={() => void run(async () => {})}>
                     Refresh
                 </button>
@@ -156,7 +168,13 @@ export default function GitPanel({
                             return;
                         }
                         const index = changes.findIndex((change) => key(change) === selected);
-                        switch (event.key) {
+                        const commandKey = event.shiftKey && event.key === 's' ? 'S' : event.key;
+                        switch (commandKey) {
+                            case 'S': {
+                                event.preventDefault();
+                                stageAll();
+                                break;
+                            }
                             case 'j':
                             case 'k':
                             case 'ArrowDown':
@@ -290,7 +308,7 @@ export default function GitPanel({
             <footer>
                 {busy
                     ? 'Working…'
-                    : 'j/k Select · s Stage · u Unstage · r Refresh · c Message · Esc Close'}
+                    : 'j/k Select · s Stage · S Stage all · u Unstage · r Refresh · c Message · Esc Close'}
                 <br />
                 Ctrl+H/L List / Diff · j/k Scroll diff · Ctrl+D/U Half page · Ctrl+F/B Page · g/G
                 Top / Bottom · n/N Next / Previous change

@@ -125,6 +125,7 @@ export interface NidoAPI {
     gitStatus(id: string): Promise<GitStatus>;
     gitDiff(id: string, path: string, staged: boolean): Promise<string>;
     gitStage(id: string, path: string, staged: boolean): Promise<void>;
+    gitStageAll(id: string): Promise<void>;
     gitCommit(id: string, message: string): Promise<string>;
     restoreWorkspaces(
         shell?: TerminalShell

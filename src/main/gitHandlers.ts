@@ -4,6 +4,7 @@ import {
     gitStatus,
     gitDiff,
     gitStage,
+    gitStageAll,
     gitCommit,
     gitHistory,
     gitCommitFiles,
@@ -25,6 +26,20 @@ export function registerGitHandlers({
     sessions: Map<string, Session>;
     send: (event: NidoEvent) => void;
 }): void {
+    async function refreshGitState(): Promise<void> {
+        for (const open of sessions.values()) {
+            try {
+                await open.refreshGitSigns();
+            } catch (error) {
+                send({
+                    type: 'error',
+                    id: open.workspace.id,
+                    message: `Git updated, but editor marks could not refresh: ${String(error)}`
+                });
+            }
+            send({ type: 'filesChanged', id: open.workspace.id });
+        }
+    }
     handle('gitStatus', (id) => gitStatus(session(id).workspace.root));
     handle('gitHistory', (id, skip) => {
         if (typeof skip !== 'number') {
@@ -50,19 +65,29 @@ export function registerGitHandlers({
         await gitSwitch(current.workspace.root, text(name), create);
         for (const open of sessions.values()) {
             await open.refreshFiles();
-            send({ type: 'filesChanged', id: open.workspace.id });
         }
+        await refreshGitState();
     });
     for (const [name, action] of [
         ['gitDiff', gitDiff],
         ['gitStage', gitStage]
     ] as const) {
-        handle(name, (id, path, staged) => {
+        handle(name, async (id, path, staged) => {
             if (typeof staged !== 'boolean') {
                 throw new Error('Invalid Git selection.');
             }
-            return action(session(id).workspace.root, text(path), staged);
+            const result = await action(session(id).workspace.root, text(path), staged);
+            if (name === 'gitStage') await refreshGitState();
+            return result;
         });
     }
-    handle('gitCommit', (id, message) => gitCommit(session(id).workspace.root, text(message)));
+    handle('gitStageAll', async (id) => {
+        await gitStageAll(session(id).workspace.root);
+        await refreshGitState();
+    });
+    handle('gitCommit', async (id, message) => {
+        const result = await gitCommit(session(id).workspace.root, text(message));
+        await refreshGitState();
+        return result;
+    });
 }

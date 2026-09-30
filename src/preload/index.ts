@@ -12,6 +12,7 @@ const api: NidoAPI = {
     gitStatus: (id) => ipcRenderer.invoke('nido:gitStatus', id),
     gitDiff: (id, path, staged) => ipcRenderer.invoke('nido:gitDiff', id, path, staged),
     gitStage: (id, path, staged) => ipcRenderer.invoke('nido:gitStage', id, path, staged),
+    gitStageAll: (id) => ipcRenderer.invoke('nido:gitStageAll', id),
     gitCommit: (id, message) => ipcRenderer.invoke('nido:gitCommit', id, message),
     restoreWorkspaces: (shell) => ipcRenderer.invoke('nido:restore', shell),
     workspaceLayout: (ids, active) => ipcRenderer.invoke('nido:layout', ids, active),

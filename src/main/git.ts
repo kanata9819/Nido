@@ -258,6 +258,11 @@ export async function gitStage(cwd: string, path: string, staged: boolean): Prom
     );
 }
 
+export async function gitStageAll(cwd: string): Promise<void> {
+    const root = (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
+    await git(root, ['add', '-A', '--', '.']);
+}
+
 export async function gitCommit(cwd: string, message: string): Promise<string> {
     if (!message.trim() || message.length > 10_000) {
         throw new Error('Enter a commit message (up to 10,000 characters).');

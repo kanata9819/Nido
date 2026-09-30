@@ -28,7 +28,7 @@ function M.refresh(buffer)
   local function render(base)
     if not valid() then return end
     api.nvim_buf_clear_namespace(buffer, namespace, 0, -1)
-    if not base then return end
+    if not base then vim.cmd('redraw'); return end
     local lines = api.nvim_buf_get_lines(buffer, 0, -1, false)
     local text = table.concat(lines, '\n') .. (vim.bo[buffer].endofline and '\n' or '')
     if #lines == 1 and lines[1] == '' then text = '' end
@@ -72,6 +72,12 @@ function M.refresh(buffer)
       end)
     end)
   end)
+end
+
+function M.refresh_all()
+  for _, buffer in ipairs(api.nvim_list_bufs()) do
+    if api.nvim_buf_is_loaded(buffer) then M.refresh(buffer) end
+  end
 end
 
 api.nvim_create_autocmd({'BufEnter', 'BufWritePost', 'TextChanged', 'TextChangedI', 'TextChangedP', 'FileChangedShellPost'}, {

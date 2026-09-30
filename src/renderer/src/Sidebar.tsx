@@ -60,7 +60,6 @@ export default function Sidebar({
                 if (
                     (event.target as Element).closest('[data-explorer-commands]') ||
                     event.nativeEvent.isComposing ||
-                    event.keyCode === 229 ||
                     event.ctrlKey ||
                     event.altKey ||
                     event.metaKey
@@ -186,13 +185,13 @@ export default function Sidebar({
                     }
                     const key = event.ctrlKey
                         ? ({ c: 'c', x: 'x', v: 'p' } as Record<string, string>)[
-                              event.key.toLowerCase()
-                          ]
+                        event.key.toLowerCase()
+                        ]
                         : event.key === 'F2'
-                          ? 'r'
-                          : event.key === 'Delete'
-                            ? 'd'
-                            : event.key;
+                            ? 'r'
+                            : event.key === 'Delete'
+                                ? 'd'
+                                : event.key;
                     const command = commands.find((command) => command.key === key);
                     if (command) {
                         event.preventDefault();

@@ -8,6 +8,7 @@ import { splitDiff } from '../src/renderer/src/gitDiff';
 import {
     gitStatus,
     gitStage,
+    gitStageAll,
     gitDiff,
     gitCommit,
     gitHistory,
@@ -17,6 +18,44 @@ import {
     gitSwitch,
     gitIgnored
 } from '../src/main/git';
+
+test('stage all includes the whole repository, deletions and literal names but excludes ignored files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-stage-all-'));
+    const git = (...args: string[]): string =>
+        execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true });
+    try {
+        git('init', '-q');
+        git('config', 'user.name', 'Nido Test');
+        git('config', 'user.email', 'nido@example.test');
+        git('config', 'commit.gpgsign', 'false');
+        await mkdir(join(root, 'nested'));
+        await writeFile(join(root, '.gitignore'), 'ignored.log\n');
+        await writeFile(join(root, 'deleted.txt'), 'delete me\n');
+        await writeFile(join(root, 'modified.txt'), 'before\n');
+        git('add', '.');
+        git('commit', '-qm', 'Initial');
+        await rm(join(root, 'deleted.txt'));
+        await writeFile(join(root, 'modified.txt'), 'staged version\n');
+        await gitStage(root, 'modified.txt', false);
+        await writeFile(join(root, 'modified.txt'), 'latest version\n');
+        await writeFile(join(root, '[日本語].txt'), 'literal\n');
+        await writeFile(join(root, 'nested/new.txt'), 'new\n');
+        await writeFile(join(root, 'ignored.log'), 'ignored\n');
+        await gitStageAll(join(root, 'nested'));
+        const status = await gitStatus(root);
+        assert.equal(status.changes.length, 4);
+        assert.ok(status.changes.every((change) => change.staged));
+        assert.equal(git('show', ':modified.txt'), 'latest version\n');
+        assert.ok(
+            status.changes.some((change) => change.path === 'deleted.txt' && change.status === 'D')
+        );
+        assert.ok(status.changes.some((change) => change.path === '[日本語].txt'));
+        assert.ok(!git('ls-files').includes('ignored.log'));
+        assert.equal(git('log', '--format=%s', '-1').trim(), 'Initial');
+    } finally {
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
 
 test('ignore decorations follow Git rules, exceptions and tracked files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-ignore-'));
