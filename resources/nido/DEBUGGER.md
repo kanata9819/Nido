@@ -15,12 +15,19 @@ For multiple binaries, choose the target in the Debug panel. F10 steps over,
 F11 steps into, Shift+F11 steps out, and Shift+F5 stops. The panel also has Pause.
 Breakpoints are session-local; restart Nido to clear them.
 
+Rust runnable lenses appear above main functions, tests and test modules. Place
+the cursor inside the target and press gR to run or gD to debug in Normal mode.
+The command menu also exposes Run Rust at cursor and Debug Rust at cursor.
+Rust-analyzer supplies the Cargo target, test filter, arguments and environment.
+Runs stream output to the same panel and Shift+F5 stops them.
+
 The panel shows local variable summaries, the current source location, build and
 debugger messages, and the last 200 lines of terminal output. Source stopping uses
 Neovim signs and a highlighted line. The debugger is isolated per workspace.
 
-Initial scope: Cargo binary targets with no command-line arguments. Test/example
-targets, launch.json, expandable object fields, watches and interactive stdin are
+F5 starts Cargo binary targets without arguments; gD uses the selected runnable,
+including individual tests and test modules. launch.json, expandable object
+fields, watches and interactive stdin are
 not yet exposed by Nido. All debug executables run locally with your permissions.
 Custom dev profiles must retain debug information for source stepping.
 

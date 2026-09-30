@@ -61,6 +61,7 @@ export interface ReferencePreview {
 export type DebugAction =
     'start' | 'breakpoint' | 'over' | 'into' | 'out' | 'pause' | 'stop' | 'launch';
 export interface DebugState {
+    kind?: 'run' | 'debug';
     terminal?: string;
     status:
         'idle' | 'building' | 'starting' | 'running' | 'paused' | 'finished' | 'error' | 'select';

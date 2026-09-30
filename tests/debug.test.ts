@@ -6,6 +6,103 @@ import { join } from 'node:path';
 import { Session } from '../src/main/session';
 
 test(
+    'Rust runnable lenses execute main, individual tests and modules using keyboard bindings',
+    { timeout: 90000 },
+    async () => {
+        const root = await mkdtemp(join(tmpdir(), 'nido-runnables-'));
+        let session: Session | undefined;
+        const notices: string[] = [];
+        try {
+            await mkdir(join(root, 'src'));
+            await writeFile(
+                join(root, 'Cargo.toml'),
+                '[package]\nname="nido_runnable_test"\nversion="0.1.0"\nedition="2021"\n'
+            );
+            await writeFile(
+                join(root, 'src/main.rs'),
+                [
+                    'fn main() {',
+                    '    println!("main-ran");',
+                    '}',
+                    '#[cfg(test)]',
+                    'mod tests {',
+                    '    #[test]',
+                    '    fn first() {',
+                    '        let value = 42;',
+                    '        println!("first-ran={value}");',
+                    '    }',
+                    '    #[test]',
+                    '    fn second() { println!("second-ran"); }',
+                    '}',
+                    ''
+                ].join('\n')
+            );
+            session = await Session.create(root, (event) => {
+                if (event.type === 'notification' || event.type === 'error')
+                    notices.push(event.message);
+            });
+            await session.openFile('src/main.rs');
+            const lua = (code: string): Promise<unknown> =>
+                session!.client.request('nvim_exec_lua', [code, []]);
+            const wait = async (condition: () => boolean | Promise<boolean>): Promise<void> => {
+                for (let i = 0; i < 300; i++) {
+                    if (await condition()) return;
+                    if (session!.state.debug?.status === 'error')
+                        throw new Error(session!.state.debug.output);
+                    await new Promise((resolve) => setTimeout(resolve, 100));
+                }
+                throw new Error(JSON.stringify({ debug: session!.state.debug, notices }));
+            };
+            await wait(
+                async () =>
+                    Number(
+                        await lua(
+                            "return #vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_create_namespace('nido_runnables'), 0, -1, {})"
+                        )
+                    ) >= 4
+            );
+            const run = async (line: number): Promise<void> => {
+                const previous = session!.state.debug;
+                await session!.input(`${line}GgR`);
+                await wait(
+                    () =>
+                        session!.state.debug !== previous &&
+                        session!.state.debug?.status === 'finished'
+                );
+            };
+            await run(2);
+            assert.match(session.state.debug!.output, /main-ran/);
+            await run(8);
+            assert.match(session.state.debug!.output, /first-ran=42/);
+            assert.doesNotMatch(session.state.debug!.output, /second-ran/);
+            await run(5);
+            assert.match(session.state.debug!.output, /first-ran=42/);
+            assert.match(session.state.debug!.output, /second-ran/);
+            await session.input('9G');
+            await wait(async () => (await lua('return vim.api.nvim_win_get_cursor(0)[1]')) === 9);
+            await session.debug('breakpoint');
+            await session.input('gD');
+            await wait(
+                () => session!.state.debug?.status === 'paused' && !!session!.state.debug.location
+            );
+            assert.match(session.state.debug!.location!, /main.rs:9$/);
+            // println! can resolve to several breakpoint locations on the same source line.
+            await session.debug('breakpoint');
+            await session.debug('start');
+            await wait(() => session!.state.debug?.status === 'finished');
+            await wait(() => /first-ran=42/.test(session!.state.debug?.terminal || ''));
+            assert.doesNotMatch(session.state.debug!.terminal || '', /second-ran/);
+            await lua("vim.api.nvim_buf_set_lines(0, 0, -1, false, {'fn main() {}'})");
+            await session.input('gggR');
+            await wait(() => notices.some((message) => /Save modified files/.test(message)));
+        } finally {
+            await session?.stop();
+            await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+        }
+    }
+);
+
+test(
     'CodeLLDB builds Rust, stops at a breakpoint, steps and reports variables',
     { timeout: 90000 },
     async () => {

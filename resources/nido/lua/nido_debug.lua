@@ -6,6 +6,9 @@ local dap = require('dap')
 local root = vim.env.NIDO_WORKSPACE_ROOT or vim.fn.getcwd()
 local channel, build
 local generation = 0
+local launch_args = {}
+local launch_cwd = root
+local launch_env
 local state = {status='idle', output='', variables={}, targets={}}
 local function publish()
   if channel then vim.rpcnotify(channel, 'nido:debug', state) end
@@ -88,12 +91,96 @@ local function launch(index)
   local target = state.targets[index]
   assert(target, 'Choose a debug target')
   state.status = 'starting'
-  publish()
   close_output()
+  terminal_buf = nil
+  state.terminal = nil
+  publish()
   timer = vim.uv.new_timer()
   timer:start(200, 200, vim.schedule_wrap(read_output))
   dap.run({name=target.name, type='codelldb', request='launch', program=target.path,
-    cwd=root, args={}, stopOnEntry=false, terminal='integrated'})
+    cwd=launch_cwd, args=launch_args, env=launch_env, stopOnEntry=false, terminal='integrated'})
+end
+
+local function check_saved()
+  for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+    assert(vim.bo[buffer].buftype ~= '' or not vim.bo[buffer].modified, 'Save modified files before debugging or running')
+  end
+end
+
+local function start_build(args)
+  assert(vim.fn.executable(dap.adapters.codelldb.executable.command) == 1, 'Bundled CodeLLDB is missing. Run pnpm prepare:neovim.')
+  check_saved()
+  launch_args = args and args.executableArgs or {}
+  launch_cwd = args and (args.cwd or args.workspaceRoot) or root
+  launch_env = args and args.environment or nil
+  local cargo = args and vim.deepcopy(args.cargoArgs) or {'build', '--bins'}
+  local tests = cargo[1] == 'test'
+  assert(cargo[1] == 'run' or cargo[1] == 'build' or tests, 'This Cargo command cannot be debugged')
+  if cargo[1] == 'run' then cargo[1]='build' end
+  if tests then table.insert(cargo, '--no-run') end
+  table.insert(cargo, '--message-format=json')
+  table.insert(cargo, 1, args and args.overrideCargo or 'cargo')
+  state = {status='building', kind='debug', output='Building Rust debug targets…\n', variables={}, targets={}}
+  publish()
+  generation = generation + 1
+  local run = generation
+  build = vim.system(cargo, {cwd=launch_cwd, env=launch_env, text=true}, function(result)
+    vim.schedule(function()
+      if run ~= generation or not build then return end
+      build = nil
+      output(result.stderr or '')
+      local targets = {}
+      for line in (result.stdout or ''):gmatch('[^\n]+') do
+        local ok, item = pcall(vim.json.decode, line)
+        if ok and item.reason == 'compiler-artifact' and type(item.executable) == 'string' and item.profile.test == tests then
+          table.insert(targets, {name=item.target.name, path=item.executable})
+        elseif ok and item.reason == 'compiler-message' and item.message.rendered then output(item.message.rendered) end
+      end
+      if result.code ~= 0 then fail('Cargo build failed.'); return end
+      state.targets = targets
+      if #targets == 0 then fail('No executable target found.'); return end
+      if #targets == 1 then
+        local ok, err = pcall(launch, 1)
+        if not ok then fail(err) end
+      else state.status='select'; publish() end
+    end)
+  end)
+end
+
+function M.runnable(item, debug, rpc)
+  assert(not build and not dap.session(), 'Stop the current run or debugger first')
+  assert(item.kind == 'cargo', 'Only Cargo runnables are supported')
+  channel = rpc
+  local args = item.args
+  if debug then start_build(args); return end
+  check_saved()
+  local command = {args.overrideCargo or 'cargo'}
+  vim.list_extend(command, args.cargoArgs)
+  if #args.executableArgs > 0 then
+    table.insert(command, '--')
+    vim.list_extend(command, args.executableArgs)
+  end
+  close_output()
+  state = {status='running', kind='run', output=item.label .. '\n', variables={}, targets={}}
+  publish()
+  generation = generation + 1
+  local run = generation
+  local function stream(err, text)
+    vim.schedule(function()
+      if run == generation then output(text or err or '') end
+    end)
+  end
+  build = vim.system(command, {
+    cwd=args.cwd or args.workspaceRoot or root, env=args.environment, text=true,
+    stdout=stream, stderr=stream,
+  }, function(result)
+    vim.schedule(function()
+      if run ~= generation or not build then return end
+      build = nil
+      state.status = result.code == 0 and 'finished' or 'error'
+      output('Process exited: ' .. result.code .. '\n')
+    end)
+  end)
 end
 
 local function action_impl(action, rpc, index)
@@ -108,35 +195,7 @@ local function action_impl(action, rpc, index)
       return
     end
     if build then return end
-    assert(vim.fn.executable(dap.adapters.codelldb.executable.command) == 1, 'Bundled CodeLLDB is missing. Run pnpm prepare:neovim.')
-    for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
-      assert(vim.bo[buffer].buftype ~= '' or not vim.bo[buffer].modified, 'Save modified files before debugging')
-    end
-    state = {status='building', output='Building Rust debug targets…\n', variables={}, targets={}}
-    publish()
-    generation = generation + 1
-    local run = generation
-    build = vim.system({'cargo', 'build', '--bins', '--message-format=json'}, {cwd=root, text=true}, function(result)
-      vim.schedule(function()
-        if run ~= generation or not build then return end
-        build = nil
-        output(result.stderr or '')
-        local targets = {}
-        for line in (result.stdout or ''):gmatch('[^\n]+') do
-          local ok, item = pcall(vim.json.decode, line)
-          if ok and item.reason == 'compiler-artifact' and type(item.executable) == 'string' and not item.profile.test then
-            table.insert(targets, {name=item.target.name, path=item.executable})
-          elseif ok and item.reason == 'compiler-message' and item.message.rendered then output(item.message.rendered) end
-        end
-        if result.code ~= 0 then fail('Cargo build failed.'); return end
-        state.targets = targets
-        if #targets == 0 then fail('No binary target found. Debugging currently requires a Cargo binary target.'); return end
-        if #targets == 1 then
-          local ok, err = pcall(launch, 1)
-          if not ok then fail(err) end
-        else state.status='select'; publish() end
-      end)
-    end)
+    start_build(nil)
   elseif action == 'launch' then
     assert(state.status == 'select', 'No target selection pending')
     launch(index)

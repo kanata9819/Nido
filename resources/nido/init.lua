@@ -115,6 +115,9 @@ vim.api.nvim_set_hl(0, 'NormalFloat', {fg='#d4d4d4', bg='#1b1e21'})
 vim.api.nvim_set_hl(0, 'FloatBorder', {fg='#65717d', bg='#1b1e21'})
 vim.api.nvim_set_hl(0, 'FloatTitle', {fg='#a8cf9e', bg='#1b1e21', bold=true})
 local show_type_information = require('nido_hover').show
+local runnables = require('nido_runnables')
+vim.keymap.set('n', 'gR', function() runnables.execute(false) end)
+vim.keymap.set('n', 'gD', function() runnables.execute(true) end)
 vim.keymap.set('n', 'zz', function() require('nido_scroll').center(vim.v.count) end)
 for _, key in ipairs({'<C-d>', '<C-f>', '<PageDown>'}) do
   vim.keymap.set('n', key, function() require('nido_scroll').page(key, vim.v.count) end)

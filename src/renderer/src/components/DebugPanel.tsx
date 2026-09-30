@@ -81,7 +81,9 @@ export default function DebugPanel({
             }}
         >
             <div className={styles.debugToolbar}>
-                <strong>Debug · {state?.status || 'idle'}</strong>
+                <strong>
+                    {state?.kind === 'run' ? 'Run' : 'Debug'} · {state?.status || 'idle'}
+                </strong>
                 <button
                     disabled={busy || state?.status === 'running'}
                     onClick={() => action('start')}
@@ -100,7 +102,10 @@ export default function DebugPanel({
                 <button disabled={!paused} onClick={() => action('out')}>
                     Step out <kbd>Shift F11</kbd>
                 </button>
-                <button disabled={state?.status !== 'running'} onClick={() => action('pause')}>
+                <button
+                    disabled={state?.kind === 'run' || state?.status !== 'running'}
+                    onClick={() => action('pause')}
+                >
                     Pause
                 </button>
                 <button
@@ -115,7 +120,7 @@ export default function DebugPanel({
             </div>
             {state?.status === 'select' && (
                 <div>
-                    Choose a binary:{' '}
+                    Choose an executable:{' '}
                     {state.targets.map((target, i) => (
                         <button
                             data-debug-target
@@ -132,21 +137,23 @@ export default function DebugPanel({
             )}
             {state?.location && <div className={styles.debugLocation}>{state.location}</div>}
             <div className={styles.debugDetails}>
-                <div aria-label="Debug variables">
-                    <strong>Variables</strong>
-                    {state?.variables.map((value, i) => (
-                        <div key={`${value.name}-${i}`} title={value.type}>
-                            <span>{value.name}</span> = {value.value}
-                        </div>
-                    ))}
-                    {!state?.variables.length && (
-                        <p>
-                            {paused
-                                ? 'No local variables'
-                                : 'Pause at a breakpoint to inspect variables.'}
-                        </p>
-                    )}
-                </div>
+                {state?.kind !== 'run' && (
+                    <div aria-label="Debug variables">
+                        <strong>Variables</strong>
+                        {state?.variables.map((value, i) => (
+                            <div key={`${value.name}-${i}`} title={value.type}>
+                                <span>{value.name}</span> = {value.value}
+                            </div>
+                        ))}
+                        {!state?.variables.length && (
+                            <p>
+                                {paused
+                                    ? 'No local variables'
+                                    : 'Pause at a breakpoint to inspect variables.'}
+                            </p>
+                        )}
+                    </div>
+                )}
                 <pre aria-label="Debug output">
                     {state?.output || 'CodeLLDB · Save files, set a breakpoint and press F5.'}
                     {state?.terminal && `\n${state.terminal}`}

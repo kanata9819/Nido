@@ -27,6 +27,11 @@ pnpm dev
 
 編集はVimの操作に対応。設定からEditorConfig・相対行番号などを切り替えられます。
 
+Rustの`main`・テスト・テストモジュールにはRun / Debugの案内を表示します。
+対象のコード内にカーソルを置き、Normalモードで`gR`（実行）／`gD`（デバッグ）。
+操作メニューからも検索できます。ファイルを保存してから実行してください。
+結果は下部パネル、ブレークポイントは`F9`、停止は`Shift+F5`です。
+
 ## 言語サポート
 
 - Rust：`rustup component add rust-analyzer rust-src rustfmt`

@@ -5,6 +5,63 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-runnable-ui-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(join(workspace, 'src'), { recursive: true });
+    await writeFile(
+        join(workspace, 'Cargo.toml'),
+        '[package]\nname="nido_lens_ui"\nversion="0.1.0"\nedition="2021"\n'
+    );
+    await writeFile(
+        join(workspace, 'src/main.rs'),
+        'fn main() {\n    println!("keyboard-run");\n}\n#[test]\nfn keyboard_test() { println!("keyboard-test"); }\n'
+    );
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        env
+    });
+    try {
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        const input = page.getByRole('textbox', { name: 'Neovim input' });
+        await expect(input).toBeFocused();
+        await page.keyboard.type(':edit src/main.rs');
+        await page.keyboard.press('Enter');
+        const canvas = page.locator('canvas:visible');
+        await expect(canvas).toHaveAttribute('aria-description', /Run \[gR\].*Debug \[gD\]/, {
+            timeout: 25000
+        });
+        await expect(canvas).toHaveAttribute('aria-description', /Run Tests \[gR\]/);
+        await page.keyboard.type('gggR');
+        const output = page.getByLabel('Debug output');
+        await expect(output).toContainText('keyboard-run', { timeout: 15000 });
+        await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toContainText(
+            'Run · finished'
+        );
+        await expect(input).toBeFocused();
+        await page.keyboard.type('5GgR');
+        await expect(output).toContainText('keyboard-test', { timeout: 15000 });
+        await expect(output).toContainText('Process exited: 0');
+        await page.keyboard.type('gggD');
+        await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toContainText(
+            'Debug · finished',
+            { timeout: 15000 }
+        );
+        await expect(output).toContainText('keyboard-run');
+        await expect(input).toBeFocused();
+        await page.screenshot({ path: 'test-results/rust-runnable-lenses.png' });
+    } finally {
+        await running.evaluate(({ app }) => app.exit(0));
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 for (const animations of [true, false]) {
     test(`navigation notices use native cards without stealing editor focus (animations ${animations})`, async () => {
         const root = await mkdtemp(join(tmpdir(), 'nido-native-notice-'));

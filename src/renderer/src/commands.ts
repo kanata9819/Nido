@@ -112,6 +112,20 @@ export function buildItems(
                           focusEditor();
                       }
                   })),
+                  ...(state.filetype === 'rust'
+                      ? [
+                            ['Run Rust at cursor', 'gR'],
+                            ['Debug Rust at cursor', 'gD']
+                        ].map(([title, keys]) => ({
+                            key: '',
+                            title,
+                            detail: `Main, test or test module · ${keys}`,
+                            run: () => {
+                                run(window.nido.input(active, `<Esc>${keys}`));
+                                focusEditor();
+                            }
+                        }))
+                      : []),
                   ...(state.lsp
                       ? [
                             ['Go to definition', 'F12 / gd', '<F12>'],

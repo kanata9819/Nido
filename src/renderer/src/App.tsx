@@ -94,6 +94,13 @@ export default function App(): React.JSX.Element {
         }
     }, [hasDebugger, active]);
 
+    useEffect(() => {
+        if (state.debug?.status === 'building' || state.debug?.status === 'running') {
+            setBottomPanel('debug');
+            setDebugVisible(true);
+        }
+    }, [active, state.debug?.status]);
+
     const workspace = workspaces.find((w) => w.id === active);
     const decorations = useMemo(
         () => fileDecorations(workspace?.root || '', gitFiles, state.diagnostics, state.problems),
