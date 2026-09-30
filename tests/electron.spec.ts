@@ -2787,3 +2787,60 @@ test('explorer zz centers selection without opening or changing files', async ()
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
 });
+
+
+test('half-page direction changes animate once per press', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-page-direction-'));
+    await writeFile(join(root, 'scroll.txt'), Array.from({ length: 400 }, (_, i) => `line ${i + 1}`).join('\n'));
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({ args: ['.', `--user-data-dir=${join(root, 'profile')}`], env });
+    try {
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, root);
+        await expect(page.getByRole('treeitem', { name: 'scroll.txt', exact: true })).toBeVisible();
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('scroll.txt');
+        await page.keyboard.press('Enter');
+        const canvas = page.locator('canvas:visible');
+        await expect(canvas).toHaveAttribute('aria-description', /line 1/);
+        await page.keyboard.type('80Gzz');
+        await page.waitForTimeout(300);
+        await canvas.evaluate((node) => {
+            node.dataset.frames = '0';
+            node.dataset.scrolls = '[]';
+            const context = (node as HTMLCanvasElement).getContext('2d')!;
+            const draw = context.drawImage.bind(context);
+            context.drawImage = ((...args: Parameters<typeof draw>) => {
+                node.dataset.frames = String(Number(node.dataset.frames) + 1);
+                draw(...args);
+            }) as typeof draw;
+            window.nido.onEvent((event) => {
+                if (event.type !== 'redraw') return;
+                for (const [name, ...calls] of event.events) {
+                    if (name === 'nido_scroll') {
+                        node.dataset.scrolls = JSON.stringify([
+                            ...JSON.parse(node.dataset.scrolls!), ...calls.map((args) => Number(args[5]))
+                        ]);
+                    }
+                }
+            });
+        });
+        for (const key of ['Control+d', 'Control+u', 'Control+d', 'Control+u']) {
+            const frames = Number(await canvas.getAttribute('data-frames'));
+            await canvas.evaluate((node) => { node.dataset.scrolls = '[]'; });
+            await page.keyboard.press(key);
+            await expect.poll(async () => Number(await canvas.getAttribute('data-frames'))).toBeGreaterThan(frames);
+            await page.waitForTimeout(200);
+            const scrolls = JSON.parse((await canvas.getAttribute('data-scrolls'))!) as number[];
+            expect(scrolls).toHaveLength(1);
+            expect(Math.sign(scrolls[0])).toBe(key === 'Control+d' ? 1 : -1);
+        }
+    } finally {
+        await running.evaluate(({ app }) => app.exit(0));
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});

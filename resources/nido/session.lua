@@ -3,43 +3,45 @@ vim.g.nido_channel = channel
 vim.api.nvim_create_autocmd({'TextChanged', 'TextChangedI', 'TextChangedP'}, {
   callback = function() vim.rpcnotify(channel, 'nido:edit') end,
 })
--- Single-grid UIs can receive a full repaint instead of grid_scroll on upward scrolling.
-vim.api.nvim_create_autocmd('WinScrolled', {
-  callback = function()
-    for id, change in pairs(vim.v.event) do
-      local win = tonumber(id)
-      if win and change.height == 0 and change.width == 0
-          and (change.topline ~= 0 or change.skipcol ~= 0 or change.leftcol ~= 0) then
-        local info = vim.fn.getwininfo(win)[1]
-        local before = info.topline - change.topline
-        if before >= 1 and before <= vim.api.nvim_buf_line_count(info.bufnr) then
-          local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
-          local old_skip = math.max(0, view.skipcol - change.skipcol)
-          local forward = change.topline > 0 or (change.topline == 0 and change.skipcol > 0)
-          local rows = 0
-          if change.topline ~= 0 or change.skipcol ~= 0 then
-            rows = vim.api.nvim_win_text_height(win, {
-              start_row = (forward and before or info.topline) - 1,
-              end_row = (forward and info.topline or before) - 1,
-              start_vcol = forward and old_skip or view.skipcol,
-              end_vcol = forward and view.skipcol or old_skip,
-            }).all
-            if not forward then
-              rows = -rows
-            end
-          end
-          local top = info.winrow - 1
-          local left = info.wincol - 1
-          -- Horizontal scrolling leaves line numbers and signs fixed in place.
-          local text_left = rows == 0 and left + info.textoff or left
-          vim.rpcnotify(channel, 'nido:scroll', {
-            1, top, top + info.height, text_left, left + info.width, rows, change.leftcol
-          })
-        end
-      end
+-- Publish viewport movement during redraw, before its flush. WinScrolled runs
+-- after the flush and would leave a stale scroll notification in the next frame.
+local views = {}
+vim.api.nvim_set_decoration_provider(vim.api.nvim_create_namespace('nido_viewport'), {
+  on_win = function(_, win, buffer)
+    local info = vim.fn.getwininfo(win)[1]
+    local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+    local previous = views[win]
+    views[win] = {buffer=buffer, height=info.height, width=info.width,
+      topline=view.topline, skipcol=view.skipcol, leftcol=view.leftcol}
+    if not previous or previous.buffer ~= buffer or previous.height ~= info.height
+        or previous.width ~= info.width then return false end
+    local columns = view.leftcol - previous.leftcol
+    if view.topline == previous.topline and view.skipcol == previous.skipcol
+        and columns == 0 then return false end
+    local forward = view.topline > previous.topline
+      or (view.topline == previous.topline and view.skipcol > previous.skipcol)
+    local first, last = previous, view
+    if not forward then first, last = view, previous end
+    local rows = 0
+    if view.topline ~= previous.topline or view.skipcol ~= previous.skipcol then
+      rows = vim.api.nvim_win_text_height(win, {
+        start_row=first.topline - 1, end_row=last.topline - 1,
+        start_vcol=first.skipcol, end_vcol=last.skipcol,
+      }).all
+      if not forward then rows = -rows end
     end
+    local top, left = info.winrow - 1, info.wincol - 1
+    -- Horizontal scrolling leaves line numbers and signs fixed in place.
+    vim.rpcnotify(channel, 'nido:scroll', {
+      1, top, top + info.height, rows == 0 and left + info.textoff or left,
+      left + info.width, rows, columns,
+    })
+    return false
   end,
 })
+vim.api.nvim_create_autocmd('WinClosed', {callback=function(event)
+  views[tonumber(event.match)] = nil
+end})
 -- LSP messages belong in Nido's nonblocking notification, not Neovim's hit-enter prompt.
 vim.lsp.handlers['window/showMessage'] = function(_, params, ctx)
   local client = vim.lsp.get_client_by_id(ctx.client_id)
