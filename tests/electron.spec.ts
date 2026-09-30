@@ -2745,3 +2745,45 @@ test('settings navigation crosses the shell selector with Ctrl D and Ctrl U', as
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
 });
+
+
+test('explorer zz centers selection without opening or changing files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-explorer-center-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+    await Promise.all(Array.from({ length: 100 }, (_, i) => writeFile(join(workspace, `file${String(i).padStart(3, '0')}.txt`), '')));
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({ args: ['.', `--user-data-dir=${join(root, 'profile')}`], env });
+    try {
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        const tree = page.getByRole('tree', { name: 'Project files' });
+        await expect(tree.getByRole('treeitem')).toHaveCount(100);
+        await tree.focus();
+        await page.keyboard.press('Home');
+        await page.keyboard.type('j'.repeat(50));
+        const selected = tree.locator('[aria-selected="true"]');
+        const name = await selected.textContent();
+        const before = await tree.evaluate((node) => node.scrollTop);
+        await page.keyboard.press('z');
+        expect(await tree.evaluate((node) => node.scrollTop)).toBe(before);
+        await page.keyboard.press('z');
+        await expect.poll(() => tree.evaluate((node) => {
+            const row = node.querySelector('[aria-selected="true"]')!.getBoundingClientRect();
+            const viewport = node.getBoundingClientRect();
+            return Math.abs(row.top + row.height / 2 - viewport.top - node.clientHeight / 2);
+        })).toBeLessThan(2);
+        await expect(selected).toHaveText(name!);
+        await expect(tree).toBeFocused();
+        const centered = await tree.evaluate((node) => node.scrollTop);
+        await page.keyboard.type('zxz');
+        expect(await tree.evaluate((node) => node.scrollTop)).toBe(centered);
+    } finally {
+        await running.evaluate(({ app }) => app.exit(0));
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});

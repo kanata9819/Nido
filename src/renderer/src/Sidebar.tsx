@@ -37,6 +37,7 @@ export default function Sidebar({
     const [selected, setSelected] = useState('');
     const [revision, setRevision] = useState(0);
     const tree = useRef<HTMLDivElement>(null);
+    const centerPrefix = useRef(false);
     const [operation, setOperation] = useState<{ request?: FileRequest }>();
     const [clipboard, setClipboard] = useState<{ path: string; name: string; cut: boolean }>();
     useEffect(
@@ -250,10 +251,28 @@ export default function Sidebar({
                 role="tree"
                 tabIndex={0}
                 aria-label="Project files"
-                title="j/k Select · : Commands · a/A New file/folder · F2 Rename · Ctrl+C/X/V Copy/Cut/Paste · Delete"
+                title="j/k Select · zz Center selection · : Commands · a/A New file/folder · F2 Rename · Ctrl+C/X/V Copy/Cut/Paste · Delete"
                 aria-activedescendant={selected ? `file-${workspace.id}-${selected}` : undefined}
+                onBlur={() => { centerPrefix.current = false; }}
                 onKeyDown={(event) => {
+                    const pending = centerPrefix.current;
+                    centerPrefix.current = false;
                     if (event.nativeEvent.isComposing || event.altKey || event.metaKey) return;
+                    if (event.key === 'z' && !event.ctrlKey && !event.shiftKey && !event.repeat) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        centerPrefix.current = !pending;
+                        if (pending) {
+                            const row = document.getElementById(`file-${workspace.id}-${selected}`);
+                            if (row) {
+                                const viewport = event.currentTarget;
+                                const bounds = viewport.getBoundingClientRect();
+                                const target = row.getBoundingClientRect();
+                                viewport.scrollTop += target.top + target.height / 2 - bounds.top - viewport.clientHeight / 2;
+                            }
+                        }
+                        return;
+                    }
                     if (
                         event.key === ':' ||
                         event.key === 'ContextMenu' ||
