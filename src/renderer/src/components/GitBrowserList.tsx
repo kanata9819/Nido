@@ -1,3 +1,4 @@
+import type { GitView } from '../types';
 import type { RefObject } from 'react';
 import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
 import styles from '../assets/GitPanel.module.css';
@@ -16,7 +17,7 @@ export default function GitBrowserList({
     open,
     setCreating
 }: {
-    view: number;
+    view: GitView;
     busy: boolean;
     commit?: GitCommitEntry;
     history: GitCommitEntry[];
@@ -31,7 +32,7 @@ export default function GitBrowserList({
 }): React.JSX.Element {
     return (
         <div
-            className={`${styles.list} ${view === 2 || (view === 1 && !commit) ? styles.historyList : ''}`}
+            className={`${styles.list} ${view === 'branches' || (view === 'history' && !commit) ? styles.historyList : ''}`}
             ref={listRef}
             role="listbox"
             aria-label={listLabel}
@@ -60,7 +61,7 @@ export default function GitBrowserList({
                 } else if (event.key === 'Enter') {
                     event.preventDefault();
                     open();
-                } else if (view === 2 && event.key === 'n') {
+                } else if (view === 'branches' && event.key === 'n') {
                     event.preventDefault();
                     setCreating(true);
                 }
@@ -72,7 +73,7 @@ export default function GitBrowserList({
                     id={`git-entry-${position}`}
                     role="option"
                     aria-selected={index === position}
-                    className={`${styles.change} ${view === 2 || (view === 1 && !commit) ? styles.historyEntry : ''}`}
+                    className={`${styles.change} ${view === 'branches' || (view === 'history' && !commit) ? styles.historyEntry : ''}`}
                     title={label}
                     ref={(node) => {
                         if (node && index === position) {
@@ -85,7 +86,7 @@ export default function GitBrowserList({
                     }}
                     onDoubleClick={open}
                 >
-                    {view === 1 && !commit ? (
+                    {view === 'history' && !commit ? (
                         <>
                             <strong className={styles.commitSubject}>
                                 {history[position].subject}
@@ -97,7 +98,7 @@ export default function GitBrowserList({
                                 <span>{history[position].author}</span>
                             </div>
                         </>
-                    ) : view === 2 ? (
+                    ) : view === 'branches' ? (
                         <>
                             <strong className={styles.commitSubject}>
                                 {branches[position].name}
@@ -120,7 +121,7 @@ export default function GitBrowserList({
                 <p>
                     {commit
                         ? 'No changed files.'
-                        : view === 1
+                        : view === 'history'
                           ? 'No commits yet.'
                           : 'No branches yet. Press n to create one.'}
                 </p>

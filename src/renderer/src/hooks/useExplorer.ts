@@ -10,7 +10,7 @@ export function useExplorer({
     workspace: Workspace;
     onError: (message: string) => void;
 }) {
-    const [entries, setEntries] = useState<Record<string, FileEntry[]>>({});
+    const [entriesByDirectory, setEntries] = useState<Record<string, FileEntry[]>>({});
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
     const [selected, setSelected] = useState('');
     const [revision, setRevision] = useState(0);
@@ -30,8 +30,8 @@ export function useExplorer({
         try {
             const files = await window.nido.files(workspace.id, path);
             setEntries((old) => ({ ...old, [path]: files }));
-        } catch (e) {
-            onError(String(e));
+        } catch (error) {
+            onError(String(error));
         }
     };
 
@@ -52,9 +52,9 @@ export function useExplorer({
                     setEntries(Object.fromEntries(files));
                 }
             })
-            .catch((e) => {
+            .catch((error) => {
                 if (!cancelled) {
-                    onError(String(e));
+                    onError(String(error));
                 }
             });
         return () => {
@@ -62,85 +62,96 @@ export function useExplorer({
         };
     }, [workspace.id, onError, revision]);
 
-    const visible = getVisibleEntries(entries, expanded);
-    const item = visible.find((entry) => entry.path === selected);
-    const parent = item
-        ? item.directory
-            ? item.path
-            : item.path.replace(/[\\/]?[^\\/]+$/, '')
-        : '';
-    const child = (name: string): string => (parent ? `${parent}/${name}` : name);
-    const treePath = (path: string): string =>
+    const visible = getVisibleEntries(entriesByDirectory, expanded);
+    const selectedEntry = visible.find((entry) => entry.path === selected);
+    let targetDirectory = '';
+    if (selectedEntry?.directory) {
+        targetDirectory = selectedEntry.path;
+    } else if (selectedEntry) {
+        targetDirectory = selectedEntry.path.replace(/[\\/]?[^\\/]+$/, '');
+    }
+    const pathInTargetDirectory = (name: string): string =>
+        targetDirectory ? `${targetDirectory}/${name}` : name;
+    const toTreePath = (path: string): string =>
         path.replace(/[\\/]/g, workspace.root.includes('\\') ? '\\' : '/');
     const closeOperation = (): void => {
         setOperation(undefined);
         requestAnimationFrame(() => tree.current?.focus());
     };
-    const request = (
+    const requestFileOperation = (
         action: FileRequest['action'],
         title: string,
         value: string,
-        path = item?.path || ''
+        path = selectedEntry?.path || ''
     ): void => setOperation({ request: { action, title, value, path } });
-    const copy = (cut: boolean): void => {
-        if (!item) return;
-        setClipboard({ path: item.path, name: item.name, cut });
+    const copySelectedEntry = (cut: boolean): void => {
+        if (!selectedEntry) return;
+        setClipboard({ path: selectedEntry.path, name: selectedEntry.name, cut });
         closeOperation();
     };
-    const paste = (): void => {
+    const pasteClipboard = (): void => {
         if (!clipboard) return;
-        const destination = child(clipboard.name);
-        const value =
-            destination.replace(/\\/g, '/') === clipboard.path.replace(/\\/g, '/')
-                ? child(clipboard.name.replace(/(\.[^.]*)?$/, ' copy$1'))
-                : destination;
-        request(
+        const destination = pathInTargetDirectory(clipboard.name);
+        const sourcePath = clipboard.path.replace(/\\/g, '/');
+        const destinationPath = destination.replace(/\\/g, '/');
+        let destinationName = destination;
+        if (sourcePath === destinationPath) {
+            // Pasting beside the original must suggest a new name instead of overwriting it.
+            const copyName = clipboard.name.replace(/(\.[^.]*)?$/, ' copy$1');
+            destinationName = pathInTargetDirectory(copyName);
+        }
+        requestFileOperation(
             clipboard.cut ? 'rename' : 'copy',
             clipboard.cut ? 'Move here' : 'Paste copy',
-            value,
+            destinationName,
             clipboard.path
         );
     };
     const commands = [
-        { title: 'New file', key: 'a', run: () => request('createFile', 'New file', child('')) },
+        {
+            title: 'New file',
+            key: 'a',
+            run: () => requestFileOperation('createFile', 'New file', pathInTargetDirectory(''))
+        },
         {
             title: 'New folder',
             key: 'A',
-            run: () => request('createDirectory', 'New folder', child(''))
+            run: () =>
+                requestFileOperation('createDirectory', 'New folder', pathInTargetDirectory(''))
         },
         {
             title: 'Rename',
             key: 'r',
-            disabled: !item,
-            run: () => request('rename', 'Rename', item!.name)
+            disabled: !selectedEntry,
+            run: () => requestFileOperation('rename', 'Rename', selectedEntry!.name)
         },
         {
             title: 'Move to…',
             key: 'm',
-            disabled: !item,
-            run: () => request('rename', 'Move to…', item!.path)
+            disabled: !selectedEntry,
+            run: () => requestFileOperation('rename', 'Move to…', selectedEntry!.path)
         },
-        { title: 'Copy', key: 'c', disabled: !item, run: () => copy(false) },
-        { title: 'Cut', key: 'x', disabled: !item, run: () => copy(true) },
-        { title: 'Paste', key: 'p', disabled: !clipboard, run: paste },
+        { title: 'Copy', key: 'c', disabled: !selectedEntry, run: () => copySelectedEntry(false) },
+        { title: 'Cut', key: 'x', disabled: !selectedEntry, run: () => copySelectedEntry(true) },
+        { title: 'Paste', key: 'p', disabled: !clipboard, run: pasteClipboard },
         {
             title: 'Delete',
             key: 'd',
-            disabled: !item,
-            run: () => request('delete', 'Delete', '', item!.path)
+            disabled: !selectedEntry,
+            run: () => requestFileOperation('delete', 'Delete', '', selectedEntry!.path)
         }
     ];
 
-    const onDone = (path: string): void => {
+    const finishFileOperation = (path: string): void => {
         setRevision((value) => value + 1);
-        setSelected(treePath(path));
+        setSelected(toTreePath(path));
         setExpanded((old) => {
             const next = new Set(old);
-            const parts = path.split(/[\\/]/);
-            parts.pop();
-            while (parts.length) {
-                next.add(treePath(parts.join('/')));
-                parts.pop();
+            const ancestorSegments = path.split(/[\\/]/);
+            ancestorSegments.pop();
+            while (ancestorSegments.length) {
+                next.add(toTreePath(ancestorSegments.join('/')));
+                ancestorSegments.pop();
             }
             return next;
         });
@@ -165,6 +176,6 @@ export function useExplorer({
         clipboard,
         commands,
         closeOperation,
-        onDone
+        onDone: finishFileOperation
     };
 }

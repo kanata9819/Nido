@@ -6,7 +6,7 @@ import type {
     ReferencePreview
 } from '../shared/types';
 
-const gridEvents = new Set([
+const rendererGridEvents = new Set([
     'popupmenu_show',
     'popupmenu_select',
     'popupmenu_hide',
@@ -27,33 +27,42 @@ const gridEvents = new Set([
 export class SessionEvents {
     state: SessionState = { buffers: [], current: 0, mode: 'n', line: 1, column: 1, filetype: '' };
     private pendingRedraw: Redraw = [];
-    private batchingScroll = false;
+    private isBatchingScroll = false;
 
     constructor(
-        private id: string,
-        private emit: (event: NidoEvent) => void
+        private workspaceId: string,
+        private sendToRenderer: (event: NidoEvent) => void
     ) {}
 
-    beginScroll(): void {
-        this.batchingScroll = true;
+    beginScrollBatch(): void {
+        this.isBatchingScroll = true;
     }
 
-    endScroll(): void {
-        this.batchingScroll = false;
-        const events = this.pendingRedraw;
+    endScrollBatch(): void {
+        this.isBatchingScroll = false;
+        if (this.pendingRedraw.length === 0) return;
+        // Grid rows and their fractional offset must become visible together.
+        this.pendingRedraw.push(['flush', []]);
+        this.publishPendingRedraw();
+    }
+
+    private publishPendingRedraw(): void {
+        const completedFrame = this.pendingRedraw;
         this.pendingRedraw = [];
-        if (events.length) {
-            this.emit({ type: 'redraw', id: this.id, events: [...events, ['flush', []]] });
-        }
+        this.sendToRenderer({ type: 'redraw', id: this.workspaceId, events: completedFrame });
     }
 
-    notify(method: string, args: unknown[]): void {
+    private publishState(): void {
+        this.sendToRenderer({ type: 'state', id: this.workspaceId, state: this.state });
+    }
+
+    receiveNotification(method: string, args: unknown[]): void {
         switch (method) {
             case 'nido:hover': {
                 if (typeof args[0] === 'string' && typeof args[1] === 'string') {
-                    this.emit({
+                    this.sendToRenderer({
                         type: 'hover',
-                        id: this.id,
+                        id: this.workspaceId,
                         markdown: args[0],
                         filetype: args[1],
                         codeBlocks: Array.isArray(args[2])
@@ -72,13 +81,13 @@ export class SessionEvents {
                 break;
             }
             case 'nido:pixel_scroll': {
-                if (this.batchingScroll) {
+                if (this.isBatchingScroll) {
                     this.pendingRedraw.push(['nido_pixel_scroll', args]);
                     break;
                 }
-                this.emit({
+                this.sendToRenderer({
                     type: 'redraw',
-                    id: this.id,
+                    id: this.workspaceId,
                     events: [
                         ['nido_pixel_scroll', args],
                         ['flush', []]
@@ -87,21 +96,23 @@ export class SessionEvents {
                 break;
             }
             case 'nido:message': {
-                this.emit({ type: 'error', id: this.id, message: String(args[0]) });
+                this.sendToRenderer({
+                    type: 'error',
+                    id: this.workspaceId,
+                    message: String(args[0])
+                });
                 break;
             }
             case 'redraw': {
                 // Other events can contain Neovim Window handles, which cannot cross Electron IPC.
                 for (const event of args as Redraw) {
-                    if (!gridEvents.has(event[0])) {
+                    if (!rendererGridEvents.has(event[0])) {
                         continue;
                     }
                     this.pendingRedraw.push(event);
                     // A repaint can span several RPC notifications. Never expose a partial frame.
-                    if (event[0] === 'flush' && !this.batchingScroll) {
-                        const events = this.pendingRedraw;
-                        this.pendingRedraw = [];
-                        this.emit({ type: 'redraw', id: this.id, events });
+                    if (event[0] === 'flush' && !this.isBatchingScroll) {
+                        this.publishPendingRedraw();
                     }
                 }
                 break;
@@ -119,7 +130,7 @@ export class SessionEvents {
                 if (!Array.isArray(this.state.problems)) {
                     this.state.problems = [];
                 }
-                this.emit({ type: 'state', id: this.id, state: this.state });
+                this.publishState();
                 break;
             }
             case 'nido:references': {
@@ -128,7 +139,7 @@ export class SessionEvents {
                     references.items = [];
                 }
                 this.state = { ...this.state, references };
-                this.emit({ type: 'state', id: this.id, state: this.state });
+                this.publishState();
                 break;
             }
             case 'nido:debug': {
@@ -140,7 +151,7 @@ export class SessionEvents {
                     debug.targets = [];
                 }
                 this.state = { ...this.state, debug };
-                this.emit({ type: 'state', id: this.id, state: this.state });
+                this.publishState();
                 break;
             }
         }

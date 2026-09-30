@@ -1,3 +1,4 @@
+import type { GitView } from '../types';
 import { useEffect, useRef, useState } from 'react';
 import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
 import GitPanel from './GitPanel';
@@ -14,7 +15,7 @@ export default function GitBrowser({
     workspaceId: string;
     onClose: () => void;
 }): React.JSX.Element {
-    const [view, setView] = useState(0);
+    const [view, setView] = useState<GitView>('changes');
     const [message, setMessage] = useState('');
     const [revision, setRevision] = useState(0);
     const [history, setHistory] = useState<GitCommitEntry[]>([]);
@@ -23,11 +24,11 @@ export default function GitBrowser({
     const [files, setFiles] = useState<string[]>([]);
     const [index, setIndex] = useState(0);
     const [diff, setDiff] = useState('');
-    const [name, setName] = useState('');
+    const [newBranchName, setNewBranchName] = useState('');
     const [creating, setCreating] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
-    const [more, setMore] = useState(false);
+    const [hasMoreHistory, setHasMoreHistory] = useState(false);
     const [branchName, setBranchName] = useState('');
     const list = useRef<HTMLDivElement>(null);
     const branchInput = useRef<HTMLInputElement>(null);
@@ -55,7 +56,7 @@ export default function GitBrowser({
     async function loadHistory(append = false): Promise<void> {
         const entries = await window.nido.gitHistory(workspaceId, append ? history.length : 0);
         setHistory(append ? [...history, ...entries] : entries);
-        setMore(entries.length === 100);
+        setHasMoreHistory(entries.length === 100);
     }
 
     useEffect(() => {
@@ -65,12 +66,12 @@ export default function GitBrowser({
     }, [creating]);
 
     useEffect(() => {
-        if (view === 0) {
+        if (view === 'changes') {
             return;
         }
         void run(async () => {
             setBranchName((await window.nido.gitStatus(workspaceId)).branch);
-            if (view === 1) {
+            if (view === 'history') {
                 await loadHistory();
             } else {
                 setBranches(await window.nido.gitBranches(workspaceId));
@@ -104,7 +105,7 @@ export default function GitBrowser({
         };
     }, [commit, path]);
 
-    function back(): void {
+    function returnToPreviousView(): void {
         if (creating) {
             setCreating(false);
         } else if (commit) {
@@ -123,7 +124,7 @@ export default function GitBrowser({
         list.current?.focus();
     }
 
-    function changeView(next: number): void {
+    function changeView(next: GitView): void {
         if (busy) {
             return;
         }
@@ -139,18 +140,18 @@ export default function GitBrowser({
         void run(async () => {
             await window.nido.gitSwitch(workspaceId, branch, create);
             setCreating(false);
-            setName('');
+            setNewBranchName('');
             setBranches(await window.nido.gitBranches(workspaceId));
             setBranchName((await window.nido.gitStatus(workspaceId)).branch);
             list.current?.focus();
         });
     }
 
-    function open(): void {
-        if (view === 2 && branches[index]) {
+    function openSelection(): void {
+        if (view === 'branches' && branches[index]) {
             const branch = branches[index];
             switchBranch(`refs/${branch.remote ? 'remotes' : 'heads'}/${branch.name}`, false);
-        } else if (view === 1 && !commit && history[index]) {
+        } else if (view === 'history' && !commit && history[index]) {
             const entry = history[index];
             void run(async () => {
                 const paths = await window.nido.gitCommitFiles(workspaceId, entry.hash);
@@ -163,7 +164,7 @@ export default function GitBrowser({
     }
 
     let labels: string[];
-    if (view === 2) {
+    if (view === 'branches') {
         labels = branches.map(
             (branch) =>
                 `${branch.current ? '● ' : ''}${branch.remote ? '[remote] ' : ''}${branch.name}`
@@ -174,29 +175,35 @@ export default function GitBrowser({
         labels = history.map((entry) => `${entry.hash.slice(0, 8)}  ${entry.subject}`);
     }
     let listLabel = 'Commit history';
-    if (view === 2) {
+    if (view === 'branches') {
         listLabel = 'Branches';
     } else if (commit) {
         listLabel = 'Commit files';
     }
 
-    useGitBrowserKeyboard({ busy, back, changeView });
+    useGitBrowserKeyboard({ busy, back: returnToPreviousView, changeView });
 
     return (
         <div className={styles.panel}>
             <nav className={styles.toolbar} aria-label="Git views">
-                {['Changes', 'History', 'Branches'].map((title, tab) => (
+                {(
+                    [
+                        { view: 'changes', title: 'Changes' },
+                        { view: 'history', title: 'History' },
+                        { view: 'branches', title: 'Branches' }
+                    ] as const
+                ).map(({ view: tab, title }, shortcutIndex) => (
                     <button
                         key={title}
                         disabled={busy}
                         aria-current={view === tab ? 'page' : undefined}
                         onClick={() => changeView(tab)}
                     >
-                        {tab + 1} {title}
+                        {shortcutIndex + 1} {title}
                     </button>
                 ))}
             </nav>
-            {view === 0 ? (
+            {view === 'changes' ? (
                 <GitPanel
                     workspaceId={workspaceId}
                     onBusyChange={setBusy}
@@ -210,12 +217,12 @@ export default function GitBrowser({
                         <span>
                             {commit
                                 ? `${commit.hash.slice(0, 8)} · ${commit.subject} · Compared with first parent`
-                                : view === 1
+                                : view === 'history'
                                   ? 'History of the current branch'
                                   : 'Local and remote-tracking branches'}
                         </span>
                         {commit && (
-                            <button disabled={busy} onClick={back}>
+                            <button disabled={busy} onClick={returnToPreviousView}>
                                 Back (Esc)
                             </button>
                         )}
@@ -243,11 +250,11 @@ export default function GitBrowser({
                             index={index}
                             setIndex={setIndex}
                             listRef={list}
-                            open={open}
+                            open={openSelection}
                             setCreating={setCreating}
                         />
                         <div className={styles.preview} data-git-preview>
-                            {view === 1 && commit ? (
+                            {view === 'history' && commit ? (
                                 <GitDiff
                                     key={`${commit.hash}:${path}`}
                                     workspaceId={workspaceId}
@@ -257,10 +264,18 @@ export default function GitBrowser({
                                     beforeLabel="First parent"
                                     afterLabel={commit.hash.slice(0, 8)}
                                 />
-                            ) : view === 1 && history[index] ? (
-                                <CommitDetails entry={history[index]} busy={busy} open={open} />
-                            ) : view === 2 && branches[index] ? (
-                                <BranchDetails entry={branches[index]} busy={busy} open={open} />
+                            ) : view === 'history' && history[index] ? (
+                                <CommitDetails
+                                    entry={history[index]}
+                                    busy={busy}
+                                    open={openSelection}
+                                />
+                            ) : view === 'branches' && branches[index] ? (
+                                <BranchDetails
+                                    entry={branches[index]}
+                                    busy={busy}
+                                    open={openSelection}
+                                />
                             ) : (
                                 <pre tabIndex={0} />
                             )}
@@ -268,11 +283,13 @@ export default function GitBrowser({
                     </div>
                     <div className={styles.toolbar}>
                         {!commit && (
-                            <button disabled={busy || !labels.length} onClick={open}>
-                                {view === 1 ? 'Open commit (Enter)' : 'Switch branch (Enter)'}
+                            <button disabled={busy || !labels.length} onClick={openSelection}>
+                                {view === 'history'
+                                    ? 'Open commit (Enter)'
+                                    : 'Switch branch (Enter)'}
                             </button>
                         )}
-                        {view === 1 && !commit && more && (
+                        {view === 'history' && !commit && hasMoreHistory && (
                             <button
                                 disabled={busy}
                                 onClick={() => void run(() => loadHistory(true))}
@@ -280,7 +297,7 @@ export default function GitBrowser({
                                 Load older commits
                             </button>
                         )}
-                        {view === 2 && (
+                        {view === 'branches' && (
                             <button disabled={busy} onClick={() => setCreating(true)}>
                                 New branch (n)
                             </button>
@@ -291,7 +308,7 @@ export default function GitBrowser({
                             className={styles.commit}
                             onSubmit={(event) => {
                                 event.preventDefault();
-                                switchBranch(name, true);
+                                switchBranch(newBranchName, true);
                             }}
                         >
                             <input
@@ -299,10 +316,10 @@ export default function GitBrowser({
                                 autoFocus
                                 aria-label="New branch name"
                                 placeholder="New branch name"
-                                value={name}
-                                onChange={(event) => setName(event.target.value)}
+                                value={newBranchName}
+                                onChange={(event) => setNewBranchName(event.target.value)}
                             />
-                            <button disabled={busy || !name.trim()} type="submit">
+                            <button disabled={busy || !newBranchName.trim()} type="submit">
                                 Create and switch
                             </button>
                         </form>

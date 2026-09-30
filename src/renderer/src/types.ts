@@ -1,3 +1,5 @@
+export type GitView = 'changes' | 'history' | 'branches';
+
 export type Panel =
     | 'commands'
     | 'workspaces'

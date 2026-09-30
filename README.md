@@ -48,3 +48,13 @@ pnpm test:e2e  # ビルド済みアプリの操作
 - `GitBrowser.tsx`：Git画面の状態とデータ取得。リストは `GitBrowserList.tsx`、詳細は `GitDetails.tsx`、キー操作は `useGitBrowserKeyboard.ts`。
 - `Session`：Neovimプロセスと入力・終了の管理。通知と描画フレームは `SessionEvents`、ファイル操作は `SessionFiles`。
 - `handlers.ts`：IPCの送信元検証とエディタ操作。ワークスペースの保存・復元・終了は `workspaceHandlers.ts`、Git操作は `gitHandlers.ts`。
+
+## コードを読む順番
+
+まず画面側の入口を読み、そこで呼ぶ処理をたどると、操作と結果をつなげやすくなります。
+以下の画面側ファイルは `src/renderer/src/`、Neovim・IPC側は `src/main/` にあります。
+
+- **エクスプローラのキー操作**：`Sidebar.tsx` → `sidebarKeyboard.ts`。表示中の行から選択位置を調べ、キーに応じた移動量を足し、移動先を画面内に表示します。
+- **ファイルの作成・移動**：`useExplorer.ts` → `components/ExplorerCommands.tsx` → `handlers.ts` → `sessionFiles.ts`。選択から操作先を決め、ダイアログで入力を受け、メインプロセスでファイルを操作します。
+- **Git画面**：`components/GitBrowser.tsx` → `GitBrowserList.tsx` / `GitDetails.tsx`。`view` は `changes`・`history`・`branches` のいずれか。取得先を調べたい場合は `gitHandlers.ts` を読みます。
+- **エディタの描画**：`session.ts` → `sessionEvents.ts` → `hooks/useEditorRendering.ts`。Neovimの通知を受け、`flush` までの描画命令を一つのフレームにまとめ、画面側へ送ります。スクロール中は行と端数の位置をまとめて反映します。

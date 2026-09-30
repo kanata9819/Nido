@@ -84,7 +84,7 @@ export class Session {
         });
         this.fileService = new SessionFiles(this.workspace.root, this.client);
         this.client.on('notification', (method: string, args: unknown[]) => {
-            this.events.notify(method, args);
+            this.events.receiveNotification(method, args);
         });
         this.process.stderr.on('data', () => {
             /* Drain the child pipe; RPC errors are surfaced separately. */
@@ -299,13 +299,13 @@ end`,
             if (this.workspace.kind === 'terminal') {
                 await this.client.request('nvim_command', ['startinsert']);
             }
-            let rest = Buffer.from(keys);
-            while (rest.length && !this.stopped) {
-                const accepted = (await this.client.request('nvim_input', [
-                    rest.toString()
+            let remainingInput = Buffer.from(keys);
+            while (remainingInput.length && !this.stopped) {
+                const acceptedBytes = (await this.client.request('nvim_input', [
+                    remainingInput.toString()
                 ])) as number;
-                rest = rest.subarray(accepted);
-                if (!accepted) {
+                remainingInput = remainingInput.subarray(acceptedBytes);
+                if (acceptedBytes === 0) {
                     await new Promise((done) => setTimeout(done, 2));
                 }
             }
@@ -355,7 +355,7 @@ end`,
         }
         const next = this.inputQueue.then(async () => {
             this.scrollDetached = true;
-            this.events.beginScroll();
+            this.events.beginScrollBatch();
             try {
                 if (this.workspace.kind === 'terminal') {
                     await this.client.request('nvim_command', ['stopinsert']);
@@ -368,7 +368,7 @@ end`,
                 await this.client.request('nvim_eval', ['1']);
             } finally {
                 // Publish the grid, fractional offset and anchored cursor as one frame, even for sub-line deltas.
-                this.events.endScroll();
+                this.events.endScrollBatch();
             }
         });
         this.inputQueue = next.catch(() => {});

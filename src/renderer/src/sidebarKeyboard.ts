@@ -1,7 +1,7 @@
 import type { FileEntry } from '../../shared/types';
 import { toggle } from './sidebarToggle';
 
-interface KeyboardDeps {
+interface ExplorerKeyboardOptions {
     visible: (FileEntry & { depth: number })[];
     selected: string;
     expanded: Set<string>;
@@ -12,7 +12,7 @@ interface KeyboardDeps {
     workspaceId: string;
 }
 
-export function createOnKeyDown({
+export function createExplorerKeyHandler({
     visible,
     selected,
     expanded,
@@ -21,7 +21,7 @@ export function createOnKeyDown({
     load,
     onOpen,
     workspaceId
-}: KeyboardDeps): (event: React.KeyboardEvent) => void {
+}: ExplorerKeyboardOptions): (event: React.KeyboardEvent) => void {
     return (event: React.KeyboardEvent): void => {
         if (
             event.nativeEvent.isComposing ||
@@ -33,18 +33,18 @@ export function createOnKeyDown({
         }
         const key = event.key.toLowerCase();
         const navigationKey = event.key === 'g' && event.shiftKey ? 'G' : event.key;
-        const halfPage = event.ctrlKey && !event.shiftKey && ['d', 'u'].includes(key);
-        const fullPage =
+        const isHalfPage = event.ctrlKey && !event.shiftKey && ['d', 'u'].includes(key);
+        const isFullPage =
             (event.ctrlKey && !event.shiftKey && ['f', 'b'].includes(key)) ||
             (!event.ctrlKey && ['PageDown', 'PageUp'].includes(event.key));
-        if (event.ctrlKey && !halfPage && !fullPage) {
+        if (event.ctrlKey && !isHalfPage && !isFullPage) {
             return;
         }
-        const index = visible.findIndex((entry) => entry.path === selected);
-        const item = visible[Math.max(0, index)];
+        const selectedIndex = visible.findIndex((entry) => entry.path === selected);
+        const selectedEntry = visible[Math.max(0, selectedIndex)];
         if (
-            halfPage ||
-            fullPage ||
+            isHalfPage ||
+            isFullPage ||
             ['j', 'k', 'ArrowDown', 'ArrowUp', 'Home', 'End', 'g', 'G'].includes(event.key)
         ) {
             event.preventDefault();
@@ -52,45 +52,54 @@ export function createOnKeyDown({
             const tree = event.currentTarget;
             const rowHeight =
                 tree.querySelector('[role="treeitem"]')?.getBoundingClientRect().height || 31;
-            const step =
-                halfPage || fullPage
-                    ? Math.max(1, Math.floor(tree.clientHeight / rowHeight / (halfPage ? 2 : 1)))
-                    : 1;
-            const next = ['Home', 'g'].includes(navigationKey)
-                ? 0
-                : ['End', 'G'].includes(navigationKey)
-                  ? visible.length - 1
-                  : Math.min(
-                        visible.length - 1,
-                        Math.max(
-                            0,
-                            (halfPage || fullPage ? Math.max(0, index) : index) +
-                                (['j', 'ArrowDown', 'PageDown'].includes(event.key) ||
-                                (event.ctrlKey && ['d', 'f'].includes(key))
-                                    ? step
-                                    : -step)
-                        )
-                    );
-            if (visible[next]) {
-                setSelected(visible[next].path);
+            let rowsToMove = 1;
+            if (isHalfPage || isFullPage) {
+                const pageHeight = isHalfPage ? tree.clientHeight / 2 : tree.clientHeight;
+                rowsToMove = Math.max(1, Math.floor(pageHeight / rowHeight));
+            }
+
+            let nextIndex: number;
+            if (navigationKey === 'Home' || navigationKey === 'g') {
+                nextIndex = 0;
+            } else if (navigationKey === 'End' || navigationKey === 'G') {
+                nextIndex = visible.length - 1;
+            } else {
+                const movingDown =
+                    ['j', 'ArrowDown', 'PageDown'].includes(event.key) ||
+                    (event.ctrlKey && ['d', 'f'].includes(key));
+                // Page movement starts at the first row when nothing is selected yet.
+                const startingIndex =
+                    isHalfPage || isFullPage ? Math.max(0, selectedIndex) : selectedIndex;
+                const direction = movingDown ? 1 : -1;
+                nextIndex = startingIndex + direction * rowsToMove;
+                nextIndex = Math.max(0, Math.min(visible.length - 1, nextIndex));
+            }
+
+            const nextEntry = visible[nextIndex];
+            if (nextEntry) {
+                setSelected(nextEntry.path);
                 document
-                    .getElementById(`file-${workspaceId}-${visible[next].path}`)
+                    .getElementById(`file-${workspaceId}-${nextEntry.path}`)
                     ?.scrollIntoView({ block: 'nearest' });
             }
-        } else if (item && ['Enter', 'l', 'ArrowRight'].includes(event.key)) {
+        } else if (selectedEntry && ['Enter', 'l', 'ArrowRight'].includes(event.key)) {
             event.preventDefault();
-            if (!item.directory || !expanded.has(item.path) || event.key === 'Enter') {
-                toggle({ entry: item, expanded, setExpanded, setSelected, onOpen, load });
+            if (
+                !selectedEntry.directory ||
+                !expanded.has(selectedEntry.path) ||
+                event.key === 'Enter'
+            ) {
+                toggle({ entry: selectedEntry, expanded, setExpanded, setSelected, onOpen, load });
             }
-        } else if (item && ['h', 'ArrowLeft'].includes(event.key)) {
+        } else if (selectedEntry && ['h', 'ArrowLeft'].includes(event.key)) {
             event.preventDefault();
-            if (expanded.has(item.path)) {
+            if (expanded.has(selectedEntry.path)) {
                 const next = new Set(expanded);
-                next.delete(item.path);
+                next.delete(selectedEntry.path);
                 setExpanded(next);
             } else {
-                const parent = item.path.replace(/[\\/][^\\/]+$/, '');
-                if (parent !== item.path) {
+                const parent = selectedEntry.path.replace(/[\\/][^\\/]+$/, '');
+                if (parent !== selectedEntry.path) {
                     setSelected(parent);
                 }
             }

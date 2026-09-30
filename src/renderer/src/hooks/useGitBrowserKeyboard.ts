@@ -1,3 +1,4 @@
+import type { GitView } from '../types';
 import { useEffect } from 'react';
 
 export function useGitBrowserKeyboard({
@@ -7,7 +8,7 @@ export function useGitBrowserKeyboard({
 }: {
     busy: boolean;
     back: () => void;
-    changeView: (next: number) => void;
+    changeView: (next: GitView) => void;
 }): void {
     useEffect(() => {
         const keydown = (event: KeyboardEvent): void => {
@@ -83,7 +84,9 @@ export function useGitBrowserKeyboard({
                 ['1', '2', '3'].includes(event.key)
             ) {
                 event.preventDefault();
-                changeView(Number(event.key) - 1);
+                if (event.key === '1') changeView('changes');
+                if (event.key === '2') changeView('history');
+                if (event.key === '3') changeView('branches');
             }
         };
         document.addEventListener('keydown', keydown);

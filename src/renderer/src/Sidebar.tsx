@@ -6,7 +6,7 @@ import DiagnosticBadges from './components/DiagnosticBadges';
 import type { Workspace } from '../../shared/types';
 import { useExplorer } from './hooks/useExplorer';
 import { toggle } from './sidebarToggle';
-import { createOnKeyDown } from './sidebarKeyboard';
+import { createExplorerKeyHandler } from './sidebarKeyboard';
 import styles from './assets/Nido.module.css';
 import { gitFileKey, type Decoration } from './hooks/useGitFileStatus';
 
@@ -200,7 +200,7 @@ export default function Sidebar({
                         if (!command.disabled) command.run();
                         return;
                     }
-                    createOnKeyDown({
+                    createExplorerKeyHandler({
                         visible,
                         selected,
                         expanded,
