@@ -1118,6 +1118,7 @@
     padding: 5px 22px 24px;
 }
 .settings label {
+    position: relative;
     color: #e0e7eb;
     font-weight: 550;
     display: flex;
@@ -1142,15 +1143,37 @@
     color: #a3cc94;
     font-size: 13px;
 }
-.settings label:focus-within {
-    background: #a3cc9410;
-    outline: 1px solid #a3cc9460;
-    outline-offset: 4px;
+.settings label:has(input[type='checkbox']:focus-visible) {
+    background: #a3cc940a;
     border-radius: 4px;
 }
-.settings input[type='range'] {
+.settings label:has(input[type='checkbox']:focus-visible)::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 12px;
+    bottom: 12px;
+    width: 2px;
+    background: #a3cc94;
+    border-radius: 2px;
+}
+.settings input[type='number'] {
     margin-left: auto;
-    accent-color: #a3cc94;
+    width: 76px;
+    padding: 10px 12px;
+    color-scheme: dark;
+    color: #e0e7eb;
+    background: #121416;
+    border: 1px solid #3f5145;
+    border-radius: 6px;
+    font: inherit;
+}
+.settings input[type='number']:focus-visible,
+.settings input[type='text']:focus-visible,
+.settings select:focus-visible {
+    border-color: #a3cc94;
+    outline: 1px solid #a3cc9460;
+    outline-offset: 2px;
 }
 .settings select {
     margin-left: auto;
@@ -1168,10 +1191,6 @@
 }
 .settings select:hover {
     border-color: #a3cc94;
-}
-.settings select:focus-visible {
-    outline: 2px solid #a3cc94;
-    outline-offset: 2px;
 }
 .settings .fontFamilyField {
     flex-direction: column;

@@ -42,6 +42,7 @@ export default function SettingsPanel({
                 const down = event.ctrlKey && key === 'd';
                 const up = event.ctrlKey && key === 'u';
                 if (target.tagName === 'SELECT' && !event.ctrlKey) return;
+                if (target.type === 'number' && !event.ctrlKey && ['ArrowUp', 'ArrowDown'].includes(event.key)) return;
                 const text = target.type === 'text';
                 const next =
                     down || event.key === 'ArrowDown' || ((!text || event.ctrlKey) && key === 'j');
@@ -66,13 +67,19 @@ export default function SettingsPanel({
                 Editor font size{' '}
                 <input
                     autoFocus
-                    type="range"
+                    type="number"
                     min="8"
                     max="24"
-                    value={fontSize}
-                    onChange={(e) => setFontSize(Number(e.target.value))}
+                    step="1"
+                    defaultValue={fontSize}
+                    onChange={(event) => {
+                        if (event.target.value && event.target.validity.valid) {
+                            setFontSize(event.target.valueAsNumber);
+                        }
+                    }}
+                    onBlur={(event) => { event.target.value = String(fontSize); }}
                 />
-                <span>{fontSize}px</span>
+                <span>px</span>
             </label>
             <label className={styles.fontFamilyField}>
                 Font family

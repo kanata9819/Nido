@@ -358,7 +358,7 @@ test('typing hides the pointer and moving or clicking restores it', async () => 
         const page = await running.firstWindow();
         const settings = page.getByRole('button', { name: 'Settings', exact: true });
         await settings.click();
-        const slider = page.getByRole('slider');
+        const slider = page.getByRole('spinbutton', { name: 'Editor font size' });
         await slider.focus();
         await page.keyboard.press('ArrowRight');
         await expect(slider).toHaveCSS('cursor', 'none');
@@ -908,10 +908,17 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         ).toBeFocused();
         await page.keyboard.press('Space');
         await page.keyboard.press(',');
-        const size = page.getByRole('slider');
+        const size = page.getByRole('spinbutton', { name: 'Editor font size' });
         await expect(size).toBeFocused();
+        await size.fill('18');
+        await expect(size).toHaveValue('18');
+        await expect.poll(() => page.evaluate(() => localStorage.getItem('nido.fontSize'))).toBe('18');
+        await size.fill('100');
+        await page.keyboard.press('Tab');
+        await expect(size).toHaveValue('18');
+        await size.focus();
         const initial = Number(await size.inputValue());
-        await page.keyboard.press('ArrowRight');
+        await page.keyboard.press('ArrowUp');
         await expect(size).toHaveValue(String(initial + 1));
         await page.keyboard.press('j');
         const family = page.getByRole('textbox', { name: 'Font family' });
