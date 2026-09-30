@@ -21,7 +21,7 @@ export interface BufferInfo {
     modified: boolean;
 }
 export interface SessionState {
-    search?: false | {pattern: string; current: number; total: number; incomplete: number};
+    search?: false | { pattern: string; current: number; total: number; incomplete: number };
     problems?: {
         path: string;
         line: number;
@@ -78,6 +78,13 @@ export interface FileEntry {
 export type FileAction = 'createFile' | 'createDirectory' | 'rename' | 'copy' | 'delete';
 export type Redraw = [string, ...unknown[][]][];
 export type NidoEvent =
+    | {
+          type: 'notification';
+          id: string;
+          message: string;
+          title: string;
+          severity: 'info' | 'warning' | 'error';
+      }
     | {
           type: 'hover';
           id: string;

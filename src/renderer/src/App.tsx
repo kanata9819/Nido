@@ -4,6 +4,7 @@ import type { FileEntry, SessionState } from '../../shared/types';
 import type { Panel } from './types';
 import Editor from './Editor';
 import TerminalPanel from './components/TerminalPanel';
+import Notification from './components/Notification';
 import NavigationRail from './components/NavigationRail';
 import { useSessionSettings } from './hooks/useSessionSettings';
 import Sidebar from './Sidebar';
@@ -519,6 +520,7 @@ export default function App(): React.JSX.Element {
                     focusEditor();
                 }}
             />
+            <Notification workspaceId={active} animations={animations} />
             {error && (
                 <div className={styles.error} role="alert">
                     <span>{error}</span>

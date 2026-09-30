@@ -96,6 +96,19 @@ export class SessionEvents {
                 break;
             }
             case 'nido:message': {
+                const level = args[1];
+                if (typeof level === 'number') {
+                    // Neovim log levels: TRACE=0, DEBUG=1, INFO=2, WARN=3, ERROR=4.
+                    if (level < 2) break;
+                    this.sendToRenderer({
+                        type: 'notification',
+                        id: this.workspaceId,
+                        message: String(args[0]),
+                        title: typeof args[2] === 'string' ? args[2] : 'Nido',
+                        severity: level >= 4 ? 'error' : level === 3 ? 'warning' : 'info'
+                    });
+                    break;
+                }
                 this.sendToRenderer({
                     type: 'error',
                     id: this.workspaceId,

@@ -1,5 +1,10 @@
 local channel = ...
 vim.g.nido_channel = channel
+-- Keep plugin/LSP notices out of the grid and avoid Neovim's hit-enter prompt.
+vim.notify = function(message, level, opts)
+  vim.rpcnotify(channel, 'nido:message', tostring(message), level or vim.log.levels.INFO,
+    opts and opts.title or (message == 'No locations found' and 'Code navigation' or 'Nido'))
+end
 vim.api.nvim_create_autocmd({'TextChanged', 'TextChangedI', 'TextChangedP'}, {
   callback = function() vim.rpcnotify(channel, 'nido:edit') end,
 })
@@ -51,7 +56,8 @@ vim.lsp.handlers['window/showMessage'] = function(_, params, ctx)
   if log then
     log(message)
   end
-  vim.rpcnotify(channel, 'nido:message', message)
+  local level = ({vim.log.levels.ERROR, vim.log.levels.WARN, vim.log.levels.INFO, vim.log.levels.DEBUG})[params.type]
+  vim.notify(message, level, {title = 'Language server'})
 end
 local pending = false
 local progress = {}

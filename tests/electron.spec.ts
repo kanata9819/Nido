@@ -5,6 +5,80 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+for (const animations of [true, false]) {
+    test(`navigation notices use native cards without stealing editor focus (animations ${animations})`, async () => {
+        const root = await mkdtemp(join(tmpdir(), 'nido-native-notice-'));
+        const workspace = join(root, 'workspace');
+        await mkdir(workspace);
+        await writeFile(join(workspace, 'notes.txt'), 'hello\n');
+        const env = { ...process.env };
+        delete env.ELECTRON_RUN_AS_NODE;
+        const running = await electron.launch({
+            args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+            env
+        });
+        try {
+            const page = await running.firstWindow();
+            await page.evaluate(
+                (enabled) => localStorage.setItem('nido.animations', String(enabled)),
+                animations
+            );
+            await page.reload();
+            await expect(
+                page.getByRole('heading', { name: 'Make yourself at home.' })
+            ).toBeVisible();
+            await page.keyboard.press('Control+Shift+n');
+            await chooseWorkspace(page, workspace);
+            const input = page.getByRole('textbox', { name: 'Neovim input' });
+            await expect(input).toBeFocused();
+            await page.keyboard.type(':edit notes.txt');
+            await page.keyboard.press('Enter');
+            await expect(page.locator('canvas:visible')).toHaveAttribute(
+                'aria-description',
+                /hello/
+            );
+            await page.keyboard.type(':lua vim.notify("No locations found", vim.log.levels.INFO)');
+            await page.keyboard.press('Enter');
+            const notice = page.getByRole('status', { name: 'Code navigation' });
+            await expect(notice).toContainText('No locations found');
+            await expect(input).toBeFocused();
+            await page.screenshot({ path: 'test-results/native-notification.png' });
+            await page.keyboard.press('Escape');
+            await expect(notice).toHaveCount(0);
+            await page.keyboard.type(':lua vim.notify("No locations found", vim.log.levels.INFO)');
+            await page.keyboard.press('Enter');
+            await expect(notice).toBeVisible();
+            await expect(notice).toHaveCSS('opacity', '1');
+            await expect(notice).toHaveCSS('transition-duration', animations ? '0.3s' : '0s');
+            const displayedAt = Date.now();
+            if (animations) {
+                await expect
+                    .poll(
+                        async () =>
+                            Number(
+                                await notice.evaluate(
+                                    (element) => getComputedStyle(element).opacity
+                                )
+                            ),
+                        {
+                            intervals: [50],
+                            timeout: 2500
+                        }
+                    )
+                    .toBeLessThan(1);
+                expect(Date.now() - displayedAt).toBeGreaterThan(1700);
+            }
+            await expect(notice).toHaveCount(0, { timeout: 3000 });
+            expect(Date.now() - displayedAt).toBeGreaterThan(1700);
+            await expect(input).toBeFocused();
+        } finally {
+            await running.evaluate(({ app }) => app.exit(0));
+            await running.close();
+            await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+        }
+    });
+}
+
 test('Ctrl star and hash searches show readable matches, counts and controls', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-word-search-'));
     const workspace = join(root, 'workspace');
@@ -2160,6 +2234,7 @@ test('references stay accessible after jumping and can be closed with the keyboa
         await page.keyboard.press('Shift+F12');
         await expect(page.getByRole('region', { name: 'References' })).toBeVisible();
     } finally {
+        await running?.evaluate(({app}) => app.exit(0));
         await running?.close();
         await rm(root, { recursive: true, force: true });
     }

@@ -57,6 +57,9 @@ function M.find()
         end
         state.loading = false
         publish(state)
+        if #items == 0 and state.error == '' then
+          vim.notify('No references found at the cursor.', vim.log.levels.INFO, {title = 'References'})
+        end
       end
     end
     local accepted = client:request('textDocument/references', params, receive, buffer)

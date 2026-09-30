@@ -9,7 +9,44 @@ import { Grid, vimKey } from '../src/renderer/src/grid';
 import { accumulateScroll, scrollOffset } from '../src/renderer/src/scroll';
 import { readLayout, writeLayout } from '../src/main/persistence';
 import { fileDecorations, gitFileKey } from '../src/renderer/src/fileDecorations';
-import type { Redraw } from '../src/shared/types';
+import type { NidoEvent, Redraw } from '../src/shared/types';
+
+test('empty definition and reference results become native notices without grid messages', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-notices-'));
+    let session: Session | undefined;
+    const notices: Extract<NidoEvent, { type: 'notification' }>[] = [];
+    try {
+        session = await Session.create(root, (event) => {
+            if (event.type === 'notification') notices.push(event);
+        });
+        await session.client.request('nvim_exec_lua', [
+            `local original = vim.lsp.get_clients
+local client = {offset_encoding = 'utf-16', request = function(_, _, _, callback)
+  callback(nil, nil)
+  return true
+end}
+vim.lsp.get_clients = function() return {client} end
+local ok, err = pcall(function()
+  vim.lsp.buf.definition()
+  require('nido_references').find()
+end)
+vim.lsp.get_clients = original
+assert(ok, err)
+vim.notify('Server unavailable', vim.log.levels.WARN, {title = 'Language server'})
+vim.notify('Debug detail', vim.log.levels.DEBUG)
+assert(vim.api.nvim_get_mode().mode ~= 'r')`, []
+        ]);
+        await session.client.request('nvim_eval', ['1']);
+        assert.ok(notices.some((notice) => notice.message === 'No locations found' && notice.severity === 'info'));
+        assert.ok(notices.some((notice) => notice.title === 'References' && /No references/.test(notice.message)));
+        assert.ok(notices.some((notice) => notice.severity === 'warning' && notice.message === 'Server unavailable'));
+        assert.ok(!notices.some((notice) => notice.message === 'Debug detail'));
+        assert.doesNotMatch(JSON.stringify(await session.client.request('nvim_exec2', ['messages', {output: true}])), /No locations found|No references found/);
+    } finally {
+        await session?.stop();
+        await rm(root, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
+    }
+});
 
 test('source previews use Neovim syntax colors without changing editor buffers or starting FileType plugins', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-source-colors-'));
