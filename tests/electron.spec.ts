@@ -33,10 +33,10 @@ test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
         await page.keyboard.type(':edit src/main.rs');
         await page.keyboard.press('Enter');
         const canvas = page.locator('canvas:visible');
-        await expect(canvas).toHaveAttribute('aria-description', /Run \[gR\].*Debug \[gD\]/, {
+        await expect(canvas).toHaveAttribute('aria-description', /Run \| Debug/, {
             timeout: 25000
         });
-        await expect(canvas).toHaveAttribute('aria-description', /Run Tests \[gR\]/);
+        await expect(canvas).toHaveAttribute('aria-description', /Run Tests \| Debug/);
         await page.keyboard.type('gggR');
         const output = page.getByLabel('Debug output');
         await expect(output).toContainText('keyboard-run', { timeout: 15000 });

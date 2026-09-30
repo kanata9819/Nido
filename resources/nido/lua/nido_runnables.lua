@@ -2,7 +2,7 @@ local M = {}
 local namespace = vim.api.nvim_create_namespace('nido_runnables')
 local revisions = {}
 local candidates = {}
-vim.api.nvim_set_hl(0, 'NidoCodeLens', {fg='#91a1ad'})
+vim.api.nvim_set_hl(0, 'NidoCodeLens', {fg='#808080'})
 
 local function range_size(item)
   local range = item.location and item.location.targetRange
@@ -61,7 +61,7 @@ function M.refresh(buffer)
           rows[row] = true
           local label = item.args.cargoArgs[1] == 'test' and 'Run Tests' or 'Run'
           vim.api.nvim_buf_set_extmark(buffer, namespace, row, 0, {
-            virt_lines={{{'  ▶ ' .. label .. ' [gR]  ·  Debug [gD]', 'NidoCodeLens'}}},
+            virt_lines={{{'  ▶ ' .. label .. ' | Debug', 'NidoCodeLens'}}},
             virt_lines_above=true,
           })
         end

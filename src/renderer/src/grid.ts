@@ -7,6 +7,7 @@ export interface Cell {
 }
 
 interface Highlight {
+    codeLens?: boolean;
     foreground?: number;
     background?: number;
     special?: number;
@@ -151,7 +152,11 @@ export class Grid {
                         break;
                     }
                     case 'hl_attr_define': {
-                        this.highlights.set(Number(args[0]), args[1] as Highlight);
+                        const info = args[3] as { hi_name?: string }[] | undefined;
+                        this.highlights.set(Number(args[0]), {
+                            ...(args[1] as Highlight),
+                            codeLens: info?.some((item) => item.hi_name === 'NidoCodeLens')
+                        });
                         break;
                     }
                     case 'default_colors_set': {
@@ -238,6 +243,26 @@ export class Grid {
                 }
 
                 const h = this.highlights.get(cell.highlight) || {};
+                if (h.codeLens) {
+                    let text = cell.text;
+                    const start = col;
+                    while (
+                        col + 1 < this.columns &&
+                        this.cells[row]?.[col + 1]?.highlight === cell.highlight
+                    ) {
+                        text += this.cells[row][++col].text;
+                    }
+                    ctx.font = `${fontSize * 0.8}px ${family}`;
+                    ctx.fillStyle = cellForeground(h, this.background, this.foreground);
+                    ctx.fillText(
+                        text,
+                        Math.round(start * cellWidth * dpr) / dpr,
+                        Math.round(
+                            (row * cellHeight + (cellHeight + fontSize * 0.8) / 2 - 3) * dpr
+                        ) / dpr
+                    );
+                    continue;
+                }
                 ctx.font = `${h.italic ? 'italic ' : ''}${h.bold ? 'bold ' : ''}${fontSize}px ${family}`;
                 ctx.fillStyle = cellForeground(h, this.background, this.foreground);
 

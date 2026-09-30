@@ -179,7 +179,7 @@ export class Session {
             await this.client.request('nvim_ui_attach', [
                 columns,
                 rows,
-                { rgb: true, ext_linegrid: true, ext_popupmenu: true }
+                { rgb: true, ext_linegrid: true, ext_popupmenu: true, ext_hlstate: true }
             ]);
             this.emit({ type: 'state', id: this.workspace.id, state: this.state });
         } catch (error) {
