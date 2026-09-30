@@ -34,17 +34,35 @@ vim.lsp.get_clients = original
 assert(ok, err)
 vim.notify('Server unavailable', vim.log.levels.WARN, {title = 'Language server'})
 vim.notify('Debug detail', vim.log.levels.DEBUG)
-assert(vim.api.nvim_get_mode().mode ~= 'r')`, []
+assert(vim.api.nvim_get_mode().mode ~= 'r')`,
+            []
         ]);
         await session.client.request('nvim_eval', ['1']);
-        assert.ok(notices.some((notice) => notice.message === 'No locations found' && notice.severity === 'info'));
-        assert.ok(notices.some((notice) => notice.title === 'References' && /No references/.test(notice.message)));
-        assert.ok(notices.some((notice) => notice.severity === 'warning' && notice.message === 'Server unavailable'));
+        assert.ok(
+            notices.some(
+                (notice) => notice.message === 'No locations found' && notice.severity === 'info'
+            )
+        );
+        assert.ok(
+            notices.some(
+                (notice) => notice.title === 'References' && /No references/.test(notice.message)
+            )
+        );
+        assert.ok(
+            notices.some(
+                (notice) => notice.severity === 'warning' && notice.message === 'Server unavailable'
+            )
+        );
         assert.ok(!notices.some((notice) => notice.message === 'Debug detail'));
-        assert.doesNotMatch(JSON.stringify(await session.client.request('nvim_exec2', ['messages', {output: true}])), /No locations found|No references found/);
+        assert.doesNotMatch(
+            JSON.stringify(
+                await session.client.request('nvim_exec2', ['messages', { output: true }])
+            ),
+            /No locations found|No references found/
+        );
     } finally {
         await session?.stop();
-        await rm(root, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
 });
 
@@ -261,9 +279,14 @@ vim.cmd('messages clear')`,
         await session.input('u');
         assert.equal(await session.client.request('nvim_eval', ['getline(1)']), 'const state = 1;');
         await session.input('<C-r>');
-        assert.equal(await session.client.request('nvim_eval', ['getline(1)']), 'const state = 1;X');
+        assert.equal(
+            await session.client.request('nvim_eval', ['getline(1)']),
+            'const state = 1;X'
+        );
         assert.doesNotMatch(
-            JSON.stringify(await session.client.request('nvim_exec2', ['messages', { output: true }])),
+            JSON.stringify(
+                await session.client.request('nvim_exec2', ['messages', { output: true }])
+            ),
             /before #|after #/
         );
         await session.client.request('nvim_exec_lua', ['vim.bo.readonly = true', []]);
@@ -393,10 +416,15 @@ test('keyboard page scrolling reveals the last row hidden by pixel-scroll oversc
             for (const key of ['<C-d>', '2<C-d>', '<C-f>', '<PageDown>']) {
                 await session.input('gg');
                 for (let step = 0; step < 46; step++) await session.input(key);
-                const screen = Number(await session.client.request('nvim_eval', [
-                    "screenpos(win_getid(), line('$'), 1).row"
-                ]));
-                assert.ok(screen > 0 && screen <= rows - 2, `${key}, ${rows} rows: EOF at screen row ${screen}`);
+                const screen = Number(
+                    await session.client.request('nvim_eval', [
+                        "screenpos(win_getid(), line('$'), 1).row"
+                    ])
+                );
+                assert.ok(
+                    screen > 0 && screen <= rows - 2,
+                    `${key}, ${rows} rows: EOF at screen row ${screen}`
+                );
             }
         }
         await session.client.request('nvim_exec_lua', [
@@ -405,9 +433,11 @@ test('keyboard page scrolling reveals the last row hidden by pixel-scroll oversc
         ]);
         await session.input('gg');
         for (let step = 0; step < 46; step++) await session.input('<C-d>');
-        const wrappedEnd = Number(await session.client.request('nvim_eval', [
-            "screenpos(win_getid(), line('$'), 160).row"
-        ]));
+        const wrappedEnd = Number(
+            await session.client.request('nvim_eval', [
+                "screenpos(win_getid(), line('$'), 160).row"
+            ])
+        );
         assert.ok(wrappedEnd > 0 && wrappedEnd <= 43, `wrapped EOF at screen row ${wrappedEnd}`);
     } finally {
         await session?.stop();
@@ -762,7 +792,12 @@ test('Neovim publishes and clears diagnostics including unopened files', async (
         assert.equal(gitFileKey(entries[0][0]), gitFileKey(path));
         assert.equal(entries[0][1], 1);
         assert.equal(session.state.problems?.length, 2);
-        const decorations = fileDecorations(root, {}, session.state.diagnostics, session.state.problems);
+        const decorations = fileDecorations(
+            root,
+            {},
+            session.state.diagnostics,
+            session.state.problems
+        );
         assert.equal(decorations[gitFileKey(path)].errors, 1);
         assert.equal(decorations[gitFileKey(path)].warnings, 1);
         assert.equal(decorations[gitFileKey(root)].errors, 1);
@@ -779,7 +814,10 @@ test('Neovim publishes and clears diagnostics including unopened files', async (
         }
         assert.deepEqual(session.state.diagnostics, {});
         assert.deepEqual(session.state.problems, []);
-        assert.deepEqual(fileDecorations(root, {}, session.state.diagnostics, session.state.problems), {});
+        assert.deepEqual(
+            fileDecorations(root, {}, session.state.diagnostics, session.state.problems),
+            {}
+        );
         await assert.rejects(session.openProblem(1, version), /Problems have changed/);
     } finally {
         await session?.stop();
@@ -840,18 +878,36 @@ test('word searches publish counts, distinguish current matches and clear on Esc
     let session: Session | undefined;
     try {
         await writeFile(join(root, 'words.txt'), 'alpha beta alpha\nalpha\n');
-        session = await Session.create(root, event => {if (event.type === 'redraw') grid.apply(event.events);});
+        session = await Session.create(root, (event) => {
+            if (event.type === 'redraw') grid.apply(event.events);
+        });
         await session.openFile('words.txt');
         const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
         await session.input('gg0*');
         await lua('return 1');
-        assert.deepEqual(session.state.search, {pattern:'\\<alpha\\>', current:2, total:3, incomplete:0});
+        assert.deepEqual(session.state.search, {
+            pattern: '\\<alpha\\>',
+            current: 2,
+            total: 3,
+            incomplete: 0
+        });
         await lua('vim.cmd.redraw()');
         await lua('return 1');
-        const row = grid.cells.find(cells => cells.map(cell => cell.text).join('').includes('alpha beta alpha'))!;
-        const text = row.map(cell => cell.text).join('');
-        assert.equal(grid.highlights.get(row[text.indexOf('alpha')].highlight)?.background, 0x514020);
-        assert.equal(grid.highlights.get(row[text.lastIndexOf('alpha')].highlight)?.background, 0xa8cf9e);
+        const row = grid.cells.find((cells) =>
+            cells
+                .map((cell) => cell.text)
+                .join('')
+                .includes('alpha beta alpha')
+        )!;
+        const text = row.map((cell) => cell.text).join('');
+        assert.equal(
+            grid.highlights.get(row[text.indexOf('alpha')].highlight)?.background,
+            0x514020
+        );
+        assert.equal(
+            grid.highlights.get(row[text.lastIndexOf('alpha')].highlight)?.background,
+            0xa8cf9e
+        );
         await session.input('#');
         await lua('return 1');
         assert.equal(session.state.search && session.state.search.current, 1);
@@ -863,7 +919,7 @@ test('word searches publish counts, distinguish current matches and clear on Esc
         assert.equal(session.state.search && session.state.search.total, 3);
     } finally {
         await session?.stop();
-        await rm(root, {recursive:true, force:true});
+        await rm(root, { recursive: true, force: true });
     }
 });
 
@@ -873,18 +929,30 @@ test('explorer file actions preserve buffers, reject overwrites and protect work
     let session: Session | undefined;
     try {
         session = await Session.create(root, () => {});
-        const action = (operation: import('../src/shared/types').FileAction, path: string, target = '') =>
-            session!.fileAction(operation, path, target, source => rename(source, join(root, 'trashed')));
+        const action = (
+            operation: import('../src/shared/types').FileAction,
+            path: string,
+            target = ''
+        ) =>
+            session!.fileAction(operation, path, target, (source) =>
+                rename(source, join(root, 'trashed'))
+            );
         await action('createDirectory', 'src');
         await action('createFile', 'src/first.txt');
         await writeFile(join(root, 'src/first.txt'), 'hello\n');
         await session.openFile('src/first.txt');
         const buffer = await session.client.request('nvim_get_current_buf', []);
         await action('rename', 'src', 'renamed');
-        assert.equal(await session.client.request('nvim_buf_get_name', [buffer]), join(root, 'renamed/first.txt'));
+        assert.equal(
+            await session.client.request('nvim_buf_get_name', [buffer]),
+            join(root, 'renamed/first.txt')
+        );
         await action('copy', 'renamed', 'copied');
         assert.equal(await readFile(join(root, 'copied/first.txt'), 'utf8'), 'hello\n');
-        await assert.rejects(action('rename', 'renamed/first.txt', 'copied/first.txt'), /already exists/);
+        await assert.rejects(
+            action('rename', 'renamed/first.txt', 'copied/first.txt'),
+            /already exists/
+        );
         await assert.rejects(action('createFile', '../escape.txt'), /inside this workspace/);
         await assert.rejects(action('delete', ''), /inside this workspace/);
         await mkdir(join(root, '.git'));
@@ -902,9 +970,9 @@ test('explorer file actions preserve buffers, reject overwrites and protect work
         assert.equal(await readFile(join(root, 'trashed/first.txt'), 'utf8'), 'helloX\n');
     } finally {
         await session?.stop();
-        await rm(join(root, 'link'), {force: true, recursive: true});
-        await rm(root, {recursive: true, force: true});
-        await rm(outside, {recursive: true, force: true});
+        await rm(join(root, 'link'), { force: true, recursive: true });
+        await rm(root, { recursive: true, force: true });
+        await rm(outside, { recursive: true, force: true });
     }
 });
 
@@ -932,7 +1000,7 @@ test('Ctrl Z undoes in normal, insert and visual modes', async () => {
         assert.equal(await lua('return vim.fn.mode()'), 'n');
     } finally {
         await session?.stop();
-        await rm(root, {recursive: true, force: true});
+        await rm(root, { recursive: true, force: true });
     }
 });
 
@@ -941,16 +1009,19 @@ test('completion navigation leaves text unchanged until Tab accepts', async () =
     let session: Session | undefined;
     let candidates: string[] = [];
     try {
-        session = await Session.create(root, event => {
+        session = await Session.create(root, (event) => {
             if (event.type !== 'redraw') return;
             for (const [name, ...calls] of event.events) {
-                if (name === 'popupmenu_show') candidates = (calls.at(-1)![0] as string[][]).map(item => item[0]);
+                if (name === 'popupmenu_show')
+                    candidates = (calls.at(-1)![0] as string[][]).map((item) => item[0]);
             }
         });
         const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
         await session.input('igetU');
         assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'getU');
-        await session.input("<Cmd>lua vim.fn.complete(1, {'getOldUser', 'setUser', 'getUserName', 'getUser'})<CR>");
+        await session.input(
+            "<Cmd>lua vim.fn.complete(1, {'getOldUser', 'setUser', 'getUserName', 'getUser'})<CR>"
+        );
         await lua('return 1');
         assert.equal(candidates.length, 4);
         assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'getU');
@@ -974,13 +1045,22 @@ test('typing brackets inserts pairs, skips closing brackets and deletes empty pa
         const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
         const reset = async (): Promise<void> => {
             await session!.input('<Esc>');
-            await lua("vim.api.nvim_buf_set_lines(0, 0, -1, false, {''}); vim.api.nvim_win_set_cursor(0, {1, 0})");
+            await lua(
+                "vim.api.nvim_buf_set_lines(0, 0, -1, false, {''}); vim.api.nvim_win_set_cursor(0, {1, 0})"
+            );
             await session!.input('i');
         };
-        for (const [left, right] of [['(', ')'], ['[', ']'], ['{', '}']]) {
+        for (const [left, right] of [
+            ['(', ')'],
+            ['[', ']'],
+            ['{', '}']
+        ]) {
             await reset();
             await session.input(left);
-            assert.deepEqual(await lua('return {vim.api.nvim_get_current_line(), vim.fn.col(".")}'), [left + right, 2]);
+            assert.deepEqual(
+                await lua('return {vim.api.nvim_get_current_line(), vim.fn.col(".")}'),
+                [left + right, 2]
+            );
             await session.input(right);
             assert.equal(await lua('return vim.api.nvim_get_current_line()'), left + right);
             assert.equal(await lua('return vim.fn.col(".")'), 3);
@@ -1115,7 +1195,15 @@ test('Git gutter signs track HEAD, unsaved edits, deletions, new files and commi
         await writeFile(join(root, 'tracked.txt'), 'first\r\nsecond\r\nthird\r\n');
         await writeFile(join(root, '.gitignore'), 'ignored.txt\n');
         git('add', '.');
-        git('-c', 'user.name=Nido Test', '-c', 'user.email=nido@example.test', 'commit', '-qm', 'base');
+        git(
+            '-c',
+            'user.name=Nido Test',
+            '-c',
+            'user.email=nido@example.test',
+            'commit',
+            '-qm',
+            'base'
+        );
         const grid = new Grid();
         session = await Session.create(root, (event) => {
             if (event.type === 'redraw') grid.apply(event.events);
@@ -1123,7 +1211,8 @@ test('Git gutter signs track HEAD, unsaved edits, deletions, new files and commi
         const lua = (code: string, args: unknown[] = []) =>
             session!.client.request('nvim_exec_lua', [code, args]);
         const signs = async (expected: [number, string][], refresh = true): Promise<void> => {
-            await lua(`
+            await lua(
+                `
 local expected, refresh = ...
 local buffer = vim.api.nvim_get_current_buf()
 local namespace = vim.api.nvim_get_namespaces().nido_git_signs
@@ -1136,19 +1225,24 @@ local function signs()
 end
 if refresh then require('nido_git_signs').refresh(buffer) end
 assert(vim.wait(5000, function() return vim.deep_equal(signs(), expected) end, 20), vim.inspect(signs()))
-vim.cmd('redraw!')`, [expected, refresh]);
+vim.cmd('redraw!')`,
+                [expected, refresh]
+            );
         };
-        const edit = (lines: string[]) => lua(
-            'vim.api.nvim_buf_set_lines(0, 0, -1, false, ...)', [lines]
-        );
+        const edit = (lines: string[]) =>
+            lua('vim.api.nvim_buf_set_lines(0, 0, -1, false, ...)', [lines]);
         await session.openFile('tracked.txt');
         await signs([]);
         await edit(['first', 'changed', 'third', 'added']);
-        await signs([[1, 'NidoGitChanged'], [3, 'NidoGitAdded']]);
+        await signs([
+            [1, 'NidoGitChanged'],
+            [3, 'NidoGitAdded']
+        ]);
         await lua('return 1');
-        const ink = (row: number) => grid.cells[row]
-            .filter((cell) => cell.text === '▎' || cell.text === '▸')
-            .map((cell) => grid.highlights.get(cell.highlight)?.foreground);
+        const ink = (row: number) =>
+            grid.cells[row]
+                .filter((cell) => cell.text === '▎' || cell.text === '▸')
+                .map((cell) => grid.highlights.get(cell.highlight)?.foreground);
         assert.deepEqual(ink(1), [0x0078d4]);
         assert.deepEqual(ink(3), [0x2ea043]);
         await edit(['second', 'third']);
@@ -1160,7 +1254,10 @@ vim.cmd('redraw!')`, [expected, refresh]);
         await edit(['first', 'third']);
         await signs([[1, 'NidoGitDeleted']]);
         await edit(['changed']);
-        await signs([[0, 'NidoGitChanged'], [0, 'NidoGitDeleted']]);
+        await signs([
+            [0, 'NidoGitChanged'],
+            [0, 'NidoGitDeleted']
+        ]);
         await edit([]);
         await signs([[0, 'NidoGitDeleted']]);
         await edit(['first', 'second', 'third']);
@@ -1169,11 +1266,22 @@ vim.cmd('redraw!')`, [expected, refresh]);
         await session.save();
         git('add', 'tracked.txt');
         await signs([[1, 'NidoGitChanged']]);
-        git('-c', 'user.name=Nido Test', '-c', 'user.email=nido@example.test', 'commit', '-qm', 'update');
+        git(
+            '-c',
+            'user.name=Nido Test',
+            '-c',
+            'user.email=nido@example.test',
+            'commit',
+            '-qm',
+            'update'
+        );
         await signs([], false);
         await writeFile(join(root, 'new.txt'), 'new\nfile\n');
         await session.openFile('new.txt');
-        await signs([[0, 'NidoGitAdded'], [1, 'NidoGitAdded']]);
+        await signs([
+            [0, 'NidoGitAdded'],
+            [1, 'NidoGitAdded']
+        ]);
         await writeFile(join(root, 'ignored.txt'), 'ignored\n');
         await session.openFile('ignored.txt');
         await signs([]);

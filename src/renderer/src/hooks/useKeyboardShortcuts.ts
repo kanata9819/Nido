@@ -69,7 +69,14 @@ export function useKeyboardShortcuts({
         const focusedLabel = document.activeElement?.getAttribute('aria-label');
         const terminalFocused = focusedLabel === 'Terminal input';
         const isNormalMode = (mode.current[active] || 'normal') === 'normal';
-        if (focusedLabel === 'Neovim input' && isNormalMode && event.ctrlKey && !event.altKey && !event.metaKey && ['*', '#'].includes(event.key)) {
+        if (
+            focusedLabel === 'Neovim input' &&
+            isNormalMode &&
+            event.ctrlKey &&
+            !event.altKey &&
+            !event.metaKey &&
+            ['*', '#'].includes(event.key)
+        ) {
             consume();
             run(window.nido.input(active, event.key));
             return;

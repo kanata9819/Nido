@@ -36,10 +36,7 @@ export default function TerminalPanel({
                 >
                     Restart shell <kbd>Ctrl Shift R</kbd>
                 </button>
-                <button
-                    aria-label="Hide terminal"
-                    onClick={onClose}
-                >
+                <button aria-label="Hide terminal" onClick={onClose}>
                     ×
                 </button>
             </div>

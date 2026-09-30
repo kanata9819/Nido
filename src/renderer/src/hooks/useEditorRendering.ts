@@ -191,7 +191,15 @@ export function useEditorRendering({
                     ctx.fillRect(left, top, width, height);
                     // Deleted rows disappear; the remaining rows slide into the gap without an old-frame overlay.
                     const layers = [
-                        ...(motion.edit ? [] : [[previousFrame, offset - motion.distance, offsetX - motion.distanceX] as const]),
+                        ...(motion.edit
+                            ? []
+                            : [
+                                  [
+                                      previousFrame,
+                                      offset - motion.distance,
+                                      offsetX - motion.distanceX
+                                  ] as const
+                              ]),
                         [targetFrame, offset, offsetX]
                     ] as const;
                     for (const [image, shift, shiftX] of layers) {

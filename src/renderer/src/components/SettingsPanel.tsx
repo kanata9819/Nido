@@ -42,7 +42,12 @@ export default function SettingsPanel({
                 const down = event.ctrlKey && key === 'd';
                 const up = event.ctrlKey && key === 'u';
                 if (target.tagName === 'SELECT' && !event.ctrlKey) return;
-                if (target.type === 'number' && !event.ctrlKey && ['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+                if (
+                    target.type === 'number' &&
+                    !event.ctrlKey &&
+                    ['ArrowUp', 'ArrowDown'].includes(event.key)
+                )
+                    return;
                 const text = target.type === 'text';
                 const next =
                     down || event.key === 'ArrowDown' || ((!text || event.ctrlKey) && key === 'j');
@@ -77,7 +82,9 @@ export default function SettingsPanel({
                             setFontSize(event.target.valueAsNumber);
                         }
                     }}
-                    onBlur={(event) => { event.target.value = String(fontSize); }}
+                    onBlur={(event) => {
+                        event.target.value = String(fontSize);
+                    }}
                 />
                 <span>px</span>
             </label>

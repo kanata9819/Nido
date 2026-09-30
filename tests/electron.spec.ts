@@ -84,44 +84,52 @@ test('Ctrl star and hash searches show readable matches, counts and controls', a
     const workspace = join(root, 'workspace');
     await mkdir(workspace);
     await writeFile(join(workspace, 'words.txt'), 'alpha beta alpha\nalpha\n');
-    const env = {...process.env};
+    const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
-    const running = await electron.launch({args:['.', `--user-data-dir=${join(root, 'profile')}`], env});
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        env
+    });
     try {
         const page = await running.firstWindow();
-        await expect(page.getByRole('heading', {name:'Make yourself at home.'})).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
         await page.keyboard.press('Control+Shift+n');
         await chooseWorkspace(page, workspace);
-        const input = page.getByRole('textbox', {name:'Neovim input'});
+        const input = page.getByRole('textbox', { name: 'Neovim input' });
         await expect(input).toBeFocused();
         await page.keyboard.type(':edit words.txt');
         await page.keyboard.press('Enter');
-        await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /alpha beta alpha/);
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /alpha beta alpha/
+        );
         await page.keyboard.press('Escape');
         await page.keyboard.type('gg0');
         await page.keyboard.press('Control+Shift+*');
-        const search = page.getByRole('status', {name:'Search matches'});
+        const search = page.getByRole('status', { name: 'Search matches' });
         await expect(search).toContainText('alpha');
         await expect(search).toContainText('2 / 3');
         await page.keyboard.press('Control+Shift+#');
         await expect(search).toContainText('1 / 3');
-        await search.getByRole('button', {name:'Next search match', exact:true}).click();
+        await search.getByRole('button', { name: 'Next search match', exact: true }).click();
         await expect(search).toContainText('3 / 3');
         await expect(input).toBeFocused();
-        await page.screenshot({path:'test-results/word-search.png'});
+        await page.screenshot({ path: 'test-results/word-search.png' });
         await page.keyboard.press('Escape');
         await expect(search).toHaveCount(0);
         await page.keyboard.type('/beta');
         await page.keyboard.press('Enter');
         await expect(search).toContainText('beta');
         await expect(search).toContainText('1 / 1');
-        await search.getByRole('button', {name:'Clear search highlights', exact:true}).click();
+        await search.getByRole('button', { name: 'Clear search highlights', exact: true }).click();
         await expect(search).toHaveCount(0);
-        expect(await readFile(join(workspace, 'words.txt'), 'utf8')).toBe('alpha beta alpha\nalpha\n');
+        expect(await readFile(join(workspace, 'words.txt'), 'utf8')).toBe(
+            'alpha beta alpha\nalpha\n'
+        );
     } finally {
-        await running.evaluate(({app}) => app.exit(0));
+        await running.evaluate(({ app }) => app.exit(0));
         await running.close();
-        await rm(root, {recursive:true, force:true, maxRetries:5, retryDelay:100});
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
 });
 
@@ -130,18 +138,21 @@ test('explorer commands create, rename, copy, move and recycle files from the ke
     const workspace = join(root, 'workspace');
     await mkdir(workspace);
     await writeFile(join(workspace, 'original.txt'), 'hello\n');
-    const env = {...process.env};
+    const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
-    const running = await electron.launch({args: ['.', `--user-data-dir=${join(root, 'profile')}`], env});
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        env
+    });
     try {
         const page = await running.firstWindow();
-        await expect(page.getByRole('heading', {name: 'Make yourself at home.'})).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
         await page.keyboard.press('Control+Shift+n');
         await chooseWorkspace(page, workspace);
-        await expect(page.getByRole('textbox', {name: 'Neovim input'})).toBeFocused();
-        const tree = page.getByRole('tree', {name: 'Project files'});
-        const menu = page.getByRole('dialog', {name: 'Explorer commands', exact:true});
-        const path = menu.getByRole('textbox', {name: /^(Workspace-relative path|Name)$/});
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        const tree = page.getByRole('tree', { name: 'Project files' });
+        const menu = page.getByRole('dialog', { name: 'Explorer commands', exact: true });
+        const path = menu.getByRole('textbox', { name: /^(Workspace-relative path|Name)$/ });
         const apply = async (value: string): Promise<void> => {
             await expect(menu).toBeVisible();
             await path.fill(value);
@@ -150,14 +161,16 @@ test('explorer commands create, rename, copy, move and recycle files from the ke
             await expect(tree).toBeFocused();
         };
         const select = async (name: string): Promise<void> => {
-            await tree.getByRole('treeitem', {name, exact:true}).click();
+            await tree.getByRole('treeitem', { name, exact: true }).click();
             await tree.focus();
         };
-        await expect(tree.getByRole('treeitem', {name:'original.txt', exact:true})).toBeVisible();
+        await expect(
+            tree.getByRole('treeitem', { name: 'original.txt', exact: true })
+        ).toBeVisible();
         await select('original.txt');
         await page.keyboard.press('F2');
         await apply('renamed.txt');
-        await expect(page.getByRole('tab', {name:'renamed.txt', exact:true})).toBeVisible();
+        await expect(page.getByRole('tab', { name: 'renamed.txt', exact: true })).toBeVisible();
         await page.keyboard.press('Control+l');
         await page.keyboard.type('A!');
         await page.keyboard.press('Escape');
@@ -170,34 +183,38 @@ test('explorer commands create, rename, copy, move and recycle files from the ke
         await expect.poll(() => readFile(join(workspace, 'copy.txt'), 'utf8')).toBe('hello!\n');
         await page.keyboard.type(':');
         await expect(menu).toBeVisible();
-        await menu.screenshot({path: 'test-results/explorer-commands.png'});
+        await menu.screenshot({ path: 'test-results/explorer-commands.png' });
         await page.keyboard.type('A');
         await apply('nested');
         await page.keyboard.type('a');
         await apply('nested/new.txt');
-        await expect(tree.getByRole('treeitem', {name:'new.txt', exact:true})).toBeVisible();
+        await expect(tree.getByRole('treeitem', { name: 'new.txt', exact: true })).toBeVisible();
         await select('renamed.txt');
         await page.keyboard.press('Control+x');
         await select('nested');
         await page.keyboard.press('Control+v');
         await apply('nested/renamed.txt');
-        await expect.poll(() => readFile(join(workspace, 'nested/renamed.txt'), 'utf8')).toBe('hello!\n');
-        await expect(tree.getByRole('treeitem', {name:'renamed.txt', exact:true})).toBeVisible();
+        await expect
+            .poll(() => readFile(join(workspace, 'nested/renamed.txt'), 'utf8'))
+            .toBe('hello!\n');
+        await expect(
+            tree.getByRole('treeitem', { name: 'renamed.txt', exact: true })
+        ).toBeVisible();
         await select('copy.txt');
         await page.keyboard.press('Delete');
         await expect(menu).toContainText('Move copy.txt to the recycle bin?');
-        await menu.getByRole('button', {name:'Cancel', exact:true}).click();
-        await expect(tree.getByRole('treeitem', {name:'copy.txt', exact:true})).toBeVisible();
+        await menu.getByRole('button', { name: 'Cancel', exact: true }).click();
+        await expect(tree.getByRole('treeitem', { name: 'copy.txt', exact: true })).toBeVisible();
         await page.keyboard.press('Delete');
-        await menu.getByRole('button', {name:'Move to recycle bin', exact:true}).click();
+        await menu.getByRole('button', { name: 'Move to recycle bin', exact: true }).click();
         await expect(menu).toHaveCount(0);
-        await expect(tree.getByRole('treeitem', {name:'copy.txt', exact:true})).toHaveCount(0);
-        await expect(page.getByRole('tab', {name:'copy.txt', exact:true})).toHaveCount(0);
+        await expect(tree.getByRole('treeitem', { name: 'copy.txt', exact: true })).toHaveCount(0);
+        await expect(page.getByRole('tab', { name: 'copy.txt', exact: true })).toHaveCount(0);
         await assert.rejects(readFile(join(workspace, 'copy.txt'), 'utf8'), /ENOENT/);
     } finally {
-        await running.evaluate(({app}) => app.exit(0));
+        await running.evaluate(({ app }) => app.exit(0));
         await running.close();
-        await rm(root, {recursive:true, force:true, maxRetries:5, retryDelay:100});
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
 });
 
@@ -277,7 +294,10 @@ test('file tabs scroll into view when switching hidden buffers with Shift H and 
     const root = await mkdtemp(join(tmpdir(), 'nido-tab-scroll-'));
     const workspace = join(root, 'workspace');
     await mkdir(workspace);
-    const files = Array.from({ length: 15 }, (_, index) => `file-${String(index).padStart(2, '0')}.txt`);
+    const files = Array.from(
+        { length: 15 },
+        (_, index) => `file-${String(index).padStart(2, '0')}.txt`
+    );
     await Promise.all(files.map((file) => writeFile(join(workspace, file), 'sample\n')));
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
@@ -298,11 +318,15 @@ test('file tabs scroll into view when switching hidden buffers with Shift H and 
         await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
         const expectSelectedVisible = async (file: string): Promise<void> => {
             await expect(selected).toHaveText(file);
-            await expect.poll(() => selected.evaluate((node) => {
-                const tab = node.parentElement!.getBoundingClientRect();
-                const list = node.closest('[role="tablist"]')!.getBoundingClientRect();
-                return tab.left >= list.left - 1 && tab.right <= list.right + 1;
-            })).toBe(true);
+            await expect
+                .poll(() =>
+                    selected.evaluate((node) => {
+                        const tab = node.parentElement!.getBoundingClientRect();
+                        const list = node.closest('[role="tablist"]')!.getBoundingClientRect();
+                        return tab.left >= list.left - 1 && tab.right <= list.right + 1;
+                    })
+                )
+                .toBe(true);
             await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
         };
         for (const file of files) {
@@ -328,11 +352,15 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
     const workspace = join(root, 'workspace');
     await mkdir(workspace);
     await writeFile(join(workspace, 'tsconfig.json'), '{}');
-    await writeFile(join(workspace, 'main.ts'), 'const amount = 1;\nconst getOldUser = 1;\nconst getUserName = 1;\nconst getUser = 1;\n');
+    await writeFile(
+        join(workspace, 'main.ts'),
+        'const amount = 1;\nconst getOldUser = 1;\nconst getUserName = 1;\nconst getUser = 1;\n'
+    );
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
     const running = await electron.launch({
-        args: ['.', `--user-data-dir=${join(root, 'profile')}`], env
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        env
     });
     try {
         const page = await running.firstWindow();
@@ -346,10 +374,16 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await page.keyboard.press('Enter');
         const canvas = page.locator('canvas:visible');
         await expect(canvas).toHaveAttribute('aria-description', /const amount/);
-        await page.keyboard.type(":lua assert(vim.wait(20000, function() local c = vim.lsp.get_clients({bufnr=0})[1]; return c and c.initialized end, 50)); print('COMPLETION_READY')");
+        await page.keyboard.type(
+            ":lua assert(vim.wait(20000, function() local c = vim.lsp.get_clients({bufnr=0})[1]; return c and c.initialized end, 50)); print('COMPLETION_READY')"
+        );
         await page.keyboard.press('Enter');
-        await expect(canvas).toHaveAttribute('aria-description', /COMPLETION_READY/, { timeout: 25000 });
-        await page.keyboard.type(":lua vim.diagnostic.set(vim.api.nvim_create_namespace('nido-test'), 0, {{lnum=0,col=0,severity=1,message='Error 1'}, {lnum=0,col=0,severity=1,message='Error 2'}, {lnum=0,col=0,severity=2,message='Warning 1'}, {lnum=0,col=0,severity=2,message='Warning 2'}, {lnum=0,col=0,severity=2,message='Warning 3'}})");
+        await expect(canvas).toHaveAttribute('aria-description', /COMPLETION_READY/, {
+            timeout: 25000
+        });
+        await page.keyboard.type(
+            ":lua vim.diagnostic.set(vim.api.nvim_create_namespace('nido-test'), 0, {{lnum=0,col=0,severity=1,message='Error 1'}, {lnum=0,col=0,severity=1,message='Error 2'}, {lnum=0,col=0,severity=2,message='Warning 1'}, {lnum=0,col=0,severity=2,message='Warning 2'}, {lnum=0,col=0,severity=2,message='Warning 3'}})"
+        );
         await page.keyboard.press('Enter');
         const tabs = page.getByRole('tablist', { name: 'Files', exact: true });
         const tree = page.getByRole('tree', { name: 'Project files' });
@@ -370,7 +404,9 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await expect(menu).toHaveCount(0);
         await page.keyboard.press('Control+Space');
         await expect(menu).toBeVisible();
-        const index = (await menu.getByRole('option').allTextContents()).findIndex(text => text.includes('toFixed'));
+        const index = (await menu.getByRole('option').allTextContents()).findIndex((text) =>
+            text.includes('toFixed')
+        );
         expect(index).toBeGreaterThanOrEqual(0);
         for (let step = 0; step <= index; step++) {
             await page.keyboard.press('ArrowDown');
@@ -392,7 +428,9 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await expect(canvas).toHaveAttribute('aria-description', /amount.toFixed/);
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
-        await expect.poll(() => readFile(join(workspace, 'main.ts'), 'utf8')).toContain('amount.toFixed');
+        await expect
+            .poll(() => readFile(join(workspace, 'main.ts'), 'utf8'))
+            .toContain('amount.toFixed');
         await page.keyboard.type(':edit note.txt');
         await page.keyboard.press('Enter');
         await page.keyboard.press('i');
@@ -400,18 +438,24 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await page.keyboard.type('plain');
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
-        await expect.poll(() => readFile(join(workspace, 'note.txt'), 'utf8')).toMatch(/^  plain\r?\n$/);
+        await expect
+            .poll(() => readFile(join(workspace, 'note.txt'), 'utf8'))
+            .toMatch(/^  plain\r?\n$/);
         await page.keyboard.type(':edit main.ts');
         await page.keyboard.press('Enter');
         await expect(canvas).toHaveAttribute('aria-description', /getOldUser/);
         await page.keyboard.press('Escape');
         await page.keyboard.type('GogetU');
         await expect(menu).toBeVisible();
-        await expect(menu.getByRole('option').first().getByText('getUser', {exact:true})).toBeVisible();
+        await expect(
+            menu.getByRole('option').first().getByText('getUser', { exact: true })
+        ).toBeVisible();
         await page.keyboard.press('Tab');
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
-        await expect.poll(() => readFile(join(workspace, 'main.ts'), 'utf8')).toMatch(/\ngetUser\r?\n$/);
+        await expect
+            .poll(() => readFile(join(workspace, 'main.ts'), 'utf8'))
+            .toMatch(/\ngetUser\r?\n$/);
     } finally {
         await running.close();
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -986,7 +1030,9 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await expect(size).toBeFocused();
         await size.fill('18');
         await expect(size).toHaveValue('18');
-        await expect.poll(() => page.evaluate(() => localStorage.getItem('nido.fontSize'))).toBe('18');
+        await expect
+            .poll(() => page.evaluate(() => localStorage.getItem('nido.fontSize')))
+            .toBe('18');
         await size.fill('100');
         await page.keyboard.press('Tab');
         await expect(size).toHaveValue('18');
@@ -1577,9 +1623,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
                 `:lua vim.diagnostic.set(vim.api.nvim_create_namespace('nido-test'), 0, {{lnum=0,col=0,severity=${severity},message='Test diagnostic'}})`
             );
             await page.keyboard.press('Enter');
-            await expect(
-                fileTabs.getByLabel(`1 ${label}`, { exact: true })
-            ).toBeVisible();
+            await expect(fileTabs.getByLabel(`1 ${label}`, { exact: true })).toBeVisible();
             await expect(fileTabs.getByText('main.rs', { exact: true })).toHaveCSS('color', color);
             await expect(explorer.getByText('main.rs', { exact: true })).toHaveCSS('color', color);
         }
@@ -1834,16 +1878,22 @@ test('line deletion slides remaining rows upward only when animations are enable
     const root = await mkdtemp(join(tmpdir(), 'nido-delete-motion-'));
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
-    await writeFile(join(root, 'lines.txt'), Array.from({length: 100}, (_, i) => `line ${i + 1}`).join('\n'));
-    const running = await electron.launch({args: ['.', `--user-data-dir=${join(root, 'profile')}`], env});
+    await writeFile(
+        join(root, 'lines.txt'),
+        Array.from({ length: 100 }, (_, i) => `line ${i + 1}`).join('\n')
+    );
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        env
+    });
     try {
         const page = await running.firstWindow();
-        await page.emulateMedia({reducedMotion: 'no-preference'});
-        await expect(page.getByRole('heading', {name: 'Make yourself at home.'})).toBeVisible();
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
         await page.keyboard.press('Control+Shift+n');
         await chooseWorkspace(page, root);
-        await expect(page.getByRole('textbox', {name: 'Neovim input'})).toBeFocused();
-        await expect(page.getByRole('treeitem', {name: 'lines.txt', exact:true})).toBeVisible();
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await expect(page.getByRole('treeitem', { name: 'lines.txt', exact: true })).toBeVisible();
         await page.keyboard.type(':edit lines.txt');
         await page.keyboard.press('Enter');
         const canvas = page.locator('canvas:visible');
@@ -1853,8 +1903,13 @@ test('line deletion slides remaining rows upward only when animations are enable
             const context = (surface as HTMLCanvasElement).getContext('2d')!;
             const draw = context.drawImage.bind(context);
             context.drawImage = ((...args: Parameters<typeof draw>) => {
-                surface.setAttribute('data-motion-frames', String(Number(surface.getAttribute('data-motion-frames')) + 1));
-                const offsets = JSON.parse(surface.getAttribute('data-motion-offsets') || '[]') as number[];
+                surface.setAttribute(
+                    'data-motion-frames',
+                    String(Number(surface.getAttribute('data-motion-frames')) + 1)
+                );
+                const offsets = JSON.parse(
+                    surface.getAttribute('data-motion-offsets') || '[]'
+                ) as number[];
                 offsets.push(Number(args[6]) - Number(args[2]) / window.devicePixelRatio);
                 surface.setAttribute('data-motion-offsets', JSON.stringify(offsets));
                 draw(...args);
@@ -1862,13 +1917,18 @@ test('line deletion slides remaining rows upward only when animations are enable
         });
         for (const command of ['10Gdd', 'uggdd']) {
             const before = Number(await canvas.getAttribute('data-motion-frames'));
-            await canvas.evaluate(node => node.removeAttribute('data-motion-offsets'));
+            await canvas.evaluate((node) => node.removeAttribute('data-motion-offsets'));
             await page.keyboard.type(command);
-            await expect(canvas).not.toHaveAttribute('aria-description', command === '10Gdd' ? /line 10\s/ : /line 1\s/);
+            await expect(canvas).not.toHaveAttribute(
+                'aria-description',
+                command === '10Gdd' ? /line 10\s/ : /line 1\s/
+            );
             await page.waitForTimeout(150);
             expect(Number(await canvas.getAttribute('data-motion-frames'))).toBeGreaterThan(before);
-            const offsets = JSON.parse((await canvas.getAttribute('data-motion-offsets'))!) as number[];
-            expect(offsets.every(offset => offset >= 0)).toBe(true);
+            const offsets = JSON.parse(
+                (await canvas.getAttribute('data-motion-offsets'))!
+            ) as number[];
+            expect(offsets.every((offset) => offset >= 0)).toBe(true);
             expect(offsets.at(-1)!).toBeLessThan(offsets[0]);
         }
         const beforeUndo = Number(await canvas.getAttribute('data-motion-frames'));
@@ -1876,27 +1936,31 @@ test('line deletion slides remaining rows upward only when animations are enable
         await expect(canvas).toHaveAttribute('aria-description', /line 1\s/);
         await page.waitForTimeout(150);
         expect(Number(await canvas.getAttribute('data-motion-frames'))).toBe(beforeUndo);
-        await page.getByRole('button', {name: 'Settings', exact:true}).click();
-        await page.getByRole('checkbox', {name: 'UI animations', exact:true}).uncheck();
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page.getByRole('checkbox', { name: 'UI animations', exact: true }).uncheck();
         await page.keyboard.press('Escape');
         await page.keyboard.type('dd');
         await expect(canvas).not.toHaveAttribute('aria-description', /line 1\s/);
         await page.waitForTimeout(150);
         expect(Number(await canvas.getAttribute('data-motion-frames'))).toBe(beforeUndo);
         await page.keyboard.type('u');
-        await page.getByRole('button', {name: 'Settings', exact:true}).click();
-        await page.getByRole('checkbox', {name: 'UI animations', exact:true}).check();
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page.getByRole('checkbox', { name: 'UI animations', exact: true }).check();
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+d');
-        await expect.poll(async () => Number(await canvas.getAttribute('data-motion-frames'))).toBeGreaterThan(0);
+        await expect
+            .poll(async () => Number(await canvas.getAttribute('data-motion-frames')))
+            .toBeGreaterThan(0);
         await page.waitForTimeout(150);
         const frames = Number(await canvas.getAttribute('data-motion-frames'));
         await page.keyboard.type('G');
-        await expect.poll(async () => Number(await canvas.getAttribute('data-motion-frames'))).toBeGreaterThan(frames);
+        await expect
+            .poll(async () => Number(await canvas.getAttribute('data-motion-frames')))
+            .toBeGreaterThan(frames);
     } finally {
-        await running.evaluate(({app}) => app.exit(0));
+        await running.evaluate(({ app }) => app.exit(0));
         await running.close();
-        await rm(root, {recursive: true, force: true});
+        await rm(root, { recursive: true, force: true });
     }
 });
 
@@ -2234,7 +2298,7 @@ test('references stay accessible after jumping and can be closed with the keyboa
         await page.keyboard.press('Shift+F12');
         await expect(page.getByRole('region', { name: 'References' })).toBeVisible();
     } finally {
-        await running?.evaluate(({app}) => app.exit(0));
+        await running?.evaluate(({ app }) => app.exit(0));
         await running?.close();
         await rm(root, { recursive: true, force: true });
     }
@@ -2514,7 +2578,9 @@ test('normal shutdown restores workspace order, active file and cursors', async 
         await page.keyboard.type('gg0w');
         await expect(async () => {
             await page.keyboard.press('K');
-            await expect(page.getByRole('dialog', { name: 'Type information' })).toBeVisible({ timeout: 1000 });
+            await expect(page.getByRole('dialog', { name: 'Type information' })).toBeVisible({
+                timeout: 1000
+            });
         }).toPass({ timeout: 20000 });
         await page.screenshot({ path: 'test-results/nido-hover.png' });
         await page.keyboard.press('Escape');
@@ -2786,12 +2852,14 @@ test('keyboard-only workspace switching, editing, saving and dirty-close guard',
     }
 });
 
-
 test('settings navigation crosses the shell selector with Ctrl D and Ctrl U', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-settings-navigation-'));
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
-    const running = await electron.launch({ args: ['.', `--user-data-dir=${join(root, 'profile')}`], env });
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        env
+    });
     try {
         const page = await running.firstWindow();
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -2816,15 +2884,21 @@ test('settings navigation crosses the shell selector with Ctrl D and Ctrl U', as
     }
 });
 
-
 test('explorer zz centers selection without opening or changing files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-explorer-center-'));
     const workspace = join(root, 'workspace');
     await mkdir(workspace);
-    await Promise.all(Array.from({ length: 100 }, (_, i) => writeFile(join(workspace, `file${String(i).padStart(3, '0')}.txt`), '')));
+    await Promise.all(
+        Array.from({ length: 100 }, (_, i) =>
+            writeFile(join(workspace, `file${String(i).padStart(3, '0')}.txt`), '')
+        )
+    );
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
-    const running = await electron.launch({ args: ['.', `--user-data-dir=${join(root, 'profile')}`], env });
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        env
+    });
     try {
         const page = await running.firstWindow();
         await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
@@ -2841,11 +2915,19 @@ test('explorer zz centers selection without opening or changing files', async ()
         await page.keyboard.press('z');
         expect(await tree.evaluate((node) => node.scrollTop)).toBe(before);
         await page.keyboard.press('z');
-        await expect.poll(() => tree.evaluate((node) => {
-            const row = node.querySelector('[aria-selected="true"]')!.getBoundingClientRect();
-            const viewport = node.getBoundingClientRect();
-            return Math.abs(row.top + row.height / 2 - viewport.top - node.clientHeight / 2);
-        })).toBeLessThan(2);
+        await expect
+            .poll(() =>
+                tree.evaluate((node) => {
+                    const row = node
+                        .querySelector('[aria-selected="true"]')!
+                        .getBoundingClientRect();
+                    const viewport = node.getBoundingClientRect();
+                    return Math.abs(
+                        row.top + row.height / 2 - viewport.top - node.clientHeight / 2
+                    );
+                })
+            )
+            .toBeLessThan(2);
         await expect(selected).toHaveText(name!);
         await expect(tree).toBeFocused();
         const centered = await tree.evaluate((node) => node.scrollTop);
@@ -2858,13 +2940,18 @@ test('explorer zz centers selection without opening or changing files', async ()
     }
 });
 
-
 test('half-page direction changes animate once per press', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-page-direction-'));
-    await writeFile(join(root, 'scroll.txt'), Array.from({ length: 400 }, (_, i) => `line ${i + 1}`).join('\n'));
+    await writeFile(
+        join(root, 'scroll.txt'),
+        Array.from({ length: 400 }, (_, i) => `line ${i + 1}`).join('\n')
+    );
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
-    const running = await electron.launch({ args: ['.', `--user-data-dir=${join(root, 'profile')}`], env });
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        env
+    });
     try {
         const page = await running.firstWindow();
         await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
@@ -2893,7 +2980,8 @@ test('half-page direction changes animate once per press', async () => {
                 for (const [name, ...calls] of event.events) {
                     if (name === 'nido_scroll') {
                         node.dataset.scrolls = JSON.stringify([
-                            ...JSON.parse(node.dataset.scrolls!), ...calls.map((args) => Number(args[5]))
+                            ...JSON.parse(node.dataset.scrolls!),
+                            ...calls.map((args) => Number(args[5]))
                         ]);
                     }
                 }
@@ -2901,9 +2989,13 @@ test('half-page direction changes animate once per press', async () => {
         });
         for (const key of ['Control+d', 'Control+u', 'Control+d', 'Control+u']) {
             const frames = Number(await canvas.getAttribute('data-frames'));
-            await canvas.evaluate((node) => { node.dataset.scrolls = '[]'; });
+            await canvas.evaluate((node) => {
+                node.dataset.scrolls = '[]';
+            });
             await page.keyboard.press(key);
-            await expect.poll(async () => Number(await canvas.getAttribute('data-frames'))).toBeGreaterThan(frames);
+            await expect
+                .poll(async () => Number(await canvas.getAttribute('data-frames')))
+                .toBeGreaterThan(frames);
             await page.waitForTimeout(200);
             const scrolls = JSON.parse((await canvas.getAttribute('data-scrolls'))!) as number[];
             expect(scrolls).toHaveLength(1);

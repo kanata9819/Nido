@@ -195,7 +195,14 @@ export default function Editor({
             />
             {children}
             {!terminal && (
-                <CompletionMenu id={id} grid={grid} input={input} fontFamily={fontFamily} onError={onError} hidden={blocked} />
+                <CompletionMenu
+                    id={id}
+                    grid={grid}
+                    input={input}
+                    fontFamily={fontFamily}
+                    onError={onError}
+                    hidden={blocked}
+                />
             )}
             {active && !blocked && !terminal && (
                 <TypeInformation id={id} input={input} fontFamily={fontFamily} />
