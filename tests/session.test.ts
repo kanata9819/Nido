@@ -188,7 +188,7 @@ test('Dark Modern syntax colors match the official palette in TypeScript, TSX an
             ],
             [
                 'sample.rs',
-                'fn greet(value: u32) -> bool { true }\nlet text: &str = "ok";\n// Documentation',
+                'fn greet(value: u32) -> bool { true }\nlet text: &str = "ok";\n// Documentation\n#[cfg(test)]\n#[test]\nfn example() { assert!(true); panic!("oops"); dbg!(text); }\nfn borrow<\'a>(value: &\'a str) -> &\'a str { value }\nfn fallible() { work()?; }',
                 [
                     [0, 'fn', '#569cd6'],
                     [0, 'greet', '#dcdcaa'],
@@ -197,7 +197,15 @@ test('Dark Modern syntax colors match the official palette in TypeScript, TSX an
                     [0, 'true', '#569cd6'],
                     [1, 'str', '#4ec9b0'],
                     [1, 'ok', '#ce9178'],
-                    [2, 'Documentation', '#6a9955']
+                    [2, 'Documentation', '#6a9955'],
+                    [1, '&', '#d4d4d4'],
+                    [3, 'cfg', '#cccccc'],
+                    [4, 'test', '#cccccc'],
+                    [5, 'assert!', '#dcdcaa'],
+                    [5, 'panic!', '#dcdcaa'],
+                    [5, 'dbg!', '#dcdcaa'],
+                    [6, "'a", '#4ec9b0'],
+                    [7, '?', '#d4d4d4']
                 ]
             ]
         ];

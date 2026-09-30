@@ -26,9 +26,12 @@ test(
             );
             let sawProgress = false;
             const messages: string[] = [];
+            const hovers: string[] = [];
             session = await Session.create(root, (event) => {
                 if (event.type === 'state' && event.state.lspProgress) sawProgress = true;
-                if (event.type === 'error') messages.push(event.message);
+                if (event.type === 'error' || event.type === 'notification')
+                    messages.push(event.message);
+                if (event.type === 'hover') hovers.push(event.markdown);
             });
             await session.openFile('src/main.rs');
             const lua = (code: string, args: unknown[] = []): Promise<unknown> =>
@@ -65,7 +68,7 @@ test(
                 await lua(
                     "return vim.api.nvim_get_hl(0, {name='@lsp.type.parameter', link=false}).fg"
                 ),
-                0x9cdcfe
+                0xffb300
             );
             const params = {
                 textDocument: { uri: pathToFileURL(join(root, 'src/main.rs')).href },
@@ -172,21 +175,15 @@ test(
             assert.match(JSON.stringify(await request('textDocument/hover', params)), /greet/);
             await session.client.request('nvim_win_set_cursor', [0, [3, 18]]);
             await session.input('<C-k>');
-            let preview: { id: number; width: number; height: number; title: unknown } | undefined;
-            for (let i = 0; i < 50; i++) {
-                preview = (await lua(`for _, win in ipairs(vim.api.nvim_list_wins()) do
-        local config = vim.api.nvim_win_get_config(win)
-        if config.relative ~= '' and config.title then
-          return {id=win, width=config.width, height=config.height, title=config.title}
-        end
-      end`)) as typeof preview;
-                if (preview) break;
+            for (let i = 0; i < 50 && !hovers.some((markdown) => markdown.includes('greet')); i++) {
                 await new Promise((done) => setTimeout(done, 100));
             }
-            assert.ok(preview, 'Ctrl+K should show a bordered documentation window');
-            assert.ok(preview.width <= 88 && preview.height <= 20);
-            assert.match(JSON.stringify(preview.title), /Type information/);
-            await session.client.request('nvim_win_close', [preview.id, true]);
+            assert.match(
+                hovers.join('\n'),
+                /greet/,
+                'Ctrl+K publishes the native type information card'
+            );
+            assert.equal(await lua('return #vim.api.nvim_list_wins()'), 1);
             assert.match(
                 JSON.stringify(
                     await request('textDocument/rename', {
@@ -249,7 +246,7 @@ test(
             await session.client.request('nvim_eval', ['1']);
             assert.equal(
                 messages.filter((message) => message.includes('Nido message test')).length,
-                4
+                3
             );
             await session.input('iOK<Esc>');
             for (

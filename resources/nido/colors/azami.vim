@@ -119,17 +119,32 @@ for color, groups in pairs({
     'typescriptBinaryOp', 'typescriptAssign', 'typescriptUnaryOp', 'typescriptTernaryOp',
     'typescriptEndColons', 'typescriptFuncComma', 'typescriptBraces', 'typescriptParens',
     'typescriptBlock', 'typescriptClassBlock', 'typescriptObjectLiteral', 'typescriptArray',
+    'rustSigil', 'rustQuestionMark',
     'typescriptFuncTypeArrow', 'typescriptLogicSymbols', 'javaScriptBraces',
   },
   [c.vscLightBlue] = {'typescriptVariableDeclaration', 'typescriptLabel', 'typescriptCall', 'typescriptDestructureVariable', 'typescriptTypeBlock', 'typescriptDefaultImportName', 'typescriptMember', 'typescriptParamImpl', 'typescriptArrowFuncArg', 'typescriptDocParamName', 'tsxAttrib'},
-  [c.vscBlueGreen] = {'typescriptTypeReference', 'typescriptInterfaceName', 'typescriptClassName', 'typescriptAliasDeclaration', 'nidoTypeImportBlock', 'typescriptPredefinedType', 'typescriptTypeParameter', '@lsp.type.typeParameter', '@type.builtin.typescript', '@type.builtin.javascript'},
-  [c.vscYellow] = {'typescriptFuncName', 'typescriptStringMethod', 'typescriptArrayMethod', 'typescriptObjectMethod', 'typescriptNumberMethod', 'typescriptMathMethod', 'typescriptJSONMethod', 'typescriptDateMethod', 'typescriptRegExpMethod', 'typescriptFunctionMethod', '@lsp.type.function', '@lsp.type.method'},
+  [c.vscBlueGreen] = {'typescriptTypeReference', 'typescriptInterfaceName', 'typescriptClassName', 'typescriptAliasDeclaration', 'nidoTypeImportBlock', 'typescriptPredefinedType', 'typescriptTypeParameter', '@lsp.type.typeParameter', '@type.builtin.typescript', '@type.builtin.javascript', 'rustLifetime'},
+  [c.vscYellow] = {'typescriptFuncName', 'typescriptStringMethod', 'typescriptArrayMethod', 'typescriptObjectMethod', 'typescriptNumberMethod', 'typescriptMathMethod', 'typescriptJSONMethod', 'typescriptDateMethod', 'typescriptRegExpMethod', 'typescriptFunctionMethod', '@lsp.type.function', '@lsp.type.method', 'rustAssert', 'rustPanic'},
   [c.vscGreen] = {'typescriptDocComment'},
   [c.vscLightRed] = {'typescriptRegexpString'},
   [c.vscYellowOrange] = {'typescriptSpecial'},
 }) do
   for _, group in ipairs(groups) do hl(0, group, {fg=color}) end
 end
+-- rust-analyzer extends the standard token types; Neovim does not inherit their VS Code supertypes.
+for group, target in pairs({
+  builtinType = '@type', union = '@type',
+  selfKeyword = '@keyword', selfTypeKeyword = '@keyword', boolean = '@boolean',
+  character = '@character', escapeSequence = '@string.escape', formatSpecifier = '@keyword',
+  lifetime = '@keyword',
+  procMacro = '@function.macro', macroBang = '@function.macro',
+  attribute = 'Normal', builtinAttribute = 'Normal', derive = 'Normal', deriveHelper = 'Normal',
+}) do
+  hl(0, '@lsp.type.' .. group .. '.rust', {link=target})
+end
+hl(0, 'rustLabel', {link='@label'})
+hl(0, 'rustAttribute', {link='Normal'})
+hl(0, 'rustDerive', {link='Normal'})
 hl(0, 'NeoTreeNormal', { fg = c.vscFront, bg = '#181818' })
 hl(0, 'NeoTreeNormalNC', { fg = c.vscFront, bg = '#181818' })
 hl(0, 'NeoTreeEndOfBuffer', { fg = '#181818', bg = '#181818' })
