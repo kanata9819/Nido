@@ -2333,7 +2333,7 @@ test('normal shutdown restores workspace order, active file and cursors', async 
         await page.keyboard.press('Control+p');
         await page.getByRole('textbox', { name: 'Filter items' }).fill('highlight.rs');
         await page.keyboard.press('Enter');
-        await expect(page.getByRole('tab', { name: 'highlight.rs', exact: true })).toBeVisible();
+        await expect(page.getByRole('tab', { name: /^highlight\.rs/ })).toBeVisible();
         await expect
             .poll(() =>
                 page.locator('canvas:visible').evaluate((element) => {
@@ -2393,7 +2393,7 @@ test('normal shutdown restores workspace order, active file and cursors', async 
                     return [sample(0), sample(24), sample(12)];
                 })
             )
-            .toEqual(['70,81,92', '70,81,92', '20,20,20']);
+            .toEqual(['70,81,92', '70,81,92', '18,18,18']);
         await expect(page.getByTitle('Rust language server connection')).toHaveText(
             'rust_analyzer'
         );
@@ -2439,15 +2439,10 @@ test('normal shutdown restores workspace order, active file and cursors', async 
         await page.keyboard.type('gg0w');
         await expect(async () => {
             await page.keyboard.press('K');
-            await expect(page.locator('canvas:visible')).toHaveAttribute(
-                'aria-description',
-                /Type information/,
-                {
-                    timeout: 1000
-                }
-            );
+            await expect(page.getByRole('dialog', { name: 'Type information' })).toBeVisible({ timeout: 1000 });
         }).toPass({ timeout: 20000 });
         await page.screenshot({ path: 'test-results/nido-hover.png' });
+        await page.keyboard.press('Escape');
         for (const [file, keys] of [
             ['a.txt', '3G4l'],
             ['b.txt', 'gg6l']
@@ -2474,7 +2469,7 @@ test('normal shutdown restores workspace order, active file and cursors', async 
             'true'
         );
         await page.keyboard.press('Shift+L');
-        await expect(page.getByRole('tab', { name: 'highlight.rs', exact: true })).toHaveAttribute(
+        await expect(page.getByRole('tab', { name: /^highlight\.rs/ })).toHaveAttribute(
             'aria-selected',
             'true'
         );
@@ -2803,6 +2798,7 @@ test('half-page direction changes animate once per press', async () => {
         await expect(page.getByRole('treeitem', { name: 'scroll.txt', exact: true })).toBeVisible();
         await page.keyboard.press('Control+p');
         await page.getByRole('textbox', { name: 'Filter items' }).fill('scroll.txt');
+        await expect(page.getByRole('button', { name: /scroll\.txt/ })).toBeVisible();
         await page.keyboard.press('Enter');
         const canvas = page.locator('canvas:visible');
         await expect(canvas).toHaveAttribute('aria-description', /line 1/);

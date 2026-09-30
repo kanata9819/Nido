@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
 import GitPanel from './GitPanel';
+import GitBrowserList from './GitBrowserList';
+import { CommitDetails, BranchDetails } from './GitDetails';
+import { useGitBrowserKeyboard } from '../hooks/useGitBrowserKeyboard';
 import GitDiff from './GitDiff';
 import styles from '../assets/GitPanel.module.css';
 
@@ -177,86 +180,7 @@ export default function GitBrowser({
         listLabel = 'Commit files';
     }
 
-    useEffect(() => {
-        const keydown = (event: KeyboardEvent): void => {
-            if (event.isComposing || event.keyCode === 229) {
-                return;
-            }
-            if (event.key === 'Escape') {
-                event.preventDefault();
-                if (!busy) {
-                    back();
-                }
-                return;
-            }
-            if (!(event.target as HTMLElement).closest('[aria-label="git palette"]')) {
-                return;
-            }
-            const editing = (event.target as HTMLElement).matches(
-                'input, textarea, [contenteditable="true"]'
-            );
-            if (editing || event.altKey || event.metaKey) {
-                return;
-            }
-            const target = event.target as HTMLElement;
-            const dialog = target.closest('[aria-label="git palette"]');
-            const key = event.key.toLowerCase();
-            if (event.ctrlKey && !event.shiftKey && (key === 'h' || key === 'l')) {
-                event.preventDefault();
-                const selector =
-                    key === 'h'
-                        ? '[role="listbox"]'
-                        : '[data-git-scroll="after"], [data-git-preview] > [tabindex]';
-                dialog?.querySelector<HTMLElement>(selector)?.focus();
-                return;
-            }
-            const preview = target.closest<HTMLElement>(
-                '[data-git-preview] pre, [data-git-summary]'
-            );
-            if (preview) {
-                const line = parseFloat(getComputedStyle(preview).lineHeight) || 20;
-                let vertical = 0;
-                let horizontal = 0;
-                if (event.ctrlKey && !event.shiftKey) {
-                    if (key === 'd' || key === 'u') {
-                        vertical = (preview.clientHeight / 2) * (key === 'd' ? 1 : -1);
-                    } else if (key === 'f' || key === 'b') {
-                        vertical = preview.clientHeight * (key === 'f' ? 1 : -1);
-                    }
-                } else if (!event.ctrlKey) {
-                    if (event.key === 'j' || event.key === 'k') {
-                        vertical = line * (event.key === 'j' ? 1 : -1);
-                    } else if (event.key === 'h' || event.key === 'l') {
-                        horizontal = line * (event.key === 'l' ? 1 : -1);
-                    } else if (key === 'g') {
-                        event.preventDefault();
-                        preview.scrollTo({
-                            top: event.shiftKey || event.key === 'G' ? preview.scrollHeight : 0,
-                            behavior: 'instant'
-                        });
-                        return;
-                    }
-                }
-                if (vertical || horizontal) {
-                    event.preventDefault();
-                    preview.scrollBy({ top: vertical, left: horizontal, behavior: 'instant' });
-                    return;
-                }
-            }
-            if (
-                !editing &&
-                !event.ctrlKey &&
-                !event.altKey &&
-                !event.metaKey &&
-                ['1', '2', '3'].includes(event.key)
-            ) {
-                event.preventDefault();
-                changeView(Number(event.key) - 1);
-            }
-        };
-        document.addEventListener('keydown', keydown);
-        return () => document.removeEventListener('keydown', keydown);
-    });
+    useGitBrowserKeyboard({ busy, back, changeView });
 
     return (
         <div className={styles.panel}>
@@ -308,109 +232,20 @@ export default function GitBrowser({
                         </button>
                     </div>
                     <div className={styles.content}>
-                        <div
-                            className={`${styles.list} ${view === 2 || (view === 1 && !commit) ? styles.historyList : ''}`}
-                            ref={list}
-                            role="listbox"
-                            aria-label={listLabel}
-                            tabIndex={0}
-                            aria-activedescendant={labels[index] ? `git-entry-${index}` : undefined}
-                            onKeyDown={(event) => {
-                                if (
-                                    busy ||
-                                    event.ctrlKey ||
-                                    event.altKey ||
-                                    event.metaKey ||
-                                    event.nativeEvent.isComposing
-                                ) {
-                                    return;
-                                }
-                                if (
-                                    ['j', 'k', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(
-                                        event.key
-                                    )
-                                ) {
-                                    event.preventDefault();
-                                    let next =
-                                        index + (['j', 'ArrowDown'].includes(event.key) ? 1 : -1);
-                                    if (event.key === 'Home') {
-                                        next = 0;
-                                    }
-                                    if (event.key === 'End') {
-                                        next = labels.length - 1;
-                                    }
-                                    setIndex(Math.max(0, Math.min(labels.length - 1, next)));
-                                } else if (event.key === 'Enter') {
-                                    event.preventDefault();
-                                    open();
-                                } else if (view === 2 && event.key === 'n') {
-                                    event.preventDefault();
-                                    setCreating(true);
-                                }
-                            }}
-                        >
-                            {labels.map((label, position) => (
-                                <div
-                                    key={label}
-                                    id={`git-entry-${position}`}
-                                    role="option"
-                                    aria-selected={index === position}
-                                    className={`${styles.change} ${view === 2 || (view === 1 && !commit) ? styles.historyEntry : ''}`}
-                                    title={label}
-                                    ref={(node) => {
-                                        if (node && index === position) {
-                                            node.scrollIntoView({ block: 'nearest' });
-                                        }
-                                    }}
-                                    onClick={() => {
-                                        setIndex(position);
-                                        list.current?.focus();
-                                    }}
-                                    onDoubleClick={open}
-                                >
-                                    {view === 1 && !commit ? (
-                                        <>
-                                            <strong className={styles.commitSubject}>
-                                                {history[position].subject}
-                                            </strong>
-                                            <div className={styles.commitMeta}>
-                                                <code className={styles.hashBadge}>
-                                                    {history[position].hash.slice(0, 8)}
-                                                </code>
-                                                <span>{history[position].author}</span>
-                                            </div>
-                                        </>
-                                    ) : view === 2 ? (
-                                        <>
-                                            <strong className={styles.commitSubject}>
-                                                {branches[position].name}
-                                            </strong>
-                                            <div className={styles.commitMeta}>
-                                                <span className={styles.branchBadge}>
-                                                    {branches[position].remote ? 'Remote' : 'Local'}
-                                                </span>
-                                                {branches[position].current && (
-                                                    <span className={styles.currentBadge}>
-                                                        Current
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <span>{label}</span>
-                                    )}
-                                </div>
-                            ))}
-                            {!labels.length && !busy && (
-                                <p>
-                                    {commit
-                                        ? 'No changed files.'
-                                        : view === 1
-                                          ? 'No commits yet.'
-                                          : 'No branches yet. Press n to create one.'}
-                                </p>
-                            )}
-                        </div>
+                        <GitBrowserList
+                            view={view}
+                            busy={busy}
+                            commit={commit}
+                            history={history}
+                            branches={branches}
+                            labels={labels}
+                            listLabel={listLabel}
+                            index={index}
+                            setIndex={setIndex}
+                            listRef={list}
+                            open={open}
+                            setCreating={setCreating}
+                        />
                         <div className={styles.preview} data-git-preview>
                             {view === 1 && commit ? (
                                 <GitDiff
@@ -423,91 +258,9 @@ export default function GitBrowser({
                                     afterLabel={commit.hash.slice(0, 8)}
                                 />
                             ) : view === 1 && history[index] ? (
-                                <section
-                                    className={styles.commitSummary}
-                                    data-git-summary
-                                    tabIndex={0}
-                                    aria-label="Commit details"
-                                >
-                                    <span className={styles.summaryLabel}>COMMIT</span>
-                                    <h2>{history[index].subject}</h2>
-                                    <dl className={styles.commitDetails}>
-                                        <div>
-                                            <dt>Author</dt>
-                                            <dd>{history[index].author}</dd>
-                                        </div>
-                                        <div>
-                                            <dt>Committed</dt>
-                                            <dd>
-                                                <time dateTime={history[index].date}>
-                                                    {new Date(history[index].date).toLocaleString(
-                                                        undefined,
-                                                        {
-                                                            dateStyle: 'medium',
-                                                            timeStyle: 'short'
-                                                        }
-                                                    )}
-                                                </time>
-                                            </dd>
-                                        </div>
-                                        <div>
-                                            <dt>Hash</dt>
-                                            <dd>
-                                                <code>{history[index].hash}</code>
-                                            </dd>
-                                        </div>
-                                    </dl>
-                                    <button disabled={busy} onClick={open}>
-                                        Browse changed files <kbd>Enter</kbd>
-                                    </button>
-                                </section>
+                                <CommitDetails entry={history[index]} busy={busy} open={open} />
                             ) : view === 2 && branches[index] ? (
-                                <section
-                                    className={styles.commitSummary}
-                                    data-git-summary
-                                    tabIndex={0}
-                                    aria-label="Branch details"
-                                >
-                                    <span className={styles.summaryLabel}>BRANCH</span>
-                                    <h2>{branches[index].name}</h2>
-                                    <dl className={styles.commitDetails}>
-                                        <div>
-                                            <dt>Type</dt>
-                                            <dd>
-                                                {branches[index].remote
-                                                    ? 'Remote-tracking branch'
-                                                    : 'Local branch'}
-                                            </dd>
-                                        </div>
-                                        <div>
-                                            <dt>Status</dt>
-                                            <dd>
-                                                {branches[index].current
-                                                    ? 'Currently checked out'
-                                                    : 'Available to switch'}
-                                            </dd>
-                                        </div>
-                                        <div>
-                                            <dt>On switch</dt>
-                                            <dd>
-                                                {branches[index].remote
-                                                    ? 'Create a local branch that tracks this remote branch.'
-                                                    : 'Check out this branch in the workspace.'}
-                                            </dd>
-                                        </div>
-                                    </dl>
-                                    <p className={styles.summaryHint}>
-                                        {branches[index].current
-                                            ? 'You are already working on this branch.'
-                                            : 'Switch to this branch to continue working on it.'}
-                                    </p>
-                                    <button
-                                        disabled={busy || branches[index].current}
-                                        onClick={open}
-                                    >
-                                        Switch branch <kbd>Enter</kbd>
-                                    </button>
-                                </section>
+                                <BranchDetails entry={branches[index]} busy={busy} open={open} />
                             ) : (
                                 <pre tabIndex={0} />
                             )}

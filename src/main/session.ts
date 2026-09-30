@@ -4,35 +4,17 @@ import { basename, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type {
     DebugAction,
-    DebugState,
     FileEntry,
     FileAction,
     NidoEvent,
-    Redraw,
     ReferencePreview,
     SavedWorkspace,
     SessionState,
     Workspace
 } from '../shared/types';
 import { SessionFiles } from './sessionFiles';
+import { SessionEvents } from './sessionEvents';
 import { SessionClient } from './sessionClient';
-
-const gridEvents = new Set([
-    'popupmenu_show',
-    'popupmenu_select',
-    'popupmenu_hide',
-    'grid_resize',
-    'grid_clear',
-    'grid_line',
-    'grid_scroll',
-    'grid_cursor_goto',
-    'hl_attr_define',
-    'default_colors_set',
-    'mode_change',
-    'busy_start',
-    'busy_stop',
-    'flush'
-]);
 
 export class Session {
     terminal?: Session;
@@ -41,14 +23,18 @@ export class Session {
     readonly process: ChildProcessWithoutNullStreams;
     readonly client: SessionClient;
     private readonly fileService: SessionFiles;
-    state: SessionState = { buffers: [], current: 0, mode: 'n', line: 1, column: 1, filetype: '' };
+    private readonly events: SessionEvents;
+    get state(): SessionState {
+        return this.events.state;
+    }
+    set state(value: SessionState) {
+        this.events.state = value;
+    }
     private stopped = false;
     private processClosed = false;
     private stopping?: Promise<void>;
     private attached = false;
     private inputQueue: Promise<void> = Promise.resolve();
-    private pendingRedraw: Redraw = [];
-    private batchingScroll = false;
     private scrollDetached = false;
 
     private constructor(
@@ -57,6 +43,7 @@ export class Session {
         private resources: string
     ) {
         this.workspace = { id: randomUUID(), root, name: basename(root) || root };
+        this.events = new SessionEvents(this.workspace.id, emit);
         this.process = spawn(
             resolve(resources, 'nvim-win64/bin/nvim.exe'),
             [
@@ -97,102 +84,7 @@ export class Session {
         });
         this.fileService = new SessionFiles(this.workspace.root, this.client);
         this.client.on('notification', (method: string, args: unknown[]) => {
-            switch (method) {
-                case 'nido:hover': {
-                    if (typeof args[0] === 'string' && typeof args[1] === 'string') {
-                        this.emit({
-                            type: 'hover',
-                            id: this.workspace.id,
-                            markdown: args[0],
-                            filetype: args[1],
-                            codeBlocks: Array.isArray(args[2])
-                                ? (args[2] as ReferencePreview['lines'][])
-                                : []
-                        });
-                    }
-                    break;
-                }
-                case 'nido:scroll': {
-                    this.pendingRedraw.push(['nido_scroll', args[0] as unknown[]]);
-                    break;
-                }
-                case 'nido:edit': {
-                    this.pendingRedraw.push(['nido_edit', []]);
-                    break;
-                }
-                case 'nido:pixel_scroll': {
-                    if (this.batchingScroll) {
-                        this.pendingRedraw.push(['nido_pixel_scroll', args]);
-                        break;
-                    }
-                    this.emit({
-                        type: 'redraw',
-                        id: this.workspace.id,
-                        events: [
-                            ['nido_pixel_scroll', args],
-                            ['flush', []]
-                        ]
-                    });
-                    break;
-                }
-                case 'nido:message': {
-                    this.emit({ type: 'error', id: this.workspace.id, message: String(args[0]) });
-                    break;
-                }
-                case 'redraw': {
-                    // Other events can contain Neovim Window handles, which cannot cross Electron IPC.
-                    for (const event of args as Redraw) {
-                        if (!gridEvents.has(event[0])) {
-                            continue;
-                        }
-                        this.pendingRedraw.push(event);
-                        // A repaint can span several RPC notifications. Never expose a partial frame.
-                        if (event[0] === 'flush' && !this.batchingScroll) {
-                            const events = this.pendingRedraw;
-                            this.pendingRedraw = [];
-                            this.emit({ type: 'redraw', id: this.workspace.id, events });
-                        }
-                    }
-                    break;
-                }
-                case 'nido:state': {
-                    this.state = {
-                        ...(args[0] as SessionState),
-                        debug: this.state.debug,
-                        references: this.state.references
-                    };
-                    // Lua encodes an empty table as a map rather than an array.
-                    if (!Array.isArray(this.state.buffers)) {
-                        this.state.buffers = [];
-                    }
-                    if (!Array.isArray(this.state.problems)) {
-                        this.state.problems = [];
-                    }
-                    this.emit({ type: 'state', id: this.workspace.id, state: this.state });
-                    break;
-                }
-                case 'nido:references': {
-                    const references = args[0] as NonNullable<SessionState['references']>;
-                    if (!Array.isArray(references.items)) {
-                        references.items = [];
-                    }
-                    this.state = { ...this.state, references };
-                    this.emit({ type: 'state', id: this.workspace.id, state: this.state });
-                    break;
-                }
-                case 'nido:debug': {
-                    const debug = args[0] as DebugState;
-                    if (!Array.isArray(debug.variables)) {
-                        debug.variables = [];
-                    }
-                    if (!Array.isArray(debug.targets)) {
-                        debug.targets = [];
-                    }
-                    this.state = { ...this.state, debug };
-                    this.emit({ type: 'state', id: this.workspace.id, state: this.state });
-                    break;
-                }
-            }
+            this.events.notify(method, args);
         });
         this.process.stderr.on('data', () => {
             /* Drain the child pipe; RPC errors are surfaced separately. */
@@ -463,7 +355,7 @@ end`,
         }
         const next = this.inputQueue.then(async () => {
             this.scrollDetached = true;
-            this.batchingScroll = true;
+            this.events.beginScroll();
             try {
                 if (this.workspace.kind === 'terminal') {
                     await this.client.request('nvim_command', ['stopinsert']);
@@ -476,16 +368,7 @@ end`,
                 await this.client.request('nvim_eval', ['1']);
             } finally {
                 // Publish the grid, fractional offset and anchored cursor as one frame, even for sub-line deltas.
-                this.batchingScroll = false;
-                const events = this.pendingRedraw;
-                this.pendingRedraw = [];
-                if (events.length) {
-                    this.emit({
-                        type: 'redraw',
-                        id: this.workspace.id,
-                        events: [...events, ['flush', []]]
-                    });
-                }
+                this.events.endScroll();
             }
         });
         this.inputQueue = next.catch(() => {});
@@ -627,7 +510,12 @@ return ok and "" or tostring(err)`,
         await this.fileService.openFile(relativePath);
     }
 
-    async fileAction(action: FileAction, path: string, target: string, trash: (path: string) => Promise<void>): Promise<void> {
+    async fileAction(
+        action: FileAction,
+        path: string,
+        target: string,
+        trash: (path: string) => Promise<void>
+    ): Promise<void> {
         await this.fileService.fileAction(action, path, target, trash);
     }
 

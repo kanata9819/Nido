@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Files, GitBranch, Keyboard, Search, Settings2, Square, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { FileEntry, SessionState } from '../../shared/types';
 import type { Panel } from './types';
 import Editor from './Editor';
+import TerminalPanel from './components/TerminalPanel';
+import NavigationRail from './components/NavigationRail';
+import { useSessionSettings } from './hooks/useSessionSettings';
 import Sidebar from './Sidebar';
 import DebugPanel from './components/DebugPanel';
 import FileHeader from './components/FileHeader';
@@ -65,43 +68,12 @@ export default function App(): React.JSX.Element {
         smoothBlink,
         scrollFollowCursor,
         formatOnSave,
-        clipboardSharing,
-        relativeLineNumbers,
-        editorConfig,
         fontFamily,
         fontSize,
         sidebarWidth,
         resizeSidebar
     } = settings;
-    useEffect(() => {
-        for (const workspace of workspaces) {
-            for (const id of [workspace.id, workspace.terminalId]) {
-                if (id) {
-                    void window.nido
-                        .setClipboardSharing(id, clipboardSharing)
-                        .catch((error) => setError(String(error)));
-                }
-            }
-        }
-    }, [clipboardSharing, workspaces]);
-    useEffect(() => {
-        for (const workspace of workspaces) {
-            if (workspace.kind !== 'terminal') {
-                void window.nido
-                    .setRelativeLineNumbers(workspace.id, relativeLineNumbers)
-                    .catch((error) => setError(String(error)));
-            }
-        }
-    }, [relativeLineNumbers, workspaces]);
-    useEffect(() => {
-        for (const workspace of workspaces) {
-            if (workspace.kind !== 'terminal') {
-                void window.nido
-                    .setEditorConfig(workspace.id, editorConfig)
-                    .catch((error) => setError(String(error)));
-            }
-        }
-    }, [editorConfig, workspaces]);
+    useSessionSettings(workspaces, settings, setError);
 
     const modal = useRef<HTMLDivElement>(null);
     const state = states[active] || defaultState;
@@ -404,54 +376,12 @@ export default function App(): React.JSX.Element {
                 run={run}
             />
             <div className={styles.body}>
-                <nav className={styles.rail} aria-label="Navigation">
-                    <button
-                        className={sidebar ? styles.railActive : ''}
-                        aria-label="Explorer"
-                        title="Explorer (Space e)"
-                        onClick={showExplorer}
-                    >
-                        <Files size={22} />
-                    </button>
-                    <button
-                        aria-label="Find file"
-                        title="Find file (Space f)"
-                        disabled={!active}
-                        onClick={() => showPanel('files')}
-                    >
-                        <Search size={22} />
-                    </button>
-                    <button
-                        aria-label="Workspaces"
-                        title="Workspaces (Space w)"
-                        onClick={() => showPanel('workspaces')}
-                    >
-                        <Square size={20} />
-                    </button>
-                    <button
-                        aria-label="Source control"
-                        title="Source control (Ctrl+Shift+G / Space g)"
-                        disabled={!active}
-                        onClick={() => showPanel('git')}
-                    >
-                        <GitBranch size={21} />
-                    </button>
-                    <div className={styles.railGap} />
-                    <button
-                        aria-label="Command palette"
-                        title="Commands (Ctrl+Shift+P)"
-                        onClick={() => showPanel('commands')}
-                    >
-                        <Keyboard size={21} />
-                    </button>
-                    <button
-                        aria-label="Settings"
-                        title="Settings (Space ,)"
-                        onClick={() => showPanel('settings')}
-                    >
-                        <Settings2 size={21} />
-                    </button>
-                </nav>
+                <NavigationRail
+                    sidebar={sidebar}
+                    active={active}
+                    showExplorer={showExplorer}
+                    showPanel={showPanel}
+                />
                 {sidebar &&
                     workspace?.kind !== 'terminal' &&
                     workspaces.map((w) => (
@@ -511,54 +441,23 @@ export default function App(): React.JSX.Element {
                     {workspaces
                         .filter((w) => w.terminalId)
                         .map((w) => (
-                            <section
+                            <TerminalPanel
                                 key={w.id}
-                                className={styles.terminalPanel}
-                                aria-label="Terminal"
-                                hidden={
-                                    w.id !== active ||
-                                    !terminalVisible ||
-                                    bottomPanel !== 'terminal'
+                                id={w.terminalId!}
+                                name={w.name}
+                                active={
+                                    w.id === active && terminalVisible && bottomPanel === 'terminal'
                                 }
-                            >
-                                <div className={styles.referencesToolbar}>
-                                    <strong>Terminal · {w.name}</strong>
-                                    <span>Ctrl+@ Toggle · Ctrl+K Editor</span>
-                                    <button
-                                        className={styles.restartShell}
-                                        title="Restart shell (Ctrl+Shift+R)"
-                                        onClick={() => restartShell(w.terminalId!)}
-                                    >
-                                        Restart shell <kbd>Ctrl Shift R</kbd>
-                                    </button>
-                                    <button
-                                        aria-label="Hide terminal"
-                                        onClick={() => {
-                                            setTerminalVisible(false);
-                                            focusEditor();
-                                        }}
-                                    >
-                                        ×
-                                    </button>
-                                </div>
-                                <Editor
-                                    id={w.terminalId!}
-                                    terminal
-                                    active={
-                                        w.id === active &&
-                                        terminalVisible &&
-                                        bottomPanel === 'terminal'
-                                    }
-                                    fontSize={fontSize}
-                                    animations={false}
-                                    smoothCursor={smoothCursor}
-                                    smoothBlink={smoothBlink}
-                                    blocked={!!panel || leader}
-                                    focusTick={terminalFocusTick}
-                                    fontFamily={fontFamily.trim() || defaultFontFamily}
-                                    onError={report}
-                                />
-                            </section>
+                                blocked={!!panel || leader}
+                                focusTick={terminalFocusTick}
+                                settings={settings}
+                                restartShell={restartShell}
+                                onError={report}
+                                onClose={() => {
+                                    setTerminalVisible(false);
+                                    focusEditor();
+                                }}
+                            />
                         ))}
                 </main>
             </div>

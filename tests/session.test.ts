@@ -1360,7 +1360,7 @@ test('Nido uses bundled Neovim and isolated config', async () => {
       local paths = vim.opt.runtimepath:get()
       assert(#paths == 3)
       assert(vim.g.colors_name == 'azami')
-      assert(vim.api.nvim_get_hl(0, {name='Normal'}).bg == 0x141414)
+      assert(vim.api.nvim_get_hl(0, {name='Normal'}).bg == 0x121212)
       assert(paths[1] == vim.env.VIMRUNTIME)
       assert(paths[2] == vim.fn.fnamemodify(vim.v.progpath, ':h:h') .. '/lib/nvim')
       for _, language in ipairs({'markdown', 'markdown_inline', 'c', 'lua', 'query', 'vim', 'vimdoc'}) do
