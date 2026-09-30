@@ -158,7 +158,7 @@ export default function App(): React.JSX.Element {
         }
         const owner = active;
         run(
-            window.nido.openTerminal(owner).then((terminal) => {
+            window.nido.openTerminal(owner, settings.terminalShell).then((terminal) => {
                 setWorkspaces((old) =>
                     old.map((w) => (w.id === owner ? { ...w, terminalId: terminal.id } : w))
                 );
@@ -180,7 +180,7 @@ export default function App(): React.JSX.Element {
 
     const restartShell = (id: string): void => {
         run(
-            window.nido.restartTerminal(id).then(() => {
+            window.nido.restartTerminal(id, settings.terminalShell).then(() => {
                 if (id === active) {
                     focusEditor();
                 } else {
@@ -238,7 +238,7 @@ export default function App(): React.JSX.Element {
         setLeader(false);
 
         try {
-            const added = await window.nido.createWorkspace(path, kind);
+            const added = await window.nido.createWorkspace(path, kind, settings.terminalShell);
             if (added) {
                 setWorkspaces((old) => [...old, added]);
                 setActive(added.id);
@@ -597,7 +597,10 @@ export default function App(): React.JSX.Element {
                     />
                 )}
             <StatusBar
-                onSearch={key => {run(window.nido.input(active, '<Esc>' + key)); focusEditor();}}
+                onSearch={(key) => {
+                    run(window.nido.input(active, '<Esc>' + key));
+                    focusEditor();
+                }}
                 active={active}
                 workspace={workspace}
                 state={state}

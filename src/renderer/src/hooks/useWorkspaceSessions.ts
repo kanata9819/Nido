@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import type { SessionState, Workspace } from '../../../shared/types';
+import {
+    terminalShells,
+    type TerminalShell,
+    type SessionState,
+    type Workspace
+} from '../../../shared/types';
 
 export function useWorkspaceSessions(report: (message: string) => void) {
     const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -54,7 +59,11 @@ export function useWorkspaceSessions(report: (message: string) => void) {
     useEffect(() => {
         let cancelled = false;
         void window.nido
-            .restoreWorkspaces()
+            .restoreWorkspaces(
+                terminalShells.find(
+                    (shell) => shell === localStorage.getItem('nido.terminalShell')
+                ) as TerminalShell | undefined
+            )
             .then((result) => {
                 if (cancelled) {
                     return;

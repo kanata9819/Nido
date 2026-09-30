@@ -2708,3 +2708,33 @@ test('keyboard-only workspace switching, editing, saving and dirty-close guard',
         await rm(root, { recursive: true, force: true });
     }
 });
+
+
+test('settings navigation crosses the shell selector with Ctrl D and Ctrl U', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-settings-navigation-'));
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({ args: ['.', `--user-data-dir=${join(root, 'profile')}`], env });
+    try {
+        const page = await running.firstWindow();
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        const shell = page.getByRole('combobox', { name: 'Shell', exact: true });
+        const extension = page.getByRole('checkbox', { name: 'Use EditorConfig' });
+        await shell.focus();
+        await page.keyboard.press('Control+d');
+        await expect(extension).toBeFocused();
+        await page.keyboard.press('Control+u');
+        await expect(shell).toBeFocused();
+        await page.keyboard.press('Control+j');
+        await expect(extension).toBeFocused();
+        await page.keyboard.press('Control+k');
+        await expect(shell).toBeFocused();
+        await page.keyboard.press('ArrowDown');
+        await expect(shell).toBeFocused();
+        await expect(shell).toHaveValue('pwsh');
+    } finally {
+        await running.evaluate(({ app }) => app.exit(0));
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});

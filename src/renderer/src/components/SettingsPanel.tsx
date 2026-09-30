@@ -1,9 +1,12 @@
+import type { TerminalShell } from '../../../shared/types';
 import type { EditorSettings } from '../hooks/useEditorSettings';
 import styles from '../assets/Nido.module.css';
 
 export type SettingsPanelProps = Omit<EditorSettings, 'sidebarWidth' | 'resizeSidebar'>;
 
 export default function SettingsPanel({
+    terminalShell,
+    setTerminalShell,
     sidebar,
     setSidebar,
     animations,
@@ -34,15 +37,23 @@ export default function SettingsPanel({
                 if (event.nativeEvent.isComposing || event.altKey || event.metaKey) {
                     return;
                 }
-                const target = event.target as HTMLInputElement;
+                const target = event.target as HTMLInputElement | HTMLSelectElement;
+                const key = event.key.toLowerCase();
+                const down = event.ctrlKey && key === 'd';
+                const up = event.ctrlKey && key === 'u';
+                if (target.tagName === 'SELECT' && !event.ctrlKey) return;
                 const text = target.type === 'text';
                 const next =
-                    event.key === 'ArrowDown' || ((!text || event.ctrlKey) && event.key === 'j');
+                    down || event.key === 'ArrowDown' || ((!text || event.ctrlKey) && key === 'j');
                 const previous =
-                    event.key === 'ArrowUp' || ((!text || event.ctrlKey) && event.key === 'k');
+                    up || event.key === 'ArrowUp' || ((!text || event.ctrlKey) && key === 'k');
                 if (next || previous) {
                     event.preventDefault();
-                    const inputs = [...event.currentTarget.querySelectorAll('input')];
+                    const inputs = [
+                        ...event.currentTarget.querySelectorAll<
+                            HTMLInputElement | HTMLSelectElement
+                        >('input, select')
+                    ];
                     const index = inputs.indexOf(target);
                     inputs[(index + (next ? 1 : -1) + inputs.length) % inputs.length]?.focus();
                 } else if (event.key === 'Enter' && target.type === 'checkbox') {
@@ -143,6 +154,21 @@ export default function SettingsPanel({
                     onChange={(event) => setSmoothBlink(event.target.checked)}
                 />
             </label>
+            <h3>Terminal</h3>
+            <label>
+                Shell
+                <select
+                    value={terminalShell}
+                    onChange={(event) => setTerminalShell(event.target.value as TerminalShell)}
+                >
+                    <option value="auto">Auto (PowerShell)</option>
+                    <option value="pwsh">PowerShell 7 (pwsh)</option>
+                    <option value="powershell.exe">Windows PowerShell</option>
+                    <option value="cmd.exe">Command Prompt (cmd)</option>
+                    <option value="wsl.exe">WSL</option>
+                </select>
+            </label>
+            <small>Applies to new terminals and Restart Shell. The selection is saved.</small>
             <h3>Extensions</h3>
             <label>
                 Use EditorConfig{' '}

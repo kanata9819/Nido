@@ -784,6 +784,10 @@ test(
             assert.match(await waitFor('second.txt'), /kept/);
             assert.equal((await session.snapshot()).terminal, true);
             assert.equal((await terminal.snapshot()).kind, 'terminal');
+            await assert.rejects(terminal.startTerminal('invalid'), /Invalid terminal shell/);
+            await terminal.startTerminal('cmd.exe');
+            await terminal.input('echo cmd-selected>cmd.txt<CR>');
+            assert.match(await waitFor('cmd.txt'), /cmd-selected/);
             await session.stop();
             assert.notEqual(terminal.process.exitCode, null);
         } finally {

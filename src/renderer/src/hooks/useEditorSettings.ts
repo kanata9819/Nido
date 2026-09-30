@@ -1,8 +1,16 @@
+import { terminalShells, type TerminalShell } from '../../../shared/types';
 import { useEffect, useState } from 'react';
 
 export const defaultFontFamily = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
 
 export function useEditorSettings() {
+    const [terminalShell, setTerminalShell] = useState<TerminalShell>(() => {
+        const saved = localStorage.getItem('nido.terminalShell') as TerminalShell;
+        return terminalShells.includes(saved) ? saved : 'auto';
+    });
+    useEffect(() => {
+        localStorage.setItem('nido.terminalShell', terminalShell);
+    }, [terminalShell]);
     const [editorConfig, setEditorConfig] = useState(
         () => localStorage.getItem('nido.editorConfig') !== 'false'
     );
@@ -86,6 +94,8 @@ export function useEditorSettings() {
     }, [fontSize]);
 
     return {
+        terminalShell,
+        setTerminalShell,
         editorConfig,
         setEditorConfig,
         relativeLineNumbers,

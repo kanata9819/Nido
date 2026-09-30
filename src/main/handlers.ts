@@ -14,6 +14,7 @@ import {
     gitSwitch
 } from './git';
 import { readLayout, writeLayout } from './persistence';
+import { terminalShells, type TerminalShell } from '../shared/types';
 import type { DebugAction, FileAction, NidoEvent, Workspace } from '../shared/types';
 
 export interface AppState {
@@ -49,6 +50,12 @@ export function registerHandlers({
             throw new Error('Workspace is no longer running.');
         }
         return found;
+    }
+
+    function shellChoice(value: unknown = 'auto'): TerminalShell {
+        if (!terminalShells.includes(value as TerminalShell))
+            throw new Error('Invalid terminal shell.');
+        return value as TerminalShell;
     }
 
     function text(value: unknown): string {
@@ -146,7 +153,8 @@ export function registerHandlers({
         })();
     });
 
-    handle('restore', () => {
+    handle('restore', (shell) => {
+        const selectedShell = shellChoice(shell);
         state.restoration ??= (async () => {
             const errors: string[] = [];
             try {
@@ -155,7 +163,7 @@ export function registerHandlers({
                     try {
                         const s = await Session.create(workspace.root, send, neovimResources);
                         sessions.set(s.workspace.id, s);
-                        errors.push(...(await s.restore(workspace)));
+                        errors.push(...(await s.restore(workspace, selectedShell)));
                         if (index === saved.active) {
                             state.active = s.workspace.id;
                         }
@@ -212,7 +220,8 @@ export function registerHandlers({
         };
     });
 
-    handle('create', async (path, kind = 'editor') => {
+    handle('create', async (path, kind = 'editor', shell) => {
+        const selectedShell = shellChoice(shell);
         if (kind !== 'editor' && kind !== 'terminal') {
             throw new Error('Invalid session type.');
         }
@@ -222,7 +231,7 @@ export function registerHandlers({
         const s = await Session.create(text(path), send, neovimResources);
         try {
             if (kind === 'terminal') {
-                await s.startTerminal();
+                await s.startTerminal(selectedShell);
             }
         } catch (error) {
             await s.stop();
@@ -246,13 +255,16 @@ export function registerHandlers({
     handle('attach', (id, columns, rows) =>
         session(id).attach(integer(columns, 1000), integer(rows, 500))
     );
-    handle('openTerminal', async (id) => (await session(id).openTerminal()).workspace);
-    handle('restartTerminal', (id) => {
+    handle(
+        'openTerminal',
+        async (id, shell) => (await session(id).openTerminal(shellChoice(shell))).workspace
+    );
+    handle('restartTerminal', (id, shell) => {
         const s = session(id);
         if (s.workspace.kind !== 'terminal') {
             throw new Error('Not a terminal session.');
         }
-        return s.startTerminal();
+        return s.startTerminal(shellChoice(shell));
     });
     handle('resize', (id, columns, rows) =>
         session(id).resize(integer(columns, 1000), integer(rows, 500))
@@ -345,14 +357,26 @@ export function registerHandlers({
             const source = await current.path(text(path));
             for (const open of sessions.values()) {
                 if (open === current) continue;
-                if (open.state.buffers.some(buffer => {
-                    if (!buffer.name) return false;
-                    const child = relative(source, buffer.name);
-                    return child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child);
-                })) throw new Error('Close this file or folder in the other workspace session first.');
+                if (
+                    open.state.buffers.some((buffer) => {
+                        if (!buffer.name) return false;
+                        const child = relative(source, buffer.name);
+                        return (
+                            child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child)
+                        );
+                    })
+                )
+                    throw new Error(
+                        'Close this file or folder in the other workspace session first.'
+                    );
             }
         }
-        await current.fileAction(action as FileAction, text(path), target === undefined ? '' : text(target), file => shell.trashItem(file));
+        await current.fileAction(
+            action as FileAction,
+            text(path),
+            target === undefined ? '' : text(target),
+            (file) => shell.trashItem(file)
+        );
         for (const open of sessions.values()) {
             if (open.workspace.root === current.workspace.root) send({type: 'filesChanged', id: open.workspace.id});
         }

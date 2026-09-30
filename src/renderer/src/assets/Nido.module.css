@@ -1152,6 +1152,27 @@
     margin-left: auto;
     accent-color: #a3cc94;
 }
+.settings select {
+    margin-left: auto;
+    max-width: 75%;
+    padding: 10px 36px 10px 12px;
+    appearance: none;
+    color-scheme: dark;
+    color: #e0e7eb;
+    font: inherit;
+    font-weight: 400;
+    background: #121416 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23a3cc94' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center;
+    border: 1px solid #3f5145;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.settings select:hover {
+    border-color: #a3cc94;
+}
+.settings select:focus-visible {
+    outline: 2px solid #a3cc94;
+    outline-offset: 2px;
+}
 .settings .fontFamilyField {
     flex-direction: column;
     align-items: stretch;

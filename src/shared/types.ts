@@ -1,3 +1,6 @@
+export const terminalShells = ['auto', 'pwsh', 'powershell.exe', 'cmd.exe', 'wsl.exe'] as const;
+export type TerminalShell = (typeof terminalShells)[number];
+
 export interface Workspace {
     kind?: 'editor' | 'terminal';
     terminalId?: string;
@@ -116,11 +119,17 @@ export interface NidoAPI {
     gitDiff(id: string, path: string, staged: boolean): Promise<string>;
     gitStage(id: string, path: string, staged: boolean): Promise<void>;
     gitCommit(id: string, message: string): Promise<string>;
-    restoreWorkspaces(): Promise<{ workspaces: Workspace[]; active: string; errors: string[] }>;
+    restoreWorkspaces(
+        shell?: TerminalShell
+    ): Promise<{ workspaces: Workspace[]; active: string; errors: string[] }>;
     workspaceLayout(ids: string[], active: string): Promise<void>;
-    createWorkspace(path: string, kind?: 'editor' | 'terminal'): Promise<Workspace | null>;
-    openTerminal(id: string): Promise<Workspace>;
-    restartTerminal(id: string): Promise<void>;
+    createWorkspace(
+        path: string,
+        kind?: 'editor' | 'terminal',
+        shell?: TerminalShell
+    ): Promise<Workspace | null>;
+    openTerminal(id: string, shell?: TerminalShell): Promise<Workspace>;
+    restartTerminal(id: string, shell?: TerminalShell): Promise<void>;
     browseFolders(path?: string): Promise<{ path: string; parent: string; folders: FileEntry[] }>;
     closeWorkspace(id: string): Promise<boolean>;
     attach(id: string, columns: number, rows: number): Promise<void>;

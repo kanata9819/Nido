@@ -296,9 +296,12 @@ export class Session {
         }
     }
 
-    async startTerminal(): Promise<void> {
+    async startTerminal(shell = 'auto'): Promise<void> {
         const next = this.inputQueue.then(async () => {
-            await this.client.request('nvim_exec_lua', ["require('nido_terminal').start()", []]);
+            await this.client.request('nvim_exec_lua', [
+                "require('nido_terminal').start(...)",
+                [shell]
+            ]);
             this.workspace.kind = 'terminal';
             this.workspace.name = `Terminal · ${basename(this.workspace.root)}`;
             // Buffer replacement leaves terminal mode asynchronously. Queue input until it returns.
@@ -316,7 +319,7 @@ export class Session {
         return next;
     }
 
-    async openTerminal(): Promise<Session> {
+    async openTerminal(shell = 'auto'): Promise<Session> {
         if (this.workspace.kind === 'terminal') {
             return this;
         }
@@ -326,7 +329,7 @@ export class Session {
         this.terminalStarting ??= (async () => {
             const terminal = await Session.create(this.workspace.root, this.emit, this.resources);
             try {
-                await terminal.startTerminal();
+                await terminal.startTerminal(shell);
                 if (this.stopped) {
                     throw new Error('Workspace was closed.');
                 }
@@ -395,8 +398,10 @@ end`,
             }
             await this.restoreScroll();
             // Native completion bypasses insert mappings for Ctrl+N/P and inserts previews.
-            if ((keys === '<C-n>' || keys === '<C-p>') &&
-                await this.client.request('nvim_eval', ['pumvisible()'])) {
+            if (
+                (keys === '<C-n>' || keys === '<C-p>') &&
+                (await this.client.request('nvim_eval', ['pumvisible()']))
+            ) {
                 keys = keys === '<C-n>' ? '<Down>' : '<Up>';
             }
             if (this.workspace.kind === 'terminal') {
@@ -527,13 +532,13 @@ end`,
         };
     }
 
-    async restore(saved: SavedWorkspace): Promise<string[]> {
+    async restore(saved: SavedWorkspace, shell = 'auto'): Promise<string[]> {
         if (saved.kind === 'terminal') {
-            await this.startTerminal();
+            await this.startTerminal(shell);
             return [];
         }
         if (saved.terminal) {
-            await this.openTerminal();
+            await this.openTerminal(shell);
         }
         const errors: string[] = [];
         for (const file of saved.files) {
