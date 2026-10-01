@@ -14,12 +14,16 @@ export default function DebugPanel({
     action: (value: DebugAction, target?: number) => void;
 }): React.JSX.Element {
     const panel = useRef<HTMLElement>(null);
+    const variableList = useRef<HTMLDivElement>(null);
     const closePrefix = useRef(false);
     const [selected, setSelected] = useState<number>();
     useEffect(() => {
         if (focusTick) {
             (
                 panel.current?.querySelector<HTMLButtonElement>('[data-debug-target]') ||
+                panel.current?.querySelector<HTMLButtonElement>(
+                    '[data-debug-variable][aria-selected="true"]'
+                ) ||
                 panel.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')
             )?.focus();
         }
@@ -56,6 +60,41 @@ export default function DebugPanel({
                 if (closing) {
                     event.preventDefault();
                     onClose();
+                    return;
+                }
+                const key = event.key.toLowerCase();
+                const halfPage = event.ctrlKey && !event.shiftKey && ['d', 'u'].includes(key);
+                if (halfPage && !event.altKey && !event.metaKey) {
+                    const target = event.target as HTMLElement;
+                    const direction = key === 'd' ? 1 : -1;
+                    const row = target.closest<HTMLElement>('[data-debug-variable]');
+                    if (row && variableList.current) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const rows = Array.from(
+                            variableList.current.querySelectorAll<HTMLElement>(
+                                '[data-debug-variable]'
+                            )
+                        );
+                        const step = Math.max(
+                            1,
+                            Math.floor(
+                                variableList.current.clientHeight /
+                                    row.getBoundingClientRect().height /
+                                    2
+                            )
+                        );
+                        rows[
+                            Math.max(
+                                0,
+                                Math.min(rows.length - 1, rows.indexOf(row) + direction * step)
+                            )
+                        ]?.focus();
+                    } else if (target.tagName === 'PRE') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        target.scrollTop += (direction * target.clientHeight) / 2;
+                    }
                     return;
                 }
                 if ((event.target as HTMLElement).tagName === 'PRE') return;
@@ -176,14 +215,17 @@ export default function DebugPanel({
                     <div className={styles.debugVariables} aria-label="Debug variables">
                         <div className={styles.debugHeading}>
                             <strong>Variables</strong>
-                            <small>↑↓ / j k Move · ←→ / h l Expand</small>
+                            <small>
+                                Ctrl+J Focus · Ctrl+K Editor · Ctrl+D/U Half page · j/k Move · h/l
+                                Expand
+                            </small>
                         </div>
                         <div className={styles.debugColumns} aria-hidden="true">
                             <span>Name</span>
                             <span>Value</span>
                             <span>Type</span>
                         </div>
-                        <div className={styles.debugVariableScroll}>
+                        <div ref={variableList} className={styles.debugVariableScroll}>
                             {[...new Set(variables.map((value) => value.scope))].map((scope) => (
                                 <div key={scope}>
                                     <div className={styles.debugScope}>{scope}</div>

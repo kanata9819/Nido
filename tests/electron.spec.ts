@@ -2678,7 +2678,7 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
         );
         await writeFile(
             join(root, 'src/main.rs'),
-            'fn main() {\n    let mut number = 21; let mut pair = [number, 22];\n    let answer = number * 2;\n    println!("answer={answer}");\n    number += 1;\n    pair[0] = number;\n    println!("{pair:?} {number}");\n}\n'
+            'fn main() {\n    let mut number = 21; let mut pair = [number; 20];\n    let answer = number * 2;\n    println!("answer={answer}");\n    number += 1;\n    pair[0] = number;\n    println!("{pair:?} {number}");\n}\n'
         );
         const executablePath = process.env.NIDO_PACKAGED_EXE;
         running = await electron.launch({
@@ -2749,7 +2749,7 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
         await page.keyboard.press('Control+l');
         await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
         await page.keyboard.press('Control+j');
-        await expect(page.getByRole('button', { name: /Continue/ })).toBeFocused();
+        await expect(page.getByRole('treeitem', { name: /^number = 21/ })).toBeFocused();
         await page.keyboard.press('Space');
         await page.keyboard.press('d');
         await expect(page.getByRole('region', { name: 'Debugger' })).toHaveCount(0);
@@ -2759,16 +2759,40 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
         await expect(page.getByRole('region', { name: 'Debugger' })).toHaveCount(0);
         await page.keyboard.press('Control+j');
         await expect(page.getByRole('treeitem', { name: /^answer = 42/ })).toBeVisible();
-        for (let i = 0; i < 12 && !(await page.locator('[data-debug-variable]:focus').count()); i++)
-            await page.keyboard.press('Tab');
         await expect(page.getByRole('treeitem', { name: /^number = 21/ })).toBeFocused();
         await page.keyboard.press('j');
         const pair = page.getByRole('treeitem', { name: /^pair = / });
         await expect(pair).toBeFocused();
         await page.keyboard.press('l');
         await expect(pair).toHaveAttribute('aria-expanded', 'true');
-        await expect(page.locator('[data-debug-variable][aria-level="2"]')).toHaveCount(2);
+        await expect(page.locator('[data-debug-variable][aria-level="2"]')).toHaveCount(20);
         await page.keyboard.press('l');
+        await expect(page.locator('[aria-level="2"]').first()).toBeFocused();
+        await page.keyboard.press('Control+d');
+        const jumpedId = await page
+            .locator('[data-debug-variable]:focus')
+            .getAttribute('data-debug-variable');
+        expect(jumpedId).not.toBe(
+            await page.locator('[aria-level="2"]').first().getAttribute('data-debug-variable')
+        );
+        await page.keyboard.press('Control+k');
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+j');
+        await expect(page.locator(`[data-debug-variable="${jumpedId}"]`)).toBeFocused();
+        await page.keyboard.press('Control+u');
+        await expect(page.locator('[aria-level="2"]').first()).toBeFocused();
+        await page.keyboard.press('Tab');
+        const output = page.getByLabel('Debug output');
+        await expect(output).toBeFocused();
+        await page.keyboard.press('Home');
+        const beforeScroll = await output.evaluate((element) => element.scrollTop);
+        await page.keyboard.press('Control+d');
+        await expect
+            .poll(() => output.evaluate((element) => element.scrollTop))
+            .toBeGreaterThan(beforeScroll);
+        await page.keyboard.press('Control+u');
+        await expect.poll(() => output.evaluate((element) => element.scrollTop)).toBe(beforeScroll);
+        await page.keyboard.press('Control+j');
         await expect(page.locator('[aria-level="2"]').first()).toBeFocused();
         await page.keyboard.press('h');
         await expect(pair).toBeFocused();
