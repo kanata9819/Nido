@@ -19,10 +19,10 @@
 .notice[data-severity='warning'] {
     --accent: #d4b779;
 }
-.notice[data-animations='true'] {
+.dismissal[data-animations='true'] {
     transition: opacity 0.3s ease;
 }
-.notice[data-fading='true'] {
+.dismissal[data-fading='true'] {
     opacity: 0;
     pointer-events: none;
 }

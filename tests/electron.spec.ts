@@ -247,6 +247,44 @@ for (const animations of [true, false]) {
             await expect(notice).toHaveCount(0, { timeout: 3000 });
             expect(Date.now() - displayedAt).toBeGreaterThan(1700);
             await expect(input).toBeFocused();
+            await page.clock.install({ time: new Date(0) });
+            await page.clock.pauseAt(new Date(1000));
+            const showError = async (): Promise<void> => {
+                await running.evaluate(({ BrowserWindow }) => {
+                    BrowserWindow.getAllWindows()[0].webContents.send('nido:event', {
+                        type: 'error',
+                        id: 'test',
+                        message:
+                            "Error: Error invoking remote method 'nido:editorConfig': Error: Workspace is no longer running."
+                    });
+                });
+            };
+            const error = page
+                .getByRole('alert')
+                .filter({ hasText: 'Workspace is no longer running.' });
+            await showError();
+            await expect(error).toHaveText('Workspace is no longer running.');
+            await expect(input).toBeFocused();
+            await expect(error).toHaveCSS('transition-duration', animations ? '0.3s' : '0s');
+            await page.clock.runFor(1500);
+            await showError();
+            await page.clock.runFor(1500);
+            await expect(error).toHaveCSS('opacity', '1');
+            await page.clock.runFor(500);
+            if (animations) {
+                await expect(error).toHaveAttribute('data-fading', 'true');
+                await page.clock.runFor(300);
+            }
+            await expect(error).toHaveCount(0);
+            await expect(input).toBeFocused();
+            await showError();
+            await expect(error).toBeVisible();
+            await page.keyboard.press('Escape');
+            await expect(error).toHaveCount(0);
+            await showError();
+            await page.getByRole('button', { name: 'Dismiss error' }).click();
+            await expect(error).toHaveCount(0);
+            await expect(input).toBeFocused();
         } finally {
             await running.evaluate(({ app }) => app.exit(0));
             await running.close();

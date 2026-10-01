@@ -24,6 +24,8 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { usePointerVisibility } from './hooks/usePointerVisibility';
 import { useWorkspaceSessions } from './hooks/useWorkspaceSessions';
 import styles from './assets/Nido.module.css';
+import notificationStyles from './assets/Notification.module.css';
+import { useNotificationDismissal } from './hooks/useNotificationDismissal';
 
 const defaultState: SessionState = {
     buffers: [],
@@ -47,11 +49,17 @@ export default function App(): React.JSX.Element {
     const [favoritesReady, setFavoritesReady] = useState(false);
     const [savingFavorite, setSavingFavorite] = useState(false);
     const favoritePending = useRef(false);
-    const [error, setError] = useState('');
+    const [errorNotice, setErrorNotice] = useState<{ message: string }>();
+    const error = errorNotice?.message || '';
+    const setError = useCallback(
+        (message: string): void => setErrorNotice(message ? { message } : undefined),
+        []
+    );
+    const dismissError = useCallback(() => setError(''), [setError]);
     const report = useCallback(
         (message: string): void =>
             setError(message.replace(/^Error: Error invoking remote method '[^']+': Error: /, '')),
-        []
+        [setError]
     );
 
     const { workspaces, setWorkspaces, active, setActive, states, mode, restoring } =
@@ -103,7 +111,8 @@ export default function App(): React.JSX.Element {
         sidebarWidth,
         resizeSidebar
     } = settings;
-    useSessionSettings(workspaces, settings, setError);
+    const errorFading = useNotificationDismissal(errorNotice, animations, dismissError);
+    useSessionSettings(workspaces, settings, report);
 
     const modal = useRef<HTMLDivElement>(null);
     const state = states[active] || defaultState;
@@ -575,7 +584,12 @@ export default function App(): React.JSX.Element {
             />
             <Notification workspaceId={active} animations={animations} />
             {error && (
-                <div className={styles.error} role="alert">
+                <div
+                    className={`${styles.error} ${notificationStyles.dismissal}`}
+                    data-animations={animations}
+                    data-fading={errorFading}
+                    role="alert"
+                >
                     <span>{error}</span>
                     <button
                         aria-label="Dismiss error"
