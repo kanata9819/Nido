@@ -155,7 +155,11 @@ export class Grid {
                         const info = args[3] as { hi_name?: string }[] | undefined;
                         this.highlights.set(Number(args[0]), {
                             ...(args[1] as Highlight),
-                            codeLens: info?.some((item) => item.hi_name === 'NidoCodeLens')
+                            codeLens: info?.some(
+                                (item) =>
+                                    item.hi_name === 'NidoCodeLens' ||
+                                    item.hi_name === 'NidoCodeLensHint'
+                            )
                         });
                         break;
                     }
