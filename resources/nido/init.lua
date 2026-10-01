@@ -75,7 +75,7 @@ vim.api.nvim_create_autocmd('TextChangedI', {
         -- Ordinary text uses an invoked request: servers may reject letters as trigger characters.
         vim.lsp.completion.get()
       end
-    end, 120)
+    end, 30)
   end,
 })
 vim.diagnostic.config({

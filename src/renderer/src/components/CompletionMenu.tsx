@@ -1,5 +1,25 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { Braces } from 'lucide-react';
+import {
+    Blocks,
+    Box,
+    Braces,
+    CaseSensitive,
+    CircleDot,
+    Code,
+    File,
+    Folder,
+    KeyRound,
+    Link,
+    ListTree,
+    Palette,
+    PanelsTopLeft,
+    Plus,
+    Ruler,
+    Text,
+    Waypoints,
+    Zap,
+    type LucideIcon
+} from 'lucide-react';
 import type { Grid } from '../grid';
 import styles from '../assets/CompletionMenu.module.css';
 
@@ -9,6 +29,34 @@ interface Menu {
     row: number;
     column: number;
 }
+
+const kindIcons: Record<string, LucideIcon> = {
+    Text,
+    Method: Box,
+    Function: Box,
+    Constructor: Box,
+    Field: PanelsTopLeft,
+    Variable: KeyRound,
+    Class: Blocks,
+    Interface: Waypoints,
+    Module: Braces,
+    Property: PanelsTopLeft,
+    Unit: Ruler,
+    Value: CircleDot,
+    Enum: ListTree,
+    Keyword: CaseSensitive,
+    Snippet: Code,
+    Color: Palette,
+    File,
+    Reference: Link,
+    Folder,
+    EnumMember: ListTree,
+    Constant: KeyRound,
+    Struct: Blocks,
+    Event: Zap,
+    Operator: Plus,
+    TypeParameter: CaseSensitive
+};
 
 export default function CompletionMenu({
     id,
@@ -98,27 +146,38 @@ export default function CompletionMenu({
                 <Braces size={14} /> Completion <span>{menu.items.length} candidates</span>
             </div>
             <div id={listId} className={styles.list} role="listbox" aria-label="Code completion">
-                {menu.items.map(([word, kind, detail], index) => (
-                    <div
-                        key={index}
-                        id={`${listId}-${index}`}
-                        className={styles.item}
-                        role="option"
-                        aria-selected={menu.selected === index}
-                        title={detail || word}
-                        onClick={() => {
-                            const keys = `<Cmd>lua vim.api.nvim_select_popupmenu_item(${index}, false, false, {})<CR>`;
-                            void window.nido
-                                .input(id, keys)
-                                .catch((error) => onError(String(error)));
-                            input.current?.focus();
-                        }}
-                    >
-                        <span className={styles.kind}>{kind || 'Text'}</span>
-                        <span className={styles.word}>{word}</span>
-                        <span className={styles.detail}>{detail}</span>
-                    </div>
-                ))}
+                {menu.items.map(([word, kind, detail], index) => {
+                    const Icon = Object.hasOwn(kindIcons, kind) ? kindIcons[kind] : Text;
+                    return (
+                        <div
+                            key={index}
+                            id={`${listId}-${index}`}
+                            className={styles.item}
+                            role="option"
+                            aria-selected={menu.selected === index}
+                            title={detail || word}
+                            onClick={() => {
+                                const keys = `<Cmd>lua vim.api.nvim_select_popupmenu_item(${index}, false, false, {})<CR>`;
+                                void window.nido
+                                    .input(id, keys)
+                                    .catch((error) => onError(String(error)));
+                                input.current?.focus();
+                            }}
+                        >
+                            <span
+                                className={styles.kind}
+                                data-kind={kind}
+                                role="img"
+                                aria-label={kind || 'Text'}
+                                title={kind || 'Text'}
+                            >
+                                <Icon size={16} aria-hidden="true" />
+                            </span>
+                            <span className={styles.word}>{word}</span>
+                            <span className={styles.detail}>{detail}</span>
+                        </div>
+                    );
+                })}
             </div>
             <div className={styles.footer}>
                 <span>

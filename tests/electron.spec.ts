@@ -337,7 +337,12 @@ test('explorer commands create, rename, copy, move and recycle files from the ke
             await expect(tree).toBeFocused();
         };
         const select = async (name: string): Promise<void> => {
-            await tree.getByRole('treeitem', { name, exact: true }).click();
+            const item = tree.getByRole('treeitem', { name, exact: true });
+            await item.click();
+            if ((await item.getAttribute('aria-expanded')) === null) {
+                await expect(page.getByRole('tab', { name, exact: true })).toBeVisible();
+                await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+            }
             await tree.focus();
         };
         await expect(
@@ -567,15 +572,45 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
             await expect(host.getByLabel('2 errors', { exact: true })).toBeVisible();
             await expect(host.getByLabel('3 warnings', { exact: true })).toBeVisible();
         }
+        await page.evaluate(() => {
+            const state = window as Window & { completionLatency: Promise<number> };
+            state.completionLatency = new Promise((resolve) => {
+                let start = 0;
+                const onKey = (event: KeyboardEvent): void => {
+                    if (event.key === 'm') start = performance.now();
+                };
+                document.addEventListener('keydown', onKey);
+                const observer = new MutationObserver(() => {
+                    if (!start || !document.querySelector('[aria-label="Code completion"]')) return;
+                    observer.disconnect();
+                    document.removeEventListener('keydown', onKey);
+                    resolve(performance.now() - start);
+                });
+                observer.observe(document.body, { childList: true, subtree: true });
+            });
+        });
         await page.keyboard.type('Goam');
         const menu = page.getByRole('listbox', { name: 'Code completion' });
         await expect(menu).toBeVisible({ timeout: 15000 });
+        const completionMs = await page.evaluate(
+            () => (window as Window & { completionLatency: Promise<number> }).completionLatency
+        );
+        console.log(`Automatic completion: ${completionMs.toFixed(1)} ms`);
         await expect(menu.getByRole('option').first()).toContainText('amount');
+        await expect(menu.getByRole('option').first().getByRole('img')).toHaveAttribute(
+            'aria-label',
+            /Variable|Constant/
+        );
+        await expect(menu.getByRole('option').first().getByRole('img').locator('svg')).toBeVisible();
         await page.keyboard.press('Tab');
         await expect(menu).toHaveCount(0);
         await expect(canvas).toHaveAttribute('aria-description', /amount/);
         await page.keyboard.type('.to');
         await expect(menu.getByRole('option').filter({ hasText: 'toFixed' })).toBeVisible();
+        await expect(
+            menu.getByRole('option').filter({ hasText: 'toFixed' }).getByRole('img')
+        ).toHaveAttribute('aria-label', 'Method');
+        await expect(menu.getByText('Method', { exact: true })).toHaveCount(0);
         await page.keyboard.press('Control+e');
         await expect(menu).toHaveCount(0);
         await page.keyboard.press('Control+Space');

@@ -1,4 +1,4 @@
-import { useRef, type CSSProperties } from 'react';
+import { memo, useRef, type CSSProperties } from 'react';
 import { ChevronDown, ChevronRight, Folder, FolderOpen, RefreshCw, Command } from 'lucide-react';
 import ExplorerCommands from './components/ExplorerCommands';
 import FileIcon from './components/FileIcon';
@@ -21,7 +21,12 @@ interface Props {
     onError: (message: string) => void;
 }
 
-export default function Sidebar({
+// Hidden trees keep their DOM and local state; refresh parent props when activated.
+export default memo(Sidebar, (previous, next) =>
+    !previous.active && !next.active && previous.workspace === next.workspace
+);
+
+function Sidebar({
     gitFiles,
     workspace,
     active,
@@ -47,7 +52,7 @@ export default function Sidebar({
         commands,
         closeOperation,
         onDone
-    } = useExplorer({ workspace, onError });
+    } = useExplorer({ workspace, active, onError });
     const rootDecoration = gitFiles[gitFileKey(workspace.root).replace(/\/$/, '')];
 
     return (

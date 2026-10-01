@@ -48,12 +48,35 @@
     outline-offset: -1px;
 }
 .kind {
-    color: #b7a3dd;
-    font-size: 10px;
-    width: 65px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #c5c5c5;
+    width: 18px;
     flex-shrink: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+}
+.kind[data-kind='Method'],
+.kind[data-kind='Function'],
+.kind[data-kind='Constructor'] {
+    color: #b180d7;
+}
+.kind[data-kind='Class'],
+.kind[data-kind='Enum'],
+.kind[data-kind='Struct'],
+.kind[data-kind='Event'] {
+    color: #ee9d28;
+}
+.kind[data-kind='Field'],
+.kind[data-kind='Variable'],
+.kind[data-kind='Interface'],
+.kind[data-kind='Property'],
+.kind[data-kind='Unit'],
+.kind[data-kind='Value'],
+.kind[data-kind='Reference'],
+.kind[data-kind='EnumMember'],
+.kind[data-kind='Constant'],
+.kind[data-kind='TypeParameter'] {
+    color: #75beff;
 }
 .word {
     white-space: nowrap;

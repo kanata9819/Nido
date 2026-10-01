@@ -5,15 +5,18 @@ import { getVisibleEntries } from '../sidebarTree';
 
 export function useExplorer({
     workspace,
+    active,
     onError
 }: {
     workspace: Workspace;
+    active: boolean;
     onError: (message: string) => void;
 }) {
     const [entriesByDirectory, setEntries] = useState<Record<string, FileEntry[]>>({});
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
     const [selected, setSelected] = useState('');
     const [revision, setRevision] = useState(0);
+    const loadedRevision = useRef(-1);
     const tree = useRef<HTMLDivElement>(null);
     const [operation, setOperation] = useState<{ request?: FileRequest }>();
     const [clipboard, setClipboard] = useState<{ path: string; name: string; cut: boolean }>();
@@ -36,6 +39,8 @@ export function useExplorer({
     };
 
     useEffect(() => {
+        // Keep each tree's state, but load hidden workspaces only when first activated or changed.
+        if (!active || loadedRevision.current === revision) return;
         let cancelled = false;
         Promise.all(
             ['', ...expanded].map(async (path) => {
@@ -49,6 +54,7 @@ export function useExplorer({
         )
             .then((files) => {
                 if (!cancelled) {
+                    loadedRevision.current = revision;
                     setEntries(Object.fromEntries(files));
                 }
             })
@@ -60,7 +66,7 @@ export function useExplorer({
         return () => {
             cancelled = true;
         };
-    }, [workspace.id, onError, revision]);
+    }, [workspace.id, active, onError, revision]);
 
     const visible = getVisibleEntries(entriesByDirectory, expanded);
     const selectedEntry = visible.find((entry) => entry.path === selected);
