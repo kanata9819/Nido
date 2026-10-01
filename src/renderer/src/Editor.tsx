@@ -111,7 +111,7 @@ export default function Editor({
                     return;
                 }
 
-                const { cellWidth, cellHeight, rows, columns, scrollFraction } = grid.current;
+                const { cellWidth, cellHeight, columns } = grid.current;
                 if (!cellWidth || !cellHeight) {
                     return;
                 }
@@ -119,20 +119,12 @@ export default function Editor({
                 const bounds = canvas.current.getBoundingClientRect();
                 const x = event.clientX - bounds.left;
                 const y = event.clientY - bounds.top;
-                // The last grid row is the pinned command line; the row above it supplies scroll overscan.
-                if (y < 0 || y >= (rows - 2) * cellHeight || x < 0 || x >= columns * cellWidth) {
+                const row = grid.current.rowAt(y);
+                if (row < 0 || x < 0 || x >= columns * cellWidth) {
                     return;
                 }
 
-                const dpr = window.devicePixelRatio || 1;
-                const offset = Math.round(scrollFraction * cellHeight * dpr) / dpr;
-                send(
-                    window.nido.click(
-                        id,
-                        Math.floor((y + offset) / cellHeight),
-                        Math.floor(x / cellWidth)
-                    )
-                );
+                send(window.nido.click(id, row, Math.floor(x / cellWidth)));
             }}
             onWheel={(event) => {
                 if (

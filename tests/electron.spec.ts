@@ -131,7 +131,8 @@ test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
     );
     await writeFile(
         join(workspace, 'src/main.rs'),
-        'fn main() {\n    println!("keyboard-run");\n}\n#[test]\nfn keyboard_test() { println!("keyboard-test"); }\n'
+        'fn main() {\n    println!("keyboard-run");\n}\n#[test]\nfn keyboard_test() { println!("keyboard-test"); }\n' +
+            Array.from({ length: 4 }, (_, index) => `#[test]\nfn extra_${index}() {}\n`).join('')
     );
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
@@ -156,6 +157,63 @@ test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
             'aria-description',
             /Run Tests \(gR\) \| Debug \(gD\)/
         );
+        await expect(canvas).toHaveAttribute('aria-description', /extra_3/);
+        await canvas.evaluate((node: HTMLCanvasElement) => {
+            const ctx = node.getContext('2d')!;
+            const clear = ctx.fillRect.bind(ctx);
+            ctx.fillRect = (x, y, width, height) => {
+                if (x === 0 && y === 0 && height === node.clientHeight) {
+                    node.setAttribute('data-code-points', '[]');
+                    node.removeAttribute('data-lens-point');
+                }
+                clear(x, y, width, height);
+            };
+            const draw = ctx.fillText.bind(ctx);
+            ctx.fillText = (value, x, y, ...rest) => {
+                if (value === 'f' || value === 'p') {
+                    const points = JSON.parse(node.getAttribute('data-code-points') || '[]');
+                    points.push({ value, x, y, font: parseFloat(ctx.font) });
+                    node.setAttribute('data-code-points', JSON.stringify(points));
+                } else if (value.includes('Run Tests') && !node.hasAttribute('data-lens-point')) {
+                    node.setAttribute(
+                        'data-lens-point',
+                        JSON.stringify({ y, font: parseFloat(ctx.font) })
+                    );
+                }
+                draw(value, x, y, ...rest);
+            };
+        });
+        await expect(canvas).toHaveAttribute('data-lens-point', /y/);
+        const points = JSON.parse((await canvas.getAttribute('data-code-points'))!) as {
+            value: string;
+            x: number;
+            y: number;
+            font: number;
+        }[];
+        const [main, testFunction] = points.filter((point) => point.value === 'f');
+        const body = points.find((point) => point.value === 'p')!;
+        const lineHeight = Math.ceil(main.font * 1.65);
+        const lens = JSON.parse((await canvas.getAttribute('data-lens-point'))!);
+        const lensHeight = 2 * (testFunction.y - lens.y) - lineHeight - (main.font - lens.font);
+        expect(body.y - main.y).toBeCloseTo(lineHeight, 0);
+        expect(lensHeight / lineHeight).toBeGreaterThan(0.65);
+        expect(lensHeight / lineHeight).toBeLessThan(0.75);
+        await expect
+            .poll(async () => (await canvas.getAttribute('aria-description'))!.split('\n').length)
+            .toBeGreaterThan(Math.floor((await canvas.boundingBox())!.height / lineHeight) + 1);
+        await canvas.click({ position: { x: testFunction.x + 2, y: testFunction.y - 4 } });
+        await expect(page.getByText('Ln 5, Col 1', { exact: true })).toBeVisible();
+        await expect
+            .poll(() => input.evaluate((node) => node.offsetTop))
+            .toBeCloseTo(testFunction.y - (lineHeight + main.font) / 2 + 3, 0);
+        await page.keyboard.type(':');
+        await expect
+            .poll(() => input.evaluate((node) => node.offsetTop))
+            .toBe(
+                Math.floor((await canvas.boundingBox())!.height / lineHeight) * lineHeight -
+                    lineHeight
+            );
+        await page.keyboard.press('Escape');
         await page.keyboard.type('gggR');
         const output = page.getByLabel('Debug output');
         await expect(output).toContainText('keyboard-run', { timeout: 15000 });
@@ -589,6 +647,13 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await chooseWorkspace(page, workspace);
         const input = page.getByRole('textbox', { name: 'Neovim input' });
         await expect(input).toBeFocused();
+        await page.evaluate(() => {
+            const stop = window.nido.onEvent((event) => {
+                if (event.type !== 'redraw') return;
+                document.documentElement.dataset.completionSession = event.id;
+                stop();
+            });
+        });
         await page.keyboard.type(':edit main.ts');
         await page.keyboard.press('Enter');
         const canvas = page.locator('canvas:visible');
@@ -635,11 +700,35 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         );
         console.log(`Automatic completion: ${completionMs.toFixed(1)} ms`);
         await expect(menu.getByRole('option').first()).toContainText('amount');
+        const sessionId = await page.evaluate(
+            () => document.documentElement.dataset.completionSession!
+        );
+        const inputTop = await input.evaluate((node) => node.offsetTop);
+        const menuTop = await menu.evaluate((node) => node.parentElement!.offsetTop);
+        await page.evaluate(({ id, keys }) => window.nido.input(id, keys), {
+            id: sessionId,
+            keys: "<Cmd>lua vim.api.nvim_buf_set_extmark(0, vim.api.nvim_create_namespace('completion-lens-test'), 1, 0, {virt_lines={{{'Run Tests', 'NidoCodeLens'}}}, virt_lines_above=true})<CR>"
+        });
+        await expect(canvas).toHaveAttribute('aria-description', /Run Tests/);
+        await expect.poll(() => input.evaluate((node) => node.offsetTop)).toBeGreaterThan(inputTop);
+        const lensHeight = (await input.evaluate((node) => node.offsetTop)) - inputTop;
+        await expect
+            .poll(() => menu.evaluate((node) => node.parentElement!.offsetTop))
+            .toBe(menuTop + lensHeight);
+        await page.evaluate(({ id, keys }) => window.nido.input(id, keys), {
+            id: sessionId,
+            keys: "<Cmd>lua vim.api.nvim_buf_clear_namespace(0, vim.api.nvim_create_namespace('completion-lens-test'), 0, -1)<CR>"
+        });
+        await expect
+            .poll(() => menu.evaluate((node) => node.parentElement!.offsetTop))
+            .toBe(menuTop);
         await expect(menu.getByRole('option').first().getByRole('img')).toHaveAttribute(
             'aria-label',
             /Variable|Constant/
         );
-        await expect(menu.getByRole('option').first().getByRole('img').locator('svg')).toBeVisible();
+        await expect(
+            menu.getByRole('option').first().getByRole('img').locator('svg')
+        ).toBeVisible();
         await menu.evaluate((element) => element.setAttribute('data-test-continuity', 'kept'));
         await page.keyboard.type('oun', { delay: 180 });
         await expect(menu).toHaveAttribute('data-test-continuity', 'kept');
@@ -725,6 +814,7 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
             .poll(() => readFile(join(workspace, 'main.ts'), 'utf8'))
             .toMatch(/\ngetUser\r?\n$/);
     } finally {
+        await running.evaluate(({ app }) => app.exit(0));
         await running.close();
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
@@ -1902,7 +1992,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
         await expect(fileTabs.locator('[data-diagnostic]')).toHaveCount(0);
         await expect(explorer.locator('[data-diagnostic]')).toHaveCount(0);
     } finally {
-        await running?.evaluate(({app}) => app.exit(0));
+        await running?.evaluate(({ app }) => app.exit(0));
         await running?.close();
         await rm(root, { recursive: true, force: true });
     }

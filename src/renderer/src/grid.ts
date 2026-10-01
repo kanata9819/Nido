@@ -62,6 +62,29 @@ export class Grid {
     scrollFraction = 0;
     cellWidth = 0;
     cellHeight = 0;
+    contentHeight = 0;
+    extraRows = 0;
+    private rowTops: number[] = [];
+    private layoutDirty = true;
+    private scrollPixels = 0;
+
+    rowTop(row: number): number {
+        const index = Math.max(0, Math.min(this.rows - 1, Math.floor(row)));
+        const top = this.rowTops[index] ?? index * this.cellHeight;
+        const bottom = this.rowTops[index + 1] ?? top + this.cellHeight;
+        return top + (row - index) * (bottom - top);
+    }
+
+    rowY(row: number): number {
+        return row === this.rows - 1 ? this.contentHeight : this.rowTop(row) - this.scrollPixels;
+    }
+
+    rowAt(y: number): number {
+        if (y < 0 || y >= this.contentHeight) return -1;
+        let row = 0;
+        while (row < this.rows - 1 && this.rowTop(row + 1) <= y + this.scrollPixels) row++;
+        return row < this.rows - 1 ? row : -1;
+    }
 
     apply(events: Redraw): boolean {
         let flush = false;
@@ -186,6 +209,7 @@ export class Grid {
                 }
             }
         }
+        if (flush) this.layoutDirty = true;
         return flush;
     }
 
@@ -214,30 +238,50 @@ export class Grid {
         const cellWidth = ctx.measureText('M').width;
         const cellHeight = Math.ceil(fontSize * 1.65);
         this.cellWidth = cellWidth;
+        if (this.layoutDirty || this.cellHeight !== cellHeight) {
+            this.rowTops = [0];
+            for (let row = 0; row < this.rows; row++) {
+                const cells = this.cells[row];
+                const compact =
+                    row < this.rows - 1 &&
+                    cells.some(
+                        (cell) => cell.text.trim() && this.highlights.get(cell.highlight)?.codeLens
+                    ) &&
+                    cells.every(
+                        (cell) => !cell.text.trim() || this.highlights.get(cell.highlight)?.codeLens
+                    );
+                this.rowTops.push(
+                    this.rowTops[row] + (compact ? Math.ceil(cellHeight * 0.7) : cellHeight)
+                );
+            }
+            this.layoutDirty = false;
+        }
         this.cellHeight = cellHeight;
-        const scrollPixels = Math.round(this.scrollFraction * cellHeight * dpr) / dpr;
+        this.contentHeight = Math.max(0, (Math.floor(height / cellHeight) - 1) * cellHeight);
+        this.extraRows = Math.floor(
+            ((this.rows - 1) * cellHeight - this.rowTop(this.rows - 1)) / cellHeight
+        );
+        this.scrollPixels = this.pixelScrollEnabled
+            ? Math.round(this.rowTop(this.scrollFraction) * dpr) / dpr
+            : 0;
         ctx.fillStyle = this.background;
         ctx.fillRect(0, 0, width, height);
         ctx.textBaseline = 'alphabetic';
         for (let row = 0; row < this.rows; row++) {
-            const offset = this.pixelScrollEnabled
-                ? row === this.rows - 1
-                    ? cellHeight
-                    : scrollPixels
-                : 0;
+            const y = this.rowY(row);
+            const rowHeight = this.rowTop(row + 1) - this.rowTop(row);
             ctx.save();
-            if (this.pixelScrollEnabled && row < this.rows - 1) {
+            if (row < this.rows - 1) {
                 ctx.beginPath();
-                ctx.rect(0, 0, width, (this.rows - 2) * cellHeight);
+                ctx.rect(0, 0, width, this.contentHeight);
                 ctx.clip();
             }
-            ctx.translate(0, -offset);
             // Paint all cell backgrounds first so a wide glyph is not erased by its continuation cell.
             for (let col = 0; col < this.columns; col++) {
                 const h = this.highlights.get(this.cells[row]?.[col]?.highlight || 0) || {};
                 ctx.fillStyle = cellBackground(h, this.background, this.foreground);
 
-                ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight);
+                ctx.fillRect(col * cellWidth, y, cellWidth + 0.5, rowHeight);
             }
 
             for (let col = 0; col < this.columns; col++) {
@@ -261,9 +305,7 @@ export class Grid {
                     ctx.fillText(
                         text,
                         Math.round(start * cellWidth * dpr) / dpr,
-                        Math.round(
-                            (row * cellHeight + (cellHeight + fontSize * 0.8) / 2 - 3) * dpr
-                        ) / dpr
+                        Math.round((y + (rowHeight + fontSize * 0.8) / 2 - 3) * dpr) / dpr
                     );
                     continue;
                 }
@@ -271,17 +313,16 @@ export class Grid {
                 ctx.fillStyle = cellForeground(h, this.background, this.foreground);
 
                 const x = col * cellWidth;
-                const y = row * cellHeight;
 
                 if (cell.text === '│') {
                     // Box-drawing lines must span the cell, including the line spacing.
-                    ctx.fillRect(Math.round(x + cellWidth / 2), y, 1, cellHeight);
+                    ctx.fillRect(Math.round(x + cellWidth / 2), y, 1, rowHeight);
                 } else {
                     // Keep glyph origins on physical pixels, including fractional Windows scaling.
                     ctx.fillText(
                         cell.text,
                         Math.round(x * dpr) / dpr,
-                        Math.round((y + (cellHeight + fontSize) / 2 - 3) * dpr) / dpr
+                        Math.round((y + (rowHeight + fontSize) / 2 - 3) * dpr) / dpr
                     );
                 }
                 if (h.underline || h.undercurl || h.strikethrough) {
@@ -290,7 +331,7 @@ export class Grid {
                     }
                     ctx.fillRect(
                         x,
-                        y + (h.strikethrough ? cellHeight / 2 : cellHeight - 3),
+                        y + (h.strikethrough ? rowHeight / 2 : rowHeight - 3),
                         cellWidth,
                         1
                     );
@@ -300,13 +341,10 @@ export class Grid {
         }
         const cursor = this.scrollCursor ?? this.cursor;
         ctx.save();
-        if (this.pixelScrollEnabled) {
-            if (cursor.row < this.rows - 1) {
-                ctx.beginPath();
-                ctx.rect(0, 0, width, (this.rows - 2) * cellHeight);
-                ctx.clip();
-            }
-            ctx.translate(0, -(cursor.row === this.rows - 1 ? cellHeight : scrollPixels));
+        if (cursor.row < this.rows - 1) {
+            ctx.beginPath();
+            ctx.rect(0, 0, width, this.contentHeight);
+            ctx.clip();
         }
         if (
             focused &&
@@ -315,7 +353,7 @@ export class Grid {
             cursor.row >= 0 &&
             cursor.row < this.rows
         ) {
-            const y = cursor.row * cellHeight;
+            const y = this.rowY(cursor.row);
             ctx.fillStyle = '#46515c';
             ctx.fillRect(0, y, width, 1);
             ctx.fillRect(0, y + cellHeight - 1, width, 1);
@@ -340,7 +378,7 @@ export class Grid {
             (!focused || this.cursorVisible)
         ) {
             const x = cursor.column * cellWidth;
-            const y = cursor.row * cellHeight;
+            const y = this.rowY(cursor.row);
             ctx.fillStyle = '#f5f5f5';
             ctx.strokeStyle = '#d4d4d4';
             ctx.globalAlpha = focused ? this.cursorOpacity : 1;

@@ -1675,6 +1675,119 @@ test('workspace snapshot restores each cursor and tolerates missing files', asyn
     }
 });
 
+test('CodeLens rows compact while clicks, fractional scrolling and the command line stay aligned', () => {
+    const grid = new Grid();
+    grid.busy = true;
+    grid.pixelScrollEnabled = true;
+    grid.apply([
+        ['grid_resize', [1, 3, 12]],
+        ['hl_attr_define', [1, {}, {}, [{ hi_name: 'NidoCodeLens' }]]],
+        ['hl_attr_define', [2, {}, {}, [{ hi_name: 'NidoCodeLensHint' }]]],
+        [
+            'grid_line',
+            [
+                1,
+                0,
+                0,
+                [
+                    ['R', 1],
+                    [' ', 0, 2]
+                ]
+            ]
+        ],
+        ['grid_line', [1, 1, 0, [['a', 0]]]],
+        [
+            'grid_line',
+            [
+                1,
+                2,
+                0,
+                [
+                    ['D', 1],
+                    ['h', 2]
+                ]
+            ]
+        ],
+        [
+            'grid_line',
+            [
+                1,
+                3,
+                0,
+                [
+                    ['R', 1],
+                    ['x', 0]
+                ]
+            ]
+        ],
+        ['grid_line', [1, 4, 0, [[' ', 1, 3]]]],
+        ['grid_line', [1, 5, 0, [['R', 1]]]],
+        ['grid_line', [1, 6, 0, [['b', 0]]]],
+        ['grid_line', [1, 7, 0, [['h', 2]]]],
+        ['grid_line', [1, 9, 0, [['c', 0]]]],
+        ['grid_line', [1, 11, 0, [[':', 0]]]]
+    ]);
+    const context = {
+        measureText: () => ({ width: 8 }),
+        ...Object.fromEntries(
+            [
+                'setTransform',
+                'fillRect',
+                'save',
+                'restore',
+                'translate',
+                'beginPath',
+                'rect',
+                'clip',
+                'fillText'
+            ].map((name) => [name, () => {}])
+        )
+    } as unknown as CanvasRenderingContext2D;
+    const canvas = {
+        width: 0,
+        height: 0,
+        getContext: () => context
+    } as unknown as HTMLCanvasElement;
+    const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    Object.defineProperty(globalThis, 'window', {
+        value: { devicePixelRatio: 2 },
+        configurable: true
+    });
+    try {
+        grid.draw(canvas, 160, 264, 14, 'monospace', false);
+        assert.equal(grid.cellHeight, 24);
+        assert.deepEqual(
+            Array.from({ length: grid.rows }, (_, row) => grid.rowTop(row)),
+            [0, 17, 41, 58, 82, 106, 123, 147, 164, 188, 212, 236]
+        );
+        assert.equal(grid.rowTop(0.5), 8.5);
+        assert.equal(grid.rowTop(1.5), 29);
+        assert.equal(grid.extraRows, 1);
+        for (let row = 0; row < grid.rows - 1; row++) {
+            const top = grid.rowY(row);
+            assert.equal(grid.rowAt(top), row);
+            assert.equal(grid.rowAt(top + (grid.rowTop(row + 1) - grid.rowTop(row)) / 2), row);
+        }
+        assert.equal(grid.rowY(grid.rows - 1), 240);
+        assert.equal(grid.rowAt(238), -1);
+        assert.equal(grid.rowAt(240), -1);
+        grid.scrollFraction = 0.3;
+        grid.draw(canvas, 160, 264, 14, 'monospace', false);
+        assert.equal(grid.rowY(1), 12);
+        assert.equal(grid.rowAt(grid.rowY(1) + 12), 1);
+        assert.equal(grid.rowY(grid.rows - 1), 240);
+        grid.apply([['grid_line', [1, 0, 0, [['x', 0]]]], ['flush']]);
+        grid.scrollFraction = 0;
+        grid.draw(canvas, 160, 264, 14, 'monospace', false);
+        assert.equal(grid.rowTop(1), 24);
+        assert.equal(grid.extraRows, 0);
+        assert.equal(grid.rowY(grid.rows - 1), 240);
+    } finally {
+        if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+        else Reflect.deleteProperty(globalThis, 'window');
+    }
+});
+
 test('grid updates preserve highlights, wide characters and scroll regions', () => {
     const grid = new Grid();
     grid.apply([

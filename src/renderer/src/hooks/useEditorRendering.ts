@@ -91,6 +91,7 @@ export function useEditorRendering({
                   right: number;
                   distance: number;
                   distanceX: number;
+                  incomingRows: number;
                   start: number;
                   edit: boolean;
               }
@@ -162,6 +163,18 @@ export function useEditorRendering({
             cellWidth = metrics.cellWidth;
 
             if (motion) {
+                if (motion.incomingRows) {
+                    const height =
+                        gridRef.current.rowTop(motion.bottom) - gridRef.current.rowTop(motion.top);
+                    const distance =
+                        gridRef.current.rowTop(motion.top) -
+                        gridRef.current.rowTop(motion.top + motion.incomingRows);
+                    motion.distance = Math.max(
+                        -height,
+                        Math.min(height, distance + motion.distance)
+                    );
+                    motion.incomingRows = 0;
+                }
                 const elapsed = (performance.now() - motion.start) * (motion.edit ? 120 / 90 : 1);
                 const offset = scrollOffset(motion.distance, elapsed);
                 const offsetX = scrollOffset(motion.distanceX, elapsed);
@@ -179,8 +192,11 @@ export function useEditorRendering({
                     targetFrame.getContext('2d')!.drawImage(surface, 0, 0);
                     const ctx = surface.getContext('2d')!;
                     const dpr = window.devicePixelRatio || 1;
-                    const top = motion.top * metrics.cellHeight;
-                    const height = (motion.bottom - motion.top) * metrics.cellHeight;
+                    const top = gridRef.current.rowY(motion.top);
+                    const height = Math.min(
+                        gridRef.current.contentHeight - top,
+                        gridRef.current.rowTop(motion.bottom) - gridRef.current.rowTop(motion.top)
+                    );
                     const left = motion.left * metrics.cellWidth;
                     const width = (motion.right - motion.left) * metrics.cellWidth;
                     ctx.save();
@@ -226,19 +242,14 @@ export function useEditorRendering({
 
             if (inputRef.current) {
                 inputRef.current.style.left = `${gridRef.current.cursor.column * metrics.cellWidth}px`;
-                const row = gridRef.current.cursor.row;
-                const offset = pixelScroll
-                    ? row === gridRef.current.rows - 1
-                        ? 1
-                        : gridRef.current.scrollFraction
-                    : 0;
-                inputRef.current.style.top = `${(row - offset) * metrics.cellHeight}px`;
+                inputRef.current.style.top = `${gridRef.current.rowY(gridRef.current.cursor.row)}px`;
             }
 
             const columns = Math.max(20, Math.floor(element.clientWidth / metrics.cellWidth));
-            // Keep one extra content row available under the pinned command line for fractional scrolling.
+            // Compact lenses free space for code; keep one extra row for fractional scrolling.
             const rows =
                 Math.max(4, Math.floor(element.clientHeight / metrics.cellHeight)) +
+                gridRef.current.extraRows +
                 (pixelScroll ? 1 : 0);
             if (!attachedRef.current) {
                 attachedRef.current = true;
@@ -383,8 +394,11 @@ export function useEditorRendering({
                     previousFrame.width = surface.width;
                     previousFrame.height = surface.height;
                     previousFrame.getContext('2d')!.drawImage(surface, 0, 0);
-                    const cellHeight = Math.ceil(fontSize * 1.65);
-                    const height = (scroll[2] - scroll[1]) * cellHeight;
+                    const height =
+                        gridRef.current.rowTop(scroll[2]) - gridRef.current.rowTop(scroll[1]);
+                    const distance =
+                        gridRef.current.rowTop(scroll[1] + scroll[5]) -
+                        gridRef.current.rowTop(scroll[1]);
                     const width = (scroll[4] - scroll[3]) * cellWidth;
                     motion = {
                         top: scroll[1],
@@ -392,10 +406,11 @@ export function useEditorRendering({
                         left: scroll[3],
                         right: scroll[4],
                         // Large jumps use at most one viewport so the animation never exposes an empty gap.
-                        distance: Math.max(
-                            -height,
-                            Math.min(height, scroll[5] * cellHeight + remaining)
-                        ),
+                        distance:
+                            scroll[5] < 0
+                                ? remaining
+                                : Math.max(-height, Math.min(height, distance + remaining)),
+                        incomingRows: Math.max(0, -scroll[5]),
                         distanceX:
                             scroll[5] === 0
                                 ? Math.max(

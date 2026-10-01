@@ -164,8 +164,8 @@ export default function CompletionMenu({
         const host = element.parentElement!;
         const list = element.querySelector<HTMLElement>('[role="listbox"]')!;
         const position = (): void => {
-            const { cellWidth, cellHeight, scrollFraction } = grid.current;
-            const top = (menu.row + 1 - scrollFraction) * cellHeight + 6;
+            const { cellWidth, cellHeight } = grid.current;
+            const top = anchor.offsetTop + cellHeight + 6;
             if (placement.current?.element !== element) {
                 placement.current = {
                     element,
@@ -179,9 +179,7 @@ export default function CompletionMenu({
             element.style.top = `${Math.max(
                 6,
                 Math.min(
-                    placement.current.above
-                        ? (menu.row - scrollFraction) * cellHeight - element.offsetHeight - 6
-                        : top,
+                    placement.current.above ? anchor.offsetTop - element.offsetHeight - 6 : top,
                     host.clientHeight - element.offsetHeight - 6
                 )
             )}px`;
@@ -195,8 +193,11 @@ export default function CompletionMenu({
         const observer = new ResizeObserver(position);
         observer.observe(host);
         observer.observe(element);
+        const cursorObserver = new MutationObserver(position);
+        cursorObserver.observe(anchor, { attributes: true, attributeFilter: ['style'] });
         return () => {
             observer.disconnect();
+            cursorObserver.disconnect();
             anchor.removeAttribute('aria-autocomplete');
             anchor.removeAttribute('aria-controls');
             anchor.removeAttribute('aria-activedescendant');
