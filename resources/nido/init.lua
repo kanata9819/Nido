@@ -62,20 +62,66 @@ vim.keymap.set('i', '<Tab>', function()
   end
   return '<Tab>'
 end, { expr = true, silent = true })
+local completion_scheduled
+local function completion_refresh(pending)
+  if vim.g.nido_channel then
+    vim.rpcnotify(vim.g.nido_channel, 'nido:completion_refresh', pending, vim.fn.pumvisible() == 1)
+  end
+end
 vim.api.nvim_create_autocmd('TextChangedI', {
   callback = function(event)
     local buffer = event.buf
     local tick = vim.api.nvim_buf_get_changedtick(buffer)
     if not vim.api.nvim_get_current_line():sub(1, vim.fn.col('.') - 1):match('[%w_\128-\255]$') then return end
+    if #vim.lsp.get_clients({bufnr=buffer, method='textDocument/completion'}) == 0 then return end
+    local scheduled = {}
+    completion_scheduled = scheduled
+    -- Backspace ends native complete() before this new request; keep the GUI card mounted.
+    completion_refresh(true)
     vim.defer_fn(function()
+      if completion_scheduled ~= scheduled then return end
+      completion_scheduled = nil
       if vim.api.nvim_buf_is_valid(buffer) and vim.api.nvim_get_current_buf() == buffer
           and vim.api.nvim_buf_get_changedtick(buffer) == tick and vim.fn.mode() == 'i'
           and vim.fn.pumvisible() == 0
           and #vim.lsp.get_clients({bufnr=buffer, method='textDocument/completion'}) > 0 then
         -- Ordinary text uses an invoked request: servers may reject letters as trigger characters.
         vim.lsp.completion.get()
+      else
+        completion_refresh(false)
       end
     end, 30)
+  end,
+})
+vim.api.nvim_create_autocmd('LspRequest', {
+  callback = function(event)
+    if event.buf ~= vim.api.nvim_get_current_buf()
+        or event.data.request.method ~= 'textDocument/completion' then return end
+    if event.data.request.type == 'pending' then
+      completion_refresh(true)
+    else
+      vim.schedule(function()
+        if completion_scheduled then return end
+        for _, client in ipairs(vim.lsp.get_clients({bufnr=0, method='textDocument/completion'})) do
+          for _, request in pairs(client.requests) do
+            if request.bufnr == event.buf and request.method == 'textDocument/completion'
+                and request.type == 'pending' then return end
+          end
+        end
+        completion_refresh(false)
+      end)
+    end
+  end,
+})
+vim.api.nvim_create_autocmd('LspDetach', {
+  callback = function(event)
+    vim.schedule(function()
+      if event.buf == vim.api.nvim_get_current_buf()
+          and #vim.lsp.get_clients({bufnr=event.buf, method='textDocument/completion'}) == 0 then
+        completion_scheduled = nil
+        completion_refresh(false)
+      end
+    end)
   end,
 })
 vim.diagnostic.config({

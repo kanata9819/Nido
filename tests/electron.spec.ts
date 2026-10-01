@@ -602,6 +602,13 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
             /Variable|Constant/
         );
         await expect(menu.getByRole('option').first().getByRole('img').locator('svg')).toBeVisible();
+        await menu.evaluate((element) => element.setAttribute('data-test-continuity', 'kept'));
+        await page.keyboard.type('oun', { delay: 180 });
+        await expect(menu).toHaveAttribute('data-test-continuity', 'kept');
+        await page.keyboard.press('Backspace');
+        await expect(canvas).toHaveAttribute('aria-description', /amou\s*\n/);
+        await expect(menu).toHaveAttribute('aria-busy', 'false');
+        await expect(menu).toHaveAttribute('data-test-continuity', 'kept');
         await page.keyboard.press('Tab');
         await expect(menu).toHaveCount(0);
         await expect(canvas).toHaveAttribute('aria-description', /amount/);
@@ -611,6 +618,13 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
             menu.getByRole('option').filter({ hasText: 'toFixed' }).getByRole('img')
         ).toHaveAttribute('aria-label', 'Method');
         await expect(menu.getByText('Method', { exact: true })).toHaveCount(0);
+        const popupBounds = await menu.boundingBox();
+        await page.keyboard.type('F');
+        await expect(menu.getByRole('option')).toHaveCount(1);
+        expect(await menu.boundingBox()).toEqual(popupBounds);
+        await page.keyboard.press('Backspace');
+        await expect(menu.getByRole('option')).toHaveCount(6);
+        expect(await menu.boundingBox()).toEqual(popupBounds);
         await page.keyboard.press('Control+e');
         await expect(menu).toHaveCount(0);
         await page.keyboard.press('Control+Space');
@@ -642,8 +656,11 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await expect
             .poll(() => readFile(join(workspace, 'main.ts'), 'utf8'))
             .toContain('amount.toFixed');
-        await page.keyboard.type(':edit note.txt');
+        await page.keyboard.type(':');
+        await expect(page.getByText('COMMAND', { exact: true })).toBeVisible();
+        await page.keyboard.type('edit note.txt');
         await page.keyboard.press('Enter');
+        await expect(page.getByRole('tab', { name: 'note.txt', exact: true })).toBeVisible();
         await page.keyboard.press('i');
         await page.keyboard.press('Tab');
         await page.keyboard.type('plain');
@@ -652,7 +669,9 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await expect
             .poll(() => readFile(join(workspace, 'note.txt'), 'utf8'))
             .toMatch(/^  plain\r?\n$/);
-        await page.keyboard.type(':edit main.ts');
+        await page.keyboard.type(':');
+        await expect(page.getByText('COMMAND', { exact: true })).toBeVisible();
+        await page.keyboard.type('edit main.ts');
         await page.keyboard.press('Enter');
         await expect(canvas).toHaveAttribute('aria-description', /getOldUser/);
         await page.keyboard.press('Escape');

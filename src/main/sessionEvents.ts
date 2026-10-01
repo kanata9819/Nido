@@ -80,6 +80,17 @@ export class SessionEvents {
                 this.pendingRedraw.push(['nido_edit', []]);
                 break;
             }
+            case 'nido:completion_refresh': {
+                this.sendToRenderer({
+                    type: 'redraw',
+                    id: this.workspaceId,
+                    events: [
+                        ['nido_completion_refresh', args],
+                        ['flush', []]
+                    ]
+                });
+                break;
+            }
             case 'nido:pixel_scroll': {
                 if (this.isBatchingScroll) {
                     this.pendingRedraw.push(['nido_pixel_scroll', args]);

@@ -28,6 +28,7 @@ interface Menu {
     selected: number;
     row: number;
     column: number;
+    pending?: boolean;
 }
 
 const kindIcons: Record<string, LucideIcon> = {
@@ -75,13 +76,29 @@ export default function CompletionMenu({
 }): React.JSX.Element | null {
     const [menu, setMenu] = useState<Menu>();
     const card = useRef<HTMLDivElement>(null);
+    const refreshing = useRef(false);
+    const currentMenu = useRef(menu);
+    currentMenu.current = menu;
+    const placement = useRef<
+        { element: HTMLDivElement; above: boolean; height: number } | undefined
+    >(undefined);
     const listId = `completion-${id}`;
     useEffect(
         () =>
             window.nido.onEvent((event) => {
-                if (event.id !== id || event.type !== 'redraw') return;
+                if (event.id !== id) return;
+                if (event.type === 'state' && !event.state.mode.startsWith('i')) {
+                    refreshing.current = false;
+                    setMenu(undefined);
+                }
+                if (event.type !== 'redraw') return;
                 for (const [name, ...calls] of event.events) {
                     for (const args of calls) {
+                        if (name === 'nido_completion_refresh') {
+                            refreshing.current = args[0] === true;
+                            if (!refreshing.current && args[1] !== true)
+                                setMenu((current) => (current?.pending ? undefined : current));
+                        }
                         if (name === 'popupmenu_show')
                             setMenu({
                                 items: args[0] as Menu['items'],
@@ -93,27 +110,78 @@ export default function CompletionMenu({
                             setMenu(
                                 (current) => current && { ...current, selected: Number(args[0]) }
                             );
-                        if (name === 'popupmenu_hide') setMenu(undefined);
+                        if (name === 'popupmenu_hide')
+                            setMenu((current) =>
+                                refreshing.current && current
+                                    ? { ...current, pending: true, selected: -1 }
+                                    : undefined
+                            );
                     }
                 }
             }),
         [id]
     );
+    useEffect(() => {
+        const anchor = input.current;
+        if (!anchor) return;
+        const onKey = (event: KeyboardEvent): void => {
+            const navigation =
+                ['ArrowUp', 'ArrowDown'].includes(event.key) ||
+                (event.ctrlKey && ['n', 'p'].includes(event.key));
+            if (currentMenu.current?.pending && (navigation || event.key === 'Tab')) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+            if (
+                navigation ||
+                ['Shift', 'Control', 'Alt', 'Meta'].includes(event.key) ||
+                (event.ctrlKey && event.code === 'Space') ||
+                (!event.ctrlKey &&
+                    !event.altKey &&
+                    !event.metaKey &&
+                    (event.key === 'Backspace' || /^[\p{L}\p{N}_]$/u.test(event.key)))
+            )
+                return;
+            refreshing.current = false;
+            setMenu(undefined);
+        };
+        const close = (): void => {
+            refreshing.current = false;
+            setMenu(undefined);
+        };
+        anchor.addEventListener('keydown', onKey, true);
+        anchor.addEventListener('blur', close);
+        return () => {
+            anchor.removeEventListener('keydown', onKey, true);
+            anchor.removeEventListener('blur', close);
+        };
+    }, [input]);
     useLayoutEffect(() => {
         const element = card.current;
         const anchor = input.current;
         if (!menu || !element || !anchor || hidden) return;
         const host = element.parentElement!;
+        const list = element.querySelector<HTMLElement>('[role="listbox"]')!;
         const position = (): void => {
             const { cellWidth, cellHeight, scrollFraction } = grid.current;
             const top = (menu.row + 1 - scrollFraction) * cellHeight + 6;
+            if (placement.current?.element !== element) {
+                placement.current = {
+                    element,
+                    above: top + element.offsetHeight > host.clientHeight - cellHeight,
+                    height: list.offsetHeight
+                };
+            }
+            placement.current.height = Math.max(placement.current.height, list.offsetHeight);
+            list.style.minHeight = `${placement.current.height}px`;
             element.style.left = `${Math.max(6, Math.min(menu.column * cellWidth, host.clientWidth - element.offsetWidth - 6))}px`;
             element.style.top = `${Math.max(
                 6,
                 Math.min(
-                    top + element.offsetHeight <= host.clientHeight - cellHeight
-                        ? top
-                        : (menu.row - scrollFraction) * cellHeight - element.offsetHeight - 6,
+                    placement.current.above
+                        ? (menu.row - scrollFraction) * cellHeight - element.offsetHeight - 6
+                        : top,
                     host.clientHeight - element.offsetHeight - 6
                 )
             )}px`;
@@ -145,7 +213,13 @@ export default function CompletionMenu({
             <div className={styles.heading}>
                 <Braces size={14} /> Completion <span>{menu.items.length} candidates</span>
             </div>
-            <div id={listId} className={styles.list} role="listbox" aria-label="Code completion">
+            <div
+                id={listId}
+                className={styles.list}
+                role="listbox"
+                aria-label="Code completion"
+                aria-busy={menu.pending ?? false}
+            >
                 {menu.items.map(([word, kind, detail], index) => {
                     const Icon = Object.hasOwn(kindIcons, kind) ? kindIcons[kind] : Text;
                     return (
@@ -155,8 +229,10 @@ export default function CompletionMenu({
                             className={styles.item}
                             role="option"
                             aria-selected={menu.selected === index}
+                            aria-disabled={menu.pending ?? false}
                             title={detail || word}
                             onClick={() => {
+                                if (menu.pending) return;
                                 const keys = `<Cmd>lua vim.api.nvim_select_popupmenu_item(${index}, false, false, {})<CR>`;
                                 void window.nido
                                     .input(id, keys)
