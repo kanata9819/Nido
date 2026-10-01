@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Session } from '../src/main/session';
+import { Grid } from '../src/renderer/src/grid';
 
 test(
     'Rust syntax and real rust-analyzer navigation, completion and diagnostics',
@@ -22,12 +23,14 @@ test(
             await writeFile(join(root, 'src/lib.rs'), 'pub fn greet() -> u32 { 42 }\n');
             await writeFile(
                 join(root, 'src/main.rs'),
-                'use nido_rust_fixture::greet;\nfn main() {\n    let answer = greet();\n    println!("{}", answer);\n}\ntype AppTabs = Vec<u32>;\nconst CURSOR_BLINK_INTERVAL: u32 = 500;\n'
+                'use nido_rust_fixture::greet;\nfn main() {\n    let answer = greet();\n    println!("{}", answer);\n}\ntype AppTabs = Vec<u32>;\nconst CURSOR_BLINK_INTERVAL: u32 = 500;\n#[derive(Debug, Clone, PartialEq)]\nstruct Example { value: u32 }\n#[allow(dead_code)]\nfn macro_colors() { let v = vec![1, 2]; dbg!(v); assert!(true); }\n'
             );
             let sawProgress = false;
             const messages: string[] = [];
             const hovers: string[] = [];
+            const grid = new Grid();
             session = await Session.create(root, (event) => {
+                if (event.type === 'redraw') grid.apply(event.events);
                 if (event.type === 'state' && event.state.lspProgress) sawProgress = true;
                 if (event.type === 'error' || event.type === 'notification')
                     messages.push(event.message);
@@ -141,6 +144,46 @@ test(
                 /References changed/
             );
             assert.equal(session.state.lsp, 'rust_analyzer');
+            await lua(`vim.lsp.semantic_tokens.force_refresh(0)
+assert(vim.wait(15000, function()
+  for _, token in ipairs(vim.lsp.semantic_tokens.get_at_pos(0, 7, 9) or {}) do
+    if token.type == 'derive' then return true end
+  end
+end, 100), 'derive tokens must resolve after Cargo loads')
+vim.cmd('redraw!')`);
+            await session.client.request('nvim_eval', ['1']);
+            for (const [word, foreground] of [
+                ['println!', 0x569cd6],
+                ['vec!', 0x569cd6],
+                ['dbg!', 0x569cd6],
+                ['assert!', 0x569cd6],
+                ['derive', 0xdcdcaa],
+                ['Debug', 0x4ec9b0],
+                ['Clone', 0x4ec9b0],
+                ['PartialEq', 0x4ec9b0],
+                ['allow', 0xcccccc]
+            ] as const) {
+                const row = grid.cells.find((cells) => {
+                    const text = cells.map((cell) => cell.text).join('');
+                    return (
+                        text.includes(word) &&
+                        (!['derive', 'Debug', 'Clone', 'PartialEq'].includes(word) ||
+                            text.includes('#[derive('))
+                    );
+                });
+                assert.ok(row, `The visible grid contains ${word}`);
+                const start = row
+                    .map((cell) => cell.text)
+                    .join('')
+                    .indexOf(word);
+                assert.deepEqual(
+                    row
+                        .slice(start, start + word.length)
+                        .map((cell) => grid.highlights.get(cell.highlight)?.foreground),
+                    Array(word.length).fill(foreground),
+                    `${word} uses its VS Code foreground in the actual redraw`
+                );
+            }
             assert.deepEqual(
                 await lua(
                     'local a=vim.lsp.semantic_tokens.get_at_pos(0, 5, 5) or {}; local b=vim.lsp.semantic_tokens.get_at_pos(0, 6, 6) or {}; return {a[1] and a[1].type, b[1] and b[1].type}'

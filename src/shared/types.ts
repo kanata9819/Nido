@@ -64,7 +64,21 @@ export interface ReferencePreview {
     lines: { text: string; color: string }[][];
 }
 export type DebugAction =
-    'start' | 'breakpoint' | 'over' | 'into' | 'out' | 'pause' | 'stop' | 'launch';
+    'start' | 'breakpoint' | 'over' | 'into' | 'out' | 'pause' | 'stop' | 'launch' | 'variable';
+export interface DebugVariable {
+    id: number;
+    parent?: number;
+    scope: string;
+    depth: number;
+    name: string;
+    value: string;
+    type: string;
+    expandable: boolean;
+    expanded: boolean;
+    changed: boolean;
+    loading: boolean;
+    error?: string;
+}
 export interface DebugState {
     kind?: 'run' | 'debug';
     terminal?: string;
@@ -72,7 +86,7 @@ export interface DebugState {
         'idle' | 'building' | 'starting' | 'running' | 'paused' | 'finished' | 'error' | 'select';
     output: string;
     location?: string;
-    variables: { name: string; value: string; type: string }[];
+    variables: DebugVariable[];
     targets: { name: string; path: string }[];
 }
 export interface FileEntry {

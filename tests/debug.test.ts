@@ -116,7 +116,7 @@ test(
             );
             await writeFile(
                 join(root, 'src/main.rs'),
-                'fn double(x: i32) -> i32 {\n    x * 2\n}\nfn main() {\n    let number = 21;\n    let answer = double(number);\n    println!("answer={answer}");\n}\n'
+                'fn double(x: i32) -> i32 {\n    x * 2\n}\nfn main() {\n    let mut number = 21; let mut pair = [number, 22];\n    let answer = double(number);\n    println!("answer={answer}");\n    number += 1;\n    pair[0] = number;\n    println!("{pair:?} {number}");\n}\n'
             );
             session = await Session.create(root, () => {});
             await session.openFile('src/main.rs');
@@ -141,6 +141,13 @@ test(
             assert.ok(
                 session.state.debug!.variables.some((v) => v.name === 'number' && v.value === '21')
             );
+            const pair = session.state.debug!.variables.find((v) => v.name === 'pair')!;
+            assert.equal(pair.expandable, true);
+            await session.debug('variable', pair.id);
+            await wait(() => session!.state.debug!.variables.some((v) => v.parent === pair.id));
+            assert.ok(
+                session.state.debug!.variables.some((v) => v.parent === pair.id && v.value === '21')
+            );
             await session.debug('into');
             await wait(() => /main.rs:2$/.test(session!.state.debug?.location || ''));
             await session.debug('out');
@@ -152,6 +159,24 @@ test(
                         (v) => v.name === 'answer' && v.value === '42'
                     ) || false
             );
+            await session.debug('over');
+            await wait(() => /main.rs:8$/.test(session!.state.debug?.location || ''));
+            await session.debug('over');
+            await wait(() =>
+                session!.state.debug!.variables.some(
+                    (v) => v.name === 'number' && v.value === '22' && v.changed
+                )
+            );
+            await session.debug('over');
+            await wait(() =>
+                session!.state.debug!.variables.some(
+                    (v) => v.depth === 1 && v.value === '22' && v.changed
+                )
+            );
+            const expandedPair = session.state.debug!.variables.find((v) => v.name === 'pair')!;
+            assert.equal(expandedPair.expanded, true, 'expanded arrays survive stepping');
+            await session.debug('variable', expandedPair.id);
+            await wait(() => !session!.state.debug!.variables.some((v) => v.depth === 1));
             await session.debug('start');
             await wait(() => session!.state.debug?.status === 'finished');
             await wait(() => /answer=42/.test(session!.state.debug?.terminal || ''));

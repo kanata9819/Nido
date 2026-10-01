@@ -153,7 +153,6 @@ end
 vim.api.nvim_set_hl(0, 'rustKeyword', {link='@keyword'})
 vim.api.nvim_set_hl(0, 'rustStructure', {link='@keyword'})
 vim.api.nvim_set_hl(0, '@lsp.type.namespace.rust', {link='@module'})
-vim.api.nvim_set_hl(0, '@lsp.type.macro.rust', {link='@function.macro'})
 vim.api.nvim_set_hl(0, '@lsp.type.typeAlias.rust', {link='@type'})
 vim.api.nvim_set_hl(0, '@lsp.type.const.rust', {link='@constant'})
 vim.o.winborder = 'rounded'

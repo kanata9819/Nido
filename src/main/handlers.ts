@@ -227,15 +227,23 @@ export function registerHandlers({
     handle('debug', (id, action, target) => {
         if (
             typeof action !== 'string' ||
-            !['start', 'breakpoint', 'over', 'into', 'out', 'pause', 'stop', 'launch'].includes(
-                action
-            )
+            ![
+                'start',
+                'breakpoint',
+                'over',
+                'into',
+                'out',
+                'pause',
+                'stop',
+                'launch',
+                'variable'
+            ].includes(action)
         ) {
             throw new Error('Invalid debug action');
         }
         return session(id).debug(
             action as DebugAction,
-            action === 'launch' ? integer(target) : undefined
+            action === 'launch' || action === 'variable' ? integer(target) : undefined
         );
     });
 

@@ -49,25 +49,64 @@ vim.fn.sign_define('DapBreakpointRejected', {text='○', texthl='DiagnosticWarn'
 vim.fn.sign_define('DapStopped', {text='▶', texthl='DiagnosticWarn', linehl='NidoDebugLine'})
 vim.api.nvim_set_hl(0, 'NidoDebugLine', {bg='#343020'})
 
-local function refresh()
+local expanded, nodes, previous, current = {}, {}, {}, {}
+local epoch, next_id = 0, 0
+local function reset_variables(new_run)
+  epoch = epoch + 1
+  previous = new_run and {} or current
+  current, nodes = {}, {}
+  if new_run then expanded = {} end
+end
+local refresh
+refresh = function()
   vim.schedule(function()
     local session = dap.session()
     local frame = session and session.current_frame
     state.variables = {}
     state.location = nil
-    if frame then
+    if frame and state.status == 'paused' then
       state.location = (frame.source and frame.source.path or frame.name) .. ':' .. frame.line
-      for _, scope in ipairs(frame.scopes or {}) do
-        for _, value in ipairs(scope.variables or {}) do
-          table.insert(state.variables, {name=value.name, value=value.value, type=value.type or ''})
+      local frame_key = (frame.source and frame.source.path or '') .. '/' .. frame.name
+      local function append(values, path, scope, depth, parent)
+        for index, value in ipairs(values) do
+          local key = path .. '/' .. index .. ':' .. value.name
+          local node = nodes[key]
+          if not node then
+            next_id = next_id + 1
+            node = {id=next_id, reference=value.variablesReference or 0, key=key}
+            nodes[key] = node
+          end
+          local open = expanded[key] == true and node.reference > 0
+          current[key] = value.value
+          if open and not node.children and not node.loading and not node.error then
+            node.loading = true
+            local request_epoch = epoch
+            session:request('variables', {variablesReference=node.reference}, function(err, response)
+              if epoch ~= request_epoch or dap.session() ~= session or session.current_frame ~= frame or state.status ~= 'paused' then return end
+              node.loading = false
+              if err then node.error = err.message or tostring(err)
+              else node.children = response and response.variables or {} end
+              refresh()
+            end)
+          end
+          table.insert(state.variables, {
+            id=node.id, parent=parent, scope=scope, depth=depth,
+            name=value.name, value=value.value, type=value.type or '',
+            expandable=node.reference > 0, expanded=open, loading=node.loading == true,
+            changed=previous[key] ~= nil and previous[key] ~= value.value, error=node.error,
+          })
+          if open and node.children then append(node.children, key, scope, depth+1, node.id) end
         end
+      end
+      for index, scope in ipairs(frame.scopes or {}) do
+        append(scope.variables or {}, frame_key .. '/' .. index .. ':' .. scope.name, scope.name, 0, nil)
       end
     end
     publish()
   end)
 end
 for _, event in ipairs({'scopes', 'variables', 'stackTrace'}) do dap.listeners.after[event].nido = refresh end
-dap.listeners.after.event_stopped.nido = function() state.status='paused'; refresh() end
+dap.listeners.after.event_stopped.nido = function() reset_variables(false); state.status='paused'; refresh() end
 dap.listeners.after.event_continued.nido = function() state.status='running'; refresh() end
 dap.listeners.after.event_initialized.nido = function() state.status='running'; publish() end
 dap.listeners.after.event_output.nido = function(_, event) output(event.output or '') end
@@ -121,6 +160,7 @@ local function start_build(args)
   table.insert(cargo, '--message-format=json')
   table.insert(cargo, 1, args and args.overrideCargo or 'cargo')
   state = {status='building', kind='debug', output='Building Rust debug targets…\n', variables={}, targets={}}
+  reset_variables(true)
   publish()
   generation = generation + 1
   local run = generation
@@ -206,6 +246,16 @@ local function action_impl(action, rpc, index)
   elseif action == 'pause' then
     assert(dap.session(), 'No debug session is running')
     dap.pause()
+  elseif action == 'variable' then
+    if state.status ~= 'paused' then return end
+    for _, node in pairs(nodes) do
+      if node.id == index and node.reference > 0 then
+        expanded[node.key] = not expanded[node.key]
+        node.error = nil
+        refresh()
+        return
+      end
+    end
   else
     assert(dap.session() and dap.session().stopped_thread_id, 'Pause the debugger before stepping')
     local actions = {over=dap.step_over, into=dap.step_into, out=dap.step_out}

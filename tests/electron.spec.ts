@@ -2678,7 +2678,7 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
         );
         await writeFile(
             join(root, 'src/main.rs'),
-            'fn main() {\n    let number = 21;\n    let answer = number * 2;\n    println!("answer={answer}");\n}\n'
+            'fn main() {\n    let mut number = 21; let mut pair = [number, 22];\n    let answer = number * 2;\n    println!("answer={answer}");\n    number += 1;\n    pair[0] = number;\n    println!("{pair:?} {number}");\n}\n'
         );
         const executablePath = process.env.NIDO_PACKAGED_EXE;
         running = await electron.launch({
@@ -2719,7 +2719,7 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
         await expect(page.getByRole('region', { name: 'Debugger' })).toBeVisible();
         await page.keyboard.press('F5');
         await expect(page.getByRole('region', { name: 'Debugger' })).toContainText(
-            'Choose a binary:',
+            'Choose an executable:',
             { timeout: 30000 }
         );
         await page.keyboard.press('Control+j');
@@ -2741,7 +2741,7 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
             'Debug · paused',
             { timeout: 30000 }
         );
-        await expect(page.getByLabel('Debug variables')).toContainText('number = 21');
+        await expect(page.getByRole('treeitem', { name: /^number = 21/ })).toBeVisible();
         await page.keyboard.press('Control+k');
         await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
         await page.keyboard.press('Control+h');
@@ -2758,7 +2758,40 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
         await page.keyboard.press('F10');
         await expect(page.getByRole('region', { name: 'Debugger' })).toHaveCount(0);
         await page.keyboard.press('Control+j');
-        await expect(page.getByLabel('Debug variables')).toContainText('answer = 42');
+        await expect(page.getByRole('treeitem', { name: /^answer = 42/ })).toBeVisible();
+        for (let i = 0; i < 12 && !(await page.locator('[data-debug-variable]:focus').count()); i++)
+            await page.keyboard.press('Tab');
+        await expect(page.getByRole('treeitem', { name: /^number = 21/ })).toBeFocused();
+        await page.keyboard.press('j');
+        const pair = page.getByRole('treeitem', { name: /^pair = / });
+        await expect(pair).toBeFocused();
+        await page.keyboard.press('l');
+        await expect(pair).toHaveAttribute('aria-expanded', 'true');
+        await expect(page.locator('[data-debug-variable][aria-level="2"]')).toHaveCount(2);
+        await page.keyboard.press('l');
+        await expect(page.locator('[aria-level="2"]').first()).toBeFocused();
+        await page.keyboard.press('h');
+        await expect(pair).toBeFocused();
+        await page.keyboard.press('h');
+        await expect(pair).toHaveAttribute('aria-expanded', 'false');
+        await expect(page.locator('[data-debug-variable][aria-level="2"]')).toHaveCount(0);
+        await page.keyboard.press('Enter');
+        await expect(pair).toHaveAttribute('aria-expanded', 'true');
+        await page.keyboard.press('F10');
+        await expect(page.getByRole('region', { name: 'Debugger' })).toContainText('main.rs:5');
+        await page.keyboard.press('F10');
+        await expect(page.getByRole('treeitem', { name: /^number = 22.*changed/ })).toHaveAttribute(
+            'data-changed',
+            'true'
+        );
+        await page.keyboard.press('F10');
+        await expect(
+            page.locator('[data-debug-variable][aria-level="2"][data-changed]')
+        ).toHaveCount(1);
+        await expect(pair).toHaveAttribute('aria-expanded', 'true');
+        const variablesBox = await page.getByLabel('Debug variables').boundingBox();
+        const consoleBox = await page.getByLabel('Debug output').boundingBox();
+        expect(consoleBox!.y).toBeGreaterThan(variablesBox!.y + variablesBox!.height);
         await page.screenshot({ path: 'test-results/nido-debugger.png' });
         await page.keyboard.press('Shift+F5');
         await expect(page.getByRole('region', { name: 'Debugger' })).toContainText(

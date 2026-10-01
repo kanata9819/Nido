@@ -114,6 +114,7 @@ for color, groups in pairs({
     'typescriptAccessibilityModifier', 'typescriptReadonlyModifier',
     'typescriptClassStatic', 'typescriptAbstract', 'typescriptAmbientDeclaration', 'typescriptCastKeyword',
     'typescriptKeywordOp', 'typescriptImportType', 'javaScriptFunction', 'javaScriptNull', 'javaScriptIdentifier',
+    '@lsp.type.macro.rust', '@lsp.type.procMacro.rust',
   },
   [c.vscFront] = {
     'typescriptBinaryOp', 'typescriptAssign', 'typescriptUnaryOp', 'typescriptTernaryOp',
@@ -137,8 +138,8 @@ for group, target in pairs({
   selfKeyword = '@keyword', selfTypeKeyword = '@keyword', boolean = '@boolean',
   character = '@character', escapeSequence = '@string.escape', formatSpecifier = '@keyword',
   lifetime = '@keyword',
-  procMacro = '@function.macro', macroBang = '@function.macro',
-  attribute = 'Normal', builtinAttribute = 'Normal', derive = 'Normal', deriveHelper = 'Normal',
+  macroBang = '@function.macro',
+  attribute = 'Normal', builtinAttribute = 'Normal', derive = '@type', deriveHelper = 'Normal',
 }) do
   hl(0, '@lsp.type.' .. group .. '.rust', {link=target})
 end
