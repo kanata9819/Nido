@@ -1,13 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FileEntry } from '../../../shared/types';
+import { Star, X } from 'lucide-react';
+import type { FavoriteWorkspace, FileEntry } from '../../../shared/types';
 import styles from '../assets/Nido.module.css';
 
 export default function FolderPicker({
     initialPath,
+    favorites,
+    favoriteBusy,
+    onOpenFavorite,
+    onRemoveFavorite,
     busy,
     onOpen
 }: {
     initialPath: string;
+    favorites: FavoriteWorkspace[];
+    favoriteBusy: boolean;
+    onOpenFavorite: (favorite: FavoriteWorkspace) => void;
+    onRemoveFavorite: (favorite: FavoriteWorkspace) => void;
     busy: boolean;
     onOpen: (path: string, kind: 'editor' | 'terminal') => void;
 }): React.JSX.Element {
@@ -22,6 +31,7 @@ export default function FolderPicker({
     const list = useRef<HTMLDivElement>(null);
     const address = useRef<HTMLInputElement>(null);
     const request = useRef(0);
+    const choiceCount = favorites.length + folders.length;
     async function browse(next: string): Promise<void> {
         const id = ++request.current;
         setLoading(true);
@@ -60,6 +70,9 @@ export default function FolderPicker({
     useEffect(() => {
         list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
     }, [selected]);
+    useEffect(() => {
+        setSelected((value) => Math.max(0, Math.min(value, choiceCount - 1)));
+    }, [choiceCount]);
     return (
         <div
             className={styles.folderPicker}
@@ -126,7 +139,9 @@ export default function FolderPicker({
                 aria-label="Folders"
                 tabIndex={0}
                 aria-busy={loading || busy}
-                aria-activedescendant={folders[selected] ? `folder-choice-${selected}` : undefined}
+                aria-activedescendant={
+                    selected < choiceCount ? `folder-choice-${selected}` : undefined
+                }
                 className={styles.paletteItems}
                 onKeyDown={(event) => {
                     if (
@@ -134,8 +149,8 @@ export default function FolderPicker({
                         event.altKey ||
                         event.metaKey ||
                         event.nativeEvent.isComposing ||
-                        loading ||
-                        busy
+                        busy ||
+                        (event.target as HTMLElement).closest('button')
                     ) {
                         return;
                     }
@@ -161,7 +176,7 @@ export default function FolderPicker({
                         case 'j':
                         case 'ArrowDown': {
                             setSelected((value) =>
-                                Math.max(0, Math.min(folders.length - 1, value + 1))
+                                Math.max(0, Math.min(choiceCount - 1, value + 1))
                             );
                             break;
                         }
@@ -173,15 +188,19 @@ export default function FolderPicker({
                         case 'h':
                         case 'ArrowLeft':
                         case 'Backspace': {
-                            void browse(parent);
+                            if (!loading) void browse(parent);
                             break;
                         }
                         default: {
-                            if (folders[selected]) {
+                            const favorite = favorites[selected];
+                            const folder = folders[selected - favorites.length];
+                            if (favorite) {
+                                onOpenFavorite(favorite);
+                            } else if (!loading && folder) {
                                 if (key === 'Enter') {
-                                    onOpen(folders[selected].path, kind);
+                                    onOpen(folder.path, kind);
                                 } else {
-                                    void browse(folders[selected].path);
+                                    void browse(folder.path);
                                 }
                             }
                             break;
@@ -189,18 +208,54 @@ export default function FolderPicker({
                     }
                 }}
             >
+                {favorites.length > 0 && <p className={styles.folderSection}>Favorites</p>}
+                {favorites.map((favorite, index) => (
+                    <div
+                        key={`${favorite.root}:${favorite.kind}`}
+                        id={`folder-choice-${index}`}
+                        role="option"
+                        aria-label={`Favorite ${favorite.name} (${favorite.kind})`}
+                        aria-selected={index === selected}
+                        className={`${styles.folderChoice} ${styles.favoriteChoice} ${index === selected ? styles.selectedItem : ''}`}
+                        onClick={() => {
+                            if (!busy) onOpenFavorite(favorite);
+                        }}
+                        title={favorite.root}
+                    >
+                        <Star size={16} className={styles.favoriteStar} />
+                        <span>
+                            <strong>{favorite.name}</strong>
+                            <small>
+                                {favorite.root} · {favorite.kind}
+                            </small>
+                        </span>
+                        <button
+                            aria-label={`Remove favorite ${favorite.name} (${favorite.kind})`}
+                            title="Remove favorite"
+                            disabled={favoriteBusy || busy}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onRemoveFavorite(favorite);
+                                list.current?.focus();
+                            }}
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+                ))}
+                {favorites.length > 0 && <p className={styles.folderSection}>Browse folders</p>}
                 {loading ? (
                     <p>Loading folders…</p>
                 ) : (
                     folders.map((folder, index) => (
                         <div
                             key={folder.path}
-                            id={`folder-choice-${index}`}
+                            id={`folder-choice-${index + favorites.length}`}
                             role="option"
-                            aria-selected={index === selected}
-                            className={`${styles.folderChoice} ${index === selected ? styles.selectedItem : ''}`}
+                            aria-selected={index + favorites.length === selected}
+                            className={`${styles.folderChoice} ${index + favorites.length === selected ? styles.selectedItem : ''}`}
                             onClick={() => {
-                                setSelected(index);
+                                setSelected(index + favorites.length);
                                 list.current?.focus();
                             }}
                             onDoubleClick={() => void browse(folder.path)}

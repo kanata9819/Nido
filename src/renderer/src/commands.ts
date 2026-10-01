@@ -13,6 +13,8 @@ interface CommandsCallbacks {
     openDebugger: () => void;
     openFile: (path: string) => void;
     activate: (id: string) => void;
+    toggleFavorite: () => void;
+    isFavorite: boolean;
 }
 
 export function buildItems(
@@ -52,6 +54,17 @@ export function buildItems(
         },
         ...(active
             ? [
+                  {
+                      key: '',
+                      title: callbacks.isFavorite
+                          ? 'Remove workspace from favorites'
+                          : 'Add workspace to favorites',
+                      detail: 'Keep this project within easy reach',
+                      run: () => {
+                          callbacks.toggleFavorite();
+                          focusEditor();
+                      }
+                  },
                   {
                       key: 'm',
                       title: 'Problems',

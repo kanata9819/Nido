@@ -7,9 +7,41 @@ import { join } from 'node:path';
 import { Session } from '../src/main/session';
 import { Grid, vimKey } from '../src/renderer/src/grid';
 import { accumulateScroll, scrollOffset } from '../src/renderer/src/scroll';
-import { readLayout, writeLayout } from '../src/main/persistence';
+import { readFavorites, readLayout, writeFavorites, writeLayout } from '../src/main/persistence';
 import { fileDecorations, gitFileKey } from '../src/renderer/src/fileDecorations';
 import type { NidoEvent, Redraw } from '../src/shared/types';
+
+test('favorite storage preserves entries independently and rejects invalid data', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-favorites-store-'));
+    const path = join(root, 'favorites.json');
+    try {
+        assert.deepEqual(await readFavorites(path), []);
+        const favorites = [{ root, name: 'Project', kind: 'editor' as const }];
+        await writeFavorites(path, favorites);
+        await writeLayout(join(root, 'workspaces.json'), {
+            version: 1,
+            workspaces: [],
+            active: 0
+        });
+        assert.deepEqual(await readFavorites(path), favorites);
+        await writeFavorites(path, []);
+        assert.deepEqual(await readFavorites(path), []);
+        for (const invalid of [
+            null,
+            {},
+            [{ root: 'relative', name: 'X', kind: 'editor' }],
+            [{ root, name: 'X', kind: 'invalid' }],
+            [{ root, kind: 'editor' }]
+        ]) {
+            await writeFile(path, JSON.stringify(invalid));
+            await assert.rejects(readFavorites(path), /Invalid favorite workspace data/);
+        }
+        await writeFile(path, '{broken');
+        await assert.rejects(readFavorites(path), SyntaxError);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
 
 test('empty definition and reference results become native notices without grid messages', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-notices-'));

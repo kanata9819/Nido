@@ -106,6 +106,15 @@
 .tabClose:focus-visible {
     opacity: 1;
 }
+.favoriteToggle[aria-pressed='true'] {
+    color: #d5b77f;
+    opacity: 1;
+}
+.favoriteToggle[aria-pressed='true'] svg,
+.favoriteStar {
+    fill: #d5b77f;
+    color: #d5b77f;
+}
 .addWorkspace {
     width: 39px;
     flex-shrink: 0;
@@ -1143,6 +1152,24 @@
 .folderChoice {
     padding: 10px 20px;
     cursor: pointer;
+}
+.folderSection {
+    padding: 10px 20px;
+    color: #82919d;
+    font-size: 11px;
+}
+.favoriteChoice {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    border-radius: 6px;
+}
+.favoriteChoice > span {
+    flex: 1;
+    min-width: 0;
+}
+.favoriteChoice > button {
+    padding: 6px;
 }
 .itemIcon {
     color: #a3bb9b;

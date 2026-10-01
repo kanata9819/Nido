@@ -5,6 +5,122 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+test('favorite workspaces support keyboard access, existing tabs, restart and missing folders', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-favorites-ui-'));
+    const alpha = join(root, 'Alpha');
+    const beta = join(root, 'Beta');
+    await mkdir(alpha);
+    await mkdir(beta);
+    const profile = join(root, 'profile');
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    let running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
+    try {
+        let page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, alpha);
+        const alphaStar = page.getByRole('button', {
+            name: 'Favorite workspace Alpha',
+            exact: true
+        });
+        await expect(alphaStar).toHaveAttribute('aria-pressed', 'false');
+        await alphaStar.click();
+        await expect(alphaStar).toHaveAttribute('aria-pressed', 'true');
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, beta);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+Shift+p');
+        await page
+            .getByRole('textbox', { name: 'Filter items' })
+            .fill('Add workspace to favorites');
+        await page.keyboard.press('Enter');
+        await expect(
+            page.getByRole('button', { name: 'Favorite workspace Beta', exact: true })
+        ).toHaveAttribute('aria-pressed', 'true');
+
+        await page.keyboard.press('Control+Shift+n');
+        const choices = page.getByRole('listbox', { name: 'Folders' });
+        await expect(choices).toBeFocused();
+        await expect(choices.getByRole('option', { name: /^Favorite / })).toHaveCount(2);
+        await page.keyboard.press('j');
+        await expect(
+            choices.getByRole('option', { name: 'Favorite Beta (editor)', exact: true })
+        ).toHaveAttribute('aria-selected', 'true');
+        await page.keyboard.press('k');
+        await page.keyboard.press('Enter');
+        await expect(
+            page.getByRole('tab', { name: 'Workspace Alpha', exact: true })
+        ).toHaveAttribute('aria-selected', 'true');
+        await expect(page.getByRole('tab', { name: /^Workspace / })).toHaveCount(2);
+
+        await page.getByRole('button', { name: 'Close workspace Alpha', exact: true }).click();
+        await expect(page.getByRole('tab', { name: /^Workspace / })).toHaveCount(1);
+        await page.keyboard.press('Control+Shift+n');
+        await expect(
+            choices.getByRole('option', { name: 'Favorite Alpha (editor)', exact: true })
+        ).toBeVisible();
+        await choices
+            .getByRole('button', { name: 'Remove favorite Beta (editor)', exact: true })
+            .click();
+        await expect(
+            choices.getByRole('option', { name: 'Favorite Beta (editor)', exact: true })
+        ).toHaveCount(0);
+        await expect(
+            page.getByRole('button', { name: 'Favorite workspace Beta', exact: true })
+        ).toHaveAttribute('aria-pressed', 'false');
+        await page.screenshot({ path: 'test-results/workspace-favorites.png' });
+        await choices.getByRole('option', { name: 'Favorite Alpha (editor)', exact: true }).click();
+        await expect(page.getByRole('tab', { name: /^Workspace / })).toHaveCount(2);
+        await page.getByRole('button', { name: 'Close workspace Alpha', exact: true }).click();
+        await page.getByRole('button', { name: 'Close workspace Beta', exact: true }).click();
+        await expect(page.getByRole('tab', { name: /^Workspace / })).toHaveCount(0);
+        const closed = running.waitForEvent('close');
+        await page.evaluate(() => {
+            void window.nido.windowAction('close');
+        });
+        await closed;
+        running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
+        page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('tab', { name: 'Workspace Alpha', exact: true })).toBeVisible();
+        await expect(
+            page.getByRole('button', { name: 'Favorite workspace Alpha', exact: true })
+        ).toHaveAttribute('aria-pressed', 'true');
+        await page.getByRole('button', { name: 'Close workspace Alpha', exact: true }).click();
+        await expect(page.getByRole('tab', { name: /^Workspace / })).toHaveCount(0);
+        await rm(alpha, { recursive: true, force: true });
+        await page.keyboard.press('Control+Shift+n');
+        await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(page.getByText(/ENOENT/)).toBeVisible();
+        await expect(page.getByRole('tab', { name: /^Workspace / })).toHaveCount(0);
+        await page
+            .getByRole('button', { name: 'Remove favorite Alpha (editor)', exact: true })
+            .click();
+        await expect(page.getByRole('option', { name: /^Favorite / })).toHaveCount(0);
+        await expect
+            .poll(async () => JSON.parse(await readFile(join(profile, 'favorites.json'), 'utf8')))
+            .toEqual([]);
+        const rejected = await page.evaluate(async () => {
+            try {
+                await window.nido.setWorkspaceFavorite('relative', 'editor', true);
+                return false;
+            } catch {
+                return true;
+            }
+        });
+        expect(rejected).toBe(true);
+    } finally {
+        await running.evaluate(({ app }) => app.exit(0));
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-runnable-ui-'));
     const workspace = join(root, 'workspace');

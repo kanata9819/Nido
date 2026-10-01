@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-import type { FileEntry, SessionState } from '../../shared/types';
+import type { FavoriteWorkspace, FileEntry, SessionState, Workspace } from '../../shared/types';
 import type { Panel } from './types';
 import Editor from './Editor';
 import TerminalPanel from './components/TerminalPanel';
@@ -43,6 +43,10 @@ export default function App(): React.JSX.Element {
     const [fileList, setFileList] = useState<FileEntry[]>([]);
     const [loading, setLoading] = useState(false);
     const [creating, setCreating] = useState(false);
+    const [favorites, setFavorites] = useState<FavoriteWorkspace[]>([]);
+    const [favoritesReady, setFavoritesReady] = useState(false);
+    const [savingFavorite, setSavingFavorite] = useState(false);
+    const favoritePending = useRef(false);
     const [error, setError] = useState('');
     const report = useCallback(
         (message: string): void =>
@@ -52,6 +56,31 @@ export default function App(): React.JSX.Element {
 
     const { workspaces, setWorkspaces, active, setActive, states, mode, restoring } =
         useWorkspaceSessions(report);
+    useEffect(() => {
+        void window.nido
+            .favoriteWorkspaces()
+            .then((saved) => {
+                setFavorites(saved);
+                setFavoritesReady(true);
+            })
+            .catch((e) => report(String(e)));
+    }, [report]);
+
+    const toggleFavorite = (w: Workspace | FavoriteWorkspace): void => {
+        if (!favoritesReady || favoritePending.current) return;
+        favoritePending.current = true;
+        setSavingFavorite(true);
+        const kind = w.kind || 'editor';
+        const enabled = !favorites.some((f) => f.root === w.root && f.kind === kind);
+        void window.nido
+            .setWorkspaceFavorite(w.root, kind, enabled)
+            .then(setFavorites)
+            .catch((e) => report(String(e)))
+            .finally(() => {
+                favoritePending.current = false;
+                setSavingFavorite(false);
+            });
+    };
     const [debugVisible, setDebugVisible] = useState(false);
     const [debugFocusTick, setDebugFocusTick] = useState(0);
     const [referencesVisible, setReferencesVisible] = useState(false);
@@ -232,6 +261,14 @@ export default function App(): React.JSX.Element {
         }
     };
 
+    const openFavorite = async (favorite: FavoriteWorkspace): Promise<void> => {
+        const opened = workspaces.find(
+            (w) => w.root === favorite.root && (w.kind || 'editor') === favorite.kind
+        );
+        if (opened) activate(opened.id);
+        else await openWorkspace(favorite.root, favorite.kind);
+    };
+
     const nextWorkspace = (offset: number): void => {
         if (!workspaces.length) {
             return;
@@ -314,7 +351,13 @@ export default function App(): React.JSX.Element {
         showExplorer,
         openDebugger,
         openFile,
-        activate
+        activate,
+        toggleFavorite: () => {
+            if (workspace) toggleFavorite(workspace);
+        },
+        isFavorite: favorites.some(
+            (f) => f.root === workspace?.root && f.kind === (workspace?.kind || 'editor')
+        )
     });
 
     const keydown = useKeyboardShortcuts({
@@ -376,6 +419,9 @@ export default function App(): React.JSX.Element {
         >
             <TitleBar
                 workspaces={workspaces}
+                favorites={favorites}
+                favoriteBusy={!favoritesReady || savingFavorite}
+                toggleFavorite={toggleFavorite}
                 active={active}
                 creating={creating}
                 activate={activate}
@@ -546,6 +592,10 @@ export default function App(): React.JSX.Element {
                 settings={settings}
                 workspaceId={active}
                 initialFolder={workspace?.root || ''}
+                favorites={favorites}
+                favoriteBusy={!favoritesReady || savingFavorite}
+                openFavorite={openFavorite}
+                removeFavorite={toggleFavorite}
                 creating={creating || restoring}
                 openWorkspace={openWorkspace}
                 panel={panel}

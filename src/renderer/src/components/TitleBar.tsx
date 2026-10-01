@@ -1,9 +1,12 @@
-import { Leaf, Minus, Plus, Square, X } from 'lucide-react';
-import type { Workspace } from '../../../shared/types';
+import { Leaf, Minus, Plus, Square, Star, X } from 'lucide-react';
+import type { FavoriteWorkspace, Workspace } from '../../../shared/types';
 import styles from '../assets/Nido.module.css';
 
 interface TitleBarProps {
     workspaces: Workspace[];
+    favorites: FavoriteWorkspace[];
+    favoriteBusy: boolean;
+    toggleFavorite: (workspace: Workspace) => void;
     active: string;
     creating: boolean;
     activate: (id: string) => void;
@@ -14,6 +17,9 @@ interface TitleBarProps {
 
 export default function TitleBar({
     workspaces,
+    favorites,
+    favoriteBusy,
+    toggleFavorite,
     active,
     creating,
     activate,
@@ -47,6 +53,18 @@ export default function TitleBar({
                             />
                             <span>{w.name}</span>
                             <kbd>Alt+{i + 1}</kbd>
+                        </button>
+                        <button
+                            className={`${styles.tabClose} ${styles.favoriteToggle}`}
+                            aria-label={`Favorite workspace ${w.name}`}
+                            aria-pressed={favorites.some(
+                                (f) => f.root === w.root && f.kind === (w.kind || 'editor')
+                            )}
+                            title="Toggle favorite"
+                            disabled={favoriteBusy}
+                            onClick={() => toggleFavorite(w)}
+                        >
+                            <Star size={13} />
                         </button>
                         <button
                             className={styles.tabClose}

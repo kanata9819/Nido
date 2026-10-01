@@ -1,6 +1,6 @@
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
-import type { SavedWorkspace } from '../shared/types';
+import type { FavoriteWorkspace, SavedWorkspace } from '../shared/types';
 
 export interface SavedLayout {
     version: 1;
@@ -51,6 +51,38 @@ export async function readLayout(path: string): Promise<SavedLayout> {
 }
 
 export async function writeLayout(path: string, data: SavedLayout): Promise<void> {
+    await writeJson(path, data);
+}
+
+export async function readFavorites(path: string): Promise<FavoriteWorkspace[]> {
+    let data: unknown;
+    try {
+        data = JSON.parse(await readFile(path, 'utf8'));
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+        throw error;
+    }
+    if (
+        !Array.isArray(data) ||
+        !data.every(
+            (w) =>
+                w &&
+                typeof w.root === 'string' &&
+                isAbsolute(w.root) &&
+                typeof w.name === 'string' &&
+                (w.kind === 'editor' || w.kind === 'terminal')
+        )
+    ) {
+        throw new Error('Invalid favorite workspace data.');
+    }
+    return data;
+}
+
+export async function writeFavorites(path: string, data: FavoriteWorkspace[]): Promise<void> {
+    await writeJson(path, data);
+}
+
+async function writeJson(path: string, data: unknown): Promise<void> {
     await writeFile(`${path}.tmp`, JSON.stringify(data), 'utf8');
     await rename(`${path}.tmp`, path);
 }

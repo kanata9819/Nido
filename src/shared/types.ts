@@ -8,6 +8,11 @@ export interface Workspace {
     root: string;
     name: string;
 }
+export interface FavoriteWorkspace {
+    root: string;
+    name: string;
+    kind: 'editor' | 'terminal';
+}
 export interface SavedWorkspace {
     kind?: 'editor' | 'terminal';
     terminal?: boolean;
@@ -132,6 +137,12 @@ export interface NidoAPI {
         shell?: TerminalShell
     ): Promise<{ workspaces: Workspace[]; active: string; errors: string[] }>;
     workspaceLayout(ids: string[], active: string): Promise<void>;
+    favoriteWorkspaces(): Promise<FavoriteWorkspace[]>;
+    setWorkspaceFavorite(
+        path: string,
+        kind: 'editor' | 'terminal',
+        enabled: boolean
+    ): Promise<FavoriteWorkspace[]>;
     createWorkspace(
         path: string,
         kind?: 'editor' | 'terminal',

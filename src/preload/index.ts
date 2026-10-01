@@ -16,6 +16,9 @@ const api: NidoAPI = {
     gitCommit: (id, message) => ipcRenderer.invoke('nido:gitCommit', id, message),
     restoreWorkspaces: (shell) => ipcRenderer.invoke('nido:restore', shell),
     workspaceLayout: (ids, active) => ipcRenderer.invoke('nido:layout', ids, active),
+    favoriteWorkspaces: () => ipcRenderer.invoke('nido:favorites'),
+    setWorkspaceFavorite: (path, kind, enabled) =>
+        ipcRenderer.invoke('nido:favorite', path, kind, enabled),
     createWorkspace: (path, kind, shell) => ipcRenderer.invoke('nido:create', path, kind, shell),
     openTerminal: (id, shell) => ipcRenderer.invoke('nido:openTerminal', id, shell),
     restartTerminal: (id, shell) => ipcRenderer.invoke('nido:restartTerminal', id, shell),

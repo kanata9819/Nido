@@ -6,11 +6,16 @@ import styles from '../assets/Nido.module.css';
 import FolderPicker from './FolderPicker';
 import GitBrowser from './GitBrowser';
 import MarkdownPreview from './MarkdownPreview';
+import type { FavoriteWorkspace } from '../../../shared/types';
 
 interface PanelProps {
     settings: SettingsPanelProps;
     workspaceId: string;
     initialFolder: string;
+    favorites: FavoriteWorkspace[];
+    favoriteBusy: boolean;
+    openFavorite: (favorite: FavoriteWorkspace) => Promise<void>;
+    removeFavorite: (favorite: FavoriteWorkspace) => void;
     creating: boolean;
     openWorkspace: (path: string, kind: 'editor' | 'terminal') => Promise<void>;
     panel: Panel;
@@ -40,6 +45,10 @@ export function Panel({
     settings,
     workspaceId,
     initialFolder,
+    favorites,
+    favoriteBusy,
+    openFavorite,
+    removeFavorite,
     creating,
     openWorkspace,
     panel,
@@ -70,6 +79,10 @@ export function Panel({
             content = (
                 <FolderPicker
                     initialPath={initialFolder}
+                    favorites={favorites}
+                    favoriteBusy={favoriteBusy}
+                    onOpenFavorite={(favorite) => void openFavorite(favorite)}
+                    onRemoveFavorite={removeFavorite}
                     busy={creating}
                     onOpen={(path, kind) => void openWorkspace(path, kind)}
                 />

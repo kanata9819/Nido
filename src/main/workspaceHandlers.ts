@@ -1,8 +1,8 @@
 import { app, dialog } from 'electron';
-import { dirname, isAbsolute, join } from 'node:path';
-import { readdir, realpath } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join } from 'node:path';
+import { readdir, realpath, stat } from 'node:fs/promises';
 import { Session } from './session';
-import { readLayout, writeLayout } from './persistence';
+import { readFavorites, readLayout, writeFavorites, writeLayout } from './persistence';
 import type { TerminalShell } from '../shared/types';
 import type { HandlerDeps } from './handlers';
 
@@ -22,6 +22,38 @@ export function registerWorkspaceHandlers({
     text: (value: unknown) => string;
     shellChoice: (value?: unknown) => TerminalShell;
 }): void {
+    const favoritesPath = join(app.getPath('userData'), 'favorites.json');
+    let favoriteWrite: Promise<unknown> = Promise.resolve();
+    handle('favorites', async () => {
+        await favoriteWrite;
+        return readFavorites(favoritesPath);
+    });
+    handle('favorite', (value, kind, enabled) => {
+        const path = text(value);
+        if (
+            !isAbsolute(path) ||
+            (kind !== 'editor' && kind !== 'terminal') ||
+            typeof enabled !== 'boolean'
+        ) {
+            throw new Error('Invalid favorite workspace.');
+        }
+        // Serialize read/modify/write so simultaneous requests cannot overwrite each other.
+        const update = favoriteWrite.then(async () => {
+            const root = enabled ? await realpath(path) : path;
+            if (enabled && !(await stat(root)).isDirectory()) {
+                throw new Error('Choose a project folder.');
+            }
+            const favorites = (await readFavorites(favoritesPath)).filter(
+                (w) => w.root !== root || w.kind !== kind
+            );
+            if (enabled) favorites.push({ root, name: basename(root) || root, kind });
+            await writeFavorites(favoritesPath, favorites);
+            return favorites;
+        });
+        favoriteWrite = update.catch(() => {});
+        return update;
+    });
+
     async function confirmClose(s: Session): Promise<boolean> {
         if (!(await s.modified())) {
             return true;
