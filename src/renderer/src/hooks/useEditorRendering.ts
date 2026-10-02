@@ -9,6 +9,7 @@ interface UseEditorRenderingOptions {
     pixelScroll: boolean;
     id: string;
     fontSize: number;
+    lineHeight: number;
     blocked: boolean;
     active: boolean;
     focusTick: number;
@@ -32,6 +33,7 @@ export function useEditorRendering({
     pixelScroll,
     id,
     fontSize,
+    lineHeight,
     blocked,
     active,
     focusTick,
@@ -261,7 +263,8 @@ export function useEditorRendering({
                 fontSize,
                 fontFamily,
                 focused,
-                cursorPosition
+                cursorPosition,
+                lineHeight
             );
             cellWidth = metrics.cellWidth;
 
@@ -633,7 +636,7 @@ export function useEditorRendering({
             unsubscribe();
             cancelAnimationFrame(frame);
         };
-    }, [id, fontSize, fontFamily, smoothBlink, pixelScroll]);
+    }, [id, fontSize, lineHeight, fontFamily, smoothBlink, pixelScroll]);
 
     useEffect(() => {
         if (active && !blocked) {

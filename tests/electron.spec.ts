@@ -211,7 +211,7 @@ test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
         }[];
         const [main, testFunction] = points.filter((point) => point.value === 'f');
         const body = points.find((point) => point.value === 'p')!;
-        const lineHeight = Math.ceil(main.font * 1.65);
+        const lineHeight = await page.evaluate(() => Number(localStorage.getItem('nido.lineHeight')));
         const lens = JSON.parse((await canvas.getAttribute('data-lens-point'))!);
         const lensHeight = 2 * (testFunction.y - lens.y) - lineHeight - (main.font - lens.font);
         expect(body.y - main.y).toBeCloseTo(lineHeight, 0);
@@ -991,7 +991,7 @@ test('relative line numbers update immediately and persist after restarting', as
     }
 });
 
-test('font family updates the canvas and survives reopening settings and restarting', async () => {
+test('font family and line height update the canvas and survive restarting', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-font-'));
     const workspace = join(root, 'workspace');
     await mkdir(workspace);
@@ -1015,7 +1015,36 @@ test('font family updates the canvas and survives reopening settings and restart
             page
                 .locator('canvas:visible')
                 .evaluate((canvas: HTMLCanvasElement) => canvas.getContext('2d')!.font);
+        await page.locator('canvas:visible').evaluate((canvas: HTMLCanvasElement) => {
+            const context = canvas.getContext('2d')!;
+            const draw = context.drawImage.bind(context);
+            const fill = context.fillRect.bind(context);
+            let firstY: number | undefined;
+            context.fillRect = (x, y, width, height) => {
+                if (x === 0 && y === 0 && height > 100) {
+                    firstY = undefined;
+                }
+                fill(x, y, width, height);
+            };
+            context.drawImage = ((...args: Parameters<typeof draw>) => {
+                if (args.length === 5) {
+                    const y = Number(args[2]);
+                    if (firstY === undefined) {
+                        firstY = y;
+                    } else if (y > firstY) {
+                        canvas.dataset.lineHeight = String(y - firstY);
+                        firstY = Infinity;
+                    }
+                }
+                draw(...args);
+            }) as typeof draw;
+        });
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        const heightInput = page.getByRole('spinbutton', { name: 'Editor line height' });
+        await expect(heightInput).toHaveValue('18');
+        await expect(page.locator('canvas:visible')).toHaveAttribute('data-line-height', '18');
+        await heightInput.fill('28');
+        await expect(page.locator('canvas:visible')).toHaveAttribute('data-line-height', '28');
         let input = page.getByRole('textbox', { name: 'Font family', exact: true });
         const defaultFamily = await input.inputValue();
         expect(defaultFamily).toContain('Cascadia Code');
@@ -1028,12 +1057,14 @@ test('font family updates the canvas and survives reopening settings and restart
         await page.keyboard.press('Escape');
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await expect(input).toHaveValue('Consolas');
+        await expect(page.getByRole('spinbutton', { name: 'Editor line height' })).toHaveValue('28');
         await running.close();
         running = await electron.launch(options);
         page = await running.firstWindow();
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         input = page.getByRole('textbox', { name: 'Font family', exact: true });
         await expect(input).toHaveValue('Consolas');
+        await expect(page.getByRole('spinbutton', { name: 'Editor line height' })).toHaveValue('28');
         await expect.poll(canvasFont).toBe('15px Consolas');
         await expect(input).toHaveCSS('background-color', 'rgb(18, 20, 22)');
         await input.focus();

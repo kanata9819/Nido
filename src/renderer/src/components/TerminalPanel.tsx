@@ -23,7 +23,7 @@ export default function TerminalPanel({
     onClose: () => void;
     onError: (message: string) => void;
 }): React.JSX.Element {
-    const { fontSize, fontFamily, smoothCursor, smoothBlink } = settings;
+    const { fontSize, lineHeight, fontFamily, smoothCursor, smoothBlink } = settings;
     return (
         <section className={styles.terminalPanel} aria-label="Terminal" hidden={!active}>
             <div className={styles.referencesToolbar}>
@@ -45,6 +45,7 @@ export default function TerminalPanel({
                 terminal
                 active={active}
                 fontSize={fontSize}
+                lineHeight={lineHeight}
                 animations={false}
                 smoothCursor={smoothCursor}
                 smoothBlink={smoothBlink}

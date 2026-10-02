@@ -28,7 +28,9 @@ export default function SettingsPanel({
     fontFamily,
     setFontFamily,
     fontSize,
-    setFontSize
+    setFontSize,
+    lineHeight,
+    setLineHeight
 }: SettingsPanelProps): React.JSX.Element {
     return (
         <div
@@ -87,6 +89,25 @@ export default function SettingsPanel({
                     }}
                     onBlur={(event) => {
                         event.target.value = String(fontSize);
+                    }}
+                />
+                <span>px</span>
+            </label>
+            <label>
+                Editor line height{' '}
+                <input
+                    type="number"
+                    min="8"
+                    max="80"
+                    step="1"
+                    defaultValue={lineHeight}
+                    onChange={(event) => {
+                        if (event.target.value && event.target.validity.valid) {
+                            setLineHeight(event.target.valueAsNumber);
+                        }
+                    }}
+                    onBlur={(event) => {
+                        event.target.value = String(lineHeight);
                     }}
                 />
                 <span>px</span>

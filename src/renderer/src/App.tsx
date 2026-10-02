@@ -110,6 +110,7 @@ export default function App(): React.JSX.Element {
         formatOnSave,
         fontFamily,
         fontSize,
+        lineHeight,
         sidebarWidth,
         resizeSidebar
     } = settings;
@@ -491,6 +492,7 @@ export default function App(): React.JSX.Element {
                             terminal={w.kind === 'terminal'}
                             active={w.id === active}
                             fontSize={fontSize}
+                            lineHeight={lineHeight}
                             animations={animations}
                             smoothCursor={smoothCursor}
                             smoothBlink={smoothBlink}

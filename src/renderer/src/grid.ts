@@ -327,7 +327,8 @@ export class Grid {
         fontSize: number,
         fontFamily: string,
         focused: boolean,
-        cursorPosition?: { row: number; column: number }
+        cursorPosition?: { row: number; column: number },
+        lineHeight = Math.ceil(fontSize * 1.65)
     ): { cellWidth: number; cellHeight: number } {
         // The grid paints its entire background; no transparent surface is needed.
         const ctx = canvas.getContext('2d', { alpha: false })!;
@@ -343,7 +344,7 @@ export class Grid {
         const family = fontFamily;
         ctx.font = `${fontSize}px ${family}`;
         const cellWidth = ctx.measureText('M').width;
-        const cellHeight = Math.ceil(fontSize * 1.65);
+        const cellHeight = lineHeight;
         const imageStyle = JSON.stringify([width, dpr, fontSize, fontFamily, cellWidth]);
         if (imageStyle !== this.imageStyle) {
             this.imageStyle = imageStyle;

@@ -238,11 +238,8 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         );
         expect(probe.calls).toBe(2);
         expect(probe.maxOutstanding).toBe(1);
-        const rowHeight = await canvas.evaluate((node) =>
-            Math.ceil(
-                Number((node as HTMLCanvasElement).getContext('2d')!.font.match(/([\d.]+)px/)![1]) *
-                    1.65
-            )
+        const rowHeight = await page.evaluate(() =>
+            Number(localStorage.getItem('nido.lineHeight'))
         );
         expect(probe.lines * rowHeight).toBeCloseTo(0.25, 6);
         await canvas.screenshot({ path: 'test-results/touchpad-fractional-scroll.png' });
@@ -359,7 +356,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
                             .touchpadProbe.completed
                 )
             )
-            .toBe(8);
+            .toBe(6 + Math.ceil(40000 / rowHeight / 1000));
         expect(
             (await running.evaluate(
                 () =>

@@ -14,6 +14,7 @@ interface Props {
     id: string;
     active: boolean;
     fontSize: number;
+    lineHeight: number;
     animations: boolean;
     smoothCursor: boolean;
     smoothBlink: boolean;
@@ -30,6 +31,7 @@ export default function Editor({
     id,
     active,
     fontSize,
+    lineHeight,
     animations,
     smoothCursor,
     smoothBlink,
@@ -52,7 +54,7 @@ export default function Editor({
 
     useEffect(() => {
         wheel.current = { remainder: 0, time: 0 };
-    }, [active, blocked, fontSize]);
+    }, [active, blocked, lineHeight]);
 
     useEffect(() => {
         error.current = onError;
@@ -64,6 +66,7 @@ export default function Editor({
         smoothBlink,
         id,
         fontSize,
+        lineHeight,
         blocked,
         active,
         focusTick,
@@ -154,7 +157,7 @@ export default function Editor({
                 }
 
                 if (!terminal) {
-                    const height = Math.ceil(fontSize * 1.65);
+                    const height = lineHeight;
                     const pixels =
                         event.deltaY *
                         (event.deltaMode === 1
@@ -163,10 +166,7 @@ export default function Editor({
                               ? event.currentTarget.clientHeight
                               : 1);
                     if (Number.isFinite(pixels) && pixels) {
-                        scroll.current(
-                            Math.max(-1000, Math.min(1000, pixels / height)),
-                            scrollFollowCursor
-                        );
+                        scroll.current(pixels / height, scrollFollowCursor);
                     }
                     return;
                 }
@@ -176,7 +176,7 @@ export default function Editor({
                     now - wheel.current.time > 200 ? 0 : wheel.current.remainder,
                     event.deltaY,
                     event.deltaMode,
-                    Math.ceil(fontSize * 1.65),
+                    lineHeight,
                     event.currentTarget.clientHeight
                 );
 

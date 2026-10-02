@@ -93,6 +93,15 @@ export function useEditorSettings() {
         localStorage.setItem('nido.fontSize', String(fontSize));
     }, [fontSize]);
 
+    const [lineHeight, setLineHeight] = useState(() => {
+        const value = Number(localStorage.getItem('nido.lineHeight'));
+        return Number.isInteger(value) && value >= 8 && value <= 80 ? value : 18;
+    });
+
+    useEffect(() => {
+        localStorage.setItem('nido.lineHeight', String(lineHeight));
+    }, [lineHeight]);
+
     return {
         terminalShell,
         setTerminalShell,
@@ -118,6 +127,8 @@ export function useEditorSettings() {
         setFontFamily,
         fontSize,
         setFontSize,
+        lineHeight,
+        setLineHeight,
         sidebarWidth,
         resizeSidebar
     };

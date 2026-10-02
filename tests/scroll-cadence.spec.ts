@@ -64,9 +64,7 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                     first = false;
                     const row = (args[0] as HTMLCanvasElement).dataset?.rowText?.match(/ROW_(\d+)/);
                     if (row) {
-                        const rowHeight = Math.ceil(
-                            Number(ctx.font.match(/([\d.]+)px/)![1]) * 1.65
-                        );
+                        const rowHeight = Number(localStorage.getItem('nido.lineHeight'));
                         const top = (Number(row[1]) - 1) * rowHeight - Number(args[2]);
                         (
                             window as unknown as {
