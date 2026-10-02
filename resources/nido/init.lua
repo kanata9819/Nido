@@ -63,15 +63,21 @@ vim.keymap.set('i', '<Tab>', function()
   return '<Tab>'
 end, { expr = true, silent = true })
 local completion_scheduled
+local completion_context
 local function completion_refresh(pending)
   if vim.g.nido_channel then
     vim.rpcnotify(vim.g.nido_channel, 'nido:completion_refresh', pending, vim.fn.pumvisible() == 1)
   end
 end
-vim.api.nvim_create_autocmd('TextChangedI', {
+vim.api.nvim_create_autocmd({ 'TextChangedI', 'TextChangedP' }, {
   callback = function(event)
     local buffer = event.buf
     local tick = vim.api.nvim_buf_get_changedtick(buffer)
+    -- complete() changes changedtick too; compare the actual text/cursor to avoid a refresh loop.
+    local context = {buffer, vim.fn.line('.'), vim.fn.col('.'), vim.api.nvim_get_current_line()}
+    if vim.deep_equal(completion_context, context) then return end
+    completion_context = context
+    completion_scheduled = nil
     if not vim.api.nvim_get_current_line():sub(1, vim.fn.col('.') - 1):match('[%w_\128-\255]$') then return end
     if #vim.lsp.get_clients({bufnr=buffer, method='textDocument/completion'}) == 0 then return end
     local scheduled = {}
@@ -83,10 +89,12 @@ vim.api.nvim_create_autocmd('TextChangedI', {
       completion_scheduled = nil
       if vim.api.nvim_buf_is_valid(buffer) and vim.api.nvim_get_current_buf() == buffer
           and vim.api.nvim_buf_get_changedtick(buffer) == tick and vim.fn.mode() == 'i'
-          and vim.fn.pumvisible() == 0
           and #vim.lsp.get_clients({bufnr=buffer, method='textDocument/completion'}) > 0 then
-        -- Ordinary text uses an invoked request: servers may reject letters as trigger characters.
-        vim.lsp.completion.get()
+        -- Native completion otherwise filters the old response while typing, but re-requests on BS.
+        -- Cancel without accepting so get() can replace the list for the current prefix.
+        local cancel = vim.fn.pumvisible() == 1 and '<C-e>' or ''
+        local keys = vim.api.nvim_replace_termcodes(cancel .. '<Cmd>lua vim.lsp.completion.get()<CR>', true, false, true)
+        vim.api.nvim_feedkeys(keys, 'n', false)
       else
         completion_refresh(false)
       end

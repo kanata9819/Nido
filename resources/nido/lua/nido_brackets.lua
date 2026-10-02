@@ -39,6 +39,26 @@ vim.keymap.set('i', '<BS>', function()
   return '<BS>'
 end, {expr=true})
 
+vim.keymap.set('i', '<CR>', function()
+  local line = api.nvim_get_current_line()
+  local column = vim.fn.col('.') - 1
+  local before, after = line:sub(1, column), line:sub(column + 1)
+  if vim.bo.buftype ~= '' or not before:match('{%s*$') or not after:match('^%s*}')
+      or ignored(vim.fn.line('.'), column - #(before:match('%s*$'))) then
+    return '<CR>'
+  end
+  local outer = line:match('^%s*')
+  local width = vim.fn.indent('.') + vim.fn.shiftwidth()
+  local inner = vim.bo.expandtab and string.rep(' ', width)
+      or string.rep('\t', math.floor(width / vim.bo.tabstop)) .. string.rep(' ', width % vim.bo.tabstop)
+  local row = vim.fn.line('.') - 1
+  local cancel = vim.fn.pumvisible() == 1 and '<C-e>' or ''
+  return cancel .. string.format(
+    '<Cmd>lua vim.api.nvim_buf_set_text(0, %d, %d, %d, %d, {"", %q, %q}); vim.api.nvim_win_set_cursor(0, {%d, %d})<CR>',
+    row, column - #(before:match('%s*$')), row, column + #(after:match('^%s*')),
+    inner, outer, row + 2, #inner)
+end, {expr=true})
+
 local function set_colors()
   for level, color in ipairs(colors) do
     api.nvim_set_hl(0, 'NidoBracket' .. level, { fg = color })

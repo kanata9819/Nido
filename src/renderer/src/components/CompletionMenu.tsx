@@ -188,8 +188,10 @@ export default function CompletionMenu({
         element.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
         anchor.setAttribute('aria-autocomplete', 'list');
         anchor.setAttribute('aria-controls', listId);
-        if (menu.selected >= 0)
+        if (menu.selected >= 0) {
             anchor.setAttribute('aria-activedescendant', `${listId}-${menu.selected}`);
+        }
+
         const observer = new ResizeObserver(position);
         observer.observe(host);
         observer.observe(element);

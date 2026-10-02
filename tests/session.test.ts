@@ -1191,6 +1191,115 @@ test('typing brackets inserts pairs, skips closing brackets and deletes empty pa
     }
 });
 
+test('Enter inside braces opens an indented body and aligns the closing brace', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-brace-enter-'));
+    let session: Session | undefined;
+    try {
+        session = await Session.create(root, () => {});
+        const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
+        for (const [filetype, line, column, expandtab, expected] of [
+            ['rust', 'fn main() {}', 11, true, ['fn main() {', '    ', '}']],
+            ['typescript', '  if (true) {  }', 14, true, ['  if (true) {', '    ', '  }']],
+            ['', '{}', 1, true, ['{', '  ', '}']],
+            ['', '\t{}', 2, false, ['\t{', '\t\t', '\t}']]
+        ] as const) {
+            await session.input('<Esc>');
+            await session.client.request('nvim_exec_lua', [
+                `local ft, line, col, spaces = ...
+vim.bo.filetype = ft
+vim.bo.expandtab = spaces
+vim.bo.shiftwidth = ft == 'rust' and 4 or 2
+vim.bo.tabstop = 2
+vim.api.nvim_buf_set_lines(0, 0, -1, false, {line})
+vim.api.nvim_win_set_cursor(0, {1, col})`,
+                [filetype, line, column, expandtab]
+            ]);
+            await session.input('i<CR>');
+            assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)'), expected);
+            assert.deepEqual(await lua('return vim.api.nvim_win_get_cursor(0)'), [2, expected[1].length]);
+            await session.input('body');
+            assert.equal(await lua('return vim.api.nvim_get_current_line()'), expected[1] + 'body');
+        }
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test('completion refreshes the same current-prefix list after typing and Backspace', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-completion-edits-'));
+    let session: Session | undefined;
+    try {
+        session = await Session.create(root, () => {});
+        const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
+        await lua(`vim.g.completion_prefixes = {}
+vim.lsp.start({
+  name = 'completion-fixture',
+  cmd = function(dispatchers)
+    local serial = 0
+    local closed = false
+    return {
+      request = function(method, params, callback)
+        serial = serial + 1
+        local result
+        if method == 'initialize' then
+          result = {capabilities = {completionProvider = {}, textDocumentSync = 1}}
+        elseif method == 'textDocument/completion' then
+          local prefix = vim.api.nvim_get_current_line():sub(1, params.position.character)
+          local prefixes = vim.g.completion_prefixes
+          table.insert(prefixes, prefix)
+          vim.g.completion_prefixes = prefixes
+          local labels = prefix == 'printl' and {'println', 'printLine'} or {'printLegacy'}
+          result = {isIncomplete = false, items = {}}
+          for _, label in ipairs(labels) do
+            table.insert(result.items, {label = label, kind = 3})
+          end
+        end
+        vim.defer_fn(function() callback(nil, result) end, 10)
+        return true, serial
+      end,
+      notify = function() return true end,
+      is_closing = function() return closed end,
+      terminate = function() closed = true; dispatchers.on_exit(0, 0) end,
+    }
+  end,
+})
+assert(vim.wait(2000, function()
+  local client = vim.lsp.get_clients({bufnr=0})[1]
+  return client and client.initialized
+end, 10))`);
+        const labels = async (): Promise<string[]> =>
+            (await lua("return vim.tbl_map(function(item) return item.abbr end, vim.fn.complete_info({'items'}).items)")) as string[];
+        const waitFor = async (expected: string[]): Promise<void> => {
+            for (let attempt = 0; attempt < 100; attempt++) {
+                if (JSON.stringify(await labels()) === JSON.stringify(expected)) return;
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+            assert.deepEqual(await labels(), expected, JSON.stringify(await lua('return {vim.g.completion_prefixes, vim.api.nvim_get_current_line(), vim.fn.mode()}')));
+        };
+        await session.input('ip');
+        await waitFor(['printLegacy']);
+        for (const character of 'rintl') {
+            await session.input(character);
+            await new Promise((resolve) => setTimeout(resolve, 80));
+        }
+        await waitFor(['printLine', 'println']);
+        const typed = await labels();
+        await session.input('n');
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        await session.input('<BS>');
+        await waitFor(typed);
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'printl');
+        const requests = await lua('return #vim.g.completion_prefixes');
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        assert.deepEqual(await labels(), typed);
+        assert.equal(await lua('return #vim.g.completion_prefixes'), requests);
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('bracket pairs share depth colors, ignore strings and comments, and refresh after edits', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-brackets-'));
     let session: Session | undefined;
