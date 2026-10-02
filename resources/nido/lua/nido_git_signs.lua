@@ -27,17 +27,15 @@ function M.refresh(buffer)
   end
   local function render(base)
     if not valid() then return end
-    api.nvim_buf_clear_namespace(buffer, namespace, 0, -1)
-    if not base then vim.cmd('redraw'); return end
     local lines = api.nvim_buf_get_lines(buffer, 0, -1, false)
     local text = table.concat(lines, '\n') .. (vim.bo[buffer].endofline and '\n' or '')
     if #lines == 1 and lines[1] == '' then text = '' end
     -- ponytail: diff the whole buffer; cache the base and diff incrementally if large files become slow.
-    local hunks = vim.diff(base, text, { result_type = 'indices' })
+    local hunks = base and vim.diff(base, text, { result_type = 'indices' }) or {}
+    local wanted = {}
     local function sign(row, group, symbol)
-      api.nvim_buf_set_extmark(buffer, namespace, math.max(0, math.min(row, #lines - 1)), 0, {
-        sign_text = symbol, sign_hl_group = group, priority = 5,
-      })
+      row = math.max(0, math.min(row, #lines - 1))
+      wanted[row .. ':' .. group .. ':' .. symbol] = {row=row, group=group, symbol=symbol}
     end
     for _, hunk in ipairs(hunks) do
       local removed, start, added = hunk[2], hunk[3], hunk[4]
@@ -49,7 +47,25 @@ function M.refresh(buffer)
         sign(added == 0 and start or start - 1 + added, 'NidoGitDeleted', '▸')
       end
     end
-    vim.cmd('redraw')
+    local stale = {}
+    for _, mark in ipairs(api.nvim_buf_get_extmarks(buffer, namespace, 0, -1, {details=true})) do
+      local details = mark[4]
+      local key = mark[2] .. ':' .. details.sign_hl_group .. ':' .. vim.trim(details.sign_text)
+      if wanted[key] and not details.invalid then wanted[key] = nil
+      else table.insert(stale, mark[1]) end
+    end
+    local changed = #stale > 0
+    local keys = vim.tbl_keys(wanted)
+    table.sort(keys)
+    for _, key in ipairs(keys) do
+      local item = wanted[key]
+      changed = true
+      api.nvim_buf_set_extmark(buffer, namespace, item.row, 0, {
+        sign_text=item.symbol, sign_hl_group=item.group, priority=5,
+      })
+    end
+    for _, id in ipairs(stale) do api.nvim_buf_del_extmark(buffer, namespace, id) end
+    if changed then vim.cmd('redraw') end
   end
   local function git(directory, arguments, callback)
     local command = { 'git', '--no-pager', '--literal-pathspecs', '-C', directory }

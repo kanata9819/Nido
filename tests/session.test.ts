@@ -1595,6 +1595,13 @@ vim.cmd('redraw!')`,
                 .map((cell) => grid.highlights.get(cell.highlight)?.foreground);
         assert.deepEqual(ink(1), [0x0078d4]);
         assert.deepEqual(ink(3), [0x2ea043]);
+        const marks = () =>
+            lua(`return vim.api.nvim_buf_get_extmarks(0,
+            vim.api.nvim_get_namespaces().nido_git_signs, 0, -1, {details=true})`);
+        const beforeSave = await marks();
+        await session.save();
+        await lua('vim.wait(500)');
+        assert.deepEqual(await marks(), beforeSave, 'saving unchanged signs preserves their IDs');
         await edit(['second', 'third']);
         await signs([[0, 'NidoGitDeleted']]);
         await lua('return 1');
@@ -1644,6 +1651,62 @@ vim.cmd('redraw!')`,
     } finally {
         await session?.stop();
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
+test('CodeLens keeps unchanged and edit-shifted marks and updates only changed labels', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-stable-lenses-'));
+    let session: Session | undefined;
+    try {
+        session = await Session.create(root, () => {});
+        await session.client.request('nvim_exec_lua', [
+            `
+local api = vim.api
+api.nvim_buf_set_lines(0, 0, -1, false, {'fn main() {}', '', '#[test] fn sample() {}'})
+vim.bo.filetype = 'rust'
+local module = require('nido_runnables')
+local namespace = api.nvim_get_namespaces().nido_runnables
+local items = {}
+local function item(row, command)
+  return {kind='cargo', args={cargoArgs={command}}, location={
+    targetSelectionRange={start={line=row}}, targetRange={start={line=row}, ['end']={line=row}},
+  }}
+end
+local original = vim.lsp.get_clients
+vim.lsp.get_clients = function(options)
+  if options and options.name == 'rust_analyzer' then
+    return {{request=function(_, _, _, callback) callback(nil, items) end}}
+  end
+  return original(options)
+end
+local ok, err = pcall(function()
+  local function marks() return api.nvim_buf_get_extmarks(0, namespace, 0, -1, {details=true}) end
+  items = {item(0, 'run'), item(2, 'test')}
+  module.refresh(0)
+  local before = marks()
+  assert(#before == 2)
+  module.refresh(0)
+  assert(vim.deep_equal(marks(), before), 'identical results must preserve extmark IDs')
+  api.nvim_buf_set_lines(0, 0, 0, false, {'// inserted'})
+  items = {item(1, 'run'), item(3, 'test')}
+  local shifted = marks()
+  module.refresh(0)
+  assert(vim.deep_equal(marks(), shifted), 'reuse marks that moved with editing')
+  items = {item(1, 'test')}
+  module.refresh(0)
+  local changed = marks()
+  assert(#changed == 1 and changed[1][2] == 1)
+  assert(changed[1][4].virt_lines[1][1][1] == '  ▶ Run Tests')
+  assert(changed[1][1] ~= before[1][1], 'changed label must be replaced')
+end)
+vim.lsp.get_clients = original
+assert(ok, err)
+`,
+            []
+        ]);
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
     }
 });
 

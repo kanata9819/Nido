@@ -50,7 +50,6 @@ function M.refresh(buffer)
     -- Cargo reloads can temporarily return no candidates for unchanged code.
     if #items == 0 and candidates[buffer] and candidates[buffer].tick == tick then return end
     candidates[buffer] = {tick=tick, items=items}
-    vim.api.nvim_buf_clear_namespace(buffer, namespace, 0, -1)
     table.sort(items, function(a, b)
       return range_size(a) < range_size(b)
     end)
@@ -59,9 +58,8 @@ function M.refresh(buffer)
       if item.kind == 'cargo' and item.location then
         local row = item.location.targetSelectionRange.start.line
         if not rows[row] then
-          rows[row] = true
           local label = item.args.cargoArgs[1] == 'test' and 'Run Tests' or 'Run'
-          vim.api.nvim_buf_set_extmark(buffer, namespace, row, 0, {
+          rows[row] = {
             virt_lines={{
               {'  ▶ ' .. label, 'NidoCodeLens'},
               {' (gR)', 'NidoCodeLensHint'},
@@ -69,10 +67,22 @@ function M.refresh(buffer)
               {' (gD)', 'NidoCodeLensHint'},
             }},
             virt_lines_above=true,
-          })
+          }
         end
       end
     end
+    local stale = {}
+    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buffer, namespace, 0, -1, {details=true})) do
+      local options = rows[mark[2]]
+      local details = mark[4]
+      if options and not details.invalid and details.virt_lines_above
+        and vim.deep_equal(details.virt_lines, options.virt_lines) then rows[mark[2]] = nil
+      else table.insert(stale, mark[1]) end
+    end
+    for row, options in pairs(rows) do
+      vim.api.nvim_buf_set_extmark(buffer, namespace, row, 0, options)
+    end
+    for _, id in ipairs(stale) do vim.api.nvim_buf_del_extmark(buffer, namespace, id) end
     reveal_first_line(buffer)
   end)
 end
