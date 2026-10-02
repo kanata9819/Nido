@@ -1,14 +1,18 @@
 local M = {}
 
 local function json(path)
-  if vim.fn.filereadable(path) == 0 then return nil end
+  if vim.fn.filereadable(path) == 0 then
+    return nil
+  end
   return vim.json.decode(table.concat(vim.fn.readfile(path), '\n'))
 end
 
 function M.setup()
   local path = vim.env.NIDO_LSP_CONFIG or vim.fs.joinpath(vim.fn.stdpath('config'), 'lsp.json')
   local ok, settings = pcall(json, path)
-  if not ok then error('Invalid LSP configuration: ' .. path .. '\n' .. tostring(settings)) end
+  if not ok then
+    error('Invalid LSP configuration: ' .. path .. '\n' .. tostring(settings))
+  end
   local option = (settings or {}).typescript or {}
   local mode = option.server or 'auto'
   assert(vim.tbl_contains({'auto', 'native', 'legacy'}, mode), 'typescript.server must be auto, native or legacy')
@@ -46,9 +50,13 @@ function M.setup()
           end
         end
       end
-      if command or tsserver then break end
+      if command or tsserver then
+        break
+      end
       local parent = vim.fs.dirname(root)
-      if parent == root then break end
+      if parent == root then
+        break
+      end
       root = parent
     end
     if not command and not tsserver and mode ~= 'legacy' then
@@ -56,7 +64,10 @@ function M.setup()
         if vim.fn.executable(bin) == 1 then
           local result = vim.system({bin, '--version'}, {text=true, env=environment}):wait(2000)
           local major = tonumber((result.stdout or ''):match('(%d+)%.')) or 0
-          if result.code == 0 and major >= 7 then command = {bin, '--lsp', '--stdio'}; break end
+          if result.code == 0 and major >= 7 then
+            command = {bin, '--lsp', '--stdio'}
+            break
+          end
         end
       end
     end

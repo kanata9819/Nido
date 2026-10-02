@@ -114,8 +114,12 @@ export class Grid {
     }
 
     rowAt(y: number): number {
-        if (y < 0 || y >= this.contentHeight) return -1;
-        if (y + this.scrollPixels < 0) return -1;
+        if (y < 0 || y >= this.contentHeight) {
+            return -1;
+        }
+        if (y + this.scrollPixels < 0) {
+            return -1;
+        }
         let row = 0;
         while (row < this.rows - 1 && this.rowTop(row + 1) <= y + this.scrollPixels) row++;
         return row < this.rows - 1 ? row : -1;
@@ -215,7 +219,9 @@ export class Grid {
                         if (row && this.upperRows.includes(row)) {
                             row = this.cells[Number(args[1])] = row.slice();
                         }
-                        if (row) this.rowImages.delete(row);
+                        if (row) {
+                            this.rowImages.delete(row);
+                        }
                         let column = Number(args[2]);
                         let highlight = 0;
                         for (const cell of args[3] as [string, number?, number?][]) {
@@ -398,7 +404,9 @@ export class Grid {
         ctx.textBaseline = 'alphabetic';
         for (let row = this.scrollPixels < 0 ? -this.upperRows.length : 0; row < this.rows; row++) {
             const cells = row < 0 ? this.upperRows[this.upperRows.length + row] : this.cells[row];
-            if (row < 0 && this.rowY(row + 1) <= 0) continue;
+            if (row < 0 && this.rowY(row + 1) <= 0) {
+                continue;
+            }
             const rowHeight = this.rowTop(row + 1) - this.rowTop(row);
             ctx.save();
             if (row < this.rows - 1) {
@@ -514,13 +522,14 @@ export class Grid {
                     [guide.opening, top],
                     [guide.closing, bottom]
                 ]) {
-                    if (column >= 0)
+                    if (column >= 0) {
                         ctx.fillRect(
                             x,
                             y,
                             Math.max(1 / dpr, snap((column + 1) * cellWidth) - x),
                             1 / dpr
                         );
+                    }
                 }
             }
         }

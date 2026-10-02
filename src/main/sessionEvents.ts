@@ -135,7 +135,9 @@ export class SessionEvents {
                 const level = args[1];
                 if (typeof level === 'number') {
                     // Neovim log levels: TRACE=0, DEBUG=1, INFO=2, WARN=3, ERROR=4.
-                    if (level < 2) break;
+                    if (level < 2) {
+                        break;
+                    }
                     this.sendToRenderer({
                         type: 'notification',
                         id: this.workspaceId,

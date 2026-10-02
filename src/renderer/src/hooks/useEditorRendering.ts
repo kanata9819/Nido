@@ -125,14 +125,19 @@ export function useEditorRendering({
 
         const finishScroll = (): void => {
             // Invoke replies and redraw notifications can arrive in different turns.
-            if (!scrollPending || !scrollAcknowledged || !scrollCompleted) return;
+            if (!scrollPending || !scrollAcknowledged || !scrollCompleted) {
+                return;
+            }
             scrollPending = false;
-            if (!disposed && (queuedScroll || prefetchNeeded)) schedule();
+            if (!disposed && (queuedScroll || prefetchNeeded)) {
+                schedule();
+            }
         };
 
         const flushScroll = (): void => {
-            if (scrollPending || prefetchPending || !queuedScroll || !scrollEnabledRef.current)
+            if (scrollPending || prefetchPending || !queuedScroll || !scrollEnabledRef.current) {
                 return;
+            }
             sentScroll = Math.max(-1000, Math.min(1000, queuedScroll));
             queuedScroll -= sentScroll;
             scrollPending = true;
@@ -155,8 +160,9 @@ export function useEditorRendering({
         };
 
         scrollRef.current = (lines, follow): void => {
-            if (lines < 0 && !prefetchPending && gridRef.current.needsUpperRows)
+            if (lines < 0 && !prefetchPending && gridRef.current.needsUpperRows) {
                 prefetchNeeded = true;
+            }
             queuedScroll += lines;
             scrollFollow = follow;
             directScroll = true;
@@ -192,11 +198,15 @@ export function useEditorRendering({
                 scrollCompletionRef.current = window.nido
                     .prefetchScroll(id)
                     .catch((error) => {
-                        if (!disposed) errorRef.current(String(error));
+                        if (!disposed) {
+                            errorRef.current(String(error));
+                        }
                     })
                     .finally(() => {
                         prefetchPending = false;
-                        if (!disposed && queuedScroll) schedule();
+                        if (!disposed && queuedScroll) {
+                            schedule();
+                        }
                     });
             }
             flushScroll();
@@ -385,7 +395,9 @@ export function useEditorRendering({
         };
 
         const schedule = (): void => {
-            if (!frame) frame = requestAnimationFrame(render);
+            if (!frame) {
+                frame = requestAnimationFrame(render);
+            }
         };
 
         paintRef.current = schedule;
@@ -451,7 +463,9 @@ export function useEditorRendering({
             if (event.type === 'redraw' && event.id === id) {
                 // Editing can shift grid rows without scrolling the viewport.
                 const edited = event.events.some(([name]) => name === 'nido_edit');
-                if (edited) stopMotion();
+                if (edited) {
+                    stopMotion();
+                }
                 const pixelOffsets = event.events.flatMap(([name, ...calls]) =>
                     name === 'nido_pixel_scroll' ? calls : []
                 );

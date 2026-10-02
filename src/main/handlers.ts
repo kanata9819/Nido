@@ -42,8 +42,9 @@ export function registerHandlers({
     }
 
     function shellChoice(value: unknown = 'auto'): TerminalShell {
-        if (!terminalShells.includes(value as TerminalShell))
+        if (!terminalShells.includes(value as TerminalShell)) {
             throw new Error('Invalid terminal shell.');
+        }
         return value as TerminalShell;
     }
 
@@ -118,7 +119,9 @@ export function registerHandlers({
         return session(id).setRelativeLineNumbers(enabled);
     });
     handle('editorConfig', (id, enabled) => {
-        if (typeof enabled !== 'boolean') throw new Error('Invalid EditorConfig setting.');
+        if (typeof enabled !== 'boolean') {
+            throw new Error('Invalid EditorConfig setting.');
+        }
         return session(id).setEditorConfig(enabled);
     });
     handle('openDocumentation', (value) => {
@@ -154,19 +157,24 @@ export function registerHandlers({
         if (action === 'rename' || action === 'delete' || action === 'copy') {
             const source = await current.path(text(path));
             for (const open of sessions.values()) {
-                if (open === current) continue;
+                if (open === current) {
+                    continue;
+                }
                 if (
                     open.state.buffers.some((buffer) => {
-                        if (!buffer.name) return false;
+                        if (!buffer.name) {
+                            return false;
+                        }
                         const child = relative(source, buffer.name);
                         return (
                             child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child)
                         );
                     })
-                )
+                ) {
                     throw new Error(
                         'Close this file or folder in the other workspace session first.'
                     );
+                }
             }
         }
         await current.fileAction(
@@ -176,8 +184,9 @@ export function registerHandlers({
             (file) => shell.trashItem(file)
         );
         for (const open of sessions.values()) {
-            if (open.workspace.root === current.workspace.root)
+            if (open.workspace.root === current.workspace.root) {
                 send({ type: 'filesChanged', id: open.workspace.id });
+            }
         }
     });
     handle('openReference', (id, index, version) =>

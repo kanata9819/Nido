@@ -1,10 +1,14 @@
 local M = {}
 
 function M.detect()
-  if vim.bo.buftype ~= '' then return nil end
+  if vim.bo.buftype ~= '' then
+    return nil
+  end
   local tick, format = vim.b.changedtick, vim.bo.fileformat
   local cached = vim.b.nido_eol
-  if cached and cached.tick == tick and cached.format == format and cached.eol == vim.bo.endofline then return cached.label end
+  if cached and cached.tick == tick and cached.format == format and cached.eol == vim.bo.endofline then
+    return cached.label
+  end
   local label = format == 'dos' and 'CRLF' or format == 'mac' and 'CR' or 'LF'
   -- In a Unix buffer, CRLF leaves a literal CR at the end of the line.
   if format == 'unix' then
@@ -12,10 +16,16 @@ function M.detect()
     local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
     for i, line in ipairs(lines) do
       if i < #lines or vim.bo.endofline then
-        if line:sub(-1) == '\r' then cr = true else lf = true end
+        if line:sub(-1) == '\r' then
+          cr = true
+        else
+          lf = true
+        end
       end
     end
-    if cr then label = lf and 'Mixed' or 'CRLF' end
+    if cr then
+      label = lf and 'Mixed' or 'CRLF'
+    end
   end
   vim.b.nido_eol = {tick=tick, format=format, eol=vim.bo.endofline, label=label}
   return label
@@ -35,7 +45,9 @@ function M.convert(format)
         changed = true
       end
     end
-    if changed then vim.api.nvim_buf_set_lines(0, 0, -1, false, lines) end
+    if changed then
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+    end
   end
   vim.bo.fileformat = format == 'LF' and 'unix' or 'dos'
   vim.bo.fixendofline = false

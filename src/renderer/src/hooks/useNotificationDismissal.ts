@@ -8,9 +8,13 @@ export function useNotificationDismissal(
     const [fading, setFading] = useState(false);
     useEffect(() => {
         setFading(false);
-        if (!notice) return;
+        if (!notice) {
+            return;
+        }
         const onKey = (event: KeyboardEvent): void => {
-            if (event.key === 'Escape') dismiss();
+            if (event.key === 'Escape') {
+                dismiss();
+            }
         };
         document.addEventListener('keydown', onKey);
         let fadeTimer: ReturnType<typeof setTimeout> | undefined;

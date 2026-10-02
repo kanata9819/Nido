@@ -159,7 +159,9 @@ function Sidebar({
                 onKeyDown={(event) => {
                     const pending = centerPrefix.current;
                     centerPrefix.current = false;
-                    if (event.nativeEvent.isComposing || event.altKey || event.metaKey) return;
+                    if (event.nativeEvent.isComposing || event.altKey || event.metaKey) {
+                        return;
+                    }
                     if (event.key === 'z' && !event.ctrlKey && !event.shiftKey && !event.repeat) {
                         event.preventDefault();
                         event.stopPropagation();
@@ -202,7 +204,9 @@ function Sidebar({
                     if (command) {
                         event.preventDefault();
                         event.stopPropagation();
-                        if (!command.disabled) command.run();
+                        if (!command.disabled) {
+                            command.run();
+                        }
                         return;
                     }
                     createExplorerKeyHandler({

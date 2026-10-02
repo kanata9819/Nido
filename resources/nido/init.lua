@@ -75,17 +75,25 @@ vim.api.nvim_create_autocmd({ 'TextChangedI', 'TextChangedP' }, {
     local tick = vim.api.nvim_buf_get_changedtick(buffer)
     -- complete() changes changedtick too; compare the actual text/cursor to avoid a refresh loop.
     local context = {buffer, vim.fn.line('.'), vim.fn.col('.'), vim.api.nvim_get_current_line()}
-    if vim.deep_equal(completion_context, context) then return end
+    if vim.deep_equal(completion_context, context) then
+      return
+    end
     completion_context = context
     completion_scheduled = nil
-    if not vim.api.nvim_get_current_line():sub(1, vim.fn.col('.') - 1):match('[%w_\128-\255]$') then return end
-    if #vim.lsp.get_clients({bufnr=buffer, method='textDocument/completion'}) == 0 then return end
+    if not vim.api.nvim_get_current_line():sub(1, vim.fn.col('.') - 1):match('[%w_\128-\255]$') then
+      return
+    end
+    if #vim.lsp.get_clients({bufnr=buffer, method='textDocument/completion'}) == 0 then
+      return
+    end
     local scheduled = {}
     completion_scheduled = scheduled
     -- Backspace ends native complete() before this new request; keep the GUI card mounted.
     completion_refresh(true)
     vim.defer_fn(function()
-      if completion_scheduled ~= scheduled then return end
+      if completion_scheduled ~= scheduled then
+        return
+      end
       completion_scheduled = nil
       if vim.api.nvim_buf_is_valid(buffer) and vim.api.nvim_get_current_buf() == buffer
           and vim.api.nvim_buf_get_changedtick(buffer) == tick and vim.fn.mode() == 'i'
@@ -104,16 +112,22 @@ vim.api.nvim_create_autocmd({ 'TextChangedI', 'TextChangedP' }, {
 vim.api.nvim_create_autocmd('LspRequest', {
   callback = function(event)
     if event.buf ~= vim.api.nvim_get_current_buf()
-        or event.data.request.method ~= 'textDocument/completion' then return end
+        or event.data.request.method ~= 'textDocument/completion' then
+      return
+    end
     if event.data.request.type == 'pending' then
       completion_refresh(true)
     else
       vim.schedule(function()
-        if completion_scheduled then return end
+        if completion_scheduled then
+          return
+        end
         for _, client in ipairs(vim.lsp.get_clients({bufnr=0, method='textDocument/completion'})) do
           for _, request in pairs(client.requests) do
             if request.bufnr == event.buf and request.method == 'textDocument/completion'
-                and request.type == 'pending' then return end
+                and request.type == 'pending' then
+              return
+            end
           end
         end
         completion_refresh(false)
@@ -154,7 +168,9 @@ require('nido_git_signs')
 for _, name in ipairs({'Normal', 'NormalNC', 'LineNr', 'CursorLineNr', 'SignColumn', 'EndOfBuffer'}) do
   local attrs = vim.api.nvim_get_hl(0, {name=name, link=false})
   attrs.bg = '#121212'
-  if name == 'EndOfBuffer' then attrs.fg = '#121212' end
+  if name == 'EndOfBuffer' then
+    attrs.fg = '#121212'
+  end
   vim.api.nvim_set_hl(0, name, attrs)
 end
 -- Native Rust syntax and LSP use these groups without a Rust Tree-sitter parser.
@@ -220,7 +236,9 @@ vim.api.nvim_create_autocmd('LspAttach', {
 -- Prefer independently updated project/external language servers, with a bundled fallback.
 if vim.env.NIDO_NODE and vim.env.NIDO_LANGUAGES then
   local ok, err = pcall(function() require('nido_typescript').setup() end)
-  if not ok then vim.schedule(function() vim.notify(tostring(err), vim.log.levels.ERROR) end) end
+  if not ok then
+    vim.schedule(function() vim.notify(tostring(err), vim.log.levels.ERROR) end)
+  end
 end
 
 -- Rust uses the installed toolchain matching the workspace.

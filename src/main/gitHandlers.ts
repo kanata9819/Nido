@@ -77,7 +77,9 @@ export function registerGitHandlers({
                 throw new Error('Invalid Git selection.');
             }
             const result = await action(session(id).workspace.root, text(path), staged);
-            if (name === 'gitStage') await refreshGitState();
+            if (name === 'gitStage') {
+                await refreshGitState();
+            }
             return result;
         });
     }

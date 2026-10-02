@@ -135,8 +135,11 @@ export function useKeyboardShortcuts({
             (!panel || panel === 'markdown')
         ) {
             consume();
-            if (panel === 'markdown') focusEditor();
-            else showPanel('markdown');
+            if (panel === 'markdown') {
+                focusEditor();
+            } else {
+                showPanel('markdown');
+            }
             return;
         }
         if (panel) {

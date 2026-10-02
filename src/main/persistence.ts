@@ -59,7 +59,9 @@ export async function readFavorites(path: string): Promise<FavoriteWorkspace[]> 
     try {
         data = JSON.parse(await readFile(path, 'utf8'));
     } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+            return [];
+        }
         throw error;
     }
     if (

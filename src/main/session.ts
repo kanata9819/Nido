@@ -217,7 +217,9 @@ export class Session {
     }
 
     async openTerminal(shell = 'auto'): Promise<Session> {
-        if (this.stopped) throw new Error('Workspace was closed.');
+        if (this.stopped) {
+            throw new Error('Workspace was closed.');
+        }
         if (this.workspace.kind === 'terminal') {
             return this;
         }
@@ -264,14 +266,18 @@ export class Session {
 
     async markdownPreview(): Promise<string> {
         return this.client.request('nvim_exec_lua', [
-            `if vim.bo.filetype ~= 'markdown' then error('Open a Markdown file to preview.') end
+            `if vim.bo.filetype ~= 'markdown' then
+  error('Open a Markdown file to preview.')
+end
 return table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\\n')`,
             []
         ]);
     }
 
     async setRelativeLineNumbers(enabled: boolean): Promise<void> {
-        if (this.workspace.kind === 'terminal') return;
+        if (this.workspace.kind === 'terminal') {
+            return;
+        }
         await this.client.request('nvim_exec_lua', [
             `local enabled = ...
 vim.go.relativenumber = enabled
@@ -285,7 +291,9 @@ end`,
     }
 
     async setEditorConfig(enabled: boolean): Promise<void> {
-        if (this.workspace.kind === 'terminal') return;
+        if (this.workspace.kind === 'terminal') {
+            return;
+        }
         await this.client.request('nvim_exec_lua', [
             "require('nido_editorconfig').set_enabled(...)",
             [enabled]
@@ -366,7 +374,9 @@ end`,
                 mode: string;
                 blocking: boolean;
             };
-            if ((mode.mode !== 'n' && mode.mode !== 'i') || mode.blocking) return;
+            if ((mode.mode !== 'n' && mode.mode !== 'i') || mode.blocking) {
+                return;
+            }
             this.events.beginScrollBatch();
             try {
                 await this.client.request('nvim_exec_lua', [
@@ -433,7 +443,9 @@ end`,
         if vim.bo[b].buflisted and vim.bo[b].buftype == '' and name ~= '' then
           local pos = vim.api.nvim_buf_get_mark(b, '"')
           local wins = vim.fn.win_findbuf(b)
-          if #wins > 0 then pos = vim.api.nvim_win_get_cursor(wins[1]) end
+          if #wins > 0 then
+            pos = vim.api.nvim_win_get_cursor(wins[1])
+          end
           table.insert(files, {path=name, line=math.max(1,pos[1]), column=pos[2]})
         end
       end
@@ -475,7 +487,9 @@ end`,
         }
         await this.client.request('nvim_exec_lua', [
             `local b = vim.fn.bufnr(...)
-      if b > 0 then vim.api.nvim_set_current_buf(b) end`,
+      if b > 0 then
+        vim.api.nvim_set_current_buf(b)
+      end`,
             [saved.current]
         ]);
         return errors;
@@ -487,14 +501,22 @@ end`,
 
     async refreshGitSigns(): Promise<void> {
         await this.client.request('nvim_exec_lua', [
-            "local signs = require('nido_git_signs'); if signs.refresh_all then signs.refresh_all() end",
+            `local signs = require('nido_git_signs')
+if signs.refresh_all then
+  signs.refresh_all()
+end`,
             []
         ]);
     }
 
     async modified(): Promise<boolean> {
         return (await this.client.request('nvim_exec_lua', [
-            "for _,b in ipairs(vim.api.nvim_list_bufs()) do if (vim.bo[b].buftype == '' or vim.bo[b].buftype == 'acwrite') and vim.bo[b].modified then return true end end return false",
+            `for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+  if (vim.bo[buffer].buftype == '' or vim.bo[buffer].buftype == 'acwrite') and vim.bo[buffer].modified then
+    return true
+  end
+end
+return false`,
             []
         ])) as boolean;
     }
@@ -601,7 +623,9 @@ require('nido_scroll').center()`,
             `local path, before, after = ...
 local language = vim.filetype.match({filename=path})
 local function highlight(source)
-  if source == '' then return {} end
+  if source == '' then
+    return {}
+  end
   return require('nido_references').highlight_text(vim.split(source, '\\n', {plain=true}), language)
 end
 return {highlight(before), highlight(after)}`,

@@ -97,7 +97,9 @@ export default function DebugPanel({
                     }
                     return;
                 }
-                if ((event.target as HTMLElement).tagName === 'PRE') return;
+                if ((event.target as HTMLElement).tagName === 'PRE') {
+                    return;
+                }
                 if (
                     event.ctrlKey ||
                     event.altKey ||
@@ -123,21 +125,30 @@ export default function DebugPanel({
                         (value) => value.id === Number(row.dataset.debugVariable)
                     );
                     const value = variables[index];
-                    if (!value) return;
+                    if (!value) {
+                        return;
+                    }
                     event.preventDefault();
                     let next = value;
-                    if (['j', 'ArrowDown'].includes(event.key))
+                    if (['j', 'ArrowDown'].includes(event.key)) {
                         next = variables[index + 1] || value;
-                    if (['k', 'ArrowUp'].includes(event.key)) next = variables[index - 1] || value;
+                    }
+                    if (['k', 'ArrowUp'].includes(event.key)) {
+                        next = variables[index - 1] || value;
+                    }
                     if (['l', 'ArrowRight'].includes(event.key)) {
-                        if (value.expandable && !value.expanded && paused)
+                        if (value.expandable && !value.expanded && paused) {
                             action('variable', value.id);
-                        else if (value.expanded && variables[index + 1]?.parent === value.id)
+                        } else if (value.expanded && variables[index + 1]?.parent === value.id) {
                             next = variables[index + 1];
+                        }
                     }
                     if (['h', 'ArrowLeft'].includes(event.key)) {
-                        if (value.expanded && paused) action('variable', value.id);
-                        else next = variables.find((item) => item.id === value.parent) || value;
+                        if (value.expanded && paused) {
+                            action('variable', value.id);
+                        } else {
+                            next = variables.find((item) => item.id === value.parent) || value;
+                        }
                     }
                     panel.current
                         ?.querySelector<HTMLElement>(`[data-debug-variable="${next.id}"]`)
@@ -251,8 +262,9 @@ export default function DebugPanel({
                                                     className={styles.debugVariable}
                                                     onFocus={() => setSelected(value.id)}
                                                     onClick={() => {
-                                                        if (paused && value.expandable)
+                                                        if (paused && value.expandable) {
                                                             action('variable', value.id);
+                                                        }
                                                     }}
                                                 >
                                                     <span

@@ -149,7 +149,9 @@ async function git(
             timeout: 60_000,
             env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
         });
-        if (input !== undefined) task.child.stdin?.end(input);
+        if (input !== undefined) {
+            task.child.stdin?.end(input);
+        }
         const { stdout } = await task;
         return stdout;
     } catch (error) {
@@ -170,7 +172,9 @@ async function git(
 }
 
 export async function gitIgnored(cwd: string, paths: string[]): Promise<Set<string>> {
-    if (!paths.length) return new Set();
+    if (!paths.length) {
+        return new Set();
+    }
     const output = await git(
         cwd,
         ['--no-literal-pathspecs', 'check-ignore', '-z', '--stdin'],

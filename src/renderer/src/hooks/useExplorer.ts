@@ -40,14 +40,18 @@ export function useExplorer({
 
     useEffect(() => {
         // Keep each tree's state, but load hidden workspaces only when first activated or changed.
-        if (!active || loadedRevision.current === revision) return;
+        if (!active || loadedRevision.current === revision) {
+            return;
+        }
         let cancelled = false;
         Promise.all(
             ['', ...expanded].map(async (path) => {
                 try {
                     return [path, await window.nido.files(workspace.id, path)] as const;
                 } catch (error) {
-                    if (!path || !String(error).includes('ENOENT')) throw error;
+                    if (!path || !String(error).includes('ENOENT')) {
+                        throw error;
+                    }
                     return [path, []] as const;
                 }
             })
@@ -91,12 +95,16 @@ export function useExplorer({
         path = selectedEntry?.path || ''
     ): void => setOperation({ request: { action, title, value, path } });
     const copySelectedEntry = (cut: boolean): void => {
-        if (!selectedEntry) return;
+        if (!selectedEntry) {
+            return;
+        }
         setClipboard({ path: selectedEntry.path, name: selectedEntry.name, cut });
         closeOperation();
     };
     const pasteClipboard = (): void => {
-        if (!clipboard) return;
+        if (!clipboard) {
+            return;
+        }
         const destination = pathInTargetDirectory(clipboard.name);
         const sourcePath = clipboard.path.replace(/\\/g, '/');
         const destinationPath = destination.replace(/\\/g, '/');
@@ -165,8 +173,9 @@ export function useExplorer({
             clipboard?.cut &&
             operation?.request?.action === 'rename' &&
             operation?.request.path === clipboard.path
-        )
+        ) {
             setClipboard(undefined);
+        }
     };
 
     return {

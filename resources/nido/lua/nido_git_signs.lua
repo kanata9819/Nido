@@ -1,4 +1,6 @@
-if vim.fn.executable('git') == 0 then return {} end
+if vim.fn.executable('git') == 0 then
+  return {}
+end
 local api = vim.api
 local namespace = api.nvim_create_namespace('nido_git_signs')
 local generations = {}
@@ -15,9 +17,13 @@ api.nvim_create_autocmd('ColorScheme', { callback = colors })
 
 function M.refresh(buffer)
   buffer = buffer or api.nvim_get_current_buf()
-  if not api.nvim_buf_is_valid(buffer) or vim.bo[buffer].buftype ~= '' then return end
+  if not api.nvim_buf_is_valid(buffer) or vim.bo[buffer].buftype ~= '' then
+    return
+  end
   local name = api.nvim_buf_get_name(buffer)
-  if name == '' then return end
+  if name == '' then
+    return
+  end
   generations[buffer] = (generations[buffer] or 0) + 1
   local generation = generations[buffer]
   local tick = api.nvim_buf_get_changedtick(buffer)
@@ -26,10 +32,14 @@ function M.refresh(buffer)
       and api.nvim_buf_get_changedtick(buffer) == tick and api.nvim_buf_get_name(buffer) == name
   end
   local function render(base)
-    if not valid() then return end
+    if not valid() then
+      return
+    end
     local lines = api.nvim_buf_get_lines(buffer, 0, -1, false)
     local text = table.concat(lines, '\n') .. (vim.bo[buffer].endofline and '\n' or '')
-    if #lines == 1 and lines[1] == '' then text = '' end
+    if #lines == 1 and lines[1] == '' then
+      text = ''
+    end
     -- ponytail: diff the whole buffer; cache the base and diff incrementally if large files become slow.
     local hunks = base and vim.diff(base, text, { result_type = 'indices' }) or {}
     local wanted = {}
@@ -51,8 +61,11 @@ function M.refresh(buffer)
     for _, mark in ipairs(api.nvim_buf_get_extmarks(buffer, namespace, 0, -1, {details=true})) do
       local details = mark[4]
       local key = mark[2] .. ':' .. details.sign_hl_group .. ':' .. vim.trim(details.sign_text)
-      if wanted[key] and not details.invalid then wanted[key] = nil
-      else table.insert(stale, mark[1]) end
+      if wanted[key] and not details.invalid then
+        wanted[key] = nil
+      else
+        table.insert(stale, mark[1])
+      end
     end
     local changed = #stale > 0
     local keys = vim.tbl_keys(wanted)
@@ -65,23 +78,36 @@ function M.refresh(buffer)
       })
     end
     for _, id in ipairs(stale) do api.nvim_buf_del_extmark(buffer, namespace, id) end
-    if changed then vim.cmd('redraw') end
+    if changed then
+      vim.cmd('redraw')
+    end
   end
   local function git(directory, arguments, callback)
     local command = { 'git', '--no-pager', '--literal-pathspecs', '-C', directory }
     vim.list_extend(command, arguments)
     vim.system(command, { text = true, timeout = 2000 }, vim.schedule_wrap(function(result)
-      if valid() then callback(result) end
+      if valid() then
+        callback(result)
+      end
     end))
   end
   git(vim.fs.dirname(name), {'rev-parse', '--show-toplevel'}, function(result)
-    if result.code ~= 0 then render(nil); return end
+    if result.code ~= 0 then
+      render(nil)
+      return
+    end
     local root = vim.trim(result.stdout)
     local path = vim.fs.relpath(root, name)
-    if not path then render(nil); return end
+    if not path then
+      render(nil)
+      return
+    end
     path = path:gsub('\\', '/')
     git(root, {'show', 'HEAD:' .. path}, function(committed)
-      if committed.code == 0 then render(committed.stdout); return end
+      if committed.code == 0 then
+        render(committed.stdout)
+        return
+      end
       -- New files include staged additions and untracked files, but exclude ignored files.
       git(root, {'ls-files', '--cached', '--others', '--exclude-standard', '--error-unmatch', '--', path}, function(listed)
         render(listed.code == 0 and '' or nil)
@@ -92,7 +118,9 @@ end
 
 function M.refresh_all()
   for _, buffer in ipairs(api.nvim_list_bufs()) do
-    if api.nvim_buf_is_loaded(buffer) then M.refresh(buffer) end
+    if api.nvim_buf_is_loaded(buffer) then
+      M.refresh(buffer)
+    end
   end
 end
 
@@ -102,7 +130,10 @@ api.nvim_create_autocmd({'BufEnter', 'BufWritePost', 'TextChanged', 'TextChanged
     local token = {}
     pending[buffer] = token
     vim.defer_fn(function()
-      if pending[buffer] == token then pending[buffer] = nil; M.refresh(buffer) end
+      if pending[buffer] == token then
+        pending[buffer] = nil
+        M.refresh(buffer)
+      end
     end, 150)
   end,
 })

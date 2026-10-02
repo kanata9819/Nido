@@ -74,15 +74,20 @@ export class SessionFiles {
             try {
                 await lstat(result);
             } catch (error) {
-                if ((error as NodeJS.ErrnoException).code === 'ENOENT') return result;
+                if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+                    return result;
+                }
                 throw error;
             }
             throw new Error('A file or folder already exists at that path.');
         };
         if (action === 'createFile' || action === 'createDirectory') {
             const result = await destination(path);
-            if (action === 'createFile') await writeFile(result, '', { flag: 'wx' });
-            else await mkdir(result);
+            if (action === 'createFile') {
+                await writeFile(result, '', { flag: 'wx' });
+            } else {
+                await mkdir(result);
+            }
             return;
         }
         const source = await this.path(path);
@@ -96,12 +101,15 @@ return result`,
             []
         ])) as { id: number; name: string; modified: boolean }[];
         const affected = buffers.filter((buf) => {
-            if (!buf.name) return false;
+            if (!buf.name) {
+                return false;
+            }
             const rel = relative(source, buf.name);
             return !isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`);
         });
-        if (affected.some((buf) => buf.modified))
+        if (affected.some((buf) => buf.modified)) {
             throw new Error('Save unsaved changes in this file or folder first.');
+        }
         if (action === 'delete') {
             await trash(source);
             for (const buf of affected)
@@ -134,7 +142,9 @@ return result`,
             const edited = await this.client.request('nvim_exec_lua', [
                 `local renamed = ...
 for _, item in ipairs(renamed) do
-  if vim.api.nvim_buf_is_valid(item.id) and vim.bo[item.id].modified then return true end
+  if vim.api.nvim_buf_is_valid(item.id) and vim.bo[item.id].modified then
+    return true
+  end
 end
 -- Check every buffer and update names in one RPC, without yielding to editor input.
 for _, item in ipairs(renamed) do
@@ -176,7 +186,9 @@ return false`,
             .sort(
                 (a, b) => Number(b.directory) - Number(a.directory) || a.name.localeCompare(b.name)
             );
-        if (!checkIgnored) return files;
+        if (!checkIgnored) {
+            return files;
+        }
         // Git is optional; ordinary folders still open when it is unavailable.
         const ignored = await gitIgnored(
             this.root,

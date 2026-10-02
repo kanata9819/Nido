@@ -28,7 +28,9 @@ export default function Notification({
         });
     }, [workspaceId]);
 
-    if (!notice) return null;
+    if (!notice) {
+        return null;
+    }
     const Icon = notice.severity === 'info' ? Info : CircleAlert;
     return (
         <aside

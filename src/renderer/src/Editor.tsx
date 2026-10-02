@@ -132,9 +132,13 @@ export default function Editor({
                         await new Promise<void>((resolve) =>
                             requestAnimationFrame(() => resolve())
                         );
-                        if (!host.current) return;
+                        if (!host.current) {
+                            return;
+                        }
                         const row = grid.current.rowAt(y);
-                        if (row >= 0) await window.nido.click(id, row, Math.floor(x / cellWidth));
+                        if (row >= 0) {
+                            await window.nido.click(id, row, Math.floor(x / cellWidth));
+                        }
                     })()
                 );
             }}

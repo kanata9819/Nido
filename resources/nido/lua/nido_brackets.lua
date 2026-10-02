@@ -8,7 +8,9 @@ local pairs_by_buffer = {}
 local function ignored(row, column)
   for _, id in ipairs(vim.fn.synstack(row, column)) do
     local name = vim.fn.synIDattr(id, 'name'):lower()
-    if name:find('comment') or name:find('string') or name:find('character') then return true end
+    if name:find('comment') or name:find('string') or name:find('character') then
+      return true
+    end
   end
   return false
 end
@@ -109,7 +111,9 @@ end
 
 -- Screen positions include folds, wrapping, tabs, wide characters and virtual CodeLens rows.
 local function publish_guides(window, buffer, first, last, immediate)
-    if not vim.g.nido_channel or window ~= api.nvim_get_current_win() then return false end
+    if not vim.g.nido_channel or window ~= api.nvim_get_current_win() then
+      return false
+    end
     local guides = {}
     if vim.bo[buffer].buftype == '' and api.nvim_win_get_config(window).relative == '' then
       api.nvim_win_call(window, function()

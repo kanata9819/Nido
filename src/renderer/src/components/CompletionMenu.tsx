@@ -86,36 +86,44 @@ export default function CompletionMenu({
     useEffect(
         () =>
             window.nido.onEvent((event) => {
-                if (event.id !== id) return;
+                if (event.id !== id) {
+                    return;
+                }
                 if (event.type === 'state' && !event.state.mode.startsWith('i')) {
                     refreshing.current = false;
                     setMenu(undefined);
                 }
-                if (event.type !== 'redraw') return;
+                if (event.type !== 'redraw') {
+                    return;
+                }
                 for (const [name, ...calls] of event.events) {
                     for (const args of calls) {
                         if (name === 'nido_completion_refresh') {
                             refreshing.current = args[0] === true;
-                            if (!refreshing.current && args[1] !== true)
+                            if (!refreshing.current && args[1] !== true) {
                                 setMenu((current) => (current?.pending ? undefined : current));
+                            }
                         }
-                        if (name === 'popupmenu_show')
+                        if (name === 'popupmenu_show') {
                             setMenu({
                                 items: args[0] as Menu['items'],
                                 selected: Number(args[1]),
                                 row: Number(args[2]),
                                 column: Number(args[3])
                             });
-                        if (name === 'popupmenu_select')
+                        }
+                        if (name === 'popupmenu_select') {
                             setMenu(
                                 (current) => current && { ...current, selected: Number(args[0]) }
                             );
-                        if (name === 'popupmenu_hide')
+                        }
+                        if (name === 'popupmenu_hide') {
                             setMenu((current) =>
                                 refreshing.current && current
                                     ? { ...current, pending: true, selected: -1 }
                                     : undefined
                             );
+                        }
                     }
                 }
             }),
@@ -123,7 +131,9 @@ export default function CompletionMenu({
     );
     useEffect(() => {
         const anchor = input.current;
-        if (!anchor) return;
+        if (!anchor) {
+            return;
+        }
         const onKey = (event: KeyboardEvent): void => {
             const navigation =
                 ['ArrowUp', 'ArrowDown'].includes(event.key) ||
@@ -141,8 +151,9 @@ export default function CompletionMenu({
                     !event.altKey &&
                     !event.metaKey &&
                     (event.key === 'Backspace' || /^[\p{L}\p{N}_]$/u.test(event.key)))
-            )
+            ) {
                 return;
+            }
             refreshing.current = false;
             setMenu(undefined);
         };
@@ -160,7 +171,9 @@ export default function CompletionMenu({
     useLayoutEffect(() => {
         const element = card.current;
         const anchor = input.current;
-        if (!menu || !element || !anchor || hidden) return;
+        if (!menu || !element || !anchor || hidden) {
+            return;
+        }
         const host = element.parentElement!;
         const list = element.querySelector<HTMLElement>('[role="listbox"]')!;
         const position = (): void => {
@@ -205,7 +218,9 @@ export default function CompletionMenu({
             anchor.removeAttribute('aria-activedescendant');
         };
     }, [menu, grid, input, listId, hidden]);
-    if (!menu?.items.length || hidden) return null;
+    if (!menu?.items.length || hidden) {
+        return null;
+    }
     return (
         <div
             ref={card}
@@ -235,7 +250,9 @@ export default function CompletionMenu({
                             aria-disabled={menu.pending ?? false}
                             title={detail || word}
                             onClick={() => {
-                                if (menu.pending) return;
+                                if (menu.pending) {
+                                    return;
+                                }
                                 const keys = `<Cmd>lua vim.api.nvim_select_popupmenu_item(${index}, false, false, {})<CR>`;
                                 void window.nido
                                     .input(id, keys)

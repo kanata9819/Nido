@@ -23,7 +23,9 @@ export function fileDecorations(
         result[path] = { ...decoration };
     }
     for (const problem of problems) {
-        if (problem.severity !== 1 && problem.severity !== 2) continue;
+        if (problem.severity !== 1 && problem.severity !== 2) {
+            continue;
+        }
         const decoration = (result[gitFileKey(problem.path)] ||= { code: '', title: '' });
         const count = problem.severity === 1 ? 'errors' : 'warnings';
         decoration[count] = (decoration[count] || 0) + 1;
@@ -48,8 +50,12 @@ export function fileDecorations(
         let parent = path.slice(0, path.lastIndexOf('/'));
         while (parent.length >= boundary.length) {
             const folder = (result[parent] ||= { code: '', title: '' });
-            if (decoration.errors) folder.errors = (folder.errors || 0) + decoration.errors;
-            if (decoration.warnings) folder.warnings = (folder.warnings || 0) + decoration.warnings;
+            if (decoration.errors) {
+                folder.errors = (folder.errors || 0) + decoration.errors;
+            }
+            if (decoration.warnings) {
+                folder.warnings = (folder.warnings || 0) + decoration.warnings;
+            }
             if (decoration.code && (!folder.code || decoration.code === 'M')) {
                 folder.code = decoration.code;
                 folder.title = 'Git: Contains changed files';

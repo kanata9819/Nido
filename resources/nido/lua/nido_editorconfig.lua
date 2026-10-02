@@ -19,7 +19,9 @@ editorconfig.config = function(buffer)
   buffer = buffer or api.nvim_get_current_buf()
   if not vim.g.editorconfig or not api.nvim_buf_is_valid(buffer)
       or vim.bo[buffer].buftype ~= '' or not vim.bo[buffer].modifiable
-      or api.nvim_buf_get_name(buffer) == '' then return end
+      or api.nvim_buf_get_name(buffer) == '' then
+    return
+  end
   if not saved[buffer] then
     saved[buffer] = {}
     for _, name in ipairs(options) do saved[buffer][name] = vim.bo[buffer][name] end
@@ -34,7 +36,9 @@ vim.cmd('runtime plugin/editorconfig.lua')
 api.nvim_create_autocmd('BufWipeout', {callback=function(event) saved[event.buf] = nil end})
 
 function M.set_enabled(enabled)
-  if vim.g.editorconfig == enabled then return end
+  if vim.g.editorconfig == enabled then
+    return
+  end
   vim.g.editorconfig = enabled
   for _, buffer in ipairs(api.nvim_list_bufs()) do
     if api.nvim_buf_is_loaded(buffer) then

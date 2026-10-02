@@ -18,10 +18,14 @@ export default function MarkdownPreview({
         window.nido
             .markdownPreview(workspaceId)
             .then((value) => {
-                if (!cancelled) setSource(value);
+                if (!cancelled) {
+                    setSource(value);
+                }
             })
             .catch((error) => {
-                if (!cancelled) setError(String(error));
+                if (!cancelled) {
+                    setError(String(error));
+                }
             });
         return () => {
             cancelled = true;
@@ -34,7 +38,9 @@ export default function MarkdownPreview({
             tabIndex={0}
             aria-label="Markdown preview content"
             onKeyDown={(event) => {
-                if (event.nativeEvent.isComposing || event.altKey || event.metaKey) return;
+                if (event.nativeEvent.isComposing || event.altKey || event.metaKey) {
+                    return;
+                }
                 const key = event.key.toLowerCase();
                 const content = event.currentTarget;
                 if (event.ctrlKey && ['d', 'u', 'f', 'b'].includes(key)) {
@@ -45,9 +51,13 @@ export default function MarkdownPreview({
                         (['d', 'u'].includes(key) ? 0.5 : 1);
                 } else if (!event.ctrlKey && ['j', 'k', 'g', 'G'].includes(event.key)) {
                     event.preventDefault();
-                    if (event.key === 'g') content.scrollTop = 0;
-                    else if (event.key === 'G') content.scrollTop = content.scrollHeight;
-                    else content.scrollTop += event.key === 'j' ? 40 : -40;
+                    if (event.key === 'g') {
+                        content.scrollTop = 0;
+                    } else if (event.key === 'G') {
+                        content.scrollTop = content.scrollHeight;
+                    } else {
+                        content.scrollTop += event.key === 'j' ? 40 : -40;
+                    }
                 }
             }}
         >

@@ -84,9 +84,15 @@ export function useGitBrowserKeyboard({
                 ['1', '2', '3'].includes(event.key)
             ) {
                 event.preventDefault();
-                if (event.key === '1') changeView('changes');
-                if (event.key === '2') changeView('history');
-                if (event.key === '3') changeView('branches');
+                if (event.key === '1') {
+                    changeView('changes');
+                }
+                if (event.key === '2') {
+                    changeView('history');
+                }
+                if (event.key === '3') {
+                    changeView('branches');
+                }
             }
         };
         document.addEventListener('keydown', keydown);

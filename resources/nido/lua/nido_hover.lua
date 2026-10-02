@@ -15,7 +15,9 @@ local function highlight_blocks(markdown)
       end
     elseif line:match('^```') then
       language = vim.trim(line:sub(4))
-      if language == '' then language = vim.bo.filetype end
+      if language == '' then
+        language = vim.bo.filetype
+      end
       lines = {}
     end
   end
@@ -49,13 +51,17 @@ function M.show()
   end, function(results)
     if request ~= generation or vim.api.nvim_get_current_buf() ~= buf
       or vim.api.nvim_get_current_win() ~= win
-      or not vim.deep_equal(cursor, vim.api.nvim_win_get_cursor(win)) then return end
+      or not vim.deep_equal(cursor, vim.api.nvim_win_get_cursor(win)) then
+      return
+    end
     local lines, errors = {}, {}
     for _, response in pairs(results) do
       if response.err then
         errors[#errors + 1] = response.err.message or 'Language server request failed.'
       elseif response.result and response.result.contents then
-        if #lines > 0 then lines[#lines + 1] = '' end
+        if #lines > 0 then
+          lines[#lines + 1] = ''
+        end
         vim.list_extend(lines, vim.lsp.util.convert_input_to_markdown_lines(response.result.contents))
       end
     end

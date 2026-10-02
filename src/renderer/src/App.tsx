@@ -75,7 +75,9 @@ export default function App(): React.JSX.Element {
     }, [report]);
 
     const toggleFavorite = (w: Workspace | FavoriteWorkspace): void => {
-        if (!favoritesReady || favoritePending.current) return;
+        if (!favoritesReady || favoritePending.current) {
+            return;
+        }
         favoritePending.current = true;
         setSavingFavorite(true);
         const kind = w.kind || 'editor';
@@ -274,8 +276,11 @@ export default function App(): React.JSX.Element {
         const opened = workspaces.find(
             (w) => w.root === favorite.root && (w.kind || 'editor') === favorite.kind
         );
-        if (opened) activate(opened.id);
-        else await openWorkspace(favorite.root, favorite.kind);
+        if (opened) {
+            activate(opened.id);
+        } else {
+            await openWorkspace(favorite.root, favorite.kind);
+        }
     };
 
     const nextWorkspace = (offset: number): void => {
@@ -362,7 +367,9 @@ export default function App(): React.JSX.Element {
         openFile,
         activate,
         toggleFavorite: () => {
-            if (workspace) toggleFavorite(workspace);
+            if (workspace) {
+                toggleFavorite(workspace);
+            }
         },
         isFavorite: favorites.some(
             (f) => f.root === workspace?.root && f.kind === (workspace?.kind || 'editor')

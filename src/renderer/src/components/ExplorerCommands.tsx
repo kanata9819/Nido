@@ -40,7 +40,9 @@ export default function ExplorerCommands({
         field.current?.select();
     }, [request]);
     const submit = async (): Promise<void> => {
-        if (!request || busy) return;
+        if (!request || busy) {
+            return;
+        }
         setBusy(true);
         setError('');
         try {
@@ -48,8 +50,9 @@ export default function ExplorerCommands({
                 request.action === 'createFile' || request.action === 'createDirectory';
             const path = creating ? value : request.path;
             const renaming = request.title === 'Rename';
-            if (renaming && /[\\/]/.test(value))
+            if (renaming && /[\\/]/.test(value)) {
                 throw new Error('Enter a name. Use Move to… to change folders.');
+            }
             const target = renaming ? request.path.replace(/[^\\/]+$/, '') + value : value;
             await window.nido.fileAction(
                 workspaceId,
@@ -79,14 +82,20 @@ export default function ExplorerCommands({
             aria-label="Explorer commands"
             onCancel={(event) => {
                 event.preventDefault();
-                if (!busy) onClose();
+                if (!busy) {
+                    onClose();
+                }
             }}
             onKeyDown={(event) => {
                 event.stopPropagation();
-                if (event.nativeEvent.isComposing) return;
+                if (event.nativeEvent.isComposing) {
+                    return;
+                }
                 if (event.key === 'Escape') {
                     event.preventDefault();
-                    if (!busy) onClose();
+                    if (!busy) {
+                        onClose();
+                    }
                 }
                 if (!request && !event.ctrlKey && !event.altKey && !event.metaKey) {
                     const command = commands.find(

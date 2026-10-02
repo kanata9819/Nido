@@ -46,7 +46,9 @@ export function registerWorkspaceHandlers({
             const favorites = (await readFavorites(favoritesPath)).filter(
                 (w) => w.root !== root || w.kind !== kind
             );
-            if (enabled) favorites.push({ root, name: basename(root) || root, kind });
+            if (enabled) {
+                favorites.push({ root, name: basename(root) || root, kind });
+            }
             await writeFavorites(favoritesPath, favorites);
             return favorites;
         });
@@ -135,7 +137,9 @@ export function registerWorkspaceHandlers({
                         try {
                             s = await Session.create(workspace.root, send, neovimResources);
                             errors.push(...(await s.restore(workspace, selectedShell)));
-                            if (index === saved.active) state.active = s.workspace.id;
+                            if (index === saved.active) {
+                                state.active = s.workspace.id;
+                            }
                             return s;
                         } catch (error) {
                             await s?.stop();
@@ -145,7 +149,9 @@ export function registerWorkspaceHandlers({
                     })
                 );
                 for (const s of restored) {
-                    if (s) sessions.set(s.workspace.id, s);
+                    if (s) {
+                        sessions.set(s.workspace.id, s);
+                    }
                 }
             } catch (error) {
                 errors.push(`Workspace restore failed: ${String(error)}`);

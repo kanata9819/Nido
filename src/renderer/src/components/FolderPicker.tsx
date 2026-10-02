@@ -188,7 +188,9 @@ export default function FolderPicker({
                         case 'h':
                         case 'ArrowLeft':
                         case 'Backspace': {
-                            if (!loading) void browse(parent);
+                            if (!loading) {
+                                void browse(parent);
+                            }
                             break;
                         }
                         default: {
@@ -218,7 +220,9 @@ export default function FolderPicker({
                         aria-selected={index === selected}
                         className={`${styles.folderChoice} ${styles.favoriteChoice} ${index === selected ? styles.selectedItem : ''}`}
                         onClick={() => {
-                            if (!busy) onOpenFavorite(favorite);
+                            if (!busy) {
+                                onOpenFavorite(favorite);
+                            }
                         }}
                         title={favorite.root}
                     >

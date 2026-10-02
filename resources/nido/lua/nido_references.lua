@@ -90,13 +90,17 @@ function M.highlight_text(lines, language)
     vim.api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
     return vim.api.nvim_buf_call(buffer, function()
       -- Syntax only: previews must not start language servers or FileType plugins.
-      if language and language:match('^[%w_]+$') then vim.bo[buffer].syntax = language end
+      if language and language:match('^[%w_]+$') then
+        vim.bo[buffer].syntax = language
+      end
       vim.cmd('syntax sync fromstart')
       return M.highlight(buffer, 1, lines, true)
     end)
   end)
   vim.api.nvim_buf_delete(buffer, {force=true})
-  if not ok then error(spans) end
+  if not ok then
+    error(spans)
+  end
   return spans
 end
 

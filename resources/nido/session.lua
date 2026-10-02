@@ -10,7 +10,9 @@ vim.api.nvim_create_autocmd({'TextChanged', 'TextChangedI', 'TextChangedP'}, {
   callback = function(event)
     local tick = vim.api.nvim_buf_get_changedtick(event.buf)
     -- Temporary :normal scrolling can report the same edit again in another mode.
-    if edit_ticks[event.buf] == tick then return end
+    if edit_ticks[event.buf] == tick then
+      return
+    end
     edit_ticks[event.buf] = tick
     vim.rpcnotify(channel, 'nido:edit')
   end,
@@ -27,21 +29,29 @@ vim.api.nvim_set_decoration_provider(vim.api.nvim_create_namespace('nido_viewpor
     views[win] = {buffer=buffer, height=info.height, width=info.width,
       topline=view.topline, skipcol=view.skipcol, leftcol=view.leftcol}
     if not previous or previous.buffer ~= buffer or previous.height ~= info.height
-        or previous.width ~= info.width then return false end
+        or previous.width ~= info.width then
+      return false
+    end
     local columns = view.leftcol - previous.leftcol
     if view.topline == previous.topline and view.skipcol == previous.skipcol
-        and columns == 0 then return false end
+        and columns == 0 then
+      return false
+    end
     local forward = view.topline > previous.topline
       or (view.topline == previous.topline and view.skipcol > previous.skipcol)
     local first, last = previous, view
-    if not forward then first, last = view, previous end
+    if not forward then
+      first, last = view, previous
+    end
     local rows = 0
     if view.topline ~= previous.topline or view.skipcol ~= previous.skipcol then
       rows = vim.api.nvim_win_text_height(win, {
         start_row=first.topline - 1, end_row=last.topline - 1,
         start_vcol=first.skipcol, end_vcol=last.skipcol,
       }).all
-      if not forward then rows = -rows end
+      if not forward then
+        rows = -rows
+      end
     end
     local top, left = info.winrow - 1, info.wincol - 1
     -- Horizontal scrolling leaves line numbers and signs fixed in place.
@@ -164,10 +174,14 @@ local function publish()
       and #vim.api.nvim_tabpage_list_wins(0) == 1
     vim.rpcnotify(channel, 'nido:state', {
       search = (function()
-        if vim.v.hlsearch ~= 1 or vim.fn.getreg('/') == '' or vim.bo.buftype ~= '' then return false end
+        if vim.v.hlsearch ~= 1 or vim.fn.getreg('/') == '' or vim.bo.buftype ~= '' then
+          return false
+        end
         -- ponytail: cap counting at 9999 matches/10 ms; show a partial count for huge files.
         local ok, count = pcall(vim.fn.searchcount, {recompute=1, maxcount=9999, timeout=10})
-        if not ok then return false end
+        if not ok then
+          return false
+        end
         return {pattern=vim.fn.getreg('/'), current=count.current or 0, total=count.total or 0, incomplete=count.incomplete or 0}
       end)(),
       problems = problems,
