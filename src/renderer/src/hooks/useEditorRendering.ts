@@ -73,6 +73,7 @@ export function useEditorRendering({
         let frame = 0;
         let disposed = false;
         let directScroll = false;
+        let descriptionDirty = true;
         let queuedScroll = 0;
         let sentScroll = 0;
         let scrollPending = false;
@@ -125,11 +126,14 @@ export function useEditorRendering({
                 .catch((error) => {
                     sentScroll = queuedScroll = 0;
                     gridRef.current.scrollPreview = 0;
-                    if (!disposed) errorRef.current(String(error));
+                    if (!disposed) {
+                        errorRef.current(String(error));
+                        schedule();
+                    }
                 })
                 .finally(() => {
                     scrollPending = false;
-                    if (!disposed) schedule();
+                    if (!disposed && queuedScroll) schedule();
                 });
         };
 
@@ -286,10 +290,15 @@ export function useEditorRendering({
                 }
             }
 
-            surface.setAttribute(
-                'aria-description',
-                gridRef.current.cells.map((row) => row.map((cell) => cell.text).join('')).join('\n')
-            );
+            if (descriptionDirty) {
+                surface.setAttribute(
+                    'aria-description',
+                    gridRef.current.cells
+                        .map((row) => row.map((cell) => cell.text).join(''))
+                        .join('\n')
+                );
+                descriptionDirty = false;
+            }
 
             if (inputRef.current) {
                 inputRef.current.style.left = `${gridRef.current.cursor.column * metrics.cellWidth}px`;
@@ -491,6 +500,13 @@ export function useEditorRendering({
                 const { row, column } = gridRef.current.cursor;
                 const mode = gridRef.current.mode;
                 if (gridRef.current.apply(event.events)) {
+                    descriptionDirty ||= event.events.some(
+                        ([name]) =>
+                            name === 'grid_line' ||
+                            name === 'grid_scroll' ||
+                            name === 'grid_resize' ||
+                            name === 'grid_clear'
+                    );
                     schedule();
                 }
 

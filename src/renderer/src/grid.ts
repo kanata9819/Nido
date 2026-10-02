@@ -131,6 +131,7 @@ export class Grid {
                         if (args[0] !== 1) {
                             break;
                         }
+                        this.layoutDirty = true;
                         this.columns = Number(args[1]);
                         this.rows = Number(args[2]);
                         this.cells = Array.from({ length: this.rows }, (_, row) =>
@@ -145,6 +146,7 @@ export class Grid {
                         if (args[0] !== 1) {
                             break;
                         }
+                        this.layoutDirty = true;
                         this.cells = Array.from({ length: this.rows }, () =>
                             Array.from({ length: this.columns }, () => ({
                                 text: ' ',
@@ -157,6 +159,7 @@ export class Grid {
                         if (args[0] !== 1) {
                             break;
                         }
+                        this.layoutDirty = true;
                         const row = this.cells[Number(args[1])];
                         if (row) this.rowImages.delete(row);
                         let column = Number(args[2]);
@@ -179,6 +182,7 @@ export class Grid {
                         if (args[0] !== 1) {
                             break;
                         }
+                        this.layoutDirty = true;
                         const [, top, bottom, left, right, rows, columns] = args as number[];
                         if (left === 0 && right === this.columns && columns === 0) {
                             const old = this.cells.slice();
@@ -212,6 +216,7 @@ export class Grid {
                         break;
                     }
                     case 'hl_attr_define': {
+                        this.layoutDirty = true;
                         this.rowImages = new WeakMap();
                         const info = args[3] as { hi_name?: string }[] | undefined;
                         this.highlights.set(Number(args[0]), {
@@ -251,7 +256,6 @@ export class Grid {
                 }
             }
         }
-        if (flush) this.layoutDirty = true;
         return flush;
     }
 

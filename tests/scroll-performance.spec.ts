@@ -129,6 +129,26 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
             });
         });
         await canvas.evaluate((node: HTMLCanvasElement) => {
+            const work = { trims: 0, descriptions: 0, paints: 0, cpuMs: 0 };
+            Object.assign(window, { scrollWork: work });
+            const trim = String.prototype.trim;
+            String.prototype.trim = function () {
+                work.trims++;
+                return trim.call(this);
+            };
+            const attribute = node.setAttribute.bind(node);
+            node.setAttribute = (name, value) => {
+                if (name === 'aria-description') work.descriptions++;
+                attribute(name, value);
+            };
+            const raf = window.requestAnimationFrame;
+            window.requestAnimationFrame = (callback) =>
+                raf((time) => {
+                    const start = performance.now();
+                    callback(time);
+                    work.cpuMs += performance.now() - start;
+                    work.paints++;
+                });
             node.dataset.offsets = '0';
             node.dataset.states = '0';
             window.nido.onEvent((event) => {
@@ -192,6 +212,22 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
             .poll(async () => Number(await canvas.getAttribute('data-first-y')))
             .toBeCloseTo(-0.25, 5);
         expect(await canvas.getAttribute('data-states')).toBe('0');
+        const work = await page.evaluate(
+            () =>
+                (
+                    window as unknown as {
+                        scrollWork: {
+                            trims: number;
+                            descriptions: number;
+                            paints: number;
+                            cpuMs: number;
+                        };
+                    }
+                ).scrollWork
+        );
+        console.log('fractional-scroll-work', work);
+        expect(work.trims).toBe(0);
+        expect(work.descriptions).toBe(0);
         const probe = await running.evaluate(
             () =>
                 (
