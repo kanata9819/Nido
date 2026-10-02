@@ -155,7 +155,8 @@ export function useEditorRendering({
         };
 
         scrollRef.current = (lines, follow): void => {
-            if (lines < 0 && !gridRef.current.hasUpperRows) prefetchNeeded = true;
+            if (lines < 0 && !prefetchPending && gridRef.current.needsUpperRows)
+                prefetchNeeded = true;
             queuedScroll += lines;
             scrollFollow = follow;
             directScroll = true;
@@ -177,7 +178,7 @@ export function useEditorRendering({
             if (
                 pixelScroll &&
                 prefetchNeeded &&
-                queuedScroll !== 0 &&
+                (queuedScroll !== 0 || directScroll) &&
                 !prefetchPending &&
                 !scrollPending &&
                 !motion &&
@@ -373,7 +374,7 @@ export function useEditorRendering({
                 blinkFade ||
                 (pixelScroll &&
                     prefetchNeeded &&
-                    queuedScroll !== 0 &&
+                    (queuedScroll !== 0 || directScroll) &&
                     !prefetchPending &&
                     !scrollPending &&
                     scrollEnabledRef.current)
@@ -563,7 +564,11 @@ export function useEditorRendering({
                             (!gridRef.current.hasUpperRows &&
                                 event.events.some(
                                     ([name]) => name === 'nido_scroll' || name === 'grid_scroll'
-                                )))
+                                )) ||
+                            (directScroll &&
+                                scroll &&
+                                scroll[5] < 0 &&
+                                gridRef.current.needsUpperRows))
                     ) {
                         prefetchNeeded = true;
                     }

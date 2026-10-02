@@ -91,6 +91,11 @@ export class Grid {
         return this.upperRows.length > 0;
     }
 
+    get needsUpperRows(): boolean {
+        // Refill while half of the eight-row cache still covers incoming wheel events.
+        return this.upperRows.length <= 4;
+    }
+
     rowTop(row: number): number {
         if (row < 0) {
             const index = Math.max(0, this.upperRows.length + Math.floor(row));

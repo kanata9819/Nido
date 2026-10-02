@@ -80,6 +80,19 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
             }) as typeof draw;
         });
         const restored = await page.evaluate(() => window.nido.restoreWorkspaces());
+        // Make cache refills span several frames, as they can under editor/LSP load.
+        await running.evaluate(({ ipcMain }) => {
+            const handlers = (
+                ipcMain as unknown as {
+                    _invokeHandlers: Map<string, (...args: unknown[]) => Promise<unknown>>;
+                }
+            )._invokeHandlers;
+            const prefetch = handlers.get('nido:prefetchScroll')!;
+            handlers.set('nido:prefetchScroll', async (...args) => {
+                await new Promise((resolve) => setTimeout(resolve, 60));
+                return prefetch(...args);
+            });
+        });
         const reports: object[] = [];
         for (const mode of ['normal', 'insert']) {
             for (const delta of [5, -5]) {
@@ -94,6 +107,11 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                     );
                     await page.waitForTimeout(150);
                 }
+                // Warm the initial viewport so this checks sustained scrolling, not cold startup.
+                await canvas.evaluate((node) =>
+                    node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -0.01 }))
+                );
+                await page.waitForTimeout(250);
                 const start = Number(await canvas.getAttribute('data-document-top'));
                 await canvas.evaluate(async (node, delta) => {
                     (window as unknown as { cadence: { samples: unknown[] } }).cadence.samples = [];
@@ -157,6 +175,10 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                 expect(samples.length).toBeGreaterThan(20);
                 expect(samples.at(-1)!.top - start).toBeCloseTo(delta * 100, 1);
                 expect(reversals).toEqual([]);
+                expect(
+                    Math.max(...steps),
+                    'cache refills must not stall then jump'
+                ).toBeLessThanOrEqual(10.1);
             }
         }
     } finally {
