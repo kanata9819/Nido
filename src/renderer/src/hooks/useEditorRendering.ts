@@ -187,8 +187,13 @@ export function useEditorRendering({
                 ) {
                     motion = undefined;
                 } else {
-                    targetFrame.width = surface.width;
-                    targetFrame.height = surface.height;
+                    if (
+                        targetFrame.width !== surface.width ||
+                        targetFrame.height !== surface.height
+                    ) {
+                        targetFrame.width = surface.width;
+                        targetFrame.height = surface.height;
+                    }
                     targetFrame.getContext('2d')!.drawImage(surface, 0, 0);
                     const ctx = surface.getContext('2d')!;
                     const dpr = window.devicePixelRatio || 1;
@@ -391,8 +396,13 @@ export function useEditorRendering({
                         : 0;
                     cancelAnimationFrame(frame);
                     render();
-                    previousFrame.width = surface.width;
-                    previousFrame.height = surface.height;
+                    if (
+                        previousFrame.width !== surface.width ||
+                        previousFrame.height !== surface.height
+                    ) {
+                        previousFrame.width = surface.width;
+                        previousFrame.height = surface.height;
+                    }
                     previousFrame.getContext('2d')!.drawImage(surface, 0, 0);
                     const height =
                         gridRef.current.rowTop(scroll[2]) - gridRef.current.rowTop(scroll[1]);

@@ -168,21 +168,40 @@ test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
                 }
                 clear(x, y, width, height);
             };
-            const draw = ctx.fillText.bind(ctx);
-            ctx.fillText = (value, x, y, ...rest) => {
-                if (value === 'f' || value === 'p') {
-                    const points = JSON.parse(node.getAttribute('data-code-points') || '[]');
-                    points.push({ value, x, y, font: parseFloat(ctx.font) });
-                    node.setAttribute('data-code-points', JSON.stringify(points));
-                } else if (value.includes('Run Tests') && !node.hasAttribute('data-lens-point')) {
-                    node.setAttribute(
-                        'data-lens-point',
-                        JSON.stringify({ y, font: parseFloat(ctx.font) })
-                    );
-                }
-                draw(value, x, y, ...rest);
+            const pointsByImage = new WeakMap<
+                HTMLCanvasElement,
+                { value: string; x: number; y: number; font: number }[]
+            >();
+            const text = CanvasRenderingContext2D.prototype.fillText;
+            CanvasRenderingContext2D.prototype.fillText = function (value, x, y, ...rest) {
+                const points = pointsByImage.get(this.canvas) || [];
+                points.push({ value, x, y, font: parseFloat(this.font) });
+                pointsByImage.set(this.canvas, points);
+                text.call(this, value, x, y, ...rest);
             };
+            const draw = ctx.drawImage.bind(ctx);
+            ctx.drawImage = ((...args: Parameters<typeof draw>) => {
+                draw(...args);
+                if (args.length !== 5) return;
+                for (const { value, x, y: localY, font } of pointsByImage.get(
+                    args[0] as HTMLCanvasElement
+                ) || []) {
+                    const y = localY + Number(args[2]);
+                    if (value === 'f' || value === 'p') {
+                        const points = JSON.parse(node.getAttribute('data-code-points') || '[]');
+                        points.push({ value, x, y, font });
+                        node.setAttribute('data-code-points', JSON.stringify(points));
+                    } else if (
+                        value.includes('Run Tests') &&
+                        !node.hasAttribute('data-lens-point')
+                    ) {
+                        node.setAttribute('data-lens-point', JSON.stringify({ y, font }));
+                    }
+                }
+            }) as typeof draw;
         });
+        const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+        await page.setViewportSize({ ...viewport, width: viewport.width + 1 });
         await expect(canvas).toHaveAttribute('data-lens-point', /y/);
         const points = JSON.parse((await canvas.getAttribute('data-code-points'))!) as {
             value: string;
@@ -1061,10 +1080,10 @@ test('Japanese editor text stays legible at fractional display scales', async ()
         const canvas = page.locator('canvas:visible');
         await expect(canvas).toHaveAttribute('aria-description', /日本語の描画位置/);
         await canvas.evaluate((element: HTMLCanvasElement) => {
-            const ctx = element.getContext('2d')!;
-            const fillText = ctx.fillText.bind(ctx);
+            const fillText = CanvasRenderingContext2D.prototype.fillText;
             element.dataset.aligned = 'true';
-            ctx.fillText = (text, x, y) => {
+            CanvasRenderingContext2D.prototype.fillText = function (text, x, y) {
+                const ctx = this;
                 const dpr = window.devicePixelRatio;
                 if (
                     Math.abs(x * dpr - Math.round(x * dpr)) > 0.001 ||
@@ -1075,9 +1094,25 @@ test('Japanese editor text stays legible at fractional display scales', async ()
                 if (text === '語') element.dataset.japaneseInk = String(ctx.fillStyle);
                 if (ctx.fillStyle === '#ffb300')
                     element.dataset.parameterInk = String(ctx.fillStyle);
-                fillText(text, x, y);
+                fillText.call(ctx, text, x, y);
             };
+            const ctx = element.getContext('2d')!;
+            const draw = ctx.drawImage.bind(ctx);
+            ctx.drawImage = ((...args: Parameters<typeof draw>) => {
+                if (
+                    args.length === 5 &&
+                    Math.abs(
+                        Number(args[2]) * window.devicePixelRatio -
+                            Math.round(Number(args[2]) * window.devicePixelRatio)
+                    ) > 0.001
+                ) {
+                    element.dataset.aligned = 'false';
+                }
+                draw(...args);
+            }) as typeof draw;
         });
+        const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+        await page.setViewportSize({ ...viewport, width: viewport.width + 1 });
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await page.getByRole('checkbox', { name: 'UI animations' }).uncheck();
         await page.getByRole('button', { name: 'Close palette' }).click();
@@ -1303,20 +1338,30 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
         await expect(canvas).toHaveAttribute('aria-description', /ab日本語xyz/);
         await canvas.evaluate((node: HTMLCanvasElement) => {
             const ctx = node.getContext('2d')!;
-            const draw = ctx.fillText.bind(ctx);
-            ctx.fillText = (value, x, y, ...rest) => {
-                if (value === '本' || value === 'Ω') {
-                    const offset = ctx.getTransform().f / window.devicePixelRatio;
-                    node.setAttribute(
-                        value === '本' ? 'data-wide-point' : 'data-tab-point',
-                        JSON.stringify({
-                            x: x + ctx.measureText('M').width * (value === '本' ? 1.25 : 0.5),
-                            y: y + offset - 4
-                        })
-                    );
-                }
-                draw(value, x, y, ...rest);
+            let row = 0;
+            const fill = ctx.fillRect.bind(ctx);
+            ctx.fillRect = (x, y, width, height) => {
+                if (x === 0 && y === 0 && height > 100) row = 0;
+                fill(x, y, width, height);
             };
+            const draw = ctx.drawImage.bind(ctx);
+            ctx.drawImage = ((...args: Parameters<typeof draw>) => {
+                draw(...args);
+                if (args.length !== 5) return;
+                const index = row++;
+                const y = Number(args[2]) + Number(args[4]) / 2;
+                queueMicrotask(() => {
+                    const line = node.getAttribute('aria-description')!.split('\n')[index] || '';
+                    const wide = line.indexOf('ab日本語');
+                    const tab = line.indexOf('Ω');
+                    const column = wide >= 0 ? wide + 4 + 1.25 : tab + 0.5;
+                    if (wide < 0 && tab < 0) return;
+                    node.setAttribute(
+                        wide >= 0 ? 'data-wide-point' : 'data-tab-point',
+                        JSON.stringify({ x: column * ctx.measureText('M').width, y })
+                    );
+                });
+            }) as typeof draw;
         });
         await canvas.hover();
         await page.mouse.wheel(0, 3);
@@ -2360,22 +2405,26 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
         await expect(canvas).toHaveAttribute('aria-description', /line 20/);
         await canvas.evaluate((surface) => {
             const context = (surface as HTMLCanvasElement).getContext('2d')!;
-            const text = context.fillText.bind(context);
-            context.fillText = (value, x, y, ...rest) => {
-                if (value === 'l' && y < 30) {
-                    surface.setAttribute(
-                        'data-first-line-y',
-                        String(y + context.getTransform().f / window.devicePixelRatio)
-                    );
-                }
-                text(value, x, y, ...rest);
+            let row = 0;
+            const fill = context.fillRect.bind(context);
+            context.fillRect = (x, y, width, height) => {
+                if (x === 0 && y === 0 && height > 100) row = 0;
+                fill(x, y, width, height);
             };
             const draw = context.drawImage.bind(context);
             context.drawImage = ((...args: Parameters<typeof draw>) => {
-                surface.setAttribute(
-                    'data-animation-frames',
-                    String(Number(surface.getAttribute('data-animation-frames') || 0) + 1)
-                );
+                if (args.length === 5 && row++ === 0) {
+                    const fontSize = Number(context.font.match(/([\d.]+)px/)![1]);
+                    surface.setAttribute(
+                        'data-first-line-y',
+                        String(Number(args[2]) + (Number(args[4]) + fontSize) / 2 - 3)
+                    );
+                }
+                if (args.length === 9)
+                    surface.setAttribute(
+                        'data-animation-frames',
+                        String(Number(surface.getAttribute('data-animation-frames') || 0) + 1)
+                    );
                 draw(...args);
             }) as typeof draw;
         });

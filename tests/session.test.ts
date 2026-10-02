@@ -1848,14 +1848,18 @@ test('CodeLens rows compact while clicks, fractional scrolling and the command l
                 'beginPath',
                 'rect',
                 'clip',
+                'drawImage',
                 'fillText'
             ].map((name) => [name, () => {}])
         )
     } as unknown as CanvasRenderingContext2D;
+    let glyphs = 0;
+    context.fillText = () => { glyphs++; };
     const canvas = {
         width: 0,
         height: 0,
-        getContext: () => context
+        getContext: () => context,
+        ownerDocument: { createElement: () => ({ width: 0, height: 0, getContext: () => context }) }
     } as unknown as HTMLCanvasElement;
     const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
     Object.defineProperty(globalThis, 'window', {
@@ -1881,13 +1885,16 @@ test('CodeLens rows compact while clicks, fractional scrolling and the command l
         assert.equal(grid.rowAt(238), -1);
         assert.equal(grid.rowAt(240), -1);
         grid.scrollFraction = 0.3;
+        const originalGlyphs = glyphs;
         grid.draw(canvas, 160, 264, 14, 'monospace', false);
+        assert.equal(glyphs, originalGlyphs, 'fractional scrolling reuses the row images');
         assert.equal(grid.rowY(1), 12);
         assert.equal(grid.rowAt(grid.rowY(1) + 12), 1);
         assert.equal(grid.rowY(grid.rows - 1), 240);
         grid.apply([['grid_line', [1, 0, 0, [['x', 0]]]], ['flush']]);
         grid.scrollFraction = 0;
         grid.draw(canvas, 160, 264, 14, 'monospace', false);
+        assert.ok(glyphs > originalGlyphs, 'edited rows invalidate the cached text');
         assert.equal(grid.rowTop(1), 24);
         assert.equal(grid.extraRows, 0);
         assert.equal(grid.rowY(grid.rows - 1), 240);
