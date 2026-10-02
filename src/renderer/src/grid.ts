@@ -8,6 +8,7 @@ export interface Cell {
 
 interface Highlight {
     codeLens?: boolean;
+    indentGuide?: boolean;
     foreground?: number;
     background?: number;
     special?: number;
@@ -218,6 +219,9 @@ export class Grid {
                                 (item) =>
                                     item.hi_name === 'NidoCodeLens' ||
                                     item.hi_name === 'NidoCodeLensHint'
+                            ),
+                            indentGuide: info?.some((item) =>
+                                /^NidoIndent\d+$/.test(item.hi_name || '')
                             )
                         });
                         break;
@@ -368,7 +372,15 @@ export class Grid {
 
                     const x = col * cellWidth;
 
-                    if (cell.text === '│') {
+                    if (h.indentGuide) {
+                        // Use the same physical-pixel boundary as bracket pair guides.
+                        ctx.fillRect(
+                            Math.round(x * dpr) / dpr - 1 / dpr,
+                            y,
+                            1 / dpr,
+                            image.height / dpr
+                        );
+                    } else if (cell.text === '│') {
                         // Box-drawing lines must span the cell, including the line spacing.
                         ctx.fillRect(Math.round(x + cellWidth / 2), y, 1, rowHeight);
                     } else {
@@ -408,7 +420,8 @@ export class Grid {
         ctx.clip();
         for (const guide of this.bracketGuides) {
             const snap = (value: number): number => Math.round(value * dpr) / dpr;
-            const x = snap((guide.column + 0.5) * cellWidth);
+            // Keep the vertical stroke outside the bracket's cell, including at fractional DPI.
+            const x = snap(guide.column * cellWidth) - 1 / dpr;
             const top =
                 guide.opening >= 0 ? this.rowY(guide.top + 1) - 1 / dpr : this.rowY(guide.top);
             const bottom =

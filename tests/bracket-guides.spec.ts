@@ -57,6 +57,23 @@ test('bracket pair guides connect scopes and track the active scope and virtual 
                 }
             });
             const ctx = node.getContext('2d')!;
+            node.dataset.indentLines = '[]';
+            const originalFill = CanvasRenderingContext2D.prototype.fillRect;
+            CanvasRenderingContext2D.prototype.fillRect = function (x, y, width, height) {
+                if (
+                    this.canvas !== node &&
+                    width <= 1 &&
+                    height > 10 &&
+                    ['#75633f', '#476a86', '#745781', '#467568', '#805655', '#647747'].includes(
+                        String(this.fillStyle)
+                    )
+                ) {
+                    const lines = JSON.parse(node.dataset.indentLines!);
+                    lines.push({ x, width });
+                    node.dataset.indentLines = JSON.stringify(lines);
+                }
+                originalFill.call(this, x, y, width, height);
+            };
             const fill = ctx.fillRect.bind(ctx);
             ctx.fillRect = (x, y, width, height) => {
                 if (x === 0 && y === 0 && height > 100) node.dataset.guideLines = '[]';
@@ -74,7 +91,9 @@ test('bracket pair guides connect scopes and track the active scope and virtual 
                 await window.nido.input(state.workspaces[0].id, keys);
             }, keys);
         };
-        await send('<Cmd>set syntax=rust<CR>');
+        await send('<Cmd>set syntax=rust shiftwidth=4<CR>');
+        const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+        await page.setViewportSize({ ...viewport, width: viewport.width + 1 });
         await expect
             .poll(async () => JSON.parse((await canvas.getAttribute('data-guides')) || '[]').length)
             .toBe(5);
@@ -92,6 +111,27 @@ test('bracket pair guides connect scopes and track the active scope and virtual 
                     JSON.parse((await canvas.getAttribute('data-guide-lines')) || '[]').length
             )
             .toBe(3);
+        const edges = await canvas.evaluate((node: HTMLCanvasElement) => {
+            const guide = JSON.parse(node.dataset.guides!).find(
+                (item: { active: boolean }) => item.active
+            );
+            const line = JSON.parse(node.dataset.guideLines!).find(
+                (item: { width: number; height: number }) => item.height > item.width
+            );
+            const width = node.getContext('2d')!.measureText('M').width;
+            const dpr = window.devicePixelRatio;
+            return {
+                aligned: JSON.parse(node.dataset.indentLines!).some(
+                    (indent: { x: number; width: number }) =>
+                        Math.abs(indent.x - line.x) < 0.001 &&
+                        Math.abs(indent.width - line.width) < 0.001
+                ),
+                right: line.x + line.width,
+                bracket: Math.round(guide.closing * width * dpr) / dpr
+            };
+        });
+        expect(edges.right).toBeLessThanOrEqual(edges.bracket);
+        expect(edges.aligned).toBe(true);
         await canvas.screenshot({ path: 'test-results/bracket-pair-guides.png' });
         await send(
             "<Cmd>lua vim.api.nvim_buf_set_extmark(0, vim.api.nvim_create_namespace('guide-lens-test'), 5, 0, {virt_lines={{{'Run Tests', 'NidoCodeLens'}}}, virt_lines_above=true})<CR>"
