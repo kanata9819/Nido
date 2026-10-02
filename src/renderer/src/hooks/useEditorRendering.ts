@@ -21,6 +21,7 @@ interface UseEditorRenderingOptions {
     attachedRef: RefObject<boolean>;
     paintRef: RefObject<() => void>;
     scrollRef: RefObject<(lines: number, follow: boolean) => void>;
+    scrollCompletionRef: RefObject<Promise<void>>;
     fontFamily: string;
 }
 
@@ -43,6 +44,7 @@ export function useEditorRendering({
     attachedRef,
     paintRef,
     scrollRef,
+    scrollCompletionRef,
     fontFamily
 }: UseEditorRenderingOptions): void {
     const animationsRef = useRef(animations);
@@ -77,6 +79,9 @@ export function useEditorRendering({
         let queuedScroll = 0;
         let sentScroll = 0;
         let scrollPending = false;
+        let prefetchNeeded = true;
+        let prefetchPending = false;
+        let preparingMotion = false;
         let scrollFollow = true;
         let lastColumns = 0;
         let lastRows = 0;
@@ -117,11 +122,12 @@ export function useEditorRendering({
         };
 
         const flushScroll = (): void => {
-            if (scrollPending || !queuedScroll || !scrollEnabledRef.current) return;
+            if (scrollPending || prefetchPending || !queuedScroll || !scrollEnabledRef.current)
+                return;
             sentScroll = Math.max(-1000, Math.min(1000, queuedScroll));
             queuedScroll -= sentScroll;
             scrollPending = true;
-            void window.nido
+            scrollCompletionRef.current = window.nido
                 .scroll(id, sentScroll, scrollFollow, true)
                 .catch((error) => {
                     sentScroll = queuedScroll = 0;
@@ -133,7 +139,7 @@ export function useEditorRendering({
                 })
                 .finally(() => {
                     scrollPending = false;
-                    if (!disposed && queuedScroll) schedule();
+                    if (!disposed && (queuedScroll || prefetchNeeded)) schedule();
                 });
         };
 
@@ -156,6 +162,29 @@ export function useEditorRendering({
                 return;
             }
             const focused = document.activeElement === input;
+            if (
+                pixelScroll &&
+                prefetchNeeded &&
+                !prefetchPending &&
+                !scrollPending &&
+                !motion &&
+                !preparingMotion &&
+                scrollEnabledRef.current &&
+                gridRef.current.rows > 0 &&
+                attachedRef.current
+            ) {
+                prefetchNeeded = false;
+                prefetchPending = true;
+                scrollCompletionRef.current = window.nido
+                    .prefetchScroll(id)
+                    .catch((error) => {
+                        if (!disposed) errorRef.current(String(error));
+                    })
+                    .finally(() => {
+                        prefetchPending = false;
+                        if (!disposed && queuedScroll) schedule();
+                    });
+            }
             flushScroll();
             const target = gridRef.current.scrollCursor ?? gridRef.current.cursor;
             const now = performance.now();
@@ -325,7 +354,16 @@ export function useEditorRendering({
                     .resize(id, columns, rows)
                     .catch((e) => errorRef.current(String(e)));
             }
-            if (cursorMotion || motion || blinkFade) {
+            if (
+                cursorMotion ||
+                motion ||
+                blinkFade ||
+                (pixelScroll &&
+                    prefetchNeeded &&
+                    !prefetchPending &&
+                    !scrollPending &&
+                    scrollEnabledRef.current)
+            ) {
                 cancelAnimationFrame(frame);
                 frame = requestAnimationFrame(render);
             }
@@ -457,7 +495,9 @@ export function useEditorRendering({
                         ? scrollOffset(motion.distanceX, now - motion.start)
                         : 0;
                     cancelAnimationFrame(frame);
+                    preparingMotion = true;
                     render();
+                    preparingMotion = false;
                     if (
                         previousFrame.width !== surface.width ||
                         previousFrame.height !== surface.height
@@ -500,6 +540,18 @@ export function useEditorRendering({
                 const { row, column } = gridRef.current.cursor;
                 const mode = gridRef.current.mode;
                 if (gridRef.current.apply(event.events)) {
+                    if (
+                        !prefetchPending &&
+                        (event.events.some(
+                            ([name]) => name === 'grid_clear' || name === 'grid_resize'
+                        ) ||
+                            (!gridRef.current.hasUpperRows &&
+                                event.events.some(
+                                    ([name]) => name === 'nido_scroll' || name === 'grid_scroll'
+                                )))
+                    ) {
+                        prefetchNeeded = true;
+                    }
                     descriptionDirty ||= event.events.some(
                         ([name]) =>
                             name === 'grid_line' ||

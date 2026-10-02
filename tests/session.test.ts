@@ -584,6 +584,83 @@ test('pixel scrolling publishes the grid, offset and anchored cursor in a single
     }
 });
 
+test('scroll prefetch caches upper rows without changing the view, cursor or buffer', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-scroll-prefetch-'));
+    let session: Session | undefined;
+    const grid = new Grid();
+    const frames: Redraw[] = [];
+    try {
+        await writeFile(
+            join(root, 'lines.txt'),
+            Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n')
+        );
+        session = await Session.create(root, (event) => {
+            if (event.type === 'redraw') {
+                grid.apply(event.events);
+                frames.push(event.events);
+            }
+        });
+        await session.attach(80, 25);
+        await session.openFile('lines.txt');
+        await session.input('50Gzt');
+        const snapshot = () =>
+            session!.client.request('nvim_exec_lua', [
+                "return {vim.fn.winsaveview(), vim.api.nvim_buf_get_lines(0, 0, -1, false), require('nido_scroll').screen_cursor()}",
+                []
+            ]);
+        for (const detached of [false, true]) {
+            if (detached) await session.scroll(0.2, false, true);
+            const before = await snapshot();
+            const cells = grid.cells.map((row) => row.map((cell) => cell.text).join(''));
+            frames.length = 0;
+            await session.prefetchScroll();
+            assert.deepEqual(await snapshot(), before);
+            assert.deepEqual(
+                grid.cells.map((row) => row.map((cell) => cell.text).join('')),
+                cells
+            );
+            assert.equal(
+                frames.length,
+                1,
+                'intermediate view must remain inside one atomic redraw'
+            );
+            assert.equal(
+                grid.hasUpperRows,
+                true,
+                JSON.stringify(
+                    frames.map((frame) =>
+                        frame.map(([name, ...calls]) => [
+                            name,
+                            name === 'grid_scroll' || name === 'nido_scroll' ? calls : calls.length
+                        ])
+                    )
+                )
+            );
+            for (let i = 0; i < 7; i++) {
+                await session.scroll(-1, !detached, true);
+                assert.equal(
+                    grid.hasUpperRows,
+                    true,
+                    'successive upward rows reuse the prefetched history'
+                );
+            }
+        }
+        await session.input('2');
+        await new Promise(resolve => setTimeout(resolve, 20));
+        await session.prefetchScroll();
+        await session.input('0G');
+        await session.client.request('nvim_eval', ['1']);
+        assert.equal((await session.client.request('nvim_win_get_cursor', [0]) as number[])[0], 20);
+        await session.input(':let g:nido_prefetch_check = 4');
+        await session.prefetchScroll();
+        await session.input('2<CR>');
+        assert.equal(await session.client.request('nvim_eval', ['g:nido_prefetch_check']), 42);
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('clipboard sharing switches Vim yank, delete and paste between private and system registers', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-clipboard-'));
     let session: Session | undefined;

@@ -101,6 +101,23 @@ function M.page(key, count)
   end
 end
 
+function M.prefetch()
+  if vim.bo.buftype ~= '' or api.nvim_win_get_config(0).relative ~= '' then return end
+  local mode = api.nvim_get_mode()
+  -- A :normal command would consume an unfinished count, mapping or command-line input.
+  if mode.mode ~= 'n' or mode.blocking then return end
+  local view = vim.fn.winsaveview()
+  if view.topline <= 1 and view.skipcol == 0 then return end
+  -- Both redraws are delivered in one scroll batch, so the intermediate view is never displayed.
+  local ok, err = pcall(function()
+    vim.cmd.normal({args={'8' .. string.char(25)}, bang=true})
+    vim.cmd.redraw()
+  end)
+  vim.fn.winrestview(view)
+  vim.cmd.redraw()
+  if not ok then error(err) end
+end
+
 function M.scroll(lines, follow, pixel)
   centered_view = nil
   local previous_anchor = anchor

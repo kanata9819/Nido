@@ -176,6 +176,7 @@ export interface NidoAPI {
     openDocumentation(url: string): Promise<void>;
     click(id: string, row: number, column: number): Promise<void>;
     scroll(id: string, lines: number, follow?: boolean, pixel?: boolean): Promise<void>;
+    prefetchScroll(id: string): Promise<void>;
     paste(id: string, text: string): Promise<void>;
     pasteClipboard(id: string): Promise<void>;
     files(id: string, relative: string): Promise<FileEntry[]>;

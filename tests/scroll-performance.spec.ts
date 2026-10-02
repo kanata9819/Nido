@@ -246,6 +246,55 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         );
         expect(probe.lines * rowHeight).toBeCloseTo(0.25, 6);
         await canvas.screenshot({ path: 'test-results/touchpad-fractional-scroll.png' });
+        // Prime a cold viewport in the middle of a file, then cross a row boundary upwards.
+        await page.evaluate(async () => {
+            const restored = await window.nido.restoreWorkspaces();
+            await window.nido.input(restored.workspaces[0].id, '50Gzt');
+        });
+        await expect(canvas).toHaveAttribute('aria-description', /line 50/);
+        await page.waitForTimeout(200);
+        await canvas.evaluate((node: HTMLCanvasElement) => {
+            const context = node.getContext('2d')!;
+            const draw = context.drawImage.bind(context);
+            context.drawImage = ((...args: Parameters<typeof draw>) => {
+                if (args.length === 5 && Number(args[2]) > 0 && Number(args[2]) < 3)
+                    node.dataset.upPreview = String(args[2]);
+                draw(...args);
+            }) as typeof draw;
+        });
+        const offsetsBeforeUp = await canvas.getAttribute('data-offsets');
+        await burst(1, -2);
+        await expect
+            .poll(async () => Number(await canvas.getAttribute('data-up-preview')))
+            .toBeCloseTo(2, 5);
+        expect(await canvas.getAttribute('data-offsets')).toBe(offsetsBeforeUp);
+        await expect
+            .poll(() =>
+                running.evaluate(
+                    () =>
+                        (globalThis as unknown as { touchpadProbe: { completed: number } })
+                            .touchpadProbe.completed
+                )
+            )
+            .toBe(3);
+        await canvas.screenshot({ path: 'test-results/touchpad-upward-scroll.png' });
+        // Cross another boundary: the first reply must not consume all upper history.
+        await canvas.evaluate((node: HTMLCanvasElement) => delete node.dataset.upPreview);
+        const offsetsBeforeSecondUp = await canvas.getAttribute('data-offsets');
+        await burst(1, -rowHeight);
+        await expect
+            .poll(async () => Number(await canvas.getAttribute('data-up-preview')))
+            .toBeCloseTo(2, 5);
+        expect(await canvas.getAttribute('data-offsets')).toBe(offsetsBeforeSecondUp);
+        await expect
+            .poll(() =>
+                running.evaluate(
+                    () =>
+                        (globalThis as unknown as { touchpadProbe: { completed: number } })
+                            .touchpadProbe.completed
+                )
+            )
+            .toBe(4);
         // A combined burst can exceed the IPC limit; send bounded chunks without losing distance.
         await burst(2, 20000);
         await expect
@@ -256,14 +305,14 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
                             .touchpadProbe.completed
                 )
             )
-            .toBe(4);
+            .toBe(6);
         expect(
             (await running.evaluate(
                 () =>
                     (globalThis as unknown as { touchpadProbe: { lines: number } }).touchpadProbe
                         .lines
             )) * rowHeight
-        ).toBeCloseTo(40000.25, 5);
+        ).toBeCloseTo(39998.25 - rowHeight, 5);
         expect(errors).toEqual([]);
     } finally {
         await running.close();

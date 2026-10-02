@@ -47,6 +47,7 @@ export default function Editor({
     const wheel = useRef({ remainder: 0, time: 0 });
     const paint = useRef<() => void>(() => {});
     const scroll = useRef<(lines: number, follow: boolean) => void>(() => {});
+    const scrollCompletion = useRef<Promise<void>>(Promise.resolve());
     const error = useRef(onError);
 
     useEffect(() => {
@@ -75,6 +76,7 @@ export default function Editor({
         attachedRef: attached,
         paintRef: paint,
         scrollRef: scroll,
+        scrollCompletionRef: scrollCompletion,
         fontFamily: fontFamily,
         pixelScroll: !terminal
     });
@@ -121,12 +123,20 @@ export default function Editor({
                 const bounds = canvas.current.getBoundingClientRect();
                 const x = event.clientX - bounds.left;
                 const y = event.clientY - bounds.top;
-                const row = grid.current.rowAt(y);
-                if (row < 0 || x < 0 || x >= columns * cellWidth) {
+                if (x < 0 || x >= columns * cellWidth) {
                     return;
                 }
-
-                send(window.nido.click(id, row, Math.floor(x / cellWidth)));
+                send(
+                    (async () => {
+                        await scrollCompletion.current;
+                        await new Promise<void>((resolve) =>
+                            requestAnimationFrame(() => resolve())
+                        );
+                        if (!host.current) return;
+                        const row = grid.current.rowAt(y);
+                        if (row >= 0) await window.nido.click(id, row, Math.floor(x / cellWidth));
+                    })()
+                );
             }}
             onWheel={(event) => {
                 if (

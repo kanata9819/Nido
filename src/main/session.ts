@@ -350,6 +350,29 @@ end`,
         this.scrollDetached = false;
     }
 
+    async prefetchScroll(): Promise<void> {
+        const next = this.inputQueue.then(async () => {
+            // This fast RPC remains available while Neovim waits for the rest of a command.
+            const mode = (await this.client.request('nvim_get_mode', [])) as {
+                mode: string;
+                blocking: boolean;
+            };
+            if (mode.mode !== 'n' || mode.blocking) return;
+            this.events.beginScrollBatch();
+            try {
+                await this.client.request('nvim_exec_lua', [
+                    "require('nido_scroll').prefetch()",
+                    []
+                ]);
+                await this.client.request('nvim_eval', ['1']);
+            } finally {
+                this.events.endScrollBatch();
+            }
+        });
+        this.inputQueue = next.catch(() => {});
+        return next;
+    }
+
     async scroll(lines: number, follow = true, pixel = false): Promise<void> {
         if (!lines) {
             return;

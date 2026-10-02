@@ -36,6 +36,7 @@ const api: NidoAPI = {
     click: (id, row, column) => ipcRenderer.invoke('nido:click', id, row, column),
     scroll: (id, lines, follow, pixel) =>
         ipcRenderer.invoke('nido:scroll', id, lines, follow, pixel),
+    prefetchScroll: (id) => ipcRenderer.invoke('nido:prefetchScroll', id),
     paste: (id, text) => ipcRenderer.invoke('nido:paste', id, text),
     pasteClipboard: (id) => ipcRenderer.invoke('nido:pasteClipboard', id),
     files: (id, path) => ipcRenderer.invoke('nido:files', id, path),

@@ -82,8 +82,17 @@ export class Grid {
     private scrollPixels = 0;
     private rowImages = new WeakMap<Cell[], HTMLCanvasElement>();
     private imageStyle = '';
+    private upperRows: Cell[][] = [];
+    private upperHeight = 0;
+    private upperLayout?: Cell[];
+    private upperFontHeight = 0;
+
+    get hasUpperRows(): boolean {
+        return this.upperRows.length > 0;
+    }
 
     rowTop(row: number): number {
+        if (row < 0) return row * this.upperHeight;
         const index = Math.max(0, Math.min(this.rows - 1, Math.floor(row)));
         const top = this.rowTops[index] ?? index * this.cellHeight;
         const bottom = this.rowTops[index + 1] ?? top + this.cellHeight;
@@ -96,13 +105,22 @@ export class Grid {
 
     rowAt(y: number): number {
         if (y < 0 || y >= this.contentHeight) return -1;
+        if (y + this.scrollPixels < 0) return -1;
         let row = 0;
         while (row < this.rows - 1 && this.rowTop(row + 1) <= y + this.scrollPixels) row++;
         return row < this.rows - 1 ? row : -1;
     }
 
     apply(events: Redraw): boolean {
+        if (
+            events.some(
+                ([name]) => name === 'nido_edit' || name === 'grid_clear' || name === 'grid_resize'
+            )
+        ) {
+            this.upperRows = [];
+        }
         let flush = false;
+        const viewportScroll = events.some(([name]) => name === 'nido_scroll');
         for (const [name, ...calls] of events) {
             switch (name) {
                 case 'flush': {
@@ -120,6 +138,29 @@ export class Grid {
             }
 
             for (const args of calls) {
+                // Viewport metadata also covers redraws where changing relative numbers prevents grid_scroll.
+                if (name === 'nido_scroll' || (name === 'grid_scroll' && !viewportScroll)) {
+                    const [grid, top, bottom, left, right, rows, columns] = args as number[];
+                    if (
+                        grid === 1 &&
+                        top === 0 &&
+                        left === 0 &&
+                        right === this.columns &&
+                        columns === 0
+                    ) {
+                        this.upperRows =
+                            Math.abs(rows) >= bottom - top
+                                ? []
+                                : rows > 0
+                                  ? [...this.upperRows, ...this.cells.slice(0, rows)].slice(-8)
+                                  : this.upperRows.slice(
+                                        0,
+                                        Math.max(0, this.upperRows.length + rows)
+                                    );
+                    } else {
+                        this.upperRows = [];
+                    }
+                }
                 switch (name) {
                     case 'nido_bracket_guides': {
                         this.bracketGuides = Array.isArray(args[0])
@@ -160,7 +201,10 @@ export class Grid {
                             break;
                         }
                         this.layoutDirty = true;
-                        const row = this.cells[Number(args[1])];
+                        let row = this.cells[Number(args[1])];
+                        if (row && this.upperRows.includes(row)) {
+                            row = this.cells[Number(args[1])] = row.slice();
+                        }
                         if (row) this.rowImages.delete(row);
                         let column = Number(args[2]);
                         let highlight = 0;
@@ -217,6 +261,7 @@ export class Grid {
                     }
                     case 'hl_attr_define': {
                         this.layoutDirty = true;
+                        this.upperLayout = undefined;
                         this.rowImages = new WeakMap();
                         const info = args[3] as { hi_name?: string }[] | undefined;
                         this.highlights.set(Number(args[0]), {
@@ -312,14 +357,35 @@ export class Grid {
         this.extraRows = Math.floor(
             ((this.rows - 1) * cellHeight - this.rowTop(this.rows - 1)) / cellHeight
         );
-        // ponytail: preview one cached overscan row; cache more rows for deeper speculative scrolling.
+        const upper = this.upperRows.at(-1);
+        if (
+            upper !== this.upperLayout ||
+            this.upperHeight === 0 ||
+            this.upperFontHeight !== cellHeight
+        ) {
+            this.upperHeight =
+                upper?.some(
+                    (cell) => cell.text.trim() && this.highlights.get(cell.highlight)?.codeLens
+                ) &&
+                upper.every(
+                    (cell) => !cell.text.trim() || this.highlights.get(cell.highlight)?.codeLens
+                )
+                    ? Math.ceil(cellHeight * 0.7)
+                    : cellHeight;
+            this.upperLayout = upper;
+            this.upperFontHeight = cellHeight;
+        }
+        // ponytail: preview one row in either direction; deeper speculation needs more lower overscan.
         this.scrollPixels = this.pixelScrollEnabled
-            ? this.rowTop(Math.max(0, Math.min(1, this.scrollFraction + this.scrollPreview)))
+            ? this.rowTop(
+                  Math.max(upper ? -1 : 0, Math.min(1, this.scrollFraction + this.scrollPreview))
+              )
             : 0;
         ctx.fillStyle = this.background;
         ctx.fillRect(0, 0, width, height);
         ctx.textBaseline = 'alphabetic';
-        for (let row = 0; row < this.rows; row++) {
+        for (let row = upper && this.scrollPixels < 0 ? -1 : 0; row < this.rows; row++) {
+            const cells = row < 0 ? upper! : this.cells[row];
             const rowHeight = this.rowTop(row + 1) - this.rowTop(row);
             ctx.save();
             if (row < this.rows - 1) {
@@ -327,7 +393,6 @@ export class Grid {
                 ctx.rect(0, 0, width, this.contentHeight);
                 ctx.clip();
             }
-            const cells = this.cells[row];
             let image = this.rowImages.get(cells);
             if (!image || image.height !== Math.ceil(rowHeight * dpr)) {
                 image = canvas.ownerDocument.createElement('canvas');
@@ -342,14 +407,14 @@ export class Grid {
                 ctx.fillRect(0, 0, width, image.height / dpr);
                 // Paint all cell backgrounds first so a wide glyph is not erased by its continuation cell.
                 for (let col = 0; col < this.columns; col++) {
-                    const h = this.highlights.get(this.cells[row]?.[col]?.highlight || 0) || {};
+                    const h = this.highlights.get(cells[col]?.highlight || 0) || {};
                     ctx.fillStyle = cellBackground(h, this.background, this.foreground);
 
                     ctx.fillRect(col * cellWidth, y, cellWidth + 0.5, image.height / dpr);
                 }
 
                 for (let col = 0; col < this.columns; col++) {
-                    const cell = this.cells[row]?.[col];
+                    const cell = cells[col];
                     if (!cell?.text || cell.text === ' ') {
                         continue;
                     }
@@ -360,9 +425,9 @@ export class Grid {
                         const start = col;
                         while (
                             col + 1 < this.columns &&
-                            this.cells[row]?.[col + 1]?.highlight === cell.highlight
+                            cells[col + 1]?.highlight === cell.highlight
                         ) {
-                            text += this.cells[row][++col].text;
+                            text += cells[++col].text;
                         }
                         ctx.font = `${fontSize * 0.8}px ${family}`;
                         ctx.fillStyle = cellForeground(h, this.background, this.foreground);
