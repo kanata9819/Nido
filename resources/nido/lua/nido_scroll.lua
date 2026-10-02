@@ -103,6 +103,7 @@ end
 
 function M.scroll(lines, follow, pixel)
   centered_view = nil
+  local previous_anchor = anchor
   if follow then
     if anchor then M.restore() end
   elseif not anchor and vim.bo.buftype == '' then
@@ -137,7 +138,10 @@ function M.scroll(lines, follow, pixel)
     end
   end
   if vim.fn.line('w0') >= api.nvim_buf_line_count(0) then fraction = 0 end
-  api.nvim_exec_autocmds('User', {pattern='NidoScroll'})
+  -- Fractional movement only changes the renderer offset, not the editor state.
+  if lines ~= 0 or anchor ~= previous_anchor then
+    api.nvim_exec_autocmds('User', {pattern='NidoScroll'})
+  end
   vim.cmd.redraw()
   publish_offset(pixel)
 end

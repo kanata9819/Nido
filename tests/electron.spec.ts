@@ -2434,13 +2434,11 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
             .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
             .toBeGreaterThan(0);
         const firstY = Number(await canvas.getAttribute('data-first-line-y'));
-        const dpr = await page.evaluate(() => window.devicePixelRatio);
-        const snap = (pixels: number): number => Math.round(pixels * dpr) / dpr;
         await page.waitForTimeout(300);
         await page.mouse.wheel(0, 2);
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
-            .toBeCloseTo(firstY + snap(3) - snap(5), 1);
+            .toBeCloseTo(firstY - 2, 1);
         await page.screenshot({ path: 'test-results/pixel-scroll.png' });
         await page.mouse.wheel(0, -2);
         await expect
@@ -2449,7 +2447,7 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
         await page.mouse.wheel(0, -100);
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
-            .toBeCloseTo(firstY + snap(3), 1);
+            .toBeCloseTo(firstY + 3, 1);
         await page.mouse.wheel(0, 100);
         await expect(canvas).not.toHaveAttribute('aria-description', /^.*line 1 /);
         await page.waitForTimeout(250);
@@ -2491,24 +2489,30 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
             const ctx = node.getContext('2d')!;
             const fill = ctx.fillRect.bind(ctx);
             let expected: number | undefined;
+            let anchorRow: number | undefined;
+            let firstRow = true;
+            const draw = ctx.drawImage.bind(ctx);
+            ctx.drawImage = ((...args: Parameters<typeof draw>) => {
+                if (firstRow && args.length === 5) {
+                    expected =
+                        anchorRow === undefined ? undefined : anchorRow * 25 + 1 + Number(args[2]);
+                    firstRow = false;
+                }
+                draw(...args);
+            }) as typeof draw;
             node.dataset.cursorErrors = '[]';
             window.nido.onEvent((event) => {
                 if (event.type !== 'redraw') return;
                 for (const [name, ...calls] of event.events) {
                     if (name !== 'nido_pixel_scroll') continue;
-                    for (const [fraction, direct, cursor] of calls) {
+                    for (const [, direct, cursor] of calls) {
                         const anchor = cursor as { row: number } | undefined;
-                        expected =
-                            direct && anchor
-                                ? anchor.row * 25 +
-                                  1 -
-                                  Math.round(Number(fraction) * 25 * window.devicePixelRatio) /
-                                      window.devicePixelRatio
-                                : undefined;
+                        anchorRow = direct && anchor ? anchor.row : undefined;
                     }
                 }
             });
             ctx.fillRect = (x, y, w, h) => {
+                if (x === 0 && y === 0 && h > 100) firstRow = true;
                 if (ctx.fillStyle === '#f5f5f5' && expected !== undefined && expected > 0) {
                     const actual = y + ctx.getTransform().f / window.devicePixelRatio;
                     const errors = JSON.parse(node.dataset.cursorErrors!) as number[];

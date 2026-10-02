@@ -20,6 +20,7 @@ interface UseEditorRenderingOptions {
     gridRef: RefObject<Grid>;
     attachedRef: RefObject<boolean>;
     paintRef: RefObject<() => void>;
+    scrollRef: RefObject<(lines: number, follow: boolean) => void>;
     fontFamily: string;
 }
 
@@ -41,10 +42,16 @@ export function useEditorRendering({
     gridRef,
     attachedRef,
     paintRef,
+    scrollRef,
     fontFamily
 }: UseEditorRenderingOptions): void {
     const animationsRef = useRef(animations);
     const smoothCursorRef = useRef(smoothCursor);
+    const scrollEnabledRef = useRef(active && !blocked);
+    useEffect(() => {
+        scrollEnabledRef.current = active && !blocked;
+        paintRef.current();
+    }, [active, blocked]);
     useEffect(() => {
         smoothCursorRef.current = smoothCursor;
         paintRef.current();
@@ -66,6 +73,10 @@ export function useEditorRendering({
         let frame = 0;
         let disposed = false;
         let directScroll = false;
+        let queuedScroll = 0;
+        let sentScroll = 0;
+        let scrollPending = false;
+        let scrollFollow = true;
         let lastColumns = 0;
         let lastRows = 0;
         let cellWidth = 0;
@@ -99,14 +110,49 @@ export function useEditorRendering({
 
         const stopMotion = (): void => {
             motion = undefined;
+            queuedScroll = 0;
+            gridRef.current.scrollPreview = 0;
+            schedule();
+        };
+
+        const flushScroll = (): void => {
+            if (scrollPending || !queuedScroll || !scrollEnabledRef.current) return;
+            sentScroll = Math.max(-1000, Math.min(1000, queuedScroll));
+            queuedScroll -= sentScroll;
+            scrollPending = true;
+            void window.nido
+                .scroll(id, sentScroll, scrollFollow, true)
+                .catch((error) => {
+                    sentScroll = queuedScroll = 0;
+                    gridRef.current.scrollPreview = 0;
+                    if (!disposed) errorRef.current(String(error));
+                })
+                .finally(() => {
+                    scrollPending = false;
+                    if (!disposed) schedule();
+                });
+        };
+
+        scrollRef.current = (lines, follow): void => {
+            queuedScroll += lines;
+            scrollFollow = follow;
+            directScroll = true;
+            motion = undefined;
+            gridRef.current.scrollPreview = queuedScroll + sentScroll;
             schedule();
         };
 
         const render = (): void => {
+            frame = 0;
+            if (!scrollEnabledRef.current) {
+                queuedScroll = 0;
+                gridRef.current.scrollPreview = 0;
+            }
             if (disposed || !element.clientWidth || !element.clientHeight) {
                 return;
             }
             const focused = document.activeElement === input;
+            flushScroll();
             const target = gridRef.current.scrollCursor ?? gridRef.current.cursor;
             const now = performance.now();
             if (blinkFade) {
@@ -277,8 +323,7 @@ export function useEditorRendering({
         };
 
         const schedule = (): void => {
-            cancelAnimationFrame(frame);
-            frame = requestAnimationFrame(render);
+            if (!frame) frame = requestAnimationFrame(render);
         };
 
         paintRef.current = schedule;
@@ -353,6 +398,14 @@ export function useEditorRendering({
                     gridRef.current.scrollCursor = args[2] as
                         { row: number; column: number } | undefined;
                     directScroll = args[1] === true;
+                    if (directScroll && scrollPending) {
+                        // The returned rows already include the one outstanding request.
+                        sentScroll = 0;
+                        gridRef.current.scrollPreview = queuedScroll;
+                    } else if (!directScroll && !scrollPending) {
+                        queuedScroll = 0;
+                        gridRef.current.scrollPreview = 0;
+                    }
                 }
                 const viewportScrolls = event.events.flatMap(([name, ...calls]) =>
                     name === 'nido_scroll' ? calls : []
@@ -457,6 +510,8 @@ export function useEditorRendering({
 
         return () => {
             disposed = true;
+            scrollRef.current = () => {};
+            gridRef.current.scrollPreview = 0;
             clearTimeout(blinkTimer);
             surface.removeEventListener('pointerdown', pointerDown);
             for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart']) {

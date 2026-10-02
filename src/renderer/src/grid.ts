@@ -71,6 +71,7 @@ export class Grid {
     cursorOpacity = 1;
     pixelScrollEnabled = false;
     scrollFraction = 0;
+    scrollPreview = 0;
     cellWidth = 0;
     cellHeight = 0;
     contentHeight = 0;
@@ -307,8 +308,9 @@ export class Grid {
         this.extraRows = Math.floor(
             ((this.rows - 1) * cellHeight - this.rowTop(this.rows - 1)) / cellHeight
         );
+        // ponytail: preview one cached overscan row; cache more rows for deeper speculative scrolling.
         this.scrollPixels = this.pixelScrollEnabled
-            ? Math.round(this.rowTop(this.scrollFraction) * dpr) / dpr
+            ? this.rowTop(Math.max(0, Math.min(1, this.scrollFraction + this.scrollPreview)))
             : 0;
         ctx.fillStyle = this.background;
         ctx.fillRect(0, 0, width, height);
@@ -405,13 +407,7 @@ export class Grid {
                 }
             }
             // Reuse rasterized text; scroll and cursor animation only composite row images.
-            ctx.drawImage(
-                image,
-                0,
-                Math.round(this.rowY(row) * dpr) / dpr,
-                image.width / dpr,
-                image.height / dpr
-            );
+            ctx.drawImage(image, 0, this.rowY(row), image.width / dpr, image.height / dpr);
             ctx.restore();
         }
         ctx.save();
@@ -430,7 +426,7 @@ export class Grid {
                     : this.rowY(guide.bottom);
             ctx.fillStyle = guide.color;
             ctx.globalAlpha = guide.active ? 0.9 : 0.3;
-            ctx.fillRect(x, snap(top), 1 / dpr, snap(bottom) - snap(top));
+            ctx.fillRect(x, top, 1 / dpr, bottom - top);
             if (guide.active) {
                 for (const [column, y] of [
                     [guide.opening, top],
@@ -439,7 +435,7 @@ export class Grid {
                     if (column >= 0)
                         ctx.fillRect(
                             x,
-                            snap(y),
+                            y,
                             Math.max(1 / dpr, snap((column + 1) * cellWidth) - x),
                             1 / dpr
                         );

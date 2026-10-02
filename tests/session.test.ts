@@ -1936,7 +1936,7 @@ test('CodeLens rows compact while clicks, fractional scrolling and the command l
         const originalGlyphs = glyphs;
         grid.draw(canvas, 160, 264, 14, 'monospace', false);
         assert.equal(glyphs, originalGlyphs, 'fractional scrolling reuses the row images');
-        assert.equal(grid.rowY(1), 12);
+        assert.equal(grid.rowY(1), 11.9);
         assert.equal(grid.rowAt(grid.rowY(1) + 12), 1);
         assert.equal(grid.rowY(grid.rows - 1), 240);
         grid.apply([['grid_line', [1, 0, 0, [['x', 0]]]], ['flush']]);

@@ -46,6 +46,7 @@ export default function Editor({
     const attached = useRef(false);
     const wheel = useRef({ remainder: 0, time: 0 });
     const paint = useRef<() => void>(() => {});
+    const scroll = useRef<(lines: number, follow: boolean) => void>(() => {});
     const error = useRef(onError);
 
     useEffect(() => {
@@ -73,6 +74,7 @@ export default function Editor({
         gridRef: grid,
         attachedRef: attached,
         paintRef: paint,
+        scrollRef: scroll,
         fontFamily: fontFamily,
         pixelScroll: !terminal
     });
@@ -147,13 +149,9 @@ export default function Editor({
                               ? event.currentTarget.clientHeight
                               : 1);
                     if (Number.isFinite(pixels) && pixels) {
-                        send(
-                            window.nido.scroll(
-                                id,
-                                Math.max(-1000, Math.min(1000, pixels / height)),
-                                scrollFollowCursor,
-                                true
-                            )
+                        scroll.current(
+                            Math.max(-1000, Math.min(1000, pixels / height)),
+                            scrollFollowCursor
                         );
                     }
                     return;

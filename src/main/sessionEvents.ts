@@ -28,6 +28,7 @@ export class SessionEvents {
     state: SessionState = { buffers: [], current: 0, mode: 'n', line: 1, column: 1, filetype: '' };
     private pendingRedraw: Redraw = [];
     private isBatchingScroll = false;
+    private pendingState = false;
 
     constructor(
         private workspaceId: string,
@@ -40,10 +41,15 @@ export class SessionEvents {
 
     endScrollBatch(): void {
         this.isBatchingScroll = false;
-        if (this.pendingRedraw.length === 0) return;
-        // Grid rows and their fractional offset must become visible together.
-        this.pendingRedraw.push(['flush', []]);
-        this.publishPendingRedraw();
+        if (this.pendingRedraw.length) {
+            // Grid rows and their fractional offset must become visible together.
+            this.pendingRedraw.push(['flush', []]);
+            this.publishPendingRedraw();
+        }
+        if (this.pendingState) {
+            this.pendingState = false;
+            this.publishState();
+        }
     }
 
     private publishPendingRedraw(): void {
@@ -53,6 +59,10 @@ export class SessionEvents {
     }
 
     private publishState(): void {
+        if (this.isBatchingScroll) {
+            this.pendingState = true;
+            return;
+        }
         this.sendToRenderer({ type: 'state', id: this.workspaceId, state: this.state });
     }
 
