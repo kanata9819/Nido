@@ -1342,6 +1342,54 @@ test('bracket pairs share depth colors, ignore strings and comments, and refresh
     }
 });
 
+test('bracket guides follow the innermost scope, ignore quoted brackets and clear on buffer switches', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-bracket-guides-'));
+    let session: Session | undefined;
+    const grid = new Grid();
+    try {
+        await writeFile(join(root, 'scope.txt'), 'function outer() {\n\tif (true) {\n\t\tconst s = "{ fake }"; // {\n\t\twork(\n\t\t\t"日",\n\t\t);\n\t}\n}\nconst empty = {};\n');
+        await writeFile(join(root, 'plain.txt'), 'plain text\n');
+        session = await Session.create(root, (event) => {
+            if (event.type === 'redraw') grid.apply(event.events);
+        });
+        const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
+        await session.openFile('scope.txt');
+        await session.attach(100, 24);
+        await lua('vim.bo.syntax = "javascript"; vim.bo.tabstop = 4; vim.wait(200); vim.cmd("redraw!")');
+        await lua('return 1');
+        assert.equal(grid.bracketGuides.length, 3);
+        const before = await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)');
+        await session.input('5G');
+        await lua('vim.cmd("redraw!")');
+        await lua('return 1');
+        const active = grid.bracketGuides.filter((guide) => guide.active);
+        assert.equal(active.length, 1);
+        assert.deepEqual([active[0].top, active[0].bottom], [3, 5]);
+        const offset = await lua('return vim.fn.getwininfo(vim.api.nvim_get_current_win())[1].textoff') as number;
+        assert.equal(active[0].column, offset + 8, 'tabs use display columns');
+        assert.ok(active[0].opening > active[0].column);
+        await session.input('3G');
+        await lua('vim.cmd("redraw!")');
+        await lua('return 1');
+        assert.deepEqual(grid.bracketGuides.filter((guide) => guide.active).map((guide) => [guide.top, guide.bottom]), [[1, 6]]);
+        assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)'), before);
+        await lua("vim.wo.foldmethod = 'manual'; vim.cmd('1,8fold'); vim.cmd('redraw!')");
+        await lua('return 1');
+        assert.equal(grid.bracketGuides.length, 0, 'folded scopes do not leave dangling guides');
+        await session.input('zo');
+        await lua('vim.cmd("redraw!")');
+        await lua('return 1');
+        assert.equal(grid.bracketGuides.length, 3);
+        await session.openFile('plain.txt');
+        await lua('vim.cmd("redraw!")');
+        await lua('return 1');
+        assert.equal(grid.bracketGuides.length, 0);
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('EditorConfig toggles existing buffers, indentation guides and save rules', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-editorconfig-'));
     const grid = new Grid();

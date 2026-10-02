@@ -58,6 +58,21 @@ export class SessionEvents {
 
     receiveNotification(method: string, args: unknown[]): void {
         switch (method) {
+            case 'nido:bracket_guides': {
+                if (args[1] === true && !this.isBatchingScroll) {
+                    this.sendToRenderer({
+                        type: 'redraw',
+                        id: this.workspaceId,
+                        events: [
+                            ['nido_bracket_guides', [args[0]]],
+                            ['flush', []]
+                        ]
+                    });
+                    break;
+                }
+                this.pendingRedraw.push(['nido_bracket_guides', args]);
+                break;
+            }
             case 'nido:hover': {
                 if (typeof args[0] === 'string' && typeof args[1] === 'string') {
                     this.sendToRenderer({

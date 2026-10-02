@@ -3,6 +3,7 @@ local namespace = api.nvim_create_namespace('nido_brackets')
 local colors = { '#FFD700', '#DA70D6', '#179FFF' }
 local closing = { [')'] = '(', [']'] = '[', ['}'] = '{' }
 local pending = {}
+local pairs_by_buffer = {}
 
 local function ignored(row, column)
   for _, id in ipairs(vim.fn.synstack(row, column)) do
@@ -70,6 +71,7 @@ local function update(buffer)
     return
   end
   api.nvim_buf_clear_namespace(buffer, namespace, 0, -1)
+  pairs_by_buffer[buffer] = {}
   if vim.bo[buffer].buftype ~= '' then
     return
   end
@@ -87,6 +89,12 @@ local function update(buffer)
           elseif #stack > 0 and stack[#stack].bracket == closing[bracket] then
             local group = 'NidoBracket' .. ((#stack - 1) % #colors + 1)
             local opening = table.remove(stack)
+            if opening.row < row - 1 then
+              table.insert(pairs_by_buffer[buffer], {
+                first=opening, last={row=row - 1, column=column - 1},
+                color=colors[(#stack % #colors) + 1],
+              })
+            end
             for _, position in ipairs({ opening, { row = row - 1, column = column - 1 } }) do
               api.nvim_buf_set_extmark(buffer, namespace, position.row, position.column, {
                 end_col = position.column + 1, hl_group = group, priority = 150,
@@ -99,9 +107,67 @@ local function update(buffer)
   end)
 end
 
+-- Screen positions include folds, wrapping, tabs, wide characters and virtual CodeLens rows.
+local function publish_guides(window, buffer, first, last, immediate)
+    if not vim.g.nido_channel or window ~= api.nvim_get_current_win() then return false end
+    local guides = {}
+    if vim.bo[buffer].buftype == '' and api.nvim_win_get_config(window).relative == '' then
+      api.nvim_win_call(window, function()
+        local info = vim.fn.getwininfo(window)[1]
+        local view = vim.fn.winsaveview()
+        local cursor = require('nido_scroll').cursor() or api.nvim_win_get_cursor(window)
+        local active
+        for _, pair in ipairs(pairs_by_buffer[buffer] or {}) do
+          local a, b = pair.first, pair.last
+          if (cursor[1] - 1 > a.row or (cursor[1] - 1 == a.row and cursor[2] >= a.column))
+              and (cursor[1] - 1 < b.row or (cursor[1] - 1 == b.row and cursor[2] <= b.column))
+              and (not active or a.row > active.first.row
+                or (a.row == active.first.row and a.column > active.first.column)) then
+            active = pair
+          end
+        end
+        for _, pair in ipairs(pairs_by_buffer[buffer] or {}) do
+          local a, b = pair.first, pair.last
+          local folded = vim.fn.foldclosed(a.row + 1) >= 0
+              and vim.fn.foldclosedend(a.row + 1) >= b.row + 1
+          if not folded and a.row < last and b.row >= first then
+            local column = math.min(vim.fn.indent(a.row + 1), vim.fn.indent(b.row + 1)) - view.leftcol
+            if column >= 0 and column < info.width - info.textoff then
+              local opening = vim.fn.screenpos(window, a.row + 1, a.column + 1)
+              local ending = vim.fn.screenpos(window, b.row + 1, b.column + 1)
+              -- A completely folded pair has no screen endpoints and needs no guide.
+              if opening.row > 0 or ending.row > 0 or a.row < first or b.row >= last then
+                table.insert(guides, {
+                  column=info.wincol - 1 + info.textoff + column,
+                  top=opening.row > 0 and opening.row - 1 or info.winrow - 2,
+                  bottom=ending.row > 0 and ending.row - 1 or info.winrow - 1 + info.height,
+                  opening=opening.col > 0 and opening.col - 1 or -1,
+                  closing=ending.col > 0 and ending.col - 1 or -1,
+                  color=pair.color, active=pair == active,
+                })
+              end
+            end
+          end
+        end
+      end)
+    end
+    vim.rpcnotify(vim.g.nido_channel, 'nido:bracket_guides', guides, immediate == true)
+    return false
+end
+api.nvim_set_decoration_provider(api.nvim_create_namespace('nido_bracket_guides'), {
+  on_win = function(_, window, buffer, first, last)
+    return publish_guides(window, buffer, first, last, false)
+  end,
+})
+-- Cursor-only redraws do not call on_win; update the active scope without repainting Neovim's text.
+api.nvim_create_autocmd({'CursorMoved', 'CursorMovedI'}, {callback=function(event)
+  publish_guides(api.nvim_get_current_win(), event.buf, vim.fn.line('w0') - 1, vim.fn.line('w$'), true)
+end})
+api.nvim_create_autocmd('BufWipeout', {callback=function(event) pairs_by_buffer[event.buf] = nil end})
+
 set_colors()
 api.nvim_create_autocmd('ColorScheme', { callback = set_colors })
-api.nvim_create_autocmd({ 'BufWinEnter', 'FileType', 'TextChanged', 'TextChangedI', 'TextChangedP' }, {
+api.nvim_create_autocmd({ 'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'TextChangedI', 'TextChangedP' }, {
   callback = function(event)
     local buffer = event.buf
     if pending[buffer] then

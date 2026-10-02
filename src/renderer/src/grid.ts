@@ -19,6 +19,16 @@ interface Highlight {
     strikethrough?: boolean;
 }
 
+interface BracketGuide {
+    column: number;
+    top: number;
+    bottom: number;
+    opening: number;
+    closing: number;
+    color: string;
+    active: boolean;
+}
+
 function cellBackground(h: Highlight, background: string, foreground: string): string {
     if (h.reverse) {
         if (h.foreground === undefined) {
@@ -64,6 +74,7 @@ export class Grid {
     cellHeight = 0;
     contentHeight = 0;
     extraRows = 0;
+    bracketGuides: BracketGuide[] = [];
     private rowTops: number[] = [];
     private layoutDirty = true;
     private scrollPixels = 0;
@@ -108,6 +119,12 @@ export class Grid {
 
             for (const args of calls) {
                 switch (name) {
+                    case 'nido_bracket_guides': {
+                        this.bracketGuides = Array.isArray(args[0])
+                            ? (args[0] as BracketGuide[])
+                            : [];
+                        break;
+                    }
                     case 'grid_resize': {
                         if (args[0] !== 1) {
                             break;
@@ -385,6 +402,38 @@ export class Grid {
             );
             ctx.restore();
         }
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, width, this.contentHeight);
+        ctx.clip();
+        for (const guide of this.bracketGuides) {
+            const snap = (value: number): number => Math.round(value * dpr) / dpr;
+            const x = snap((guide.column + 0.5) * cellWidth);
+            const top =
+                guide.opening >= 0 ? this.rowY(guide.top + 1) - 1 / dpr : this.rowY(guide.top);
+            const bottom =
+                guide.closing >= 0
+                    ? this.rowY(guide.bottom + 1) - 1 / dpr
+                    : this.rowY(guide.bottom);
+            ctx.fillStyle = guide.color;
+            ctx.globalAlpha = guide.active ? 0.9 : 0.3;
+            ctx.fillRect(x, snap(top), 1 / dpr, snap(bottom) - snap(top));
+            if (guide.active) {
+                for (const [column, y] of [
+                    [guide.opening, top],
+                    [guide.closing, bottom]
+                ]) {
+                    if (column >= 0)
+                        ctx.fillRect(
+                            x,
+                            snap(y),
+                            Math.max(1 / dpr, snap((column + 1) * cellWidth) - x),
+                            1 / dpr
+                        );
+                }
+            }
+        }
+        ctx.restore();
         const cursor = this.scrollCursor ?? this.cursor;
         ctx.save();
         if (cursor.row < this.rows - 1) {
