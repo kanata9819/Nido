@@ -83,8 +83,8 @@ export class Grid {
     private rowImages = new WeakMap<Cell[], HTMLCanvasElement>();
     private imageStyle = '';
     private upperRows: Cell[][] = [];
-    private upperHeight = 0;
-    private upperLayout?: Cell[];
+    private upperTops: number[] = [0];
+    private upperLayout?: Cell[][];
     private upperFontHeight = 0;
 
     get hasUpperRows(): boolean {
@@ -92,7 +92,12 @@ export class Grid {
     }
 
     rowTop(row: number): number {
-        if (row < 0) return row * this.upperHeight;
+        if (row < 0) {
+            const index = Math.max(0, this.upperRows.length + Math.floor(row));
+            const top = this.upperTops[index] ?? row * this.cellHeight;
+            const bottom = this.upperTops[index + 1] ?? top + this.cellHeight;
+            return top + (row - Math.floor(row)) * (bottom - top);
+        }
         const index = Math.max(0, Math.min(this.rows - 1, Math.floor(row)));
         const top = this.rowTops[index] ?? index * this.cellHeight;
         const bottom = this.rowTops[index + 1] ?? top + this.cellHeight;
@@ -357,35 +362,38 @@ export class Grid {
         this.extraRows = Math.floor(
             ((this.rows - 1) * cellHeight - this.rowTop(this.rows - 1)) / cellHeight
         );
-        const upper = this.upperRows.at(-1);
-        if (
-            upper !== this.upperLayout ||
-            this.upperHeight === 0 ||
-            this.upperFontHeight !== cellHeight
-        ) {
-            this.upperHeight =
-                upper?.some(
-                    (cell) => cell.text.trim() && this.highlights.get(cell.highlight)?.codeLens
-                ) &&
-                upper.every(
-                    (cell) => !cell.text.trim() || this.highlights.get(cell.highlight)?.codeLens
-                )
-                    ? Math.ceil(cellHeight * 0.7)
-                    : cellHeight;
-            this.upperLayout = upper;
+        if (this.upperRows !== this.upperLayout || this.upperFontHeight !== cellHeight) {
+            this.upperTops = [0];
+            for (const cells of this.upperRows.slice().reverse()) {
+                const compact =
+                    cells.some(
+                        (cell) => cell.text.trim() && this.highlights.get(cell.highlight)?.codeLens
+                    ) &&
+                    cells.every(
+                        (cell) => !cell.text.trim() || this.highlights.get(cell.highlight)?.codeLens
+                    );
+                this.upperTops.unshift(
+                    this.upperTops[0] - (compact ? Math.ceil(cellHeight * 0.7) : cellHeight)
+                );
+            }
+            this.upperLayout = this.upperRows;
             this.upperFontHeight = cellHeight;
         }
-        // ponytail: preview one row in either direction; deeper speculation needs more lower overscan.
+        // ponytail: preview at most eight upper rows; deeper speculation needs a larger cache.
         this.scrollPixels = this.pixelScrollEnabled
             ? this.rowTop(
-                  Math.max(upper ? -1 : 0, Math.min(1, this.scrollFraction + this.scrollPreview))
+                  Math.max(
+                      -this.upperRows.length,
+                      Math.min(1, this.scrollFraction + this.scrollPreview)
+                  )
               )
             : 0;
         ctx.fillStyle = this.background;
         ctx.fillRect(0, 0, width, height);
         ctx.textBaseline = 'alphabetic';
-        for (let row = upper && this.scrollPixels < 0 ? -1 : 0; row < this.rows; row++) {
-            const cells = row < 0 ? upper! : this.cells[row];
+        for (let row = this.scrollPixels < 0 ? -this.upperRows.length : 0; row < this.rows; row++) {
+            const cells = row < 0 ? this.upperRows[this.upperRows.length + row] : this.cells[row];
+            if (row < 0 && this.rowY(row + 1) <= 0) continue;
             const rowHeight = this.rowTop(row + 1) - this.rowTop(row);
             ctx.save();
             if (row < this.rows - 1) {

@@ -1790,6 +1790,40 @@ test('line endings normalize only in memory until saved, preserve content and su
     }
 });
 
+test('resize waits for UI reattachment instead of using a detached channel', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-ui-reattach-'));
+    let session: Session | undefined;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    try {
+        session = await Session.create(root, () => {});
+        await session.attach(80, 25);
+        const request = session.client.request.bind(session.client);
+        let detached!: () => void;
+        const detaching = new Promise<void>(resolve => { detached = resolve; });
+        session.client.request = async (method, args = []) => {
+            const result = await request(method, args);
+            if (method === 'nvim_ui_detach') {
+                detached();
+                await gate;
+            }
+            return result;
+        };
+        const attaching = session.attach(90, 26);
+        await detaching;
+        const resizing = session.resize(72, 22);
+        setTimeout(release, 30);
+        const results = await Promise.allSettled([attaching, resizing]);
+        assert.ok(results.every(result => result.status === 'fulfilled'), JSON.stringify(results));
+        const uis = await request('nvim_list_uis', []) as {width: number; height: number}[];
+        assert.deepEqual([uis[0].width, uis[0].height], [72, 22]);
+    } finally {
+        release();
+        await session?.stop();
+        await rm(root, {recursive: true, force: true});
+    }
+});
+
 test('a renderer joining after Neovim startup receives syntax colors', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-colors-'));
     let grid: Grid | undefined;

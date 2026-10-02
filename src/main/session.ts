@@ -34,6 +34,7 @@ export class Session {
     private processClosed = false;
     private stopping?: Promise<void>;
     private attached = false;
+    private uiQueue: Promise<void> = Promise.resolve();
     private inputQueue: Promise<void> = Promise.resolve();
     private scrollDetached = false;
 
@@ -168,24 +169,28 @@ export class Session {
     }
 
     async attach(columns: number, rows: number): Promise<void> {
-        if (this.attached) {
-            // A new renderer missed startup highlight definitions. Reattach the UI
-            // so Neovim resends all colors and grid state, not just changed cells.
-            await this.client.request('nvim_ui_detach', []);
-            this.attached = false;
-        }
-        this.attached = true;
-        try {
-            await this.client.request('nvim_ui_attach', [
-                columns,
-                rows,
-                { rgb: true, ext_linegrid: true, ext_popupmenu: true, ext_hlstate: true }
-            ]);
-            this.emit({ type: 'state', id: this.workspace.id, state: this.state });
-        } catch (error) {
-            this.attached = false;
-            throw error;
-        }
+        const next = this.uiQueue.then(async () => {
+            if (this.attached) {
+                // A new renderer missed startup highlight definitions. Reattach the UI
+                // so Neovim resends all colors and grid state, not just changed cells.
+                await this.client.request('nvim_ui_detach', []);
+                this.attached = false;
+            }
+            try {
+                await this.client.request('nvim_ui_attach', [
+                    columns,
+                    rows,
+                    { rgb: true, ext_linegrid: true, ext_popupmenu: true, ext_hlstate: true }
+                ]);
+                this.attached = true;
+                this.emit({ type: 'state', id: this.workspace.id, state: this.state });
+            } catch (error) {
+                this.attached = false;
+                throw error;
+            }
+        });
+        this.uiQueue = next.catch(() => {});
+        return next;
     }
 
     async startTerminal(shell = 'auto'): Promise<void> {
@@ -240,9 +245,13 @@ export class Session {
     }
 
     async resize(columns: number, rows: number): Promise<void> {
-        if (this.attached) {
-            await this.client.request('nvim_ui_try_resize', [columns, rows]);
-        }
+        const next = this.uiQueue.then(async () => {
+            if (this.attached) {
+                await this.client.request('nvim_ui_try_resize', [columns, rows]);
+            }
+        });
+        this.uiQueue = next.catch(() => {});
+        return next;
     }
 
     async setClipboardSharing(enabled: boolean): Promise<void> {

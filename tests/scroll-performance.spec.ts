@@ -295,6 +295,38 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
                 )
             )
             .toBe(4);
+        // A faster upward gesture must use several cached rows, not stop after one.
+        await canvas.evaluate((node: HTMLCanvasElement) => {
+            const ctx = node.getContext('2d')!;
+            const draw = ctx.drawImage.bind(ctx);
+            let rowImage: CanvasImageSource | undefined;
+            ctx.drawImage = ((...args: Parameters<typeof draw>) => {
+                if (args.length === 5) {
+                    rowImage ??= args[0];
+                    if (args[0] === rowImage) node.dataset.largeUpPreview = String(args[2]);
+                }
+                draw(...args);
+            }) as typeof draw;
+            window.dispatchEvent(new Event('focus'));
+        });
+        await expect
+            .poll(async () => Number(await canvas.getAttribute('data-large-up-preview')))
+            .toBeCloseTo(2 - rowHeight, 5);
+        const offsetsBeforeFastUp = await canvas.getAttribute('data-offsets');
+        await burst(1, -3 * rowHeight);
+        await expect
+            .poll(async () => Number(await canvas.getAttribute('data-large-up-preview')))
+            .toBeCloseTo(2 + 2 * rowHeight, 5);
+        expect(await canvas.getAttribute('data-offsets')).toBe(offsetsBeforeFastUp);
+        await expect
+            .poll(() =>
+                running.evaluate(
+                    () =>
+                        (globalThis as unknown as { touchpadProbe: { completed: number } })
+                            .touchpadProbe.completed
+                )
+            )
+            .toBe(5);
         // A combined burst can exceed the IPC limit; send bounded chunks without losing distance.
         await burst(2, 20000);
         await expect
@@ -305,14 +337,14 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
                             .touchpadProbe.completed
                 )
             )
-            .toBe(6);
+            .toBe(7);
         expect(
             (await running.evaluate(
                 () =>
                     (globalThis as unknown as { touchpadProbe: { lines: number } }).touchpadProbe
                         .lines
             )) * rowHeight
-        ).toBeCloseTo(39998.25 - rowHeight, 5);
+        ).toBeCloseTo(39998.25 - 4 * rowHeight, 5);
         expect(errors).toEqual([]);
     } finally {
         await running.close();
