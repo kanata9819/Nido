@@ -5,9 +5,17 @@ vim.notify = function(message, level, opts)
   vim.rpcnotify(channel, 'nido:message', tostring(message), level or vim.log.levels.INFO,
     opts and opts.title or (message == 'No locations found' and 'Code navigation' or 'Nido'))
 end
+local edit_ticks = {}
 vim.api.nvim_create_autocmd({'TextChanged', 'TextChangedI', 'TextChangedP'}, {
-  callback = function() vim.rpcnotify(channel, 'nido:edit') end,
+  callback = function(event)
+    local tick = vim.api.nvim_buf_get_changedtick(event.buf)
+    -- Temporary :normal scrolling can report the same edit again in another mode.
+    if edit_ticks[event.buf] == tick then return end
+    edit_ticks[event.buf] = tick
+    vim.rpcnotify(channel, 'nido:edit')
+  end,
 })
+vim.api.nvim_create_autocmd('BufWipeout', {callback=function(event) edit_ticks[event.buf] = nil end})
 -- Publish viewport movement during redraw, before its flush. WinScrolled runs
 -- after the flush and would leave a stale scroll notification in the next frame.
 local views = {}

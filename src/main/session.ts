@@ -366,7 +366,7 @@ end`,
                 mode: string;
                 blocking: boolean;
             };
-            if (mode.mode !== 'n' || mode.blocking) return;
+            if ((mode.mode !== 'n' && mode.mode !== 'i') || mode.blocking) return;
             this.events.beginScrollBatch();
             try {
                 await this.client.request('nvim_exec_lua', [

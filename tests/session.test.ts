@@ -655,6 +655,15 @@ test('scroll prefetch caches upper rows without changing the view, cursor or buf
         await session.prefetchScroll();
         await session.input('2<CR>');
         assert.equal(await session.client.request('nvim_eval', ['g:nido_prefetch_check']), 42);
+        await session.input('i_');
+        const inserting = await snapshot();
+        frames.length = 0;
+        await session.prefetchScroll();
+        assert.deepEqual(await snapshot(), inserting, 'Insert-mode prefetch preserves the view and text');
+        assert.equal((await session.client.request('nvim_get_mode', []) as {mode: string}).mode, 'i');
+        assert.equal(grid.hasUpperRows, true, 'editing must not permanently disable the upper cache');
+        assert.equal(frames.flat().filter(event => event[0] === 'nido_edit').length, 0,
+            'prefetch must not republish an already delivered edit and cancel pending wheel movement');
     } finally {
         await session?.stop();
         await rm(root, { recursive: true, force: true });

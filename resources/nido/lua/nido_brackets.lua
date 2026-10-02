@@ -128,9 +128,10 @@ local function publish_guides(window, buffer, first, last, immediate)
         end
         for _, pair in ipairs(pairs_by_buffer[buffer] or {}) do
           local a, b = pair.first, pair.last
-          local folded = vim.fn.foldclosed(a.row + 1) >= 0
-              and vim.fn.foldclosedend(a.row + 1) >= b.row + 1
-          if not folded and a.row < last and b.row >= first then
+          -- Offscreen pairs cannot draw a guide; avoid querying Neovim for every pair in the file.
+          if a.row < last and b.row >= first
+              and not (vim.fn.foldclosed(a.row + 1) >= 0
+                and vim.fn.foldclosedend(a.row + 1) >= b.row + 1) then
             local column = math.min(vim.fn.indent(a.row + 1), vim.fn.indent(b.row + 1)) - view.leftcol
             if column >= 0 and column < info.width - info.textoff then
               local opening = vim.fn.screenpos(window, a.row + 1, a.column + 1)

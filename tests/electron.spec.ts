@@ -2550,7 +2550,13 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
             frames = await canvas.getAttribute('data-animation-frames');
         }
         for (const command of ['G', 'gg', '100G', 'zt', 'zb', 'zz', '/line 150\n', 'zL', 'zH']) {
-            await page.keyboard.type(command);
+            if (command.endsWith('\n')) {
+                await page.keyboard.type(command.slice(0, -1), { delay: 20 });
+                await page.keyboard.press('Enter');
+                await expect(canvas).toHaveAttribute('aria-description', /line 150 /);
+            } else {
+                await page.keyboard.type(command);
+            }
             await expect
                 .poll(async () => Number(await canvas.getAttribute('data-animation-frames')), {
                     message: command

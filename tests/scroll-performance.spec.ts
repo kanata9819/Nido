@@ -327,6 +327,28 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
                 )
             )
             .toBe(5);
+        // Editing clears the history; Insert mode must warm it before the next upward boundary.
+        await page.evaluate(async () => {
+            const restored = await window.nido.restoreWorkspaces();
+            await window.nido.input(restored.workspaces[0].id, 'i_');
+        });
+        await page.waitForTimeout(150);
+        await canvas.evaluate((node: HTMLCanvasElement) => delete node.dataset.upPreview);
+        const offsetsAfterEdit = await canvas.getAttribute('data-offsets');
+        await burst(1, -2);
+        await expect
+            .poll(async () => Number(await canvas.getAttribute('data-up-preview')))
+            .toBeCloseTo(2, 5);
+        expect(await canvas.getAttribute('data-offsets')).toBe(offsetsAfterEdit);
+        await expect
+            .poll(() =>
+                running.evaluate(
+                    () =>
+                        (globalThis as unknown as { touchpadProbe: { completed: number } })
+                            .touchpadProbe.completed
+                )
+            )
+            .toBe(6);
         // A combined burst can exceed the IPC limit; send bounded chunks without losing distance.
         await burst(2, 20000);
         await expect
@@ -337,16 +359,23 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
                             .touchpadProbe.completed
                 )
             )
-            .toBe(7);
+            .toBe(8);
         expect(
             (await running.evaluate(
                 () =>
                     (globalThis as unknown as { touchpadProbe: { lines: number } }).touchpadProbe
                         .lines
             )) * rowHeight
-        ).toBeCloseTo(39998.25 - 4 * rowHeight, 5);
+        ).toBeCloseTo(39996.25 - 4 * rowHeight, 5);
         expect(errors).toEqual([]);
+        await page.evaluate(async () => {
+            const restored = await window.nido.restoreWorkspaces();
+            await window.nido.input(restored.workspaces[0].id, '<Esc>:write<CR>');
+        });
     } finally {
+        await running.evaluate(({ BrowserWindow }) => {
+            for (const window of BrowserWindow.getAllWindows()) window.destroy();
+        });
         await running.close();
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }

@@ -79,6 +79,8 @@ export function useEditorRendering({
         let queuedScroll = 0;
         let sentScroll = 0;
         let scrollPending = false;
+        let scrollAcknowledged = false;
+        let scrollCompleted = false;
         let prefetchNeeded = true;
         let prefetchPending = false;
         let preparingMotion = false;
@@ -121,15 +123,24 @@ export function useEditorRendering({
             schedule();
         };
 
+        const finishScroll = (): void => {
+            // Invoke replies and redraw notifications can arrive in different turns.
+            if (!scrollPending || !scrollAcknowledged || !scrollCompleted) return;
+            scrollPending = false;
+            if (!disposed && (queuedScroll || prefetchNeeded)) schedule();
+        };
+
         const flushScroll = (): void => {
             if (scrollPending || prefetchPending || !queuedScroll || !scrollEnabledRef.current)
                 return;
             sentScroll = Math.max(-1000, Math.min(1000, queuedScroll));
             queuedScroll -= sentScroll;
             scrollPending = true;
+            scrollAcknowledged = scrollCompleted = false;
             scrollCompletionRef.current = window.nido
                 .scroll(id, sentScroll, scrollFollow, true)
                 .catch((error) => {
+                    scrollAcknowledged = true;
                     sentScroll = queuedScroll = 0;
                     gridRef.current.scrollPreview = 0;
                     if (!disposed) {
@@ -138,12 +149,13 @@ export function useEditorRendering({
                     }
                 })
                 .finally(() => {
-                    scrollPending = false;
-                    if (!disposed && (queuedScroll || prefetchNeeded)) schedule();
+                    scrollCompleted = true;
+                    finishScroll();
                 });
         };
 
         scrollRef.current = (lines, follow): void => {
+            if (lines < 0 && !gridRef.current.hasUpperRows) prefetchNeeded = true;
             queuedScroll += lines;
             scrollFollow = follow;
             directScroll = true;
@@ -165,6 +177,7 @@ export function useEditorRendering({
             if (
                 pixelScroll &&
                 prefetchNeeded &&
+                queuedScroll !== 0 &&
                 !prefetchPending &&
                 !scrollPending &&
                 !motion &&
@@ -360,6 +373,7 @@ export function useEditorRendering({
                 blinkFade ||
                 (pixelScroll &&
                     prefetchNeeded &&
+                    queuedScroll !== 0 &&
                     !prefetchPending &&
                     !scrollPending &&
                     scrollEnabledRef.current)
@@ -446,6 +460,7 @@ export function useEditorRendering({
                         { row: number; column: number } | undefined;
                     directScroll = args[1] === true;
                     if (directScroll && scrollPending) {
+                        scrollAcknowledged = true;
                         // The returned rows already include the one outstanding request.
                         sentScroll = 0;
                         gridRef.current.scrollPreview = queuedScroll;
@@ -569,6 +584,7 @@ export function useEditorRendering({
                 ) {
                     resetBlink();
                 }
+                finishScroll();
             }
         });
 

@@ -105,7 +105,7 @@ function M.prefetch()
   if vim.bo.buftype ~= '' or api.nvim_win_get_config(0).relative ~= '' then return end
   local mode = api.nvim_get_mode()
   -- A :normal command would consume an unfinished count, mapping or command-line input.
-  if mode.mode ~= 'n' or mode.blocking then return end
+  if (mode.mode ~= 'n' and mode.mode ~= 'i') or mode.blocking then return end
   local view = vim.fn.winsaveview()
   if view.topline <= 1 and view.skipcol == 0 then return end
   -- Both redraws are delivered in one scroll batch, so the intermediate view is never displayed.

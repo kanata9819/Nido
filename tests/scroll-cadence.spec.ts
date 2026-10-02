@@ -1,0 +1,169 @@
+import { test, expect, _electron as electron } from '@playwright/test';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+test('continuous wheel scrolling keeps painted positions monotonic in both directions', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-scroll-cadence-'));
+    const profile = join(root, 'profile');
+    const file = join(root, 'rows.txt');
+    await mkdir(profile);
+    await writeFile(
+        file,
+        Array.from({ length: 4000 }, (_, i) => `ROW_${i + 1} text text text`).join('\n')
+    );
+    await writeFile(
+        join(profile, 'workspaces.json'),
+        JSON.stringify({
+            version: 1,
+            active: 0,
+            window: { width: 1100, height: 850, maximized: false },
+            workspaces: [{ root, current: file, files: [{ path: file, line: 1, column: 0 }] }]
+        })
+    );
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
+    try {
+        const page = await running.firstWindow();
+        const canvas = page.locator('canvas:visible');
+        await expect(canvas).toHaveAttribute('aria-description', /ROW_1 /);
+        await canvas.evaluate((node: HTMLCanvasElement) => {
+            const text = CanvasRenderingContext2D.prototype.fillText;
+            CanvasRenderingContext2D.prototype.fillText = function (...args) {
+                if (!this.canvas.isConnected)
+                    this.canvas.dataset.rowText = (this.canvas.dataset.rowText ?? '') + args[0];
+                text.apply(this, args);
+            };
+            const ctx = node.getContext('2d')!;
+            const fill = ctx.fillRect.bind(ctx);
+            const draw = ctx.drawImage.bind(ctx);
+            let first = true;
+            Object.assign(window, { cadence: { samples: [] as { top: number; at: number }[] } });
+            Object.assign(window, { cadenceEvents: [] as unknown[] });
+            window.nido.onEvent((event) => {
+                if (event.type === 'redraw')
+                    (window as unknown as { cadenceEvents: unknown[] }).cadenceEvents.push({
+                        at: performance.now(),
+                        events: event.events.filter(([name]) =>
+                            [
+                                'nido_edit',
+                                'nido_pixel_scroll',
+                                'nido_scroll',
+                                'mode_change'
+                            ].includes(name)
+                        )
+                    });
+            });
+            ctx.fillRect = (x, y, w, h) => {
+                if (x === 0 && y === 0 && h > 100) first = true;
+                fill(x, y, w, h);
+            };
+            ctx.drawImage = ((...args: Parameters<typeof draw>) => {
+                if (first && args.length === 5 && Number(args[2]) + Number(args[4]) > 0) {
+                    first = false;
+                    const row = (args[0] as HTMLCanvasElement).dataset?.rowText?.match(/ROW_(\d+)/);
+                    if (row) {
+                        const rowHeight = Math.ceil(
+                            Number(ctx.font.match(/([\d.]+)px/)![1]) * 1.65
+                        );
+                        const top = (Number(row[1]) - 1) * rowHeight - Number(args[2]);
+                        (
+                            window as unknown as {
+                                cadence: { samples: { top: number; at: number }[] };
+                            }
+                        ).cadence.samples.push({ top, at: performance.now() });
+                        node.dataset.documentTop = String(top);
+                    }
+                }
+                draw(...args);
+            }) as typeof draw;
+        });
+        const restored = await page.evaluate(() => window.nido.restoreWorkspaces());
+        const reports: object[] = [];
+        for (const mode of ['normal', 'insert']) {
+            for (const delta of [5, -5]) {
+                await page.evaluate(async (id) => {
+                    await window.nido.input(id, '<Esc>1000Gzt');
+                }, restored.workspaces[0].id);
+                await page.waitForTimeout(250);
+                if (mode === 'insert') {
+                    await page.evaluate(
+                        (id) => window.nido.input(id, 'i_'),
+                        restored.workspaces[0].id
+                    );
+                    await page.waitForTimeout(150);
+                }
+                const start = Number(await canvas.getAttribute('data-document-top'));
+                await canvas.evaluate(async (node, delta) => {
+                    (window as unknown as { cadence: { samples: unknown[] } }).cadence.samples = [];
+                    (window as unknown as { cadenceEvents: unknown[] }).cadenceEvents = [];
+                    for (let i = 0; i < 100; i++) {
+                        await new Promise<void>((resolve) =>
+                            requestAnimationFrame(() => resolve())
+                        );
+                        node.dispatchEvent(
+                            new WheelEvent('wheel', { bubbles: true, deltaY: delta })
+                        );
+                    }
+                }, delta);
+                await page.waitForTimeout(150);
+                const samples = await page.evaluate(
+                    () =>
+                        (
+                            window as unknown as {
+                                cadence: { samples: { top: number; at: number }[] };
+                            }
+                        ).cadence.samples
+                );
+                const steps = samples
+                    .slice(1)
+                    .map((sample, i) => Math.sign(delta) * (sample.top - samples[i].top));
+                const gaps = samples
+                    .slice(1)
+                    .map((sample, i) => sample.at - samples[i].at)
+                    .sort((a, b) => a - b);
+                const reversals = steps.filter((step) => step < -0.1);
+                reports.push({
+                    direction: delta > 0 ? 'down' : 'up',
+                    mode,
+                    paints: samples.length,
+                    reversals,
+                    minStep: Math.min(...steps),
+                    maxStep: Math.max(...steps),
+                    gapP95: gaps[Math.floor(gaps.length * 0.95)],
+                    maxGap: gaps.at(-1),
+                    distance: samples.at(-1)!.top - start
+                });
+                if (reversals.length)
+                    Object.assign(reports.at(-1)!, {
+                        samples,
+                        events: await page.evaluate(
+                            () => (window as unknown as { cadenceEvents: unknown[] }).cadenceEvents
+                        )
+                    });
+                if (reversals.length)
+                    await writeFile(
+                        join(
+                            process.cwd(),
+                            `test-results/scroll-cadence-failure-${test.info().repeatEachIndex}.json`
+                        ),
+                        JSON.stringify(reports.at(-1), null, 2)
+                    );
+                await writeFile(
+                    join(process.cwd(), 'test-results/scroll-cadence.json'),
+                    JSON.stringify(reports, null, 2)
+                );
+                expect(samples.length).toBeGreaterThan(20);
+                expect(samples.at(-1)!.top - start).toBeCloseTo(delta * 100, 1);
+                expect(reversals).toEqual([]);
+            }
+        }
+    } finally {
+        await running.evaluate(({ BrowserWindow }) => {
+            for (const window of BrowserWindow.getAllWindows()) window.destroy();
+        });
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
