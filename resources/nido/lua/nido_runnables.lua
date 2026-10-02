@@ -39,7 +39,7 @@ local function request(buffer, callback, attempt)
   end, buffer)
 end
 
-function M.refresh(buffer)
+function M.refresh(buffer, confirmed)
   if not vim.api.nvim_buf_is_valid(buffer) or vim.bo[buffer].filetype ~= 'rust' then return end
   revisions[buffer] = (revisions[buffer] or 0) + 1
   local revision = revisions[buffer]
@@ -47,9 +47,6 @@ function M.refresh(buffer)
   request(buffer, function(err, items)
     if err or not vim.api.nvim_buf_is_valid(buffer) or revisions[buffer] ~= revision
       or vim.api.nvim_buf_get_changedtick(buffer) ~= tick then return end
-    -- Cargo reloads can temporarily return no candidates for unchanged code.
-    if #items == 0 and candidates[buffer] and candidates[buffer].tick == tick then return end
-    candidates[buffer] = {tick=tick, items=items}
     table.sort(items, function(a, b)
       return range_size(a) < range_size(b)
     end)
@@ -71,8 +68,19 @@ function M.refresh(buffer)
         end
       end
     end
+    local marks = vim.api.nvim_buf_get_extmarks(buffer, namespace, 0, -1, {details=true})
+    -- Save-time analysis can temporarily omit lenses, including after formatting changed the tick.
+    -- Keep the current layout until a second response confirms the removal.
+    if not confirmed and vim.tbl_count(rows) < #marks then
+      vim.defer_fn(function()
+        if revisions[buffer] == revision and vim.api.nvim_buf_is_valid(buffer)
+          and vim.api.nvim_buf_get_changedtick(buffer) == tick then M.refresh(buffer, true) end
+      end, 300)
+      return
+    end
+    candidates[buffer] = {tick=tick, items=items}
     local stale = {}
-    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buffer, namespace, 0, -1, {details=true})) do
+    for _, mark in ipairs(marks) do
       local options = rows[mark[2]]
       local details = mark[4]
       if options and not details.invalid and details.virt_lines_above
