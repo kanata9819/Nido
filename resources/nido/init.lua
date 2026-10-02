@@ -205,8 +205,9 @@ vim.api.nvim_create_autocmd('LspAttach', {
           local prefix = vim.api.nvim_get_current_line():sub(1, vim.fn.col('.') - 1):match('[%w_\128-\255]+$') or ''
           if prefix ~= '' then
             local score = vim.fn.matchfuzzypos({item.filterText or item.label}, prefix)[3][1] or 0
+            -- Negative fuzzy scores need a tenth digit; keep lexical sorting numeric.
             -- Preserve the server's contextual order when matching scores are equal.
-            item.sortText = string.format('%09d:', 999999999 - score) .. (item.sortText or item.label)
+            item.sortText = string.format('%010d:', 999999999 - score) .. (item.sortText or item.label)
           end
           return {}
         end,

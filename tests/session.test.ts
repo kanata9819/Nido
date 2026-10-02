@@ -1335,7 +1335,9 @@ vim.lsp.start({
           local prefixes = vim.g.completion_prefixes
           table.insert(prefixes, prefix)
           vim.g.completion_prefixes = prefixes
-          local labels = prefix == 'printl' and {'println', 'printLine'} or {'printLegacy'}
+          local labels = prefix == 'println'
+            and {'TOUCHPREDICTIONPARAMETERS_DEFAULT_RLS_LAMBDA_LEARNING_RATE', 'println'}
+            or prefix == 'printl' and {'println', 'printLine'} or {'printLegacy'}
           result = {isIncomplete = false, items = {}}
           for _, label in ipairs(labels) do
             table.insert(result.items, {label = label, kind = 3})
@@ -1372,7 +1374,7 @@ end, 10))`);
         await waitFor(['printLine', 'println']);
         const typed = await labels();
         await session.input('n');
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitFor(['println', 'TOUCHPREDICTIONPARAMETERS_DEFAULT_RLS_LAMBDA_LEARNING_RATE']);
         await session.input('<BS>');
         await waitFor(typed);
         assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'printl');
