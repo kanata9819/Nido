@@ -162,6 +162,7 @@ vim.api.nvim_set_hl(0, 'CurSearch', {fg='#152219', bg='#a8cf9e', bold=true})
 vim.api.nvim_set_hl(0, 'IncSearch', {link='CurSearch'})
 require('nido_indent')
 require('nido_editorconfig')
+require('nido_text_edits')
 require('nido_brackets')
 require('nido_git_signs')
 -- Darken surfaces without changing Azami's token colors.
