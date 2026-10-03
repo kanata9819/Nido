@@ -4,9 +4,18 @@ import type { EditorSettings } from './useEditorSettings';
 
 export function useSessionSettings(
     workspaces: Workspace[],
-    { clipboardSharing, relativeLineNumbers, editorConfig }: EditorSettings,
+    { clipboardSharing, relativeLineNumbers, editorConfig, wordWrap }: EditorSettings,
     setError: (message: string) => void
 ): void {
+    useEffect(() => {
+        for (const workspace of workspaces) {
+            if (workspace.kind !== 'terminal') {
+                void window.nido
+                    .setWordWrap(workspace.id, wordWrap)
+                    .catch((error) => setError(String(error)));
+            }
+        }
+    }, [wordWrap, workspaces]);
     useEffect(() => {
         for (const workspace of workspaces) {
             for (const id of [workspace.id, workspace.terminalId]) {

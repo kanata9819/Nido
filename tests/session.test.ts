@@ -788,6 +788,44 @@ test('relative line numbers follow the setting when switching previously opened 
     }
 });
 
+test('word wrap follows the setting across cached buffers and new windows', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-word-wrap-'));
+    let session: Session | undefined;
+    try {
+        for (const name of ['first.txt', 'second.txt', 'new.txt']) {
+            await writeFile(join(root, name), `${'x'.repeat(400)}WRAP_END\n`);
+        }
+        session = await Session.create(root, () => {});
+        const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
+        await session.attach(80, 24);
+        await session.openFile('first.txt');
+        assert.equal(await lua('return vim.wo.wrap'), true);
+        await session.openFile('second.txt');
+        await session.setWordWrap(false);
+        for (const name of ['first.txt', 'second.txt', 'new.txt']) {
+            await session.openFile(name);
+            assert.equal(await lua('return vim.wo.wrap'), false, name);
+        }
+        await lua("vim.cmd('split')");
+        assert.equal(await lua('return vim.wo.wrap'), false);
+        await session.setWordWrap(true);
+        assert.deepEqual(
+            await lua(`local result = {}
+for _, win in ipairs(vim.api.nvim_list_wins()) do
+  table.insert(result, vim.api.nvim_get_option_value('wrap', {win=win}))
+end
+return result`),
+            [true, true]
+        );
+        await session.openFile('first.txt');
+        assert.equal(await lua('return vim.wo.wrap'), true);
+        assert.equal(await lua('return #vim.api.nvim_get_current_line()'), 408);
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('normal Ctrl+C avoids the Neovim quit hint while command entry remains visible', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-quit-hint-'));
     const grid = new Grid();

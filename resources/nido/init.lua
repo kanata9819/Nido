@@ -16,11 +16,13 @@ end, {silent=true})
 vim.o.termguicolors = true
 vim.o.number = true
 vim.o.relativenumber = false
+vim.o.wrap = true
 -- Buffer switches can restore cached window options from before a settings change.
 vim.api.nvim_create_autocmd({ 'BufWinEnter', 'WinEnter' }, {
   callback = function()
     if vim.bo.buftype == '' and vim.api.nvim_win_get_config(0).relative == '' then
       vim.wo.relativenumber = vim.go.relativenumber
+      vim.wo.wrap = vim.go.wrap
     end
   end,
 })

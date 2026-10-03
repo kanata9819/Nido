@@ -341,6 +341,8 @@ export class Grid {
             canvas.height = Math.round(height * dpr);
         }
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        // Cached glyphs are already antialiased; compositing must not blur them again.
+        ctx.imageSmoothingEnabled = false;
         const family = fontFamily;
         ctx.font = `${fontSize}px ${family}`;
         const cellWidth = ctx.measureText('M').width;
@@ -498,7 +500,13 @@ export class Grid {
                 }
             }
             // Reuse rasterized text; scroll and cursor animation only composite row images.
-            ctx.drawImage(image, 0, this.rowY(row), image.width / dpr, image.height / dpr);
+            ctx.drawImage(
+                image,
+                0,
+                Math.round(this.rowY(row) * dpr) / dpr,
+                image.width / dpr,
+                image.height / dpr
+            );
             ctx.restore();
         }
         ctx.save();

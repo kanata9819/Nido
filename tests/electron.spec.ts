@@ -991,6 +991,51 @@ test('relative line numbers update immediately and persist after restarting', as
     }
 });
 
+test('word wrap updates long lines immediately and persists after restarting', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-word-wrap-ui-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+    await writeFile(join(workspace, 'long.txt'), `${'x'.repeat(400)}WRAP_END\nnext line\n`);
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const options = { args: ['.', `--user-data-dir=${join(root, 'profile')}`], env };
+    let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    try {
+        running = await electron.launch(options);
+        let page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('long.txt');
+        await expect(page.getByRole('button', { name: /long.txt/ })).toBeVisible();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /WRAP_END/);
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        const setting = page.getByRole('checkbox', { name: 'Word wrap', exact: true });
+        await expect(setting).toBeChecked();
+        await setting.uncheck();
+        await expect(page.locator('canvas:visible')).not.toHaveAttribute('aria-description', /WRAP_END/);
+        await setting.focus();
+        await page.keyboard.press('Enter');
+        await expect(setting).toBeChecked();
+        await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /WRAP_END/);
+        await setting.uncheck();
+        await page.keyboard.press('Escape');
+        await running.close();
+        running = await electron.launch(options);
+        page = await running.firstWindow();
+        await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /next line/);
+        await expect(page.locator('canvas:visible')).not.toHaveAttribute('aria-description', /WRAP_END/);
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await expect(page.getByRole('checkbox', { name: 'Word wrap', exact: true })).not.toBeChecked();
+    } finally {
+        await running?.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('font family and line height update the canvas and survive restarting', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-font-'));
     const workspace = join(root, 'workspace');

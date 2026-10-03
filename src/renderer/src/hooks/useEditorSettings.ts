@@ -4,6 +4,12 @@ import { useEffect, useState } from 'react';
 export const defaultFontFamily = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
 
 export function useEditorSettings() {
+    const [wordWrap, setWordWrap] = useState(
+        () => localStorage.getItem('nido.wordWrap') !== 'false'
+    );
+    useEffect(() => {
+        localStorage.setItem('nido.wordWrap', String(wordWrap));
+    }, [wordWrap]);
     const [terminalShell, setTerminalShell] = useState<TerminalShell>(() => {
         const saved = localStorage.getItem('nido.terminalShell') as TerminalShell;
         return terminalShells.includes(saved) ? saved : 'auto';
@@ -103,6 +109,8 @@ export function useEditorSettings() {
     }, [lineHeight]);
 
     return {
+        wordWrap,
+        setWordWrap,
         terminalShell,
         setTerminalShell,
         editorConfig,

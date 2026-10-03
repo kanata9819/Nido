@@ -290,6 +290,24 @@ end`,
         ]);
     }
 
+    async setWordWrap(enabled: boolean): Promise<void> {
+        if (this.workspace.kind === 'terminal') {
+            return;
+        }
+        await this.client.request('nvim_exec_lua', [
+            `local enabled = ...
+vim.go.wrap = enabled
+for _, win in ipairs(vim.api.nvim_list_wins()) do
+  local buf = vim.api.nvim_win_get_buf(win)
+  if vim.api.nvim_win_get_config(win).relative == ''
+      and vim.bo[buf].buftype == '' then
+    vim.api.nvim_set_option_value('wrap', enabled, {win=win})
+  end
+end`,
+            [enabled]
+        ]);
+    }
+
     async setEditorConfig(enabled: boolean): Promise<void> {
         if (this.workspace.kind === 'terminal') {
             return;

@@ -124,6 +124,12 @@ export function registerHandlers({
         }
         return session(id).setEditorConfig(enabled);
     });
+    handle('wordWrap', (id, enabled) => {
+        if (typeof enabled !== 'boolean') {
+            throw new Error('Invalid word wrap setting.');
+        }
+        return session(id).setWordWrap(enabled);
+    });
     handle('openDocumentation', (value) => {
         const url = new URL(text(value));
         if (!['https:', 'http:'].includes(url.protocol)) {

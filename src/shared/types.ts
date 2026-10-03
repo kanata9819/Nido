@@ -172,6 +172,7 @@ export interface NidoAPI {
     markdownPreview(id: string): Promise<string>;
     setClipboardSharing(id: string, enabled: boolean): Promise<void>;
     setRelativeLineNumbers(id: string, enabled: boolean): Promise<void>;
+    setWordWrap(id: string, enabled: boolean): Promise<void>;
     setEditorConfig(id: string, enabled: boolean): Promise<void>;
     openDocumentation(url: string): Promise<void>;
     click(id: string, row: number, column: number): Promise<void>;

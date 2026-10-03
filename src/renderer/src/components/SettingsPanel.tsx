@@ -5,6 +5,8 @@ import styles from '../assets/Nido.module.css';
 export type SettingsPanelProps = Omit<EditorSettings, 'sidebarWidth' | 'resizeSidebar'>;
 
 export default function SettingsPanel({
+    wordWrap,
+    setWordWrap,
     terminalShell,
     setTerminalShell,
     sidebar,
@@ -139,6 +141,15 @@ export default function SettingsPanel({
                     onChange={(event) => setFormatOnSave(event.target.checked)}
                 />
             </label>
+            <label>
+                Word wrap{' '}
+                <input
+                    type="checkbox"
+                    checked={wordWrap}
+                    onChange={(event) => setWordWrap(event.target.checked)}
+                />
+            </label>
+            <small>Wrap long lines at the editor width. The selection is saved.</small>
             <label>
                 Share system clipboard{' '}
                 <input
