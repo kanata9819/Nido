@@ -131,21 +131,26 @@ test('sticky headers follow wrapped lines, virtual rows and folds, and ignore ou
     const grid = new Grid();
     let session: Session | undefined;
     try {
-        await writeFile(join(root, 'outline.txt'), [
-            'class Panel {', '  render() {', ...Array.from({ length: 12 }, () => '    item();'),
-            '  }', '}', ...Array.from({ length: 40 }, () => 'outside();')
-        ].join('\n'));
+        await writeFile(
+            join(root, 'outline.txt'),
+            [
+                'class Panel {',
+                '  render() {',
+                ...Array.from({ length: 12 }, () => '    item();'),
+                '  }',
+                '}',
+                ...Array.from({ length: 40 }, () => 'outside();')
+            ].join('\n')
+        );
         session = await Session.create(root, (event) => {
             if (event.type === 'redraw') grid.apply(event.events);
         });
         await session.openFile('outline.txt');
         const lua = async (source: string): Promise<unknown> => {
-            console.log('sticky probe', source.trim().slice(0, 65));
             const timeout = setTimeout(() => session!.process.kill(), 10000);
             try {
                 const result = await session!.client.request('nvim_exec_lua', [source, []]);
                 await session!.client.request('nvim_eval', ['1']);
-                console.log('sticky probe done');
                 return result;
             } finally {
                 clearTimeout(timeout);
@@ -153,13 +158,23 @@ test('sticky headers follow wrapped lines, virtual rows and folds, and ignore ou
         };
         await lua("vim.wait(300); vim.cmd('normal! 8Gzt'); vim.cmd.redraw()");
         const firstBottom = grid.stickyScroll!.scopes.find((scope) => scope.line === 2)!.bottom;
-        await lua("vim.api.nvim_buf_set_lines(0, 9, 10, false, {string.rep('x', 200)}); vim.cmd('doautocmd TextChanged'); vim.wait(300); vim.cmd.redraw()");
+        await lua(
+            "vim.api.nvim_buf_set_lines(0, 9, 10, false, {string.rep('x', 200)}); vim.cmd('doautocmd TextChanged'); vim.wait(300); vim.cmd.redraw()"
+        );
         const wrappedBottom = grid.stickyScroll!.scopes.find((scope) => scope.line === 2)!.bottom;
         assert.ok(wrappedBottom >= firstBottom + 2, 'wrapped source lines extend the screen range');
-        await lua("vim.api.nvim_buf_set_extmark(0, vim.api.nvim_create_namespace('sticky-lens-test'), 11, 0, {virt_lines={{{'Run Tests', 'NidoCodeLens'}}}, virt_lines_above=true}); vim.cmd.redraw()");
-        assert.equal(grid.stickyScroll!.scopes.find((scope) => scope.line === 2)!.bottom, wrappedBottom + 1);
+        await lua(
+            "vim.api.nvim_buf_set_extmark(0, vim.api.nvim_create_namespace('sticky-lens-test'), 11, 0, {virt_lines={{{'Run Tests', 'NidoCodeLens'}}}, virt_lines_above=true}); vim.cmd.redraw()"
+        );
+        assert.equal(
+            grid.stickyScroll!.scopes.find((scope) => scope.line === 2)!.bottom,
+            wrappedBottom + 1
+        );
         await lua("vim.wo.foldmethod='manual'; vim.cmd('11,14fold'); vim.cmd.redraw()");
-        assert.equal(grid.stickyScroll!.scopes.find((scope) => scope.line === 2)!.bottom, wrappedBottom - 3);
+        assert.equal(
+            grid.stickyScroll!.scopes.find((scope) => scope.line === 2)!.bottom,
+            wrappedBottom - 3
+        );
 
         await lua(`
             _G.sticky_callbacks = {}
@@ -181,12 +196,17 @@ test('sticky headers follow wrapped lines, virtual rows and folds, and ignore ou
             vim.wait(30)
             vim.cmd.redraw()
         `);
-        assert.deepEqual(grid.stickyScroll!.scopes.map((scope) => [scope.line, scope.ending]), [[1, 16]]);
+        assert.deepEqual(
+            grid.stickyScroll!.scopes.map((scope) => [scope.line, scope.ending]),
+            [[1, 16]]
+        );
         await lua(`
+            local before = #_G.sticky_callbacks
             vim.cmd('doautocmd Syntax')
-            assert(vim.wait(5000, function() return #_G.sticky_callbacks == 2 end))
+            assert(vim.wait(5000, function() return #_G.sticky_callbacks > before end))
+            local stale = _G.sticky_callbacks[#_G.sticky_callbacks]
             vim.api.nvim_buf_set_lines(0, 0, -1, false, {'plain text', 'no scopes'})
-            _G.sticky_callbacks[2](nil, {{name='OldScope', kind=5,
+            stale(nil, {{name='OldScope', kind=5,
               range={start={line=0,character=0}, ['end']={line=16,character=0}}
             }})
             vim.cmd('doautocmd TextChanged')

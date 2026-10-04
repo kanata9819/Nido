@@ -52,7 +52,8 @@ test('Sticky Scroll pins nested headers, jumps by mouse and keyboard, and saves 
             window.nido.onEvent((event) => {
                 if (event.type !== 'redraw') return;
                 for (const [name, ...calls] of event.events) {
-                    if (name === 'nido_sticky_scroll') node.dataset.sticky = JSON.stringify(calls.at(-1));
+                    if (name === 'nido_sticky_scroll')
+                        node.dataset.sticky = JSON.stringify(calls.at(-1));
                 }
             });
         });
@@ -77,9 +78,12 @@ test('Sticky Scroll pins nested headers, jumps by mouse and keyboard, and saves 
         await send('<Cmd>normal! 20Gzt<CR>');
         const condition = sticky.locator('[data-source-line="3"]');
         await expect(condition).toBeVisible();
-        await page.keyboard.down('Shift');
         await condition.hover();
+        await page.keyboard.down('Shift');
         await expect(condition).toHaveAttribute('aria-label', 'Go to line 44');
+        await page.keyboard.up('Shift');
+        await expect(condition).toHaveAttribute('aria-label', 'Go to line 3');
+        await page.keyboard.down('Shift');
         await condition.click({ modifiers: ['Shift'] });
         await page.keyboard.up('Shift');
         await expect(page.locator('body')).toContainText('Ln 44, Col 1');
@@ -110,4 +114,3 @@ test('Sticky Scroll pins nested headers, jumps by mouse and keyboard, and saves 
         await rm(root, { recursive: true, force: true });
     }
 });
-

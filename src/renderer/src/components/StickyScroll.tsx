@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { StickyScrollState } from '../../../shared/types';
 import type { Grid } from '../grid';
 import { stickyRows, type StickyRow } from '../stickyScroll';
@@ -38,7 +38,28 @@ export default function StickyScroll({
 }): React.JSX.Element | null {
     const [model, setModel] = useState<Model>();
     const [peek, setPeek] = useState<number>();
-    const host = useRef<HTMLDivElement>(null);
+    const hovered = useRef<number>(undefined);
+    useEffect(() => {
+        const keyDown = (event: KeyboardEvent): void => {
+            if (event.key === 'Shift') {
+                setPeek(hovered.current);
+            }
+        };
+        const keyUp = (event: KeyboardEvent): void => {
+            if (event.key === 'Shift') {
+                setPeek(undefined);
+            }
+        };
+        const blur = (): void => setPeek(undefined);
+        window.addEventListener('keydown', keyDown);
+        window.addEventListener('keyup', keyUp);
+        window.addEventListener('blur', blur);
+        return () => {
+            window.removeEventListener('keydown', keyDown);
+            window.removeEventListener('keyup', keyUp);
+            window.removeEventListener('blur', blur);
+        };
+    }, []);
     useLayoutEffect(() => {
         const update = (motionOffset: number): void => {
             const surface = grid.current;
@@ -118,7 +139,6 @@ export default function StickyScroll({
     const lastOffset = model.rows.at(-1)?.offset ?? 0;
     return (
         <div
-            ref={host}
             className={styles.sticky}
             data-sticky-scroll={id}
             role="navigation"
@@ -179,13 +199,17 @@ export default function StickyScroll({
                             data-source-line={scope.line}
                             aria-label={`Go to line ${ending ? scope.ending : scope.line}`}
                             title="Jump to this scope · Shift: ending line · Alt+Shift+S: focus headers"
-                            onPointerEnter={(event) =>
-                                setPeek(event.shiftKey ? scope.line : undefined)
-                            }
+                            onPointerEnter={(event) => {
+                                hovered.current = scope.line;
+                                setPeek(event.shiftKey ? scope.line : undefined);
+                            }}
                             onPointerMove={(event) =>
                                 setPeek(event.shiftKey ? scope.line : undefined)
                             }
-                            onPointerLeave={() => setPeek(undefined)}
+                            onPointerLeave={() => {
+                                hovered.current = undefined;
+                                setPeek(undefined);
+                            }}
                             onClick={(event) => jump(scope, event.shiftKey)}
                         >
                             <span
