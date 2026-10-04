@@ -27,7 +27,14 @@ test('formatted Rust saves keep CodeLens rows visible', { timeout: 90000 }, asyn
             if (event.type !== 'redraw') return;
             grid.apply(event.events);
             if (measuring) {
-                mainRows.push(grid.cells.findIndex((row) => row.map((cell) => cell.text).join('').includes('fn main()')));
+                mainRows.push(
+                    grid.cells.findIndex((row) =>
+                        row
+                            .map((cell) => cell.text)
+                            .join('')
+                            .includes('fn main()')
+                    )
+                );
                 frames.push(
                     grid.cells
                         .map((row) => row.map((cell) => cell.text).join(''))
@@ -62,7 +69,10 @@ end`);
         await session.save(true);
         await lua('vim.lsp.buf.format = _G.original_format; vim.wait(1500)');
         assert.ok(frames.length > 0);
-        assert.ok(mainRows.every((row) => row === 1), `main moved between rows: ${mainRows}`);
+        assert.ok(
+            mainRows.every((row) => row === 1),
+            `main moved between rows: ${mainRows}`
+        );
         assert.ok(
             frames.every((frame) => frame.length === 3),
             JSON.stringify(frames)

@@ -101,6 +101,10 @@ export class SessionEvents {
                 this.pendingRedraw.push(['nido_scroll', args[0] as unknown[]]);
                 break;
             }
+            case 'nido:scroll_cache': {
+                this.pendingRedraw.push(['nido_scroll_cache', args]);
+                break;
+            }
             case 'nido:edit': {
                 this.pendingRedraw.push(['nido_edit', []]);
                 break;

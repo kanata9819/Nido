@@ -57,6 +57,8 @@ function cellForeground(h: Highlight, background: string, foreground: string): s
 }
 
 export class Grid {
+    // Keep enough history for fast gestures while a refill spans several display frames.
+    private static readonly upperRowLimit = 256;
     cells: Cell[][] = [];
     highlights = new Map<number, Highlight>();
     columns = 0;
@@ -83,6 +85,7 @@ export class Grid {
     private rowImages = new WeakMap<Cell[], HTMLCanvasElement>();
     private imageStyle = '';
     private upperRows: Cell[][] = [];
+    private upperRowsAtStart = false;
     private upperTops: number[] = [0];
     private upperLayout?: Cell[][];
     private upperFontHeight = 0;
@@ -92,8 +95,9 @@ export class Grid {
     }
 
     get needsUpperRows(): boolean {
-        // Refill while half of the eight-row cache still covers incoming wheel events.
-        return this.upperRows.length <= 4;
+        const remaining =
+            this.upperRows.length + Math.min(0, this.scrollFraction + this.scrollPreview);
+        return !this.upperRowsAtStart && remaining <= Grid.upperRowLimit * 0.75;
     }
 
     rowTop(row: number): number {
@@ -126,12 +130,19 @@ export class Grid {
     }
 
     apply(events: Redraw): boolean {
+        // Prefetch returns to the same viewport. Preserve its rasterized rows while
+        // replaying temporary views, then reuse them if their contents are unchanged.
+        const retainedRows = events.some(([name]) => name === 'nido_scroll_cache')
+            ? new Set(this.cells)
+            : undefined;
+        const retainedView = retainedRows ? this.cells.slice() : undefined;
         if (
             events.some(
                 ([name]) => name === 'nido_edit' || name === 'grid_clear' || name === 'grid_resize'
             )
         ) {
             this.upperRows = [];
+            this.upperRowsAtStart = false;
         }
         let flush = false;
         const viewportScroll = events.some(([name]) => name === 'nido_scroll');
@@ -162,20 +173,36 @@ export class Grid {
                         right === this.columns &&
                         columns === 0
                     ) {
+                        if (
+                            rows > 0 &&
+                            (rows >= bottom - top ||
+                                this.upperRows.length + rows > Grid.upperRowLimit)
+                        ) {
+                            this.upperRowsAtStart = false;
+                        }
+                        // Upward page-sized moves can still reuse the prefetched history.
+                        // Downward page jumps skip rows we have never received.
                         this.upperRows =
-                            Math.abs(rows) >= bottom - top
-                                ? []
-                                : rows > 0
-                                  ? [...this.upperRows, ...this.cells.slice(0, rows)].slice(-8)
-                                  : this.upperRows.slice(
-                                        0,
-                                        Math.max(0, this.upperRows.length + rows)
-                                    );
+                            rows > 0
+                                ? rows >= bottom - top
+                                    ? []
+                                    : [...this.upperRows, ...this.cells.slice(0, rows)].slice(
+                                          -Grid.upperRowLimit
+                                      )
+                                : this.upperRows.slice(
+                                      0,
+                                      Math.max(0, this.upperRows.length + rows)
+                                  );
                     } else {
                         this.upperRows = [];
+                        this.upperRowsAtStart = false;
                     }
                 }
                 switch (name) {
+                    case 'nido_scroll_cache': {
+                        this.upperRowsAtStart = args[0] === true;
+                        break;
+                    }
                     case 'nido_bracket_guides': {
                         this.bracketGuides = Array.isArray(args[0])
                             ? (args[0] as BracketGuide[])
@@ -216,7 +243,7 @@ export class Grid {
                         }
                         this.layoutDirty = true;
                         let row = this.cells[Number(args[1])];
-                        if (row && this.upperRows.includes(row)) {
+                        if (row && (this.upperRows.includes(row) || retainedRows?.has(row))) {
                             row = this.cells[Number(args[1])] = row.slice();
                         }
                         if (row) {
@@ -260,6 +287,9 @@ export class Grid {
                         }
                         const old = this.cells.map((row) => row.slice());
                         for (let row = top; row < bottom; row++) {
+                            if (retainedRows?.has(this.cells[row])) {
+                                this.cells[row] = this.cells[row].slice();
+                            }
                             this.rowImages.delete(this.cells[row]);
                             for (let col = left; col < right; col++) {
                                 const sourceRow = row + rows;
@@ -314,6 +344,23 @@ export class Grid {
                         this.mode = String(args[0]);
                         break;
                     }
+                }
+            }
+        }
+        if (retainedView) {
+            for (let row = 0; row < this.rows; row++) {
+                const before = retainedView[row];
+                const after = this.cells[row];
+                if (
+                    before &&
+                    after &&
+                    before.length === after.length &&
+                    before.every(
+                        (cell, col) =>
+                            cell.text === after[col].text && cell.highlight === after[col].highlight
+                    )
+                ) {
+                    this.cells[row] = before;
                 }
             }
         }
@@ -393,7 +440,7 @@ export class Grid {
             this.upperLayout = this.upperRows;
             this.upperFontHeight = cellHeight;
         }
-        // ponytail: preview at most eight upper rows; deeper speculation needs a larger cache.
+        // Only preview rows whose text and decorations are already available.
         this.scrollPixels = this.pixelScrollEnabled
             ? this.rowTop(
                   Math.max(

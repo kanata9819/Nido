@@ -93,10 +93,10 @@ export function useEditorRendering({
         let cursorPosition: { row: number; column: number } | undefined;
         let cursorMotion:
             | {
-                  from: { row: number; column: number };
-                  to: { row: number; column: number };
-                  start: number;
-              }
+                from: { row: number; column: number };
+                to: { row: number; column: number };
+                start: number;
+            }
             | undefined;
         let blinkTimer: ReturnType<typeof setTimeout> | undefined;
         let blinkFade: { from: number; to: number; start: number } | undefined;
@@ -106,16 +106,16 @@ export function useEditorRendering({
         const targetFrame = document.createElement('canvas');
         let motion:
             | {
-                  top: number;
-                  bottom: number;
-                  left: number;
-                  right: number;
-                  distance: number;
-                  distanceX: number;
-                  incomingRows: number;
-                  start: number;
-                  edit: boolean;
-              }
+                top: number;
+                bottom: number;
+                left: number;
+                right: number;
+                distance: number;
+                distanceX: number;
+                incomingRows: number;
+                start: number;
+                edit: boolean;
+            }
             | undefined;
 
         const stopMotion = (): void => {
@@ -162,14 +162,14 @@ export function useEditorRendering({
         };
 
         scrollRef.current = (lines, follow): void => {
-            if (lines < 0 && !prefetchPending && gridRef.current.needsUpperRows) {
-                prefetchNeeded = true;
-            }
             queuedScroll += lines;
             scrollFollow = follow;
             directScroll = true;
             motion = undefined;
             gridRef.current.scrollPreview = queuedScroll + sentScroll;
+            if (lines < 0 && !prefetchPending && gridRef.current.needsUpperRows) {
+                prefetchNeeded = true;
+            }
             schedule();
         };
 
@@ -321,12 +321,12 @@ export function useEditorRendering({
                         ...(motion.edit
                             ? []
                             : [
-                                  [
-                                      previousFrame,
-                                      offset - motion.distance,
-                                      offsetX - motion.distanceX
-                                  ] as const
-                              ]),
+                                [
+                                    previousFrame,
+                                    offset - motion.distance,
+                                    offsetX - motion.distanceX
+                                ] as const
+                            ]),
                         [targetFrame, offset, offsetX]
                     ] as const;
                     for (const [image, shift, shiftX] of layers) {
@@ -493,8 +493,8 @@ export function useEditorRendering({
                 const scrolls = viewportScrolls.length
                     ? viewportScrolls
                     : event.events.flatMap(([name, ...calls]) =>
-                          name === 'grid_scroll' ? calls : []
-                      );
+                        name === 'grid_scroll' ? calls : []
+                    );
                 const scroll = scrolls.length === 1 ? (scrolls[0] as number[]) : undefined;
                 if (
                     scrolls.length ||
@@ -559,9 +559,9 @@ export function useEditorRendering({
                         distanceX:
                             scroll[5] === 0
                                 ? Math.max(
-                                      -width,
-                                      Math.min(width, scroll[6] * cellWidth + remainingX)
-                                  )
+                                    -width,
+                                    Math.min(width, scroll[6] * cellWidth + remainingX)
+                                )
                                 : 0,
                         start: now,
                         edit: edited
@@ -578,7 +578,7 @@ export function useEditorRendering({
                         (event.events.some(
                             ([name]) => name === 'grid_clear' || name === 'grid_resize'
                         ) ||
-                            (!gridRef.current.hasUpperRows &&
+                            (!gridRef.current.hasUpperRows && gridRef.current.needsUpperRows &&
                                 event.events.some(
                                     ([name]) => name === 'nido_scroll' || name === 'grid_scroll'
                                 )) ||
@@ -616,7 +616,7 @@ export function useEditorRendering({
 
         return () => {
             disposed = true;
-            scrollRef.current = () => {};
+            scrollRef.current = () => { };
             gridRef.current.scrollPreview = 0;
             clearTimeout(blinkTimer);
             surface.removeEventListener('pointerdown', pointerDown);

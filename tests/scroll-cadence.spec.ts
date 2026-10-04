@@ -93,7 +93,7 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
         });
         const reports: object[] = [];
         for (const mode of ['normal', 'insert']) {
-            for (const delta of [5, -5]) {
+            for (const delta of [5, -5, 40, -40, 120, -120]) {
                 await page.evaluate(async (id) => {
                     await window.nido.input(id, '<Esc>1000Gzt');
                 }, restored.workspaces[0].id);
@@ -142,6 +142,7 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                 const reversals = steps.filter((step) => step < -0.1);
                 reports.push({
                     direction: delta > 0 ? 'down' : 'up',
+                    delta,
                     mode,
                     paints: samples.length,
                     reversals,
@@ -171,12 +172,16 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                     JSON.stringify(reports, null, 2)
                 );
                 expect(samples.length).toBeGreaterThan(20);
-                expect(samples.at(-1)!.top - start).toBeCloseTo(delta * 100, 1);
+                // Rasterized row positions can differ by one physical pixel at fractional DPI.
+                const pixel = await page.evaluate(() => 1 / window.devicePixelRatio);
+                expect(Math.abs(samples.at(-1)!.top - start - delta * 100)).toBeLessThanOrEqual(
+                    pixel + 0.01
+                );
                 expect(reversals).toEqual([]);
                 expect(
                     Math.max(...steps),
                     'cache refills must not stall then jump'
-                ).toBeLessThanOrEqual(10.1);
+                ).toBeLessThanOrEqual(Math.abs(delta) * (Math.abs(delta) > 5 ? 3 : 2) + pixel);
             }
         }
     } finally {

@@ -211,7 +211,9 @@ test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
         }[];
         const [main, testFunction] = points.filter((point) => point.value === 'f');
         const body = points.find((point) => point.value === 'p')!;
-        const lineHeight = await page.evaluate(() => Number(localStorage.getItem('nido.lineHeight')));
+        const lineHeight = await page.evaluate(() =>
+            Number(localStorage.getItem('nido.lineHeight'))
+        );
         const lens = JSON.parse((await canvas.getAttribute('data-lens-point'))!);
         const lensHeight = 2 * (testFunction.y - lens.y) - lineHeight - (main.font - lens.font);
         expect(body.y - main.y).toBeCloseTo(lineHeight, 0);
@@ -1011,25 +1013,42 @@ test('word wrap updates long lines immediately and persists after restarting', a
         await page.getByRole('textbox', { name: 'Filter items' }).fill('long.txt');
         await expect(page.getByRole('button', { name: /long.txt/ })).toBeVisible();
         await page.keyboard.press('Enter');
-        await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /WRAP_END/);
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /WRAP_END/
+        );
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         const setting = page.getByRole('checkbox', { name: 'Word wrap', exact: true });
         await expect(setting).toBeChecked();
         await setting.uncheck();
-        await expect(page.locator('canvas:visible')).not.toHaveAttribute('aria-description', /WRAP_END/);
+        await expect(page.locator('canvas:visible')).not.toHaveAttribute(
+            'aria-description',
+            /WRAP_END/
+        );
         await setting.focus();
         await page.keyboard.press('Enter');
         await expect(setting).toBeChecked();
-        await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /WRAP_END/);
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /WRAP_END/
+        );
         await setting.uncheck();
         await page.keyboard.press('Escape');
         await running.close();
         running = await electron.launch(options);
         page = await running.firstWindow();
-        await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /next line/);
-        await expect(page.locator('canvas:visible')).not.toHaveAttribute('aria-description', /WRAP_END/);
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /next line/
+        );
+        await expect(page.locator('canvas:visible')).not.toHaveAttribute(
+            'aria-description',
+            /WRAP_END/
+        );
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
-        await expect(page.getByRole('checkbox', { name: 'Word wrap', exact: true })).not.toBeChecked();
+        await expect(
+            page.getByRole('checkbox', { name: 'Word wrap', exact: true })
+        ).not.toBeChecked();
     } finally {
         await running?.close();
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -1102,14 +1121,18 @@ test('font family and line height update the canvas and survive restarting', asy
         await page.keyboard.press('Escape');
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await expect(input).toHaveValue('Consolas');
-        await expect(page.getByRole('spinbutton', { name: 'Editor line height' })).toHaveValue('28');
+        await expect(page.getByRole('spinbutton', { name: 'Editor line height' })).toHaveValue(
+            '28'
+        );
         await running.close();
         running = await electron.launch(options);
         page = await running.firstWindow();
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         input = page.getByRole('textbox', { name: 'Font family', exact: true });
         await expect(input).toHaveValue('Consolas');
-        await expect(page.getByRole('spinbutton', { name: 'Editor line height' })).toHaveValue('28');
+        await expect(page.getByRole('spinbutton', { name: 'Editor line height' })).toHaveValue(
+            '28'
+        );
         await expect.poll(canvasFont).toBe('15px Consolas');
         await expect(input).toHaveCSS('background-color', 'rgb(18, 20, 22)');
         await input.focus();

@@ -611,6 +611,7 @@ test('scroll prefetch caches upper rows without changing the view, cursor or buf
         for (const detached of [false, true]) {
             if (detached) await session.scroll(0.2, false, true);
             const before = await snapshot();
+            const cachedRows = grid.cells.slice();
             const cells = grid.cells.map((row) => row.map((cell) => cell.text).join(''));
             frames.length = 0;
             await session.prefetchScroll();
@@ -618,6 +619,18 @@ test('scroll prefetch caches upper rows without changing the view, cursor or buf
             assert.deepEqual(
                 grid.cells.map((row) => row.map((cell) => cell.text).join('')),
                 cells
+            );
+            for (let row = 0; row < grid.rows; row++) {
+                assert.equal(
+                    grid.cells[row],
+                    cachedRows[row],
+                    'prefetch reuses unchanged row images'
+                );
+            }
+            assert.equal(
+                grid.needsUpperRows,
+                false,
+                'history reaches BOF without repeated refills'
             );
             assert.equal(
                 frames.length,
@@ -645,6 +658,11 @@ test('scroll prefetch caches upper rows without changing the view, cursor or buf
                 );
             }
         }
+        await session.input('175Gzt');
+        await session.prefetchScroll();
+        await session.scroll(-70, true, true);
+        assert.equal(grid.hasUpperRows, true, 'an upward page jump retains earlier cached rows');
+        assert.equal(grid.needsUpperRows, false, 'the remaining history still reaches BOF');
         await session.input('2');
         await new Promise((resolve) => setTimeout(resolve, 20));
         await session.prefetchScroll();

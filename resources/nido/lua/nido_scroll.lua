@@ -11,6 +11,12 @@ local function publish_offset(pixel)
   end
 end
 
+local function publish_cache(at_start)
+  for _, ui in ipairs(api.nvim_list_uis()) do
+    vim.rpcnotify(ui.chan, 'nido:scroll_cache', at_start)
+  end
+end
+
 function M.cursor()
   if not anchor or not api.nvim_buf_is_valid(anchor.buffer) then
     return nil
@@ -116,18 +122,45 @@ function M.prefetch()
   end
   local view = vim.fn.winsaveview()
   if view.topline <= 1 and view.skipcol == 0 then
+    publish_cache(true)
     return
   end
-  -- Both redraws are delivered in one scroll batch, so the intermediate view is never displayed.
+  -- Match Grid's bounded history; collect each viewport before restoring it in reverse order.
+  -- Each step is smaller than the window so grid_scroll retains the outgoing rows.
+  -- The whole traversal is one batch, so none of these temporary views are displayed.
+  local views = {}
+  local remaining = 256
+  local step = math.max(1, api.nvim_win_get_height(0) - 1)
+  local at_start = false
   local ok, err = pcall(function()
-    vim.cmd.normal({args={'8' .. string.char(25)}, bang=true})
-    vim.cmd.redraw()
+    while remaining > 0 do
+      local before = vim.fn.winsaveview()
+      if before.topline <= 1 and before.skipcol == 0 then
+        at_start = true
+        break
+      end
+      views[#views + 1] = before
+      local count = math.min(step, remaining)
+      vim.cmd.normal({args={count .. string.char(25)}, bang=true})
+      vim.cmd.redraw()
+      remaining = remaining - count
+      local after = vim.fn.winsaveview()
+      at_start = after.topline <= 1 and after.skipcol == 0
+      if after.topline == before.topline and after.skipcol == before.skipcol then
+        break
+      end
+    end
   end)
+  for index = #views, 1, -1 do
+    vim.fn.winrestview(views[index])
+    vim.cmd.redraw()
+  end
   vim.fn.winrestview(view)
   vim.cmd.redraw()
   if not ok then
     error(err)
   end
+  publish_cache(at_start)
 end
 
 function M.scroll(lines, follow, pixel)
