@@ -12,7 +12,7 @@ body,
 body {
     font-family: 'Segoe UI Variable', 'Segoe UI', sans-serif;
     color: #d6dce2;
-    background: #191e23;
+    background: var(--window-background, #191e23);
     font-size: 13px;
 }
 button,
@@ -32,7 +32,7 @@ button:disabled {
 button:focus-visible,
 input:focus-visible,
 [tabindex]:focus-visible {
-    outline: 2px solid #a8cf9e;
+    outline: 2px solid var(--ui-accent, #a8cf9e);
     outline-offset: -2px;
 }
 button:hover {
@@ -50,7 +50,7 @@ kbd {
     white-space: nowrap;
 }
 ::selection {
-    background: #405344;
+    background: var(--ui-selection, #405344);
 }
 ::-webkit-scrollbar {
     width: 7px;

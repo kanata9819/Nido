@@ -55,6 +55,7 @@ const api: NidoAPI = {
     save: (id, format) => ipcRenderer.invoke('nido:save', id, format),
     debug: (id, action, target) => ipcRenderer.invoke('nido:debug', id, action, target),
     setLineEnding: (id, format) => ipcRenderer.invoke('nido:setLineEnding', id, format),
+    setTheme: (theme) => ipcRenderer.invoke('nido:theme', theme),
     windowAction: (action) => ipcRenderer.invoke('nido:window', action),
     onEvent: (callback) => {
         const listener = (_event: Electron.IpcRendererEvent, event: NidoEvent): void =>

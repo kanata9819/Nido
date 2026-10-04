@@ -41,6 +41,7 @@ export default function TerminalPanel({
                 </button>
             </div>
             <Editor
+                theme={settings.theme}
                 id={id}
                 terminal
                 active={active}

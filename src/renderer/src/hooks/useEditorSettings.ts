@@ -1,9 +1,16 @@
-import { terminalShells, type TerminalShell } from '../../../shared/types';
+import { terminalShells, uiThemes, type TerminalShell, type UITheme } from '../../../shared/types';
 import { useEffect, useState } from 'react';
 
 export const defaultFontFamily = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
 
 export function useEditorSettings() {
+    const [theme, setTheme] = useState<UITheme>(() => {
+        const saved = localStorage.getItem('nido.theme') as UITheme;
+        return uiThemes.includes(saved) ? saved : 'dark';
+    });
+    useEffect(() => {
+        localStorage.setItem('nido.theme', theme);
+    }, [theme]);
     const [wordWrap, setWordWrap] = useState(
         () => localStorage.getItem('nido.wordWrap') !== 'false'
     );
@@ -109,6 +116,8 @@ export function useEditorSettings() {
     }, [lineHeight]);
 
     return {
+        theme,
+        setTheme,
         wordWrap,
         setWordWrap,
         terminalShell,

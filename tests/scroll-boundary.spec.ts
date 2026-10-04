@@ -34,6 +34,12 @@ test('upward touchpad gestures stop at the first row while replies are delayed',
         const canvas = page.locator('canvas:visible');
         await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        if (process.env.NIDO_TEST_THEME === 'acrylic') {
+            await page
+                .getByRole('combobox', { name: 'Theme', exact: true })
+                .selectOption('acrylic');
+            await expect(page.locator('html')).toHaveAttribute('data-theme', 'acrylic');
+        }
         await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).uncheck();
         await page.getByRole('checkbox', { name: 'Relative line numbers' }).check();
         await page.keyboard.press('Escape');

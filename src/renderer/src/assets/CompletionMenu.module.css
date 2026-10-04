@@ -4,9 +4,10 @@
     width: 480px;
     max-width: calc(100% - 12px);
     overflow: hidden;
-    border: 1px solid #39454c;
+    border: 1px solid var(--ui-border-strong, #39454c);
     border-radius: 10px;
-    background: #1b2025;
+    background: var(--surface-popover, #1b2025);
+    backdrop-filter: var(--glass-blur, none);
     color: #dce3e8;
     box-shadow: 0 12px 36px #0009;
     font-size: 12px;
@@ -17,8 +18,8 @@
     align-items: center;
     gap: 9px;
     padding: 9px 12px;
-    color: #a3cc94;
-    background: #20272c;
+    color: var(--ui-accent, #a3cc94);
+    background: var(--surface-tabs, #20272c);
 }
 .heading span {
     margin-left: auto;
@@ -47,8 +48,8 @@
     cursor: wait;
 }
 .item[aria-selected='true'] {
-    background: #314638;
-    outline: 1px solid #526d55;
+    background: var(--ui-selection, #314638);
+    outline: 1px solid var(--ui-border-strong, #526d55);
     outline-offset: -1px;
 }
 .kind {

@@ -1,10 +1,12 @@
-import type { TerminalShell } from '../../../shared/types';
+import type { TerminalShell, UITheme } from '../../../shared/types';
 import type { EditorSettings } from '../hooks/useEditorSettings';
 import styles from '../assets/Nido.module.css';
 
 export type SettingsPanelProps = Omit<EditorSettings, 'sidebarWidth' | 'resizeSidebar'>;
 
 export default function SettingsPanel({
+    theme,
+    setTheme,
     wordWrap,
     setWordWrap,
     terminalShell,
@@ -75,6 +77,16 @@ export default function SettingsPanel({
                 }
             }}
         >
+            <label>
+                Theme
+                <select value={theme} onChange={(event) => setTheme(event.target.value as UITheme)}>
+                    <option value="dark">Dark Modern</option>
+                    <option value="acrylic">Dark Modern (Acrylic)</option>
+                </select>
+            </label>
+            <small>
+                Dark Modern colors, with optional frosted surfaces. The selection is saved.
+            </small>
             <label>
                 Editor font size{' '}
                 <input
@@ -228,7 +240,7 @@ export default function SettingsPanel({
                 />
             </label>
             <small>
-                Apply the project's .editorconfig to indentation, line endings and save rules.
+                Apply the project&apos;s .editorconfig to indentation, line endings and save rules.
             </small>
             <p>
                 Tab / ↑ ↓ / j k: Move · ← →: Adjust · Space / Enter: Toggle · Esc: Close

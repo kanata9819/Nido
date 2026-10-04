@@ -3,6 +3,7 @@ import type { Grid } from '../grid';
 import { ScrollQueue, scrollOffset } from '../scroll';
 
 interface UseEditorRenderingOptions {
+    backgroundOpacity: number;
     animations: boolean;
     smoothCursor: boolean;
     smoothBlink: boolean;
@@ -27,6 +28,7 @@ interface UseEditorRenderingOptions {
 }
 
 export function useEditorRendering({
+    backgroundOpacity,
     animations,
     smoothCursor,
     smoothBlink,
@@ -73,6 +75,7 @@ export function useEditorRendering({
         const grid = gridRef.current;
         const element = hostRef.current!;
         const surface = canvasRef.current!;
+        grid.backgroundOpacity = backgroundOpacity;
         grid.pixelScrollEnabled = pixelScroll;
 
         let frame = 0;
@@ -300,7 +303,9 @@ export function useEditorRendering({
                         targetFrame.width = surface.width;
                         targetFrame.height = surface.height;
                     }
-                    targetFrame.getContext('2d')!.drawImage(surface, 0, 0);
+                    const targetContext = targetFrame.getContext('2d')!;
+                    targetContext.globalCompositeOperation = 'copy';
+                    targetContext.drawImage(surface, 0, 0);
                     const ctx = surface.getContext('2d')!;
                     const dpr = window.devicePixelRatio || 1;
                     const top = grid.rowY(motion.top);
@@ -314,8 +319,7 @@ export function useEditorRendering({
                     ctx.beginPath();
                     ctx.rect(left, top, width, height);
                     ctx.clip();
-                    ctx.fillStyle = grid.background;
-                    ctx.fillRect(left, top, width, height);
+                    grid.paintBackground(ctx, left, top, width, height);
                     // Deleted rows disappear; the remaining rows slide into the gap without an old-frame overlay.
                     const layers = [
                         ...(motion.edit
@@ -330,6 +334,14 @@ export function useEditorRendering({
                         [targetFrame, offset, offsetX]
                     ] as const;
                     for (const [image, shift, shiftX] of layers) {
+                        ctx.save();
+                        if (backgroundOpacity < 1) {
+                            // Copy only this layer's destination; translucent overlap must not double text or tint.
+                            ctx.beginPath();
+                            ctx.rect(left + shiftX, top + shift, width, height);
+                            ctx.clip();
+                            ctx.globalCompositeOperation = 'copy';
+                        }
                         ctx.drawImage(
                             image,
                             left * dpr,
@@ -341,6 +353,7 @@ export function useEditorRendering({
                             width,
                             height
                         );
+                        ctx.restore();
                     }
                     ctx.restore();
                 }
@@ -537,7 +550,9 @@ export function useEditorRendering({
                         previousFrame.width = surface.width;
                         previousFrame.height = surface.height;
                     }
-                    previousFrame.getContext('2d')!.drawImage(surface, 0, 0);
+                    const previousContext = previousFrame.getContext('2d')!;
+                    previousContext.globalCompositeOperation = 'copy';
+                    previousContext.drawImage(surface, 0, 0);
                     const height = grid.rowTop(scroll[2]) - grid.rowTop(scroll[1]);
                     const distance = grid.rowTop(scroll[1] + scroll[5]) - grid.rowTop(scroll[1]);
                     const width = (scroll[4] - scroll[3]) * cellWidth;
@@ -632,6 +647,7 @@ export function useEditorRendering({
             cancelAnimationFrame(frame);
         };
     }, [
+        backgroundOpacity,
         id,
         fontSize,
         lineHeight,

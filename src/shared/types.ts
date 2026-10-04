@@ -1,6 +1,9 @@
 export const terminalShells = ['auto', 'pwsh', 'powershell.exe', 'cmd.exe', 'wsl.exe'] as const;
 export type TerminalShell = (typeof terminalShells)[number];
 
+export const uiThemes = ['dark', 'acrylic'] as const;
+export type UITheme = (typeof uiThemes)[number];
+
 export interface Workspace {
     kind?: 'editor' | 'terminal';
     terminalId?: string;
@@ -192,6 +195,7 @@ export interface NidoAPI {
     save(id: string, format?: boolean): Promise<void>;
     debug(id: string, action: DebugAction, target?: number): Promise<void>;
     setLineEnding(id: string, format: 'LF' | 'CRLF'): Promise<void>;
+    setTheme(theme: UITheme): Promise<void>;
     windowAction(action: 'minimize' | 'maximize' | 'close'): Promise<void>;
     onEvent(callback: (event: NidoEvent) => void): () => void;
 }

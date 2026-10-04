@@ -6,8 +6,9 @@
     width: min(540px, calc(100% - 24px));
     max-height: min(420px, calc(100% - 24px));
     color: #dce3e8;
-    background: #1b2025;
-    border: 1px solid #46574c;
+    background: var(--surface-popover, #1b2025);
+    backdrop-filter: var(--glass-blur, none);
+    border: 1px solid var(--ui-border-strong, #46574c);
     border-radius: 12px;
     box-shadow: 0 14px 42px #0008;
     overflow: hidden;
@@ -19,7 +20,7 @@
     gap: 10px;
     padding: 12px 15px;
     border-bottom: 1px solid #ffffff0d;
-    color: #afd2a3;
+    color: var(--ui-accent, #afd2a3);
 }
 .card strong {
     font-weight: 600;

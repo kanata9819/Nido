@@ -26,11 +26,24 @@ test('scroll rendering reuses text and reports GPU and frame timings', async () 
     );
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
-    const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
+    const running = await electron.launch({
+        executablePath,
+        args: [...(executablePath ? [] : ['.']), `--user-data-dir=${profile}`],
+        env
+    });
     try {
         const page = await running.firstWindow();
         const canvas = page.locator('canvas:visible');
         await expect(canvas).toHaveAttribute('aria-description', /const value/);
+        if (process.env.NIDO_TEST_THEME === 'acrylic') {
+            await page.getByRole('button', { name: 'Settings', exact: true }).click();
+            await page
+                .getByRole('combobox', { name: 'Theme', exact: true })
+                .selectOption('acrylic');
+            await page.keyboard.press('Escape');
+            await expect(canvas).toHaveAttribute('aria-description', /const value/);
+        }
         const gpu = await running.evaluate(({ app }) => app.getGPUFeatureStatus());
         await page.evaluate(() => {
             const state = { glyphs: 0, paints: 0, cpuMs: 0, frames: [] as number[], last: 0 };
@@ -270,7 +283,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
                 draw(...args);
             }) as typeof draw;
         });
-        const burst = (count: number, delta: number) =>
+        const burst = (count: number, delta: number): Promise<void> =>
             canvas.evaluate(
                 (node, { count, delta }) => {
                     for (let i = 0; i < count; i++)

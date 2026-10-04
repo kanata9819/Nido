@@ -6,8 +6,10 @@ import { useEditorInput } from './hooks/useEditorInput';
 import styles from './assets/Nido.module.css';
 import TypeInformation from './components/TypeInformation';
 import CompletionMenu from './components/CompletionMenu';
+import type { UITheme } from '../../shared/types';
 
 interface Props {
+    theme: UITheme;
     scrollFollowCursor?: boolean;
     terminal?: boolean;
     children?: ReactNode;
@@ -25,6 +27,7 @@ interface Props {
 }
 
 export default function Editor({
+    theme,
     scrollFollowCursor = true,
     terminal = false,
     children,
@@ -61,6 +64,7 @@ export default function Editor({
     }, [onError]);
 
     useEditorRendering({
+        backgroundOpacity: theme === 'acrylic' ? 0.5 : 1,
         animations,
         smoothCursor,
         smoothBlink,
@@ -193,6 +197,7 @@ export default function Editor({
             }}
         >
             <canvas
+                key={theme}
                 ref={canvas}
                 className={styles.canvas}
                 aria-label={terminal ? 'Terminal display' : 'Neovim editor display'}

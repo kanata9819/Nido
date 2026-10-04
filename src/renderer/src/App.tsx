@@ -101,6 +101,7 @@ export default function App(): React.JSX.Element {
     const [focusTick, setFocusTick] = useState(0);
     const settings = useEditorSettings();
     const {
+        theme,
         sidebar,
         setSidebar,
         animations,
@@ -114,6 +115,10 @@ export default function App(): React.JSX.Element {
         sidebarWidth,
         resizeSidebar
     } = settings;
+    useLayoutEffect(() => {
+        document.documentElement.dataset.theme = theme;
+        void window.nido.setTheme(theme).catch((error) => report(String(error)));
+    }, [theme, report]);
     const errorFading = useNotificationDismissal(errorNotice, animations, dismissError);
     useSessionSettings(workspaces, settings, report);
 
@@ -488,6 +493,7 @@ export default function App(): React.JSX.Element {
                     {workspaces.map((w) => (
                         <Editor
                             key={w.id}
+                            theme={theme}
                             id={w.id}
                             terminal={w.kind === 'terminal'}
                             active={w.id === active}

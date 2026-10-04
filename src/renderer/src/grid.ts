@@ -67,6 +67,7 @@ export class Grid {
     scrollCursor?: { row: number; column: number };
     foreground = '#d6dce2';
     background = '#191e23';
+    backgroundOpacity = 1;
     mode = 'normal';
     busy = false;
     cursorVisible = true;
@@ -125,7 +126,9 @@ export class Grid {
             return -1;
         }
         let row = 0;
-        while (row < this.rows - 1 && this.rowTop(row + 1) <= y + this.scrollPixels) row++;
+        while (row < this.rows - 1 && this.rowTop(row + 1) <= y + this.scrollPixels) {
+            row++;
+        }
         return row < this.rows - 1 ? row : -1;
     }
 
@@ -405,6 +408,27 @@ export class Grid {
         return flush;
     }
 
+    paintBackground(
+        context: CanvasRenderingContext2D,
+        x: number,
+        y: number,
+        width: number,
+        height: number
+    ): void {
+        if (this.backgroundOpacity < 1) {
+            // Replace the previous frame so repeated paints never accumulate opacity.
+            context.clearRect(x, y, width, height);
+        }
+        context.fillStyle =
+            this.backgroundOpacity < 1
+                ? this.background +
+                  Math.round(this.backgroundOpacity * 255)
+                      .toString(16)
+                      .padStart(2, '0')
+                : this.background;
+        context.fillRect(x, y, width, height);
+    }
+
     draw(
         canvas: HTMLCanvasElement,
         width: number,
@@ -415,8 +439,8 @@ export class Grid {
         cursorPosition?: { row: number; column: number },
         lineHeight = Math.ceil(fontSize * 1.65)
     ): { cellWidth: number; cellHeight: number } {
-        // The grid paints its entire background; no transparent surface is needed.
-        const ctx = canvas.getContext('2d', { alpha: false })!;
+        const translucent = this.backgroundOpacity < 1;
+        const ctx = canvas.getContext('2d', { alpha: translucent })!;
         const dpr = window.devicePixelRatio || 1;
         if (
             canvas.width !== Math.round(width * dpr) ||
@@ -432,7 +456,14 @@ export class Grid {
         ctx.font = `${fontSize}px ${family}`;
         const cellWidth = ctx.measureText('M').width;
         const cellHeight = lineHeight;
-        const imageStyle = JSON.stringify([width, dpr, fontSize, fontFamily, cellWidth]);
+        const imageStyle = JSON.stringify([
+            width,
+            dpr,
+            fontSize,
+            fontFamily,
+            cellWidth,
+            translucent
+        ]);
         if (imageStyle !== this.imageStyle) {
             this.imageStyle = imageStyle;
             this.rowImages = new WeakMap();
@@ -487,8 +518,7 @@ export class Grid {
                   )
               )
             : 0;
-        ctx.fillStyle = this.background;
-        ctx.fillRect(0, 0, width, height);
+        this.paintBackground(ctx, 0, 0, width, height);
         ctx.textBaseline = 'alphabetic';
         for (let row = this.scrollPixels < 0 ? -this.upperRows.length : 0; row < this.rows; row++) {
             const cells = row < 0 ? this.upperRows[this.upperRows.length + row] : this.cells[row];
@@ -511,17 +541,23 @@ export class Grid {
                 image.width = canvas.width;
                 image.height = Math.ceil(rowHeight * dpr);
                 this.rowImages.set(cells, image);
-                const ctx = image.getContext('2d', { alpha: false })!;
+                const ctx = image.getContext('2d', { alpha: translucent })!;
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 ctx.textBaseline = 'alphabetic';
                 const y = 0;
-                ctx.fillStyle = this.background;
-                ctx.fillRect(0, 0, width, image.height / dpr);
+                if (!translucent) {
+                    ctx.fillStyle = this.background;
+                    ctx.fillRect(0, 0, width, image.height / dpr);
+                }
                 // Paint all cell backgrounds first so a wide glyph is not erased by its continuation cell.
                 for (let col = 0; col < this.columns; col++) {
                     const h = this.highlights.get(cells[col]?.highlight || 0) || {};
-                    ctx.fillStyle = cellBackground(h, this.background, this.foreground);
-
+                    const background = cellBackground(h, this.background, this.foreground);
+                    // Cache opaque glyphs and selection colors over a clear default background.
+                    if (translucent && background === this.background) {
+                        continue;
+                    }
+                    ctx.fillStyle = background;
                     ctx.fillRect(col * cellWidth, y, cellWidth + 0.5, image.height / dpr);
                 }
 

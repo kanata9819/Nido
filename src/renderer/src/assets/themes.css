@@ -1,0 +1,18 @@
+/* Tint backgrounds only; text and cached glyphs retain their full opacity. */
+:root[data-theme='acrylic'] {
+    color-scheme: dark;
+    --window-background: transparent;
+    --app-background: #14141420;
+    --surface-title: #0e101238;
+    --surface-rail: #10121430;
+    --surface-panel: #17191b50;
+    --surface-tabs: #1b212665;
+    --surface-active: #2023264a;
+    --surface-popover: #1b1e21a6;
+    --surface-input: #12141699;
+    --surface-editor: transparent;
+    --ui-border: #282c3099;
+    --ui-border-strong: #43504999;
+    --glass-blur: blur(24px);
+    --glass-highlight: inset 0 1px 0 #ffffff0e;
+}

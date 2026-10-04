@@ -1,9 +1,10 @@
-import { BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
+import { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } from 'electron';
+import { release } from 'node:os';
 import { isAbsolute, relative, sep } from 'node:path';
 import { Session } from './session';
 import { registerGitHandlers } from './gitHandlers';
 import { registerWorkspaceHandlers } from './workspaceHandlers';
-import { terminalShells, type TerminalShell } from '../shared/types';
+import { terminalShells, uiThemes, type TerminalShell, type UITheme } from '../shared/types';
 import type { DebugAction, FileAction, NidoEvent, Workspace } from '../shared/types';
 
 export interface AppState {
@@ -268,6 +269,21 @@ export function registerHandlers({
             throw new Error('Invalid line ending');
         }
         return session(id).setLineEnding(format);
+    });
+
+    handle('theme', (value) => {
+        if (!uiThemes.includes(value as UITheme)) {
+            throw new Error('Invalid theme.');
+        }
+        // Native acrylic needs Windows 11 22H2; older systems keep an opaque backing.
+        const nativeBackdrop =
+            process.platform === 'win32' && Number(release().split('.')[2]) >= 22621;
+        const acrylic = value === 'acrylic' && nativeBackdrop;
+        if (nativeBackdrop) {
+            nativeTheme.themeSource = 'dark';
+            window.setBackgroundMaterial(acrylic ? 'acrylic' : 'none');
+        }
+        window.setBackgroundColor(acrylic ? '#00000000' : '#141414');
     });
 
     handle('window', (action) => {
