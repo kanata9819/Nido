@@ -23,6 +23,33 @@ if ($nidoActualHash -ne $nidoHash) {
     throw "Neovim archive checksum mismatch: $nidoArchive"
 }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-[System.IO.Compression.ZipFile]::ExtractToDirectory($nidoArchive, $nidoResources)
-Set-Content -LiteralPath $nidoMarker -Value $nidoHash -Encoding ascii
+$nidoTemporary = Join-Path $nidoResources ('.nvim-' + [Guid]::NewGuid().ToString('N'))
+$nidoBackup = Join-Path $nidoResources ('.nvim-backup-' + [Guid]::NewGuid().ToString('N'))
+try {
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($nidoArchive, $nidoTemporary)
+    $nidoPrepared = Join-Path $nidoTemporary 'nvim-win64'
+    if (!(Test-Path (Join-Path $nidoPrepared 'bin/nvim.exe')) -or
+        !(Test-Path (Join-Path $nidoPrepared 'share/nvim/runtime/doc'))) {
+        throw 'Neovim archive is missing required editor resources.'
+    }
+    Set-Content -LiteralPath (Join-Path $nidoPrepared 'nido-version.txt') -Value $nidoHash -Encoding ascii
+    if (Test-Path $nidoBundle) {
+        Move-Item -LiteralPath $nidoBundle -Destination $nidoBackup
+    }
+    try {
+        Move-Item -LiteralPath $nidoPrepared -Destination $nidoBundle
+    } catch {
+        if (Test-Path $nidoBackup) {
+            Move-Item -LiteralPath $nidoBackup -Destination $nidoBundle
+        }
+        throw
+    }
+    if (Test-Path $nidoBackup) {
+        Remove-Item -LiteralPath $nidoBackup -Recurse -Force
+    }
+} finally {
+    if (Test-Path $nidoTemporary) {
+        Remove-Item -LiteralPath $nidoTemporary -Recurse -Force
+    }
+}
 Write-Output "Bundled Neovim $nidoVersion (Windows x64), SHA256 verified."

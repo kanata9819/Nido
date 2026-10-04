@@ -2518,6 +2518,22 @@ test('grid updates preserve highlights, wide characters and scroll regions', () 
     );
 });
 
+test('pasting preserves the order of preceding and following keyboard input', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-paste-order-'));
+    let session: Session | undefined;
+    try {
+        await writeFile(join(root, 'file.txt'), 'ab\n');
+        session = await Session.create(root, () => {});
+        await session.openFile('file.txt');
+        await Promise.all([session.input('i'), session.paste('X'), session.input('Y<Esc>')]);
+        const lines = await session.client.request('nvim_buf_get_lines', [0, 0, -1, false]);
+        assert.deepEqual(lines, ['XYab']);
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('two real Neovim sessions edit, save, switch buffers and isolate state', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-test-'));
     const sessions: Session[] = [];

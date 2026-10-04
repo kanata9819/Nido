@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { vimKey } from '../grid';
+import { isAltGraph, vimKey } from '../grid';
 
 interface UseEditorInputOptions {
     id: string;
@@ -64,7 +64,12 @@ export function useEditorInput({
                 return;
             }
 
-            if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'v') {
+            if (
+                event.ctrlKey &&
+                event.shiftKey &&
+                !isAltGraph(event.nativeEvent) &&
+                event.key.toLowerCase() === 'v'
+            ) {
                 event.preventDefault();
                 send(window.nido.pasteClipboard(id));
                 return;
