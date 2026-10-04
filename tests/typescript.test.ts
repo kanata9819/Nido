@@ -120,7 +120,7 @@ test('user LSP configuration selects legacy or an external command without sourc
     try {
         await mkdir(join(root, 'node_modules'));
         await symlink(
-            resolve('node_modules/typescript'),
+            resolve('node_modules/@typescript/native'),
             join(root, 'node_modules/typescript'),
             'junction'
         );
@@ -137,7 +137,7 @@ test('user LSP configuration selects legacy or an external command without sourc
         assert.ok(((await configure()) as string[]).some((arg) => arg.endsWith('cli.mjs')));
         const command = [
             process.execPath,
-            resolve('node_modules/typescript/bin/tsc'),
+            resolve('node_modules/@typescript/native/bin/tsc'),
             '--lsp',
             '--stdio'
         ];
@@ -163,14 +163,15 @@ test('user LSP configuration selects legacy or an external command without sourc
     }
 });
 
-for (const [extension, native] of [
-    ['ts', false],
-    ['js', false],
-    ['ts', true],
-    ['js', true]
+for (const [extension, native, packageName] of [
+    ['ts', false, 'typescript'],
+    ['js', false, 'typescript'],
+    ['ts', true, 'typescript'],
+    ['js', true, 'typescript'],
+    ['ts', true, '@typescript/native']
 ] as const) {
     test(
-        `${extension}: ${native ? 'TS7 project' : 'bundled'} LSP hover, navigation, references, completion, rename, diagnostics and save formatting`,
+        `${extension}: ${native ? `TS7 project (${packageName})` : 'bundled'} LSP hover, navigation, references, completion, rename, diagnostics and save formatting`,
         { timeout: 60000 },
         async () => {
             const root = await mkdtemp(join(tmpdir(), 'nido-ts-js-'));
@@ -178,9 +179,17 @@ for (const [extension, native] of [
             try {
                 if (native) {
                     await mkdir(join(root, 'node_modules'));
+                    if (packageName === '@typescript/native') {
+                        await mkdir(join(root, 'node_modules/@typescript'));
+                        await symlink(
+                            resolve('node_modules/typescript'),
+                            join(root, 'node_modules/typescript'),
+                            'junction'
+                        );
+                    }
                     await symlink(
-                        resolve('node_modules/typescript'),
-                        join(root, 'node_modules/typescript'),
+                        resolve('node_modules/@typescript/native'),
+                        join(root, 'node_modules', packageName),
                         'junction'
                     );
                 }
@@ -205,13 +214,27 @@ for (const [extension, native] of [
                     `import { greet } from './lib';\nconst answer=greet();\nanswer.toUpperCase();\n`
                 );
                 session = await Session.create(root, () => {}, process.env.NIDO_TEST_RESOURCES);
-                if (!native) {
+                if (!native || packageName === '@typescript/native') {
                     const config = join(root, 'lsp.json');
                     await writeFile(config, JSON.stringify({ typescript: { server: 'legacy' } }));
                     await session.client.request('nvim_exec_lua', [
                         "vim.env.NIDO_LSP_CONFIG = ...; require('nido_typescript').setup()",
                         [config]
                     ]);
+                    assert.equal(
+                        await session.client.request('nvim_exec_lua', [
+                            'return vim.fn.filereadable(vim.lsp.config.typescript.init_options.tsserver.path)',
+                            []
+                        ]),
+                        1
+                    );
+                    if (native) {
+                        await writeFile(config, JSON.stringify({ typescript: { server: 'auto' } }));
+                        await session.client.request('nvim_exec_lua', [
+                            "require('nido_typescript').setup()",
+                            []
+                        ]);
+                    }
                 }
                 await session.openFile(`main.${extension}`);
                 const lua = (code: string, args: unknown[] = []): Promise<unknown> =>
@@ -229,7 +252,7 @@ for (const [extension, native] of [
                 if (native) {
                     assert.equal(
                         resolve(command[1]),
-                        resolve(root, 'node_modules/typescript/bin/tsc')
+                        resolve(root, 'node_modules', packageName, 'bin/tsc')
                     );
                     assert.ok(command.includes('--lsp'));
                 } else {

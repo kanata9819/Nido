@@ -352,14 +352,35 @@ end`,
 
     click(row: number, column: number): Promise<void> {
         const next = this.inputQueue.then(async () => {
-            // Mouse coordinates refer to the visible viewport, not the pre-scroll editing anchor.
-            await this.client.request('nvim_exec_lua', [
-                "require('nido_scroll').restore(true)",
-                []
-            ]);
-            this.scrollDetached = false;
-            await this.client.request('nvim_input_mouse', ['left', 'press', '', 1, row, column]);
-            await this.client.request('nvim_input_mouse', ['left', 'release', '', 1, row, column]);
+            this.events.beginScrollBatch();
+            try {
+                // Mouse coordinates refer to the visible viewport, not the pre-scroll editing anchor.
+                await this.client.request('nvim_exec_lua', [
+                    "require('nido_scroll').restore(true)",
+                    []
+                ]);
+                // Restore the keyboard cursor margin and pixel offset before the next input.
+                this.scrollDetached = true;
+                await this.client.request('nvim_input_mouse', [
+                    'left',
+                    'press',
+                    '',
+                    1,
+                    row,
+                    column
+                ]);
+                await this.client.request('nvim_input_mouse', [
+                    'left',
+                    'release',
+                    '',
+                    1,
+                    row,
+                    column
+                ]);
+                await this.client.request('nvim_eval', ['1']);
+            } finally {
+                this.events.endScrollBatch();
+            }
         });
         this.inputQueue = next.catch(() => {});
         return next;

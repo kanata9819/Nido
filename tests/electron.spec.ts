@@ -816,7 +816,7 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await page.keyboard.press('Control+s');
         await expect
             .poll(() => readFile(join(workspace, 'note.txt'), 'utf8'))
-            .toMatch(/^  plain\r?\n$/);
+            .toMatch(/^ {2}plain\r?\n$/);
         await page.keyboard.type(':');
         await expect(page.getByText('COMMAND', { exact: true })).toBeVisible();
         await page.keyboard.type('edit main.ts');
@@ -1106,9 +1106,16 @@ test('font family and line height update the canvas and survive restarting', asy
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         const heightInput = page.getByRole('spinbutton', { name: 'Editor line height' });
         await expect(heightInput).toHaveValue('18');
-        await expect(page.locator('canvas:visible')).toHaveAttribute('data-line-height', '18');
+        // Row images snap to physical pixels, so fractional DPI can round their spacing.
+        const physicalPixel = await page.evaluate(() => 1 / window.devicePixelRatio);
+        const heightError = (height: number): Promise<number> =>
+            page
+                .locator('canvas:visible')
+                .getAttribute('data-line-height')
+                .then((value) => Math.abs(Number(value) - height));
+        await expect.poll(() => heightError(18)).toBeLessThanOrEqual(physicalPixel + 0.001);
         await heightInput.fill('28');
-        await expect(page.locator('canvas:visible')).toHaveAttribute('data-line-height', '28');
+        await expect.poll(() => heightError(28)).toBeLessThanOrEqual(physicalPixel + 0.001);
         let input = page.getByRole('textbox', { name: 'Font family', exact: true });
         const defaultFamily = await input.inputValue();
         expect(defaultFamily).toContain('Cascadia Code');
@@ -1182,7 +1189,6 @@ test('Japanese editor text stays legible at fractional display scales', async ()
             const fillText = CanvasRenderingContext2D.prototype.fillText;
             element.dataset.aligned = 'true';
             CanvasRenderingContext2D.prototype.fillText = function (text, x, y) {
-                const ctx = this;
                 const dpr = window.devicePixelRatio;
                 if (
                     Math.abs(x * dpr - Math.round(x * dpr)) > 0.001 ||
@@ -1190,10 +1196,10 @@ test('Japanese editor text stays legible at fractional display scales', async ()
                 ) {
                     element.dataset.aligned = 'false';
                 }
-                if (text === '語') element.dataset.japaneseInk = String(ctx.fillStyle);
-                if (ctx.fillStyle === '#ffb300')
-                    element.dataset.parameterInk = String(ctx.fillStyle);
-                fillText.call(ctx, text, x, y);
+                if (text === '語') element.dataset.japaneseInk = String(this.fillStyle);
+                if (this.fillStyle === '#ffb300')
+                    element.dataset.parameterInk = String(this.fillStyle);
+                fillText.call(this, text, x, y);
             };
             const ctx = element.getContext('2d')!;
             const draw = ctx.drawImage.bind(ctx);
@@ -1415,8 +1421,10 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
     lines[1] = 'ab日本語xyz';
     lines[29] = '\tΩtarget';
     await writeFile(join(root, 'click.txt'), lines.join('\n'));
+    const executablePath = process.env.NIDO_PACKAGED_EXE;
     const running = await electron.launch({
-        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        executablePath,
+        args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
         env
     });
     try {

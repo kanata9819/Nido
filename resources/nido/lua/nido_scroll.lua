@@ -4,6 +4,7 @@ local namespace = api.nvim_create_namespace('nido_scroll_anchor')
 local anchor
 local fraction = 0
 local centered_view
+local mouse_scrolloff
 
 local function view_at_start(view)
   return view.topline <= 1 and view.skipcol == 0
@@ -59,6 +60,18 @@ end
 
 function M.restore(keep_view)
   -- A mouse click changes the editing anchor, not the visible pixel offset.
+  if keep_view then
+    if not mouse_scrolloff then
+      mouse_scrolloff = {window=api.nvim_get_current_win(), value=vim.wo.scrolloff}
+    end
+    -- Keep a click near the viewport edge from applying the keyboard's cursor margin.
+    vim.wo.scrolloff = 0
+  elseif mouse_scrolloff then
+    if api.nvim_win_is_valid(mouse_scrolloff.window) then
+      vim.wo[mouse_scrolloff.window].scrolloff = mouse_scrolloff.value
+    end
+    mouse_scrolloff = nil
+  end
   if not keep_view then
     fraction = 0
     centered_view = nil
@@ -220,7 +233,7 @@ function M.scroll(lines, follow, pixel)
   publish_offset(pixel)
 end
 
-api.nvim_create_autocmd('BufLeave', {callback=M.restore})
+api.nvim_create_autocmd('BufLeave', {callback=function() M.restore() end})
 api.nvim_create_autocmd('WinScrolled', {callback=function()
   if not centered_view then
     return

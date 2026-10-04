@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react';
-import { Grid } from '../grid';
-import { scrollOffset } from '../scroll';
+import type { Grid } from '../grid';
+import { ScrollQueue, scrollOffset } from '../scroll';
 
 interface UseEditorRenderingOptions {
     animations: boolean;
@@ -55,48 +55,44 @@ export function useEditorRendering({
     useEffect(() => {
         scrollEnabledRef.current = active && !blocked;
         paintRef.current();
-    }, [active, blocked]);
+    }, [active, blocked, paintRef]);
     useEffect(() => {
         smoothCursorRef.current = smoothCursor;
         paintRef.current();
-    }, [smoothCursor]);
+    }, [smoothCursor, paintRef]);
     useEffect(() => {
         animationsRef.current = animations;
         paintRef.current();
-    }, [animations]);
+    }, [animations, paintRef]);
 
     useEffect(() => {
         errorRef.current = onError;
-    }, [onError]);
+    }, [onError, errorRef]);
 
     useEffect(() => {
+        const grid = gridRef.current;
         const element = hostRef.current!;
         const surface = canvasRef.current!;
-        gridRef.current.pixelScrollEnabled = pixelScroll;
+        grid.pixelScrollEnabled = pixelScroll;
 
         let frame = 0;
         let disposed = false;
         let directScroll = false;
         let descriptionDirty = true;
-        let queuedScroll = 0;
-        let sentScroll = 0;
-        let scrollPending = false;
-        let scrollAcknowledged = false;
-        let scrollCompleted = false;
+        const scrollQueue = new ScrollQueue();
         let prefetchNeeded = true;
         let prefetchPending = false;
         let preparingMotion = false;
-        let scrollFollow = true;
         let lastColumns = 0;
         let lastRows = 0;
         let cellWidth = 0;
         let cursorPosition: { row: number; column: number } | undefined;
         let cursorMotion:
             | {
-                from: { row: number; column: number };
-                to: { row: number; column: number };
-                start: number;
-            }
+                  from: { row: number; column: number };
+                  to: { row: number; column: number };
+                  start: number;
+              }
             | undefined;
         let blinkTimer: ReturnType<typeof setTimeout> | undefined;
         let blinkFade: { from: number; to: number; start: number } | undefined;
@@ -106,68 +102,68 @@ export function useEditorRendering({
         const targetFrame = document.createElement('canvas');
         let motion:
             | {
-                top: number;
-                bottom: number;
-                left: number;
-                right: number;
-                distance: number;
-                distanceX: number;
-                incomingRows: number;
-                start: number;
-                edit: boolean;
-            }
+                  top: number;
+                  bottom: number;
+                  left: number;
+                  right: number;
+                  distance: number;
+                  distanceX: number;
+                  incomingRows: number;
+                  start: number;
+                  edit: boolean;
+              }
             | undefined;
 
         const stopMotion = (): void => {
             motion = undefined;
-            queuedScroll = 0;
-            gridRef.current.scrollPreview = 0;
+            scrollQueue.cancelQueued();
+            grid.scrollPreview = 0;
             schedule();
         };
 
         const finishScroll = (): void => {
-            // Invoke replies and redraw notifications can arrive in different turns.
-            if (!scrollPending || !scrollAcknowledged || !scrollCompleted) {
+            if (!scrollQueue.finish()) {
                 return;
             }
-            scrollPending = false;
-            if (!disposed && (queuedScroll || prefetchNeeded)) {
+            if (scrollQueue.hasQueued || prefetchNeeded) {
                 schedule();
             }
         };
 
         const flushScroll = (): void => {
-            if (scrollPending || prefetchPending || !queuedScroll || !scrollEnabledRef.current) {
+            if (prefetchPending || !scrollEnabledRef.current) {
                 return;
             }
-            sentScroll = Math.max(-1000, Math.min(1000, queuedScroll));
-            queuedScroll -= sentScroll;
-            scrollPending = true;
-            scrollAcknowledged = scrollCompleted = false;
+            const command = scrollQueue.start();
+            if (!command) {
+                return;
+            }
             scrollCompletionRef.current = window.nido
-                .scroll(id, sentScroll, scrollFollow, true)
+                .scroll(id, command.lines, command.follow, true)
                 .catch((error) => {
-                    scrollAcknowledged = true;
-                    sentScroll = queuedScroll = 0;
-                    gridRef.current.scrollPreview = 0;
-                    if (!disposed) {
-                        errorRef.current(String(error));
-                        schedule();
+                    if (disposed) {
+                        return;
                     }
+                    scrollQueue.fail();
+                    grid.scrollPreview = 0;
+                    errorRef.current(String(error));
+                    schedule();
                 })
                 .finally(() => {
-                    scrollCompleted = true;
+                    if (disposed) {
+                        return;
+                    }
+                    scrollQueue.complete();
                     finishScroll();
                 });
         };
 
         scrollRef.current = (lines, follow): void => {
-            queuedScroll += lines;
-            scrollFollow = follow;
+            scrollQueue.enqueue(lines, follow);
             directScroll = true;
             motion = undefined;
-            gridRef.current.scrollPreview = queuedScroll + sentScroll;
-            if (lines < 0 && !prefetchPending && gridRef.current.needsUpperRows) {
+            grid.scrollPreview = scrollQueue.preview;
+            if (lines < 0 && !prefetchPending && grid.needsUpperRows) {
                 prefetchNeeded = true;
             }
             schedule();
@@ -175,24 +171,27 @@ export function useEditorRendering({
 
         const render = (): void => {
             frame = 0;
-            if (!scrollEnabledRef.current) {
-                queuedScroll = 0;
-                gridRef.current.scrollPreview = 0;
+            if (disposed) {
+                return;
             }
-            if (disposed || !element.clientWidth || !element.clientHeight) {
+            if (!scrollEnabledRef.current) {
+                scrollQueue.cancelQueued();
+                grid.scrollPreview = 0;
+            }
+            if (!element.clientWidth || !element.clientHeight) {
                 return;
             }
             const focused = document.activeElement === input;
             if (
                 pixelScroll &&
                 prefetchNeeded &&
-                (queuedScroll !== 0 || directScroll) &&
+                (scrollQueue.hasQueued || directScroll) &&
                 !prefetchPending &&
-                !scrollPending &&
+                !scrollQueue.pending &&
                 !motion &&
                 !preparingMotion &&
                 scrollEnabledRef.current &&
-                gridRef.current.rows > 0 &&
+                grid.rows > 0 &&
                 attachedRef.current
             ) {
                 prefetchNeeded = false;
@@ -205,19 +204,22 @@ export function useEditorRendering({
                         }
                     })
                     .finally(() => {
+                        if (disposed) {
+                            return;
+                        }
                         prefetchPending = false;
-                        if (!disposed && queuedScroll) {
+                        if (scrollQueue.hasQueued) {
                             schedule();
                         }
                     });
             }
             flushScroll();
-            const target = gridRef.current.scrollCursor ?? gridRef.current.cursor;
+            const target = grid.scrollCursor ?? grid.cursor;
             const now = performance.now();
             if (blinkFade) {
                 const progress = canBlink() ? Math.min(1, (now - blinkFade.start) / 180) : 1;
                 const eased = progress * progress * (3 - 2 * progress);
-                gridRef.current.cursorOpacity = canBlink()
+                grid.cursorOpacity = canBlink()
                     ? blinkFade.from + (blinkFade.to - blinkFade.from) * eased
                     : 1;
                 if (progress === 1) {
@@ -256,7 +258,7 @@ export function useEditorRendering({
                     }
                 }
             }
-            const metrics = gridRef.current.draw(
+            const metrics = grid.draw(
                 surface,
                 element.clientWidth,
                 element.clientHeight,
@@ -270,11 +272,9 @@ export function useEditorRendering({
 
             if (motion) {
                 if (motion.incomingRows) {
-                    const height =
-                        gridRef.current.rowTop(motion.bottom) - gridRef.current.rowTop(motion.top);
+                    const height = grid.rowTop(motion.bottom) - grid.rowTop(motion.top);
                     const distance =
-                        gridRef.current.rowTop(motion.top) -
-                        gridRef.current.rowTop(motion.top + motion.incomingRows);
+                        grid.rowTop(motion.top) - grid.rowTop(motion.top + motion.incomingRows);
                     motion.distance = Math.max(
                         -height,
                         Math.min(height, distance + motion.distance)
@@ -303,10 +303,10 @@ export function useEditorRendering({
                     targetFrame.getContext('2d')!.drawImage(surface, 0, 0);
                     const ctx = surface.getContext('2d')!;
                     const dpr = window.devicePixelRatio || 1;
-                    const top = gridRef.current.rowY(motion.top);
+                    const top = grid.rowY(motion.top);
                     const height = Math.min(
-                        gridRef.current.contentHeight - top,
-                        gridRef.current.rowTop(motion.bottom) - gridRef.current.rowTop(motion.top)
+                        grid.contentHeight - top,
+                        grid.rowTop(motion.bottom) - grid.rowTop(motion.top)
                     );
                     const left = motion.left * metrics.cellWidth;
                     const width = (motion.right - motion.left) * metrics.cellWidth;
@@ -314,19 +314,19 @@ export function useEditorRendering({
                     ctx.beginPath();
                     ctx.rect(left, top, width, height);
                     ctx.clip();
-                    ctx.fillStyle = gridRef.current.background;
+                    ctx.fillStyle = grid.background;
                     ctx.fillRect(left, top, width, height);
                     // Deleted rows disappear; the remaining rows slide into the gap without an old-frame overlay.
                     const layers = [
                         ...(motion.edit
                             ? []
                             : [
-                                [
-                                    previousFrame,
-                                    offset - motion.distance,
-                                    offsetX - motion.distanceX
-                                ] as const
-                            ]),
+                                  [
+                                      previousFrame,
+                                      offset - motion.distance,
+                                      offsetX - motion.distanceX
+                                  ] as const
+                              ]),
                         [targetFrame, offset, offsetX]
                     ] as const;
                     for (const [image, shift, shiftX] of layers) {
@@ -349,37 +349,39 @@ export function useEditorRendering({
             if (descriptionDirty) {
                 surface.setAttribute(
                     'aria-description',
-                    gridRef.current.cells
-                        .map((row) => row.map((cell) => cell.text).join(''))
-                        .join('\n')
+                    grid.cells.map((row) => row.map((cell) => cell.text).join('')).join('\n')
                 );
                 descriptionDirty = false;
             }
 
             if (inputRef.current) {
-                inputRef.current.style.left = `${gridRef.current.cursor.column * metrics.cellWidth}px`;
-                inputRef.current.style.top = `${gridRef.current.rowY(gridRef.current.cursor.row)}px`;
+                inputRef.current.style.left = `${grid.cursor.column * metrics.cellWidth}px`;
+                inputRef.current.style.top = `${grid.rowY(grid.cursor.row)}px`;
             }
 
             const columns = Math.max(20, Math.floor(element.clientWidth / metrics.cellWidth));
             // Compact lenses free space for code; keep one extra row for fractional scrolling.
             const rows =
                 Math.max(4, Math.floor(element.clientHeight / metrics.cellHeight)) +
-                gridRef.current.extraRows +
+                grid.extraRows +
                 (pixelScroll ? 1 : 0);
             if (!attachedRef.current) {
                 attachedRef.current = true;
                 lastColumns = columns;
                 lastRows = rows;
-                void window.nido
-                    .attach(id, columns, rows)
-                    .catch((e) => errorRef.current(String(e)));
+                void window.nido.attach(id, columns, rows).catch((e) => {
+                    if (!disposed) {
+                        errorRef.current(String(e));
+                    }
+                });
             } else if (columns !== lastColumns || rows !== lastRows) {
                 lastColumns = columns;
                 lastRows = rows;
-                void window.nido
-                    .resize(id, columns, rows)
-                    .catch((e) => errorRef.current(String(e)));
+                void window.nido.resize(id, columns, rows).catch((e) => {
+                    if (!disposed) {
+                        errorRef.current(String(e));
+                    }
+                });
             }
             if (
                 cursorMotion ||
@@ -387,9 +389,9 @@ export function useEditorRendering({
                 blinkFade ||
                 (pixelScroll &&
                     prefetchNeeded &&
-                    (queuedScroll !== 0 || directScroll) &&
+                    (scrollQueue.hasQueued || directScroll) &&
                     !prefetchPending &&
-                    !scrollPending &&
+                    !scrollQueue.pending &&
                     scrollEnabledRef.current)
             ) {
                 cancelAnimationFrame(frame);
@@ -398,7 +400,7 @@ export function useEditorRendering({
         };
 
         const schedule = (): void => {
-            if (!frame) {
+            if (!disposed && !frame) {
                 frame = requestAnimationFrame(render);
             }
         };
@@ -417,12 +419,12 @@ export function useEditorRendering({
             }
             if (smoothBlink) {
                 blinkFade = {
-                    from: gridRef.current.cursorOpacity,
-                    to: gridRef.current.cursorOpacity > 0.5 ? 0 : 1,
+                    from: grid.cursorOpacity,
+                    to: grid.cursorOpacity > 0.5 ? 0 : 1,
                     start: performance.now()
                 };
             } else {
-                gridRef.current.cursorVisible = !gridRef.current.cursorVisible;
+                grid.cursorVisible = !grid.cursorVisible;
             }
             schedule();
             blinkTimer = setTimeout(blink, 550);
@@ -430,8 +432,8 @@ export function useEditorRendering({
 
         const resetBlink = (): void => {
             clearTimeout(blinkTimer);
-            gridRef.current.cursorVisible = true;
-            gridRef.current.cursorOpacity = 1;
+            grid.cursorVisible = true;
+            grid.cursorOpacity = 1;
             blinkFade = undefined;
             schedule();
             if (canBlink()) {
@@ -473,18 +475,15 @@ export function useEditorRendering({
                     name === 'nido_pixel_scroll' ? calls : []
                 );
                 for (const args of pixelOffsets) {
-                    gridRef.current.scrollFraction = Number(args[0]);
-                    gridRef.current.scrollCursor = args[2] as
-                        { row: number; column: number } | undefined;
+                    grid.scrollFraction = Number(args[0]);
+                    grid.scrollCursor = args[2] as { row: number; column: number } | undefined;
                     directScroll = args[1] === true;
-                    if (directScroll && scrollPending) {
-                        scrollAcknowledged = true;
-                        // The returned rows already include the one outstanding request.
-                        sentScroll = 0;
-                        gridRef.current.scrollPreview = queuedScroll;
-                    } else if (!directScroll && !scrollPending) {
-                        queuedScroll = 0;
-                        gridRef.current.scrollPreview = 0;
+                    if (directScroll && scrollQueue.pending) {
+                        scrollQueue.acknowledge();
+                        grid.scrollPreview = scrollQueue.preview;
+                    } else if (!directScroll && !scrollQueue.pending) {
+                        scrollQueue.cancelQueued();
+                        grid.scrollPreview = 0;
                     }
                 }
                 const viewportScrolls = event.events.flatMap(([name, ...calls]) =>
@@ -493,8 +492,8 @@ export function useEditorRendering({
                 const scrolls = viewportScrolls.length
                     ? viewportScrolls
                     : event.events.flatMap(([name, ...calls]) =>
-                        name === 'grid_scroll' ? calls : []
-                    );
+                          name === 'grid_scroll' ? calls : []
+                      );
                 const scroll = scrolls.length === 1 ? (scrolls[0] as number[]) : undefined;
                 if (
                     scrolls.length ||
@@ -539,11 +538,8 @@ export function useEditorRendering({
                         previousFrame.height = surface.height;
                     }
                     previousFrame.getContext('2d')!.drawImage(surface, 0, 0);
-                    const height =
-                        gridRef.current.rowTop(scroll[2]) - gridRef.current.rowTop(scroll[1]);
-                    const distance =
-                        gridRef.current.rowTop(scroll[1] + scroll[5]) -
-                        gridRef.current.rowTop(scroll[1]);
+                    const height = grid.rowTop(scroll[2]) - grid.rowTop(scroll[1]);
+                    const distance = grid.rowTop(scroll[1] + scroll[5]) - grid.rowTop(scroll[1]);
                     const width = (scroll[4] - scroll[3]) * cellWidth;
                     motion = {
                         top: scroll[1],
@@ -559,9 +555,9 @@ export function useEditorRendering({
                         distanceX:
                             scroll[5] === 0
                                 ? Math.max(
-                                    -width,
-                                    Math.min(width, scroll[6] * cellWidth + remainingX)
-                                )
+                                      -width,
+                                      Math.min(width, scroll[6] * cellWidth + remainingX)
+                                  )
                                 : 0,
                         start: now,
                         edit: edited
@@ -570,22 +566,20 @@ export function useEditorRendering({
                     motion = undefined;
                 }
 
-                const { row, column } = gridRef.current.cursor;
-                const mode = gridRef.current.mode;
-                if (gridRef.current.apply(event.events)) {
+                const { row, column } = grid.cursor;
+                const mode = grid.mode;
+                if (grid.apply(event.events)) {
                     if (
                         !prefetchPending &&
                         (event.events.some(
                             ([name]) => name === 'grid_clear' || name === 'grid_resize'
                         ) ||
-                            (!gridRef.current.hasUpperRows && gridRef.current.needsUpperRows &&
+                            (!grid.hasUpperRows &&
+                                grid.needsUpperRows &&
                                 event.events.some(
                                     ([name]) => name === 'nido_scroll' || name === 'grid_scroll'
                                 )) ||
-                            (directScroll &&
-                                scroll &&
-                                scroll[5] < 0 &&
-                                gridRef.current.needsUpperRows))
+                            (directScroll && scroll && scroll[5] < 0 && grid.needsUpperRows))
                     ) {
                         prefetchNeeded = true;
                     }
@@ -600,9 +594,9 @@ export function useEditorRendering({
                 }
 
                 if (
-                    row !== gridRef.current.cursor.row ||
-                    column !== gridRef.current.cursor.column ||
-                    mode !== gridRef.current.mode
+                    row !== grid.cursor.row ||
+                    column !== grid.cursor.column ||
+                    mode !== grid.mode
                 ) {
                     resetBlink();
                 }
@@ -616,8 +610,9 @@ export function useEditorRendering({
 
         return () => {
             disposed = true;
-            scrollRef.current = () => { };
-            gridRef.current.scrollPreview = 0;
+            paintRef.current = () => {};
+            scrollRef.current = () => {};
+            grid.scrollPreview = 0;
             clearTimeout(blinkTimer);
             surface.removeEventListener('pointerdown', pointerDown);
             for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart']) {
@@ -636,12 +631,28 @@ export function useEditorRendering({
             unsubscribe();
             cancelAnimationFrame(frame);
         };
-    }, [id, fontSize, lineHeight, fontFamily, smoothBlink, pixelScroll]);
+    }, [
+        id,
+        fontSize,
+        lineHeight,
+        fontFamily,
+        smoothBlink,
+        pixelScroll,
+        hostRef,
+        canvasRef,
+        inputRef,
+        gridRef,
+        attachedRef,
+        errorRef,
+        paintRef,
+        scrollRef,
+        scrollCompletionRef
+    ]);
 
     useEffect(() => {
         if (active && !blocked) {
             inputRef.current?.focus();
             paintRef.current();
         }
-    }, [active, blocked, focusTick]);
+    }, [active, blocked, focusTick, inputRef, paintRef]);
 }

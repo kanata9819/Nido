@@ -34,7 +34,7 @@ function M.setup()
     -- Read package metadata rather than depending on a version-specific native binary layout.
     local root = vim.fn.getcwd()
     while root do
-      for _, name in ipairs({'typescript', '@typescript/native-preview'}) do
+      for _, name in ipairs({'@typescript/native', 'typescript', '@typescript/native-preview'}) do
         local directory = vim.fs.joinpath(root, 'node_modules', name)
         local package = json(vim.fs.joinpath(directory, 'package.json'))
         if package then
@@ -45,8 +45,12 @@ function M.setup()
             command = {node, vim.fs.joinpath(directory, bin), '--lsp', '--stdio'}
             break
           elseif name == 'typescript' and major < 7 and mode ~= 'native' then
-            tsserver = vim.fs.joinpath(directory, 'lib', 'tsserver.js')
-            break
+            local server = vim.fs.joinpath(directory, 'lib', 'tsserver.js')
+            -- API-only compatibility packages do not include a language server.
+            if vim.fn.filereadable(server) == 1 then
+              tsserver = server
+              break
+            end
           end
         end
       end
