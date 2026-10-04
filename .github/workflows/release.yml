@@ -31,7 +31,33 @@ jobs:
             - run: pnpm install --frozen-lockfile
             - run: pnpm build
             - run: pnpm test
+            - name: Prepare a single draft release
+              shell: pwsh
+              run: |
+                  # Create the release before parallel artifact uploads can race to create it.
+                  gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY *> $null
+                  if ($LASTEXITCODE -ne 0) {
+                      gh release create $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --verify-tag --draft --title "Nido $env:GITHUB_REF_NAME" --generate-notes
+                      if ($LASTEXITCODE -ne 0) { throw 'Unable to prepare the draft release.' }
+                  }
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             - name: Publish installer and update metadata
               run: pnpm exec electron-builder --win --publish always
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Verify assets and publish release
+              shell: pwsh
+              run: |
+                  $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+                  $releaseJson = gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --json assets
+                  if ($LASTEXITCODE -ne 0) { throw 'Unable to verify release assets.' }
+                  $release = $releaseJson | ConvertFrom-Json
+                  foreach ($name in @("nido-$version-setup.exe", "nido-$version-setup.exe.blockmap", 'latest.yml')) {
+                      $asset = @($release.assets | Where-Object { $_.name -eq $name })
+                      if ($asset.Count -ne 1 -or $asset[0].size -le 0) { throw "Missing release asset: $name" }
+                  }
+                  gh release edit $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --draft=false --latest
+                  if ($LASTEXITCODE -ne 0) { throw 'Unable to publish the complete release.' }
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
