@@ -98,6 +98,68 @@ assert(vim.api.nvim_get_mode().mode ~= 'r')`,
     }
 });
 
+test('gf reports missing files through native notices and preserves counted path searches and jumps', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-goto-file-'));
+    const grid = new Grid();
+    const notices: Extract<NidoEvent, { type: 'notification' }>[] = [];
+    let session: Session | undefined;
+    try {
+        await mkdir(join(root, 'first'));
+        await mkdir(join(root, 'second'));
+        await writeFile(join(root, 'notes.txt'), 'event.preventDefault\ntarget\n');
+        await writeFile(join(root, 'first', 'target.txt'), 'first match\n');
+        await writeFile(join(root, 'second', 'target.txt'), 'second match\n');
+        session = await Session.create(root, (event) => {
+            if (event.type === 'notification') notices.push(event);
+            if (event.type === 'redraw') grid.apply(event.events);
+        });
+        await session.openFile('notes.txt');
+        await session.client.request('nvim_exec_lua', [
+            "vim.opt.path = {'first', 'second'}; vim.opt.suffixesadd = {'.txt'}",
+            []
+        ]);
+        await session.input('gg0gf');
+        await session.client.request('nvim_eval', ['1']);
+        assert.deepEqual(
+            notices.map(({ title, message, severity }) => ({ title, message, severity })),
+            [
+                {
+                    title: 'File navigation',
+                    message: 'E447: Can\'t find file "event.preventDefault" in path',
+                    severity: 'error'
+                }
+            ]
+        );
+        assert.equal(await session.client.request('nvim_eval', ["expand('%:t')"]), 'notes.txt');
+        assert.equal(await session.client.request('nvim_eval', ["mode(1)"]), 'n');
+        assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), [1, 0]);
+        assert.match(
+            grid.cells.map((row) => row.map((cell) => cell.text).join('')).join('\n'),
+            /event\.preventDefault/
+        );
+        assert.doesNotMatch(
+            grid.cells.map((row) => row.map((cell) => cell.text).join('')).join('\n'),
+            /E447|Can't find file|Press ENTER/
+        );
+        assert.doesNotMatch(
+            JSON.stringify(
+                await session.client.request('nvim_exec2', ['messages', { output: true }])
+            ),
+            /E447|Can't find file/
+        );
+        await session.input('j02gf');
+        assert.equal(await session.client.request('nvim_eval', ['getline(1)']), 'second match');
+        await session.input('<C-o>');
+        assert.equal(await session.client.request('nvim_eval', ["expand('%:t')"]), 'notes.txt');
+        await session.input('gf');
+        assert.equal(await session.client.request('nvim_eval', ['getline(1)']), 'first match');
+        assert.equal(notices.length, 1);
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('source previews use Neovim syntax colors without changing editor buffers or starting FileType plugins', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-source-colors-'));
     let session: Session | undefined;

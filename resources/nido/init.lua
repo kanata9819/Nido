@@ -41,6 +41,17 @@ for _, key in ipairs({'u', 'U', '<C-r>', 'g-', 'g+'}) do
     vim.cmd.normal({args={vim.v.count1 .. keys}, bang=true, mods={silent=true}})
   end, { silent = true })
 end
+-- Keep file-jump errors in Nido's notification without replacing Neovim's path lookup.
+vim.keymap.set('n', 'gf', function()
+  local count = vim.v.count > 0 and tostring(vim.v.count) or ''
+  local ok, err = pcall(function()
+    vim.cmd.normal({args={count .. 'gf'}, bang=true, mods={silent=true}})
+  end)
+  if not ok then
+    local message = tostring(err)
+    vim.notify(message:match('E%d+:.*') or message, vim.log.levels.ERROR, {title='File navigation'})
+  end
+end, {silent=true})
 vim.o.laststatus = 0
 vim.keymap.set('n', '<C-z>', 'u', {remap=true, silent=true})
 vim.keymap.set('x', '<C-z>', '<Esc>u', {remap=true, silent=true})
