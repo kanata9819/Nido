@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
-import { mkdtemp, mkdir, readFile, realpath, rm, writeFile, rename, symlink } from 'node:fs/promises';
+import {
+    mkdtemp,
+    mkdir,
+    readFile,
+    realpath,
+    rm,
+    writeFile,
+    rename,
+    symlink
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Session } from '../src/main/session';
@@ -131,7 +140,7 @@ test('gf reports missing files through native notices and preserves counted path
             ]
         );
         assert.equal(await session.client.request('nvim_eval', ["expand('%:t')"]), 'notes.txt');
-        assert.equal(await session.client.request('nvim_eval', ["mode(1)"]), 'n');
+        assert.equal(await session.client.request('nvim_eval', ['mode(1)']), 'n');
         assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), [1, 0]);
         assert.match(
             grid.cells.map((row) => row.map((cell) => cell.text).join('')).join('\n'),
@@ -164,7 +173,7 @@ test('source previews use Neovim syntax colors without changing editor buffers o
     const root = await mkdtemp(join(tmpdir(), 'nido-source-colors-'));
     let session: Session | undefined;
     try {
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         await session.client.request('nvim_exec_lua', [
             `vim.g.preview_filetypes = 0
 vim.api.nvim_create_autocmd('FileType', {callback=function() vim.g.preview_filetypes = vim.g.preview_filetypes + 1 end})`,
@@ -231,7 +240,7 @@ test('TypeScript import bindings and type-only keywords use the reference theme 
     const root = await mkdtemp(join(tmpdir(), 'nido-import-colors-'));
     let session: Session | undefined;
     try {
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         const source = "import { run } from './lib';\nimport type {\n  Shape\n} from './lib';";
         for (const path of ['sample.ts', 'sample.tsx']) {
             const [lines] = await session.highlightSources(path, source, '');
@@ -252,7 +261,7 @@ test('Dark Modern syntax colors match the official palette in TypeScript, TSX an
     const root = await mkdtemp(join(tmpdir(), 'nido-dark-modern-'));
     let session: Session | undefined;
     try {
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         const cases: [string, string, [number, string, string][]][] = [
             [
                 'sample.ts',
@@ -462,7 +471,7 @@ test('wheel scrolling can retain the edit position and resumes input and paste a
             join(root, 'lines.txt'),
             Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n')
         );
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         await session.openFile('lines.txt');
         await session.client.request('nvim_exec_lua', [
             'vim.api.nvim_win_set_cursor(0, {20, 0})',
@@ -508,7 +517,7 @@ test('keyboard page scrolling reveals the last row hidden by pixel-scroll oversc
     const root = await mkdtemp(join(tmpdir(), 'nido-page-end-'));
     let session: Session | undefined;
     try {
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         await session.client.request('nvim_exec_lua', [
             'vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.tbl_map(tostring, vim.fn.range(1, 46)))',
             []
@@ -895,7 +904,7 @@ test('clipboard sharing switches Vim yank, delete and paste between private and 
     const root = await mkdtemp(join(tmpdir(), 'nido-clipboard-'));
     let session: Session | undefined;
     try {
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         const lua = (code: string): Promise<unknown> =>
             session!.client.request('nvim_exec_lua', [code, []]);
         // Exercise the real Vim provider contract without replacing the user's OS clipboard.
@@ -971,7 +980,7 @@ test('relative line numbers follow the setting when switching previously opened 
         await writeFile(join(root, 'first.txt'), 'first\n');
         await writeFile(join(root, 'second.txt'), 'second\n');
         await writeFile(join(root, 'new.txt'), 'new\n');
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         await session.openFile('first.txt');
         await session.openFile('second.txt');
         await session.setRelativeLineNumbers(true);
@@ -999,7 +1008,7 @@ test('word wrap follows the setting across cached buffers and new windows', asyn
         for (const name of ['first.txt', 'second.txt', 'new.txt']) {
             await writeFile(join(root, name), `${'x'.repeat(400)}WRAP_END\n`);
         }
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
         await session.attach(80, 24);
         await session.openFile('first.txt');
@@ -1111,7 +1120,7 @@ test('save formats before writing only when enabled and a formatter is available
     try {
         const path = join(root, 'sample.txt');
         await writeFile(path, 'original\n');
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         await session.openFile('sample.txt');
         await session.client.request('nvim_exec_lua', [
             `local get_clients = vim.lsp.get_clients
@@ -1164,7 +1173,7 @@ test('Neovim publishes and clears diagnostics including unopened files', async (
     const root = await mkdtemp(join(tmpdir(), 'nido-diagnostics-'));
     let session: Session | undefined;
     try {
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         const path = join(root, 'unopened.txt');
         await session.client.request('nvim_exec_lua', [
             "local path = ...; local b = vim.fn.bufadd(path); vim.fn.bufload(b); vim.diagnostic.set(vim.api.nvim_create_namespace('test'), b, {{lnum=0,col=0,severity=2,message='Warning'}, {lnum=0,col=0,severity=1,message='Error'}})",
@@ -1217,7 +1226,7 @@ test(
         const root = await mkdtemp(join(tmpdir(), 'nido-terminal-'));
         let session: Session | undefined;
         try {
-            session = await Session.create(root, () => {});
+            session = await Session.create(root, () => { });
             const [terminal, same] = await Promise.all([
                 session.openTerminal(),
                 session.openTerminal()
@@ -1313,7 +1322,7 @@ test('explorer file actions preserve buffers, reject overwrites and protect work
     const outside = await mkdtemp(join(tmpdir(), 'nido-file-outside-'));
     let session: Session | undefined;
     try {
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         const action = (
             operation: import('../src/shared/types').FileAction,
             path: string,
@@ -1364,7 +1373,7 @@ test('explorer file actions preserve buffers, reject overwrites and protect work
 
 test('file mutations serialize and retain edits arriving during OS operations', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-file-race-'));
-    const session = await Session.create(root, () => {});
+    const session = await Session.create(root, () => { });
     try {
         await writeFile(join(root, 'source.txt'), 'saved\n');
         await session.openFile('source.txt');
@@ -1389,7 +1398,7 @@ test('file mutations serialize and retain edits arriving during OS operations', 
         );
         await ready;
         // A second mutation must wait until the first operation releases its OS boundary.
-        const creation = session.fileAction('createFile', 'source.txt', '', async () => {});
+        const creation = session.fileAction('createFile', 'source.txt', '', async () => { });
         release();
         await Promise.all([deletion, creation]);
         assert.equal(await session.client.request('nvim_buf_is_valid', [buffer]), true);
@@ -1410,7 +1419,7 @@ test('file mutations serialize and retain edits arriving during OS operations', 
             return request(method, args);
         };
         await assert.rejects(
-            session.fileAction('rename', 'rename-source.txt', 'moved.txt', async () => {}),
+            session.fileAction('rename', 'rename-source.txt', 'moved.txt', async () => { }),
             /move was cancelled/
         );
         assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'edited during rename');
@@ -1431,7 +1440,7 @@ test('Ctrl Z undoes in normal, insert and visual modes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-undo-key-'));
     let session: Session | undefined;
     try {
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
         await session.input('ihello<Esc>');
         await lua('return 1');
@@ -1492,7 +1501,7 @@ test('typing brackets inserts pairs, skips closing brackets and deletes empty pa
     const root = await mkdtemp(join(tmpdir(), 'nido-auto-brackets-'));
     let session: Session | undefined;
     try {
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
         const reset = async (): Promise<void> => {
             await session!.input('<Esc>');
@@ -1541,7 +1550,7 @@ test('Enter inside braces opens an indented body and aligns the closing brace', 
     const root = await mkdtemp(join(tmpdir(), 'nido-brace-enter-'));
     let session: Session | undefined;
     try {
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
         for (const [filetype, line, column, expandtab, expected] of [
             ['rust', 'fn main() {}', 11, true, ['fn main() {', '    ', '}']],
@@ -1582,7 +1591,7 @@ test('completion refreshes the same current-prefix list after typing and Backspa
     const root = await mkdtemp(join(tmpdir(), 'nido-completion-edits-'));
     let session: Session | undefined;
     try {
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
         await lua(`vim.g.completion_prefixes = {}
 vim.lsp.start({
@@ -1671,7 +1680,7 @@ test('bracket pairs share depth colors, ignore strings and comments, and refresh
         const content =
             'fn main() {\n  let x = ([1]);\n  let s = "([{}])"; // []\n  /* {\n  } */\n}\n';
         await writeFile(join(root, 'pairs.txt'), content);
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         await session.openFile('pairs.txt');
         await session.client.request('nvim_exec_lua', ['vim.bo.syntax = "rust"', []]);
         const marks = async (): Promise<[number, number, number, { hl_group: string }][]> => {
@@ -1946,7 +1955,7 @@ test('CodeLens keeps unchanged and edit-shifted marks and updates only changed l
     const root = await mkdtemp(join(tmpdir(), 'nido-stable-lenses-'));
     let session: Session | undefined;
     try {
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         await session.client.request('nvim_exec_lua', [
             `
 local api = vim.api
@@ -2064,7 +2073,7 @@ test('scroll follows pixel distance and preserves insert mode and file contents'
     try {
         const content = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
         await writeFile(join(root, 'scroll.txt'), content);
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         await session.openFile('scroll.txt');
         await session.scroll(1);
         assert.equal(await session.client.request('nvim_eval', ["line('w0')"]), 2);
@@ -2162,7 +2171,7 @@ test('resize waits for UI reattachment instead of using a detached channel', asy
         release = resolve;
     });
     try {
-        session = await Session.create(root, () => {});
+        session = await Session.create(root, () => { });
         await session.attach(80, 25);
         const request = session.client.request.bind(session.client);
         let detached!: () => void;
@@ -2233,7 +2242,7 @@ test('a renderer joining after Neovim startup receives syntax colors', async () 
 });
 
 test('Nido uses bundled Neovim and isolated config', async () => {
-    const session = await Session.create(process.cwd(), () => {});
+    const session = await Session.create(process.cwd(), () => { });
     try {
         await session.attach(80, 24);
         const result = await session.client.request('nvim_exec_lua', [
@@ -2274,7 +2283,7 @@ test('workspace snapshot restores each cursor and tolerates missing files', asyn
     try {
         await writeFile(join(root, 'first.txt'), 'first line\nsecond line\nthird line\n');
         await writeFile(join(root, 'second.txt'), 'another file\n');
-        const first = await Session.create(root, () => {});
+        const first = await Session.create(root, () => { });
         sessions.push(first);
         await first.openFile('first.txt');
         await first.client.request('nvim_win_set_cursor', [0, [3, 4]]);
@@ -2292,7 +2301,7 @@ test('workspace snapshot restores each cursor and tolerates missing files', asyn
         assert.deepEqual((await readLayout(path)).workspaces, []);
         await writeLayout(path, { version: 1, workspaces: [snapshot], active: 0 });
         await first.stop();
-        const restored = await Session.create(root, () => {});
+        const restored = await Session.create(root, () => { });
         sessions.push(restored);
         assert.deepEqual(await restored.restore((await readLayout(path)).workspaces[0]), []);
         await restored.attach(90, 30);
@@ -2300,7 +2309,7 @@ test('workspace snapshot restores each cursor and tolerates missing files', asyn
         await restored.stop();
         await writeFile(join(root, 'first.txt'), 'short\n');
         await rm(join(root, 'second.txt'));
-        const changed = await Session.create(root, () => {});
+        const changed = await Session.create(root, () => { });
         sessions.push(changed);
         assert.equal((await changed.restore(snapshot)).length, 1);
         assert.equal((await changed.snapshot()).files[0].line, 1);
@@ -2380,7 +2389,7 @@ test('CodeLens rows compact while clicks, fractional scrolling and the command l
                 'clip',
                 'drawImage',
                 'fillText'
-            ].map((name) => [name, () => {}])
+            ].map((name) => [name, () => { }])
         )
     } as unknown as CanvasRenderingContext2D;
     let glyphs = 0;
