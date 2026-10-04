@@ -80,6 +80,99 @@ test('scroll rendering reuses text and reports GPU and frame timings', async () 
     }
 });
 
+test('wrapped upward scrolling reuses text and avoids continuous cache refills', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-wrapped-scroll-'));
+    const profile = join(root, 'profile');
+    const file = join(root, 'wrapped.txt');
+    await mkdir(profile);
+    await writeFile(
+        file,
+        Array.from(
+            { length: 4000 },
+            (_, i) => `ROW_${i + 1} ${'const value = example(argument); '.repeat(3)}`
+        ).join('\n')
+    );
+    await writeFile(
+        join(profile, 'workspaces.json'),
+        JSON.stringify({
+            version: 1,
+            active: 0,
+            window: { width: 1100, height: 850, maximized: false },
+            workspaces: [{ root, current: file, files: [{ path: file, line: 1, column: 0 }] }]
+        })
+    );
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
+    try {
+        const page = await running.firstWindow();
+        const canvas = page.locator('canvas:visible');
+        await expect(canvas).toHaveAttribute('aria-description', /ROW_1 /);
+        const restored = await page.evaluate(() => window.nido.restoreWorkspaces());
+        await page.evaluate(
+            (id) => window.nido.input(id, '<Esc>2000Gzt'),
+            restored.workspaces[0].id
+        );
+        await canvas.evaluate((node) =>
+            node.dispatchEvent(
+                new WheelEvent('wheel', {
+                    bubbles: true,
+                    deltaY: -0.01
+                })
+            )
+        );
+        await page.waitForTimeout(300);
+        const work = await canvas.evaluate(async (node) => {
+            const work = { glyphs: 0, paints: 0, refills: 0, maxPaintMs: 0 };
+            const fillText = CanvasRenderingContext2D.prototype.fillText;
+            CanvasRenderingContext2D.prototype.fillText = function (...args) {
+                work.glyphs++;
+                return fillText.apply(this, args);
+            };
+            const raf = window.requestAnimationFrame;
+            window.requestAnimationFrame = (callback) =>
+                raf((time) => {
+                    const start = performance.now();
+                    callback(time);
+                    work.paints++;
+                    work.maxPaintMs = Math.max(work.maxPaintMs, performance.now() - start);
+                });
+            const unsubscribe = window.nido.onEvent((event) => {
+                if (
+                    event.type === 'redraw' &&
+                    event.events.some(([name]) => name === 'nido_scroll_cache')
+                ) {
+                    work.refills++;
+                }
+            });
+            try {
+                for (let i = 0; i < 100; i++) {
+                    await new Promise<void>((resolve) => raf(() => resolve()));
+                    node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -40 }));
+                }
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                return work;
+            } finally {
+                unsubscribe();
+                window.requestAnimationFrame = raf;
+                CanvasRenderingContext2D.prototype.fillText = fillText;
+            }
+        });
+        console.log('wrapped-scroll-work', work);
+        expect(work.paints).toBeGreaterThan(50);
+        expect(work.refills).toBeGreaterThan(0);
+        expect(work.refills).toBeLessThanOrEqual(5);
+        expect(work.glyphs / work.paints).toBeLessThan(400);
+        await canvas.screenshot({ path: 'test-results/wrapped-upward-scroll.png' });
+    } finally {
+        await running.evaluate(({ BrowserWindow }) => {
+            for (const window of BrowserWindow.getAllWindows()) window.destroy();
+        });
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('touchpad deltas preview before RPC, coalesce and settle without double movement', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-touchpad-'));
     const profile = join(root, 'profile');

@@ -130,12 +130,30 @@ export class Grid {
     }
 
     apply(events: Redraw): boolean {
-        // Prefetch returns to the same viewport. Preserve its rasterized rows while
-        // replaying temporary views, then reuse them if their contents are unchanged.
-        const retainedRows = events.some(([name]) => name === 'nido_scroll_cache')
-            ? new Set(this.cells)
-            : undefined;
+        // Neovim can repaint wrapped rows instead of emitting grid_scroll. Keep
+        // rasterized rows at their new positions when the returned cells still match.
+        const viewportMoves = events.flatMap(([name, ...calls]) =>
+            name === 'nido_scroll' ? calls : []
+        );
+        const prefetched = events.some(([name]) => name === 'nido_scroll_cache');
+        const retainedRows =
+            prefetched || viewportMoves.length
+                ? new Set([...this.upperRows, ...this.cells])
+                : undefined;
         const retainedView = retainedRows ? this.cells.slice() : undefined;
+        const retainedUpper = retainedRows ? this.upperRows.slice() : [];
+        const shift =
+            !prefetched &&
+            viewportMoves.every(
+                (args) =>
+                    args[0] === 1 &&
+                    args[1] === 0 &&
+                    args[3] === 0 &&
+                    args[4] === this.columns &&
+                    args[6] === 0
+            )
+                ? viewportMoves.reduce((total, args) => total + Number(args[5]), 0)
+                : 0;
         if (
             events.some(
                 ([name]) => name === 'nido_edit' || name === 'grid_clear' || name === 'grid_resize'
@@ -349,7 +367,11 @@ export class Grid {
         }
         if (retainedView) {
             for (let row = 0; row < this.rows; row++) {
-                const before = retainedView[row];
+                const source = row < this.rows - 1 ? row + shift : row;
+                const before =
+                    source < 0
+                        ? retainedUpper[retainedUpper.length + source]
+                        : retainedView[source];
                 const after = this.cells[row];
                 if (
                     before &&
@@ -454,7 +476,10 @@ export class Grid {
         ctx.textBaseline = 'alphabetic';
         for (let row = this.scrollPixels < 0 ? -this.upperRows.length : 0; row < this.rows; row++) {
             const cells = row < 0 ? this.upperRows[this.upperRows.length + row] : this.cells[row];
-            if (row < 0 && this.rowY(row + 1) <= 0) {
+            if (
+                row < this.rows - 1 &&
+                (this.rowY(row + 1) <= 0 || this.rowY(row) >= this.contentHeight)
+            ) {
                 continue;
             }
             const rowHeight = this.rowTop(row + 1) - this.rowTop(row);

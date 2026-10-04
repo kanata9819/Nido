@@ -705,6 +705,46 @@ test('scroll prefetch caches upper rows without changing the view, cursor or buf
     }
 });
 
+test('scroll prefetch fills history for wrapped lines without repeated refills', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-wrapped-prefetch-'));
+    const grid = new Grid();
+    let session: Session | undefined;
+    try {
+        await writeFile(
+            join(root, 'wrapped.txt'),
+            Array.from(
+                { length: 1500 },
+                (_, i) => `ROW_${i + 1} ${'const value = example(argument); '.repeat(5)}`
+            ).join('\n')
+        );
+        session = await Session.create(root, (event) => {
+            if (event.type === 'redraw') grid.apply(event.events);
+        });
+        await session.attach(80, 25);
+        await session.openFile('wrapped.txt');
+        await session.input('1000Gzt');
+        await session.client.request('nvim_exec_lua', ['vim.cmd.redraw()', []]);
+        await session.client.request('nvim_eval', ['1']);
+        const before = grid.cells.map((row) => row.map((cell) => cell.text).join(''));
+        await session.prefetchScroll();
+        assert.deepEqual(
+            grid.cells.map((row) => row.map((cell) => cell.text).join('')),
+            before
+        );
+        assert.equal(grid.needsUpperRows, false, 'a wrapped viewport must fill the upper history');
+        const images = new Set(grid.cells);
+        await session.scroll(-3, false, true);
+        assert.equal(grid.needsUpperRows, false, 'small upward deltas must reuse history');
+        assert.ok(
+            grid.cells.filter((row) => images.has(row)).length > grid.rows / 2,
+            'wrapped scrolling must reuse unchanged text images instead of rasterizing the viewport'
+        );
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('clipboard sharing switches Vim yank, delete and paste between private and system registers', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-clipboard-'));
     let session: Session | undefined;
