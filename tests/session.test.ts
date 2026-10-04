@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
-import { mkdtemp, mkdir, readFile, rm, writeFile, rename, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile, rename, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Session } from '../src/main/session';
@@ -1328,9 +1328,10 @@ test('explorer file actions preserve buffers, reject overwrites and protect work
         await session.openFile('src/first.txt');
         const buffer = await session.client.request('nvim_get_current_buf', []);
         await action('rename', 'src', 'renamed');
+        // Windows TEMP can use an 8.3 alias; Session resolves it to the canonical path.
         assert.equal(
             await session.client.request('nvim_buf_get_name', [buffer]),
-            join(root, 'renamed/first.txt')
+            await realpath(join(root, 'renamed/first.txt'))
         );
         await action('copy', 'renamed', 'copied');
         assert.equal(await readFile(join(root, 'copied/first.txt'), 'utf8'), 'hello\n');
