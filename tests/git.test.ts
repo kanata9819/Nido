@@ -5,6 +5,9 @@ import { mkdtemp, readFile, rename, rm, writeFile, mkdir } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { splitDiff } from '../src/renderer/src/gitDiff';
+import { registerGitHandlers } from '../src/main/gitHandlers';
+import type { Session } from '../src/main/session';
+import type { NidoEvent } from '../src/shared/types';
 import {
     gitStatus,
     gitStage,
@@ -18,6 +21,94 @@ import {
     gitSwitch,
     gitIgnored
 } from '../src/main/git';
+
+test('branch switches protect sessions in the same repository and leave other projects alone', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-switch-sessions-'));
+    const repository = join(root, 'repository');
+    const nested = join(repository, 'nested');
+    const other = join(root, 'other');
+    const plain = join(root, 'plain');
+    const refreshed: string[] = [];
+    const checked: string[] = [];
+    const events: NidoEvent[] = [];
+    let nestedModified = false;
+    const mockSession = (id: string, path: string, modified: () => boolean): Session =>
+        ({
+            workspace: { id, root: path, name: id },
+            state: { buffers: [], current: 0, mode: 'n', line: 1, column: 1, filetype: '' },
+            modified: async (): Promise<boolean> => {
+                checked.push(id);
+                return modified();
+            },
+            refreshFiles: async (): Promise<void> => {
+                refreshed.push(id);
+            },
+            refreshGitSigns: async (): Promise<void> => {}
+        }) as Session;
+    try {
+        await Promise.all([nested, other, plain].map((path) => mkdir(path, { recursive: true })));
+        for (const cwd of [repository, other]) {
+            execFileSync('git', ['init', '-q', '-b', 'main'], { cwd });
+        }
+        const sessions = new Map([
+            ['current', mockSession('current', repository, () => false)],
+            ['nested', mockSession('nested', nested, () => nestedModified)],
+            ['other', mockSession('other', other, () => true)],
+            ['plain', mockSession('plain', plain, () => true)]
+        ]);
+        const handlers = new Map<string, (...args: unknown[]) => unknown>();
+        registerGitHandlers({
+            handle: (name, action): void => {
+                handlers.set(name, action);
+            },
+            session: (id): Session => sessions.get(String(id))!,
+            text: (value): string => String(value),
+            sessions,
+            send: (event): void => {
+                events.push(event);
+            }
+        });
+        const switchBranch = (name: string): Promise<void> =>
+            handlers.get('gitSwitch')!('current', name, true) as Promise<void>;
+        const branch = (): string =>
+            execFileSync('git', ['symbolic-ref', '--short', 'HEAD'], {
+                cwd: repository,
+                encoding: 'utf8'
+            }).trim();
+
+        await switchBranch('feature');
+        assert.equal(branch(), 'feature');
+        assert.deepEqual(checked, ['current', 'nested']);
+        assert.deepEqual(refreshed, ['current', 'nested']);
+        assert.deepEqual(events, [
+            { type: 'filesChanged', id: 'current' },
+            { type: 'filesChanged', id: 'nested' }
+        ]);
+
+        nestedModified = true;
+        await assert.rejects(switchBranch('blocked'), /Save unsaved editor changes/);
+        assert.equal(branch(), 'feature');
+
+        // A nested repository owns its buffers independently of the surrounding working tree.
+        execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: nested });
+        checked.length = 0;
+        refreshed.length = 0;
+        events.length = 0;
+        await switchBranch('next');
+        assert.equal(branch(), 'next');
+        assert.deepEqual(checked, ['current']);
+        assert.deepEqual(refreshed, ['current']);
+        assert.deepEqual(events, [{ type: 'filesChanged', id: 'current' }]);
+
+        sessions.get('other')!.state.buffers = [
+            { id: 1, name: join(repository, 'external.txt'), modified: true }
+        ];
+        await assert.rejects(switchBranch('external'), /Save unsaved editor changes/);
+        assert.equal(branch(), 'next');
+    } finally {
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
 
 test('stage all includes the whole repository, deletions and literal names but excludes ignored files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-stage-all-'));

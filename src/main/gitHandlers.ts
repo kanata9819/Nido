@@ -1,3 +1,4 @@
+import { dirname, isAbsolute, relative, sep } from 'node:path';
 import type { Session } from './session';
 import type { NidoEvent } from '../shared/types';
 import {
@@ -10,7 +11,8 @@ import {
     gitCommitFiles,
     gitCommitDiff,
     gitBranches,
-    gitSwitch
+    gitSwitch,
+    gitRoot
 } from './git';
 
 export function registerGitHandlers({
@@ -26,8 +28,8 @@ export function registerGitHandlers({
     sessions: Map<string, Session>;
     send: (event: NidoEvent) => void;
 }): void {
-    async function refreshGitState(): Promise<void> {
-        for (const open of sessions.values()) {
+    async function refreshGitState(selected: Iterable<Session> = sessions.values()): Promise<void> {
+        for (const open of selected) {
             try {
                 await open.refreshGitSigns();
             } catch (error) {
@@ -57,16 +59,45 @@ export function registerGitHandlers({
         if (typeof create !== 'boolean') {
             throw new Error('Invalid branch action.');
         }
+        const root = await gitRoot(current.workspace.root);
+        const affected: Session[] = [];
         for (const open of sessions.values()) {
+            // Navigation can open a file from this repository in another project's session.
+            const directories = new Set([
+                open.workspace.root,
+                ...open.state.buffers
+                    .filter(({ name }) => {
+                        if (!isAbsolute(name)) {
+                            return false;
+                        }
+                        const child = relative(root, name);
+                        return (
+                            child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child)
+                        );
+                    })
+                    .map(({ name }) => dirname(name))
+            ]);
+            let sameRepository = open === current;
+            for (const directory of directories) {
+                if (sameRepository) {
+                    break;
+                }
+                const openRoot = await gitRoot(directory).catch(() => undefined);
+                sameRepository = openRoot !== undefined && relative(root, openRoot) === '';
+            }
+            if (!sameRepository) {
+                continue;
+            }
+            affected.push(open);
             if (await open.modified()) {
                 throw new Error('Save unsaved editor changes before switching branches.');
             }
         }
         await gitSwitch(current.workspace.root, text(name), create);
-        for (const open of sessions.values()) {
+        for (const open of affected) {
             await open.refreshFiles();
         }
-        await refreshGitState();
+        await refreshGitState(affected);
     });
     for (const [name, action] of [
         ['gitDiff', gitDiff],

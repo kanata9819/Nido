@@ -406,12 +406,19 @@ end`,
         return next;
     }
 
-    async paste(text: string): Promise<void> {
-        await this.restoreScroll();
-        if (this.workspace.kind === 'terminal') {
-            await this.client.request('nvim_command', ['startinsert']);
-        }
-        await this.client.request('nvim_paste', [text, true, -1]);
+    paste(text: string): Promise<void> {
+        const next = this.inputQueue.then(async () => {
+            if (this.stopped) {
+                throw new Error('Neovim session is closed.');
+            }
+            await this.restoreScroll();
+            if (this.workspace.kind === 'terminal') {
+                await this.client.request('nvim_command', ['startinsert']);
+            }
+            await this.client.request('nvim_paste', [text, true, -1]);
+        });
+        this.inputQueue = next.catch(() => {});
+        return next;
     }
 
     async save(format = false): Promise<void> {

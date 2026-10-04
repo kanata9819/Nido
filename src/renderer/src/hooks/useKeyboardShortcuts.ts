@@ -1,5 +1,6 @@
 import type { Panel, Item } from '../types';
 import type { DebugAction, Workspace } from '../../../shared/types';
+import { isAltGraph } from '../grid';
 
 interface UseKeyboardShortcutsParams {
     save: () => void;
@@ -58,7 +59,7 @@ export function useKeyboardShortcuts({
         if (document.activeElement?.closest('[data-type-information], [data-explorer-commands]')) {
             return;
         }
-        if (event.isComposing || event.keyCode === 229) {
+        if (event.isComposing || event.keyCode === 229 || isAltGraph(event)) {
             return;
         }
 

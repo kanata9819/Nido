@@ -4,6 +4,10 @@ import type { GitChange, GitStatus, GitCommitEntry, GitBranchEntry } from '../sh
 
 const exec = promisify(execFile);
 
+export async function gitRoot(cwd: string): Promise<string> {
+    return (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
+}
+
 export async function gitHistory(cwd: string, skip: number): Promise<GitCommitEntry[]> {
     if (!Number.isSafeInteger(skip) || skip < 0) {
         throw new Error('Invalid history offset.');
