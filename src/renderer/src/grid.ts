@@ -1,4 +1,4 @@
-import type { Redraw } from '../../shared/types';
+import type { Redraw, StickyScrollState } from '../../shared/types';
 import { color } from './gridColors';
 
 export interface Cell {
@@ -80,6 +80,7 @@ export class Grid {
     contentHeight = 0;
     extraRows = 0;
     bracketGuides: BracketGuide[] = [];
+    stickyScroll?: StickyScrollState;
     private rowTops: number[] = [];
     private layoutDirty = true;
     private scrollPixels = 0;
@@ -184,6 +185,14 @@ export class Grid {
             }
 
             for (const args of calls) {
+                if (name === 'nido_sticky_scroll') {
+                    const state = args[0] as StickyScrollState;
+                    this.stickyScroll = {
+                        ...state,
+                        scopes: Array.isArray(state.scopes) ? state.scopes : []
+                    };
+                    continue;
+                }
                 // grid_scroll can also move decorations inside a stationary viewport.
                 // Only actual viewport movement contributes to the preview history.
                 if (name === 'nido_scroll') {

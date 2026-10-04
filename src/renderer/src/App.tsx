@@ -503,6 +503,8 @@ export default function App(): React.JSX.Element {
                             smoothCursor={smoothCursor}
                             smoothBlink={smoothBlink}
                             scrollFollowCursor={scrollFollowCursor}
+                            stickyScroll={settings.stickyScroll}
+                            stickyScrollMaxLines={settings.stickyScrollMaxLines}
                             blocked={!!panel || leader}
                             focusTick={focusTick}
                             fontFamily={fontFamily.trim() || defaultFontFamily}

@@ -25,7 +25,7 @@
         "build:win": "npm run build && electron-builder --win --publish never",
         "build:mac": "electron-vite build && electron-builder --mac",
         "build:linux": "electron-vite build && electron-builder --linux",
-        "test": "tsx --test tests/session.test.ts tests/session-lifecycle.test.ts tests/git.test.ts tests/scroll.test.ts tests/click.test.ts tests/updater.test.ts",
+        "test": "tsx --test tests/session.test.ts tests/session-lifecycle.test.ts tests/git.test.ts tests/scroll.test.ts tests/click.test.ts tests/updater.test.ts tests/sticky-scroll.test.ts",
         "test:e2e": "playwright test",
         "test:rust": "tsx --test tests/rust.test.ts",
         "test:typescript": "tsx --test tests/typescript.test.ts",

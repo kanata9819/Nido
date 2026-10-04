@@ -22,6 +22,7 @@ interface UseEditorRenderingOptions {
     gridRef: RefObject<Grid>;
     attachedRef: RefObject<boolean>;
     paintRef: RefObject<() => void>;
+    afterPaintRef: RefObject<(motionOffset: number) => void>;
     scrollRef: RefObject<(lines: number, follow: boolean) => void>;
     scrollCompletionRef: RefObject<Promise<void>>;
     fontFamily: string;
@@ -47,6 +48,7 @@ export function useEditorRendering({
     gridRef,
     attachedRef,
     paintRef,
+    afterPaintRef,
     scrollRef,
     scrollCompletionRef,
     fontFamily
@@ -273,6 +275,8 @@ export function useEditorRendering({
             );
             cellWidth = metrics.cellWidth;
 
+            let overlayOffset = 0;
+
             if (motion) {
                 if (motion.incomingRows) {
                     const height = grid.rowTop(motion.bottom) - grid.rowTop(motion.top);
@@ -296,6 +300,7 @@ export function useEditorRendering({
                 ) {
                     motion = undefined;
                 } else {
+                    overlayOffset = offset;
                     if (
                         targetFrame.width !== surface.width ||
                         targetFrame.height !== surface.height
@@ -359,6 +364,7 @@ export function useEditorRendering({
                 }
             }
 
+            afterPaintRef.current(overlayOffset);
             if (descriptionDirty) {
                 surface.setAttribute(
                     'aria-description',
@@ -661,6 +667,7 @@ export function useEditorRendering({
         attachedRef,
         errorRef,
         paintRef,
+        afterPaintRef,
         scrollRef,
         scrollCompletionRef
     ]);

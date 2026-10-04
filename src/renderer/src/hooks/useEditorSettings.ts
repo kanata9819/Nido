@@ -17,6 +17,17 @@ export function useEditorSettings() {
     useEffect(() => {
         localStorage.setItem('nido.wordWrap', String(wordWrap));
     }, [wordWrap]);
+    const [stickyScroll, setStickyScroll] = useState(
+        () => localStorage.getItem('nido.stickyScroll') !== 'false'
+    );
+    const [stickyScrollMaxLines, setStickyScrollMaxLines] = useState(() => {
+        const value = Number(localStorage.getItem('nido.stickyScrollMaxLines'));
+        return Number.isInteger(value) && value >= 1 && value <= 10 ? value : 5;
+    });
+    useEffect(() => {
+        localStorage.setItem('nido.stickyScroll', String(stickyScroll));
+        localStorage.setItem('nido.stickyScrollMaxLines', String(stickyScrollMaxLines));
+    }, [stickyScroll, stickyScrollMaxLines]);
     const [terminalShell, setTerminalShell] = useState<TerminalShell>(() => {
         const saved = localStorage.getItem('nido.terminalShell') as TerminalShell;
         return terminalShells.includes(saved) ? saved : 'auto';
@@ -120,6 +131,10 @@ export function useEditorSettings() {
         setTheme,
         wordWrap,
         setWordWrap,
+        stickyScroll,
+        setStickyScroll,
+        stickyScrollMaxLines,
+        setStickyScrollMaxLines,
         terminalShell,
         setTerminalShell,
         editorConfig,

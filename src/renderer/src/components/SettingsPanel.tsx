@@ -9,6 +9,10 @@ export default function SettingsPanel({
     setTheme,
     wordWrap,
     setWordWrap,
+    stickyScroll,
+    setStickyScroll,
+    stickyScrollMaxLines,
+    setStickyScrollMaxLines,
     terminalShell,
     setTerminalShell,
     sidebar,
@@ -162,6 +166,33 @@ export default function SettingsPanel({
                 />
             </label>
             <small>Wrap long lines at the editor width. The selection is saved.</small>
+            <label>
+                Sticky Scroll{' '}
+                <input
+                    type="checkbox"
+                    checked={stickyScroll}
+                    onChange={(event) => setStickyScroll(event.target.checked)}
+                />
+            </label>
+            <small>
+                Keep enclosing scopes visible. Click to jump; Shift-hover shows the ending.
+                Alt+Shift+S focuses the headers.
+            </small>
+            <label>
+                Sticky Scroll maximum lines{' '}
+                <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    step="1"
+                    value={stickyScrollMaxLines}
+                    onChange={(event) => {
+                        if (event.target.value && event.target.validity.valid) {
+                            setStickyScrollMaxLines(event.target.valueAsNumber);
+                        }
+                    }}
+                />
+            </label>
             <label>
                 Share system clipboard{' '}
                 <input

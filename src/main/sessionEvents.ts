@@ -68,6 +68,10 @@ export class SessionEvents {
 
     receiveNotification(method: string, args: unknown[]): void {
         switch (method) {
+            case 'nido:sticky_scroll': {
+                this.pendingRedraw.push(['nido_sticky_scroll', args]);
+                break;
+            }
             case 'nido:bracket_guides': {
                 if (args[1] === true && !this.isBatchingScroll) {
                     this.sendToRenderer({

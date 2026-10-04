@@ -84,6 +84,25 @@ export interface ReferencePreview {
     line: number;
     lines: { text: string; color: string }[][];
 }
+export interface StickyScrollState {
+    window: number;
+    buffer: number;
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+    gutter: number;
+    tabstop: number;
+    leftcol: number;
+    scopes: {
+        line: number;
+        ending: number;
+        top: number;
+        bottom: number;
+        text: ReferencePreview['lines'][number];
+        endText: ReferencePreview['lines'][number];
+    }[];
+}
 export type DebugAction =
     'start' | 'breakpoint' | 'over' | 'into' | 'out' | 'pause' | 'stop' | 'launch' | 'variable';
 export interface DebugVariable {
@@ -200,6 +219,7 @@ export interface NidoAPI {
     click(id: string, row: number, column: number): Promise<void>;
     scroll(id: string, lines: number, follow?: boolean, pixel?: boolean): Promise<void>;
     prefetchScroll(id: string): Promise<void>;
+    jumpSticky(id: string, window: number, buffer: number, line: number): Promise<void>;
     paste(id: string, text: string): Promise<void>;
     pasteClipboard(id: string): Promise<void>;
     files(id: string, relative: string): Promise<FileEntry[]>;

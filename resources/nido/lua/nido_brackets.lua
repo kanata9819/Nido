@@ -185,3 +185,5 @@ api.nvim_create_autocmd({ 'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'T
     end, 80)
   end,
 })
+
+return { pairs = function(buffer) return pairs_by_buffer[buffer] or {} end }

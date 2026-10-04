@@ -386,6 +386,26 @@ end`,
         return next;
     }
 
+    jumpSticky(window: number, buffer: number, line: number): Promise<void> {
+        const next = this.inputQueue.then(async () => {
+            this.events.beginScrollBatch();
+            try {
+                const moved = await this.client.request('nvim_exec_lua', [
+                    "return require('nido_sticky').jump(...)",
+                    [window, buffer, line]
+                ]);
+                if (moved) {
+                    this.scrollDetached = false;
+                }
+                await this.client.request('nvim_eval', ['1']);
+            } finally {
+                this.events.endScrollBatch();
+            }
+        });
+        this.inputQueue = next.catch(() => {});
+        return next;
+    }
+
     async paste(text: string): Promise<void> {
         await this.restoreScroll();
         if (this.workspace.kind === 'terminal') {

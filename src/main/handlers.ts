@@ -245,6 +245,9 @@ export function registerHandlers({
 
     handle('save', (id, format) => session(id).save(format === true));
     handle('prefetchScroll', (id) => session(id).prefetchScroll());
+    handle('jumpSticky', (id, window, buffer, line) =>
+        session(id).jumpSticky(integer(window), integer(buffer), integer(line))
+    );
     handle('scroll', (id, lines, follow, pixel) => {
         if (
             typeof lines !== 'number' ||

@@ -6,11 +6,14 @@ import { useEditorInput } from './hooks/useEditorInput';
 import styles from './assets/Nido.module.css';
 import TypeInformation from './components/TypeInformation';
 import CompletionMenu from './components/CompletionMenu';
+import StickyScroll from './components/StickyScroll';
 import type { UITheme } from '../../shared/types';
 
 interface Props {
     theme: UITheme;
     scrollFollowCursor?: boolean;
+    stickyScroll?: boolean;
+    stickyScrollMaxLines?: number;
     terminal?: boolean;
     children?: ReactNode;
     id: string;
@@ -29,6 +32,8 @@ interface Props {
 export default function Editor({
     theme,
     scrollFollowCursor = true,
+    stickyScroll = true,
+    stickyScrollMaxLines = 5,
     terminal = false,
     children,
     id,
@@ -51,6 +56,7 @@ export default function Editor({
     const attached = useRef(false);
     const wheel = useRef({ remainder: 0, time: 0 });
     const paint = useRef<() => void>(() => {});
+    const stickyPaint = useRef<(motionOffset: number) => void>(() => {});
     const scroll = useRef<(lines: number, follow: boolean) => void>(() => {});
     const scrollCompletion = useRef<Promise<void>>(Promise.resolve());
     const error = useRef(onError);
@@ -82,6 +88,7 @@ export default function Editor({
         gridRef: grid,
         attachedRef: attached,
         paintRef: paint,
+        afterPaintRef: stickyPaint,
         scrollRef: scroll,
         scrollCompletionRef: scrollCompletion,
         fontFamily: fontFamily,
@@ -105,6 +112,18 @@ export default function Editor({
             ref={host}
             className={styles.editor}
             hidden={!active}
+            onKeyDownCapture={(event) => {
+                if (!blocked && event.altKey && event.shiftKey && event.key.toLowerCase() === 's') {
+                    const header = host.current?.querySelector<HTMLButtonElement>(
+                        '[data-sticky-scroll] button'
+                    );
+                    if (header) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        header.focus();
+                    }
+                }
+            }}
             onPointerDown={(event) => {
                 if (
                     event.button !== 0 ||
@@ -203,6 +222,19 @@ export default function Editor({
                 aria-label={terminal ? 'Terminal display' : 'Neovim editor display'}
             />
             {children}
+            {!terminal && active && stickyScroll && (
+                <StickyScroll
+                    id={id}
+                    grid={grid}
+                    paintRef={stickyPaint}
+                    input={input}
+                    scrollCompletion={scrollCompletion}
+                    maxLines={stickyScrollMaxLines}
+                    fontSize={fontSize}
+                    fontFamily={fontFamily}
+                    onError={onError}
+                />
+            )}
             {!terminal && (
                 <CompletionMenu
                     id={id}

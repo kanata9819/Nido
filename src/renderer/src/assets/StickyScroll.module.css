@@ -1,0 +1,49 @@
+.sticky {
+    position: absolute;
+    z-index: 2;
+    overflow: hidden;
+    box-shadow: 0 3px 6px #0005;
+    border-bottom: 1px solid var(--ui-border, #282c30);
+}
+.row {
+    position: absolute;
+    width: 100%;
+    overflow: hidden;
+}
+.row button {
+    display: flex;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: inherit;
+    color: inherit;
+    font: inherit;
+    line-height: inherit;
+    text-align: left;
+    font-variant-ligatures: none;
+    cursor: pointer;
+}
+.row button:hover {
+    background: #ffffff08;
+}
+.row button:focus-visible {
+    outline: 1px solid var(--ui-accent, #a3cc94);
+    outline-offset: -1px;
+}
+.number {
+    flex-shrink: 0;
+    box-sizing: border-box;
+    color: #858585;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.code {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: pre;
+}
+.code > span {
+    display: inline-block;
+}
