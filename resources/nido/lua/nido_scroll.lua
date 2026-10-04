@@ -5,15 +5,21 @@ local anchor
 local fraction = 0
 local centered_view
 
+local function view_at_start(view)
+  return view.topline <= 1 and view.skipcol == 0
+end
+
 local function publish_offset(pixel)
+  local at_start = view_at_start(vim.fn.winsaveview())
   for _, ui in ipairs(api.nvim_list_uis()) do
-    vim.rpcnotify(ui.chan, 'nido:pixel_scroll', fraction, pixel == true, M.screen_cursor())
+    vim.rpcnotify(ui.chan, 'nido:pixel_scroll', fraction, pixel == true, M.screen_cursor(), at_start)
   end
 end
 
 local function publish_cache(at_start)
+  local view_start = view_at_start(vim.fn.winsaveview())
   for _, ui in ipairs(api.nvim_list_uis()) do
-    vim.rpcnotify(ui.chan, 'nido:scroll_cache', at_start)
+    vim.rpcnotify(ui.chan, 'nido:scroll_cache', at_start, view_start)
   end
 end
 

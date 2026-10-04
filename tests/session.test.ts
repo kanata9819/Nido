@@ -584,6 +584,90 @@ test('pixel scrolling publishes the grid, offset and anchored cursor in a single
     }
 });
 
+test('upward pixel scrolling at the beginning never exposes cached rows or a fractional offset', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-scroll-start-'));
+    let session: Session | undefined;
+    const grid = new Grid();
+    const frames: Redraw[] = [];
+    try {
+        await writeFile(
+            join(root, 'rows.txt'),
+            Array.from({ length: 500 }, (_, index) => `ROW_${index + 1} text`).join('\n')
+        );
+        session = await Session.create(root, (event) => {
+            if (event.type === 'redraw') {
+                frames.push(event.events);
+                grid.apply(event.events);
+            }
+        });
+        await session.attach(80, 25);
+        await session.openFile('rows.txt');
+        await session.setRelativeLineNumbers(true);
+        await session.input('200Gzt');
+        await session.prefetchScroll();
+        await session.scroll(-1000, false, true);
+        await session.prefetchScroll();
+        for (const delta of [-0.1, -0.3, -1, -2.5, -0.01]) {
+            frames.length = 0;
+            await session.scroll(delta, false, true);
+            const view = (await session.client.request('nvim_exec_lua', [
+                'return vim.fn.winsaveview()',
+                []
+            ])) as { topline: number; skipcol: number };
+            const offsets = frames.flatMap((frame) =>
+                frame.flatMap(([name, ...calls]) => (name === 'nido_pixel_scroll' ? calls : []))
+            );
+            assert.equal(view.topline, 1);
+            assert.equal(view.skipcol, 0);
+            assert.equal(offsets.at(-1)?.[0], 0, `delta ${delta}: ${JSON.stringify(frames)}`);
+            assert.equal(grid.hasUpperRows, false, `delta ${delta}: ${JSON.stringify(frames)}`);
+        }
+        await session.input('200Gzt');
+        await session.prefetchScroll();
+        for (let step = 0; step < 180; step++) {
+            await session.scroll(-1.3, false, true);
+        }
+        assert.equal(grid.hasUpperRows, false);
+        await session.input('gg');
+        await session.client.request('nvim_exec_lua', [
+            `local ns = vim.api.nvim_create_namespace('top-test')
+            vim.api.nvim_buf_set_extmark(0, ns, 0, 0, {virt_lines={{{'VIRTUAL_GHOST', 'Normal'}}}, virt_lines_above=true})
+            vim.fn.winrestview({topline=1, topfill=1}); vim.cmd.redraw()`,
+            []
+        ]);
+        await session.client.request('nvim_eval', ['1']);
+        await session.client.request('nvim_exec_lua', [
+            "vim.api.nvim_buf_clear_namespace(0, vim.api.nvim_create_namespace('top-test'), 0, -1); vim.cmd.redraw()",
+            []
+        ]);
+        await session.client.request('nvim_eval', ['1']);
+        assert.equal(grid.hasUpperRows, false, 'a decoration redraw is not viewport movement');
+        await session.prefetchScroll();
+        assert.equal(
+            grid.hasUpperRows,
+            false,
+            'virtual-line redraws at the beginning must not leave stale history'
+        );
+        // A wrapped continuation of line one still has real content above it.
+        await session.client.request('nvim_exec_lua', [
+            "vim.api.nvim_buf_set_lines(0, 0, 1, false, {string.rep('wrapped ', 60)}); vim.cmd('normal! gg'); vim.cmd.redraw()",
+            []
+        ]);
+        await session.scroll(1.2, false, true);
+        const wrappedView = (await session.client.request('nvim_exec_lua', [
+            'return vim.fn.winsaveview()',
+            []
+        ])) as { topline: number; skipcol: number };
+        assert.equal(wrappedView.topline, 1);
+        assert.ok(wrappedView.skipcol > 0);
+        await session.prefetchScroll();
+        assert.equal(grid.hasUpperRows, true, 'wrapped line one retains its earlier screen rows');
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('scroll prefetch caches upper rows without changing the view, cursor or buffer', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-scroll-prefetch-'));
     let session: Session | undefined;

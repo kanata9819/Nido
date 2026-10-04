@@ -163,7 +163,7 @@ export class Grid {
             this.upperRowsAtStart = false;
         }
         let flush = false;
-        const viewportScroll = events.some(([name]) => name === 'nido_scroll');
+        let atStart: boolean | undefined;
         for (const [name, ...calls] of events) {
             switch (name) {
                 case 'flush': {
@@ -181,8 +181,9 @@ export class Grid {
             }
 
             for (const args of calls) {
-                // Viewport metadata also covers redraws where changing relative numbers prevents grid_scroll.
-                if (name === 'nido_scroll' || (name === 'grid_scroll' && !viewportScroll)) {
+                // grid_scroll can also move decorations inside a stationary viewport.
+                // Only actual viewport movement contributes to the preview history.
+                if (name === 'nido_scroll') {
                     const [grid, top, bottom, left, right, rows, columns] = args as number[];
                     if (
                         grid === 1 &&
@@ -219,6 +220,15 @@ export class Grid {
                 switch (name) {
                     case 'nido_scroll_cache': {
                         this.upperRowsAtStart = args[0] === true;
+                        if (typeof args[1] === 'boolean') {
+                            atStart = args[1];
+                        }
+                        break;
+                    }
+                    case 'nido_pixel_scroll': {
+                        if (typeof args[3] === 'boolean') {
+                            atStart = args[3];
+                        }
                         break;
                     }
                     case 'nido_bracket_guides': {
@@ -364,6 +374,12 @@ export class Grid {
                     }
                 }
             }
+        }
+        if (atStart) {
+            // Decoration redraws can emit grid_scroll without moving the viewport.
+            // At BOF none of those outgoing rows belong above the current view.
+            this.upperRows = [];
+            this.upperRowsAtStart = true;
         }
         if (retainedView) {
             for (let row = 0; row < this.rows; row++) {
