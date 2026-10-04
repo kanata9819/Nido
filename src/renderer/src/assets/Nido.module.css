@@ -540,7 +540,7 @@
     min-width: max-content;
     padding-right: 18px;
 }
-.referencePreviewCode > div[data-highlight='true'] {
+.referencePreviewCode > div[data-current='true'] {
     background: #304338;
     box-shadow: inset 3px 0 #a5bd9b;
 }

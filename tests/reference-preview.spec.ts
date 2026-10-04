@@ -116,16 +116,24 @@ for (const animations of [true, false]) {
             await resolvePreview(1);
             await expect(preview.locator('[data-current="true"]')).toHaveText('21RESULT_1_LINE_1');
             const bounds = await preview.boundingBox();
-            // Inspect the actual animated layers halfway through their transition.
+            // Inspect the actual animated content halfway through its transition.
             await preview.evaluate((node) => {
                 node.setAttribute('data-persistent-frame', 'true');
+                const content = node.firstElementChild!;
+                content.setAttribute('data-persistent-content', 'true');
                 const measurement = { removed: false, animations: 0, pause: true };
                 Object.assign(window, { referenceMeasurement: measurement });
                 new MutationObserver((mutations) => {
-                    if (mutations.some((mutation) => [...mutation.removedNodes].includes(node))) {
+                    if (
+                        mutations.some((mutation) =>
+                            [...mutation.removedNodes].some(
+                                (removed) => removed === node || removed === content
+                            )
+                        )
+                    ) {
                         measurement.removed = true;
                     }
-                }).observe(node.parentElement!, { childList: true });
+                }).observe(node.parentElement!, { childList: true, subtree: true });
                 const animate = Element.prototype.animate;
                 Element.prototype.animate = function (...args) {
                     const animation = animate.apply(this, args);
@@ -150,6 +158,11 @@ for (const animations of [true, false]) {
             await resolvePreview(2);
             await expect(preview.locator('[data-current="true"]')).toContainText('RESULT_2');
             await expect(preview).toHaveAttribute('data-persistent-frame', 'true');
+            await expect(preview.locator(':scope > div')).toHaveCount(1);
+            await expect(preview.locator(':scope > div')).toHaveAttribute(
+                'data-persistent-content',
+                'true'
+            );
             expect(await preview.boundingBox()).toEqual(bounds);
             const motion = await preview.evaluate((node) => ({
                 frame: node.getAnimations().length,
@@ -165,8 +178,10 @@ for (const animations of [true, false]) {
             }));
             expect(motion.frame).toBe(0);
             expect(motion.measurement.removed).toBe(false);
-            expect(motion.measurement.animations).toBe(animations ? 2 : 0);
-            expect(motion.layers).toHaveLength(animations ? 2 : 0);
+            // Old text must not show through the new result during the transition.
+            await expect(preview).not.toContainText('RESULT_1');
+            expect(motion.measurement.animations).toBe(animations ? 1 : 0);
+            expect(motion.layers).toHaveLength(animations ? 1 : 0);
             for (const opacity of motion.layers) {
                 expect(opacity).toBeGreaterThan(0);
                 expect(opacity).toBeLessThan(1);
@@ -187,12 +202,13 @@ for (const animations of [true, false]) {
                         await preview.evaluate(
                             (node) => node.getAnimations({ subtree: true }).length
                         )
-                    ).toBe(2);
-                    await expect(preview.locator('[aria-hidden="true"] > header')).toHaveCount(1);
+                    ).toBe(1);
+                    await expect(preview.locator('header')).toHaveCount(1);
+                    await expect(preview).not.toContainText(`RESULT_${index === 2 ? 3 : 2}`);
                 }
                 // Changing the OS motion preference also stops an in-flight transition.
                 await page.emulateMedia({ reducedMotion: 'reduce' });
-                await expect(preview.locator('[aria-hidden="true"] > header')).toHaveCount(0);
+                await expect(preview.locator('header')).toHaveCount(1);
                 expect(
                     await preview.evaluate((node) => node.getAnimations({ subtree: true }).length)
                 ).toBe(0);
@@ -204,7 +220,7 @@ for (const animations of [true, false]) {
                 ).referenceMeasurement.pause = false;
                 node.getAnimations({ subtree: true }).forEach((animation) => animation.finish());
             });
-            await expect(preview.locator('[aria-hidden="true"] > header')).toHaveCount(0);
+            await expect(preview.locator('header')).toHaveCount(1);
 
             // A slow response for a skipped result must not replace the latest selection.
             await page.keyboard.press('j');

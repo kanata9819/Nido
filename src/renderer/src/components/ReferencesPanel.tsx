@@ -26,9 +26,8 @@ interface PreviewContent {
 function ReferencePreviewContent({
     item,
     data,
-    error,
-    previous = false
-}: Omit<PreviewContent, 'key' | 'index'> & { previous?: boolean }): React.JSX.Element {
+    error
+}: Omit<PreviewContent, 'key' | 'index'>): React.JSX.Element {
     return (
         <>
             <header>
@@ -39,11 +38,7 @@ function ReferencePreviewContent({
             <div className={styles.referencePreviewCode}>
                 {data ? (
                     data.lines.map((spans, index) => (
-                        <div
-                            key={index}
-                            data-current={!previous && data.first + index === data.line}
-                            data-highlight={data.first + index === data.line}
-                        >
+                        <div key={index} data-current={data.first + index === data.line}>
                             <span aria-hidden="true">{data.first + index}</span>
                             <code>
                                 {spans.map((span, part) => (
@@ -75,12 +70,9 @@ export default function ReferencesPanel({
     const list = useRef<HTMLDivElement>(null);
     const [selected, setSelected] = useState(0);
     const [focused, setFocused] = useState(false);
-    const [preview, setPreview] = useState<{
-        current: PreviewContent;
-        previous?: PreviewContent;
-    }>();
+    const [preview, setPreview] = useState<PreviewContent>();
     const currentContent = useRef<HTMLDivElement>(null);
-    const previousContent = useRef<HTMLDivElement>(null);
+    const displayedContent = useRef<PreviewContent | undefined>(undefined);
     const closePrefix = useRef(false);
     const item = state.items[selected];
     const previewKey = `${state.version}:${selected}`;
@@ -96,10 +88,7 @@ export default function ReferencesPanel({
                 return;
             }
             // Keep the old preview (including its header) until the next result is ready.
-            setPreview((old) => ({
-                current: { key: previewKey, index: selected, item, data, error },
-                previous: old?.current.key !== previewKey ? old?.current : undefined
-            }));
+            setPreview({ key: previewKey, index: selected, item, data, error });
         };
         void window.nido.previewReference(workspaceId, selected + 1, state.version).then(
             (result) => show(result),
@@ -120,48 +109,30 @@ export default function ReferencesPanel({
         item?.line
     ]);
     useLayoutEffect(() => {
-        if (!preview?.previous || !currentContent.current || !previousContent.current) {
+        const previous = displayedContent.current;
+        displayedContent.current = preview;
+        if (!preview || !previous || preview.key === previous.key || !currentContent.current) {
             return;
         }
-        const current = preview.current;
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-        const settle = (): void => {
-            setPreview((value) => (value?.current === current ? { current } : value));
-        };
         if (!animations || reducedMotion.matches) {
-            settle();
             return;
         }
-        const direction = current.index >= preview.previous.index ? 1 : -1;
-        const timing = {
-            duration: 150,
-            easing: 'cubic-bezier(0.2, 0, 0, 1)',
-            fill: 'both'
-        } as const;
+        const direction = preview.index >= previous.index ? 1 : -1;
+        // Animate only the new content; overlapping old text creates visible ghosting.
         const incoming = currentContent.current.animate(
             [
-                { opacity: 0, transform: `translateY(${direction * 6}px)` },
+                { opacity: 0.7, transform: `translateY(${direction * 4}px)` },
                 { opacity: 1, transform: 'translateY(0)' }
             ],
-            timing
-        );
-        const outgoing = previousContent.current.animate(
-            [
-                { opacity: 1, transform: 'translateY(0)' },
-                { opacity: 0, transform: `translateY(${-direction * 6}px)` }
-            ],
-            timing
+            { duration: 150, easing: 'cubic-bezier(0.2, 0, 0, 1)' }
         );
         const finish = (): void => {
             incoming.cancel();
-            outgoing.cancel();
-            settle();
         };
-        void incoming.finished.then(finish, () => {});
         reducedMotion.addEventListener('change', finish);
         return () => {
             incoming.cancel();
-            outgoing.cancel();
             reducedMotion.removeEventListener('change', finish);
         };
     }, [preview, animations]);
@@ -217,24 +188,10 @@ export default function ReferencesPanel({
                     <section
                         className={styles.referencePreview}
                         aria-label="Reference preview"
-                        aria-busy={preview?.current.key !== previewKey}
+                        aria-busy={preview?.key !== previewKey}
                     >
-                        {preview?.previous && (
-                            <div
-                                key={preview.previous.key}
-                                ref={previousContent}
-                                className={styles.referencePreviewContent}
-                                aria-hidden="true"
-                            >
-                                <ReferencePreviewContent {...preview.previous} previous />
-                            </div>
-                        )}
-                        <div
-                            key={preview?.current.key ?? 'loading'}
-                            ref={currentContent}
-                            className={styles.referencePreviewContent}
-                        >
-                            <ReferencePreviewContent {...(preview?.current ?? { item })} />
+                        <div ref={currentContent} className={styles.referencePreviewContent}>
+                            <ReferencePreviewContent {...(preview ?? { item })} />
                         </div>
                     </section>,
                     previewHost
