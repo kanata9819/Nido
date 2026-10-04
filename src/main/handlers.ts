@@ -6,6 +6,7 @@ import { registerGitHandlers } from './gitHandlers';
 import { registerWorkspaceHandlers } from './workspaceHandlers';
 import { terminalShells, uiThemes, type TerminalShell, type UITheme } from '../shared/types';
 import type { DebugAction, FileAction, NidoEvent, Workspace } from '../shared/types';
+import type { Updates } from './updater';
 
 export interface AppState {
     order: string[];
@@ -28,8 +29,9 @@ export function registerHandlers({
     sessions,
     state,
     neovimResources,
-    send
-}: HandlerDeps): void {
+    send,
+    updates
+}: HandlerDeps & { updates: Updates }): () => Promise<boolean> {
     function session(id: unknown): Session {
         const found =
             typeof id === 'string'
@@ -76,7 +78,21 @@ export function registerHandlers({
         });
     };
 
-    registerWorkspaceHandlers({
+    handle('updateState', () => updates.snapshot());
+    handle('updateAction', (action) => {
+        switch (action) {
+            case 'check':
+                return updates.check();
+            case 'download':
+                return updates.download();
+            case 'install':
+                return updates.install();
+            default:
+                throw new Error('Unknown update action.');
+        }
+    });
+
+    const prepareToQuit = registerWorkspaceHandlers({
         window,
         sessions,
         state,
@@ -309,4 +325,5 @@ export function registerHandlers({
             }
         }
     });
+    return prepareToQuit;
 }

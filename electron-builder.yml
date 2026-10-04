@@ -1,4 +1,4 @@
-appId: com.electron.app
+appId: com.kanata9819.nido
 productName: nido
 directories:
     buildResources: build
@@ -36,6 +36,8 @@ win:
           arch: [x64]
     executableName: nido
 nsis:
+    perMachine: false
+    deleteAppDataOnUninstall: false
     artifactName: ${name}-${version}-setup.${ext}
     shortcutName: ${productName}
     uninstallDisplayName: ${productName}
@@ -61,5 +63,7 @@ appImage:
     artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:
-    provider: generic
-    url: https://example.com/auto-updates
+    provider: github
+    owner: kanata9819
+    repo: Nido
+    releaseType: release

@@ -1,0 +1,37 @@
+.button {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 12px;
+    flex-shrink: 0;
+    font-size: 11px;
+    white-space: nowrap;
+    -webkit-app-region: no-drag;
+}
+.button[data-update-status='available'],
+.button[data-update-status='downloaded'] {
+    color: var(--ui-accent, #a3cc94);
+    background: var(--ui-accent-soft, #a3cc9410);
+}
+.button[data-update-status='error'] {
+    color: #e59b96;
+}
+.button:disabled {
+    opacity: 0.55;
+}
+.spinner {
+    animation: spin 1s linear infinite;
+}
+[data-animations='false'] .spinner {
+    animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+    .spinner {
+        animation: none;
+    }
+}
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

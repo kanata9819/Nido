@@ -21,7 +21,7 @@ export function registerWorkspaceHandlers({
     session: (id: unknown) => Session;
     text: (value: unknown) => string;
     shellChoice: (value?: unknown) => TerminalShell;
-}): void {
+}): () => Promise<boolean> {
     const favoritesPath = join(app.getPath('userData'), 'favorites.json');
     let favoriteWrite: Promise<unknown> = Promise.resolve();
     handle('favorites', async () => {
@@ -79,49 +79,59 @@ export function registerWorkspaceHandlers({
         return true;
     }
 
-    // Window close logic.
+    // Ordinary close and update restart share the same save and session shutdown sequence.
+    async function prepareToQuit(): Promise<boolean> {
+        if (state.closing) {
+            return true;
+        }
+        if (state.prompting) {
+            return false;
+        }
+        state.prompting = true;
+        try {
+            if (state.restoration) {
+                await state.restoration;
+            }
+            for (const s of sessions.values()) {
+                if (!(await confirmClose(s))) {
+                    return false;
+                }
+            }
+            const ids = [
+                ...state.order.filter((id) => sessions.has(id)),
+                ...[...sessions.keys()].filter((id) => !state.order.includes(id))
+            ];
+            await writeLayout(join(app.getPath('userData'), 'workspaces.json'), {
+                version: 1,
+                window: {
+                    width: window.getNormalBounds().width,
+                    height: window.getNormalBounds().height,
+                    maximized: window.isMaximized()
+                },
+                workspaces: await Promise.all(ids.map((id) => session(id).snapshot())),
+                active: Math.max(0, ids.indexOf(state.active))
+            });
+            await Promise.all([...sessions.values()].map((s) => s.stop()));
+            state.closing = true;
+            return true;
+        } finally {
+            state.prompting = false;
+        }
+    }
     window.on('close', (event) => {
         if (state.closing) {
             return;
         }
         event.preventDefault();
-        if (state.prompting) {
-            return;
-        }
-        state.prompting = true;
-        void (async () => {
-            try {
-                if (state.restoration) {
-                    await state.restoration;
+        void prepareToQuit()
+            .then((ready) => {
+                if (ready) {
+                    window.close();
                 }
-                for (const s of sessions.values()) {
-                    if (!(await confirmClose(s))) {
-                        return;
-                    }
-                }
-                const ids = [
-                    ...state.order.filter((id) => sessions.has(id)),
-                    ...[...sessions.keys()].filter((id) => !state.order.includes(id))
-                ];
-                await writeLayout(join(app.getPath('userData'), 'workspaces.json'), {
-                    version: 1,
-                    window: {
-                        width: window.getNormalBounds().width,
-                        height: window.getNormalBounds().height,
-                        maximized: window.isMaximized()
-                    },
-                    workspaces: await Promise.all(ids.map((id) => session(id).snapshot())),
-                    active: Math.max(0, ids.indexOf(state.active))
-                });
-                state.closing = true;
-                await Promise.all([...sessions.values()].map((s) => s.stop()));
-                window.close();
-            } catch (error) {
-                await dialog.showMessageBox(window, { type: 'error', message: String(error) });
-            } finally {
-                state.prompting = false;
-            }
-        })();
+            })
+            .catch((error: unknown) =>
+                dialog.showMessageBox(window, { type: 'error', message: String(error) })
+            );
     });
 
     handle('restore', (shell) => {
@@ -236,4 +246,5 @@ export function registerWorkspaceHandlers({
         send({ type: 'exit', id: s.workspace.id });
         return true;
     });
+    return prepareToQuit;
 }

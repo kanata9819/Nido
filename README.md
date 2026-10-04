@@ -54,6 +54,26 @@ pnpm test:e2e  # ビルド済みアプリの操作
 
 型チェックはTypeScript 7を使います。Lintが利用するTypeScript APIは、公式の互換パッケージでTypeScript 6を併用しています。
 
+## アプリの更新
+
+最初は `nido-0.2.0-setup.exe` でインストールしてください。タイトルバーの最小化ボタン左にある更新ボタンから、更新確認・ダウンロード・再起動を行えます。
+起動後にも更新を確認します。ダウンロードや再起動はボタンを押すまで行いません。再起動前に未保存ファイルを確認し、ワークスペースを保存してNeovimを終了します。
+開発版や `win-unpacked` の直接起動では更新を無効にしています。失敗時は既存の通知で理由を表示し、再試行できます。
+
+更新元は公開リポジトリ `kanata9819/Nido` のGitHub Releasesです。
+`package.json` のバージョンを上げて、その変更を含む `v0.2.0` のようなタグをpushすると、GitHub ActionsがWindows版をビルド・テストして公開します。
+タグとバージョンが一致しなければ公開しません。インストーラー、`.blockmap`、`latest.yml` を同じReleaseへ配布し、Neovimや言語サーバーなどの同梱リソースもまとめて更新します。
+ローカルの `pnpm build:win` は公開せず、インストーラーと更新情報を生成します。
+
+配布前の検証は `tests/update.spec.ts` にあります。ローカルHTTPサーバーから実際のインストーラーを取得し、ハッシュ検証・保存確認のキャンセル・保存後のインストーラー呼び出しを確認します。OSへのインストール実行はテストで置き換えています。
+`dist/auto-update` にWindows版を生成した後、以下で実行できます。
+
+```powershell
+$env:NIDO_PACKAGED_EXE = "$PWD/dist/auto-update/win-unpacked/nido.exe"
+$env:NIDO_UPDATER_FIXTURE = '1'
+pnpm exec playwright test tests/update.spec.ts
+```
+
 ## コードの責務
 
 - `App.tsx`：画面全体の構成とパネル・フォーカスの連携。表示部品は `components/`、設定のセッション反映は `useSessionSettings.ts`。

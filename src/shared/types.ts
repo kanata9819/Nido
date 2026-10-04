@@ -4,6 +4,24 @@ export type TerminalShell = (typeof terminalShells)[number];
 export const uiThemes = ['dark', 'acrylic'] as const;
 export type UITheme = (typeof uiThemes)[number];
 
+export interface UpdateState {
+    status:
+        | 'disabled'
+        | 'idle'
+        | 'checking'
+        | 'current'
+        | 'available'
+        | 'downloading'
+        | 'downloaded'
+        | 'installing'
+        | 'error';
+    currentVersion: string;
+    version?: string;
+    percent?: number;
+    message?: string;
+}
+export type UpdateAction = 'check' | 'download' | 'install';
+
 export interface Workspace {
     kind?: 'editor' | 'terminal';
     terminalId?: string;
@@ -101,6 +119,7 @@ export interface FileEntry {
 export type FileAction = 'createFile' | 'createDirectory' | 'rename' | 'copy' | 'delete';
 export type Redraw = [string, ...unknown[][]][];
 export type NidoEvent =
+    | { type: 'update'; id?: never; state: UpdateState }
     | {
           type: 'notification';
           id: string;
@@ -196,6 +215,8 @@ export interface NidoAPI {
     debug(id: string, action: DebugAction, target?: number): Promise<void>;
     setLineEnding(id: string, format: 'LF' | 'CRLF'): Promise<void>;
     setTheme(theme: UITheme): Promise<void>;
+    updateState(): Promise<UpdateState>;
+    updateAction(action: UpdateAction): Promise<UpdateState>;
     windowAction(action: 'minimize' | 'maximize' | 'close'): Promise<void>;
     onEvent(callback: (event: NidoEvent) => void): () => void;
 }

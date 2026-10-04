@@ -1,6 +1,7 @@
 import { Leaf, Minus, Plus, Square, Star, X } from 'lucide-react';
 import type { FavoriteWorkspace, Workspace } from '../../../shared/types';
 import styles from '../assets/Nido.module.css';
+import UpdateButton from './UpdateButton';
 
 interface TitleBarProps {
     workspaces: Workspace[];
@@ -86,6 +87,7 @@ export default function TitleBar({
                 </button>
             </div>
             <div className={styles.dragArea} />
+            <UpdateButton />
             <div className={styles.windowControls}>
                 <button
                     aria-label="Minimize"

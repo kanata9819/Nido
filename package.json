@@ -1,10 +1,14 @@
 {
     "name": "nido",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Nido — a keyboard-first Neovim desktop client",
     "main": "./out/main/index.js",
     "author": "",
-    "homepage": "https://electron-vite.org",
+    "homepage": "https://github.com/kanata9819/Nido",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/kanata9819/Nido.git"
+    },
     "scripts": {
         "icons": "electron scripts/generate-icons.mjs",
         "format": "prettier --write .",
@@ -18,10 +22,10 @@
         "build": "npm run prepare:neovim && npm run typecheck && electron-vite build",
         "postinstall": "electron-builder install-app-deps",
         "build:unpack": "npm run build && electron-builder --dir",
-        "build:win": "npm run build && electron-builder --win",
+        "build:win": "npm run build && electron-builder --win --publish never",
         "build:mac": "electron-vite build && electron-builder --mac",
         "build:linux": "electron-vite build && electron-builder --linux",
-        "test": "tsx --test tests/session.test.ts tests/session-lifecycle.test.ts tests/git.test.ts tests/scroll.test.ts tests/click.test.ts",
+        "test": "tsx --test tests/session.test.ts tests/session-lifecycle.test.ts tests/git.test.ts tests/scroll.test.ts tests/click.test.ts tests/updater.test.ts",
         "test:e2e": "playwright test",
         "test:rust": "tsx --test tests/rust.test.ts",
         "test:typescript": "tsx --test tests/typescript.test.ts",
@@ -30,6 +34,7 @@
     "dependencies": {
         "@electron-toolkit/preload": "^3.0.2",
         "@electron-toolkit/utils": "^4.0.0",
+        "electron-updater": "6.8.9",
         "lucide-react": "^1.48.0",
         "neovim": "^5.5.0",
         "react-markdown": "^10.1.0",

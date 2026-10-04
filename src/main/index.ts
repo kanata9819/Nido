@@ -1,5 +1,8 @@
 import { app, BrowserWindow, Menu, screen } from 'electron';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { autoUpdater } from 'electron-updater';
+import { Updates } from './updater';
 import { Session } from './session';
 import { registerHandlers, type AppState } from './handlers';
 import type { NidoEvent } from '../shared/types';
@@ -81,7 +84,41 @@ app.whenReady().then(async () => {
             window.maximize();
         }
     });
-    registerHandlers({ window, sessions, state, neovimResources, send });
+    let prepareToQuit: () => Promise<boolean> = async () => false;
+    const installed =
+        process.platform === 'win32' &&
+        app.isPackaged &&
+        existsSync(join(dirname(process.execPath), 'Uninstall nido.exe'));
+    const updates = new Updates(autoUpdater, {
+        currentVersion: app.getVersion(),
+        enabled: installed,
+        publish: (update) => send({ type: 'update', state: update }),
+        notify: (message, severity) =>
+            send({
+                type: 'notification',
+                id: state.active,
+                title: 'Nido update',
+                message,
+                severity
+            }),
+        prepareToQuit: () => prepareToQuit(),
+        recover: () => {
+            if (window.isDestroyed()) {
+                return;
+            }
+            state.closing = false;
+            state.restoration = undefined;
+            sessions.clear();
+            window.reload();
+        }
+    });
+    prepareToQuit = registerHandlers({ window, sessions, state, neovimResources, send, updates });
+    window.webContents.once('did-finish-load', () => {
+        if (installed) {
+            const timer = setTimeout(() => void updates.check(false), 5000);
+            window.once('closed', () => clearTimeout(timer));
+        }
+    });
     if (process.env.ELECTRON_RENDERER_URL) {
         void window.loadURL(process.env.ELECTRON_RENDERER_URL);
     } else {
