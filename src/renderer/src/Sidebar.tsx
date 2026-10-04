@@ -193,13 +193,13 @@ function Sidebar({
                     }
                     const key = event.ctrlKey
                         ? ({ c: 'c', x: 'x', v: 'p' } as Record<string, string>)[
-                              event.key.toLowerCase()
-                          ]
+                        event.key.toLowerCase()
+                        ]
                         : event.key === 'F2'
-                          ? 'r'
-                          : event.key === 'Delete'
-                            ? 'd'
-                            : event.key;
+                            ? 'r'
+                            : event.key === 'Delete'
+                                ? 'd'
+                                : event.key;
                     const command = commands.find((command) => command.key === key);
                     if (command) {
                         event.preventDefault();
