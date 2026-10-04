@@ -491,17 +491,25 @@
     left: 50%;
     transform: translate(-50%, -50%);
     width: min(820px, calc(100% - 48px));
+    height: 430px;
     max-height: calc(100% - 100px);
-    overflow: auto;
+    overflow: hidden;
     background: #181d21;
     border: 1px solid #536359;
     border-radius: 10px;
     box-shadow: 0 16px 60px #0009;
     pointer-events: none;
 }
+.referencePreviewContent {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+}
 .referencePreview header {
     display: flex;
     align-items: center;
+    flex-shrink: 0;
     gap: 10px;
     padding: 12px 16px;
     border-bottom: 1px solid #303a40;
@@ -518,6 +526,9 @@
     white-space: nowrap;
 }
 .referencePreviewCode {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
     padding: 10px 0;
     font:
         13px/1.65 Consolas,
@@ -529,7 +540,7 @@
     min-width: max-content;
     padding-right: 18px;
 }
-.referencePreviewCode > div[data-current='true'] {
+.referencePreviewCode > div[data-highlight='true'] {
     background: #304338;
     box-shadow: inset 3px 0 #a5bd9b;
 }

@@ -541,6 +541,7 @@ export default function App(): React.JSX.Element {
                     root={workspace?.root || ''}
                     visible={referencesVisible && bottomPanel === 'references'}
                     focusTick={referencesFocusTick}
+                    animations={animations}
                     onClose={closeReferences}
                     onOpen={(index) =>
                         run(

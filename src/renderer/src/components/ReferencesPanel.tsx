@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReferenceList, ReferencePreview } from '../../../shared/types';
 import FileIcon from './FileIcon';
@@ -10,8 +10,56 @@ interface Props {
     root: string;
     visible: boolean;
     focusTick: number;
+    animations: boolean;
     onClose: () => void;
     onOpen: (index: number) => void;
+}
+
+interface PreviewContent {
+    key: string;
+    index: number;
+    item: ReferenceList['items'][number];
+    data?: ReferencePreview;
+    error?: string;
+}
+
+function ReferencePreviewContent({
+    item,
+    data,
+    error,
+    previous = false
+}: Omit<PreviewContent, 'key' | 'index'> & { previous?: boolean }): React.JSX.Element {
+    return (
+        <>
+            <header>
+                <FileIcon path={item.path} />
+                <strong title={item.path}>{item.path.replaceAll('\\', '/')}</strong>
+                <span>Ln {item.line} · Enter to jump</span>
+            </header>
+            <div className={styles.referencePreviewCode}>
+                {data ? (
+                    data.lines.map((spans, index) => (
+                        <div
+                            key={index}
+                            data-current={!previous && data.first + index === data.line}
+                            data-highlight={data.first + index === data.line}
+                        >
+                            <span aria-hidden="true">{data.first + index}</span>
+                            <code>
+                                {spans.map((span, part) => (
+                                    <span key={part} style={{ color: span.color }}>
+                                        {span.text || ' '}
+                                    </span>
+                                ))}
+                            </code>
+                        </div>
+                    ))
+                ) : (
+                    <p>{error || 'Loading preview…'}</p>
+                )}
+            </div>
+        </>
+    );
 }
 
 export default function ReferencesPanel({
@@ -20,35 +68,42 @@ export default function ReferencesPanel({
     root,
     visible,
     focusTick,
+    animations,
     onClose,
     onOpen
 }: Props): React.JSX.Element {
     const list = useRef<HTMLDivElement>(null);
     const [selected, setSelected] = useState(0);
     const [focused, setFocused] = useState(false);
-    const [preview, setPreview] = useState<ReferencePreview>();
-    const [previewError, setPreviewError] = useState('');
+    const [preview, setPreview] = useState<{
+        current: PreviewContent;
+        previous?: PreviewContent;
+    }>();
+    const currentContent = useRef<HTMLDivElement>(null);
+    const previousContent = useRef<HTMLDivElement>(null);
     const closePrefix = useRef(false);
     const item = state.items[selected];
+    const previewKey = `${state.version}:${selected}`;
     const previewHost = document.getElementById('editor-preview-host');
     useEffect(() => {
-        setPreview(undefined);
-        setPreviewError('');
         if (!visible || !focused || !item || state.loading) {
+            setPreview(undefined);
             return;
         }
         let cancelled = false;
-        void window.nido.previewReference(workspaceId, selected + 1, state.version).then(
-            (result) => {
-                if (!cancelled) {
-                    setPreview(result);
-                }
-            },
-            (error) => {
-                if (!cancelled) {
-                    setPreviewError(String(error));
-                }
+        const show = (data?: ReferencePreview, error?: string): void => {
+            if (cancelled) {
+                return;
             }
+            // Keep the old preview (including its header) until the next result is ready.
+            setPreview((old) => ({
+                current: { key: previewKey, index: selected, item, data, error },
+                previous: old?.current.key !== previewKey ? old?.current : undefined
+            }));
+        };
+        void window.nido.previewReference(workspaceId, selected + 1, state.version).then(
+            (result) => show(result),
+            (error) => show(undefined, String(error))
         );
         return () => {
             cancelled = true;
@@ -56,6 +111,7 @@ export default function ReferencesPanel({
     }, [
         workspaceId,
         selected,
+        previewKey,
         state.version,
         state.loading,
         visible,
@@ -63,6 +119,52 @@ export default function ReferencesPanel({
         item?.path,
         item?.line
     ]);
+    useLayoutEffect(() => {
+        if (!preview?.previous || !currentContent.current || !previousContent.current) {
+            return;
+        }
+        const current = preview.current;
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+        const settle = (): void => {
+            setPreview((value) => (value?.current === current ? { current } : value));
+        };
+        if (!animations || reducedMotion.matches) {
+            settle();
+            return;
+        }
+        const direction = current.index >= preview.previous.index ? 1 : -1;
+        const timing = {
+            duration: 150,
+            easing: 'cubic-bezier(0.2, 0, 0, 1)',
+            fill: 'both'
+        } as const;
+        const incoming = currentContent.current.animate(
+            [
+                { opacity: 0, transform: `translateY(${direction * 6}px)` },
+                { opacity: 1, transform: 'translateY(0)' }
+            ],
+            timing
+        );
+        const outgoing = previousContent.current.animate(
+            [
+                { opacity: 1, transform: 'translateY(0)' },
+                { opacity: 0, transform: `translateY(${-direction * 6}px)` }
+            ],
+            timing
+        );
+        const finish = (): void => {
+            incoming.cancel();
+            outgoing.cancel();
+            settle();
+        };
+        void incoming.finished.then(finish, () => {});
+        reducedMotion.addEventListener('change', finish);
+        return () => {
+            incoming.cancel();
+            outgoing.cancel();
+            reducedMotion.removeEventListener('change', finish);
+        };
+    }, [preview, animations]);
     useEffect(() => {
         setSelected(0);
     }, [state.version]);
@@ -112,32 +214,27 @@ export default function ReferencesPanel({
                 !state.loading &&
                 previewHost &&
                 createPortal(
-                    <section className={styles.referencePreview} aria-label="Reference preview">
-                        <header>
-                            <FileIcon path={item.path} />
-                            <strong title={item.path}>{item.path.replaceAll('\\', '/')}</strong>
-                            <span>Ln {item.line} · Enter to jump</span>
-                        </header>
-                        <div className={styles.referencePreviewCode}>
-                            {preview ? (
-                                preview.lines.map((spans, index) => (
-                                    <div
-                                        key={index}
-                                        data-current={preview.first + index === preview.line}
-                                    >
-                                        <span aria-hidden="true">{preview.first + index}</span>
-                                        <code>
-                                            {spans.map((span, part) => (
-                                                <span key={part} style={{ color: span.color }}>
-                                                    {span.text || ' '}
-                                                </span>
-                                            ))}
-                                        </code>
-                                    </div>
-                                ))
-                            ) : (
-                                <p>{previewError || 'Loading preview…'}</p>
-                            )}
+                    <section
+                        className={styles.referencePreview}
+                        aria-label="Reference preview"
+                        aria-busy={preview?.current.key !== previewKey}
+                    >
+                        {preview?.previous && (
+                            <div
+                                key={preview.previous.key}
+                                ref={previousContent}
+                                className={styles.referencePreviewContent}
+                                aria-hidden="true"
+                            >
+                                <ReferencePreviewContent {...preview.previous} previous />
+                            </div>
+                        )}
+                        <div
+                            key={preview?.current.key ?? 'loading'}
+                            ref={currentContent}
+                            className={styles.referencePreviewContent}
+                        >
+                            <ReferencePreviewContent {...(preview?.current ?? { item })} />
                         </div>
                     </section>,
                     previewHost
