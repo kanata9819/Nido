@@ -140,16 +140,21 @@ test(windowsBaselineCases[1], async () => {
         await running.evaluate(async ({ clipboard, ClipboardItem }) => {
             // Preserve every clipboard format; never attach personal clipboard contents to reports.
             const items = await Promise.all(
-                (await clipboard.read()).map(
-                    async (item) =>
-                        new ClipboardItem(
-                            Object.fromEntries(
-                                await Promise.all(
-                                    item.types.map(async (type) => [type, await item.getType(type)])
+                (await clipboard.read())
+                    .filter((item) => item.types.length > 0)
+                    .map(
+                        async (item) =>
+                            new ClipboardItem(
+                                Object.fromEntries(
+                                    await Promise.all(
+                                        item.types.map(async (type) => [
+                                            type,
+                                            await item.getType(type)
+                                        ])
+                                    )
                                 )
                             )
-                        )
-                )
+                    )
             );
             Object.assign(globalThis, { nidoBaselineClipboard: items });
             await clipboard.writeText('クリップボード\r\nsecond clipboard line');

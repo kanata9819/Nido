@@ -1,6 +1,12 @@
 import { createRoot } from 'react-dom/client';
 import type { ComponentProps } from 'react';
-import type { FavoriteWorkspace, NidoAPI, NidoEvent, ReferenceList } from '../../src/shared/types';
+import type {
+    DebugState,
+    FavoriteWorkspace,
+    NidoAPI,
+    NidoEvent,
+    ReferenceList
+} from '../../src/shared/types';
 import App from '../../src/renderer/src/App';
 import ExplorerCommands from '../../src/renderer/src/components/ExplorerCommands';
 import FolderPicker from '../../src/renderer/src/components/FolderPicker';
@@ -8,11 +14,13 @@ import GitBrowser from '../../src/renderer/src/components/GitBrowser';
 import GitDiff from '../../src/renderer/src/components/GitDiff';
 import Notification from '../../src/renderer/src/components/Notification';
 import ReferencesPanel from '../../src/renderer/src/components/ReferencesPanel';
+import DebugPanel from '../../src/renderer/src/components/DebugPanel';
 import { Favorites, GitBadges, Completion } from './Probes';
 import '../../src/renderer/src/assets/global.css';
 import '../../src/renderer/src/assets/themes.css';
 
 interface HarnessProps {
+    debugState?: DebugState;
     workspaceId: string;
     initialPath: string;
     favorites: FavoriteWorkspace[];
@@ -119,6 +127,19 @@ let props: HarnessProps = {
 function render(updates: Partial<HarnessProps>): void {
     props = { ...props, ...updates };
     switch (parameters.get('view')) {
+        case 'debug':
+            root.render(
+                <>
+                    <button>Outside debugger</button>
+                    <DebugPanel
+                        state={props.debugState}
+                        focusTick={1}
+                        action={noop}
+                        onClose={noop}
+                    />
+                </>
+            );
+            break;
         case 'app':
             root.render(<App />);
             break;

@@ -1,5 +1,5 @@
 import type { DebugAction, DebugState } from '../../../shared/types';
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import styles from '../assets/Nido.module.css';
 
 export default function DebugPanel({
@@ -16,9 +16,21 @@ export default function DebugPanel({
     const panel = useRef<HTMLElement>(null);
     const variableList = useRef<HTMLDivElement>(null);
     const closePrefix = useRef(false);
+    const focused = useRef(false);
+    const lastFocusTick = useRef(0);
     const [selected, setSelected] = useState<number>();
-    useEffect(() => {
-        if (focusTick) {
+    useLayoutEffect(() => {
+        const requested = focusTick !== lastFocusTick.current;
+        lastFocusTick.current = focusTick;
+        // DAP replaces variable IDs after stepping. Restore focus after the old row disappears,
+        // while allowing the user to move back to the editor during an update.
+        if (
+            focusTick &&
+            (requested ||
+                (focused.current &&
+                    !panel.current?.contains(document.activeElement) &&
+                    state?.variables?.length))
+        ) {
             (
                 panel.current?.querySelector<HTMLButtonElement>('[data-debug-target]') ||
                 panel.current?.querySelector<HTMLButtonElement>(
@@ -27,7 +39,7 @@ export default function DebugPanel({
                 panel.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')
             )?.focus();
         }
-    }, [focusTick]);
+    }, [focusTick, state?.variables]);
     const busy = state?.status === 'building' || state?.status === 'starting';
     const paused = state?.status === 'paused';
     const variables = state?.variables || [];
@@ -40,8 +52,12 @@ export default function DebugPanel({
             tabIndex={-1}
             className={styles.debugPanel}
             aria-label="Debugger"
+            onFocusCapture={() => {
+                focused.current = true;
+            }}
             onBlur={(event) => {
                 if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                    focused.current = false;
                     closePrefix.current = false;
                 }
             }}

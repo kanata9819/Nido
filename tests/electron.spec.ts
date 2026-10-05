@@ -2364,8 +2364,14 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
         await page.screenshot({ path: 'test-results/nido-terminal.png' });
         await page.keyboard.press('Control+Shift+n');
         await expect(page.getByRole('combobox', { name: 'Session type' })).toBeVisible();
+        await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
+            'aria-busy',
+            'false'
+        );
+        await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
         await page.getByRole('combobox', { name: 'Session type' }).focus();
         await page.keyboard.press('End');
+        await expect(page.getByRole('combobox', { name: 'Session type' })).toHaveValue('terminal');
         await chooseWorkspace(page, root);
         const input = page.getByRole('textbox', { name: 'Terminal input' });
         await expect(input).toHaveCount(1);
@@ -3127,6 +3133,11 @@ test('normal shutdown restores workspace order, active file and cursors', async 
                     const canvas = element as HTMLCanvasElement;
                     const scale = window.devicePixelRatio || 1;
                     const ctx = canvas.getContext('2d')!;
+                    const input = document.querySelector<HTMLTextAreaElement>(
+                        'textarea[aria-label="Neovim input"]'
+                    )!;
+                    const top = parseFloat(input.style.top);
+                    const lineHeight = Number(localStorage.getItem('nido.lineHeight'));
                     const sample = (y: number): string =>
                         Array.from(
                             ctx.getImageData(canvas.width - 2, Math.floor((y + 0.5) * scale), 1, 1)
@@ -3134,7 +3145,11 @@ test('normal shutdown restores workspace order, active file and cursors', async 
                         )
                             .slice(0, 3)
                             .join(',');
-                    return [sample(0), sample(24), sample(12)];
+                    return [
+                        sample(top),
+                        sample(top + lineHeight - 1),
+                        sample(top + lineHeight / 2)
+                    ];
                 })
             )
             .toEqual(['70,81,92', '70,81,92', '18,18,18']);
@@ -3388,7 +3403,7 @@ test('keyboard-only workspace switching, editing, saving and dirty-close guard',
         await expect
             .poll(
                 async () =>
-                    (await readFile(join(root, 'Nido', 'WorkspaceTabs.tsx'), 'utf8')).match(
+                    (await readSavedFile(join(root, 'Nido', 'WorkspaceTabs.tsx')))?.match(
                         /日本語入力/g
                     )?.length
             )

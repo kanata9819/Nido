@@ -20,6 +20,54 @@ test.afterAll(async () => {
     await server?.close();
 });
 
+test('Debugger restores variable focus after stepping and respects focus outside its panel', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=debug`);
+    const renderVariables = async (id: number): Promise<void> => {
+        await page.evaluate(
+            (id) =>
+                window.rendererTest.render({
+                    debugState: {
+                        status: 'paused',
+                        output: '',
+                        targets: [],
+                        variables: [
+                            {
+                                id,
+                                name: 'number',
+                                value: '21',
+                                type: 'int',
+                                scope: 'Locals',
+                                depth: 0,
+                                expandable: false,
+                                expanded: false,
+                                loading: false,
+                                changed: false
+                            }
+                        ]
+                    }
+                }),
+            id
+        );
+    };
+    await renderVariables(1);
+    const variable = page.getByRole('treeitem', { name: 'number = 21 (int)' });
+    await variable.focus();
+    await page.evaluate(() =>
+        window.rendererTest.render({
+            debugState: { status: 'running', output: '', targets: [], variables: [] }
+        })
+    );
+    await expect(variable).toHaveCount(0);
+    await renderVariables(2);
+    await expect(variable).toBeFocused();
+    const outside = page.getByRole('button', { name: 'Outside debugger' });
+    await outside.focus();
+    await renderVariables(3);
+    await expect(outside).toBeFocused();
+});
+
 test('Git diff ignores an older response after selecting another file', async ({ page }) => {
     await page.goto(`${origin}?view=git&defer=gitDiff`);
     const list = page.getByRole('listbox', { name: 'Changed files' });
