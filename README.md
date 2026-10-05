@@ -62,6 +62,21 @@ pnpm test:renderer # ChromiumでUIの状態遷移と非同期処理を検証（E
 
 型チェックはTypeScript 7を使います。Lintが利用するTypeScript APIは、公式の互換パッケージでTypeScript 6を併用しています。
 
+### Windows版の基本動作確認
+
+Windows x64で次を実行すると、警告ゼロのLint・型チェック・配布用ビルド・単体テスト・レンダラーのテスト・実アプリの操作テストをまとめて確認できます。GitとRustのMSVCツールチェーン（C++ Build Toolsを含む）、`rust-analyzer`・`rust-src`・`rustfmt`が必要です。
+
+```powershell
+rustup component add rust-analyzer rust-src rustfmt
+pnpm verify:windows
+```
+
+操作テスト26件は`dist/win-unpacked/nido.exe`を直接起動します。起動と同梱リソース、日本語・空白を含むパス、CRLFでの保存、貼り付けの入力順序、Windowsクリップボード、AltGrキーイベント、IMEの変換イベント、ワークスペースとファイル操作、Git、補完・診断・参照、ターミナル、Rustデバッグ、設定と終了・復元、100%・125%・150%表示を確認します。各テストには一時フォルダーと独立したプロファイルを使います。
+
+ビルド済みの場合は`pnpm test:windows`だけでも実行できます。必須ケースの欠落・スキップ・未処理のレンダラー例外も失敗扱いです。Windows以外では成功扱いにせず、実行条件のエラーを返します。
+
+PRとmainへのpushでGitHub Actionsの **Windows baseline** が実行され、リリースも同じ操作テストの成功後に公開されます。失敗時はActionsの`windows-baseline-reports`からレポートとログを取得できます。このセットは主要機能の回帰確認用で、実際のIME・キーボード配列やインストーラーによる更新は別途確認してください。
+
 ## アプリの更新
 
 最初は `nido-0.2.1-setup.exe` でインストールしてください。タイトルバーの最小化ボタン左にある更新ボタンから、更新確認・ダウンロード・再起動を行えます。

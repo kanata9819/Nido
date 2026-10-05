@@ -1,4 +1,5 @@
-import { test, expect, _electron as electron, type Page } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+import { electron } from './helpers/electron';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

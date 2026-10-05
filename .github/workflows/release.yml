@@ -29,8 +29,17 @@ jobs:
                   $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
                   if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag must match package.json version.' }
             - run: pnpm install --frozen-lockfile
+            - run: rustup component add rust-analyzer rust-src rustfmt
+            - run: pnpm lint --max-warnings 0
+            - run: pnpm typecheck:windows
             - run: pnpm build
             - run: pnpm test
+            - name: Verify the packaged Windows app before publishing
+              run: |
+                  pnpm exec electron-builder --win --dir --publish never
+                  if ($LASTEXITCODE -ne 0) { throw 'Unable to package the Windows app.' }
+                  pnpm test:windows
+                  if ($LASTEXITCODE -ne 0) { throw 'Windows baseline failed.' }
             - name: Prepare a single draft release
               shell: pwsh
               run: |
@@ -42,6 +51,15 @@ jobs:
                   }
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Upload Windows test reports
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: windows-release-test-reports
+                  path: |
+                      playwright-report/windows/
+                      test-results/
+                  retention-days: 7
             - name: Publish installer and update metadata
               run: pnpm exec electron-builder --win --publish always
               env:
