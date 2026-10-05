@@ -29,8 +29,24 @@ jobs:
             - run: pnpm install --frozen-lockfile
             - name: Prepare Rust language and debugging tests
               run: rustup component add rust-analyzer rust-src rustfmt
+            - name: Lint without warnings
+              run: pnpm lint --max-warnings 0
+            - name: Check application and Windows test types
+              run: |
+                  pnpm typecheck
+                  if ($LASTEXITCODE -ne 0) { throw 'Application typecheck failed.' }
+                  pnpm typecheck:windows
+                  if ($LASTEXITCODE -ne 0) { throw 'Windows test typecheck failed.' }
+            - name: Build the packaged Windows app
+              run: pnpm build:unpack
+            - name: Run unit and Neovim integration tests
+              run: pnpm test
+            - name: Prepare renderer browser
+              run: pnpm exec playwright install chromium
+            - name: Verify renderer state transitions
+              run: pnpm test:renderer
             - name: Verify the packaged Windows app
-              run: pnpm verify:windows
+              run: pnpm test:windows
             - name: Upload test reports
               if: always()
               uses: actions/upload-artifact@v7
