@@ -271,7 +271,10 @@ export default function GitBrowser({
                         <strong>{branchName}</strong>
                         <span>
                             {commit
-                                ? t('{hash} · {subject} · Compared with first parent', { hash: commit.hash.slice(0, 8), subject: commit.subject })
+                                ? t('{hash} · {subject} · Compared with first parent', {
+                                      hash: commit.hash.slice(0, 8),
+                                      subject: commit.subject
+                                  })
                                 : view === 'history'
                                   ? t('History of the current branch')
                                   : t('Local and remote-tracking branches')}
@@ -386,7 +389,9 @@ export default function GitBrowser({
                         </p>
                     )}
                     <footer>
-                        {t('1/2/3 Views · Ctrl+H/L List / Diff · j/k Select / Scroll · Ctrl+D/U Half page · Ctrl+F/B Page · g/G Top / Bottom · n/N Next / Previous change · Tab Move focus · Esc Back / Close')}
+                        {t(
+                            '1/2/3 Views · Ctrl+H/L List / Diff · j/k Select / Scroll · Ctrl+D/U Half page · Ctrl+F/B Page · g/G Top / Bottom · n/N Next / Previous change · Tab Move focus · Esc Back / Close'
+                        )}
                     </footer>
                 </section>
             )}

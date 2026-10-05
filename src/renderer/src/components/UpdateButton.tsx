@@ -44,7 +44,9 @@ export default function UpdateButton(): React.JSX.Element {
               : status === 'checking'
                 ? t('Checking for updates')
                 : status === 'downloading'
-                  ? t('Downloading update {percent}%', { percent: Math.floor(update?.percent ?? 0) })
+                  ? t('Downloading update {percent}%', {
+                        percent: Math.floor(update?.percent ?? 0)
+                    })
                   : status === 'installing'
                     ? t('Restarting to update')
                     : status === 'current'
@@ -69,7 +71,11 @@ export default function UpdateButton(): React.JSX.Element {
             data-update-status={status ?? 'loading'}
             aria-label={label}
             aria-busy={busy}
-            title={update?.message ? t(update.message) : `${label}${update?.version ? ` · ${update.version}` : ''}`}
+            title={
+                update?.message
+                    ? t(update.message)
+                    : `${label}${update?.version ? `   ${update.version}` : ''}`
+            }
             disabled={busy || status === 'disabled'}
             onClick={() =>
                 void window.nido

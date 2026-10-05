@@ -20,7 +20,9 @@ test.afterAll(async () => {
     await server?.close();
 });
 
-test('settings switch the UI language immediately, persist it and switch back to English', async ({ page }) => {
+test('settings switch the UI language immediately, persist it and switch back to English', async ({
+    page
+}) => {
     await page.goto(`${origin}?view=app`);
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -29,12 +31,34 @@ test('settings switch the UI language immediately, persist it and switch back to
     await settings.getByRole('combobox', { name: 'Language', exact: true }).selectOption('ja');
     await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
     const japaneseSettings = page.getByRole('dialog', { name: '設定', exact: true });
-    await expect(japaneseSettings.getByRole('checkbox', { name: '行の折り返し', exact: true })).not.toBeChecked();
-    await expect(japaneseSettings.getByRole('combobox', { name: '言語', exact: true })).toHaveValue('ja');
-    await expect(page.getByRole('button', { name: 'エクスプローラー', exact: true })).toHaveAttribute('title', 'エクスプローラー（Space e）');
+    await expect(
+        japaneseSettings.getByRole('checkbox', { name: '行の折り返し', exact: true })
+    ).not.toBeChecked();
+    await expect(japaneseSettings.getByRole('combobox', { name: '言語', exact: true })).toHaveValue(
+        'ja'
+    );
+    await expect(
+        page.getByRole('button', { name: 'エクスプローラー', exact: true })
+    ).toHaveAttribute('title', 'エクスプローラー（Space e）');
     await expect.poll(() => page.evaluate(() => localStorage.getItem('nido.language'))).toBe('ja');
-    await expect.poll(() => page.evaluate(() => window.rendererTest.calls.filter((call) => call.method === 'setLanguage').at(-1)?.args[0])).toBe('ja');
-    await expect.poll(() => page.evaluate(() => window.rendererTest.calls.filter((call) => call.method === 'restoreWorkspaces').length)).toBe(1);
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.calls.filter((call) => call.method === 'setLanguage').at(-1)
+                        ?.args[0]
+            )
+        )
+        .toBe('ja');
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.calls.filter((call) => call.method === 'restoreWorkspaces')
+                        .length
+            )
+        )
+        .toBe(1);
 
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
@@ -45,14 +69,18 @@ test('settings switch the UI language immediately, persist it and switch back to
     await expect.poll(() => page.evaluate(() => localStorage.getItem('nido.language'))).toBe('en');
 });
 
-test('Japanese command search and keyboard navigation keep working after a language change', async ({ page }) => {
+test('Japanese command search and keyboard navigation keep working after a language change', async ({
+    page
+}) => {
     await page.goto(`${origin}?view=app`);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('ja');
     await page.getByRole('button', { name: 'パレットを閉じる', exact: true }).click();
     await expect(page.getByRole('textbox', { name: 'Neovim入力', exact: true })).toBeFocused();
     await page.keyboard.press('Space');
-    await expect(page.getByRole('dialog', { name: 'キーボードコマンド', exact: true })).toBeVisible();
+    await expect(
+        page.getByRole('dialog', { name: 'キーボードコマンド', exact: true })
+    ).toBeVisible();
     await page.keyboard.press('Escape');
     await page.keyboard.press('Control+Shift+p');
     await page.getByRole('textbox', { name: '項目を絞り込む', exact: true }).fill('設定');
@@ -63,7 +91,10 @@ test('Japanese command search and keyboard navigation keep working after a langu
     await expect(page.getByRole('dialog', { name: 'ソース管理', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: '3 ブランチ', exact: true })).toBeEnabled();
     await page.keyboard.press('3');
-    await expect(page.getByRole('button', { name: '3 ブランチ', exact: true })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('button', { name: '3 ブランチ', exact: true })).toHaveAttribute(
+        'aria-current',
+        'page'
+    );
 });
 
 test('an invalid saved language safely opens the English interface', async ({ page }) => {

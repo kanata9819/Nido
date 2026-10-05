@@ -66,7 +66,9 @@ export function registerWorkspaceHandlers({
             type: 'warning',
             title: t('Unsaved changes'),
             message: t('Save changes in {name}?', { name: s.workspace.name }),
-            detail: t('Save all files before closing this workspace. Untitled buffers need a filename (:w path).'),
+            detail: t(
+                'Save all files before closing this workspace. Untitled buffers need a filename (:w path).'
+            ),
             buttons: [t('Save all'), t('Cancel'), t('Discard changes')],
             defaultId: 0,
             cancelId: 1,

@@ -365,9 +365,13 @@ export default function GitPanel({
             <footer>
                 {busy
                     ? t('Working…')
-                    : t('j/k Select · s Stage · S Stage all · u Unstage · r Refresh · c Message · Esc Close')}
+                    : t(
+                          'j/k Select · s Stage · S Stage all · u Unstage · r Refresh · c Message · Esc Close'
+                      )}
                 <br />
-                {t('Ctrl+H/L List / Diff · j/k Scroll diff · Ctrl+D/U Half page · Ctrl+F/B Page · g/G Top / Bottom · n/N Next / Previous change')}
+                {t(
+                    'Ctrl+H/L List / Diff · j/k Scroll diff · Ctrl+D/U Half page · Ctrl+F/B Page · g/G Top / Bottom · n/N Next / Previous change'
+                )}
                 <br />
                 {t('Saved files only · Changes cover the entire repository.')}
             </footer>

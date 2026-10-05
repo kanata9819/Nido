@@ -153,7 +153,9 @@ function Sidebar({
                 role="tree"
                 tabIndex={0}
                 aria-label={t('Project files')}
-                title={t('j/k Select · zz Center selection · : Commands · a/A New file/folder · F2 Rename · Ctrl+C/X/V Copy/Cut/Paste · Delete')}
+                title={t(
+                    'j/k Select · zz Center selection · : Commands · a/A New file/folder · F2 Rename · Ctrl+C/X/V Copy/Cut/Paste · Delete'
+                )}
                 aria-activedescendant={selected ? `file-${workspace.id}-${selected}` : undefined}
                 onBlur={() => {
                     centerPrefix.current = false;
@@ -288,7 +290,8 @@ function Sidebar({
                     <p className={styles.emptyTree}>
                         {t('No files yet.')}
                         <br />
-                        {t('Press')} <kbd>a</kbd> {t('for a file or')} <kbd>A</kbd> {t('for a folder.')}
+                        {t('Press')} <kbd>a</kbd> {t('for a file or')} <kbd>A</kbd>{' '}
+                        {t('for a folder.')}
                     </p>
                 )}
             </div>

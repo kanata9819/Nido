@@ -21,8 +21,14 @@ test('Japanese messages preserve interpolation fields and accept literal file na
     }
     const name = '日本語 $1 {name}.ts';
     assert.equal(translate('ja', 'Close file {name}', { name }), `ファイル ${name} を閉じる`);
-    assert.equal(translate('en', 'Ln {line}, Col {column}', { line: 12, column: 3 }), 'Ln 12, Col 3');
-    assert.equal(translate('ja', 'Ln {line}, Col {column}', { line: 12, column: 3 }), '12 行、3 列');
+    assert.equal(
+        translate('en', 'Ln {line}, Col {column}', { line: 12, column: 3 }),
+        'Ln 12, Col 3'
+    );
+    assert.equal(
+        translate('ja', 'Ln {line}, Col {column}', { line: 12, column: 3 }),
+        '12 行、3 列'
+    );
 });
 
 test('external tool messages and object property names are preserved', () => {
@@ -36,7 +42,9 @@ test('translated command searches keep shortcut keys and actions, and preserve p
     const noop = (): void => {};
     const callbacks = {
         save: noop,
-        showPanel: (panel: unknown): void => { panels.push(panel); },
+        showPanel: (panel: unknown): void => {
+            panels.push(panel);
+        },
         moveWorkspace: noop,
         run: noop,
         focusEditor: noop,
@@ -52,18 +60,52 @@ test('translated command searches keep shortcut keys and actions, and preserve p
     const workspaces: Workspace[] = [{ id: 'alpha', name: 'Settings', root: '/Settings' }];
     const state: SessionState = {
         buffers: [{ id: 1, name: '/Settings/Settings', modified: false }],
-        current: 1, mode: 'n', line: 1, column: 1, filetype: ''
+        current: 1,
+        mode: 'n',
+        line: 1,
+        column: 1,
+        filetype: ''
     };
     const english = buildItems('alpha', 'commands', workspaces, [], state, '', callbacks);
-    const japaneseItems = buildItems('alpha', 'commands', workspaces, [], state, '設定', callbacks, createTranslator('ja'));
-    assert.deepEqual(japaneseItems.commands.map((item) => item.key), english.commands.map((item) => item.key));
+    const japaneseItems = buildItems(
+        'alpha',
+        'commands',
+        workspaces,
+        [],
+        state,
+        '設定',
+        callbacks,
+        createTranslator('ja')
+    );
+    assert.deepEqual(
+        japaneseItems.commands.map((item) => item.key),
+        english.commands.map((item) => item.key)
+    );
     assert.equal(japaneseItems.filtered.length, 1);
     assert.equal(japaneseItems.filtered[0].title, '設定');
     japaneseItems.filtered[0].run();
     assert.deepEqual(panels, ['settings']);
     assert.equal(english.commands.find((item) => item.key === ',')?.title, 'Settings');
-    const projects = buildItems('alpha', 'workspaces', workspaces, [], state, '', callbacks, createTranslator('ja'));
+    const projects = buildItems(
+        'alpha',
+        'workspaces',
+        workspaces,
+        [],
+        state,
+        '',
+        callbacks,
+        createTranslator('ja')
+    );
     assert.equal(projects.items[0].title, 'Settings');
-    const files = buildItems('alpha', 'buffers', workspaces, [], state, '', callbacks, createTranslator('ja'));
+    const files = buildItems(
+        'alpha',
+        'buffers',
+        workspaces,
+        [],
+        state,
+        '',
+        callbacks,
+        createTranslator('ja')
+    );
     assert.equal(files.items[0].title, 'Settings');
 });

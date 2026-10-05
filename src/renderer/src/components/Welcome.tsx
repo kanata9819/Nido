@@ -67,7 +67,8 @@ export function Welcome({
                 </span>
             </div>
             <div className={styles.welcomeNote}>
-                <span className={styles.liveDot} /> {t('Every workspace runs its own Neovim session.')}
+                <span className={styles.liveDot} />{' '}
+                {t('Every workspace runs its own Neovim session.')}
             </div>
         </section>
     );

@@ -252,7 +252,10 @@ export default function FolderPicker({
                         key={`${favorite.root}:${favorite.kind}`}
                         id={`folder-choice-${index}`}
                         role="option"
-                        aria-label={t('Favorite {name} ({kind})', { name: favorite.name, kind: favorite.kind === 'terminal' ? t('Terminal') : t('Editor') })}
+                        aria-label={t('Favorite {name} ({kind})', {
+                            name: favorite.name,
+                            kind: favorite.kind === 'terminal' ? t('Terminal') : t('Editor')
+                        })}
                         aria-selected={index === selected}
                         className={`${styles.folderChoice} ${styles.favoriteChoice} ${index === selected ? styles.selectedItem : ''}`}
                         onClick={() => {
@@ -266,11 +269,15 @@ export default function FolderPicker({
                         <span>
                             <strong>{favorite.name}</strong>
                             <small>
-                                {favorite.root} · {favorite.kind === 'terminal' ? t('Terminal') : t('Editor')}
+                                {favorite.root} ·{' '}
+                                {favorite.kind === 'terminal' ? t('Terminal') : t('Editor')}
                             </small>
                         </span>
                         <button
-                            aria-label={t('Remove favorite {name} ({kind})', { name: favorite.name, kind: favorite.kind === 'terminal' ? t('Terminal') : t('Editor') })}
+                            aria-label={t('Remove favorite {name} ({kind})', {
+                                name: favorite.name,
+                                kind: favorite.kind === 'terminal' ? t('Terminal') : t('Editor')
+                            })}
                             title={t('Remove favorite')}
                             disabled={favoriteBusy || busy}
                             onClick={(event) => {
@@ -283,7 +290,9 @@ export default function FolderPicker({
                         </button>
                     </div>
                 ))}
-                {favorites.length > 0 && <p className={styles.folderSection}>{t('Browse folders')}</p>}
+                {favorites.length > 0 && (
+                    <p className={styles.folderSection}>{t('Browse folders')}</p>
+                )}
                 {loading ? (
                     <p>{t('Loading folders…')}</p>
                 ) : (
@@ -309,7 +318,9 @@ export default function FolderPicker({
                 )}
             </div>
             <p className={styles.folderActions}>
-                {t('j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Esc Cancel')}
+                {t(
+                    'j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Esc Cancel'
+                )}
             </p>
         </div>
     );

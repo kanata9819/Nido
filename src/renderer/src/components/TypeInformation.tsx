@@ -238,7 +238,11 @@ export default function TypeInformation({
                 {linkError && <p role="alert">{linkError}</p>}
             </div>
             <footer>
-                <span title={t('h/l / ← →: horizontal · j/k: line · Ctrl+D/U: half page · Ctrl+F/B: page')}>
+                <span
+                    title={t(
+                        'h/l / ← →: horizontal · j/k: line · Ctrl+D/U: half page · Ctrl+F/B: page'
+                    )}
+                >
                     {t('h / l · Horizontal · Ctrl D / U · Scroll')}
                 </span>
                 <span>{t('Esc / Ctrl C · Back to editor')}</span>

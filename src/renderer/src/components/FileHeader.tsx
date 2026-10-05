@@ -83,7 +83,9 @@ export default function FileHeader({
                             </button>
                             <button
                                 className={styles.tabClose}
-                                aria-label={t('Close file {name}', { name: buffer.name ? filename(buffer.name) : t('[Untitled]') })}
+                                aria-label={t('Close file {name}', {
+                                    name: buffer.name ? filename(buffer.name) : t('[Untitled]')
+                                })}
                                 onClick={() => run(window.nido.closeBuffer(active, buffer.id))}
                             >
                                 <X size={12} />

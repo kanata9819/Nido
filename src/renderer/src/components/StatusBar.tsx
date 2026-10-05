@@ -63,9 +63,15 @@ export default function StatusBar({
                     {t('References')}
                 </button>
             )}
-            <span className={styles.statusWorkspace}>{workspace?.name || t('Welcome to Nido')}</span>
+            <span className={styles.statusWorkspace}>
+                {workspace?.name || t('Welcome to Nido')}
+            </span>
             {state.search && (
-                <span className={styles.searchStatus} role="status" aria-label={t('Search matches')}>
+                <span
+                    className={styles.searchStatus}
+                    role="status"
+                    aria-label={t('Search matches')}
+                >
                     <Search size={13} />
                     <strong title={state.search.pattern}>
                         {state.search.pattern.replace(/^\\</, '').replace(/\\>$/, '')}
@@ -100,7 +106,9 @@ export default function StatusBar({
             )}
             <span className={styles.statusDivider} />
             <span className={styles.sessionCount}>
-                {t(sessionCount === 1 ? '{count} session' : '{count} sessions', { count: sessionCount })}
+                {t(sessionCount === 1 ? '{count} session' : '{count} sessions', {
+                    count: sessionCount
+                })}
             </span>
             <span className={styles.statusGap} />
             {state.lspProgress && (
@@ -138,9 +146,7 @@ export default function StatusBar({
                     <option value="CRLF">CRLF</option>
                 </select>
             )}
-            <span>
-                {t('Ln {line}, Col {column}', { line: state.line, column: state.column })}
-            </span>
+            <span>{t('Ln {line}, Col {column}', { line: state.line, column: state.column })}</span>
             {active && workspace?.kind !== 'terminal' && state.scrollPercent !== undefined && (
                 <span
                     className={styles.scrollPosition}

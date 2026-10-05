@@ -85,7 +85,10 @@ export default function GitDiff({
                             <span>
                                 {activeChange < 0
                                     ? t('{count} changes', { count: changes.length })
-                                    : t('Change {current} / {total}', { current: activeChange + 1, total: changes.length })}{' '}
+                                    : t('Change {current} / {total}', {
+                                          current: activeChange + 1,
+                                          total: changes.length
+                                      })}{' '}
                                 · n / N
                             </span>
                         )}

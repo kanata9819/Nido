@@ -29,7 +29,9 @@ export default function TerminalPanel({
     return (
         <section className={styles.terminalPanel} aria-label={t('Terminal')} hidden={!active}>
             <div className={styles.referencesToolbar}>
-                <strong>{t('Terminal ·')} {name}</strong>
+                <strong>
+                    {t('Terminal ·')} {name}
+                </strong>
                 <span>{t('Ctrl+@ Toggle · Ctrl+K Editor')}</span>
                 <button
                     className={styles.restartShell}

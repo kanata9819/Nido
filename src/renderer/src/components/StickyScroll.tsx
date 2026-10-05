@@ -199,8 +199,12 @@ export default function StickyScroll({
                                 transform: `translateY(${offset}px)`
                             }}
                             data-source-line={scope.line}
-                            aria-label={t('Go to line {line}', { line: ending ? scope.ending : scope.line })}
-                            title={t('Jump to this scope · Shift: ending line · Alt+Shift+S: focus headers')}
+                            aria-label={t('Go to line {line}', {
+                                line: ending ? scope.ending : scope.line
+                            })}
+                            title={t(
+                                'Jump to this scope · Shift: ending line · Alt+Shift+S: focus headers'
+                            )}
                             onPointerEnter={(event) => {
                                 hovered.current = scope.line;
                                 setPeek(event.shiftKey ? scope.line : undefined);

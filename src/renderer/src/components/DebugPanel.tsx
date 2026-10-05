@@ -258,7 +258,9 @@ export default function DebugPanel({
                         <div className={styles.debugHeading}>
                             <strong>{t('Variables')}</strong>
                             <small>
-                                {t('Ctrl+J Focus · Ctrl+K Editor · Ctrl+D/U Half page · j/k Move · h/l Expand')}
+                                {t(
+                                    'Ctrl+J Focus · Ctrl+K Editor · Ctrl+D/U Half page · j/k Move · h/l Expand'
+                                )}
                             </small>
                         </div>
                         <div className={styles.debugColumns} aria-hidden="true">
@@ -318,7 +320,9 @@ export default function DebugPanel({
                                                         title={value.error || value.value}
                                                     >
                                                         {value.changed && (
-                                                            <span aria-label={t('Changed')}>● </span>
+                                                            <span aria-label={t('Changed')}>
+                                                                ●{' '}
+                                                            </span>
                                                         )}
                                                         {value.value}
                                                         {value.loading ? ' …' : ''}
@@ -350,7 +354,8 @@ export default function DebugPanel({
                         <strong>{t('Console')}</strong>
                     </div>
                     <pre aria-label={t('Debug output')} tabIndex={0}>
-                        {state?.output || t('CodeLLDB · Save files, set a breakpoint and press F5.')}
+                        {state?.output ||
+                            t('CodeLLDB · Save files, set a breakpoint and press F5.')}
                         {state?.terminal && `\n${state.terminal}`}
                     </pre>
                 </div>

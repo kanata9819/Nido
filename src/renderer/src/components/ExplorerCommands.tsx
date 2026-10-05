@@ -145,13 +145,13 @@ export default function ExplorerCommands({
                     }}
                 >
                     {request.action === 'delete' ? (
-                        <p>
-                            {t('Move {path} to the recycle bin?', { path: request.path })}
-                        </p>
+                        <p>{t('Move {path} to the recycle bin?', { path: request.path })}</p>
                     ) : (
                         <>
                             <label htmlFor="explorer-path">
-                                {request.title === 'Rename' ? t('Name') : t('Workspace-relative path')}
+                                {request.title === 'Rename'
+                                    ? t('Name')
+                                    : t('Workspace-relative path')}
                             </label>
                             <input
                                 id="explorer-path"

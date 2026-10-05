@@ -19,7 +19,11 @@ import TitleBar from './components/TitleBar';
 import { Welcome, WorkspaceWelcome } from './components/Welcome';
 import { buildItems } from './commands';
 import { fileDecorations } from './fileDecorations';
-import { defaultFontFamily, useEditorSettings, type EditorSettings } from './hooks/useEditorSettings';
+import {
+    defaultFontFamily,
+    useEditorSettings,
+    type EditorSettings
+} from './hooks/useEditorSettings';
 import { useFavoriteWorkspaces } from './hooks/useFavoriteWorkspaces';
 import { useGitFileStatus } from './hooks/useGitFileStatus';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -375,27 +379,36 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         setDebugVisible(true);
         setDebugFocusTick((value) => value + 1);
     };
-    const { commands, filtered } = buildItems(active, panel, workspaces, fileList, state, query, {
-        save,
-        showPanel,
-        moveWorkspace,
-        run,
-        focusEditor,
-        closeWorkspace,
-        create,
-        showExplorer,
-        openDebugger,
-        openFile,
-        activate,
-        toggleFavorite: () => {
-            if (workspace) {
-                toggleFavorite(workspace);
-            }
+    const { commands, filtered } = buildItems(
+        active,
+        panel,
+        workspaces,
+        fileList,
+        state,
+        query,
+        {
+            save,
+            showPanel,
+            moveWorkspace,
+            run,
+            focusEditor,
+            closeWorkspace,
+            create,
+            showExplorer,
+            openDebugger,
+            openFile,
+            activate,
+            toggleFavorite: () => {
+                if (workspace) {
+                    toggleFavorite(workspace);
+                }
+            },
+            isFavorite: favorites.some(
+                (f) => f.root === workspace?.root && f.kind === (workspace?.kind || 'editor')
+            )
         },
-        isFavorite: favorites.some(
-            (f) => f.root === workspace?.root && f.kind === (workspace?.kind || 'editor')
-        )
-    }, t);
+        t
+    );
 
     const keydown = useKeyboardShortcuts({
         save,

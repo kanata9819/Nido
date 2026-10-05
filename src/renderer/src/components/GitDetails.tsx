@@ -32,10 +32,13 @@ export function CommitDetails({
                     <dt>{t('Committed')}</dt>
                     <dd>
                         <time dateTime={entry.date}>
-                            {new Date(entry.date).toLocaleString(language === 'ja' ? 'ja-JP' : 'en-US', {
-                                dateStyle: 'medium',
-                                timeStyle: 'short'
-                            })}
+                            {new Date(entry.date).toLocaleString(
+                                language === 'ja' ? 'ja-JP' : 'en-US',
+                                {
+                                    dateStyle: 'medium',
+                                    timeStyle: 'short'
+                                }
+                            )}
                         </time>
                     </dd>
                 </div>

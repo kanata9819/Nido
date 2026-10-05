@@ -202,7 +202,8 @@ export default function ReferencesPanel({
                 )}
             <div className={styles.referencesToolbar}>
                 <strong>
-                    {t('References')} <span>{state.loading ? t('Searching…') : state.items.length}</span>
+                    {t('References')}{' '}
+                    <span>{state.loading ? t('Searching…') : state.items.length}</span>
                 </strong>
                 <span>{t('j/k Select · Enter Jump · Ctrl+J Return · Esc / Space d Close')}</span>
                 <button aria-label={t('Hide references')} onClick={onClose}>

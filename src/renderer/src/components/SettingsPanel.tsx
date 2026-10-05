@@ -191,7 +191,9 @@ export default function SettingsPanel({
                 />
             </label>
             <small>
-                {t('Keep enclosing scopes visible. Click to jump; Shift-hover shows the ending. Alt+Shift+S focuses the headers.')}
+                {t(
+                    'Keep enclosing scopes visible. Click to jump; Shift-hover shows the ending. Alt+Shift+S focuses the headers.'
+                )}
             </small>
             <label>
                 {t('Sticky Scroll maximum lines')}{' '}
@@ -216,7 +218,9 @@ export default function SettingsPanel({
                     onChange={(event) => setClipboardSharing(event.target.checked)}
                 />
             </label>
-            <small>{t('Sync Vim copy, cut and paste (yy / dd / p) with the system clipboard.')}</small>
+            <small>
+                {t('Sync Vim copy, cut and paste (yy / dd / p) with the system clipboard.')}
+            </small>
             <label>
                 {t('Cursor follows scrolling')}{' '}
                 <input
@@ -234,7 +238,9 @@ export default function SettingsPanel({
                 />
             </label>
             <small>
-                {t('Off: absolute line numbers. On: distance from the cursor, with the current line shown as an absolute number.')}
+                {t(
+                    'Off: absolute line numbers. On: distance from the cursor, with the current line shown as an absolute number.'
+                )}
             </small>
             <label>
                 {t('UI animations')}{' '}
@@ -274,7 +280,9 @@ export default function SettingsPanel({
                     <option value="wsl.exe">WSL</option>
                 </select>
             </label>
-            <small>{t('Applies to new terminals and Restart Shell. The selection is saved.')}</small>
+            <small>
+                {t('Applies to new terminals and Restart Shell. The selection is saved.')}
+            </small>
             <h3>{t('Extensions')}</h3>
             <label>
                 {t('Use EditorConfig')}{' '}
@@ -285,12 +293,16 @@ export default function SettingsPanel({
                 />
             </label>
             <small>
-                {t('Apply the project\'s .editorconfig to indentation, line endings and save rules.')}
+                {t(
+                    "Apply the project's .editorconfig to indentation, line endings and save rules."
+                )}
             </small>
             <p>
                 {t('Tab / ↑ ↓ / j k: Move · ← →: Adjust · Space / Enter: Toggle · Esc: Close')}
                 <br />
-                {t('Nido includes its own Neovim and editor settings. Personal Neovim config is not loaded.')}
+                {t(
+                    'Nido includes its own Neovim and editor settings. Personal Neovim config is not loaded.'
+                )}
             </p>
         </div>
     );

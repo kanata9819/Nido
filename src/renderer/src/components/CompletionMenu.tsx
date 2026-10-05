@@ -233,7 +233,10 @@ export default function CompletionMenu({
             onMouseDown={(event) => event.preventDefault()}
         >
             <div className={styles.heading}>
-                <Braces size={14} /> {t('Completion')} <span>{menu.items.length} {t('candidates')}</span>
+                <Braces size={14} /> {t('Completion')}{' '}
+                <span>
+                    {menu.items.length} {t('candidates')}
+                </span>
             </div>
             <div
                 id={listId}
