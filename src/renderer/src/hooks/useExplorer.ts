@@ -1,7 +1,30 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+    useEffect,
+    useRef,
+    useState,
+    type Dispatch,
+    type SetStateAction,
+    type RefObject
+} from 'react';
 import type { FileEntry, Workspace } from '../../../shared/types';
 import type { FileRequest } from '../components/ExplorerCommands';
 import { getVisibleEntries } from '../sidebarTree';
+
+interface ExplorerState {
+    visible: ReturnType<typeof getVisibleEntries>;
+    expanded: Set<string>;
+    selected: string;
+    setSelected: Dispatch<SetStateAction<string>>;
+    setExpanded: Dispatch<SetStateAction<Set<string>>>;
+    load: (path: string) => Promise<void>;
+    tree: RefObject<HTMLDivElement | null>;
+    operation: { request?: FileRequest } | undefined;
+    setOperation: Dispatch<SetStateAction<{ request?: FileRequest } | undefined>>;
+    clipboard: { path: string; name: string; cut: boolean } | undefined;
+    commands: { title: string; key: string; disabled?: boolean; run: () => void }[];
+    closeOperation: () => void;
+    onDone: (path: string) => void;
+}
 
 export function useExplorer({
     workspace,
@@ -11,7 +34,7 @@ export function useExplorer({
     workspace: Workspace;
     active: boolean;
     onError: (message: string) => void;
-}) {
+}): ExplorerState {
     const [entriesByDirectory, setEntries] = useState<Record<string, FileEntry[]>>({});
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
     const [selected, setSelected] = useState('');
@@ -70,7 +93,7 @@ export function useExplorer({
         return () => {
             cancelled = true;
         };
-    }, [workspace.id, active, onError, revision]);
+    }, [workspace.id, active, onError, revision, expanded]);
 
     const visible = getVisibleEntries(entriesByDirectory, expanded);
     const selectedEntry = visible.find((entry) => entry.path === selected);

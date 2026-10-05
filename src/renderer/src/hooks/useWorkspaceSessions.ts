@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+    useEffect,
+    useRef,
+    useState,
+    type Dispatch,
+    type SetStateAction,
+    type RefObject
+} from 'react';
 import {
     terminalShells,
     type TerminalShell,
@@ -6,7 +13,17 @@ import {
     type Workspace
 } from '../../../shared/types';
 
-export function useWorkspaceSessions(report: (message: string) => void) {
+interface WorkspaceSessions {
+    workspaces: Workspace[];
+    setWorkspaces: Dispatch<SetStateAction<Workspace[]>>;
+    active: string;
+    setActive: Dispatch<SetStateAction<string>>;
+    states: Record<string, SessionState>;
+    mode: RefObject<Record<string, string>>;
+    restoring: boolean;
+}
+
+export function useWorkspaceSessions(report: (message: string) => void): WorkspaceSessions {
     const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
     const [selectedWorkspace, setActive] = useState('');
     const [states, setStates] = useState<Record<string, SessionState>>({});

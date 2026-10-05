@@ -24,7 +24,8 @@ test('directional scrolling profiles a large bracket-heavy buffer', async () => 
         });
         await session.attach(100, 40);
         await session.openFile('large.txt');
-        const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
+        const lua = (code: string): ReturnType<Session['client']['request']> =>
+            session!.client.request('nvim_exec_lua', [code, []]);
         await lua(`vim.wo.wrap = false; vim.wait(250)
 local original = vim.fn.foldclosed
 vim.g.profile_fold_calls = 0

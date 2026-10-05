@@ -14,10 +14,14 @@ export default function Notification({
     animations: boolean;
 }): React.JSX.Element | null {
     const [notice, setNotice] = useState<Notice>();
+    const [previousWorkspace, setPreviousWorkspace] = useState(workspaceId);
+    if (workspaceId !== previousWorkspace) {
+        setPreviousWorkspace(workspaceId);
+        setNotice(undefined);
+    }
     const dismiss = useCallback(() => setNotice(undefined), []);
     const fading = useNotificationDismissal(notice, animations, dismiss);
     useEffect(() => {
-        setNotice(undefined);
         return window.nido.onEvent((event) => {
             if (
                 event.type === 'notification' &&

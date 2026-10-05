@@ -23,10 +23,19 @@ export default function GitBrowser({
     const [commit, setCommit] = useState<GitCommitEntry>();
     const [files, setFiles] = useState<string[]>([]);
     const [index, setIndex] = useState(0);
-    const [diff, setDiff] = useState('');
+    const [diffResult, setDiffResult] = useState<{
+        workspaceId: string;
+        commit: GitCommitEntry;
+        path: string;
+        value: string;
+    }>();
     const [newBranchName, setNewBranchName] = useState('');
     const [creating, setCreating] = useState(false);
-    const [busy, setBusy] = useState(false);
+    const [working, setBusy] = useState(false);
+    const [loadedView, setLoadedView] = useState<{ view: GitView; revision: number }>();
+    const busy =
+        working ||
+        (view !== 'changes' && (loadedView?.view !== view || loadedView.revision !== revision));
     const [error, setError] = useState('');
     const [hasMoreHistory, setHasMoreHistory] = useState(false);
     const [branchName, setBranchName] = useState('');
@@ -69,41 +78,82 @@ export default function GitBrowser({
         if (view === 'changes') {
             return;
         }
-        void run(async () => {
-            setBranchName((await window.nido.gitStatus(workspaceId)).branch);
-            if (view === 'history') {
-                await loadHistory();
-            } else {
-                setBranches(await window.nido.gitBranches(workspaceId));
+        let cancelled = false;
+        async function load(): Promise<void> {
+            try {
+                const status = await window.nido.gitStatus(workspaceId);
+                if (view === 'history') {
+                    const entries = await window.nido.gitHistory(workspaceId, 0);
+                    if (!cancelled) {
+                        setHistory(entries);
+                        setHasMoreHistory(entries.length === 100);
+                    }
+                } else {
+                    const entries = await window.nido.gitBranches(workspaceId);
+                    if (!cancelled) {
+                        setBranches(entries);
+                    }
+                }
+                if (!cancelled) {
+                    setBranchName(status.branch);
+                }
+            } catch (failure) {
+                if (!cancelled) {
+                    setError(
+                        String(failure).replace(
+                            /^Error: Error invoking remote method '[^']+': Error: /,
+                            ''
+                        )
+                    );
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoadedView({ view, revision });
+                }
             }
-        });
+        }
+        void load();
         list.current?.focus();
-    }, [view, revision]);
+        return () => {
+            cancelled = true;
+        };
+    }, [view, revision, workspaceId]);
 
     const path = files[index];
+    const diff =
+        !commit || !path
+            ? 'Select a commit and press Enter to browse its changed files.'
+            : diffResult?.workspaceId === workspaceId &&
+                diffResult.commit === commit &&
+                diffResult.path === path
+              ? diffResult.value
+              : 'Loading diff…';
     useEffect(() => {
         let cancelled = false;
         if (!commit || !path) {
-            setDiff('Select a commit and press Enter to browse its changed files.');
             return;
         }
-        setDiff('Loading diff…');
         window.nido
             .gitCommitDiff(workspaceId, commit.hash, path)
             .then((value) => {
                 if (!cancelled) {
-                    setDiff(value || 'No textual changes.');
+                    setDiffResult({
+                        workspaceId,
+                        commit,
+                        path,
+                        value: value || 'No textual changes.'
+                    });
                 }
             })
             .catch((failure) => {
                 if (!cancelled) {
-                    setDiff(String(failure));
+                    setDiffResult({ workspaceId, commit, path, value: String(failure) });
                 }
             });
         return () => {
             cancelled = true;
         };
-    }, [commit, path]);
+    }, [workspaceId, commit, path]);
 
     function returnToPreviousView(): void {
         if (creating) {
@@ -127,6 +177,9 @@ export default function GitBrowser({
     function changeView(next: GitView): void {
         if (busy) {
             return;
+        }
+        if (next !== view) {
+            setRevision((value) => value + 1);
         }
         setView(next);
         setCommit(undefined);
@@ -232,6 +285,7 @@ export default function GitBrowser({
                                 setCommit(undefined);
                                 setFiles([]);
                                 setIndex(0);
+                                setError('');
                                 setRevision((value) => value + 1);
                             }}
                         >

@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GitChange, GitStatus } from '../../../shared/types';
 import styles from '../assets/GitPanel.module.css';
 import GitDiff from './GitDiff';
+
+const key = (change: GitChange): string => `${change.staged}:${change.path}`;
 
 export default function GitPanel({
     workspaceId,
@@ -16,21 +18,24 @@ export default function GitPanel({
 }): React.JSX.Element {
     const [status, setStatus] = useState<GitStatus>();
     const [selected, setSelected] = useState('');
-    const [diff, setDiff] = useState('');
+    const [diffResult, setDiffResult] = useState<{
+        workspaceId: string;
+        change: GitChange;
+        status: GitStatus | undefined;
+        value: string;
+    }>();
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
-    const [busy, setBusy] = useState(false);
+    const [busy, setBusy] = useState(true);
     const list = useRef<HTMLDivElement>(null);
     const input = useRef<HTMLTextAreaElement>(null);
     const locked = useRef(false);
-    const key = (change: GitChange): string => `${change.staged}:${change.path}`;
     const changes = [...(status?.changes || [])].sort(
         (a, b) => Number(b.staged) - Number(a.staged)
     );
     const current = changes.find((change) => key(change) === selected);
 
-    async function refresh(): Promise<void> {
-        const next = await window.nido.gitStatus(workspaceId);
+    const applyStatus = useCallback((next: GitStatus): void => {
         setStatus(next);
         setSelected((previous) => {
             if (next.changes.some((change) => key(change) === previous)) {
@@ -42,6 +47,10 @@ export default function GitPanel({
             }
             return '';
         });
+    }, []);
+
+    async function refresh(): Promise<void> {
+        applyStatus(await window.nido.gitStatus(workspaceId));
     }
 
     async function run(action: () => Promise<unknown>): Promise<void> {
@@ -50,7 +59,6 @@ export default function GitPanel({
         }
         locked.current = true;
         setBusy(true);
-        onBusyChange?.(true);
         setError('');
         setNotice('');
         try {
@@ -63,39 +71,86 @@ export default function GitPanel({
         } finally {
             locked.current = false;
             setBusy(false);
-            onBusyChange?.(false);
         }
     }
 
     useEffect(() => {
-        void run(async () => {});
-        list.current?.focus();
-    }, [workspaceId]);
+        onBusyChange?.(busy);
+    }, [busy, onBusyChange]);
 
     useEffect(() => {
         let cancelled = false;
-        setDiff(current ? 'Loading diff…' : 'Select a change to preview its diff.');
+        locked.current = true;
+        void window.nido
+            .gitStatus(workspaceId)
+            .then(
+                (next) => {
+                    if (!cancelled) {
+                        applyStatus(next);
+                    }
+                },
+                (failure) => {
+                    if (!cancelled) {
+                        setError(
+                            String(failure).replace(
+                                /^Error: Error invoking remote method '[^']+': Error: /,
+                                ''
+                            )
+                        );
+                    }
+                }
+            )
+            .finally(() => {
+                if (!cancelled) {
+                    locked.current = false;
+                    setBusy(false);
+                }
+            });
+        list.current?.focus();
+        return () => {
+            cancelled = true;
+        };
+    }, [workspaceId, applyStatus]);
+
+    const diff = !current
+        ? 'Select a change to preview its diff.'
+        : diffResult?.workspaceId === workspaceId &&
+            diffResult.change === current &&
+            diffResult.status === status
+          ? diffResult.value
+          : 'Loading diff…';
+    useEffect(() => {
+        let cancelled = false;
         if (current) {
             window.nido
                 .gitDiff(workspaceId, current.path, current.staged)
                 .then((value) => {
                     if (!cancelled) {
-                        setDiff(
-                            value ||
+                        setDiffResult({
+                            workspaceId,
+                            change: current,
+                            status,
+                            value:
+                                value ||
                                 'No textual diff (the file may have a mode change or be empty).'
-                        );
+                        });
                     }
                 })
                 .catch((failure) => {
                     if (!cancelled) {
-                        setDiff(String(failure));
+                        setDiffResult({
+                            workspaceId,
+                            change: current,
+                            status,
+                            value: String(failure)
+                        });
                     }
                 });
         }
         return () => {
             cancelled = true;
         };
-    }, [workspaceId, selected, status]);
+    }, [workspaceId, current, status]);
 
     function stage(): void {
         if (current) {

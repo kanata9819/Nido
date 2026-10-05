@@ -71,15 +71,28 @@ export default function ReferencesPanel({
     const [selected, setSelected] = useState(0);
     const [focused, setFocused] = useState(false);
     const [preview, setPreview] = useState<PreviewContent>();
+    const selectionKey = `${workspaceId}:${state.version}`;
+    const [previousSelectionKey, setPreviousSelectionKey] = useState(selectionKey);
+    if (selectionKey !== previousSelectionKey) {
+        setPreviousSelectionKey(selectionKey);
+        setSelected(0);
+    }
     const currentContent = useRef<HTMLDivElement>(null);
     const displayedContent = useRef<PreviewContent | undefined>(undefined);
     const closePrefix = useRef(false);
     const item = state.items[selected];
     const previewKey = `${state.version}:${selected}`;
     const previewHost = document.getElementById('editor-preview-host');
+    const previewEnabled = visible && focused && !!item && !state.loading;
+    const [previousPreviewEnabled, setPreviousPreviewEnabled] = useState(previewEnabled);
+    if (previewEnabled !== previousPreviewEnabled) {
+        setPreviousPreviewEnabled(previewEnabled);
+        if (!previewEnabled) {
+            setPreview(undefined);
+        }
+    }
     useEffect(() => {
         if (!visible || !focused || !item || state.loading) {
-            setPreview(undefined);
             return;
         }
         let cancelled = false;
@@ -97,17 +110,7 @@ export default function ReferencesPanel({
         return () => {
             cancelled = true;
         };
-    }, [
-        workspaceId,
-        selected,
-        previewKey,
-        state.version,
-        state.loading,
-        visible,
-        focused,
-        item?.path,
-        item?.line
-    ]);
+    }, [workspaceId, selected, previewKey, state.version, state.loading, visible, focused, item]);
     useLayoutEffect(() => {
         const previous = displayedContent.current;
         displayedContent.current = preview;
@@ -136,9 +139,6 @@ export default function ReferencesPanel({
             reducedMotion.removeEventListener('change', finish);
         };
     }, [preview, animations]);
-    useEffect(() => {
-        setSelected(0);
-    }, [state.version]);
     useEffect(() => {
         if (visible) {
             list.current?.focus();

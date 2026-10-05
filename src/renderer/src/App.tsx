@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-import type { FavoriteWorkspace, FileEntry, SessionState, Workspace } from '../../shared/types';
+import type { FavoriteWorkspace, FileEntry, SessionState } from '../../shared/types';
 import type { Panel } from './types';
 import Editor from './Editor';
 import TerminalPanel from './components/TerminalPanel';
@@ -19,6 +19,7 @@ import { Welcome, WorkspaceWelcome } from './components/Welcome';
 import { buildItems } from './commands';
 import { fileDecorations } from './fileDecorations';
 import { defaultFontFamily, useEditorSettings } from './hooks/useEditorSettings';
+import { useFavoriteWorkspaces } from './hooks/useFavoriteWorkspaces';
 import { useGitFileStatus } from './hooks/useGitFileStatus';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { usePointerVisibility } from './hooks/usePointerVisibility';
@@ -45,10 +46,6 @@ export default function App(): React.JSX.Element {
     const [fileList, setFileList] = useState<FileEntry[]>([]);
     const [loading, setLoading] = useState(false);
     const [creating, setCreating] = useState(false);
-    const [favorites, setFavorites] = useState<FavoriteWorkspace[]>([]);
-    const [favoritesReady, setFavoritesReady] = useState(false);
-    const [savingFavorite, setSavingFavorite] = useState(false);
-    const favoritePending = useRef(false);
     const [errorNotice, setErrorNotice] = useState<{ message: string }>();
     const error = errorNotice?.message || '';
     const setError = useCallback(
@@ -64,33 +61,12 @@ export default function App(): React.JSX.Element {
 
     const { workspaces, setWorkspaces, active, setActive, states, mode, restoring } =
         useWorkspaceSessions(report);
-    useEffect(() => {
-        void window.nido
-            .favoriteWorkspaces()
-            .then((saved) => {
-                setFavorites(saved);
-                setFavoritesReady(true);
-            })
-            .catch((e) => report(String(e)));
-    }, [report]);
-
-    const toggleFavorite = (w: Workspace | FavoriteWorkspace): void => {
-        if (!favoritesReady || favoritePending.current) {
-            return;
-        }
-        favoritePending.current = true;
-        setSavingFavorite(true);
-        const kind = w.kind || 'editor';
-        const enabled = !favorites.some((f) => f.root === w.root && f.kind === kind);
-        void window.nido
-            .setWorkspaceFavorite(w.root, kind, enabled)
-            .then(setFavorites)
-            .catch((e) => report(String(e)))
-            .finally(() => {
-                favoritePending.current = false;
-                setSavingFavorite(false);
-            });
-    };
+    const {
+        favorites,
+        ready: favoritesReady,
+        busy: savingFavorite,
+        toggleFavorite
+    } = useFavoriteWorkspaces(report);
     const [debugVisible, setDebugVisible] = useState(false);
     const [debugFocusTick, setDebugFocusTick] = useState(0);
     const [referencesVisible, setReferencesVisible] = useState(false);
@@ -126,26 +102,45 @@ export default function App(): React.JSX.Element {
     const state = states[active] || defaultState;
     const gitFiles = useGitFileStatus(active, state.buffers, panel);
     const hasDebugger = !!state.debug;
-    useEffect(() => {
-        if (state.references) {
+    const referenceVersion = state.references?.version;
+    const referencesLoading = state.references?.loading;
+    const debugStatus = state.debug?.status;
+    const [previousPanelState, setPreviousPanelState] = useState({
+        active,
+        referenceVersion,
+        referencesLoading,
+        hasDebugger,
+        debugStatus
+    });
+    const workspaceChanged = previousPanelState.active !== active;
+    const referencesChanged =
+        workspaceChanged ||
+        previousPanelState.referenceVersion !== referenceVersion ||
+        previousPanelState.referencesLoading !== referencesLoading;
+    const debuggerChanged = workspaceChanged || previousPanelState.hasDebugger !== hasDebugger;
+    const debugStatusChanged = workspaceChanged || previousPanelState.debugStatus !== debugStatus;
+    // Reset only when the session's panel signals change, before committing the next UI.
+    if (referencesChanged || debuggerChanged || debugStatusChanged) {
+        setPreviousPanelState({
+            active,
+            referenceVersion,
+            referencesLoading,
+            hasDebugger,
+            debugStatus
+        });
+        if (referencesChanged && state.references) {
             setBottomPanel('references');
             setReferencesVisible(true);
             setReferencesFocusTick((value) => value + 1);
         }
-    }, [active, state.references?.version, state.references?.loading]);
-
-    useEffect(() => {
-        if (hasDebugger) {
+        if (debuggerChanged && hasDebugger) {
             setDebugVisible(true);
         }
-    }, [hasDebugger, active]);
-
-    useEffect(() => {
-        if (state.debug?.status === 'building' || state.debug?.status === 'running') {
+        if (debugStatusChanged && (debugStatus === 'building' || debugStatus === 'running')) {
             setBottomPanel('debug');
             setDebugVisible(true);
         }
-    }, [active, state.debug?.status]);
+    }
 
     const workspace = workspaces.find((w) => w.id === active);
     const decorations = useMemo(

@@ -39,6 +39,13 @@ export default defineConfig(
             ...eslintPluginReactRefresh.configs.vite.rules
         }
     },
+    {
+        files: ['**/*.cjs'],
+        rules: {
+            // CommonJS preloads run through Node --require and must use require().
+            '@typescript-eslint/no-require-imports': 'off'
+        }
+    },
     eslintConfigPrettier,
     {
         files: ['src/**/*.{ts,tsx}'],

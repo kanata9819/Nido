@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Star, X } from 'lucide-react';
 import type { FavoriteWorkspace, FileEntry } from '../../../shared/types';
 import styles from '../assets/Nido.module.css';
@@ -30,49 +30,83 @@ export default function FolderPicker({
     const [error, setError] = useState('');
     const list = useRef<HTMLDivElement>(null);
     const address = useRef<HTMLInputElement>(null);
-    const request = useRef(0);
+    const request = useRef({ id: 0 });
     const choiceCount = favorites.length + folders.length;
-    async function browse(next: string): Promise<void> {
-        const id = ++request.current;
-        setLoading(true);
-        setError('');
-        try {
-            const result = await window.nido.browseFolders(next);
-            if (id !== request.current) {
-                return;
-            }
+    const [previousChoiceCount, setPreviousChoiceCount] = useState(choiceCount);
+    if (choiceCount !== previousChoiceCount) {
+        setPreviousChoiceCount(choiceCount);
+        setSelected((value) => Math.max(0, Math.min(value, choiceCount - 1)));
+    }
+    const applyFolders = useCallback(
+        (result: Awaited<ReturnType<typeof window.nido.browseFolders>>): void => {
             setPath(result.path);
             setDirectory(result.path);
             setParent(result.parent);
             setFolders(result.folders);
             setSelected(0);
+        },
+        []
+    );
+    async function browse(next: string): Promise<void> {
+        const id = ++request.current.id;
+        setLoading(true);
+        setError('');
+        try {
+            const result = await window.nido.browseFolders(next);
+            if (id !== request.current.id) {
+                return;
+            }
+            applyFolders(result);
             requestAnimationFrame(() => {
-                if (id === request.current) {
+                if (id === request.current.id) {
                     list.current?.focus();
                 }
             });
-        } catch (err) {
-            if (id === request.current) {
-                setError(String(err));
+        } catch (error) {
+            if (id === request.current.id) {
+                setError(String(error));
             }
         } finally {
-            if (id === request.current) {
+            if (id === request.current.id) {
                 setLoading(false);
             }
         }
     }
     useEffect(() => {
-        void browse(initialPath);
+        const counter = request.current;
+        const id = ++counter.id;
+        void window.nido
+            .browseFolders(initialPath)
+            .then(
+                (result) => {
+                    if (id !== counter.id) {
+                        return;
+                    }
+                    applyFolders(result);
+                    requestAnimationFrame(() => {
+                        if (id === counter.id) {
+                            list.current?.focus();
+                        }
+                    });
+                },
+                (error) => {
+                    if (id === counter.id) {
+                        setError(String(error));
+                    }
+                }
+            )
+            .finally(() => {
+                if (id === counter.id) {
+                    setLoading(false);
+                }
+            });
         return () => {
-            request.current++;
+            counter.id++;
         };
-    }, []);
+    }, [initialPath, applyFolders]);
     useEffect(() => {
         list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
     }, [selected]);
-    useEffect(() => {
-        setSelected((value) => Math.max(0, Math.min(value, choiceCount - 1)));
-    }, [choiceCount]);
     return (
         <div
             className={styles.folderPicker}

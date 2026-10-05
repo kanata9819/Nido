@@ -29,7 +29,7 @@ export default function FileHeader({
     const selectedTab = useRef<HTMLDivElement>(null);
     useLayoutEffect(() => {
         selectedTab.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    }, [active, state.current]);
+    }, [active, current?.id]);
     return (
         <>
             {' '}

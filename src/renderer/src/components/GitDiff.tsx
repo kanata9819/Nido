@@ -28,15 +28,23 @@ export default function GitDiff({
     const [selectedChange, setSelectedChange] = useState<{ diff: string; row: number }>();
     const activeChange = selectedChange?.diff === diff ? changes.indexOf(selectedChange.row) : -1;
     const [highlighted, setHighlighted] = useState<{
+        workspaceId: string;
+        path: string;
         diff: string;
-        lines: ReferencePreview['lines'][];
+        lines?: ReferencePreview['lines'][];
+        error?: string;
     }>();
-    const [error, setError] = useState('');
+    const currentHighlight =
+        highlighted?.workspaceId === workspaceId &&
+        highlighted.path === path &&
+        highlighted.diff === diff
+            ? highlighted
+            : undefined;
+    const error = currentHighlight?.error || '';
     const before = useRef<HTMLPreElement>(null);
     const after = useRef<HTMLPreElement>(null);
     useEffect(() => {
         let cancelled = false;
-        setError('');
         if (!path || !rows.some((row) => row.before || row.after)) {
             return;
         }
@@ -46,12 +54,17 @@ export default function GitDiff({
         void window.nido.highlightSources(workspaceId, path, sources[0], sources[1]).then(
             (lines) => {
                 if (!cancelled) {
-                    setHighlighted({ diff, lines });
+                    setHighlighted({ workspaceId, path, diff, lines });
                 }
             },
             () => {
                 if (!cancelled) {
-                    setError('Syntax highlighting unavailable');
+                    setHighlighted({
+                        workspaceId,
+                        path,
+                        diff,
+                        error: 'Syntax highlighting unavailable'
+                    });
                 }
             }
         );
@@ -139,8 +152,8 @@ export default function GitDiff({
                                     {row[side]?.number}
                                 </span>
                                 <code>
-                                    {highlighted?.diff === diff && row[side]
-                                        ? highlighted.lines[side === 'before' ? 0 : 1][
+                                    {currentHighlight?.lines && row[side]
+                                        ? currentHighlight.lines[side === 'before' ? 0 : 1][
                                               row[side].number - 1
                                           ]?.map((span, column) => (
                                               <span key={column} style={{ color: span.color }}>

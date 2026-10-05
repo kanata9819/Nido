@@ -15,7 +15,7 @@ export function useSessionSettings(
                     .catch((error) => setError(String(error)));
             }
         }
-    }, [wordWrap, workspaces]);
+    }, [wordWrap, workspaces, setError]);
     useEffect(() => {
         for (const workspace of workspaces) {
             for (const id of [workspace.id, workspace.terminalId]) {
@@ -26,7 +26,7 @@ export function useSessionSettings(
                 }
             }
         }
-    }, [clipboardSharing, workspaces]);
+    }, [clipboardSharing, workspaces, setError]);
     useEffect(() => {
         for (const workspace of workspaces) {
             if (workspace.kind !== 'terminal') {
@@ -35,7 +35,7 @@ export function useSessionSettings(
                     .catch((error) => setError(String(error)));
             }
         }
-    }, [relativeLineNumbers, workspaces]);
+    }, [relativeLineNumbers, workspaces, setError]);
     useEffect(() => {
         for (const workspace of workspaces) {
             if (workspace.kind !== 'terminal') {
@@ -44,5 +44,5 @@ export function useSessionSettings(
                     .catch((error) => setError(String(error)));
             }
         }
-    }, [editorConfig, workspaces]);
+    }, [editorConfig, workspaces, setError]);
 }
