@@ -10,6 +10,7 @@ export type Panel =
     | 'git'
     | 'problems'
     | 'markdown'
+    | 'features'
     | null;
 
 export interface Item {

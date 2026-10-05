@@ -20,6 +20,7 @@ pnpm dev
 | Ctrl+P                   | ファイル検索         |
 | Ctrl+S                   | 保存                 |
 | Ctrl+Shift+G             | Git                  |
+| Ctrl+Shift+X             | ビルトイン機能一覧   |
 | Ctrl+Shift+V（Markdown） | プレビュー           |
 | Ctrl+@                   | ターミナル           |
 | Space（Normalモード）    | 操作メニュー         |
@@ -27,6 +28,8 @@ pnpm dev
 | Alt+Shift+S              | Sticky Scrollに移動  |
 
 編集はVimの操作に対応。設定からEditorConfig・相対行番号などを切り替えられます。
+
+左の機能一覧ボタン、`Ctrl+Shift+X`、コマンドパレットの **Features / 機能一覧** から、ビルトイン機能をカテゴリ別に確認・検索できます。ワークスペースを開く前でも利用でき、Escで編集画面に戻れます。
 
 設定の **Language / 言語** で **English / 日本語** を選べます。UIはその場で切り替わり、再起動後も選択を維持します。初期値は英語です。メニュー・コマンド検索・操作ガイド・確認ダイアログも選択した言語で表示します。
 

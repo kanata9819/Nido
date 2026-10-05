@@ -1,16 +1,18 @@
 import { useI18n } from '../i18n';
-import { Files, GitBranch, Keyboard, Search, Settings2, Square } from 'lucide-react';
+import { Blocks, Files, GitBranch, Keyboard, Search, Settings2, Square } from 'lucide-react';
 import type { Panel } from '../types';
 import styles from '../assets/Nido.module.css';
 
 export default function NavigationRail({
     sidebar,
     active,
+    panel,
     showExplorer,
     showPanel
 }: {
     sidebar: boolean;
     active: string;
+    panel: Panel;
     showExplorer: () => void;
     showPanel: (panel: Panel) => void;
 }): React.JSX.Element {
@@ -18,7 +20,7 @@ export default function NavigationRail({
     return (
         <nav className={styles.rail} aria-label={t('Navigation')}>
             <button
-                className={sidebar ? styles.railActive : ''}
+                className={sidebar && panel !== 'features' ? styles.railActive : ''}
                 aria-label={t('Explorer')}
                 title={t('Explorer (Space e)')}
                 onClick={showExplorer}
@@ -47,6 +49,16 @@ export default function NavigationRail({
                 onClick={() => showPanel('git')}
             >
                 <GitBranch size={21} />
+            </button>
+            <button
+                className={panel === 'features' ? styles.railActive : ''}
+                aria-label={t('Features')}
+                aria-pressed={panel === 'features'}
+                title={t('Features (Ctrl+Shift+X)')}
+                data-features-trigger
+                onClick={() => showPanel('features')}
+            >
+                <Blocks size={22} />
             </button>
             <div className={styles.railGap} />
             <button

@@ -63,7 +63,7 @@ export function Panel({
     setSelection
 }: PanelProps): React.JSX.Element | null {
     const t = useI18n();
-    if (!panel) {
+    if (!panel || panel === 'features') {
         return null;
     }
 

@@ -76,7 +76,7 @@ test('global shortcuts leave AltGr input available to the editor', () => {
             return null;
         }
         renderToStaticMarkup(createElement(KeyboardProbe));
-        for (const key of ['p', 's', '@', '1', ' ']) {
+        for (const key of ['p', 's', 'x', '@', '1', ' ']) {
             handler({
                 ...keyEvent(key),
                 preventDefault: unexpected,

@@ -315,6 +315,12 @@
     display: flex;
     flex-direction: column;
 }
+.editorContent {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
 .fileTabs {
     height: 34px;
     display: flex;

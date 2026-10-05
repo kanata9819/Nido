@@ -224,6 +224,23 @@ export function useKeyboardShortcuts({
             }
             return;
         }
+        if (
+            event.ctrlKey &&
+            event.shiftKey &&
+            !event.altKey &&
+            !event.metaKey &&
+            event.key.toLowerCase() === 'x'
+        ) {
+            consume();
+            if (!event.repeat) {
+                if (panel === 'features') {
+                    focusEditor();
+                } else {
+                    showPanel('features');
+                }
+            }
+            return;
+        }
         if (panel) {
             if (event.key === 'Tab' && modal.current) {
                 const nodes = [

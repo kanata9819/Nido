@@ -8,6 +8,62 @@ export function parseLanguage(value: unknown): Language {
 
 // English source messages are also the fallback for messages from external tools.
 export const japanese: Record<string, string> = {
+    Features: '機能一覧',
+    'Features (Ctrl+Shift+X)': '機能一覧（Ctrl+Shift+X）',
+    'Explore built-in features · Ctrl+Shift+X': 'ビルトイン機能を確認 · Ctrl+Shift+X',
+    'Close features': '機能一覧を閉じる',
+    'Built-in': 'ビルトイン',
+    'Built-in features': 'ビルトイン機能',
+    'Discover what Nido can do.': 'Nidoで、できること。',
+    'Explore the features included with Nido.': 'Nidoに組み込まれている機能を一覧で確認できます。',
+    'Search features': '機能を検索',
+    'Search built-in features': 'ビルトイン機能を検索',
+    'Showing {count} of {total}': '{total}件中{count}件を表示',
+    'No features match your search.': '検索に一致する機能はありません。',
+    Editing: '編集',
+    'Projects and files': 'プロジェクトとファイル',
+    'Tools and appearance': 'ツールと表示',
+    'Vim editing': 'Vim編集',
+    'Edit with Neovim modes, motions, registers and undo.':
+        'Neovimのモード・移動・レジスター・Undoでコードを編集できます。',
+    'Completion and diagnostics': '補完と診断',
+    'Get code suggestions and review errors, warnings and hints.':
+        'コードの補完候補と、エラー・警告・ヒントを確認できます。',
+    'Keep enclosing functions and types visible while scrolling.':
+        'スクロール中も、現在の関数や型の見出しを固定表示します。',
+    'Bracket and indentation guides': '括弧とインデントのガイド',
+    'Follow nested code with colored brackets and indentation guides.':
+        '括弧の色分けとインデントガイドで、コードの入れ子を追えます。',
+    'Apply project indentation, line endings and save rules.':
+        'プロジェクトのインデント・改行コード・保存ルールを適用します。',
+    'Switch between independent sessions, save favorites and restore open files.':
+        '独立したセッションの切り替え、お気に入りの保存、開いたファイルの復元に対応します。',
+    'Create, rename, copy, move and recycle files from the keyboard.':
+        'キーボードでファイルの作成・名前変更・コピー・移動・ごみ箱への移動ができます。',
+    'File search': 'ファイル検索',
+    'Find project files and switch between open buffers.':
+        'プロジェクトのファイル検索と、開いているバッファーの切り替えができます。',
+    'Review diffs, stage changes, commit and switch branches. Requires Git.':
+        '差分の確認・ステージ・コミット・ブランチの切り替えができます。Gitが必要です。',
+    'Rust and TypeScript language tools': 'RustとTypeScriptの言語ツール',
+    'Use definitions, rename, formatting and code actions. Rust uses your installed toolchain.':
+        '定義への移動・名前変更・整形・コードアクションに対応します。Rustはインストール済みのツールチェーンを使用します。',
+    'References and documentation': '参照とドキュメント',
+    'Browse symbol references and syntax-highlighted documentation.':
+        'シンボルの参照先と、シンタックスハイライト付きのドキュメントを確認できます。',
+    'Rust run and debug': 'Rustの実行とデバッグ',
+    'Run main functions and tests, set breakpoints, inspect variables and step through Rust. Requires the Rust toolchain.':
+        'main関数やテストの実行、ブレークポイント、変数の確認、ステップ実行に対応します。Rustのツールチェーンが必要です。',
+    'Use a workspace terminal or a standalone shell session.':
+        'ワークスペース内のターミナルと、独立したシェルセッションを利用できます。',
+    'Preview Markdown using the current unsaved edits.':
+        '保存前の編集内容を使ってMarkdownをプレビューできます。',
+    'Themes and interface settings': 'テーマと画面設定',
+    'Choose Dark Modern or Acrylic, adjust fonts and switch between English and Japanese.':
+        'Dark Modern・Acrylicの選択、フォントの調整、英語・日本語の切り替えができます。',
+    'App updates': 'アプリの更新',
+    'Check for releases, download updates and restart after saving. Available in the installed Windows app.':
+        'リリースの確認・更新のダウンロード・保存後の再起動に対応します。インストール済みのWindowsアプリで利用できます。',
     Language: '言語',
     'Choose English or Japanese. The selection is saved.':
         '英語または日本語を選択できます。選択は保存されます。',

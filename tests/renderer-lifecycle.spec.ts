@@ -20,6 +20,80 @@ test.afterAll(async () => {
     await server?.close();
 });
 
+test('Features opens without a workspace, searches built-ins and restores navigation focus', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('restoreWorkspaces', 0, {
+            workspaces: [],
+            active: '',
+            errors: []
+        })
+    );
+    const trigger = page.getByRole('button', { name: 'Features', exact: true });
+    await trigger.click();
+    const features = page.getByRole('region', { name: 'Features', exact: true });
+    const search = features.getByRole('textbox', { name: 'Search features' });
+    await expect(search).toBeFocused();
+    await expect(trigger).toHaveAttribute('aria-pressed', 'true');
+    await expect(features.locator('[data-feature]')).toHaveCount(16);
+    await search.fill('sticky');
+    await expect(features.locator('[data-feature]')).toHaveCount(1);
+    await expect(
+        features.getByRole('heading', { name: 'Sticky Scroll', exact: true })
+    ).toBeVisible();
+    await search.fill('does-not-exist');
+    await expect(features.getByText('No features match your search.')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(features).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await page.keyboard.press('Control+Shift+x');
+    await expect(features).toBeVisible();
+    await page.keyboard.press('Control+Shift+x');
+    await expect(features).toHaveCount(0);
+});
+
+test('Features shortcut preserves the editor and supports Japanese and command palette access', async ({
+    page
+}) => {
+    await page.addInitScript(() => localStorage.setItem('nido.language', 'ja'));
+    await page.goto(`${origin}?view=app`);
+    const editor = page.getByRole('textbox', { name: 'Neovim入力' });
+    await expect(
+        page.getByRole('tab', { name: 'ワークスペース Alpha', exact: true })
+    ).toBeVisible();
+    await page.keyboard.press('Control+Shift+x');
+    const features = page.getByRole('region', { name: '機能一覧', exact: true });
+    const search = features.getByRole('textbox', { name: '機能を検索' });
+    await expect(search).toBeFocused();
+    await search.fill('スクロール');
+    await expect(features.locator('[data-feature="sticky-scroll"]')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(editor).toBeFocused();
+    await expect(
+        page.getByRole('tab', { name: 'ワークスペース Alpha', exact: true })
+    ).toBeVisible();
+    await page.keyboard.press('Control+Shift+p');
+    const palette = page.getByRole('dialog', { name: 'すべてのコマンド' });
+    await palette.getByRole('textbox').fill('機能一覧');
+    await palette.getByRole('button', { name: /機能一覧/ }).click();
+    await expect(features).toBeVisible();
+    await features.getByRole('button', { name: '機能一覧を閉じる' }).click();
+    await expect(editor).toBeFocused();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.calls.filter((call) =>
+                        ['input', 'closeWorkspace', 'openFile'].includes(call.method)
+                    ).length
+            )
+        )
+        .toBe(0);
+});
+
 test('settings switch the UI language immediately, persist it and switch back to English', async ({
     page
 }) => {

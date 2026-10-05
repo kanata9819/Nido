@@ -7,6 +7,7 @@ import Editor from './Editor';
 import TerminalPanel from './components/TerminalPanel';
 import Notification from './components/Notification';
 import NavigationRail from './components/NavigationRail';
+import FeaturesPage from './components/FeaturesPage';
 import { useSessionSettings } from './hooks/useSessionSettings';
 import Sidebar from './Sidebar';
 import DebugPanel from './components/DebugPanel';
@@ -175,6 +176,11 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         setPanel(null);
         setLeader(false);
         setFocusTick((n) => n + 1);
+        if (panel === 'features' && !active) {
+            requestAnimationFrame(() =>
+                document.querySelector<HTMLElement>('[data-features-trigger]')?.focus()
+            );
+        }
     };
 
     const closeReferences = (): void => {
@@ -483,6 +489,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                 <NavigationRail
                     sidebar={sidebar}
                     active={active}
+                    panel={panel}
                     showExplorer={showExplorer}
                     showPanel={showPanel}
                 />
@@ -506,67 +513,76 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                         />
                     ))}
                 <main id="editor-preview-host" className={styles.main}>
-                    {workspace ? (
-                        <FileHeader
-                            workspace={workspace}
-                            state={state}
-                            decorations={decorations}
-                            focusEditor={focusEditor}
-                            restartShell={restartShell}
-                            run={run}
-                        />
-                    ) : (
-                        <Welcome creating={creating} create={create} />
-                    )}
-                    {workspaces.map((w) => (
-                        <Editor
-                            key={w.id}
-                            theme={theme}
-                            id={w.id}
-                            terminal={w.kind === 'terminal'}
-                            active={w.id === active}
-                            fontSize={fontSize}
-                            lineHeight={lineHeight}
-                            animations={animations}
-                            smoothCursor={smoothCursor}
-                            smoothBlink={smoothBlink}
-                            scrollFollowCursor={scrollFollowCursor}
-                            stickyScroll={settings.stickyScroll}
-                            stickyScrollMaxLines={settings.stickyScrollMaxLines}
-                            blocked={!!panel || leader}
-                            focusTick={focusTick}
-                            fontFamily={fontFamily.trim() || defaultFontFamily}
-                            onError={report}
-                        >
-                            {w.kind !== 'terminal' &&
-                                states[w.id]?.empty &&
-                                states[w.id]?.mode === 'n' && (
-                                    <WorkspaceWelcome onOpen={() => showPanel('files')} />
-                                )}
-                        </Editor>
-                    ))}
-                    {leader && <KeyboardGuide commands={commands} focusEditor={focusEditor} />}
-                    {workspaces
-                        .filter((w) => w.terminalId)
-                        .map((w) => (
-                            <TerminalPanel
-                                key={w.id}
-                                id={w.terminalId!}
-                                name={w.name}
-                                active={
-                                    w.id === active && terminalVisible && bottomPanel === 'terminal'
-                                }
-                                blocked={!!panel || leader}
-                                focusTick={terminalFocusTick}
-                                settings={settings}
+                    <div
+                        className={styles.editorContent}
+                        inert={panel === 'features'}
+                        aria-hidden={panel === 'features' || undefined}
+                    >
+                        {workspace ? (
+                            <FileHeader
+                                workspace={workspace}
+                                state={state}
+                                decorations={decorations}
+                                focusEditor={focusEditor}
                                 restartShell={restartShell}
-                                onError={report}
-                                onClose={() => {
-                                    setTerminalVisible(false);
-                                    focusEditor();
-                                }}
+                                run={run}
                             />
+                        ) : (
+                            <Welcome creating={creating} create={create} />
+                        )}
+                        {workspaces.map((w) => (
+                            <Editor
+                                key={w.id}
+                                theme={theme}
+                                id={w.id}
+                                terminal={w.kind === 'terminal'}
+                                active={w.id === active}
+                                fontSize={fontSize}
+                                lineHeight={lineHeight}
+                                animations={animations}
+                                smoothCursor={smoothCursor}
+                                smoothBlink={smoothBlink}
+                                scrollFollowCursor={scrollFollowCursor}
+                                stickyScroll={settings.stickyScroll}
+                                stickyScrollMaxLines={settings.stickyScrollMaxLines}
+                                blocked={!!panel || leader}
+                                focusTick={focusTick}
+                                fontFamily={fontFamily.trim() || defaultFontFamily}
+                                onError={report}
+                            >
+                                {w.kind !== 'terminal' &&
+                                    states[w.id]?.empty &&
+                                    states[w.id]?.mode === 'n' && (
+                                        <WorkspaceWelcome onOpen={() => showPanel('files')} />
+                                    )}
+                            </Editor>
                         ))}
+                        {leader && <KeyboardGuide commands={commands} focusEditor={focusEditor} />}
+                        {workspaces
+                            .filter((w) => w.terminalId)
+                            .map((w) => (
+                                <TerminalPanel
+                                    key={w.id}
+                                    id={w.terminalId!}
+                                    name={w.name}
+                                    active={
+                                        w.id === active &&
+                                        terminalVisible &&
+                                        bottomPanel === 'terminal'
+                                    }
+                                    blocked={!!panel || leader}
+                                    focusTick={terminalFocusTick}
+                                    settings={settings}
+                                    restartShell={restartShell}
+                                    onError={report}
+                                    onClose={() => {
+                                        setTerminalVisible(false);
+                                        focusEditor();
+                                    }}
+                                />
+                            ))}
+                    </div>
+                    {panel === 'features' && <FeaturesPage onClose={focusEditor} />}
                 </main>
             </div>
             {active && state.references && (

@@ -43,6 +43,12 @@ export function buildItems(
 
     const commands: Item[] = [
         {
+            key: '',
+            title: 'Features',
+            detail: 'Explore built-in features · Ctrl+Shift+X',
+            run: () => showPanel('features')
+        },
+        {
             key: 'w',
             title: 'Switch workspace',
             detail: 'Independent Neovim sessions',
