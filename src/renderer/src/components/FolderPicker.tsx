@@ -269,8 +269,7 @@ export default function FolderPicker({
                         <span>
                             <strong>{favorite.name}</strong>
                             <small>
-                                {favorite.root} ·{' '}
-                                {t(favorite.kind)}
+                                {favorite.root} · {t(favorite.kind)}
                             </small>
                         </span>
                         <button
