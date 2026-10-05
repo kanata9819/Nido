@@ -87,8 +87,14 @@ test('Japanese command search and keyboard navigation keep working after a langu
     await page.keyboard.press('Enter');
     await expect(page.getByRole('dialog', { name: '設定', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
+    await expect(page.getByRole('textbox', { name: 'Neovim入力', exact: true })).toBeFocused();
     await page.keyboard.press('Control+Shift+g');
     await expect(page.getByRole('dialog', { name: 'ソース管理', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Gitの変更', exact: true })).toHaveAttribute(
+        'aria-busy',
+        'false'
+    );
+    await expect(page.getByRole('listbox', { name: '変更されたファイル', exact: true })).toBeFocused();
     await expect(page.getByRole('button', { name: '3 ブランチ', exact: true })).toBeEnabled();
     await page.keyboard.press('3');
     await expect(page.getByRole('button', { name: '3 ブランチ', exact: true })).toHaveAttribute(
