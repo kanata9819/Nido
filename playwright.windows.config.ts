@@ -11,6 +11,7 @@ export default defineConfig({
         'electron.spec.ts',
         'theme.spec.ts',
         'scroll-boundary.spec.ts',
+        'fast-wheel.spec.ts',
         'canvas-sharpness.spec.ts'
     ],
     grep: new RegExp(

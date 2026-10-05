@@ -2,6 +2,7 @@ import { test, expect, _electron as electron } from '@playwright/test';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { installRowImageProbe } from './helpers/row-image-probe';
 
 test('an old scroll failure cannot reset the preview after changing editor settings', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-scroll-lifecycle-'));
@@ -28,6 +29,8 @@ test('an old scroll failure cannot reset the preview after changing editor setti
     });
     try {
         const page = await running.firstWindow();
+        await page.addInitScript(installRowImageProbe);
+        await page.reload();
         const canvas = page.locator('canvas:visible');
         await expect(canvas).toHaveAttribute('aria-description', /ROW_1/);
         await running.evaluate(({ ipcMain }) => {
@@ -68,7 +71,11 @@ test('an old scroll failure cannot reset the preview after changing editor setti
             };
             context.drawImage = ((...args: Parameters<typeof draw>) => {
                 if (first && args.length === 5) {
-                    node.dataset.firstY = String(args[2]);
+                    const baseline = Number(
+                        (args[0] as HTMLCanvasElement).dataset.rowBaseline ?? 0
+                    );
+                    const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
+                    node.dataset.firstY = String(Number(args[2]) + phase);
                     first = false;
                 }
                 draw(...args);
@@ -107,7 +114,7 @@ test('an old scroll failure cannot reset the preview after changing editor setti
         );
         await expect.poll(calls).toBe(2);
         const expectedY = await page.evaluate(
-            () => Math.round(-8 * window.devicePixelRatio) / window.devicePixelRatio
+            () => Math.round(-8 * window.devicePixelRatio * 4) / (window.devicePixelRatio * 4)
         );
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-first-y')))
@@ -155,7 +162,7 @@ test('an old scroll failure cannot reset the preview after changing editor setti
         );
         await expect.poll(completed).toBe(3);
         const finalY = await page.evaluate(
-            () => Math.round(-10 * window.devicePixelRatio) / window.devicePixelRatio
+            () => Math.round(-10 * window.devicePixelRatio * 4) / (window.devicePixelRatio * 4)
         );
         await expect(canvas).toHaveAttribute('data-first-y', String(finalY));
         await expect(page.getByText('Old scroll failed', { exact: false })).toHaveCount(0);

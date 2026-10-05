@@ -126,11 +126,19 @@ export function useEditorRendering({
             schedule();
         };
 
+        // Refills can span several frames. Send wheel-sized steps to Neovim first;
+        // reserve refills for small upward steps that can preview the wait.
+        const needsScrollPrefetch = (): boolean =>
+            prefetchNeeded &&
+            scrollQueue.preview < 0 &&
+            scrollQueue.preview > -3 &&
+            (grid.canPreviewUpwardScroll || scrollQueue.preview > -1);
+
         const finishScroll = (): void => {
             if (!scrollQueue.finish()) {
                 return;
             }
-            if (scrollQueue.hasQueued || prefetchNeeded) {
+            if (scrollQueue.hasQueued) {
                 schedule();
             }
         };
@@ -189,8 +197,7 @@ export function useEditorRendering({
             const focused = document.activeElement === input;
             if (
                 pixelScroll &&
-                prefetchNeeded &&
-                (scrollQueue.hasQueued || directScroll) &&
+                needsScrollPrefetch() &&
                 !prefetchPending &&
                 !scrollQueue.pending &&
                 !motion &&
@@ -407,8 +414,7 @@ export function useEditorRendering({
                 motion ||
                 blinkFade ||
                 (pixelScroll &&
-                    prefetchNeeded &&
-                    (scrollQueue.hasQueued || directScroll) &&
+                    needsScrollPrefetch() &&
                     !prefetchPending &&
                     !scrollQueue.pending &&
                     scrollEnabledRef.current)

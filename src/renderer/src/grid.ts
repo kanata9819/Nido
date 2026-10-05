@@ -97,6 +97,10 @@ export class Grid {
         return this.upperRows.length > 0;
     }
 
+    get canPreviewUpwardScroll(): boolean {
+        return this.scrollFraction + this.scrollPreview >= -this.upperRows.length;
+    }
+
     get needsUpperRows(): boolean {
         const remaining =
             this.upperRows.length + Math.min(0, this.scrollFraction + this.scrollPreview);

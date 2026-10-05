@@ -22,6 +22,10 @@ export const windowsBaselineCases = [
     'clicking editor glyphs moves the cursor, including wide text and detached pixel scrolling',
     'acrylic switches live without losing edits and persists across restarts',
     'upward touchpad gestures stop at the first row while replies are delayed',
+    'fast wheel down moves during input with a cold viewport',
+    'fast wheel up moves during input with a cold viewport',
+    'fast wheel up moves when cached history is shorter than a wheel step',
+    'fast wheel up keeps moving while input exhausts cached history',
     'cached editor text preserves its pixels at 100% scale',
     'cached editor text preserves its pixels at 125% scale',
     'cached editor text preserves its pixels at 150% scale'
