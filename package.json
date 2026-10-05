@@ -31,6 +31,7 @@
         "test:renderer": "playwright test --config playwright.renderer.config.ts",
         "test:windows": "playwright test --config playwright.windows.config.ts",
         "verify:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-windows.ps1",
+        "test:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-installer.ps1",
         "test:rust": "tsx --test tests/rust.test.ts",
         "test:typescript": "tsx --test tests/typescript.test.ts",
         "test:debug": "tsx --test tests/debug.test.ts"

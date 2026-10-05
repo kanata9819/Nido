@@ -6,6 +6,7 @@ files:
     - '!dist/**'
     - '!resources/**'
     - '!scripts/**'
+    - '!patches/**'
     - '!tests/**'
     - '!.downloads/**'
     - '!**/.vscode/*'
@@ -36,6 +37,7 @@ win:
           arch: [x64]
     executableName: nido
 nsis:
+    include: build/installer.nsh
     perMachine: false
     deleteAppDataOnUninstall: false
     artifactName: ${name}-${version}-setup.${ext}

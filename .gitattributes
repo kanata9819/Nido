@@ -1,2 +1,3 @@
 # Keep source line endings consistent with Prettier on every platform.
 * text=auto eol=lf
+patches/*.patch text eol=lf

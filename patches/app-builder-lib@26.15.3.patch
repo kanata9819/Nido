@@ -1,0 +1,15 @@
+diff --git a/templates/nsis/include/installer.nsh b/templates/nsis/include/installer.nsh
+index 300ef3dd699d0f5a081b1934fcc22dbe12025bdb..a6a3d30c6922791ae96cafb8acb25014db7a626b 100644
+--- a/templates/nsis/include/installer.nsh
++++ b/templates/nsis/include/installer.nsh
+@@ -2,6 +2,10 @@
+ 
+ !include "extractAppPackage.nsh"
+ 
++!ifmacrodef customFileExtraction
++  !insertmacro customFileExtraction
++!endif
++
+ !ifdef APP_PACKAGE_URL
+   !include webPackage.nsh
+ !endif

@@ -64,6 +64,8 @@ jobs:
               run: pnpm exec electron-builder --win --publish always
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Verify installer file transfer
+              run: pnpm test:installer
             - name: Verify assets and publish release
               shell: pwsh
               run: |
