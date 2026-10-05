@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import {
     Blocks,
@@ -74,6 +75,7 @@ export default function CompletionMenu({
     onError: (message: string) => void;
     hidden: boolean;
 }): React.JSX.Element | null {
+    const t = useI18n();
     const [menu, setMenu] = useState<Menu>();
     const card = useRef<HTMLDivElement>(null);
     const refreshing = useRef(false);
@@ -231,13 +233,13 @@ export default function CompletionMenu({
             onMouseDown={(event) => event.preventDefault()}
         >
             <div className={styles.heading}>
-                <Braces size={14} /> Completion <span>{menu.items.length} candidates</span>
+                <Braces size={14} /> {t('Completion')} <span>{menu.items.length} {t('candidates')}</span>
             </div>
             <div
                 id={listId}
                 className={styles.list}
                 role="listbox"
-                aria-label="Code completion"
+                aria-label={t('Code completion')}
                 aria-busy={menu.pending ?? false}
             >
                 {menu.items.map(([word, kind, detail], index) => {
@@ -266,8 +268,8 @@ export default function CompletionMenu({
                                 className={styles.kind}
                                 data-kind={kind}
                                 role="img"
-                                aria-label={kind || 'Text'}
-                                title={kind || 'Text'}
+                                aria-label={t(kind || 'Text')}
+                                title={t(kind || 'Text')}
                             >
                                 <Icon size={16} aria-hidden="true" />
                             </span>
@@ -279,13 +281,13 @@ export default function CompletionMenu({
             </div>
             <div className={styles.footer}>
                 <span>
-                    <kbd>↑ ↓</kbd> Select
+                    <kbd>↑ ↓</kbd> {t('Select')}
                 </span>
                 <span>
-                    <kbd>Tab</kbd> Accept
+                    <kbd>Tab</kbd> {t('Accept')}
                 </span>
                 <span>
-                    <kbd>Esc</kbd> Close
+                    <kbd>Esc</kbd> {t('Close')}
                 </span>
             </div>
         </div>

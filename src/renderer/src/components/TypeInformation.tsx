@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Braces, X } from 'lucide-react';
 import Markdown from 'react-markdown';
@@ -14,6 +15,7 @@ export default function TypeInformation({
     input: RefObject<HTMLTextAreaElement | null>;
     fontFamily: string;
 }): React.JSX.Element | null {
+    const t = useI18n();
     const [info, setInfo] = useState<Extract<NidoEvent, { type: 'hover' }>>();
     const [linkError, setLinkError] = useState('');
     const card = useRef<HTMLDivElement>(null);
@@ -91,7 +93,7 @@ export default function TypeInformation({
             ref={card}
             className={styles.card}
             role="dialog"
-            aria-label="Type information"
+            aria-label={t('Type information')}
             data-type-information
             onClick={(event) => event.stopPropagation()}
             onWheel={(event) => event.stopPropagation()}
@@ -162,11 +164,11 @@ export default function TypeInformation({
         >
             <header>
                 <Braces size={17} />
-                <strong>Type information</strong>
+                <strong>{t('Type information')}</strong>
                 <span>{info.filetype}</span>
                 <button
-                    aria-label="Close type information"
-                    title="Close (Esc / Ctrl+C)"
+                    aria-label={t('Close type information')}
+                    title={t('Close (Esc / Ctrl+C)')}
                     onClick={close}
                 >
                     <X size={16} />
@@ -176,7 +178,7 @@ export default function TypeInformation({
                 ref={body}
                 className={styles.body}
                 tabIndex={0}
-                aria-label="Type information content"
+                aria-label={t('Type information content')}
             >
                 <div className={styles.prose}>
                     <Markdown
@@ -236,10 +238,10 @@ export default function TypeInformation({
                 {linkError && <p role="alert">{linkError}</p>}
             </div>
             <footer>
-                <span title="h/l / ← →: horizontal · j/k: line · Ctrl+D/U: half page · Ctrl+F/B: page">
-                    h / l · Horizontal · Ctrl D / U · Scroll
+                <span title={t('h/l / ← →: horizontal · j/k: line · Ctrl+D/U: half page · Ctrl+F/B: page')}>
+                    {t('h / l · Horizontal · Ctrl D / U · Scroll')}
                 </span>
-                <span>Esc / Ctrl C · Back to editor</span>
+                <span>{t('Esc / Ctrl C · Back to editor')}</span>
             </footer>
         </div>
     );

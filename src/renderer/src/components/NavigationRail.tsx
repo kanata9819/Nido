@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { Files, GitBranch, Keyboard, Search, Settings2, Square } from 'lucide-react';
 import type { Panel } from '../types';
 import styles from '../assets/Nido.module.css';
@@ -13,34 +14,35 @@ export default function NavigationRail({
     showExplorer: () => void;
     showPanel: (panel: Panel) => void;
 }): React.JSX.Element {
+    const t = useI18n();
     return (
-        <nav className={styles.rail} aria-label="Navigation">
+        <nav className={styles.rail} aria-label={t('Navigation')}>
             <button
                 className={sidebar ? styles.railActive : ''}
-                aria-label="Explorer"
-                title="Explorer (Space e)"
+                aria-label={t('Explorer')}
+                title={t('Explorer (Space e)')}
                 onClick={showExplorer}
             >
                 <Files size={22} />
             </button>
             <button
-                aria-label="Find file"
-                title="Find file (Space f)"
+                aria-label={t('Find file')}
+                title={t('Find file (Space f)')}
                 disabled={!active}
                 onClick={() => showPanel('files')}
             >
                 <Search size={22} />
             </button>
             <button
-                aria-label="Workspaces"
-                title="Workspaces (Space w)"
+                aria-label={t('Workspaces')}
+                title={t('Workspaces (Space w)')}
                 onClick={() => showPanel('workspaces')}
             >
                 <Square size={20} />
             </button>
             <button
-                aria-label="Source control"
-                title="Source control (Ctrl+Shift+G / Space g)"
+                aria-label={t('Source control')}
+                title={t('Source control (Ctrl+Shift+G / Space g)')}
                 disabled={!active}
                 onClick={() => showPanel('git')}
             >
@@ -48,15 +50,15 @@ export default function NavigationRail({
             </button>
             <div className={styles.railGap} />
             <button
-                aria-label="Command palette"
-                title="Commands (Ctrl+Shift+P)"
+                aria-label={t('Command palette')}
+                title={t('Commands (Ctrl+Shift+P)')}
                 onClick={() => showPanel('commands')}
             >
                 <Keyboard size={21} />
             </button>
             <button
-                aria-label="Settings"
-                title="Settings (Space ,)"
+                aria-label={t('Settings')}
+                title={t('Settings (Space ,)')}
                 onClick={() => showPanel('settings')}
             >
                 <Settings2 size={21} />

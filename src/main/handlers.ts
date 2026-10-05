@@ -7,8 +7,10 @@ import { registerWorkspaceHandlers } from './workspaceHandlers';
 import { terminalShells, uiThemes, type TerminalShell, type UITheme } from '../shared/types';
 import type { DebugAction, FileAction, NidoEvent, Workspace } from '../shared/types';
 import type { Updates } from './updater';
+import { translate, type Language } from '../shared/i18n';
 
 export interface AppState {
+    language?: Language;
     order: string[];
     active: string;
     restoration: Promise<{ workspaces: Workspace[]; active: string; errors: string[] }> | undefined;
@@ -79,6 +81,12 @@ export function registerHandlers({
     };
 
     handle('updateState', () => updates.snapshot());
+    handle('language', (value) => {
+        if (value !== 'en' && value !== 'ja') {
+            throw new Error('Invalid language.');
+        }
+        state.language = value;
+    });
     handle('updateAction', (action) => {
         switch (action) {
             case 'check':
@@ -228,10 +236,11 @@ export function registerHandlers({
         const s = session(id);
         const buffer = integer(value);
         if (await s.bufferModified(buffer)) {
+            const t = (message: string): string => translate(state.language ?? 'en', message);
             const { response } = await dialog.showMessageBox(window, {
                 type: 'warning',
-                message: 'Discard this file\u2019s unsaved changes?',
-                buttons: ['Cancel', 'Discard'],
+                message: t('Discard this file\u2019s unsaved changes?'),
+                buttons: [t('Cancel'), t('Discard')],
                 defaultId: 0,
                 cancelId: 0,
                 noLink: true

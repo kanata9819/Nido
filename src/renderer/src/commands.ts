@@ -1,5 +1,6 @@
 import type { Panel, Item } from './types';
 import type { DebugAction, FileEntry, SessionState, Workspace } from '../../shared/types';
+import { createTranslator, type Translator } from '../../shared/i18n';
 
 interface CommandsCallbacks {
     save: () => void;
@@ -24,7 +25,8 @@ export function buildItems(
     fileList: FileEntry[],
     state: SessionState,
     query: string,
-    callbacks: CommandsCallbacks
+    callbacks: CommandsCallbacks,
+    t: Translator = createTranslator('en')
 ): { commands: Item[]; items: Item[]; filtered: Item[] } {
     const {
         save,
@@ -118,7 +120,7 @@ export function buildItems(
                   })),
                   ...(['LF', 'CRLF'] as const).map((format) => ({
                       key: '',
-                      title: `Convert line endings to ${format}`,
+                      title: t('Convert line endings to {format}', { format }),
                       detail: 'Normalize the current file · Save to apply to disk',
                       run: () => {
                           run(window.nido.setLineEnding(active, format));
@@ -132,7 +134,7 @@ export function buildItems(
                         ].map(([title, keys]) => ({
                             key: '',
                             title,
-                            detail: `Main, test or test module · ${keys}`,
+                            detail: t('Main, test or test module · {keys}', { keys }),
                             run: () => {
                                 run(window.nido.input(active, `<Esc>${keys}`));
                                 focusEditor();
@@ -232,14 +234,18 @@ export function buildItems(
             detail: 'Prompts for unsaved changes',
             run: () => run(window.nido.windowAction('close'))
         }
-    ];
+    ].map((command) => ({
+        ...command,
+        title: t(command.title),
+        detail: t(command.detail)
+    }));
 
     let items: Item[];
     switch (panel) {
         case 'problems':
             items = (state.problems || [])
                 .map((problem, index) => ({
-                    key: ['Error', 'Warning', 'Info', 'Hint'][problem.severity - 1] || 'Info',
+                    key: t(['Error', 'Warning', 'Info', 'Hint'][problem.severity - 1] || 'Info'),
                     severity: problem.severity,
                     title: problem.message,
                     detail: `${problem.path}:${problem.line}:${problem.column}${problem.source ? ' · ' + problem.source : ''}`,
@@ -262,8 +268,8 @@ export function buildItems(
                 })),
                 {
                     key: '+',
-                    title: 'Open workspace',
-                    detail: 'Start another independent session',
+                    title: t('Open workspace'),
+                    detail: t('Start another independent session'),
                     run: () => void create()
                 }
             ];
@@ -279,8 +285,8 @@ export function buildItems(
         case 'buffers':
             items = state.buffers.map((b) => ({
                 key: b.modified ? '●' : '',
-                title: filename(b.name),
-                detail: b.name || 'Untitled buffer',
+                title: b.name ? filename(b.name) : t('[Untitled]'),
+                detail: b.name || t('Untitled buffer'),
                 run: () => {
                     run(window.nido.selectBuffer(active, b.id));
                     focusEditor();

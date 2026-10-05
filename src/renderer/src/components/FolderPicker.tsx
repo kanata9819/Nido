@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Star, X } from 'lucide-react';
 import type { FavoriteWorkspace, FileEntry } from '../../../shared/types';
@@ -20,6 +21,7 @@ export default function FolderPicker({
     busy: boolean;
     onOpen: (path: string, kind: 'editor' | 'terminal') => void;
 }): React.JSX.Element {
+    const t = useI18n();
     const [path, setPath] = useState(initialPath);
     const [kind, setKind] = useState<'editor' | 'terminal'>('editor');
     const [directory, setDirectory] = useState('');
@@ -125,7 +127,7 @@ export default function FolderPicker({
             <input
                 ref={address}
                 className={`${styles.paletteInput} ${styles.folderPath}`}
-                aria-label="Folder path"
+                aria-label={t('Folder path')}
                 value={path}
                 disabled={busy}
                 onChange={(event) => setPath(event.target.value)}
@@ -142,35 +144,35 @@ export default function FolderPicker({
             />
             <div className={styles.folderActions}>
                 <label>
-                    Session type{' '}
+                    {t('Session type')}{' '}
                     <select
-                        aria-label="Session type"
+                        aria-label={t('Session type')}
                         value={kind}
                         disabled={busy}
                         onChange={(event) => setKind(event.target.value as 'editor' | 'terminal')}
                     >
-                        <option value="editor">Editor</option>
-                        <option value="terminal">Terminal</option>
+                        <option value="editor">{t('Editor')}</option>
+                        <option value="terminal">{t('Terminal')}</option>
                     </select>
                 </label>
                 <button
                     disabled={loading || busy || parent === directory}
                     onClick={() => void browse(parent)}
                 >
-                    ↑ Parent
+                    {t('↑ Parent')}
                 </button>
                 <button
                     disabled={loading || busy || !directory}
                     onClick={() => onOpen(directory, kind)}
                 >
-                    {busy ? 'Opening…' : 'Open current folder'}
+                    {busy ? t('Opening…') : t('Open current folder')}
                 </button>
             </div>
             {error && <p role="alert">{error}</p>}
             <div
                 ref={list}
                 role="listbox"
-                aria-label="Folders"
+                aria-label={t('Folders')}
                 tabIndex={0}
                 aria-busy={loading || busy}
                 aria-activedescendant={
@@ -244,13 +246,13 @@ export default function FolderPicker({
                     }
                 }}
             >
-                {favorites.length > 0 && <p className={styles.folderSection}>Favorites</p>}
+                {favorites.length > 0 && <p className={styles.folderSection}>{t('Favorites')}</p>}
                 {favorites.map((favorite, index) => (
                     <div
                         key={`${favorite.root}:${favorite.kind}`}
                         id={`folder-choice-${index}`}
                         role="option"
-                        aria-label={`Favorite ${favorite.name} (${favorite.kind})`}
+                        aria-label={t('Favorite {name} ({kind})', { name: favorite.name, kind: favorite.kind === 'terminal' ? t('Terminal') : t('Editor') })}
                         aria-selected={index === selected}
                         className={`${styles.folderChoice} ${styles.favoriteChoice} ${index === selected ? styles.selectedItem : ''}`}
                         onClick={() => {
@@ -264,12 +266,12 @@ export default function FolderPicker({
                         <span>
                             <strong>{favorite.name}</strong>
                             <small>
-                                {favorite.root} · {favorite.kind}
+                                {favorite.root} · {favorite.kind === 'terminal' ? t('Terminal') : t('Editor')}
                             </small>
                         </span>
                         <button
-                            aria-label={`Remove favorite ${favorite.name} (${favorite.kind})`}
-                            title="Remove favorite"
+                            aria-label={t('Remove favorite {name} ({kind})', { name: favorite.name, kind: favorite.kind === 'terminal' ? t('Terminal') : t('Editor') })}
+                            title={t('Remove favorite')}
                             disabled={favoriteBusy || busy}
                             onClick={(event) => {
                                 event.stopPropagation();
@@ -281,9 +283,9 @@ export default function FolderPicker({
                         </button>
                     </div>
                 ))}
-                {favorites.length > 0 && <p className={styles.folderSection}>Browse folders</p>}
+                {favorites.length > 0 && <p className={styles.folderSection}>{t('Browse folders')}</p>}
                 {loading ? (
-                    <p>Loading folders…</p>
+                    <p>{t('Loading folders…')}</p>
                 ) : (
                     folders.map((folder, index) => (
                         <div
@@ -303,12 +305,11 @@ export default function FolderPicker({
                     ))
                 )}
                 {!loading && !folders.length && (
-                    <p>No subfolders. Open this folder with Ctrl+Enter.</p>
+                    <p>{t('No subfolders. Open this folder with Ctrl+Enter.')}</p>
                 )}
             </div>
             <p className={styles.folderActions}>
-                j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L
-                Path · Esc Cancel
+                {t('j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Esc Cancel')}
             </p>
         </div>
     );

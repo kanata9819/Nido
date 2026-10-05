@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReferencePreview } from '../../../shared/types';
 import { splitDiff } from '../gitDiff';
@@ -18,6 +19,7 @@ export default function GitDiff({
     beforeLabel: string;
     afterLabel: string;
 }): React.JSX.Element {
+    const t = useI18n();
     const rows = useMemo(() => splitDiff(diff), [diff]);
     const changes = rows.flatMap((row, index) =>
         (row.before?.changed || row.after?.changed) &&
@@ -77,22 +79,22 @@ export default function GitDiff({
             {(['before', 'after'] as const).map((side) => (
                 <div key={side} className={styles.diffPane}>
                     <div className={styles.diffHeading}>
-                        <strong>{side === 'before' ? 'Before' : 'After'}</strong>
+                        <strong>{side === 'before' ? t('Before') : t('After')}</strong>
                         <span>{side === 'before' ? beforeLabel : afterLabel}</span>
                         {side === 'after' && changes.length > 0 && (
                             <span>
                                 {activeChange < 0
-                                    ? `${changes.length} changes`
-                                    : `Change ${activeChange + 1} / ${changes.length}`}{' '}
+                                    ? t('{count} changes', { count: changes.length })
+                                    : t('Change {current} / {total}', { current: activeChange + 1, total: changes.length })}{' '}
                                 · n / N
                             </span>
                         )}
-                        {side === 'after' && error && <span role="status">{error}</span>}
+                        {side === 'after' && error && <span role="status">{t(error)}</span>}
                     </div>
                     <pre
                         ref={side === 'before' ? before : after}
                         tabIndex={0}
-                        aria-label={side === 'before' ? `${label} original` : label}
+                        aria-label={side === 'before' ? t('{label} original', { label }) : label}
                         data-git-scroll={side}
                         onKeyDown={(event) => {
                             if (

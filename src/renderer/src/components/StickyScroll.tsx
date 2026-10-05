@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { StickyScrollState } from '../../../shared/types';
 import type { Grid } from '../grid';
@@ -36,6 +37,7 @@ export default function StickyScroll({
     fontFamily: string;
     onError: (message: string) => void;
 }): React.JSX.Element | null {
+    const t = useI18n();
     const [model, setModel] = useState<Model>();
     const [peek, setPeek] = useState<number>();
     const hovered = useRef<number>(undefined);
@@ -142,7 +144,7 @@ export default function StickyScroll({
             className={styles.sticky}
             data-sticky-scroll={id}
             role="navigation"
-            aria-label="Sticky Scroll"
+            aria-label={t('Sticky Scroll')}
             style={{
                 top: model.top,
                 left: model.left,
@@ -197,8 +199,8 @@ export default function StickyScroll({
                                 transform: `translateY(${offset}px)`
                             }}
                             data-source-line={scope.line}
-                            aria-label={`Go to line ${ending ? scope.ending : scope.line}`}
-                            title="Jump to this scope · Shift: ending line · Alt+Shift+S: focus headers"
+                            aria-label={t('Go to line {line}', { line: ending ? scope.ending : scope.line })}
+                            title={t('Jump to this scope · Shift: ending line · Alt+Shift+S: focus headers')}
                             onPointerEnter={(event) => {
                                 hovered.current = scope.line;
                                 setPeek(event.shiftKey ? scope.line : undefined);

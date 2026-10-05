@@ -59,6 +59,7 @@ const api: NidoAPI = {
     debug: (id, action, target) => ipcRenderer.invoke('nido:debug', id, action, target),
     setLineEnding: (id, format) => ipcRenderer.invoke('nido:setLineEnding', id, format),
     setTheme: (theme) => ipcRenderer.invoke('nido:theme', theme),
+    setLanguage: (language) => ipcRenderer.invoke('nido:language', language),
     updateState: () => ipcRenderer.invoke('nido:updateState'),
     updateAction: (action) => ipcRenderer.invoke('nido:updateAction', action),
     windowAction: (action) => ipcRenderer.invoke('nido:window', action),

@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import type { DebugAction, DebugState } from '../../../shared/types';
 import { useEffect, useRef, useState } from 'react';
 import styles from '../assets/Nido.module.css';
@@ -13,6 +14,7 @@ export default function DebugPanel({
     onClose: () => void;
     action: (value: DebugAction, target?: number) => void;
 }): React.JSX.Element {
+    const t = useI18n();
     const panel = useRef<HTMLElement>(null);
     const variableList = useRef<HTMLDivElement>(null);
     const closePrefix = useRef(false);
@@ -59,7 +61,8 @@ export default function DebugPanel({
             ref={panel}
             tabIndex={-1}
             className={styles.debugPanel}
-            aria-label="Debugger"
+            data-debug-panel
+            aria-label={t('Debugger')}
             onFocusCapture={() => {
                 focused.current = true;
             }}
@@ -195,45 +198,45 @@ export default function DebugPanel({
         >
             <div className={styles.debugToolbar}>
                 <strong>
-                    {state?.kind === 'run' ? 'Run' : 'Debug'} · {state?.status || 'idle'}
+                    {state?.kind === 'run' ? t('Run') : t('Debug')} · {t(state?.status || 'idle')}
                 </strong>
                 <button
                     disabled={busy || state?.status === 'running'}
                     onClick={() => action('start')}
                 >
-                    ▶ {paused ? 'Continue' : 'Start'} <kbd>F5</kbd>
+                    ▶ {paused ? t('Continue') : t('Start')} <kbd>F5</kbd>
                 </button>
                 <button onClick={() => action('breakpoint')}>
-                    ● Breakpoint <kbd>F9</kbd>
+                    {t('● Breakpoint')} <kbd>F9</kbd>
                 </button>
                 <button disabled={!paused} onClick={() => action('over')}>
-                    Step over <kbd>F10</kbd>
+                    {t('Step over')} <kbd>F10</kbd>
                 </button>
                 <button disabled={!paused} onClick={() => action('into')}>
-                    Step into <kbd>F11</kbd>
+                    {t('Step into')} <kbd>F11</kbd>
                 </button>
                 <button disabled={!paused} onClick={() => action('out')}>
-                    Step out <kbd>Shift F11</kbd>
+                    {t('Step out')} <kbd>Shift F11</kbd>
                 </button>
                 <button
                     disabled={state?.kind === 'run' || state?.status !== 'running'}
                     onClick={() => action('pause')}
                 >
-                    Pause
+                    {t('Pause')}
                 </button>
                 <button
                     disabled={!state || ['idle', 'finished', 'error'].includes(state.status)}
                     onClick={() => action('stop')}
                 >
-                    Stop <kbd>Shift F5</kbd>
+                    {t('Stop')} <kbd>Shift F5</kbd>
                 </button>
-                <button aria-label="Hide debugger" onClick={onClose}>
-                    × Close <kbd>Space d</kbd>
+                <button aria-label={t('Hide debugger')} onClick={onClose}>
+                    {t('× Close')} <kbd>Space d</kbd>
                 </button>
             </div>
             {state?.status === 'select' && (
                 <div>
-                    Choose an executable:{' '}
+                    {t('Choose an executable:')}{' '}
                     {state.targets.map((target, i) => (
                         <button
                             data-debug-target
@@ -251,18 +254,17 @@ export default function DebugPanel({
             {state?.location && <div className={styles.debugLocation}>{state.location}</div>}
             <div className={styles.debugDetails}>
                 {state?.kind !== 'run' && (
-                    <div className={styles.debugVariables} aria-label="Debug variables">
+                    <div className={styles.debugVariables} aria-label={t('Debug variables')}>
                         <div className={styles.debugHeading}>
-                            <strong>Variables</strong>
+                            <strong>{t('Variables')}</strong>
                             <small>
-                                Ctrl+J Focus · Ctrl+K Editor · Ctrl+D/U Half page · j/k Move · h/l
-                                Expand
+                                {t('Ctrl+J Focus · Ctrl+K Editor · Ctrl+D/U Half page · j/k Move · h/l Expand')}
                             </small>
                         </div>
                         <div className={styles.debugColumns} aria-hidden="true">
-                            <span>Name</span>
-                            <span>Value</span>
-                            <span>Type</span>
+                            <span>{t('Name')}</span>
+                            <span>{t('Value')}</span>
+                            <span>{t('Type')}</span>
                         </div>
                         <div ref={variableList} className={styles.debugVariableScroll}>
                             {[...new Set(variables.map((value) => value.scope))].map((scope) => (
@@ -284,7 +286,7 @@ export default function DebugPanel({
                                                             : undefined
                                                     }
                                                     aria-selected={selectedId === value.id}
-                                                    aria-label={`${value.name} = ${value.value}${value.type ? ` (${value.type})` : ''}${value.changed ? ', changed' : ''}`}
+                                                    aria-label={`${value.name} = ${value.value}${value.type ? ` (${value.type})` : ''}${value.changed ? t(', changed') : ''}`}
                                                     aria-busy={value.loading}
                                                     tabIndex={selectedId === value.id ? 0 : -1}
                                                     className={styles.debugVariable}
@@ -316,7 +318,7 @@ export default function DebugPanel({
                                                         title={value.error || value.value}
                                                     >
                                                         {value.changed && (
-                                                            <span aria-label="Changed">● </span>
+                                                            <span aria-label={t('Changed')}>● </span>
                                                         )}
                                                         {value.value}
                                                         {value.loading ? ' …' : ''}
@@ -336,8 +338,8 @@ export default function DebugPanel({
                             {!variables.length && (
                                 <p>
                                     {paused
-                                        ? 'No local variables'
-                                        : 'Pause at a breakpoint to inspect variables.'}
+                                        ? t('No local variables')
+                                        : t('Pause at a breakpoint to inspect variables.')}
                                 </p>
                             )}
                         </div>
@@ -345,10 +347,10 @@ export default function DebugPanel({
                 )}
                 <div className={styles.debugConsole}>
                     <div className={styles.debugHeading}>
-                        <strong>Console</strong>
+                        <strong>{t('Console')}</strong>
                     </div>
-                    <pre aria-label="Debug output" tabIndex={0}>
-                        {state?.output || 'CodeLLDB · Save files, set a breakpoint and press F5.'}
+                    <pre aria-label={t('Debug output')} tabIndex={0}>
+                        {state?.output || t('CodeLLDB · Save files, set a breakpoint and press F5.')}
                         {state?.terminal && `\n${state.terminal}`}
                     </pre>
                 </div>

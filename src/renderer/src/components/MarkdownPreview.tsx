@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -9,6 +10,7 @@ export default function MarkdownPreview({
 }: {
     workspaceId: string;
 }): React.JSX.Element {
+    const t = useI18n();
     const [source, setSource] = useState<string>();
     const [error, setError] = useState('');
     const body = useRef<HTMLDivElement>(null);
@@ -36,7 +38,7 @@ export default function MarkdownPreview({
             ref={body}
             className={styles.markdownPreview}
             tabIndex={0}
-            aria-label="Markdown preview content"
+            aria-label={t('Markdown preview content')}
             onKeyDown={(event) => {
                 if (event.nativeEvent.isComposing || event.altKey || event.metaKey) {
                     return;
@@ -65,7 +67,7 @@ export default function MarkdownPreview({
                 {error ? (
                     <p role="alert">{error}</p>
                 ) : source === undefined ? (
-                    <p>Loading…</p>
+                    <p>{t('Loading…')}</p>
                 ) : (
                     <Markdown
                         remarkPlugins={[remarkGfm]}

@@ -1,9 +1,11 @@
+import { useI18n } from '../i18n';
 import { useEffect, useState } from 'react';
 import { ArrowDownToLine, Check, LoaderCircle, RefreshCw } from 'lucide-react';
 import type { UpdateAction, UpdateState } from '../../../shared/types';
 import styles from '../assets/UpdateButton.module.css';
 
 export default function UpdateButton(): React.JSX.Element {
+    const t = useI18n();
     const [update, setUpdate] = useState<UpdateState>();
     useEffect(() => {
         let active = true;
@@ -36,20 +38,20 @@ export default function UpdateButton(): React.JSX.Element {
     const busy = !update || ['checking', 'downloading', 'installing'].includes(update.status);
     const label =
         status === 'available'
-            ? 'Download update'
+            ? t('Download update')
             : status === 'downloaded'
-              ? 'Restart to update'
+              ? t('Restart to update')
               : status === 'checking'
-                ? 'Checking for updates'
+                ? t('Checking for updates')
                 : status === 'downloading'
-                  ? `Downloading update ${Math.floor(update?.percent ?? 0)}%`
+                  ? t('Downloading update {percent}%', { percent: Math.floor(update?.percent ?? 0) })
                   : status === 'installing'
-                    ? 'Restarting to update'
+                    ? t('Restarting to update')
                     : status === 'current'
-                      ? 'Nido is up to date'
+                      ? t('Nido is up to date')
                       : status === 'error'
-                        ? 'Retry update check'
-                        : 'Check for updates';
+                        ? t('Retry update check')
+                        : t('Check for updates');
     const Icon = busy
         ? LoaderCircle
         : status === 'downloaded'
@@ -67,7 +69,7 @@ export default function UpdateButton(): React.JSX.Element {
             data-update-status={status ?? 'loading'}
             aria-label={label}
             aria-busy={busy}
-            title={update?.message ?? `${label}${update?.version ? ` · ${update.version}` : ''}`}
+            title={update?.message ? t(update.message) : `${label}${update?.version ? ` · ${update.version}` : ''}`}
             disabled={busy || status === 'disabled'}
             onClick={() =>
                 void window.nido
@@ -84,8 +86,8 @@ export default function UpdateButton(): React.JSX.Element {
         >
             <Icon size={16} className={busy ? styles.spinner : undefined} />
             {status === 'downloading' && <span>{Math.floor(update?.percent ?? 0)}%</span>}
-            {status === 'downloaded' && <span>Restart to update</span>}
-            {status === 'available' && <span>Update</span>}
+            {status === 'downloaded' && <span>{t('Restart to update')}</span>}
+            {status === 'available' && <span>{t('Update')}</span>}
         </button>
     );
 }

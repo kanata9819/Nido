@@ -1,10 +1,14 @@
+import { useI18n } from '../i18n';
 import type { TerminalShell, UITheme } from '../../../shared/types';
 import type { EditorSettings } from '../hooks/useEditorSettings';
 import styles from '../assets/Nido.module.css';
+import type { Language } from '../../../shared/i18n';
 
 export type SettingsPanelProps = Omit<EditorSettings, 'sidebarWidth' | 'resizeSidebar'>;
 
 export default function SettingsPanel({
+    language,
+    setLanguage,
     theme,
     setTheme,
     wordWrap,
@@ -40,6 +44,7 @@ export default function SettingsPanel({
     lineHeight,
     setLineHeight
 }: SettingsPanelProps): React.JSX.Element {
+    const t = useI18n();
     return (
         <div
             className={styles.settings}
@@ -82,17 +87,28 @@ export default function SettingsPanel({
             }}
         >
             <label>
-                Theme
+                {t('Language')}
+                <select
+                    value={language}
+                    onChange={(event) => setLanguage(event.target.value as Language)}
+                >
+                    <option value="en">English</option>
+                    <option value="ja">日本語</option>
+                </select>
+            </label>
+            <small>{t('Choose English or Japanese. The selection is saved.')}</small>
+            <label>
+                {t('Theme')}
                 <select value={theme} onChange={(event) => setTheme(event.target.value as UITheme)}>
-                    <option value="dark">Dark Modern</option>
-                    <option value="acrylic">Dark Modern (Acrylic)</option>
+                    <option value="dark">{t('Dark Modern')}</option>
+                    <option value="acrylic">{t('Dark Modern (Acrylic)')}</option>
                 </select>
             </label>
             <small>
-                Dark Modern colors, with optional frosted surfaces. The selection is saved.
+                {t('Dark Modern colors, with optional frosted surfaces. The selection is saved.')}
             </small>
             <label>
-                Editor font size{' '}
+                {t('Editor font size')}{' '}
                 <input
                     autoFocus
                     type="number"
@@ -112,7 +128,7 @@ export default function SettingsPanel({
                 <span>px</span>
             </label>
             <label>
-                Editor line height{' '}
+                {t('Editor line height')}{' '}
                 <input
                     type="number"
                     min="8"
@@ -131,18 +147,18 @@ export default function SettingsPanel({
                 <span>px</span>
             </label>
             <label className={styles.fontFamilyField}>
-                Font family
+                {t('Font family')}
                 <input
                     type="text"
                     value={fontFamily}
-                    placeholder="Default editor font"
+                    placeholder={t('Default editor font')}
                     spellCheck={false}
                     autoComplete="off"
                     onChange={(event) => setFontFamily(event.target.value)}
                 />
             </label>
             <label>
-                Show file explorer{' '}
+                {t('Show file explorer')}{' '}
                 <input
                     type="checkbox"
                     checked={sidebar}
@@ -150,7 +166,7 @@ export default function SettingsPanel({
                 />
             </label>
             <label>
-                Format on save{' '}
+                {t('Format on save')}{' '}
                 <input
                     type="checkbox"
                     checked={formatOnSave}
@@ -158,16 +174,16 @@ export default function SettingsPanel({
                 />
             </label>
             <label>
-                Word wrap{' '}
+                {t('Word wrap')}{' '}
                 <input
                     type="checkbox"
                     checked={wordWrap}
                     onChange={(event) => setWordWrap(event.target.checked)}
                 />
             </label>
-            <small>Wrap long lines at the editor width. The selection is saved.</small>
+            <small>{t('Wrap long lines at the editor width. The selection is saved.')}</small>
             <label>
-                Sticky Scroll{' '}
+                {t('Sticky Scroll')}{' '}
                 <input
                     type="checkbox"
                     checked={stickyScroll}
@@ -175,11 +191,10 @@ export default function SettingsPanel({
                 />
             </label>
             <small>
-                Keep enclosing scopes visible. Click to jump; Shift-hover shows the ending.
-                Alt+Shift+S focuses the headers.
+                {t('Keep enclosing scopes visible. Click to jump; Shift-hover shows the ending. Alt+Shift+S focuses the headers.')}
             </small>
             <label>
-                Sticky Scroll maximum lines{' '}
+                {t('Sticky Scroll maximum lines')}{' '}
                 <input
                     type="number"
                     min="1"
@@ -194,16 +209,16 @@ export default function SettingsPanel({
                 />
             </label>
             <label>
-                Share system clipboard{' '}
+                {t('Share system clipboard')}{' '}
                 <input
                     type="checkbox"
                     checked={clipboardSharing}
                     onChange={(event) => setClipboardSharing(event.target.checked)}
                 />
             </label>
-            <small>Sync Vim copy, cut and paste (yy / dd / p) with the system clipboard.</small>
+            <small>{t('Sync Vim copy, cut and paste (yy / dd / p) with the system clipboard.')}</small>
             <label>
-                Cursor follows scrolling{' '}
+                {t('Cursor follows scrolling')}{' '}
                 <input
                     type="checkbox"
                     checked={scrollFollowCursor}
@@ -211,7 +226,7 @@ export default function SettingsPanel({
                 />
             </label>
             <label>
-                Relative line numbers{' '}
+                {t('Relative line numbers')}{' '}
                 <input
                     type="checkbox"
                     checked={relativeLineNumbers}
@@ -219,11 +234,10 @@ export default function SettingsPanel({
                 />
             </label>
             <small>
-                Off: absolute line numbers. On: distance from the cursor, with the current line
-                shown as an absolute number.
+                {t('Off: absolute line numbers. On: distance from the cursor, with the current line shown as an absolute number.')}
             </small>
             <label>
-                UI animations{' '}
+                {t('UI animations')}{' '}
                 <input
                     type="checkbox"
                     checked={animations}
@@ -231,7 +245,7 @@ export default function SettingsPanel({
                 />
             </label>
             <label>
-                Smooth cursor movement{' '}
+                {t('Smooth cursor movement')}{' '}
                 <input
                     type="checkbox"
                     checked={smoothCursor}
@@ -239,31 +253,31 @@ export default function SettingsPanel({
                 />
             </label>
             <label>
-                Smooth cursor blink{' '}
+                {t('Smooth cursor blink')}{' '}
                 <input
                     type="checkbox"
                     checked={smoothBlink}
                     onChange={(event) => setSmoothBlink(event.target.checked)}
                 />
             </label>
-            <h3>Terminal</h3>
+            <h3>{t('Terminal')}</h3>
             <label>
-                Shell
+                {t('Shell')}
                 <select
                     value={terminalShell}
                     onChange={(event) => setTerminalShell(event.target.value as TerminalShell)}
                 >
-                    <option value="auto">Auto (PowerShell)</option>
+                    <option value="auto">{t('Auto (PowerShell)')}</option>
                     <option value="pwsh">PowerShell 7 (pwsh)</option>
                     <option value="powershell.exe">Windows PowerShell</option>
-                    <option value="cmd.exe">Command Prompt (cmd)</option>
+                    <option value="cmd.exe">{t('Command Prompt (cmd)')}</option>
                     <option value="wsl.exe">WSL</option>
                 </select>
             </label>
-            <small>Applies to new terminals and Restart Shell. The selection is saved.</small>
-            <h3>Extensions</h3>
+            <small>{t('Applies to new terminals and Restart Shell. The selection is saved.')}</small>
+            <h3>{t('Extensions')}</h3>
             <label>
-                Use EditorConfig{' '}
+                {t('Use EditorConfig')}{' '}
                 <input
                     type="checkbox"
                     checked={editorConfig}
@@ -271,13 +285,12 @@ export default function SettingsPanel({
                 />
             </label>
             <small>
-                Apply the project&apos;s .editorconfig to indentation, line endings and save rules.
+                {t('Apply the project\'s .editorconfig to indentation, line endings and save rules.')}
             </small>
             <p>
-                Tab / ↑ ↓ / j k: Move · ← →: Adjust · Space / Enter: Toggle · Esc: Close
+                {t('Tab / ↑ ↓ / j k: Move · ← →: Adjust · Space / Enter: Toggle · Esc: Close')}
                 <br />
-                Nido includes its own Neovim and editor settings. Personal Neovim config is not
-                loaded.
+                {t('Nido includes its own Neovim and editor settings. Personal Neovim config is not loaded.')}
             </p>
         </div>
     );

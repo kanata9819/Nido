@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import type { GitView } from '../types';
 import type { RefObject } from 'react';
 import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
@@ -30,6 +31,7 @@ export default function GitBrowserList({
     open: () => void;
     setCreating: (creating: boolean) => void;
 }): React.JSX.Element {
+    const t = useI18n();
     return (
         <div
             className={`${styles.list} ${view === 'branches' || (view === 'history' && !commit) ? styles.historyList : ''}`}
@@ -105,10 +107,10 @@ export default function GitBrowserList({
                             </strong>
                             <div className={styles.commitMeta}>
                                 <span className={styles.branchBadge}>
-                                    {branches[position].remote ? 'Remote' : 'Local'}
+                                    {branches[position].remote ? t('Remote') : t('Local')}
                                 </span>
                                 {branches[position].current && (
-                                    <span className={styles.currentBadge}>Current</span>
+                                    <span className={styles.currentBadge}>{t('Current')}</span>
                                 )}
                             </div>
                         </>
@@ -120,10 +122,10 @@ export default function GitBrowserList({
             {!labels.length && !busy && (
                 <p>
                     {commit
-                        ? 'No changed files.'
+                        ? t('No changed files.')
                         : view === 'history'
-                          ? 'No commits yet.'
-                          : 'No branches yet. Press n to create one.'}
+                          ? t('No commits yet.')
+                          : t('No branches yet. Press n to create one.')}
                 </p>
             )}
         </div>

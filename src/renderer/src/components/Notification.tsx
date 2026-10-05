@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { CircleAlert, Info, X } from 'lucide-react';
 import type { NidoEvent } from '../../../shared/types';
@@ -13,6 +14,7 @@ export default function Notification({
     workspaceId: string;
     animations: boolean;
 }): React.JSX.Element | null {
+    const t = useI18n();
     const [notice, setNotice] = useState<Notice>();
     const [previousWorkspace, setPreviousWorkspace] = useState(workspaceId);
     if (workspaceId !== previousWorkspace) {
@@ -43,15 +45,15 @@ export default function Notification({
             data-animations={animations}
             data-fading={fading}
             role={notice.severity === 'info' ? 'status' : 'alert'}
-            aria-label={notice.title}
+            aria-label={t(notice.title)}
         >
             <Icon size={19} className={styles.icon} aria-hidden="true" />
             <div className={styles.content}>
-                <strong>{notice.title}</strong>
-                <p>{notice.message}</p>
-                <small>Esc to dismiss</small>
+                <strong>{t(notice.title)}</strong>
+                <p>{t(notice.message)}</p>
+                <small>{t('Esc to dismiss')}</small>
             </div>
-            <button aria-label="Dismiss notification" onClick={() => setNotice(undefined)}>
+            <button aria-label={t('Dismiss notification')} onClick={() => setNotice(undefined)}>
                 <X size={16} />
             </button>
         </aside>

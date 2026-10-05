@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { Leaf, Minus, Plus, Square, Star, X } from 'lucide-react';
 import type { FavoriteWorkspace, Workspace } from '../../../shared/types';
 import styles from '../assets/Nido.module.css';
@@ -28,13 +29,14 @@ export default function TitleBar({
     create,
     run
 }: TitleBarProps): React.JSX.Element {
+    const t = useI18n();
     return (
         <header className={styles.titlebar}>
             <div className={styles.brand}>
                 <Leaf size={22} />
                 <span>Nido</span>
             </div>
-            <div className={styles.workspaces} role="tablist" aria-label="Workspaces">
+            <div className={styles.workspaces} role="tablist" aria-label={t('Workspaces')}>
                 {workspaces.map((w, i) => (
                     <div
                         key={w.id}
@@ -43,7 +45,7 @@ export default function TitleBar({
                         <button
                             role="tab"
                             aria-selected={active === w.id}
-                            aria-label={`Workspace ${w.name}`}
+                            aria-label={t('Workspace {name}', { name: w.name })}
                             onClick={() => activate(w.id)}
                         >
                             <span
@@ -57,11 +59,11 @@ export default function TitleBar({
                         </button>
                         <button
                             className={`${styles.tabClose} ${styles.favoriteToggle}`}
-                            aria-label={`Favorite workspace ${w.name}`}
+                            aria-label={t('Favorite workspace {name}', { name: w.name })}
                             aria-pressed={favorites.some(
                                 (f) => f.root === w.root && f.kind === (w.kind || 'editor')
                             )}
-                            title="Toggle favorite"
+                            title={t('Toggle favorite')}
                             disabled={favoriteBusy}
                             onClick={() => toggleFavorite(w)}
                         >
@@ -69,7 +71,7 @@ export default function TitleBar({
                         </button>
                         <button
                             className={styles.tabClose}
-                            aria-label={`Close workspace ${w.name}`}
+                            aria-label={t('Close workspace {name}', { name: w.name })}
                             onClick={() => closeWorkspace(w.id)}
                         >
                             <X size={12} />
@@ -78,8 +80,8 @@ export default function TitleBar({
                 ))}
                 <button
                     className={styles.addWorkspace}
-                    title="Open workspace (Ctrl+Shift+N)"
-                    aria-label="Open workspace"
+                    title={t('Open workspace (Ctrl+Shift+N)')}
+                    aria-label={t('Open workspace')}
                     disabled={creating}
                     onClick={() => void create()}
                 >
@@ -90,19 +92,19 @@ export default function TitleBar({
             <UpdateButton />
             <div className={styles.windowControls}>
                 <button
-                    aria-label="Minimize"
+                    aria-label={t('Minimize')}
                     onClick={() => run(window.nido.windowAction('minimize'))}
                 >
                     <Minus size={15} />
                 </button>
                 <button
-                    aria-label="Maximize or restore"
+                    aria-label={t('Maximize or restore')}
                     onClick={() => run(window.nido.windowAction('maximize'))}
                 >
                     <Square size={12} />
                 </button>
                 <button
-                    aria-label="Close Nido"
+                    aria-label={t('Close Nido')}
                     onClick={() => run(window.nido.windowAction('close'))}
                 >
                     <X size={17} />

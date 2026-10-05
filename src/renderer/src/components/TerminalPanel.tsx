@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import Editor from '../Editor';
 import { defaultFontFamily, type EditorSettings } from '../hooks/useEditorSettings';
 import styles from '../assets/Nido.module.css';
@@ -23,20 +24,21 @@ export default function TerminalPanel({
     onClose: () => void;
     onError: (message: string) => void;
 }): React.JSX.Element {
+    const t = useI18n();
     const { fontSize, lineHeight, fontFamily, smoothCursor, smoothBlink } = settings;
     return (
-        <section className={styles.terminalPanel} aria-label="Terminal" hidden={!active}>
+        <section className={styles.terminalPanel} aria-label={t('Terminal')} hidden={!active}>
             <div className={styles.referencesToolbar}>
-                <strong>Terminal · {name}</strong>
-                <span>Ctrl+@ Toggle · Ctrl+K Editor</span>
+                <strong>{t('Terminal ·')} {name}</strong>
+                <span>{t('Ctrl+@ Toggle · Ctrl+K Editor')}</span>
                 <button
                     className={styles.restartShell}
-                    title="Restart shell (Ctrl+Shift+R)"
+                    title={t('Restart shell (Ctrl+Shift+R)')}
                     onClick={() => restartShell(id)}
                 >
-                    Restart shell <kbd>Ctrl Shift R</kbd>
+                    {t('Restart shell')} <kbd>Ctrl Shift R</kbd>
                 </button>
-                <button aria-label="Hide terminal" onClick={onClose}>
+                <button aria-label={t('Hide terminal')} onClick={onClose}>
                     ×
                 </button>
             </div>

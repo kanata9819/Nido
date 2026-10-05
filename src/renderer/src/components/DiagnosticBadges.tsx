@@ -1,12 +1,14 @@
 import { CircleX, TriangleAlert } from 'lucide-react';
 import type { Decoration } from '../fileDecorations';
 import styles from '../assets/Nido.module.css';
+import { useI18n } from '../i18n';
 
 export default function DiagnosticBadges({
     decoration
 }: {
     decoration?: Decoration;
 }): React.JSX.Element {
+    const t = useI18n();
     return (
         <>
             {(
@@ -20,8 +22,8 @@ export default function DiagnosticBadges({
                         key={severity}
                         className={styles.diagnosticCount}
                         data-diagnostic={severity}
-                        title={`${count} ${severity}${count === 1 ? '' : 's'}`}
-                        aria-label={`${count} ${severity}${count === 1 ? '' : 's'}`}
+                        title={t(`{count} ${severity}${count === 1 ? '' : 's'}`, { count })}
+                        aria-label={t(`{count} ${severity}${count === 1 ? '' : 's'}`, { count })}
                     >
                         <Icon size={12} aria-hidden="true" />
                         {count}

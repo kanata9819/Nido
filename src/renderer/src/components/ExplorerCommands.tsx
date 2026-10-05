@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Command, X } from 'lucide-react';
 import type { FileAction } from '../../../shared/types';
@@ -23,6 +24,7 @@ export default function ExplorerCommands({
     onClose: () => void;
     onDone: (path: string) => void;
 }): React.JSX.Element {
+    const t = useI18n();
     const dialog = useRef<HTMLDialogElement>(null);
     const field = useRef<HTMLInputElement>(null);
     const [value, setValue] = useState(request?.value || '');
@@ -55,7 +57,7 @@ export default function ExplorerCommands({
             const path = creating ? value : request.path;
             const renaming = request.title === 'Rename';
             if (renaming && /[\\/]/.test(value)) {
-                throw new Error('Enter a name. Use Move to… to change folders.');
+                throw new Error(t('Enter a name. Use Move to… to change folders.'));
             }
             const target = renaming ? request.path.replace(/[^\\/]+$/, '') + value : value;
             await window.nido.fileAction(
@@ -83,7 +85,7 @@ export default function ExplorerCommands({
             ref={dialog}
             className={`${styles.palette} ${styles.explorerDialog}`}
             data-explorer-commands
-            aria-label="Explorer commands"
+            aria-label={t('Explorer commands')}
             onCancel={(event) => {
                 event.preventDefault();
                 if (!busy) {
@@ -129,8 +131,8 @@ export default function ExplorerCommands({
         >
             <div className={styles.paletteHeading}>
                 <Command size={17} />
-                <span>{request?.title || 'Explorer commands'}</span>
-                <button aria-label="Close explorer commands" disabled={busy} onClick={onClose}>
+                <span>{t(request?.title || 'Explorer commands')}</span>
+                <button aria-label={t('Close explorer commands')} disabled={busy} onClick={onClose}>
                     <X size={17} />
                 </button>
             </div>
@@ -144,12 +146,12 @@ export default function ExplorerCommands({
                 >
                     {request.action === 'delete' ? (
                         <p>
-                            Move <strong>{request.path}</strong> to the recycle bin?
+                            {t('Move {path} to the recycle bin?', { path: request.path })}
                         </p>
                     ) : (
                         <>
                             <label htmlFor="explorer-path">
-                                {request.title === 'Rename' ? 'Name' : 'Workspace-relative path'}
+                                {request.title === 'Rename' ? t('Name') : t('Workspace-relative path')}
                             </label>
                             <input
                                 id="explorer-path"
@@ -166,7 +168,7 @@ export default function ExplorerCommands({
                     {error && <p role="alert">{error}</p>}
                     <div className={styles.explorerActions}>
                         <button type="button" disabled={busy} onClick={onClose}>
-                            Cancel
+                            {t('Cancel')}
                         </button>
                         <button
                             type="submit"
@@ -174,10 +176,10 @@ export default function ExplorerCommands({
                             autoFocus={request.action === 'delete'}
                         >
                             {busy
-                                ? 'Working…'
+                                ? t('Working…')
                                 : request.action === 'delete'
-                                  ? 'Move to recycle bin'
-                                  : 'Apply'}
+                                  ? t('Move to recycle bin')
+                                  : t('Apply')}
                         </button>
                     </div>
                 </form>
@@ -191,7 +193,7 @@ export default function ExplorerCommands({
                             onClick={item.run}
                         >
                             <span>
-                                <strong>{item.title}</strong>
+                                <strong>{t(item.title)}</strong>
                             </span>
                             <kbd>{item.key}</kbd>
                         </button>

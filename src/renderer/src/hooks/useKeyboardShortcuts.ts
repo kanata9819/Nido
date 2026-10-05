@@ -86,14 +86,14 @@ export function useKeyboardShortcuts({
             event.preventDefault();
             event.stopPropagation();
         };
-        const focusedLabel = document.activeElement?.getAttribute('aria-label');
-        const terminalFocused = focusedLabel === 'Terminal input';
+        const focusedInput = document.activeElement?.getAttribute('data-editor-input');
+        const terminalFocused = focusedInput === 'terminal';
         // Redraw mode notifications can trail rapid input. Check the actual mode before
         // consuming text as a Normal-mode UI shortcut, retaining following keys in order.
         if (
             !replayed.current.has(event) &&
             (checkingMode.current ||
-                (focusedLabel === 'Neovim input' && !panel && !leader && needsMode(event)))
+                (focusedInput === 'editor' && !panel && !leader && needsMode(event)))
         ) {
             consume();
             queued.current.push(
@@ -120,8 +120,8 @@ export function useKeyboardShortcuts({
                                 const next = queued.current.shift()!;
                                 const context = current.current;
                                 if (
-                                    document.activeElement?.getAttribute('aria-label') ===
-                                        'Neovim input' &&
+                                    document.activeElement?.getAttribute('data-editor-input') ===
+                                        'editor' &&
                                     !context.panel &&
                                     !context.leader &&
                                     needsMode(next)
@@ -152,7 +152,7 @@ export function useKeyboardShortcuts({
         }
         const isNormalMode = (mode.current[active] || 'normal') === 'normal';
         if (
-            focusedLabel === 'Neovim input' &&
+            focusedInput === 'editor' &&
             isNormalMode &&
             event.ctrlKey &&
             !event.altKey &&
@@ -171,7 +171,7 @@ export function useKeyboardShortcuts({
             if (terminalFocused && !panel) {
                 return;
             }
-            if (document.activeElement?.closest('[aria-label="References"]')) {
+            if (document.activeElement?.closest('[data-references-panel]')) {
                 consume();
                 closeReferences();
                 return;
@@ -183,7 +183,7 @@ export function useKeyboardShortcuts({
                 return;
             }
 
-            if (panel || leader || focusedLabel !== 'Neovim input') {
+            if (panel || leader || focusedInput !== 'editor') {
                 consume();
                 focusEditor();
                 return;
@@ -263,7 +263,7 @@ export function useKeyboardShortcuts({
                 action = 'stop';
             }
             run(window.nido.debug(active, action));
-            if (!document.activeElement?.closest('[aria-label="Debugger"]')) {
+            if (!document.activeElement?.closest('[data-debug-panel]')) {
                 focusEditor();
             }
             return;
@@ -291,7 +291,7 @@ export function useKeyboardShortcuts({
             !event.metaKey &&
             !event.shiftKey &&
             ['h', 'j', 'k', 'l'].includes(event.key.toLowerCase()) &&
-            !(event.key.toLowerCase() === 'k' && focusedLabel === 'Neovim input')
+            !(event.key.toLowerCase() === 'k' && focusedInput === 'editor')
         ) {
             consume();
             if (event.key.toLowerCase() === 'h') {
@@ -378,7 +378,7 @@ export function useKeyboardShortcuts({
             !event.altKey &&
             !event.metaKey &&
             ['H', 'L'].includes(event.key) &&
-            focusedLabel === 'Neovim input' &&
+            focusedInput === 'editor' &&
             isNormalMode &&
             state.buffers.length > 0
         ) {
@@ -394,7 +394,7 @@ export function useKeyboardShortcuts({
             event.key === ' ' &&
             !event.ctrlKey &&
             !event.altKey &&
-            focusedLabel === 'Neovim input' &&
+            focusedInput === 'editor' &&
             isNormalMode
         ) {
             consume();

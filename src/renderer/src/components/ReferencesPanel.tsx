@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReferenceList, ReferencePreview } from '../../../shared/types';
@@ -28,12 +29,13 @@ function ReferencePreviewContent({
     data,
     error
 }: Omit<PreviewContent, 'key' | 'index'>): React.JSX.Element {
+    const t = useI18n();
     return (
         <>
             <header>
                 <FileIcon path={item.path} />
                 <strong title={item.path}>{item.path.replaceAll('\\', '/')}</strong>
-                <span>Ln {item.line} · Enter to jump</span>
+                <span>{t('Ln {line} · Enter to jump', { line: item.line })}</span>
             </header>
             <div className={styles.referencePreviewCode}>
                 {data ? (
@@ -50,7 +52,7 @@ function ReferencePreviewContent({
                         </div>
                     ))
                 ) : (
-                    <p>{error || 'Loading preview…'}</p>
+                    <p>{error || t('Loading preview…')}</p>
                 )}
             </div>
         </>
@@ -67,6 +69,7 @@ export default function ReferencesPanel({
     onClose,
     onOpen
 }: Props): React.JSX.Element {
+    const t = useI18n();
     const list = useRef<HTMLDivElement>(null);
     const [selected, setSelected] = useState(0);
     const [focused, setFocused] = useState(false);
@@ -151,7 +154,8 @@ export default function ReferencesPanel({
     return (
         <section
             className={styles.referencesPanel}
-            aria-label="References"
+            data-references-panel
+            aria-label={t('References')}
             hidden={!visible}
             onFocus={() => setFocused(true)}
             onBlur={(event) => {
@@ -187,7 +191,7 @@ export default function ReferencesPanel({
                 createPortal(
                     <section
                         className={styles.referencePreview}
-                        aria-label="Reference preview"
+                        aria-label={t('Reference preview')}
                         aria-busy={preview?.key !== previewKey}
                     >
                         <div ref={currentContent} className={styles.referencePreviewContent}>
@@ -198,10 +202,10 @@ export default function ReferencesPanel({
                 )}
             <div className={styles.referencesToolbar}>
                 <strong>
-                    References <span>{state.loading ? 'Searching…' : state.items.length}</span>
+                    {t('References')} <span>{state.loading ? t('Searching…') : state.items.length}</span>
                 </strong>
-                <span>j/k Select · Enter Jump · Ctrl+J Return · Esc / Space d Close</span>
-                <button aria-label="Hide references" onClick={onClose}>
+                <span>{t('j/k Select · Enter Jump · Ctrl+J Return · Esc / Space d Close')}</span>
+                <button aria-label={t('Hide references')} onClick={onClose}>
                     ×
                 </button>
             </div>
@@ -209,7 +213,7 @@ export default function ReferencesPanel({
                 ref={list}
                 className={styles.referencesList}
                 role="listbox"
-                aria-label="Reference results"
+                aria-label={t('Reference results')}
                 data-reference-version={state.version}
                 tabIndex={0}
                 aria-busy={state.loading}
@@ -272,7 +276,7 @@ export default function ReferencesPanel({
                 })}
                 {state.error && <p role="alert">{state.error}</p>}
                 {!state.loading && !state.error && !state.items.length && (
-                    <p>No references found.</p>
+                    <p>{t('No references found.')}</p>
                 )}
             </div>
         </section>

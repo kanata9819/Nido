@@ -5,6 +5,7 @@ import { Session } from './session';
 import { readFavorites, readLayout, writeFavorites, writeLayout } from './persistence';
 import type { TerminalShell } from '../shared/types';
 import type { HandlerDeps } from './handlers';
+import { createTranslator } from '../shared/i18n';
 
 export function registerWorkspaceHandlers({
     window,
@@ -60,12 +61,13 @@ export function registerWorkspaceHandlers({
         if (!(await s.modified())) {
             return true;
         }
+        const t = createTranslator(state.language ?? 'en');
         const { response } = await dialog.showMessageBox(window, {
             type: 'warning',
-            title: 'Unsaved changes',
-            message: `Save changes in ${s.workspace.name}?`,
-            detail: 'Save all files before closing this workspace. Untitled buffers need a filename (:w path).',
-            buttons: ['Save all', 'Cancel', 'Discard changes'],
+            title: t('Unsaved changes'),
+            message: t('Save changes in {name}?', { name: s.workspace.name }),
+            detail: t('Save all files before closing this workspace. Untitled buffers need a filename (:w path).'),
+            buttons: [t('Save all'), t('Cancel'), t('Discard changes')],
             defaultId: 0,
             cancelId: 1,
             noLink: true
