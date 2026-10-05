@@ -3513,7 +3513,9 @@ test('keyboard-only workspace switching, editing, saving and dirty-close guard',
             'rgb(201, 166, 230)'
         );
         await page.keyboard.press('Escape');
+        await expect(page.getByText('NORMAL', { exact: true })).toBeVisible();
         await page.keyboard.type('Go');
+        await expect(page.getByText('INSERT', { exact: true })).toBeVisible();
         await page.locator('textarea:visible').evaluate((element) => {
             const input = element as HTMLTextAreaElement;
             input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
@@ -3526,6 +3528,10 @@ test('keyboard-only workspace switching, editing, saving and dirty-close guard',
             );
             input.dispatchEvent(new InputEvent('input', { bubbles: true, data: '日本語入力' }));
         });
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /日本語入力/
+        );
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
         await expect

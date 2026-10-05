@@ -186,7 +186,11 @@ test(windowsBaselineCases[1], async () => {
                 delete (state as Partial<typeof state>).nidoBaselineClipboard;
             });
         }
+        // Synthetic IME events need the preceding Vim command to finish before composition.
+        await expect(input).toBeFocused();
+        await expect(page.getByText('NORMAL', { exact: true })).toBeVisible();
         await page.keyboard.type('Go');
+        await expect(page.getByText('INSERT', { exact: true })).toBeVisible();
         await input.evaluate((node) => {
             const textarea = node as HTMLTextAreaElement;
             textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
@@ -199,6 +203,9 @@ test(windowsBaselineCases[1], async () => {
             );
             textarea.dispatchEvent(new InputEvent('input', { bubbles: true, data: '日本語入力' }));
         });
+        await expect(
+            page.locator('canvas[aria-label="Neovim editor display"]:visible')
+        ).toHaveAttribute('aria-description', /日本語入力/);
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
         await expect

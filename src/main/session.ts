@@ -637,10 +637,16 @@ return false`,
         await this.write('wall');
     }
 
-    private async write(command: 'write' | 'wall', format = false): Promise<void> {
-        await this.restoreScroll();
-        const error = (await this.client.request('nvim_exec_lua', [
-            `local command, format = ...
+    private write(command: 'write' | 'wall', format = false): Promise<void> {
+        // Saving must follow committed input and precede any subsequently queued edits.
+        const next = this.inputQueue.then(async () => {
+            if (this.stopped) {
+                throw new Error('Neovim session is closed.');
+            }
+            await this.restoreScroll();
+            const writing = this.client
+                .request('nvim_exec_lua', [
+                    `local command, format = ...
 local ok, err = pcall(function()
   if format and #vim.lsp.get_clients({bufnr=0, method='textDocument/formatting'}) > 0 then
     vim.lsp.buf.format({bufnr=0, async=false, timeout_ms=3000})
@@ -648,11 +654,27 @@ local ok, err = pcall(function()
   vim.cmd({cmd=command, mods={silent=true}})
 end)
 return ok and "" or tostring(err)`,
-            [command, format]
-        ])) as string;
-        if (error) {
-            throw new Error(error);
-        }
+                    [command, format]
+                ])
+                .then((error) => {
+                    if (error) {
+                        throw new Error(error as string);
+                    }
+                });
+            // A deferred write cannot complete while r/f/getchar waits for its next key.
+            // Let that key through while still returning the write's actual completion.
+            void writing.catch(() => {});
+            const mode = (await this.client.request('nvim_get_mode', [])) as { blocking: boolean };
+            if (!mode.blocking) {
+                await writing;
+            }
+            return { writing };
+        });
+        this.inputQueue = next.then(
+            () => {},
+            () => {}
+        );
+        return next.then(({ writing }) => writing);
     }
 
     async selectBuffer(buffer: number): Promise<void> {

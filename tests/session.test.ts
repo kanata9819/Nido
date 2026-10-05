@@ -2586,6 +2586,83 @@ test('pasting preserves the order of preceding and following keyboard input', as
     }
 });
 
+test('save and save all wait for pending committed input', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-save-input-order-'));
+    try {
+        for (const command of ['save', 'saveAll'] as const) {
+            const file = join(root, 'file.txt');
+            await writeFile(file, 'original\n');
+            const session = await Session.create(root, () => {});
+            let release!: () => void;
+            let started!: () => void;
+            const gate = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            const inputStarted = new Promise<void>((resolve) => {
+                started = resolve;
+            });
+            try {
+                await session.openFile('file.txt');
+                const request = session.client.request.bind(session.client);
+                session.client.request = async (name, args = []) => {
+                    if (name === 'nvim_input' && args[0] === 'i') {
+                        started();
+                        await gate;
+                    }
+                    return request(name, args);
+                };
+                const opening = session.input('i');
+                await inputStarted;
+                const text = session.input('日本語入力<Esc>');
+                const saving = session[command]();
+                // Let an incorrectly unqueued write reach Neovim before releasing input.
+                await new Promise<void>((resolve) => setImmediate(resolve));
+                await request('nvim_eval', ['1']);
+                release();
+                await Promise.all([opening, text, saving]);
+                assert.equal(await readFile(file, 'utf8'), '日本語入力original\n', command);
+            } finally {
+                release();
+                await session.stop();
+            }
+        }
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test(
+    'saving while a Vim command waits for a key keeps subsequent input available',
+    { timeout: 10000 },
+    async () => {
+        const root = await mkdtemp(join(tmpdir(), 'nido-save-pending-command-'));
+        let session: Session | undefined;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+            await writeFile(join(root, 'file.txt'), 'original\n');
+            session = await Session.create(root, () => {});
+            await session.openFile('file.txt');
+            await session.input('0r');
+            assert.equal(await session.inputMode(), 'R');
+            await Promise.race([
+                Promise.all([session.save(), session.input('X<Esc>')]),
+                new Promise<never>((_resolve, reject) => {
+                    timer = setTimeout(
+                        () => reject(new Error('Saving blocked subsequent input.')),
+                        2000
+                    );
+                })
+            ]);
+            assert.equal(await session.client.request('nvim_get_current_line', []), 'Xriginal');
+        } finally {
+            clearTimeout(timer);
+            await session?.client.request('nvim_input', ['<Esc>']).catch(() => {});
+            await session?.stop();
+            await rm(root, { recursive: true, force: true });
+        }
+    }
+);
+
 test('two real Neovim sessions edit, save, switch buffers and isolate state', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-test-'));
     const sessions: Session[] = [];
