@@ -1,7 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
 import { electron } from './helpers/electron';
+import { readSavedFile } from './helpers/files';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -474,12 +475,12 @@ test('explorer commands create, rename, copy, move and recycle files from the ke
         await page.keyboard.type('A!');
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
-        await expect.poll(() => readFile(join(workspace, 'renamed.txt'), 'utf8')).toBe('hello!\n');
+        await expect.poll(() => readSavedFile(join(workspace, 'renamed.txt'))).toBe('hello!\n');
         await tree.focus();
         await page.keyboard.press('Control+c');
         await page.keyboard.press('Control+v');
         await apply('copy.txt');
-        await expect.poll(() => readFile(join(workspace, 'copy.txt'), 'utf8')).toBe('hello!\n');
+        await expect.poll(() => readSavedFile(join(workspace, 'copy.txt'))).toBe('hello!\n');
         await page.keyboard.type(':');
         await expect(menu).toBeVisible();
         await menu.screenshot({ path: 'test-results/explorer-commands.png' });
@@ -494,7 +495,7 @@ test('explorer commands create, rename, copy, move and recycle files from the ke
         await page.keyboard.press('Control+v');
         await apply('nested/renamed.txt');
         await expect
-            .poll(() => readFile(join(workspace, 'nested/renamed.txt'), 'utf8'))
+            .poll(() => readSavedFile(join(workspace, 'nested/renamed.txt')))
             .toBe('hello!\n');
         await expect(
             tree.getByRole('treeitem', { name: 'renamed.txt', exact: true })
@@ -803,7 +804,7 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
         await expect
-            .poll(() => readFile(join(workspace, 'main.ts'), 'utf8'))
+            .poll(() => readSavedFile(join(workspace, 'main.ts')))
             .toContain('amount.toFixed');
         await page.keyboard.type(':');
         await expect(page.getByText('COMMAND', { exact: true })).toBeVisible();
@@ -816,7 +817,7 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
         await expect
-            .poll(() => readFile(join(workspace, 'note.txt'), 'utf8'))
+            .poll(() => readSavedFile(join(workspace, 'note.txt')))
             .toMatch(/^ {2}plain\r?\n$/);
         await page.keyboard.type(':');
         await expect(page.getByText('COMMAND', { exact: true })).toBeVisible();
@@ -833,7 +834,7 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
         await expect
-            .poll(() => readFile(join(workspace, 'main.ts'), 'utf8'))
+            .poll(() => readSavedFile(join(workspace, 'main.ts')))
             .toMatch(/\ngetUser\r?\n$/);
     } finally {
         await running.evaluate(({ app }) => app.exit(0));
@@ -899,8 +900,13 @@ test('Markdown preview renders unsaved edits and supports keyboard scrolling and
         await expect(page.getByRole('button', { name: /preview.md/ })).toBeVisible();
         await page.keyboard.press('Enter');
         await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /Preview/);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
         await page.keyboard.type('Go## Unsaved heading');
         await page.keyboard.press('Escape');
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /Unsaved heading/
+        );
         await page.keyboard.press('Control+Shift+v');
         const popup = page.getByRole('dialog', { name: 'markdown palette' });
         const content = page.getByLabel('Markdown preview content', { exact: true });
@@ -1512,7 +1518,7 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
         await page.keyboard.press('Escape');
         await page.keyboard.type(':w');
         await page.keyboard.press('Enter');
-        await expect.poll(() => readFile(join(root, 'click.txt'), 'utf8')).toContain('\tXΩtarget');
+        await expect.poll(() => readSavedFile(join(root, 'click.txt'))).toContain('\tXΩtarget');
     } catch (error) {
         running.process().kill();
         throw error;
@@ -1552,6 +1558,9 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await page.keyboard.press('ArrowUp');
         await expect(size).toHaveValue(String(initial + 1));
         await page.keyboard.press('j');
+        const lineHeight = page.getByRole('spinbutton', { name: 'Editor line height' });
+        await expect(lineHeight).toBeFocused();
+        await page.keyboard.press('j');
         const family = page.getByRole('textbox', { name: 'Font family' });
         await expect(family).toBeFocused();
         await page.keyboard.press('Control+a');
@@ -1571,7 +1580,11 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await page.keyboard.press('Shift+Tab');
         await expect(family).toBeFocused();
         await page.keyboard.press('Shift+Tab');
+        await expect(lineHeight).toBeFocused();
+        await page.keyboard.press('Shift+Tab');
         await expect(size).toBeFocused();
+        await page.keyboard.press('Shift+Tab');
+        await expect(page.getByRole('combobox', { name: 'Theme', exact: true })).toBeFocused();
         await page.keyboard.press('Shift+Tab');
         await expect(page.getByRole('button', { name: 'Close palette' })).toBeFocused();
         await page.keyboard.press('Shift+Tab');
@@ -1772,9 +1785,13 @@ test('window size and maximized state survive restart', async () => {
     try {
         running = await electron.launch(options);
         await running.firstWindow();
-        await running.evaluate(({ BrowserWindow }) =>
-            BrowserWindow.getAllWindows()[0].setSize(1040, 680)
-        );
+        await running.evaluate(({ BrowserWindow, screen }) => {
+            const area = screen.getPrimaryDisplay().workAreaSize;
+            BrowserWindow.getAllWindows()[0].setSize(
+                Math.min(1000, area.width),
+                Math.min(680, area.height)
+            );
+        });
         const originalSize = await running.evaluate(({ BrowserWindow }) =>
             BrowserWindow.getAllWindows()[0].getSize()
         );
@@ -1851,6 +1868,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
             await page.keyboard.press('Control+l');
             await expect(preview).toBeFocused();
             const top = (): Promise<number> => preview.evaluate((node) => node.scrollTop);
+            const viewportHeight = await preview.evaluate((node) => node.clientHeight);
             const original = page.getByLabel(`${label} original`, { exact: true });
             await page.keyboard.press('g');
             await page.keyboard.press('j');
@@ -1862,7 +1880,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
                 ['Control+f', 'Control+b']
             ]) {
                 await page.keyboard.press(down);
-                await expect.poll(top).toBeGreaterThan(100);
+                await expect.poll(top).toBeGreaterThan(viewportHeight * 0.4);
                 await page.keyboard.press(up);
                 await expect.poll(top).toBeLessThan(1);
             }
@@ -2106,7 +2124,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
         await page.keyboard.press('Escape');
         await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
         await page.keyboard.press('Control+s');
-        await expect.poll(() => readFile(join(repository, 'main.rs'), 'utf8')).toContain('unsaved');
+        await expect.poll(() => readSavedFile(join(repository, 'main.rs'))).toContain('unsaved');
         await expect(fileTabs.getByLabel('Git: Modified', { exact: true })).toHaveText('M');
         await expect(explorer.getByLabel('Git: Modified', { exact: true })).toHaveText('M');
         await expect(explorer.getByText('main.rs', { exact: true })).toHaveCSS(
@@ -2210,6 +2228,7 @@ test('Problems can be selected, filtered, opened and cleared with the keyboard',
 });
 
 async function chooseWorkspace(page: Page, path: string, navigate = false): Promise<void> {
+    const canonicalPath = await realpath(path);
     await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
         'aria-busy',
         'false'
@@ -2235,7 +2254,7 @@ async function chooseWorkspace(page: Page, path: string, navigate = false): Prom
             'false'
         );
         await page.keyboard.press('h');
-        await expect(page.getByRole('textbox', { name: 'Folder path' })).toHaveValue(path);
+        await expect(page.getByRole('textbox', { name: 'Folder path' })).toHaveValue(canonicalPath);
         await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
             'aria-busy',
             'false'
@@ -2776,12 +2795,15 @@ test('references stay accessible after jumping and can be closed with the keyboa
         await page.keyboard.press('Enter');
         await expect(async () => {
             await page.keyboard.press('Control+k');
-            await page.keyboard.type('gg0wgr');
+            await page.keyboard.type('gg0wgr', { delay: 20 });
             await expect(
                 page.getByRole('listbox', { name: 'Reference results' }).getByRole('option')
             ).toHaveCount(2, {
                 timeout: 1000
             });
+            await expect(
+                page.getByRole('region', { name: 'Reference preview', exact: true })
+            ).toContainText('fn main()');
         }).toPass({ timeout: 30000 });
         const list = page.getByRole('listbox', { name: 'Reference results' });
         await expect(list).toBeFocused();
@@ -3037,7 +3059,7 @@ test('normal shutdown restores workspace order, active file and cursors', async 
         assert.equal(await readFile(join(root, 'One', 'mixed.txt'), 'utf8'), 'first\r\nsecond\n');
         await page.keyboard.press('Control+s');
         await expect
-            .poll(() => readFile(join(root, 'One', 'mixed.txt'), 'utf8'))
+            .poll(() => readSavedFile(join(root, 'One', 'mixed.txt')))
             .toBe('first\nsecond\n');
         await page.keyboard.press('Control+Shift+p');
         await page
@@ -3047,7 +3069,7 @@ test('normal shutdown restores workspace order, active file and cursors', async 
         await expect(page.getByRole('combobox', { name: 'Line endings' })).toHaveValue('CRLF');
         await page.keyboard.press('Control+s');
         await expect
-            .poll(() => readFile(join(root, 'One', 'mixed.txt'), 'utf8'))
+            .poll(() => readSavedFile(join(root, 'One', 'mixed.txt')))
             .toBe('first\r\nsecond\r\n');
         await page.keyboard.press('Space');
         await page.keyboard.press('d');
@@ -3335,7 +3357,7 @@ test('keyboard-only workspace switching, editing, saving and dirty-close guard',
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
         await expect
-            .poll(() => readFile(join(root, 'Nido', 'WorkspaceTabs.tsx'), 'utf8'))
+            .poll(() => readSavedFile(join(root, 'Nido', 'WorkspaceTabs.tsx')))
             .toContain('// smoke test');
         await expect(page.locator('canvas:visible')).toHaveAttribute(
             'aria-description',

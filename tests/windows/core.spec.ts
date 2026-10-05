@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { electron } from '../helpers/electron';
+import { readSavedFile } from '../helpers/files';
 import { windowsBaselineCases } from './cases';
 
 async function profileFor(root: string, folders: string[], filename: string): Promise<string> {
@@ -89,9 +90,7 @@ test(windowsBaselineCases[0], async () => {
         await page.keyboard.type('gg0iOK ');
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
-        await expect
-            .poll(() => readFile(file, 'utf8'))
-            .toBe('OK 日本語のファイル\r\nsecond line\r\n');
+        await expect.poll(() => readSavedFile(file)).toBe('OK 日本語のファイル\r\nsecond line\r\n');
     } finally {
         await stop(running, root);
     }
@@ -119,7 +118,7 @@ test(windowsBaselineCases[1], async () => {
             ]);
         });
         await page.keyboard.press('Control+s');
-        await expect.poll(() => readFile(file, 'utf8')).toBe('XYab\r\n');
+        await expect.poll(() => readSavedFile(file)).toBe('XYab\r\n');
         await page.keyboard.type('A');
         await input.evaluate((node) => {
             node.dispatchEvent(
@@ -136,11 +135,22 @@ test(windowsBaselineCases[1], async () => {
         });
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
-        await expect.poll(() => readFile(file, 'utf8')).toBe('XYab@\r\n');
+        await expect.poll(() => readSavedFile(file)).toBe('XYab@\r\n');
 
-        await running.evaluate(async ({ clipboard }) => {
+        await running.evaluate(async ({ clipboard, ClipboardItem }) => {
             // Preserve every clipboard format; never attach personal clipboard contents to reports.
-            const items = await clipboard.read();
+            const items = await Promise.all(
+                (await clipboard.read()).map(
+                    async (item) =>
+                        new ClipboardItem(
+                            Object.fromEntries(
+                                await Promise.all(
+                                    item.types.map(async (type) => [type, await item.getType(type)])
+                                )
+                            )
+                        )
+                )
+            );
             Object.assign(globalThis, { nidoBaselineClipboard: items });
             await clipboard.writeText('クリップボード\r\nsecond clipboard line');
         });
@@ -150,7 +160,7 @@ test(windowsBaselineCases[1], async () => {
             await page.keyboard.press('Escape');
             await page.keyboard.press('Control+s');
             await expect
-                .poll(() => readFile(file, 'utf8'))
+                .poll(() => readSavedFile(file))
                 .toBe('XYab@\r\nクリップボード\r\nsecond clipboard line\r\n');
         } finally {
             await running.evaluate(async ({ clipboard }) => {
@@ -179,7 +189,7 @@ test(windowsBaselineCases[1], async () => {
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
         await expect
-            .poll(() => readFile(file, 'utf8'))
+            .poll(() => readSavedFile(file))
             .toBe('XYab@\r\nクリップボード\r\nsecond clipboard line\r\n日本語入力\r\n');
     } finally {
         await stop(running, root);

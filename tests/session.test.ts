@@ -878,7 +878,16 @@ test('scroll prefetch fills history for wrapped lines without repeated refills',
         await session.attach(80, 25);
         await session.openFile('wrapped.txt');
         await session.input('1000Gzt');
-        await session.client.request('nvim_exec_lua', ['vim.cmd.redraw()', []]);
+        // The bracket scanner runs asynchronously. A later color change correctly invalidates
+        // cached row images, so compare reuse only after the initial highlights are ready.
+        await session.client.request('nvim_exec_lua', [
+            `local namespace = vim.api.nvim_get_namespaces().nido_brackets
+assert(vim.wait(3000, function()
+  return #vim.api.nvim_buf_get_extmarks(0, namespace, 0, -1, {limit=1}) > 0
+end, 10), 'Bracket highlighting did not become ready')
+vim.cmd.redraw()`,
+            []
+        ]);
         await session.client.request('nvim_eval', ['1']);
         const before = grid.cells.map((row) => row.map((cell) => cell.text).join(''));
         await session.prefetchScroll();
