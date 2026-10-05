@@ -10,10 +10,36 @@ export function parseLanguage(value: unknown): Language {
 export const japanese: Record<string, string> = {
     Features: '機能一覧',
     'Features (Ctrl+Shift+X)': '機能一覧（Ctrl+Shift+X）',
-    'Explore built-in features · Ctrl+Shift+X': 'ビルトイン機能を確認 · Ctrl+Shift+X',
+    'Explore languages and built-in features · Ctrl+Shift+X':
+        '対応言語・ビルトイン機能を確認 · Ctrl+Shift+X',
     'Close features': '機能一覧を閉じる',
     'Built-in': 'ビルトイン',
     'Built-in features': 'ビルトイン機能',
+    'Feature catalog': '機能カタログ',
+    Languages: '対応言語',
+    'See which languages are supported and what you need to get started.':
+        '対応言語・利用できる機能・導入に必要なツールを確認できます。',
+    'Search languages': '対応言語を検索',
+    'Search languages or file extensions': '言語名や拡張子で検索',
+    'No languages match your search.': '検索に一致する言語はありません。',
+    'Code intelligence': '補完・診断・コード操作',
+    Preview: 'プレビュー',
+    'Syntax highlighting': 'シンタックスハイライト',
+    'These common languages include highlighting and editing. Completion, diagnostics and symbol navigation are not configured.':
+        '主な言語の色分けと編集に対応しています。補完・診断・シンボルへの移動は未対応です。',
+    'Completion, diagnostics, hover, definitions, references, rename, formatting and code actions.':
+        '補完・診断・ホバー・定義への移動・参照・名前変更・整形・コードアクションに対応します。',
+    'Language server included. Uses project TypeScript when available, with a bundled fallback.':
+        '言語サーバーを同梱。プロジェクトのTypeScriptを優先し、なければ同梱版を使用します。',
+    'Language server included. JSX is supported without an extra plugin.':
+        '言語サーバーを同梱。追加プラグインなしでJSXにも対応します。',
+    'Uses your Rust toolchain. Install Rust, then add these components. Run and debug are also supported.':
+        'Rustのツールチェーンが必要です。Rustの導入後、下記のコンポーネントを追加してください。実行・デバッグにも対応します。',
+    'Syntax highlighting and a live preview of unsaved edits. Open the preview with Ctrl+Shift+V.':
+        '色分けと保存前の編集内容のプレビューに対応します。Ctrl+Shift+Vでプレビューを開けます。',
+    'Built-in syntax highlighting only.': '標準のシンタックスハイライトに対応します。',
+    'Requires Rust': 'Rustの導入が必要',
+    Setup: '導入方法',
     'Discover what Nido can do.': 'Nidoで、できること。',
     'Explore the features included with Nido.': 'Nidoに組み込まれている機能を一覧で確認できます。',
     'Search features': '機能を検索',

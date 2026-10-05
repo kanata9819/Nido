@@ -46,6 +46,26 @@
     color: #d5dce1;
     background: var(--surface-active, #202326);
 }
+.tabs {
+    display: flex;
+    flex-shrink: 0;
+    gap: 24px;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--ui-border, #282c30);
+}
+.tabs button {
+    padding: 12px 0;
+    border-bottom: 2px solid transparent;
+    color: #86939b;
+    font-size: 12px;
+}
+.tabs button:hover {
+    color: #d5dce1;
+}
+.tabs button[aria-selected='true'] {
+    border-bottom-color: var(--ui-accent, #a3cc94);
+    color: #d5dce1;
+}
 .content {
     flex: 1;
     min-height: 0;
@@ -74,6 +94,7 @@
     letter-spacing: -0.6px;
 }
 .intro p,
+.categoryDescription,
 .card p {
     color: #96a2ab;
     line-height: 1.75;
@@ -133,6 +154,9 @@
     color: #7e8b97;
     font-size: 10px;
 }
+.categoryDescription {
+    margin: -3px 0 15px;
+}
 .grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
@@ -160,7 +184,8 @@
     font-weight: 500;
     line-height: 1.6;
 }
-.badge {
+.badge,
+.neutralBadge {
     flex-shrink: 0;
     padding: 2px 6px;
     border-radius: 4px;
@@ -168,6 +193,58 @@
     color: var(--ui-accent, #a3cc94);
     font-size: 9px;
     line-height: 1.6;
+}
+.neutralBadge {
+    color: #a6b2bb;
+    background: var(--surface-active, #202326);
+}
+.languageTitle {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-width: 0;
+}
+.languageMark {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 7px;
+    background: var(--ui-accent-soft, #a3cc9410);
+    color: var(--ui-accent, #a3cc94);
+    font-family: monospace;
+    font-size: 14px;
+    font-weight: 600;
+}
+.extensions {
+    font-size: 10px;
+    color: #85929b;
+}
+.setup {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--ui-border, #282c30);
+}
+.setup h5 {
+    margin: 0;
+    color: #b6c1c9;
+    font-size: 10px;
+    font-weight: 500;
+}
+.setup p {
+    margin: 6px 0 0;
+}
+.installCommand {
+    display: block;
+    margin-top: 10px;
+    padding: 8px 10px;
+    border-radius: 4px;
+    background: var(--surface-active, #202326);
+    color: #c2cfd7;
+    font-size: 10px;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
 }
 .card p {
     margin: 9px 0 12px;
