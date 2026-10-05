@@ -27,6 +27,7 @@ const api: NidoAPI = {
     attach: (id, columns, rows) => ipcRenderer.invoke('nido:attach', id, columns, rows),
     resize: (id, columns, rows) => ipcRenderer.invoke('nido:resize', id, columns, rows),
     input: (id, keys) => ipcRenderer.invoke('nido:input', id, keys),
+    inputMode: (id) => ipcRenderer.invoke('nido:inputMode', id),
     markdownPreview: (id) => ipcRenderer.invoke('nido:markdownPreview', id),
     setClipboardSharing: (id, enabled) => ipcRenderer.invoke('nido:clipboardSharing', id, enabled),
     setEditorConfig: (id, enabled) => ipcRenderer.invoke('nido:editorConfig', id, enabled),

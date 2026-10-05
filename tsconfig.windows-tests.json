@@ -1,0 +1,14 @@
+{
+    "extends": "./tsconfig.web.json",
+    "compilerOptions": {
+        "noEmit": true,
+        "composite": false
+    },
+    "include": [
+        "src/renderer/src/env.d.ts",
+        "src/preload/*.d.ts",
+        "tests/helpers/*.ts",
+        "tests/windows/*.ts",
+        "playwright.windows.config.ts"
+    ]
+}

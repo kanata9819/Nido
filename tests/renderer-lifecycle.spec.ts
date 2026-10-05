@@ -20,6 +20,127 @@ test.afterAll(async () => {
     await server?.close();
 });
 
+test('Rapid insert text keeps spaces and following keys while a mode check is pending', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=inputMode`);
+    const input = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(input).toBeFocused();
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [['mode_change', ['normal', 0]]]
+        })
+    );
+    await page.keyboard.type('Go## Unsaved heading');
+    await input.evaluate((node) =>
+        node.dispatchEvent(
+            new KeyboardEvent('keydown', {
+                key: '@',
+                code: 'KeyQ',
+                ctrlKey: true,
+                altKey: true,
+                modifierAltGraph: true,
+                bubbles: true,
+                cancelable: true
+            })
+        )
+    );
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'i'));
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'i'));
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'input')
+                    .map((call) => call.args[1])
+                    .join('')
+            )
+        )
+        .toBe('Go## Unsaved heading@');
+    await expect(page.getByRole('dialog', { name: 'Keyboard commands' })).toHaveCount(0);
+});
+
+test('Rapid Normal-mode menu keys open the debugger and keep its focus', async ({ page }) => {
+    await page.goto(`${origin}?view=app&defer=inputMode`);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.type(' D');
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'n'));
+    const debuggerPanel = page.getByRole('region', { name: 'Debugger', exact: true });
+    await expect(debuggerPanel).toBeVisible();
+    await expect
+        .poll(() => debuggerPanel.evaluate((node) => node.contains(document.activeElement)))
+        .toBe(true);
+    await page.keyboard.press('Space');
+    await page.keyboard.press('d');
+    await expect(debuggerPanel).toHaveCount(0);
+    await page.keyboard.press('Control+Shift+p');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('Open debug panel');
+    await page.keyboard.press('Enter');
+    await expect(debuggerPanel).toBeVisible();
+    await expect
+        .poll(() => debuggerPanel.evaluate((node) => node.contains(document.activeElement)))
+        .toBe(true);
+});
+
+test('Debugger focuses arriving variables, restores focus after stepping and respects focus outside its panel', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=debug`);
+    await expect(page.getByRole('button', { name: /Start F5/ })).toBeFocused();
+    const renderVariables = async (id: number): Promise<void> => {
+        await page.evaluate(
+            (id) =>
+                window.rendererTest.render({
+                    debugState: {
+                        status: 'paused',
+                        output: '',
+                        targets: [],
+                        variables: [
+                            {
+                                id,
+                                name: 'number',
+                                value: '21',
+                                type: 'int',
+                                scope: 'Locals',
+                                depth: 0,
+                                expandable: false,
+                                expanded: false,
+                                loading: false,
+                                changed: false
+                            }
+                        ]
+                    }
+                }),
+            id
+        );
+    };
+    await renderVariables(1);
+    const variable = page.getByRole('treeitem', { name: 'number = 21 (int)' });
+    await expect(variable).toBeFocused();
+    await page.evaluate(() =>
+        window.rendererTest.render({
+            debugState: { status: 'running', output: '', targets: [], variables: [] }
+        })
+    );
+    await expect(variable).toHaveCount(0);
+    await renderVariables(2);
+    await expect(variable).toBeFocused();
+    const outside = page.getByRole('button', { name: 'Outside debugger' });
+    await outside.focus();
+    await renderVariables(3);
+    await expect(outside).toBeFocused();
+    await page.reload();
+    await expect(page.getByRole('button', { name: /Start F5/ })).toBeFocused();
+    await outside.focus();
+    await renderVariables(4);
+    await expect(outside).toBeFocused();
+});
+
 test('Git diff ignores an older response after selecting another file', async ({ page }) => {
     await page.goto(`${origin}?view=git&defer=gitDiff`);
     const list = page.getByRole('listbox', { name: 'Changed files' });
@@ -375,6 +496,39 @@ test('App opens references and debugger on new events while respecting a closed 
             }
         })
     );
+    await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toBeVisible();
+    const debugStatus = async (status: 'paused' | 'running' | 'building'): Promise<void> => {
+        await page.evaluate(
+            (nextStatus) =>
+                window.rendererTest.emit({
+                    type: 'state',
+                    id: 'alpha',
+                    state: {
+                        buffers: [],
+                        current: 0,
+                        mode: 'n',
+                        line: 2,
+                        column: 1,
+                        filetype: '',
+                        debug: { status: nextStatus, output: '', variables: [], targets: [] }
+                    }
+                }),
+            status
+        );
+    };
+    await debugStatus('paused');
+    await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toContainText(
+        'Debug · paused'
+    );
+    await page.getByRole('button', { name: 'Hide debugger' }).click();
+    const input = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(input).toBeFocused();
+    await debugStatus('running');
+    await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toHaveCount(0);
+    await debugStatus('paused');
+    await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toHaveCount(0);
+    await expect(input).toBeFocused();
+    await debugStatus('building');
     await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toBeVisible();
     expect(errors).toEqual([]);
 });

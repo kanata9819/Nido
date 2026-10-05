@@ -20,6 +20,35 @@ import { readFavorites, readLayout, writeFavorites, writeLayout } from '../src/m
 import { fileDecorations, gitFileKey } from '../src/renderer/src/fileDecorations';
 import type { NidoEvent, Redraw } from '../src/shared/types';
 
+test('input mode queries observe preceding queued keys before following text', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-input-mode-'));
+    let session: Session | undefined;
+    try {
+        session = await Session.create(root, () => {});
+        await session.attach(80, 24);
+        const opening = session.input('i');
+        const mode = session.inputMode();
+        const text = session.input('Unsaved heading<Esc>');
+        await opening;
+        assert.equal(await mode, 'i');
+        await text;
+        assert.equal(await session.inputMode(), 'n');
+        assert.equal(await session.client.request('nvim_get_current_line', []), 'Unsaved heading');
+        await session.input('0d');
+        assert.match(await session.inputMode(), /^no/);
+        await session.input('w');
+        assert.equal(await session.client.request('nvim_get_current_line', []), 'heading');
+        await session.input('0r');
+        assert.equal(await session.inputMode(), 'R');
+        await session.input(' ');
+        assert.equal(await session.client.request('nvim_get_current_line', []), ' eading');
+    } finally {
+        await session?.client.request('nvim_input', ['<Esc>']).catch(() => {});
+        await session?.stop();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('favorite storage preserves entries independently and rejects invalid data', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-favorites-store-'));
     const path = join(root, 'favorites.json');
@@ -878,7 +907,16 @@ test('scroll prefetch fills history for wrapped lines without repeated refills',
         await session.attach(80, 25);
         await session.openFile('wrapped.txt');
         await session.input('1000Gzt');
-        await session.client.request('nvim_exec_lua', ['vim.cmd.redraw()', []]);
+        // The bracket scanner runs asynchronously. A later color change correctly invalidates
+        // cached row images, so compare reuse only after the initial highlights are ready.
+        await session.client.request('nvim_exec_lua', [
+            `local namespace = vim.api.nvim_get_namespaces().nido_brackets
+assert(vim.wait(3000, function()
+  return #vim.api.nvim_buf_get_extmarks(0, namespace, 0, -1, {limit=1}) > 0
+end, 10), 'Bracket highlighting did not become ready')
+vim.cmd.redraw()`,
+            []
+        ]);
         await session.client.request('nvim_eval', ['1']);
         const before = grid.cells.map((row) => row.map((cell) => cell.text).join(''));
         await session.prefetchScroll();
@@ -1262,7 +1300,7 @@ test(
             assert.notEqual(terminal.process.exitCode, null);
         } finally {
             await session?.stop();
-            await rm(root, { recursive: true, force: true });
+            await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
         }
     }
 );

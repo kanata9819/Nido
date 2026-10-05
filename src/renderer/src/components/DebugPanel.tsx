@@ -16,9 +16,26 @@ export default function DebugPanel({
     const panel = useRef<HTMLElement>(null);
     const variableList = useRef<HTMLDivElement>(null);
     const closePrefix = useRef(false);
+    const focused = useRef(false);
+    const awaitingVariables = useRef(false);
+    const lastFocusTick = useRef(0);
     const [selected, setSelected] = useState<number>();
     useEffect(() => {
-        if (focusTick) {
+        const requested = focusTick !== lastFocusTick.current;
+        lastFocusTick.current = focusTick;
+        if (requested) {
+            awaitingVariables.current = !state?.variables?.length;
+        }
+        // DAP replaces variable IDs after stepping. Restore focus after the old row disappears,
+        // while allowing the user to move back to the editor during an update.
+        if (
+            focusTick &&
+            (requested ||
+                (focused.current &&
+                    (awaitingVariables.current ||
+                        !panel.current?.contains(document.activeElement)) &&
+                    state?.variables?.length))
+        ) {
             (
                 panel.current?.querySelector<HTMLButtonElement>('[data-debug-target]') ||
                 panel.current?.querySelector<HTMLButtonElement>(
@@ -26,8 +43,11 @@ export default function DebugPanel({
                 ) ||
                 panel.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')
             )?.focus();
+            if (state?.variables?.length) {
+                awaitingVariables.current = false;
+            }
         }
-    }, [focusTick]);
+    }, [focusTick, state?.variables]);
     const busy = state?.status === 'building' || state?.status === 'starting';
     const paused = state?.status === 'paused';
     const variables = state?.variables || [];
@@ -40,8 +60,16 @@ export default function DebugPanel({
             tabIndex={-1}
             className={styles.debugPanel}
             aria-label="Debugger"
+            onFocusCapture={() => {
+                focused.current = true;
+            }}
             onBlur={(event) => {
                 if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                    // Removing a focused variable row can blur without an outside focus target.
+                    if (event.relatedTarget) {
+                        focused.current = false;
+                        awaitingVariables.current = false;
+                    }
                     closePrefix.current = false;
                 }
             }}

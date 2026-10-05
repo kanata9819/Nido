@@ -1,0 +1,63 @@
+name: Windows baseline
+
+on:
+    pull_request:
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: windows-baseline-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    windows:
+        runs-on: windows-latest
+        timeout-minutes: 45
+        steps:
+            - uses: actions/checkout@v7
+            - uses: pnpm/action-setup@v6
+              with:
+                  version: 12.5.1
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Prepare Rust language and debugging tests
+              run: rustup component add rust-analyzer rust-src rustfmt
+            - name: Lint without warnings
+              run: pnpm lint --max-warnings 0
+            - name: Check application and Windows test types
+              run: |
+                  pnpm typecheck
+                  if ($LASTEXITCODE -ne 0) { throw 'Application typecheck failed.' }
+                  pnpm typecheck:windows
+                  if ($LASTEXITCODE -ne 0) { throw 'Windows test typecheck failed.' }
+            - name: Build the packaged Windows app
+              id: build
+              run: pnpm build:unpack
+            - name: Run unit and Neovim integration tests
+              run: pnpm test
+            - name: Prepare renderer browser
+              id: browser
+              if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+              run: pnpm exec playwright install chromium
+            - name: Verify renderer state transitions
+              if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
+              run: pnpm test:renderer
+            - name: Verify the packaged Windows app
+              if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+              run: pnpm test:windows
+            - name: Upload test reports
+              if: always()
+              uses: actions/upload-artifact@v7
+              with:
+                  name: windows-baseline-reports
+                  path: |
+                      playwright-report/
+                      test-results/
+                  retention-days: 7

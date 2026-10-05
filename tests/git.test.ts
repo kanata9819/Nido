@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, rename, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, readFile, rename, rm, writeFile, mkdir, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { splitDiff } from '../src/renderer/src/gitDiff';
@@ -104,6 +104,15 @@ test('branch switches protect sessions in the same repository and leave other pr
             { id: 1, name: join(repository, 'external.txt'), modified: true }
         ];
         await assert.rejects(switchBranch('external'), /Save unsaved editor changes/);
+        assert.equal(branch(), 'next');
+
+        // Junctions and Windows 8.3 paths can refer to this repository outside its lexical path.
+        const alias = join(root, 'repository-alias');
+        await symlink(repository, alias, process.platform === 'win32' ? 'junction' : 'dir');
+        sessions.get('other')!.state.buffers = [
+            { id: 1, name: join(alias, 'external.txt'), modified: true }
+        ];
+        await assert.rejects(switchBranch('aliased'), /Save unsaved editor changes/);
         assert.equal(branch(), 'next');
     } finally {
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

@@ -1,6 +1,14 @@
 import type { Panel, Item } from '../types';
 import type { DebugAction, Workspace } from '../../../shared/types';
 import { isAltGraph } from '../grid';
+import { useLayoutEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
+
+const needsMode = (event: KeyboardEvent): boolean =>
+    !event.ctrlKey &&
+    !event.altKey &&
+    !event.metaKey &&
+    (event.key === ' ' || (event.shiftKey && ['H', 'L'].includes(event.key)));
 
 interface UseKeyboardShortcutsParams {
     save: () => void;
@@ -55,11 +63,22 @@ export function useKeyboardShortcuts({
     setLeader,
     activate
 }: UseKeyboardShortcutsParams): (event: KeyboardEvent) => void {
+    const queued = useRef<KeyboardEvent[]>([]);
+    const checkingMode = useRef(false);
+    const replayed = useRef(new WeakSet<KeyboardEvent>());
+    const current = useRef({ active, panel, leader, mode });
+    useLayoutEffect(() => {
+        current.current = { active, panel, leader, mode };
+    }, [active, panel, leader, mode]);
+
     const keydown = (event: KeyboardEvent): void => {
         if (document.activeElement?.closest('[data-type-information], [data-explorer-commands]')) {
             return;
         }
-        if (event.isComposing || event.keyCode === 229 || isAltGraph(event)) {
+        if (event.isComposing || event.keyCode === 229) {
+            return;
+        }
+        if (isAltGraph(event) && !checkingMode.current) {
             return;
         }
 
@@ -69,6 +88,68 @@ export function useKeyboardShortcuts({
         };
         const focusedLabel = document.activeElement?.getAttribute('aria-label');
         const terminalFocused = focusedLabel === 'Terminal input';
+        // Redraw mode notifications can trail rapid input. Check the actual mode before
+        // consuming text as a Normal-mode UI shortcut, retaining following keys in order.
+        if (
+            !replayed.current.has(event) &&
+            (checkingMode.current ||
+                (focusedLabel === 'Neovim input' && !panel && !leader && needsMode(event)))
+        ) {
+            consume();
+            queued.current.push(
+                new KeyboardEvent('keydown', {
+                    key: event.key,
+                    code: event.code,
+                    location: event.location,
+                    repeat: event.repeat,
+                    ctrlKey: event.ctrlKey,
+                    altKey: event.altKey,
+                    shiftKey: event.shiftKey,
+                    metaKey: event.metaKey,
+                    modifierAltGraph: isAltGraph(event),
+                    bubbles: true,
+                    cancelable: true
+                })
+            );
+            if (!checkingMode.current) {
+                checkingMode.current = true;
+                run(
+                    (async () => {
+                        try {
+                            while (queued.current.length) {
+                                const next = queued.current.shift()!;
+                                const context = current.current;
+                                if (
+                                    document.activeElement?.getAttribute('aria-label') ===
+                                        'Neovim input' &&
+                                    !context.panel &&
+                                    !context.leader &&
+                                    needsMode(next)
+                                ) {
+                                    const actual = await window.nido.inputMode(context.active);
+                                    context.mode.current[context.active] =
+                                        actual === 'n'
+                                            ? 'normal'
+                                            : actual.startsWith('i')
+                                              ? 'insert'
+                                              : actual;
+                                }
+                                replayed.current.add(next);
+                                // Commit a menu transition before handling the next buffered key.
+                                flushSync(() => document.activeElement?.dispatchEvent(next));
+                            }
+                        } finally {
+                            checkingMode.current = false;
+                            queued.current.length = 0;
+                        }
+                    })()
+                );
+            }
+            return;
+        }
+        if (isAltGraph(event)) {
+            return;
+        }
         const isNormalMode = (mode.current[active] || 'normal') === 'normal';
         if (
             focusedLabel === 'Neovim input' &&

@@ -1,4 +1,4 @@
-import { dirname, isAbsolute, relative, sep } from 'node:path';
+import { dirname, isAbsolute, relative } from 'node:path';
 import type { Session } from './session';
 import type { NidoEvent } from '../shared/types';
 import {
@@ -66,15 +66,9 @@ export function registerGitHandlers({
             const directories = new Set([
                 open.workspace.root,
                 ...open.state.buffers
-                    .filter(({ name }) => {
-                        if (!isAbsolute(name)) {
-                            return false;
-                        }
-                        const child = relative(root, name);
-                        return (
-                            child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child)
-                        );
-                    })
+                    // Git resolves Windows short paths and junctions to the repository root.
+                    // A lexical containment check here would discard those aliases first.
+                    .filter(({ name }) => isAbsolute(name))
                     .map(({ name }) => dirname(name))
             ]);
             let sameRepository = open === current;

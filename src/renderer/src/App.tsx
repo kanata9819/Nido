@@ -136,7 +136,13 @@ export default function App(): React.JSX.Element {
         if (debuggerChanged && hasDebugger) {
             setDebugVisible(true);
         }
-        if (debugStatusChanged && (debugStatus === 'building' || debugStatus === 'running')) {
+        // Stepping or continuing a paused session preserves the user's panel visibility.
+        if (
+            debugStatusChanged &&
+            (debugStatus === 'building' ||
+                (debugStatus === 'running' &&
+                    (workspaceChanged || previousPanelState.debugStatus !== 'paused')))
+        ) {
             setBottomPanel('debug');
             setDebugVisible(true);
         }

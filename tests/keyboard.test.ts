@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { vimKey } from '../src/renderer/src/grid';
 import { useEditorInput as createEditorInput } from '../src/renderer/src/hooks/useEditorInput';
 import { useKeyboardShortcuts as createKeyboardHandler } from '../src/renderer/src/hooks/useKeyboardShortcuts';
@@ -42,32 +44,37 @@ test('global shortcuts leave AltGr input available to the editor', () => {
                 }
             }
         });
-        const handler = createKeyboardHandler({
-            save: unexpected,
-            panel: null,
-            leader: false,
-            error: '',
-            setError: unexpected,
-            setFocusTick: unexpected,
-            focusEditor: unexpected,
-            modal: { current: null },
-            mode: { current: { workspace: 'normal' } },
-            active: 'workspace',
-            workspaces: [],
-            nextWorkspace: unexpected,
-            showExplorer: unexpected,
-            showDebugger: unexpected,
-            closeReferences: unexpected,
-            toggleTerminal: unexpected,
-            restartShell: unexpected,
-            create: unexpected,
-            showPanel: unexpected,
-            commands: [],
-            state: { buffers: [], current: 0, filetype: '' },
-            run: unexpected,
-            setLeader: unexpected,
-            activate: unexpected
-        });
+        let handler!: ReturnType<typeof createKeyboardHandler>;
+        function KeyboardProbe(): null {
+            handler = createKeyboardHandler({
+                save: unexpected,
+                panel: null,
+                leader: false,
+                error: '',
+                setError: unexpected,
+                setFocusTick: unexpected,
+                focusEditor: unexpected,
+                modal: { current: null },
+                mode: { current: { workspace: 'normal' } },
+                active: 'workspace',
+                workspaces: [],
+                nextWorkspace: unexpected,
+                showExplorer: unexpected,
+                showDebugger: unexpected,
+                closeReferences: unexpected,
+                toggleTerminal: unexpected,
+                restartShell: unexpected,
+                create: unexpected,
+                showPanel: unexpected,
+                commands: [],
+                state: { buffers: [], current: 0, filetype: '' },
+                run: unexpected,
+                setLeader: unexpected,
+                activate: unexpected
+            });
+            return null;
+        }
+        renderToStaticMarkup(createElement(KeyboardProbe));
         for (const key of ['p', 's', '@', '1', ' ']) {
             handler({
                 ...keyEvent(key),

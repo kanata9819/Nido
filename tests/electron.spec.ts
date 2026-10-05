@@ -1,6 +1,8 @@
-import { test, expect, _electron as electron, type Page } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+import { electron } from './helpers/electron';
+import { readSavedFile } from './helpers/files';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -473,12 +475,12 @@ test('explorer commands create, rename, copy, move and recycle files from the ke
         await page.keyboard.type('A!');
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
-        await expect.poll(() => readFile(join(workspace, 'renamed.txt'), 'utf8')).toBe('hello!\n');
+        await expect.poll(() => readSavedFile(join(workspace, 'renamed.txt'))).toBe('hello!\n');
         await tree.focus();
         await page.keyboard.press('Control+c');
         await page.keyboard.press('Control+v');
         await apply('copy.txt');
-        await expect.poll(() => readFile(join(workspace, 'copy.txt'), 'utf8')).toBe('hello!\n');
+        await expect.poll(() => readSavedFile(join(workspace, 'copy.txt'))).toBe('hello!\n');
         await page.keyboard.type(':');
         await expect(menu).toBeVisible();
         await menu.screenshot({ path: 'test-results/explorer-commands.png' });
@@ -493,7 +495,7 @@ test('explorer commands create, rename, copy, move and recycle files from the ke
         await page.keyboard.press('Control+v');
         await apply('nested/renamed.txt');
         await expect
-            .poll(() => readFile(join(workspace, 'nested/renamed.txt'), 'utf8'))
+            .poll(() => readSavedFile(join(workspace, 'nested/renamed.txt')))
             .toBe('hello!\n');
         await expect(
             tree.getByRole('treeitem', { name: 'renamed.txt', exact: true })
@@ -796,13 +798,14 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await expect(canvas).not.toHaveAttribute('aria-description', /amount.toFixed/);
         await expect(input).toBeFocused();
         await page.screenshot({ path: 'test-results/nido-completion.png' });
+        await expect(menu).toHaveAttribute('aria-busy', 'false');
         await page.keyboard.press('Tab');
         await expect(menu).toHaveCount(0);
         await expect(canvas).toHaveAttribute('aria-description', /amount.toFixed/);
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
         await expect
-            .poll(() => readFile(join(workspace, 'main.ts'), 'utf8'))
+            .poll(() => readSavedFile(join(workspace, 'main.ts')))
             .toContain('amount.toFixed');
         await page.keyboard.type(':');
         await expect(page.getByText('COMMAND', { exact: true })).toBeVisible();
@@ -815,7 +818,7 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
         await expect
-            .poll(() => readFile(join(workspace, 'note.txt'), 'utf8'))
+            .poll(() => readSavedFile(join(workspace, 'note.txt')))
             .toMatch(/^ {2}plain\r?\n$/);
         await page.keyboard.type(':');
         await expect(page.getByText('COMMAND', { exact: true })).toBeVisible();
@@ -828,11 +831,13 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await expect(
             menu.getByRole('option').first().getByText('getUser', { exact: true })
         ).toBeVisible();
+        await expect(canvas).toHaveAttribute('aria-description', /getU\s*\n/);
+        await expect(menu).toHaveAttribute('aria-busy', 'false');
         await page.keyboard.press('Tab');
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
         await expect
-            .poll(() => readFile(join(workspace, 'main.ts'), 'utf8'))
+            .poll(() => readSavedFile(join(workspace, 'main.ts')))
             .toMatch(/\ngetUser\r?\n$/);
     } finally {
         await running.evaluate(({ app }) => app.exit(0));
@@ -898,8 +903,13 @@ test('Markdown preview renders unsaved edits and supports keyboard scrolling and
         await expect(page.getByRole('button', { name: /preview.md/ })).toBeVisible();
         await page.keyboard.press('Enter');
         await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /Preview/);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
         await page.keyboard.type('Go## Unsaved heading');
         await page.keyboard.press('Escape');
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /Unsaved heading/
+        );
         await page.keyboard.press('Control+Shift+v');
         const popup = page.getByRole('dialog', { name: 'markdown palette' });
         const content = page.getByLabel('Markdown preview content', { exact: true });
@@ -1427,6 +1437,7 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
         args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
         env
     });
+    let failed = false;
     try {
         const page = await running.firstWindow();
         await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
@@ -1442,8 +1453,35 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
         ).toBeVisible();
         await page.keyboard.press('Enter');
         const canvas = page.locator('canvas:visible');
+        const waitForScroll = async (attribute: string): Promise<void> => {
+            await expect
+                .poll(() =>
+                    canvas.evaluate(async (node, pointAttribute) => {
+                        const before = node.getAttribute(pointAttribute);
+                        for (let frame = 0; frame < 2; frame++) {
+                            await new Promise<void>((resolve) =>
+                                requestAnimationFrame(() => resolve())
+                            );
+                            if (node.getAttribute('data-pending-scrolls') !== '0') return false;
+                        }
+                        return before === node.getAttribute(pointAttribute);
+                    }, attribute)
+                )
+                .toBe(true);
+        };
         await expect(canvas).toHaveAttribute('aria-description', /ab日本語xyz/);
         await canvas.evaluate((node: HTMLCanvasElement) => {
+            let pendingScrolls = 0;
+            node.dataset.pendingScrolls = '0';
+            const scroll = window.nido.scroll;
+            window.nido.scroll = async (...args) => {
+                node.dataset.pendingScrolls = String(++pendingScrolls);
+                try {
+                    await scroll(...args);
+                } finally {
+                    node.dataset.pendingScrolls = String(--pendingScrolls);
+                }
+            };
             const ctx = node.getContext('2d')!;
             let row = 0;
             const fill = ctx.fillRect.bind(ctx);
@@ -1473,6 +1511,7 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
         await canvas.hover();
         await page.mouse.wheel(0, 3);
         await expect(canvas).toHaveAttribute('data-wide-point', /x/);
+        await waitForScroll('data-wide-point');
         const point = JSON.parse((await canvas.getAttribute('data-wide-point'))!);
         const bounds = (await canvas.boundingBox())!;
         await page.mouse.move(bounds.x + point.x, bounds.y + point.y);
@@ -1494,6 +1533,7 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
         await canvas.evaluate((node) => node.removeAttribute('data-tab-point'));
         await page.mouse.wheel(0, 507);
         await expect(canvas).toHaveAttribute('data-tab-point', /x/);
+        await waitForScroll('data-tab-point');
         await expect(page.getByText('Ln 2, Col 6', { exact: true })).toBeVisible();
         const tabPoint = JSON.parse((await canvas.getAttribute('data-tab-point'))!);
         await canvas.click({ position: tabPoint });
@@ -1511,12 +1551,14 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
         await page.keyboard.press('Escape');
         await page.keyboard.type(':w');
         await page.keyboard.press('Enter');
-        await expect.poll(() => readFile(join(root, 'click.txt'), 'utf8')).toContain('\tXΩtarget');
+        await expect.poll(() => readSavedFile(join(root, 'click.txt'))).toContain('\tXΩtarget');
     } catch (error) {
+        failed = true;
         running.process().kill();
         throw error;
     } finally {
-        await running.close().catch(() => {});
+        if (failed) await running.close().catch(() => {});
+        else await running.close();
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
 });
@@ -1551,6 +1593,9 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await page.keyboard.press('ArrowUp');
         await expect(size).toHaveValue(String(initial + 1));
         await page.keyboard.press('j');
+        const lineHeight = page.getByRole('spinbutton', { name: 'Editor line height' });
+        await expect(lineHeight).toBeFocused();
+        await page.keyboard.press('j');
         const family = page.getByRole('textbox', { name: 'Font family' });
         await expect(family).toBeFocused();
         await page.keyboard.press('Control+a');
@@ -1570,7 +1615,11 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await page.keyboard.press('Shift+Tab');
         await expect(family).toBeFocused();
         await page.keyboard.press('Shift+Tab');
+        await expect(lineHeight).toBeFocused();
+        await page.keyboard.press('Shift+Tab');
         await expect(size).toBeFocused();
+        await page.keyboard.press('Shift+Tab');
+        await expect(page.getByRole('combobox', { name: 'Theme', exact: true })).toBeFocused();
         await page.keyboard.press('Shift+Tab');
         await expect(page.getByRole('button', { name: 'Close palette' })).toBeFocused();
         await page.keyboard.press('Shift+Tab');
@@ -1768,18 +1817,26 @@ test('window size and maximized state survive restart', async () => {
         env
     };
     let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    const waitForStartup = async (): Promise<void> => {
+        const page = await running!.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    };
     try {
         running = await electron.launch(options);
-        await running.firstWindow();
-        await running.evaluate(({ BrowserWindow }) =>
-            BrowserWindow.getAllWindows()[0].setSize(1040, 680)
-        );
+        await waitForStartup();
+        await running.evaluate(({ BrowserWindow, screen }) => {
+            const area = screen.getPrimaryDisplay().workAreaSize;
+            BrowserWindow.getAllWindows()[0].setSize(
+                Math.min(1000, area.width),
+                Math.min(680, area.height)
+            );
+        });
         const originalSize = await running.evaluate(({ BrowserWindow }) =>
             BrowserWindow.getAllWindows()[0].getSize()
         );
         await running.close();
         running = await electron.launch(options);
-        await running.firstWindow();
+        await waitForStartup();
         await expect
             .poll(() =>
                 running!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getSize())
@@ -1795,7 +1852,7 @@ test('window size and maximized state survive restart', async () => {
             .toBe(true);
         await running.close();
         running = await electron.launch(options);
-        await running.firstWindow();
+        await waitForStartup();
         await expect
             .poll(() =>
                 running!.evaluate(({ BrowserWindow }) =>
@@ -1850,6 +1907,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
             await page.keyboard.press('Control+l');
             await expect(preview).toBeFocused();
             const top = (): Promise<number> => preview.evaluate((node) => node.scrollTop);
+            const viewportHeight = await preview.evaluate((node) => node.clientHeight);
             const original = page.getByLabel(`${label} original`, { exact: true });
             await page.keyboard.press('g');
             await page.keyboard.press('j');
@@ -1861,7 +1919,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
                 ['Control+f', 'Control+b']
             ]) {
                 await page.keyboard.press(down);
-                await expect.poll(top).toBeGreaterThan(100);
+                await expect.poll(top).toBeGreaterThan(viewportHeight * 0.4);
                 await page.keyboard.press(up);
                 await expect.poll(top).toBeLessThan(1);
             }
@@ -2105,7 +2163,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
         await page.keyboard.press('Escape');
         await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
         await page.keyboard.press('Control+s');
-        await expect.poll(() => readFile(join(repository, 'main.rs'), 'utf8')).toContain('unsaved');
+        await expect.poll(() => readSavedFile(join(repository, 'main.rs'))).toContain('unsaved');
         await expect(fileTabs.getByLabel('Git: Modified', { exact: true })).toHaveText('M');
         await expect(explorer.getByLabel('Git: Modified', { exact: true })).toHaveText('M');
         await expect(explorer.getByText('main.rs', { exact: true })).toHaveCSS(
@@ -2209,6 +2267,7 @@ test('Problems can be selected, filtered, opened and cleared with the keyboard',
 });
 
 async function chooseWorkspace(page: Page, path: string, navigate = false): Promise<void> {
+    const canonicalPath = await realpath(path);
     await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
         'aria-busy',
         'false'
@@ -2234,7 +2293,7 @@ async function chooseWorkspace(page: Page, path: string, navigate = false): Prom
             'false'
         );
         await page.keyboard.press('h');
-        await expect(page.getByRole('textbox', { name: 'Folder path' })).toHaveValue(path);
+        await expect(page.getByRole('textbox', { name: 'Folder path' })).toHaveValue(canonicalPath);
         await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
             'aria-busy',
             'false'
@@ -2277,6 +2336,9 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
             'NORMAL'
         );
         await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+        await expect(terminal.locator('canvas')).toHaveAttribute('aria-description', /PS .*?>/, {
+            timeout: 15000
+        });
         await page.keyboard.type(
             "$nidoValue = 'alive'; Start-Sleep -Milliseconds 500; Set-Content background.txt $nidoValue"
         );
@@ -2332,6 +2394,13 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
             '12px'
         );
         await page.keyboard.press('Control+Shift+r');
+        await expect(terminal.locator('canvas')).not.toHaveAttribute(
+            'aria-description',
+            /preserved\.txt/
+        );
+        await expect(terminal.locator('canvas')).toHaveAttribute('aria-description', /PS .*?>/, {
+            timeout: 15000
+        });
         await page.keyboard.type('Set-Content restarted.txt ([string]::IsNullOrEmpty($nidoValue))');
         await page.keyboard.press('Enter');
         await expect
@@ -2344,12 +2413,23 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
         await page.screenshot({ path: 'test-results/nido-terminal.png' });
         await page.keyboard.press('Control+Shift+n');
         await expect(page.getByRole('combobox', { name: 'Session type' })).toBeVisible();
+        await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
+            'aria-busy',
+            'false'
+        );
+        await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
         await page.getByRole('combobox', { name: 'Session type' }).focus();
         await page.keyboard.press('End');
+        await expect(page.getByRole('combobox', { name: 'Session type' })).toHaveValue('terminal');
         await chooseWorkspace(page, root);
         const input = page.getByRole('textbox', { name: 'Terminal input' });
         await expect(input).toHaveCount(1);
         await expect(input).toBeFocused();
+        await expect(page.locator('canvas[aria-label="Terminal display"]:visible')).toHaveAttribute(
+            'aria-description',
+            /PS .*?>/,
+            { timeout: 15000 }
+        );
         await page.keyboard.type("Set-Content standalone.txt 'separate'");
         await page.keyboard.press('Enter');
         await expect
@@ -2374,6 +2454,9 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
         });
         await restored.keyboard.press('Alt+2');
         await expect(restored.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+        await expect(
+            restored.locator('canvas[aria-label="Terminal display"]:visible')
+        ).toHaveAttribute('aria-description', /PS .*?>/, { timeout: 15000 });
         await restored.keyboard.type("Set-Content restored.txt 'restored'");
         await restored.keyboard.press('Enter');
         await expect
@@ -2765,6 +2848,19 @@ test('references stay accessible after jumping and can be closed with the keyboa
             env
         });
         const page = await running.firstWindow();
+        await page.evaluate(() => {
+            Object.assign(window, { referenceState: { id: '', version: 0 } });
+            window.nido.onEvent((event) => {
+                if (event.type === 'state') {
+                    Object.assign(window, {
+                        referenceState: {
+                            id: event.id,
+                            version: event.state.references?.version || 0
+                        }
+                    });
+                }
+            });
+        });
         await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
         await page.keyboard.press('Control+Shift+n');
         await chooseWorkspace(page, root);
@@ -2774,13 +2870,51 @@ test('references stay accessible after jumping and can be closed with the keyboa
         await expect(page.getByRole('button', { name: /main.rs/ })).toBeVisible();
         await page.keyboard.press('Enter');
         await expect(async () => {
+            const before = await page.evaluate(
+                () =>
+                    (window as Window & { referenceState: { version: number } }).referenceState
+                        .version
+            );
             await page.keyboard.press('Control+k');
-            await page.keyboard.type('gg0wgr');
+            await page.keyboard.type('gg0wgr', { delay: 20 });
+            await expect
+                .poll(() =>
+                    page.evaluate(() =>
+                        window.nido.inputMode(
+                            (window as Window & { referenceState: { id: string } }).referenceState
+                                .id
+                        )
+                    )
+                )
+                .toBe('n');
+            await expect
+                .poll(() =>
+                    page.evaluate(
+                        () =>
+                            (window as Window & { referenceState: { version: number } })
+                                .referenceState.version
+                    )
+                )
+                .toBeGreaterThan(before);
+            const version = await page.evaluate(
+                () =>
+                    (window as Window & { referenceState: { version: number } }).referenceState
+                        .version
+            );
+            const results = page.getByRole('listbox', { name: 'Reference results' });
+            await expect(results).toHaveAttribute('data-reference-version', String(version));
+            await expect(results).toHaveAttribute('aria-busy', 'false');
             await expect(
                 page.getByRole('listbox', { name: 'Reference results' }).getByRole('option')
             ).toHaveCount(2, {
                 timeout: 1000
             });
+            await expect(
+                page.getByRole('region', { name: 'Reference preview', exact: true })
+            ).toHaveAttribute('aria-busy', 'false');
+            await expect(
+                page.getByRole('region', { name: 'Reference preview', exact: true })
+            ).toContainText('fn main()');
         }).toPass({ timeout: 30000 });
         const list = page.getByRole('listbox', { name: 'Reference results' });
         await expect(list).toBeFocused();
@@ -2858,6 +2992,14 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
             };
         });
         const page = await running.firstWindow();
+        await page.evaluate(() => {
+            window.nido.onEvent((event) => {
+                if (event.type === 'state' && event.state.debug?.status === 'paused') {
+                    document.documentElement.dataset.debugPausedLocation =
+                        event.state.debug.location || '';
+                }
+            });
+        });
         await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
         await page.keyboard.press('Control+Shift+n');
         await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
@@ -2886,7 +3028,7 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
         await page.keyboard.press('F5');
         await expect(page.getByRole('region', { name: 'Debugger' })).toContainText(
             'Choose an executable:',
-            { timeout: 30000 }
+            { timeout: 90000 }
         );
         await page.keyboard.press('Control+j');
         await expect(page.locator('[data-debug-target]:focus')).toHaveCount(1);
@@ -2922,6 +3064,9 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
         await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
         await expect(page.getByRole('tab', { name: 'main.rs', exact: true })).toBeVisible();
         await page.keyboard.press('F10');
+        await expect
+            .poll(() => page.evaluate(() => document.documentElement.dataset.debugPausedLocation))
+            .toMatch(/main\.rs:4$/);
         await expect(page.getByRole('region', { name: 'Debugger' })).toHaveCount(0);
         await page.keyboard.press('Control+j');
         await expect(page.getByRole('treeitem', { name: /^answer = 42/ })).toBeVisible();
@@ -3036,7 +3181,7 @@ test('normal shutdown restores workspace order, active file and cursors', async 
         assert.equal(await readFile(join(root, 'One', 'mixed.txt'), 'utf8'), 'first\r\nsecond\n');
         await page.keyboard.press('Control+s');
         await expect
-            .poll(() => readFile(join(root, 'One', 'mixed.txt'), 'utf8'))
+            .poll(() => readSavedFile(join(root, 'One', 'mixed.txt')))
             .toBe('first\nsecond\n');
         await page.keyboard.press('Control+Shift+p');
         await page
@@ -3046,7 +3191,7 @@ test('normal shutdown restores workspace order, active file and cursors', async 
         await expect(page.getByRole('combobox', { name: 'Line endings' })).toHaveValue('CRLF');
         await page.keyboard.press('Control+s');
         await expect
-            .poll(() => readFile(join(root, 'One', 'mixed.txt'), 'utf8'))
+            .poll(() => readSavedFile(join(root, 'One', 'mixed.txt')))
             .toBe('first\r\nsecond\r\n');
         await page.keyboard.press('Space');
         await page.keyboard.press('d');
@@ -3104,6 +3249,11 @@ test('normal shutdown restores workspace order, active file and cursors', async 
                     const canvas = element as HTMLCanvasElement;
                     const scale = window.devicePixelRatio || 1;
                     const ctx = canvas.getContext('2d')!;
+                    const input = document.querySelector<HTMLTextAreaElement>(
+                        'textarea[aria-label="Neovim input"]'
+                    )!;
+                    const top = parseFloat(input.style.top);
+                    const lineHeight = Number(localStorage.getItem('nido.lineHeight'));
                     const sample = (y: number): string =>
                         Array.from(
                             ctx.getImageData(canvas.width - 2, Math.floor((y + 0.5) * scale), 1, 1)
@@ -3111,7 +3261,11 @@ test('normal shutdown restores workspace order, active file and cursors', async 
                         )
                             .slice(0, 3)
                             .join(',');
-                    return [sample(0), sample(24), sample(12)];
+                    return [
+                        sample(top),
+                        sample(top + lineHeight - 1),
+                        sample(top + lineHeight / 2)
+                    ];
                 })
             )
             .toEqual(['70,81,92', '70,81,92', '18,18,18']);
@@ -3334,7 +3488,7 @@ test('keyboard-only workspace switching, editing, saving and dirty-close guard',
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
         await expect
-            .poll(() => readFile(join(root, 'Nido', 'WorkspaceTabs.tsx'), 'utf8'))
+            .poll(() => readSavedFile(join(root, 'Nido', 'WorkspaceTabs.tsx')))
             .toContain('// smoke test');
         await expect(page.locator('canvas:visible')).toHaveAttribute(
             'aria-description',
@@ -3365,7 +3519,7 @@ test('keyboard-only workspace switching, editing, saving and dirty-close guard',
         await expect
             .poll(
                 async () =>
-                    (await readFile(join(root, 'Nido', 'WorkspaceTabs.tsx'), 'utf8')).match(
+                    (await readSavedFile(join(root, 'Nido', 'WorkspaceTabs.tsx')))?.match(
                         /日本語入力/g
                     )?.length
             )
