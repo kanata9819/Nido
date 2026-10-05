@@ -62,7 +62,15 @@ test(windowsBaselineCases[0], async () => {
         const profile = await profileFor(root, [workspace], filename);
         running = await launch(profile);
         const page = await running.firstWindow();
-        await expect(page.getByRole('tab', { name: filename, exact: true })).toBeVisible();
+        await expect(page.getByRole('tab', { name: filename, exact: true }))
+            .toBeVisible()
+            .catch(async (error) => {
+                await test.info().attach('startup-state', {
+                    body: await page.locator('body').innerText(),
+                    contentType: 'text/plain'
+                });
+                throw error;
+            });
         await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
         const canvas = page.locator('canvas[aria-label="Neovim editor display"]:visible');
         await expect(canvas).toHaveAttribute('aria-description', /日本語のファイル/);

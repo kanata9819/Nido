@@ -210,6 +210,7 @@ export default function ReferencesPanel({
                 className={styles.referencesList}
                 role="listbox"
                 aria-label="Reference results"
+                data-reference-version={state.version}
                 tabIndex={0}
                 aria-busy={state.loading}
                 aria-activedescendant={state.items[selected] ? `reference-${selected}` : undefined}

@@ -20,6 +20,7 @@ export default defineConfig({
     ),
     globalSetup: './tests/windows/setup.ts',
     timeout: 180000,
+    expect: { timeout: 15000 },
     globalTimeout: 20 * 60 * 1000,
     workers: 1,
     retries: 0,

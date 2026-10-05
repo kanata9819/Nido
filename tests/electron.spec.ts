@@ -2836,6 +2836,19 @@ test('references stay accessible after jumping and can be closed with the keyboa
             env
         });
         const page = await running.firstWindow();
+        await page.evaluate(() => {
+            Object.assign(window, { referenceState: { id: '', version: 0 } });
+            window.nido.onEvent((event) => {
+                if (event.type === 'state') {
+                    Object.assign(window, {
+                        referenceState: {
+                            id: event.id,
+                            version: event.state.references?.version || 0
+                        }
+                    });
+                }
+            });
+        });
         await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
         await page.keyboard.press('Control+Shift+n');
         await chooseWorkspace(page, root);
@@ -2845,13 +2858,48 @@ test('references stay accessible after jumping and can be closed with the keyboa
         await expect(page.getByRole('button', { name: /main.rs/ })).toBeVisible();
         await page.keyboard.press('Enter');
         await expect(async () => {
+            const before = await page.evaluate(
+                () =>
+                    (window as Window & { referenceState: { version: number } }).referenceState
+                        .version
+            );
             await page.keyboard.press('Control+k');
             await page.keyboard.type('gg0wgr', { delay: 20 });
+            await expect
+                .poll(() =>
+                    page.evaluate(() =>
+                        window.nido.inputMode(
+                            (window as Window & { referenceState: { id: string } }).referenceState
+                                .id
+                        )
+                    )
+                )
+                .toBe('n');
+            await expect
+                .poll(() =>
+                    page.evaluate(
+                        () =>
+                            (window as Window & { referenceState: { version: number } })
+                                .referenceState.version
+                    )
+                )
+                .toBeGreaterThan(before);
+            const version = await page.evaluate(
+                () =>
+                    (window as Window & { referenceState: { version: number } }).referenceState
+                        .version
+            );
+            const results = page.getByRole('listbox', { name: 'Reference results' });
+            await expect(results).toHaveAttribute('data-reference-version', String(version));
+            await expect(results).toHaveAttribute('aria-busy', 'false');
             await expect(
                 page.getByRole('listbox', { name: 'Reference results' }).getByRole('option')
             ).toHaveCount(2, {
                 timeout: 1000
             });
+            await expect(
+                page.getByRole('region', { name: 'Reference preview', exact: true })
+            ).toHaveAttribute('aria-busy', 'false');
             await expect(
                 page.getByRole('region', { name: 'Reference preview', exact: true })
             ).toContainText('fn main()');
