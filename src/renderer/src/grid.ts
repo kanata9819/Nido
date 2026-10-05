@@ -57,6 +57,7 @@ function cellForeground(h: Highlight, background: string, foreground: string): s
 }
 
 export class Grid {
+    private static readonly rasterPhases = 4;
     // Keep enough history for fast gestures while a refill spans several display frames.
     private static readonly upperRowLimit = 256;
     cells: Cell[][] = [];
@@ -84,7 +85,7 @@ export class Grid {
     private rowTops: number[] = [];
     private layoutDirty = true;
     private scrollPixels = 0;
-    private rowImages = new WeakMap<Cell[], HTMLCanvasElement>();
+    private rowImages = new WeakMap<Cell[], HTMLCanvasElement[]>();
     private imageStyle = '';
     private upperRows: Cell[][] = [];
     private upperRowsAtStart = false;
@@ -283,12 +284,7 @@ export class Grid {
                         }
                         this.layoutDirty = true;
                         let row = this.cells[Number(args[1])];
-                        if (row && (this.upperRows.includes(row) || retainedRows?.has(row))) {
-                            row = this.cells[Number(args[1])] = row.slice();
-                        }
-                        if (row) {
-                            this.rowImages.delete(row);
-                        }
+                        let changed = false;
                         let column = Number(args[2]);
                         let highlight = 0;
                         for (const cell of args[3] as [string, number?, number?][]) {
@@ -297,7 +293,22 @@ export class Grid {
                             }
                             for (let i = 0; i < (cell[2] ?? 1); i++) {
                                 if (row && column < this.columns) {
-                                    row[column] = { text: cell[0], highlight };
+                                    if (
+                                        row[column]?.text !== cell[0] ||
+                                        row[column]?.highlight !== highlight
+                                    ) {
+                                        if (!changed) {
+                                            if (
+                                                this.upperRows.includes(row) ||
+                                                retainedRows?.has(row)
+                                            ) {
+                                                row = this.cells[Number(args[1])] = row.slice();
+                                            }
+                                            this.rowImages.delete(row);
+                                            changed = true;
+                                        }
+                                        row[column] = { text: cell[0], highlight };
+                                    }
                                 }
 
                                 column++;
@@ -538,18 +549,29 @@ export class Grid {
                 continue;
             }
             const rowHeight = this.rowTop(row + 1) - this.rowTop(row);
+            // Cache fractional coverage while preserving the native glyph raster.
+            const physicalY =
+                this.pixelScrollEnabled && row < this.rows - 1
+                    ? Math.round(this.rowY(row) * dpr * Grid.rasterPhases) / Grid.rasterPhases
+                    : Math.round(this.rowY(row) * dpr);
+            const top = Math.floor(physicalY);
+            const phase = Math.round((physicalY - top) * Grid.rasterPhases);
             ctx.save();
             if (row < this.rows - 1) {
                 ctx.beginPath();
                 ctx.rect(0, 0, width, this.contentHeight);
                 ctx.clip();
             }
-            let image = this.rowImages.get(cells);
-            if (!image || image.height !== Math.ceil(rowHeight * dpr)) {
+            let images = this.rowImages.get(cells) ?? [];
+            let image = images[0];
+            const imageHeight = Math.ceil(rowHeight * dpr);
+            if (!image || image.height !== imageHeight) {
+                images = [];
+                this.rowImages.set(cells, images);
                 image = canvas.ownerDocument.createElement('canvas');
                 image.width = canvas.width;
-                image.height = Math.ceil(rowHeight * dpr);
-                this.rowImages.set(cells, image);
+                image.height = imageHeight;
+                images[0] = image;
                 const ctx = image.getContext('2d', { alpha: translucent })!;
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 ctx.textBaseline = 'alphabetic';
@@ -632,14 +654,27 @@ export class Grid {
                     }
                 }
             }
+            if (phase) {
+                let shifted = images[phase];
+                if (!shifted) {
+                    shifted = canvas.ownerDocument.createElement('canvas');
+                    shifted.width = image.width;
+                    shifted.height = image.height + 1;
+                    const shiftedContext = shifted.getContext('2d', { alpha: translucent })!;
+                    if (!translucent) {
+                        shiftedContext.fillStyle = this.background;
+                        shiftedContext.fillRect(0, 0, shifted.width, shifted.height);
+                    }
+                    // Interpolate the native bitmap once per phase, then reuse its physical pixels.
+                    shiftedContext.imageSmoothingEnabled = true;
+                    shiftedContext.imageSmoothingQuality = 'low';
+                    shiftedContext.drawImage(image, 0, phase / Grid.rasterPhases);
+                    images[phase] = shifted;
+                }
+                image = shifted;
+            }
             // Reuse rasterized text; scroll and cursor animation only composite row images.
-            ctx.drawImage(
-                image,
-                0,
-                Math.round(this.rowY(row) * dpr) / dpr,
-                image.width / dpr,
-                image.height / dpr
-            );
+            ctx.drawImage(image, 0, top / dpr, image.width / dpr, image.height / dpr);
             ctx.restore();
         }
         ctx.save();

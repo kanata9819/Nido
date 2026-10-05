@@ -3,6 +3,7 @@ import { electron } from './helpers/electron';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { installRowImageProbe } from './helpers/row-image-probe';
 
 test('upward touchpad gestures stop at the first row while replies are delayed', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-scroll-boundary-'));
@@ -44,19 +45,13 @@ test('upward touchpad gestures stop at the first row while replies are delayed',
         await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).uncheck();
         await page.getByRole('checkbox', { name: 'Relative line numbers' }).check();
         await page.keyboard.press('Escape');
+        await canvas.evaluate(installRowImageProbe);
         await canvas.evaluate((node: HTMLCanvasElement) => {
             const measurement = {
                 samples: [] as { text: string; y: number; at: number }[],
                 events: [] as unknown[]
             };
             Object.assign(window, { boundaryMeasurement: measurement });
-            const text = CanvasRenderingContext2D.prototype.fillText;
-            CanvasRenderingContext2D.prototype.fillText = function (...args) {
-                if (!this.canvas.isConnected) {
-                    this.canvas.dataset.rowText = (this.canvas.dataset.rowText ?? '') + args[0];
-                }
-                text.apply(this, args);
-            };
             const context = node.getContext('2d')!;
             const fill = context.fillRect.bind(context);
             const draw = context.drawImage.bind(context);
@@ -68,9 +63,12 @@ test('upward touchpad gestures stop at the first row while replies are delayed',
             context.drawImage = ((...args: Parameters<typeof draw>) => {
                 if (first && args.length === 5 && Number(args[2]) + Number(args[4]) > 0) {
                     first = false;
+                    const source = args[0] as HTMLCanvasElement;
+                    const baseline = Number(source.dataset.rowBaseline);
+                    const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
                     const sample = {
-                        text: (args[0] as HTMLCanvasElement).dataset.rowText ?? '',
-                        y: Number(args[2]),
+                        text: source.dataset.rowText ?? '',
+                        y: Number(args[2]) + phase,
                         at: performance.now()
                     };
                     measurement.samples.push(sample);

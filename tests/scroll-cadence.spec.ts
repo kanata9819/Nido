@@ -2,6 +2,7 @@ import { test, expect, _electron as electron } from '@playwright/test';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { installRowImageProbe } from './helpers/row-image-probe';
 
 test('continuous wheel scrolling keeps painted positions monotonic in both directions', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-scroll-cadence-'));
@@ -26,15 +27,11 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
     const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
     try {
         const page = await running.firstWindow();
+        await page.addInitScript(installRowImageProbe);
+        await page.reload();
         const canvas = page.locator('canvas:visible');
         await expect(canvas).toHaveAttribute('aria-description', /ROW_1 /);
         await canvas.evaluate((node: HTMLCanvasElement) => {
-            const text = CanvasRenderingContext2D.prototype.fillText;
-            CanvasRenderingContext2D.prototype.fillText = function (...args) {
-                if (!this.canvas.isConnected)
-                    this.canvas.dataset.rowText = (this.canvas.dataset.rowText ?? '') + args[0];
-                text.apply(this, args);
-            };
             const ctx = node.getContext('2d')!;
             const fill = ctx.fillRect.bind(ctx);
             const draw = ctx.drawImage.bind(ctx);
@@ -62,10 +59,13 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
             ctx.drawImage = ((...args: Parameters<typeof draw>) => {
                 if (first && args.length === 5 && Number(args[2]) + Number(args[4]) > 0) {
                     first = false;
-                    const row = (args[0] as HTMLCanvasElement).dataset?.rowText?.match(/ROW_(\d+)/);
+                    const source = args[0] as HTMLCanvasElement;
+                    const row = source.dataset?.rowText?.match(/ROW_(\d+)/);
                     if (row) {
                         const rowHeight = Number(localStorage.getItem('nido.lineHeight'));
-                        const top = (Number(row[1]) - 1) * rowHeight - Number(args[2]);
+                        const baseline = Number(source.dataset.rowBaseline);
+                        const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
+                        const top = (Number(row[1]) - 1) * rowHeight - Number(args[2]) - phase;
                         (
                             window as unknown as {
                                 cadence: { samples: { top: number; at: number }[] };
@@ -106,9 +106,20 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                     await page.waitForTimeout(150);
                 }
                 // Warm the initial viewport so this checks sustained scrolling, not cold startup.
-                await canvas.evaluate((node) =>
-                    node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -0.01 }))
-                );
+                await canvas.evaluate(async (node) => {
+                    // Visit fractional coverage positions as well as the whole-pixel raster.
+                    for (const pixels of [0.2, 0.2, 0.2, 0.2, 0.2, -1.01]) {
+                        await new Promise<void>((resolve) =>
+                            requestAnimationFrame(() => resolve())
+                        );
+                        node.dispatchEvent(
+                            new WheelEvent('wheel', {
+                                bubbles: true,
+                                deltaY: pixels / devicePixelRatio
+                            })
+                        );
+                    }
+                });
                 await page.waitForTimeout(250);
                 const start = Number(await canvas.getAttribute('data-document-top'));
                 await canvas.evaluate(async (node, delta) => {

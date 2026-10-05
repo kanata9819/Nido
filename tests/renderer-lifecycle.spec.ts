@@ -20,7 +20,142 @@ test.afterAll(async () => {
     await server?.close();
 });
 
-test('Features opens without a workspace, searches built-ins and restores navigation focus', async ({
+for (const scale of [1, 1.25, 1.5]) {
+    test(`slow pixel scrolling moves glyphs without whole-pixel jumps at ${scale * 100}% scale`, async ({
+        browser
+    }) => {
+        const context = await browser.newContext({ deviceScaleFactor: scale });
+        try {
+            const page = await context.newPage();
+            await page.route('**/canvas-probe', (route) =>
+                route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+            );
+            await page.goto(`${origin}canvas-probe`);
+            const samples = await page.evaluate(
+                async (moduleUrl) => {
+                    const { Grid } = await import(moduleUrl);
+                    const grid = new Grid();
+                    grid.apply([
+                        ['grid_resize', [1, 40, 6]],
+                        [
+                            'hl_attr_define',
+                            [1, { foreground: 0xffffff, background: 0x191e23 }, {}, []]
+                        ],
+                        ['grid_line', [1, 2, 0, Array.from('MMMMMMMMMMMM', (text) => [text, 1])]],
+                        ['flush']
+                    ]);
+                    grid.pixelScrollEnabled = true;
+                    const canvas = document.createElement('canvas');
+                    const positions: number[] = [];
+                    let glyphs = 0;
+                    const fillText = CanvasRenderingContext2D.prototype.fillText;
+                    CanvasRenderingContext2D.prototype.fillText = function (...args) {
+                        glyphs++;
+                        fillText.apply(this, args);
+                    };
+                    let initialGlyphs = 0;
+                    let nativeMismatches = 0;
+                    try {
+                        for (let step = 0; step <= 16; step++) {
+                            const dpr = devicePixelRatio;
+                            grid.scrollFraction = step / 8 / (28 * dpr);
+                            grid.draw(canvas, 400, 168, 16, 'monospace', false, undefined, 28);
+                            const ctx = canvas.getContext('2d')!;
+                            if (step === 0) {
+                                initialGlyphs = glyphs;
+                                // Resting text must retain the native font raster, rather than
+                                // inheriting blur from a scaled intermediate image.
+                                const reference = document.createElement('canvas');
+                                reference.width = Math.floor(120 * dpr);
+                                reference.height = 28 * dpr;
+                                const native = reference.getContext('2d', { alpha: false })!;
+                                native.setTransform(dpr, 0, 0, dpr, 0, 0);
+                                native.fillStyle = '#191e23';
+                                native.fillRect(0, 0, 400, 28);
+                                native.fillStyle = '#ffffff';
+                                native.font = '16px monospace';
+                                for (let column = 0; column < 12; column++) {
+                                    fillText.call(
+                                        native,
+                                        'M',
+                                        Math.round(column * grid.cellWidth * dpr) / dpr,
+                                        Math.round(19 * dpr) / dpr
+                                    );
+                                }
+                                const expected = native.getImageData(
+                                    0,
+                                    0,
+                                    reference.width,
+                                    reference.height
+                                ).data;
+                                const actual = ctx.getImageData(
+                                    0,
+                                    56 * dpr,
+                                    reference.width,
+                                    reference.height
+                                ).data;
+                                nativeMismatches = actual.reduce(
+                                    (count, value, index) =>
+                                        count + Number(value !== expected[index]),
+                                    0
+                                );
+                            }
+                            const top = Math.floor(40 * dpr);
+                            const width = Math.floor(120 * dpr);
+                            const pixels = ctx.getImageData(
+                                0,
+                                top,
+                                width,
+                                Math.ceil(48 * dpr)
+                            ).data;
+                            const background = pixels[0];
+                            let mass = 0;
+                            let moment = 0;
+                            for (let offset = 0; offset < pixels.length; offset += 4) {
+                                const coverage = Math.max(0, pixels[offset] - background);
+                                mass += coverage;
+                                moment += coverage * (top + Math.floor(offset / 4 / width));
+                            }
+                            positions.push(moment / mass);
+                        }
+                        grid.apply([
+                            [
+                                'grid_line',
+                                [1, 2, 0, Array.from('MMMMMMMMMMMM', (text) => [text, 1])]
+                            ],
+                            ['flush']
+                        ]);
+                        grid.draw(canvas, 400, 168, 16, 'monospace', false, undefined, 28);
+                    } finally {
+                        CanvasRenderingContext2D.prototype.fillText = fillText;
+                    }
+                    return { positions, glyphs, initialGlyphs, nativeMismatches };
+                },
+                `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+            );
+            const steps = samples.positions
+                .slice(1)
+                .map((y, index) => samples.positions[index] - y);
+            expect(steps.every((step) => step >= -0.02)).toBe(true);
+            expect(
+                Math.max(...steps),
+                'slow gestures must not jump a whole physical pixel'
+            ).toBeLessThan(0.6);
+            expect(samples.positions[0] - samples.positions.at(-1)!).toBeCloseTo(2, 1);
+            expect(samples.nativeMismatches, 'resting text must preserve its native pixels').toBe(
+                0
+            );
+            expect(samples.glyphs, 'fractional positions must reuse the native glyph raster').toBe(
+                samples.initialGlyphs
+            );
+        } finally {
+            await context.close();
+        }
+    });
+}
+
+// The Features page is temporarily disabled; retain these tests for its return.
+test.skip('Features opens without a workspace, searches built-ins and restores navigation focus', async ({
     page
 }) => {
     await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
@@ -56,7 +191,7 @@ test('Features opens without a workspace, searches built-ins and restores naviga
     await expect(features).toHaveCount(0);
 });
 
-test('Features shortcut preserves the editor and supports Japanese and command palette access', async ({
+test.skip('Features shortcut preserves the editor and supports Japanese and command palette access', async ({
     page
 }) => {
     await page.addInitScript(() => localStorage.setItem('nido.language', 'ja'));
@@ -100,7 +235,7 @@ test('Features shortcut preserves the editor and supports Japanese and command p
         .toBe(0);
 });
 
-test('Languages distinguishes code tools from highlighting, shows setup and supports keyboard tabs', async ({
+test.skip('Languages distinguishes code tools from highlighting, shows setup and supports keyboard tabs', async ({
     page
 }) => {
     await page.goto(`${origin}?view=app`);

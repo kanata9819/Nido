@@ -2,6 +2,7 @@ import { test, expect, _electron as electron } from '@playwright/test';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { installRowImageProbe } from './helpers/row-image-probe';
 
 test('scroll rendering reuses text and reports GPU and frame timings', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-scroll-performance-'));
@@ -209,7 +210,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         const canvas = page.locator('canvas:visible');
         await expect(canvas).toHaveAttribute('aria-description', /line 1/);
         const dpr = await page.evaluate(() => window.devicePixelRatio);
-        const snapped = (pixels: number): number => Math.round(pixels * dpr) / dpr;
+        const snapped = (pixels: number): number => Math.round(pixels * dpr * 4) / (dpr * 4);
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.waitForTimeout(300);
@@ -236,6 +237,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
                 }
             });
         });
+        await canvas.evaluate(installRowImageProbe);
         await canvas.evaluate((node: HTMLCanvasElement) => {
             const work = { trims: 0, descriptions: 0, paints: 0, cpuMs: 0 };
             Object.assign(window, { scrollWork: work });
@@ -277,7 +279,11 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
             const draw = context.drawImage.bind(context);
             context.drawImage = ((...args: Parameters<typeof draw>) => {
                 if (first && args.length === 5) {
-                    node.dataset.firstY = String(args[2]);
+                    const baseline = Number(
+                        (args[0] as HTMLCanvasElement).dataset.rowBaseline ?? 0
+                    );
+                    const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
+                    node.dataset.firstY = String(Number(args[2]) + phase);
                     first = false;
                 }
                 draw(...args);
@@ -297,7 +303,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
                 },
                 { count, delta }
             );
-        // Use a visible fractional move: row images now snap to physical pixels for sharp text.
+        // Measure glyph positions, including fractional coverage within cached row images.
         await burst(40, 0.04);
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-first-y')))
@@ -363,8 +369,13 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
             const context = node.getContext('2d')!;
             const draw = context.drawImage.bind(context);
             context.drawImage = ((...args: Parameters<typeof draw>) => {
-                if (args.length === 5 && Number(args[2]) > 0 && Number(args[2]) < 3)
-                    node.dataset.upPreview = String(args[2]);
+                if (args.length === 5 && Number(args[2]) > 0 && Number(args[2]) < 3) {
+                    const baseline = Number(
+                        (args[0] as HTMLCanvasElement).dataset.rowBaseline ?? 0
+                    );
+                    const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
+                    node.dataset.upPreview = String(Number(args[2]) + phase);
+                }
                 draw(...args);
             }) as typeof draw;
         });
@@ -405,11 +416,18 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         await canvas.evaluate((node: HTMLCanvasElement) => {
             const ctx = node.getContext('2d')!;
             const draw = ctx.drawImage.bind(ctx);
-            let rowImage: CanvasImageSource | undefined;
+            let rowText: string | undefined;
             ctx.drawImage = ((...args: Parameters<typeof draw>) => {
                 if (args.length === 5) {
-                    rowImage ??= args[0];
-                    if (args[0] === rowImage) node.dataset.largeUpPreview = String(args[2]);
+                    const source = args[0] as HTMLCanvasElement;
+                    rowText ??= source.dataset.rowText;
+                    if (source.dataset.rowText === rowText) {
+                        const baseline = Number(
+                            (args[0] as HTMLCanvasElement).dataset.rowBaseline ?? 0
+                        );
+                        const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
+                        node.dataset.largeUpPreview = String(Number(args[2]) + phase);
+                    }
                 }
                 draw(...args);
             }) as typeof draw;
