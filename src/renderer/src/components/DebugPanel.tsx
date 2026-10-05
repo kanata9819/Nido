@@ -1,5 +1,5 @@
 import type { DebugAction, DebugState } from '../../../shared/types';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import styles from '../assets/Nido.module.css';
 
 export default function DebugPanel({
@@ -19,7 +19,7 @@ export default function DebugPanel({
     const focused = useRef(false);
     const lastFocusTick = useRef(0);
     const [selected, setSelected] = useState<number>();
-    useLayoutEffect(() => {
+    useEffect(() => {
         const requested = focusTick !== lastFocusTick.current;
         lastFocusTick.current = focusTick;
         // DAP replaces variable IDs after stepping. Restore focus after the old row disappears,

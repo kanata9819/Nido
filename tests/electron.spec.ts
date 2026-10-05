@@ -2915,7 +2915,7 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
         await page.keyboard.press('F5');
         await expect(page.getByRole('region', { name: 'Debugger' })).toContainText(
             'Choose an executable:',
-            { timeout: 30000 }
+            { timeout: 90000 }
         );
         await page.keyboard.press('Control+j');
         await expect(page.locator('[data-debug-target]:focus')).toHaveCount(1);

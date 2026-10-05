@@ -350,6 +350,52 @@ end`,
         return next;
     }
 
+    inputMode(): Promise<string> {
+        // A deferred API request observes preceding input after Neovim has processed it.
+        const next = this.inputQueue.then(async () => {
+            if (this.stopped) {
+                throw new Error('Neovim session is closed.');
+            }
+            let completed = false;
+            let result = '';
+            let failure: unknown;
+            const deferred = this.client.request('nvim_eval', ['mode(1)']).then(
+                (value) => {
+                    result = value as string;
+                    completed = true;
+                },
+                (error) => {
+                    failure = error;
+                    completed = true;
+                }
+            );
+            while (!completed) {
+                // A deferred request cannot finish while r/f/getchar waits for its next key.
+                // The fast API stays available; let that key through instead of deadlocking.
+                const mode = (await this.client.request('nvim_get_mode', [])) as {
+                    mode: string;
+                    blocking: boolean;
+                };
+                if (mode.blocking) {
+                    return mode.mode === 'n' ? 'pending' : mode.mode;
+                }
+                if (!completed) {
+                    await new Promise((resolve) => setTimeout(resolve, 1));
+                }
+            }
+            await deferred;
+            if (failure) {
+                throw failure;
+            }
+            return result;
+        });
+        this.inputQueue = next.then(
+            () => {},
+            () => {}
+        );
+        return next;
+    }
+
     click(row: number, column: number): Promise<void> {
         const next = this.inputQueue.then(async () => {
             this.events.beginScrollBatch();

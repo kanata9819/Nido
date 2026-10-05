@@ -20,6 +20,73 @@ test.afterAll(async () => {
     await server?.close();
 });
 
+test('Rapid insert text keeps spaces and following keys while a mode check is pending', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=inputMode`);
+    const input = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(input).toBeFocused();
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [['mode_change', ['normal', 0]]]
+        })
+    );
+    await page.keyboard.type('Go## Unsaved heading');
+    await input.evaluate((node) =>
+        node.dispatchEvent(
+            new KeyboardEvent('keydown', {
+                key: '@',
+                code: 'KeyQ',
+                ctrlKey: true,
+                altKey: true,
+                modifierAltGraph: true,
+                bubbles: true,
+                cancelable: true
+            })
+        )
+    );
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'i'));
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'i'));
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'input')
+                    .map((call) => call.args[1])
+                    .join('')
+            )
+        )
+        .toBe('Go## Unsaved heading@');
+    await expect(page.getByRole('dialog', { name: 'Keyboard commands' })).toHaveCount(0);
+});
+
+test('Rapid Normal-mode menu keys open the debugger and keep its focus', async ({ page }) => {
+    await page.goto(`${origin}?view=app&defer=inputMode`);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.type(' D');
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'n'));
+    const debuggerPanel = page.getByRole('region', { name: 'Debugger', exact: true });
+    await expect(debuggerPanel).toBeVisible();
+    await expect
+        .poll(() => debuggerPanel.evaluate((node) => node.contains(document.activeElement)))
+        .toBe(true);
+    await page.keyboard.press('Space');
+    await page.keyboard.press('d');
+    await expect(debuggerPanel).toHaveCount(0);
+    await page.keyboard.press('Control+Shift+p');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('Open debug panel');
+    await page.keyboard.press('Enter');
+    await expect(debuggerPanel).toBeVisible();
+    await expect
+        .poll(() => debuggerPanel.evaluate((node) => node.contains(document.activeElement)))
+        .toBe(true);
+});
+
 test('Debugger restores variable focus after stepping and respects focus outside its panel', async ({
     page
 }) => {
