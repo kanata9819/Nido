@@ -1,3 +1,5 @@
+import type { Language } from './i18n';
+
 export const terminalShells = ['auto', 'pwsh', 'powershell.exe', 'cmd.exe', 'wsl.exe'] as const;
 export type TerminalShell = (typeof terminalShells)[number];
 
@@ -236,6 +238,7 @@ export interface NidoAPI {
     debug(id: string, action: DebugAction, target?: number): Promise<void>;
     setLineEnding(id: string, format: 'LF' | 'CRLF'): Promise<void>;
     setTheme(theme: UITheme): Promise<void>;
+    setLanguage(language: Language): Promise<void>;
     updateState(): Promise<UpdateState>;
     updateAction(action: UpdateAction): Promise<UpdateState>;
     windowAction(action: 'minimize' | 'maximize' | 'close'): Promise<void>;

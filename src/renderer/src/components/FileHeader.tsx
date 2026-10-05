@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useLayoutEffect, useRef } from 'react';
 import { ChevronRight, X } from 'lucide-react';
 import type { Workspace, SessionState } from '../../../shared/types';
@@ -24,6 +25,7 @@ export default function FileHeader({
     restartShell,
     run
 }: FileHeaderProps): React.JSX.Element {
+    const t = useI18n();
     const active = workspace.id;
     const current = state.buffers.find((buffer) => buffer.id === state.current);
     const selectedTab = useRef<HTMLDivElement>(null);
@@ -36,7 +38,7 @@ export default function FileHeader({
             <div
                 className={styles.fileTabs}
                 role="tablist"
-                aria-label="Files"
+                aria-label={t('Files')}
                 hidden={workspace.kind === 'terminal'}
             >
                 {state.buffers.map((buffer) => {
@@ -62,26 +64,28 @@ export default function FileHeader({
                                     data-status={decoration?.code || undefined}
                                     data-diagnostic={decoration?.diagnostic}
                                 >
-                                    {filename(buffer.name)}
+                                    {buffer.name ? filename(buffer.name) : t('[Untitled]')}
                                 </span>
                                 <DiagnosticBadges decoration={decoration} />
                                 {decoration?.code && (
                                     <span
                                         className={styles.gitBadge}
                                         data-status={decoration.code}
-                                        title={decoration.title}
-                                        aria-label={decoration.title}
+                                        title={t(decoration.title)}
+                                        aria-label={t(decoration.title)}
                                     >
                                         {decoration.code}
                                     </span>
                                 )}
                                 {buffer.modified && (
-                                    <span className={styles.unsaved} aria-label="Unsaved" />
+                                    <span className={styles.unsaved} aria-label={t('Unsaved')} />
                                 )}
                             </button>
                             <button
                                 className={styles.tabClose}
-                                aria-label={`Close file ${filename(buffer.name)}`}
+                                aria-label={t('Close file {name}', {
+                                    name: buffer.name ? filename(buffer.name) : t('[Untitled]')
+                                })}
                                 onClick={() => run(window.nido.closeBuffer(active, buffer.id))}
                             >
                                 <X size={12} />
@@ -101,18 +105,18 @@ export default function FileHeader({
                                 .replace(workspace.root, '')
                                 .replace(/^[\\/]/, '')
                                 .replaceAll('\\', ' / ')
-                          : 'Untitled'}
+                          : t('Untitled')}
                 </span>
                 {workspace.kind === 'terminal' ? (
                     <button
                         className={styles.restartShell}
-                        title="Restart shell (Ctrl+Shift+R)"
+                        title={t('Restart shell (Ctrl+Shift+R)')}
                         onClick={() => restartShell(active)}
                     >
-                        Restart shell <kbd>Ctrl Shift R</kbd>
+                        {t('Restart shell')} <kbd>Ctrl Shift R</kbd>
                     </button>
                 ) : (
-                    <span className={styles.breadcrumbHint}>SPACE for commands</span>
+                    <span className={styles.breadcrumbHint}>{t('SPACE for commands')}</span>
                 )}
             </div>
         </>

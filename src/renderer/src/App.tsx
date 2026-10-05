@@ -1,3 +1,4 @@
+import { LanguageContext, useI18n } from './i18n';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import type { FavoriteWorkspace, FileEntry, SessionState } from '../../shared/types';
@@ -18,7 +19,11 @@ import TitleBar from './components/TitleBar';
 import { Welcome, WorkspaceWelcome } from './components/Welcome';
 import { buildItems } from './commands';
 import { fileDecorations } from './fileDecorations';
-import { defaultFontFamily, useEditorSettings } from './hooks/useEditorSettings';
+import {
+    defaultFontFamily,
+    useEditorSettings,
+    type EditorSettings
+} from './hooks/useEditorSettings';
 import { useFavoriteWorkspaces } from './hooks/useFavoriteWorkspaces';
 import { useGitFileStatus } from './hooks/useGitFileStatus';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -38,6 +43,16 @@ const defaultState: SessionState = {
 };
 
 export default function App(): React.JSX.Element {
+    const settings = useEditorSettings();
+    return (
+        <LanguageContext value={settings.language}>
+            <AppContent settings={settings} />
+        </LanguageContext>
+    );
+}
+
+function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Element {
+    const t = useI18n();
     const pointerHidden = usePointerVisibility();
     const [panel, setPanel] = useState<Panel>(null);
     const [leader, setLeader] = useState(false);
@@ -75,7 +90,6 @@ export default function App(): React.JSX.Element {
     const [terminalVisible, setTerminalVisible] = useState(false);
     const [terminalFocusTick, setTerminalFocusTick] = useState(0);
     const [focusTick, setFocusTick] = useState(0);
-    const settings = useEditorSettings();
     const {
         theme,
         sidebar,
@@ -95,6 +109,10 @@ export default function App(): React.JSX.Element {
         document.documentElement.dataset.theme = theme;
         void window.nido.setTheme(theme).catch((error) => report(String(error)));
     }, [theme, report]);
+    useLayoutEffect(() => {
+        document.documentElement.lang = settings.language;
+        void window.nido.setLanguage(settings.language).catch((error) => report(String(error)));
+    }, [settings.language, report]);
     const errorFading = useNotificationDismissal(errorNotice, animations, dismissError);
     useSessionSettings(workspaces, settings, report);
 
@@ -361,27 +379,36 @@ export default function App(): React.JSX.Element {
         setDebugVisible(true);
         setDebugFocusTick((value) => value + 1);
     };
-    const { commands, filtered } = buildItems(active, panel, workspaces, fileList, state, query, {
-        save,
-        showPanel,
-        moveWorkspace,
-        run,
-        focusEditor,
-        closeWorkspace,
-        create,
-        showExplorer,
-        openDebugger,
-        openFile,
-        activate,
-        toggleFavorite: () => {
-            if (workspace) {
-                toggleFavorite(workspace);
-            }
+    const { commands, filtered } = buildItems(
+        active,
+        panel,
+        workspaces,
+        fileList,
+        state,
+        query,
+        {
+            save,
+            showPanel,
+            moveWorkspace,
+            run,
+            focusEditor,
+            closeWorkspace,
+            create,
+            showExplorer,
+            openDebugger,
+            openFile,
+            activate,
+            toggleFavorite: () => {
+                if (workspace) {
+                    toggleFavorite(workspace);
+                }
+            },
+            isFavorite: favorites.some(
+                (f) => f.root === workspace?.root && f.kind === (workspace?.kind || 'editor')
+            )
         },
-        isFavorite: favorites.some(
-            (f) => f.root === workspace?.root && f.kind === (workspace?.kind || 'editor')
-        )
-    });
+        t
+    );
 
     const keydown = useKeyboardShortcuts({
         save,
@@ -611,7 +638,7 @@ export default function App(): React.JSX.Element {
                 >
                     <span>{error}</span>
                     <button
-                        aria-label="Dismiss error"
+                        aria-label={t('Dismiss error')}
                         onClick={() => {
                             setError('');
                             setFocusTick((n) => n + 1);

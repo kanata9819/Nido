@@ -1,3 +1,4 @@
+import { useI18n } from './i18n';
 import { memo, useRef, type CSSProperties } from 'react';
 import { ChevronDown, ChevronRight, Folder, FolderOpen, RefreshCw, Command } from 'lucide-react';
 import ExplorerCommands from './components/ExplorerCommands';
@@ -37,6 +38,7 @@ function Sidebar({
     width,
     onResize
 }: Props): React.JSX.Element {
+    const t = useI18n();
     const drag = useRef<{ x: number; width: number } | null>(null);
     const centerPrefix = useRef(false);
     const {
@@ -59,7 +61,7 @@ function Sidebar({
     return (
         <aside
             className={styles.sidebar}
-            aria-label="File explorer"
+            aria-label={t('File explorer')}
             hidden={!active}
             style={{ width }}
             onKeyDownCapture={(event) => {
@@ -82,13 +84,13 @@ function Sidebar({
             <div
                 className={styles.sidebarResize}
                 role="separator"
-                aria-label="Explorer width"
+                aria-label={t('Explorer width')}
                 aria-orientation="vertical"
                 aria-valuemin={160}
                 aria-valuemax={480}
                 aria-valuenow={width}
                 tabIndex={0}
-                title="Drag to resize · Shift+H / L"
+                title={t('Drag to resize · Shift+H / L')}
                 onKeyDown={(event) => {
                     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
                         event.preventDefault();
@@ -131,15 +133,15 @@ function Sidebar({
                     {workspace.name}
                 </span>
                 <button
-                    title="Explorer commands (:)"
-                    aria-label="Explorer commands"
+                    title={t('Explorer commands (:)')}
+                    aria-label={t('Explorer commands')}
                     onClick={() => setOperation({})}
                 >
                     <Command size={14} />
                 </button>
                 <button
-                    title="Refresh files"
-                    aria-label="Refresh files"
+                    title={t('Refresh files')}
+                    aria-label={t('Refresh files')}
                     onClick={() => void load('')}
                 >
                     <RefreshCw size={14} />
@@ -150,8 +152,10 @@ function Sidebar({
                 className={styles.tree}
                 role="tree"
                 tabIndex={0}
-                aria-label="Project files"
-                title="j/k Select · zz Center selection · : Commands · a/A New file/folder · F2 Rename · Ctrl+C/X/V Copy/Cut/Paste · Delete"
+                aria-label={t('Project files')}
+                title={t(
+                    'j/k Select · zz Center selection · : Commands · a/A New file/folder · F2 Rename · Ctrl+C/X/V Copy/Cut/Paste · Delete'
+                )}
                 aria-activedescendant={selected ? `file-${workspace.id}-${selected}` : undefined}
                 onBlur={() => {
                     centerPrefix.current = false;
@@ -273,8 +277,8 @@ function Sidebar({
                                 <span
                                     className={styles.gitBadge}
                                     data-status={decoration.code}
-                                    title={decoration.title}
-                                    aria-label={decoration.title}
+                                    title={t(decoration.title)}
+                                    aria-label={t(decoration.title)}
                                 >
                                     {decoration.code}
                                 </span>
@@ -284,17 +288,18 @@ function Sidebar({
                 })}
                 {!visible.length && (
                     <p className={styles.emptyTree}>
-                        No files yet.
+                        {t('No files yet.')}
                         <br />
-                        Press <kbd>a</kbd> for a file or <kbd>A</kbd> for a folder.
+                        {t('Press')} <kbd>a</kbd> {t('for a file or')} <kbd>A</kbd>{' '}
+                        {t('for a folder.')}
                     </p>
                 )}
             </div>
             <div className={styles.sidebarFooter}>
                 <span className={styles.liveDot} />{' '}
                 {clipboard
-                    ? `${clipboard.cut ? 'Cut' : 'Copied'}: ${clipboard.name}`
-                    : 'File commands'}{' '}
+                    ? `${clipboard.cut ? t('Cut') : t('Copied')}: ${clipboard.name}`
+                    : t('File commands')}{' '}
                 <kbd>:</kbd>
             </div>
             {operation && (

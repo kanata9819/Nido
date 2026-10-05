@@ -1,3 +1,4 @@
+import { useI18n } from './i18n';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Grid } from './grid';
 import { accumulateScroll } from './scroll';
@@ -48,6 +49,7 @@ export default function Editor({
     fontFamily,
     onError
 }: Props): React.JSX.Element {
+    const t = useI18n();
     const host = useRef<HTMLDivElement>(null);
     const canvas = useRef<HTMLCanvasElement>(null);
     const input = useRef<HTMLTextAreaElement>(null);
@@ -219,7 +221,7 @@ export default function Editor({
                 key={theme}
                 ref={canvas}
                 className={styles.canvas}
-                aria-label={terminal ? 'Terminal display' : 'Neovim editor display'}
+                aria-label={terminal ? t('Terminal display') : t('Neovim editor display')}
             />
             {children}
             {!terminal && active && stickyScroll && (
@@ -251,7 +253,8 @@ export default function Editor({
             <textarea
                 ref={input}
                 className={styles.editorInput}
-                aria-label={terminal ? 'Terminal input' : 'Neovim input'}
+                data-editor-input={terminal ? 'terminal' : 'editor'}
+                aria-label={terminal ? t('Terminal input') : t('Neovim input')}
                 spellCheck={false}
                 autoCapitalize="off"
                 autoComplete="off"

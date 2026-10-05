@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import type { GitView } from '../types';
 import { useEffect, useRef, useState } from 'react';
 import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
@@ -15,6 +16,7 @@ export default function GitBrowser({
     workspaceId: string;
     onClose: () => void;
 }): React.JSX.Element {
+    const t = useI18n();
     const [view, setView] = useState<GitView>('changes');
     const [message, setMessage] = useState('');
     const [revision, setRevision] = useState(0);
@@ -122,12 +124,12 @@ export default function GitBrowser({
     const path = files[index];
     const diff =
         !commit || !path
-            ? 'Select a commit and press Enter to browse its changed files.'
+            ? t('Select a commit and press Enter to browse its changed files.')
             : diffResult?.workspaceId === workspaceId &&
                 diffResult.commit === commit &&
                 diffResult.path === path
               ? diffResult.value
-              : 'Loading diff…';
+              : t('Loading diff…');
     useEffect(() => {
         let cancelled = false;
         if (!commit || !path) {
@@ -227,23 +229,23 @@ export default function GitBrowser({
     } else {
         labels = history.map((entry) => `${entry.hash.slice(0, 8)}  ${entry.subject}`);
     }
-    let listLabel = 'Commit history';
+    let listLabel = t('Commit history');
     if (view === 'branches') {
-        listLabel = 'Branches';
+        listLabel = t('Branches');
     } else if (commit) {
-        listLabel = 'Commit files';
+        listLabel = t('Commit files');
     }
 
     useGitBrowserKeyboard({ busy, back: returnToPreviousView, changeView });
 
     return (
         <div className={styles.panel}>
-            <nav className={styles.toolbar} aria-label="Git views">
+            <nav className={styles.toolbar} aria-label={t('Git views')}>
                 {(
                     [
-                        { view: 'changes', title: 'Changes' },
-                        { view: 'history', title: 'History' },
-                        { view: 'branches', title: 'Branches' }
+                        { view: 'changes', title: t('Changes') },
+                        { view: 'history', title: t('History') },
+                        { view: 'branches', title: t('Branches') }
                     ] as const
                 ).map(({ view: tab, title }, shortcutIndex) => (
                     <button
@@ -264,19 +266,22 @@ export default function GitBrowser({
                     setMessage={setMessage}
                 />
             ) : (
-                <section aria-label="Git browser" aria-busy={busy}>
+                <section aria-label={t('Git browser')} aria-busy={busy}>
                     <div className={styles.toolbar}>
                         <strong>{branchName}</strong>
                         <span>
                             {commit
-                                ? `${commit.hash.slice(0, 8)} · ${commit.subject} · Compared with first parent`
+                                ? t('{hash} · {subject} · Compared with first parent', {
+                                      hash: commit.hash.slice(0, 8),
+                                      subject: commit.subject
+                                  })
                                 : view === 'history'
-                                  ? 'History of the current branch'
-                                  : 'Local and remote-tracking branches'}
+                                  ? t('History of the current branch')
+                                  : t('Local and remote-tracking branches')}
                         </span>
                         {commit && (
                             <button disabled={busy} onClick={returnToPreviousView}>
-                                Back (Esc)
+                                {t('Back (Esc)')}
                             </button>
                         )}
                         <button
@@ -289,7 +294,7 @@ export default function GitBrowser({
                                 setRevision((value) => value + 1);
                             }}
                         >
-                            Refresh
+                            {t('Refresh')}
                         </button>
                     </div>
                     <div className={styles.content}>
@@ -313,9 +318,9 @@ export default function GitBrowser({
                                     key={`${commit.hash}:${path}`}
                                     workspaceId={workspaceId}
                                     path={path}
-                                    diff={diff}
-                                    label="Commit diff"
-                                    beforeLabel="First parent"
+                                    diff={t(diff)}
+                                    label={t('Commit diff')}
+                                    beforeLabel={t('First parent')}
                                     afterLabel={commit.hash.slice(0, 8)}
                                 />
                             ) : view === 'history' && history[index] ? (
@@ -339,8 +344,8 @@ export default function GitBrowser({
                         {!commit && (
                             <button disabled={busy || !labels.length} onClick={openSelection}>
                                 {view === 'history'
-                                    ? 'Open commit (Enter)'
-                                    : 'Switch branch (Enter)'}
+                                    ? t('Open commit (Enter)')
+                                    : t('Switch branch (Enter)')}
                             </button>
                         )}
                         {view === 'history' && !commit && hasMoreHistory && (
@@ -348,12 +353,12 @@ export default function GitBrowser({
                                 disabled={busy}
                                 onClick={() => void run(() => loadHistory(true))}
                             >
-                                Load older commits
+                                {t('Load older commits')}
                             </button>
                         )}
                         {view === 'branches' && (
                             <button disabled={busy} onClick={() => setCreating(true)}>
-                                New branch (n)
+                                {t('New branch (n)')}
                             </button>
                         )}
                     </div>
@@ -368,13 +373,13 @@ export default function GitBrowser({
                             <input
                                 ref={branchInput}
                                 autoFocus
-                                aria-label="New branch name"
-                                placeholder="New branch name"
+                                aria-label={t('New branch name')}
+                                placeholder={t('New branch name')}
                                 value={newBranchName}
                                 onChange={(event) => setNewBranchName(event.target.value)}
                             />
                             <button disabled={busy || !newBranchName.trim()} type="submit">
-                                Create and switch
+                                {t('Create and switch')}
                             </button>
                         </form>
                     )}
@@ -384,9 +389,9 @@ export default function GitBrowser({
                         </p>
                     )}
                     <footer>
-                        1/2/3 Views · Ctrl+H/L List / Diff · j/k Select / Scroll · Ctrl+D/U Half
-                        page · Ctrl+F/B Page · g/G Top / Bottom · n/N Next / Previous change · Tab
-                        Move focus · Esc Back / Close
+                        {t(
+                            '1/2/3 Views · Ctrl+H/L List / Diff · j/k Select / Scroll · Ctrl+D/U Half page · Ctrl+F/B Page · g/G Top / Bottom · n/N Next / Previous change · Tab Move focus · Esc Back / Close'
+                        )}
                     </footer>
                 </section>
             )}

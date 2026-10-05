@@ -1,9 +1,16 @@
 import { terminalShells, uiThemes, type TerminalShell, type UITheme } from '../../../shared/types';
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { parseLanguage, type Language } from '../../../shared/i18n';
 
 export const defaultFontFamily = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
 
 export function useEditorSettings(): EditorSettings {
+    const [language, setLanguage] = useState<Language>(() =>
+        parseLanguage(localStorage.getItem('nido.language'))
+    );
+    useEffect(() => {
+        localStorage.setItem('nido.language', language);
+    }, [language]);
     const [theme, setTheme] = useState<UITheme>(() => {
         const saved = localStorage.getItem('nido.theme') as UITheme;
         return uiThemes.includes(saved) ? saved : 'dark';
@@ -127,6 +134,8 @@ export function useEditorSettings(): EditorSettings {
     }, [lineHeight]);
 
     return {
+        language,
+        setLanguage,
         theme,
         setTheme,
         wordWrap,
@@ -167,6 +176,8 @@ export function useEditorSettings(): EditorSettings {
 }
 
 export interface EditorSettings {
+    language: Language;
+    setLanguage: Dispatch<SetStateAction<Language>>;
     theme: UITheme;
     setTheme: Dispatch<SetStateAction<UITheme>>;
     wordWrap: boolean;

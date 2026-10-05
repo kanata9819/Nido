@@ -1,3 +1,5 @@
+import { useContext } from 'react';
+import { LanguageContext, useI18n } from '../i18n';
 import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
 import styles from '../assets/GitPanel.module.css';
 
@@ -10,40 +12,45 @@ export function CommitDetails({
     busy: boolean;
     open: () => void;
 }): React.JSX.Element {
+    const t = useI18n();
+    const language = useContext(LanguageContext);
     return (
         <section
             className={styles.commitSummary}
             data-git-summary
             tabIndex={0}
-            aria-label="Commit details"
+            aria-label={t('Commit details')}
         >
-            <span className={styles.summaryLabel}>COMMIT</span>
+            <span className={styles.summaryLabel}>{t('COMMIT')}</span>
             <h2>{entry.subject}</h2>
             <dl className={styles.commitDetails}>
                 <div>
-                    <dt>Author</dt>
+                    <dt>{t('Author')}</dt>
                     <dd>{entry.author}</dd>
                 </div>
                 <div>
-                    <dt>Committed</dt>
+                    <dt>{t('Committed')}</dt>
                     <dd>
                         <time dateTime={entry.date}>
-                            {new Date(entry.date).toLocaleString(undefined, {
-                                dateStyle: 'medium',
-                                timeStyle: 'short'
-                            })}
+                            {new Date(entry.date).toLocaleString(
+                                language === 'ja' ? 'ja-JP' : 'en-US',
+                                {
+                                    dateStyle: 'medium',
+                                    timeStyle: 'short'
+                                }
+                            )}
                         </time>
                     </dd>
                 </div>
                 <div>
-                    <dt>Hash</dt>
+                    <dt>{t('Hash')}</dt>
                     <dd>
                         <code>{entry.hash}</code>
                     </dd>
                 </div>
             </dl>
             <button disabled={busy} onClick={open}>
-                Browse changed files <kbd>Enter</kbd>
+                {t('Browse changed files')} <kbd>Enter</kbd>
             </button>
         </section>
     );
@@ -58,40 +65,41 @@ export function BranchDetails({
     busy: boolean;
     open: () => void;
 }): React.JSX.Element {
+    const t = useI18n();
     return (
         <section
             className={styles.commitSummary}
             data-git-summary
             tabIndex={0}
-            aria-label="Branch details"
+            aria-label={t('Branch details')}
         >
-            <span className={styles.summaryLabel}>BRANCH</span>
+            <span className={styles.summaryLabel}>{t('BRANCH')}</span>
             <h2>{entry.name}</h2>
             <dl className={styles.commitDetails}>
                 <div>
-                    <dt>Type</dt>
-                    <dd>{entry.remote ? 'Remote-tracking branch' : 'Local branch'}</dd>
+                    <dt>{t('Type')}</dt>
+                    <dd>{entry.remote ? t('Remote-tracking branch') : t('Local branch')}</dd>
                 </div>
                 <div>
-                    <dt>Status</dt>
-                    <dd>{entry.current ? 'Currently checked out' : 'Available to switch'}</dd>
+                    <dt>{t('Status')}</dt>
+                    <dd>{entry.current ? t('Currently checked out') : t('Available to switch')}</dd>
                 </div>
                 <div>
-                    <dt>On switch</dt>
+                    <dt>{t('On switch')}</dt>
                     <dd>
                         {entry.remote
-                            ? 'Create a local branch that tracks this remote branch.'
-                            : 'Check out this branch in the workspace.'}
+                            ? t('Create a local branch that tracks this remote branch.')
+                            : t('Check out this branch in the workspace.')}
                     </dd>
                 </div>
             </dl>
             <p className={styles.summaryHint}>
                 {entry.current
-                    ? 'You are already working on this branch.'
-                    : 'Switch to this branch to continue working on it.'}
+                    ? t('You are already working on this branch.')
+                    : t('Switch to this branch to continue working on it.')}
             </p>
             <button disabled={busy || entry.current} onClick={open}>
-                Switch branch <kbd>Enter</kbd>
+                {t('Switch branch')} <kbd>Enter</kbd>
             </button>
         </section>
     );

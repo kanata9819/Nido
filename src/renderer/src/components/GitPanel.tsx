@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GitChange, GitStatus } from '../../../shared/types';
 import styles from '../assets/GitPanel.module.css';
@@ -16,6 +17,7 @@ export default function GitPanel({
     message: string;
     setMessage: (message: string) => void;
 }): React.JSX.Element {
+    const t = useI18n();
     const [status, setStatus] = useState<GitStatus>();
     const [selected, setSelected] = useState('');
     const [diffResult, setDiffResult] = useState<{
@@ -113,12 +115,12 @@ export default function GitPanel({
     }, [workspaceId, applyStatus]);
 
     const diff = !current
-        ? 'Select a change to preview its diff.'
+        ? t('Select a change to preview its diff.')
         : diffResult?.workspaceId === workspaceId &&
             diffResult.change === current &&
             diffResult.status === status
           ? diffResult.value
-          : 'Loading diff…';
+          : t('Loading diff…');
     useEffect(() => {
         let cancelled = false;
         if (current) {
@@ -178,7 +180,7 @@ export default function GitPanel({
     return (
         <section
             className={styles.panel}
-            aria-label="Git changes"
+            aria-label={t('Git changes')}
             aria-busy={busy}
             onKeyDown={(event) => {
                 if (event.nativeEvent.isComposing || event.keyCode === 229) {
@@ -191,16 +193,16 @@ export default function GitPanel({
             }}
         >
             <div className={styles.toolbar}>
-                <strong>{status?.branch || 'Source control'}</strong>
+                <strong>{status?.branch || t('Source control')}</strong>
                 <span title={status?.root}>{status?.root}</span>
                 <button
                     disabled={busy || !changes.some((change) => !change.staged)}
                     onClick={stageAll}
                 >
-                    Stage all (S)
+                    {t('Stage all (S)')}
                 </button>
                 <button disabled={busy} onClick={() => void run(async () => {})}>
-                    Refresh
+                    {t('Refresh')}
                 </button>
             </div>
             <div className={styles.content}>
@@ -208,7 +210,7 @@ export default function GitPanel({
                     ref={list}
                     className={styles.list}
                     role="listbox"
-                    aria-label="Changed files"
+                    aria-label={t('Changed files')}
                     tabIndex={0}
                     aria-activedescendant={
                         current ? `git-change-${changes.indexOf(current)}` : undefined
@@ -281,7 +283,7 @@ export default function GitPanel({
                     {changes.map((change, index) => (
                         <div key={key(change)}>
                             {(index === 0 || changes[index - 1].staged !== change.staged) && (
-                                <h3>{change.staged ? 'Staged changes' : 'Changes'}</h3>
+                                <h3>{change.staged ? t('Staged changes') : t('Changes')}</h3>
                             )}
                             <div
                                 id={`git-change-${index}`}
@@ -308,35 +310,35 @@ export default function GitPanel({
                             </div>
                         </div>
                     ))}
-                    {status && !changes.length && <p>Working tree clean.</p>}
+                    {status && !changes.length && <p>{t('Working tree clean.')}</p>}
                 </div>
                 <div className={styles.preview} data-git-preview>
                     <div className={styles.toolbar}>
                         <span>
                             {current
-                                ? `${current.staged ? 'Staged' : 'Working tree'} · ${current.path}`
-                                : 'Diff'}
+                                ? `${current.staged ? t('Staged') : t('Working tree')} · ${current.path}`
+                                : t('Diff')}
                         </span>
                         <button disabled={busy || !current} onClick={stage}>
-                            {current?.staged ? 'Unstage (u)' : 'Stage (s)'}
+                            {current?.staged ? t('Unstage (u)') : t('Stage (s)')}
                         </button>
                     </div>
                     <GitDiff
                         key={selected}
                         workspaceId={workspaceId}
                         path={current?.path || ''}
-                        diff={diff}
-                        label="Git diff"
-                        beforeLabel={current?.staged ? 'HEAD' : 'Index'}
-                        afterLabel={current?.staged ? 'Index · Staged' : 'Working tree'}
+                        diff={t(diff)}
+                        label={t('Git diff')}
+                        beforeLabel={current?.staged ? 'HEAD' : t('Index')}
+                        afterLabel={current?.staged ? t('Index · Staged') : t('Working tree')}
                     />
                 </div>
             </div>
             <div className={styles.commit}>
                 <textarea
                     ref={input}
-                    aria-label="Commit message"
-                    placeholder="Commit message"
+                    aria-label={t('Commit message')}
+                    placeholder={t('Commit message')}
                     maxLength={10000}
                     value={message}
                     onChange={(event) => setMessage(event.target.value)}
@@ -345,7 +347,7 @@ export default function GitPanel({
                     disabled={busy || !message.trim() || !changes.some((change) => change.staged)}
                     onClick={commit}
                 >
-                    Commit staged
+                    {t('Commit staged')}
                     <br />
                     <small>Ctrl+Enter</small>
                 </button>
@@ -362,13 +364,16 @@ export default function GitPanel({
             )}
             <footer>
                 {busy
-                    ? 'Working…'
-                    : 'j/k Select · s Stage · S Stage all · u Unstage · r Refresh · c Message · Esc Close'}
+                    ? t('Working…')
+                    : t(
+                          'j/k Select · s Stage · S Stage all · u Unstage · r Refresh · c Message · Esc Close'
+                      )}
                 <br />
-                Ctrl+H/L List / Diff · j/k Scroll diff · Ctrl+D/U Half page · Ctrl+F/B Page · g/G
-                Top / Bottom · n/N Next / Previous change
+                {t(
+                    'Ctrl+H/L List / Diff · j/k Scroll diff · Ctrl+D/U Half page · Ctrl+F/B Page · g/G Top / Bottom · n/N Next / Previous change'
+                )}
                 <br />
-                Saved files only · Changes cover the entire repository.
+                {t('Saved files only · Changes cover the entire repository.')}
             </footer>
         </section>
     );

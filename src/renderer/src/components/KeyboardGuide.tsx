@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { X } from 'lucide-react';
 import type { Item } from '../types';
 import styles from '../assets/Nido.module.css';
@@ -9,12 +10,13 @@ export default function KeyboardGuide({
     commands: Item[];
     focusEditor: () => void;
 }): React.JSX.Element {
+    const t = useI18n();
     return (
-        <div className={styles.leader} role="dialog" aria-label="Keyboard commands">
+        <div className={styles.leader} role="dialog" aria-label={t('Keyboard commands')}>
             <div className={styles.leaderTitle}>
                 <kbd>SPACE</kbd>
-                <span>Where to?</span>
-                <button aria-label="Dismiss commands" onClick={focusEditor}>
+                <span>{t('Where to?')}</span>
+                <button aria-label={t('Dismiss commands')} onClick={focusEditor}>
                     <X size={14} />
                 </button>
             </div>
@@ -31,8 +33,8 @@ export default function KeyboardGuide({
                     ))}
             </div>
             <footer>
-                <span>Space again for all commands</span>
-                <span>Esc to dismiss</span>
+                <span>{t('Space again for all commands')}</span>
+                <span>{t('Esc to dismiss')}</span>
             </footer>
         </div>
     );

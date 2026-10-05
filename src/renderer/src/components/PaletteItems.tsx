@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useEffect, useRef } from 'react';
 import { Command, FolderOpen, FileCode2, CircleAlert, TriangleAlert, Info } from 'lucide-react';
 import type { Panel, Item } from '../types';
@@ -43,6 +44,7 @@ export default function PaletteItems({
     setQuery,
     setSelection
 }: PaletteItemsProps): React.JSX.Element {
+    const t = useI18n();
     const results = useRef<HTMLDivElement>(null);
     const filter = useRef<HTMLInputElement>(null);
     useEffect(() => {
@@ -61,8 +63,8 @@ export default function PaletteItems({
                 ref={filter}
                 autoFocus={panel !== 'problems'}
                 className={styles.paletteInput}
-                aria-label="Filter items"
-                placeholder={panel === 'files' ? 'Type a filename…' : 'Type to search…'}
+                aria-label={t('Filter items')}
+                placeholder={panel === 'files' ? t('Type a filename…') : t('Type to search…')}
                 value={query}
                 onChange={(event) => {
                     setQuery(event.target.value);
@@ -86,7 +88,7 @@ export default function PaletteItems({
                 ref={results}
                 tabIndex={panel === 'problems' ? 0 : undefined}
                 role={panel === 'problems' ? 'listbox' : undefined}
-                aria-label={panel === 'problems' ? 'Problems' : undefined}
+                aria-label={panel === 'problems' ? t('Problems') : undefined}
                 aria-activedescendant={
                     panel === 'problems' && filtered[selection] ? `problem-${selection}` : undefined
                 }
@@ -148,20 +150,20 @@ export default function PaletteItems({
                 {!filtered.length && (
                     <p className={styles.noResults}>
                         {loading
-                            ? 'Looking through your project…'
+                            ? t('Looking through your project…')
                             : panel === 'problems' && !query
-                              ? 'No problems reported.'
-                              : 'No matching items.'}
+                              ? t('No problems reported.')
+                              : t('No matching items.')}
                     </p>
                 )}
             </div>
             <div className={styles.paletteFooter}>
                 <span>
                     {panel === 'problems'
-                        ? `${filtered.length} problems · j/k Select · / Filter`
+                        ? t('{count} problems · j/k Select · / Filter', { count: filtered.length })
                         : '↑ ↓ or Ctrl+j / k to navigate'}
                 </span>
-                <span>Enter to select · Esc to return</span>
+                <span>{t('Enter to select · Esc to return')}</span>
             </div>
         </>
     );

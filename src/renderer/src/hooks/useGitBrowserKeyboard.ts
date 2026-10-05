@@ -22,7 +22,7 @@ export function useGitBrowserKeyboard({
                 }
                 return;
             }
-            if (!(event.target as HTMLElement).closest('[aria-label="git palette"]')) {
+            if (!(event.target as HTMLElement).closest('[data-panel="git"]')) {
                 return;
             }
             const editing = (event.target as HTMLElement).matches(
@@ -32,7 +32,7 @@ export function useGitBrowserKeyboard({
                 return;
             }
             const target = event.target as HTMLElement;
-            const dialog = target.closest('[aria-label="git palette"]');
+            const dialog = target.closest('[data-panel="git"]');
             const key = event.key.toLowerCase();
             if (event.ctrlKey && !event.shiftKey && (key === 'h' || key === 'l')) {
                 event.preventDefault();

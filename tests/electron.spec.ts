@@ -1621,6 +1621,18 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await page.keyboard.press('Shift+Tab');
         await expect(page.getByRole('combobox', { name: 'Theme', exact: true })).toBeFocused();
         await page.keyboard.press('Shift+Tab');
+        const language = page.getByRole('combobox', { name: 'Language', exact: true });
+        await expect(language).toBeFocused();
+        await page.keyboard.press('ArrowDown');
+        await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
+        await expect(page.getByRole('combobox', { name: '言語', exact: true })).toBeFocused();
+        await page.keyboard.press('ArrowUp');
+        await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+        await expect(language).toBeFocused();
+        await expect
+            .poll(() => page.evaluate(() => localStorage.getItem('nido.language')))
+            .toBe('en');
+        await page.keyboard.press('Shift+Tab');
         await expect(page.getByRole('button', { name: 'Close palette' })).toBeFocused();
         await page.keyboard.press('Shift+Tab');
         await expect(page.getByRole('checkbox', { name: 'Use EditorConfig' })).toBeFocused();

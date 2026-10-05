@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import SettingsPanel, { type SettingsPanelProps } from './SettingsPanel';
 import type { Panel, Item } from '../types';
 import { Command, X } from 'lucide-react';
@@ -61,6 +62,7 @@ export function Panel({
     setQuery,
     setSelection
 }: PanelProps): React.JSX.Element | null {
+    const t = useI18n();
     if (!panel) {
         return null;
     }
@@ -118,13 +120,14 @@ export function Panel({
                 className={`${styles.palette} ${panel === 'git' ? styles.gitPalette : ''} ${panel === 'markdown' ? styles.markdownPalette : ''}`}
                 role="dialog"
                 aria-modal="true"
-                aria-label={panel === 'settings' ? 'Settings' : `${panel} palette`}
+                aria-label={panel === 'settings' ? t('Settings') : t(`${panel} palette`)}
+                data-panel={panel}
                 ref={modal}
             >
                 <div className={styles.paletteHeading}>
                     <Command size={17} />
-                    <span>{panelTitles[panel]}</span>
-                    <button aria-label="Close palette" onClick={focusEditor}>
+                    <span>{t(panelTitles[panel])}</span>
+                    <button aria-label={t('Close palette')} onClick={focusEditor}>
                         <X size={17} />
                     </button>
                 </div>

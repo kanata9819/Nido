@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { Code2, Search, ChevronUp, ChevronDown, X } from 'lucide-react';
 import type { Workspace, SessionState } from '../../../shared/types';
 import styles from '../assets/Nido.module.css';
@@ -40,56 +41,63 @@ export default function StatusBar({
     onLineEnding,
     onSearch
 }: StatusBarProps): React.JSX.Element {
+    const t = useI18n();
     const displayMode = modeLabel(state.mode);
     return (
         <footer className={styles.statusbar}>
-            <span className={styles.mode} data-mode={displayMode}>
-                {displayMode}
+            <span className={styles.mode} data-mode={t(displayMode)}>
+                {t(displayMode)}
             </span>
             {active && (
-                <button aria-label="Toggle terminal" onClick={onToggleTerminal}>
-                    Terminal
+                <button aria-label={t('Toggle terminal')} onClick={onToggleTerminal}>
+                    {t('Terminal')}
                 </button>
             )}
             {active && (
-                <button aria-label="Toggle debugger" onClick={onToggleDebugger}>
-                    Debug
+                <button aria-label={t('Toggle debugger')} onClick={onToggleDebugger}>
+                    {t('Debug')}
                 </button>
             )}
             {state.references && (
-                <button aria-label="Toggle references" onClick={onToggleReferences}>
-                    References
+                <button aria-label={t('Toggle references')} onClick={onToggleReferences}>
+                    {t('References')}
                 </button>
             )}
-            <span className={styles.statusWorkspace}>{workspace?.name || 'Welcome to Nido'}</span>
+            <span className={styles.statusWorkspace}>
+                {workspace?.name || t('Welcome to Nido')}
+            </span>
             {state.search && (
-                <span className={styles.searchStatus} role="status" aria-label="Search matches">
+                <span
+                    className={styles.searchStatus}
+                    role="status"
+                    aria-label={t('Search matches')}
+                >
                     <Search size={13} />
                     <strong title={state.search.pattern}>
                         {state.search.pattern.replace(/^\\</, '').replace(/\\>$/, '')}
                     </strong>
                     <span>
                         {state.search.incomplete === 1
-                            ? 'Counting…'
+                            ? t('Counting…')
                             : `${state.search.current} / ${state.search.total}${state.search.incomplete === 2 ? '+' : ''}`}
                     </span>
                     <button
-                        aria-label="Previous search match"
-                        title="Previous (N)"
+                        aria-label={t('Previous search match')}
+                        title={t('Previous (N)')}
                         onClick={() => onSearch('N')}
                     >
                         <ChevronUp size={14} />
                     </button>
                     <button
-                        aria-label="Next search match"
-                        title="Next (n)"
+                        aria-label={t('Next search match')}
+                        title={t('Next (n)')}
                         onClick={() => onSearch('n')}
                     >
                         <ChevronDown size={14} />
                     </button>
                     <button
-                        aria-label="Clear search highlights"
-                        title="Clear (Esc)"
+                        aria-label={t('Clear search highlights')}
+                        title={t('Clear (Esc)')}
                         onClick={() => onSearch('<Esc>')}
                     >
                         <X size={13} />
@@ -98,7 +106,9 @@ export default function StatusBar({
             )}
             <span className={styles.statusDivider} />
             <span className={styles.sessionCount}>
-                {sessionCount} {sessionCount === 1 ? 'session' : 'sessions'}
+                {t(sessionCount === 1 ? '{count} session' : '{count} sessions', {
+                    count: sessionCount
+                })}
             </span>
             <span className={styles.statusGap} />
             {state.lspProgress && (
@@ -107,24 +117,24 @@ export default function StatusBar({
                     <span>{state.lspProgress}</span>
                 </span>
             )}
-            <span>{state.filetype || 'Plain text'}</span>
+            <span>{state.filetype || t('Plain text')}</span>
             {state.filetype === 'rust' && (
-                <span title="Rust language server connection">
-                    {state.lsp || 'Rust LSP: not connected'}
+                <span title={t('Rust language server connection')}>
+                    {state.lsp || t('Rust LSP: not connected')}
                 </span>
             )}
             <span>UTF-8</span>
             {active && workspace?.kind !== 'terminal' && state.lineEnding && (
                 <select
                     className={styles.lineEnding}
-                    aria-label="Line endings"
-                    title="Convert line endings (save to apply to disk)"
+                    aria-label={t('Line endings')}
+                    title={t('Convert line endings (save to apply to disk)')}
                     value={state.lineEnding}
                     onChange={(event) => onLineEnding(event.target.value as 'LF' | 'CRLF')}
                 >
                     {state.lineEnding === 'Mixed' && (
                         <option value="Mixed" disabled>
-                            Mixed
+                            {t('Mixed')}
                         </option>
                     )}
                     {state.lineEnding === 'CR' && (
@@ -136,14 +146,12 @@ export default function StatusBar({
                     <option value="CRLF">CRLF</option>
                 </select>
             )}
-            <span>
-                Ln {state.line}, Col {state.column}
-            </span>
+            <span>{t('Ln {line}, Col {column}', { line: state.line, column: state.column })}</span>
             {active && workspace?.kind !== 'terminal' && state.scrollPercent !== undefined && (
                 <span
                     className={styles.scrollPosition}
-                    title="Position in file"
-                    aria-label={`File position ${state.scrollPercent}%`}
+                    title={t('Position in file')}
+                    aria-label={t('File position {percent}%', { percent: state.scrollPercent })}
                 >
                     <span className={styles.scrollTrack} aria-hidden="true">
                         <span style={{ width: `${state.scrollPercent}%` }} />
