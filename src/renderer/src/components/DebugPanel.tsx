@@ -17,18 +17,23 @@ export default function DebugPanel({
     const variableList = useRef<HTMLDivElement>(null);
     const closePrefix = useRef(false);
     const focused = useRef(false);
+    const awaitingVariables = useRef(false);
     const lastFocusTick = useRef(0);
     const [selected, setSelected] = useState<number>();
     useEffect(() => {
         const requested = focusTick !== lastFocusTick.current;
         lastFocusTick.current = focusTick;
+        if (requested) {
+            awaitingVariables.current = !state?.variables?.length;
+        }
         // DAP replaces variable IDs after stepping. Restore focus after the old row disappears,
         // while allowing the user to move back to the editor during an update.
         if (
             focusTick &&
             (requested ||
                 (focused.current &&
-                    !panel.current?.contains(document.activeElement) &&
+                    (awaitingVariables.current ||
+                        !panel.current?.contains(document.activeElement)) &&
                     state?.variables?.length))
         ) {
             (
@@ -38,6 +43,9 @@ export default function DebugPanel({
                 ) ||
                 panel.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')
             )?.focus();
+            if (state?.variables?.length) {
+                awaitingVariables.current = false;
+            }
         }
     }, [focusTick, state?.variables]);
     const busy = state?.status === 'building' || state?.status === 'starting';
@@ -57,7 +65,11 @@ export default function DebugPanel({
             }}
             onBlur={(event) => {
                 if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                    focused.current = false;
+                    // Removing a focused variable row can blur without an outside focus target.
+                    if (event.relatedTarget) {
+                        focused.current = false;
+                        awaitingVariables.current = false;
+                    }
                     closePrefix.current = false;
                 }
             }}

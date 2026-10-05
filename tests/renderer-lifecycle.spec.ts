@@ -87,10 +87,11 @@ test('Rapid Normal-mode menu keys open the debugger and keep its focus', async (
         .toBe(true);
 });
 
-test('Debugger restores variable focus after stepping and respects focus outside its panel', async ({
+test('Debugger focuses arriving variables, restores focus after stepping and respects focus outside its panel', async ({
     page
 }) => {
     await page.goto(`${origin}?view=debug`);
+    await expect(page.getByRole('button', { name: /Start F5/ })).toBeFocused();
     const renderVariables = async (id: number): Promise<void> => {
         await page.evaluate(
             (id) =>
@@ -120,7 +121,7 @@ test('Debugger restores variable focus after stepping and respects focus outside
     };
     await renderVariables(1);
     const variable = page.getByRole('treeitem', { name: 'number = 21 (int)' });
-    await variable.focus();
+    await expect(variable).toBeFocused();
     await page.evaluate(() =>
         window.rendererTest.render({
             debugState: { status: 'running', output: '', targets: [], variables: [] }
@@ -132,6 +133,11 @@ test('Debugger restores variable focus after stepping and respects focus outside
     const outside = page.getByRole('button', { name: 'Outside debugger' });
     await outside.focus();
     await renderVariables(3);
+    await expect(outside).toBeFocused();
+    await page.reload();
+    await expect(page.getByRole('button', { name: /Start F5/ })).toBeFocused();
+    await outside.focus();
+    await renderVariables(4);
     await expect(outside).toBeFocused();
 });
 
