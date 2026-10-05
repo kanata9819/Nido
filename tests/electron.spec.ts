@@ -798,6 +798,7 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await expect(canvas).not.toHaveAttribute('aria-description', /amount.toFixed/);
         await expect(input).toBeFocused();
         await page.screenshot({ path: 'test-results/nido-completion.png' });
+        await expect(menu).toHaveAttribute('aria-busy', 'false');
         await page.keyboard.press('Tab');
         await expect(menu).toHaveCount(0);
         await expect(canvas).toHaveAttribute('aria-description', /amount.toFixed/);
@@ -830,6 +831,8 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         await expect(
             menu.getByRole('option').first().getByText('getUser', { exact: true })
         ).toBeVisible();
+        await expect(canvas).toHaveAttribute('aria-description', /getU\s*\n/);
+        await expect(menu).toHaveAttribute('aria-busy', 'false');
         await page.keyboard.press('Tab');
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
