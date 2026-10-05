@@ -254,7 +254,7 @@ export default function FolderPicker({
                         role="option"
                         aria-label={t('Favorite {name} ({kind})', {
                             name: favorite.name,
-                            kind: favorite.kind === 'terminal' ? t('Terminal') : t('Editor')
+                            kind: t(favorite.kind)
                         })}
                         aria-selected={index === selected}
                         className={`${styles.folderChoice} ${styles.favoriteChoice} ${index === selected ? styles.selectedItem : ''}`}
@@ -270,13 +270,13 @@ export default function FolderPicker({
                             <strong>{favorite.name}</strong>
                             <small>
                                 {favorite.root} ·{' '}
-                                {favorite.kind === 'terminal' ? t('Terminal') : t('Editor')}
+                                {t(favorite.kind)}
                             </small>
                         </span>
                         <button
                             aria-label={t('Remove favorite {name} ({kind})', {
                                 name: favorite.name,
-                                kind: favorite.kind === 'terminal' ? t('Terminal') : t('Editor')
+                                kind: t(favorite.kind)
                             })}
                             title={t('Remove favorite')}
                             disabled={favoriteBusy || busy}

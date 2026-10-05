@@ -129,6 +129,8 @@ export const japanese: Record<string, string> = {
     'Folder path': 'フォルダーのパス',
     'Session type': 'セッションの種類',
     Editor: 'エディター',
+    editor: 'エディター',
+    terminal: 'ターミナル',
     '↑ Parent': '↑ 親フォルダー',
     'Opening…': '開いています…',
     'Open current folder': '現在のフォルダーを開く',

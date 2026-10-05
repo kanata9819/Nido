@@ -1,5 +1,5 @@
-import { useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useI18n } from '../i18n';
 import { createPortal } from 'react-dom';
 import type { ReferenceList, ReferencePreview } from '../../../shared/types';
 import FileIcon from './FileIcon';
