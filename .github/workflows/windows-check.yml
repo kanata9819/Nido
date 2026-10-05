@@ -38,14 +38,19 @@ jobs:
                   pnpm typecheck:windows
                   if ($LASTEXITCODE -ne 0) { throw 'Windows test typecheck failed.' }
             - name: Build the packaged Windows app
+              id: build
               run: pnpm build:unpack
             - name: Run unit and Neovim integration tests
               run: pnpm test
             - name: Prepare renderer browser
+              id: browser
+              if: ${{ !cancelled() && steps.build.outcome == 'success' }}
               run: pnpm exec playwright install chromium
             - name: Verify renderer state transitions
+              if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
               run: pnpm test:renderer
             - name: Verify the packaged Windows app
+              if: ${{ !cancelled() && steps.build.outcome == 'success' }}
               run: pnpm test:windows
             - name: Upload test reports
               if: always()
