@@ -321,7 +321,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         activate(
             workspaces[
                 (workspaces.findIndex((w) => w.id === active) + offset + workspaces.length) %
-                workspaces.length
+                    workspaces.length
             ].id
         );
     };

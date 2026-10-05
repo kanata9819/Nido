@@ -96,6 +96,8 @@ hl(0, '@function.macro', { fg = c.vscYellow, bg = 'NONE' })
 hl(0, '@constant.macro', { fg = c.vscBlueGreen, bg = 'NONE' })
 hl(0, '@variable.builtin', { fg = c.vscBlue, bg = 'NONE' })
 hl(0, 'typescriptIdentifier', { link = '@variable.builtin' })
+-- TSX defaults self-closing delimiters to Identifier; match the other tag delimiters.
+hl(0, 'tsxCloseString', { link = 'htmlTag' })
 hl(0, '@label', { fg = '#C8C8C8', bg = 'NONE' })
 hl(0, '@string.regexp', { fg = c.vscLightRed, bg = 'NONE' })
 hl(0, '@string.escape', { fg = c.vscYellowOrange, bg = 'NONE' })

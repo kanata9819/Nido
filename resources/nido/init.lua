@@ -16,6 +16,9 @@ end, {silent=true})
 vim.o.termguicolors = true
 vim.o.number = true
 vim.o.relativenumber = false
+-- The renderer draws the code cursor line; Neovim colors only its current line number.
+vim.o.cursorline = true
+vim.o.cursorlineopt = 'number'
 vim.o.wrap = true
 -- Pixel scrolling and prefetch count visible rows, including wrapped continuations.
 vim.o.smoothscroll = true

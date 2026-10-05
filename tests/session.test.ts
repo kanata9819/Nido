@@ -310,12 +310,16 @@ test('Dark Modern syntax colors match the official palette in TypeScript, TSX an
             ],
             [
                 'sample.tsx',
-                'const view = <div title="ok">Hello</div>;\nclass Example { apply() { this.busy = true; } }',
+                'const view = <div title="ok">Hello</div>;\nclass Example { apply() { this.busy = true; } }\nconst component = <FeaturesPage onClose={focusEditor} />;\nconst nested = <Example><span /></Example>;',
                 [
                     [0, 'div', '#569cd6'],
                     [0, 'title', '#9cdcfe'],
                     [0, 'ok', '#ce9178'],
-                    [1, 'this', '#569cd6']
+                    [1, 'this', '#569cd6'],
+                    [0, '</', '#808080'],
+                    [2, 'FeaturesPage', '#dcdcaa'],
+                    [2, '/>', '#808080'],
+                    [3, '/>', '#808080']
                 ]
             ],
             [
@@ -437,7 +441,7 @@ vim.cmd('messages clear')`,
     }
 });
 
-test('relative gutter numbers stay based on the edit anchor during detached pixel scrolling', async () => {
+test('gutter numbers and current-line colors stay based on the edit anchor during pixel scrolling', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-relative-scroll-'));
     const grid = new Grid();
     let session: Session | undefined;
@@ -453,7 +457,37 @@ test('relative gutter numbers stay based on the edit anchor during detached pixe
         await session.openFile('lines.txt');
         await session.setRelativeLineNumbers(true);
         await session.input('80Gzz');
+        const checkGutter = (anchor: number, relative: boolean): void => {
+            let checked = 0;
+            for (const row of grid.cells) {
+                const text = row.map((cell) => cell.text).join('');
+                const match = text.match(/^\s*(\d+)\s+line (\d+)\s*$/);
+                if (!match) continue;
+                const line = Number(match[2]);
+                assert.equal(
+                    Number(match[1]),
+                    !relative || line === anchor ? line : Math.abs(line - anchor),
+                    `gutter for line ${line}`
+                );
+                const first = text.indexOf(match[1]);
+                for (const cell of row.slice(first, first + match[1].length)) {
+                    assert.equal(
+                        grid.highlights.get(cell.highlight)?.foreground,
+                        line === anchor ? 0xc6c6c6 : 0x858585,
+                        `gutter color for line ${line}`
+                    );
+                }
+                checked++;
+            }
+            assert.ok(checked > 10);
+        };
+        for (const relative of [true, false, true]) {
+            await session.setRelativeLineNumbers(relative);
+            await new Promise((done) => setTimeout(done, 30));
+            checkGutter(80, relative);
+        }
         for (const [lines, relative] of [
+            [0.25, true],
             [26.25, true],
             [-24.5, true],
             [0.1, false],
@@ -462,27 +496,14 @@ test('relative gutter numbers stay based on the edit anchor during detached pixe
             await session.setRelativeLineNumbers(relative);
             await session.scroll(lines, false, true);
             await new Promise((done) => setTimeout(done, 30));
-            let checked = 0;
-            for (const row of grid.cells) {
-                const match = row
-                    .map((cell) => cell.text)
-                    .join('')
-                    .match(/^\s*(\d+)\s+line (\d+)\s*$/);
-                if (!match) continue;
-                const line = Number(match[2]);
-                assert.equal(
-                    Number(match[1]),
-                    !relative || line === 80 ? line : Math.abs(line - 80),
-                    `gutter for line ${line}`
-                );
-                checked++;
-            }
-            assert.ok(checked > 10);
+            checkGutter(80, relative);
         }
         await session.input('j');
         await session.client.request('nvim_eval', ['1']);
         assert.equal(await session.client.request('nvim_eval', ["line('.')"]), 81);
         assert.equal(await session.client.request('nvim_eval', ['&statuscolumn']), '');
+        await new Promise((done) => setTimeout(done, 30));
+        checkGutter(81, true);
         await session.scroll(30, false, true);
         await session.scroll(1, true, true);
         assert.equal(await session.client.request('nvim_eval', ['&statuscolumn']), '');

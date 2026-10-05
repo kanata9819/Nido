@@ -46,7 +46,7 @@ end
 
 function M.statuscolumn()
   local pos = M.cursor()
-  if not pos or api.nvim_get_current_win() ~= anchor.window or not vim.wo.relativenumber then
+  if not pos or api.nvim_get_current_win() ~= anchor.window then
     return '%s%C%=%l '
   end
   -- Neovim moves its internal cursor to keep it visible; relative numbers use the edit anchor.
@@ -54,7 +54,10 @@ function M.statuscolumn()
     return '%s%C'
   end
   local current = vim.v.lnum == pos[1]
-  local number = current and (vim.wo.number and pos[1] or 0) or math.abs(vim.v.lnum - pos[1])
+  local number = vim.v.lnum
+  if vim.wo.relativenumber then
+    number = current and (vim.wo.number and pos[1] or 0) or math.abs(vim.v.lnum - pos[1])
+  end
   return '%s%C%=' .. (current and '%#CursorLineNr#' or '%#LineNr#') .. number .. '%* '
 end
 
