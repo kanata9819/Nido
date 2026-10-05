@@ -109,7 +109,10 @@ function M.highlight(buffer, first, lines, syntax_only)
   local function color(group)
     if colors[group] == nil then
       local attrs = vim.api.nvim_get_hl(0, { name = group, link = false, create = false })
-      colors[group] = attrs.fg and string.format('#%06x', attrs.fg) or false
+      -- Unpainted language-specific captures may not have a highlight ID yet.
+      local parent = group:sub(1, 1) == '@' and group:match('^(.*)%.[^.]+$')
+      colors[group] = attrs.fg and string.format('#%06x', attrs.fg)
+        or (next(attrs) == nil and parent and color(parent)) or false
     end
     return colors[group]
   end
@@ -141,6 +144,19 @@ function M.highlight(buffer, first, lines, syntax_only)
       end
       for _, group in ipairs(groups.semantic_tokens) do
         apply(group.opts.hl_group, group.opts.priority)
+      end
+      if not syntax_only then
+        -- Offscreen rows have token data even when Neovim has not painted their extmarks.
+        local row = first + offset - 2
+        local filetype = vim.bo[buffer].filetype
+        for _, token in ipairs(vim.lsp.semantic_tokens.get_at_pos(buffer, row, column) or {}) do
+          apply('@lsp.type.' .. token.type .. '.' .. filetype, vim.hl.priorities.semantic_tokens)
+          for modifier in pairs(token.modifiers) do
+            apply('@lsp.mod.' .. modifier .. '.' .. filetype, vim.hl.priorities.semantic_tokens + 1)
+            apply('@lsp.typemod.' .. token.type .. '.' .. modifier .. '.' .. filetype,
+              vim.hl.priorities.semantic_tokens + 2)
+          end
+        end
       end
       local previous = spans[#spans]
       if previous and previous.color == foreground then

@@ -1,6 +1,6 @@
 local M = {}
 local api = vim.api
-local entries, pending, published = {}, {}, {}
+local entries, pending, published, color_pending = {}, {}, {}, {}
 
 local function redraw()
   -- Outline changes do not dirty buffer rows, so force decoration providers to run again.
@@ -120,6 +120,19 @@ local function highlight(entry, buffer, line)
   return entry.highlights[line]
 end
 
+local function recolor(buffer)
+  if color_pending[buffer] or not entries[buffer] then return end
+  color_pending[buffer] = true
+  -- Token notifications can arrive during redraw, once per token. Repaint once afterwards.
+  vim.schedule(function()
+    color_pending[buffer] = nil
+    local entry = entries[buffer]
+    if not entry or next(entry.highlights) == nil then return end
+    entry.highlights = {}
+    redraw()
+  end)
+end
+
 function M.publish(window, buffer)
   if not vim.g.nido_channel or window ~= api.nvim_get_current_win() then return false end
   local info = vim.fn.getwininfo(window)[1]
@@ -173,11 +186,19 @@ end})
 api.nvim_create_autocmd({'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'TextChangedI', 'TextChangedP', 'LspAttach', 'LspDetach'}, {
   callback=function(event) schedule(event.buf) end,
 })
+api.nvim_create_autocmd('LspTokenUpdate', {callback=function(event) recolor(event.buf) end})
+api.nvim_create_autocmd('LspRequest', {callback=function(event)
+  local request = event.data.request
+  -- A response containing only offscreen tokens does not emit LspTokenUpdate.
+  if request.type == 'complete' and request.method:match('^textDocument/semanticTokens/') then
+    recolor(event.buf)
+  end
+end})
 api.nvim_create_autocmd('ColorScheme', {callback=function()
   for buffer in pairs(entries) do schedule(buffer) end
 end})
 api.nvim_create_autocmd('BufWipeout', {callback=function(event)
-  entries[event.buf], pending[event.buf] = nil, nil
+  entries[event.buf], pending[event.buf], color_pending[event.buf] = nil, nil, nil
 end})
 api.nvim_create_autocmd('WinClosed', {callback=function(event) published[tonumber(event.match)] = nil end})
 api.nvim_create_autocmd('UIEnter', {callback=function()

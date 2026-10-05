@@ -58,6 +58,120 @@ test('sticky scopes pin in nesting order, respect the line limit and slide out a
     );
 });
 
+test('Rust sticky headers pick up delayed semantic colors even when their source rows are offscreen', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-sticky-colors-'));
+    const grid = new Grid();
+    let session: Session | undefined;
+    try {
+        await writeFile(
+            join(root, 'scopes.rs'),
+            [
+                'impl Screen {',
+                '    pub fn apply_csi(&mut self, csi: CsiActions) {',
+                ...Array.from({ length: 40 }, () => '        let value = 0;'),
+                '    }',
+                '}'
+            ].join('\n')
+        );
+        session = await Session.create(root, (event) => {
+            if (event.type === 'redraw') grid.apply(event.events);
+        });
+        const lua = async (source: string): Promise<unknown> => {
+            const result = await session!.client.request('nvim_exec_lua', [source, []]);
+            await session!.client.request('nvim_eval', ['1']);
+            return result;
+        };
+        await lua("vim.lsp.enable('rust_analyzer', false)");
+        await session.openFile('scopes.rs');
+        await lua("vim.wait(300); vim.cmd('normal! 12Gzt'); vim.cmd.redraw()");
+        const headerColor = (): string | undefined =>
+            grid.stickyScroll?.scopes
+                .find((scope) => scope.line === 1)
+                ?.text.find((span) => span.text.includes('Screen'))?.color;
+        const syntaxColor = headerColor();
+        assert.ok(syntaxColor);
+        assert.notEqual(syntaxColor, '#4ec9b0');
+        await lua(`
+            _G.sticky_semantic_requests = {}
+            -- A real Neovim LSP client with a controlled in-process transport.
+            -- Hold semantic replies until the headers have already been cached offscreen.
+            _G.sticky_color_client = vim.lsp.start({
+              name='sticky-color-fixture',
+              cmd=function(dispatchers)
+                local closed, next_id = false, 0
+                return {
+                  request=function(method, _, callback, notify_reply)
+                    next_id = next_id + 1
+                    local id = next_id
+                    local function reply(result)
+                      if notify_reply then notify_reply(id) end
+                      callback(nil, result)
+                    end
+                    if method == 'initialize' then
+                      vim.schedule(function() reply({capabilities={
+                        textDocumentSync=1,
+                        semanticTokensProvider={full=true, legend={
+                          tokenTypes={'struct', 'parameter'}, tokenModifiers={'declaration'}
+                        }}
+                      }}) end)
+                    elseif method == 'textDocument/semanticTokens/full' then
+                      table.insert(_G.sticky_semantic_requests, reply)
+                    else
+                      vim.schedule(function() reply(nil) end)
+                    end
+                    return true, id
+                  end,
+                  notify=function(method)
+                    if method == 'exit' then closed=true; dispatchers.on_exit(0, 0) end
+                    return true
+                  end,
+                  is_closing=function() return closed end,
+                  terminate=function() closed=true; dispatchers.on_exit(0, 0) end,
+                }
+              end,
+            })
+            assert(vim.wait(5000, function() return #_G.sticky_semantic_requests > 0 end))
+            table.remove(_G.sticky_semantic_requests, 1)({data={0, 5, 6, 0, 0}})
+            assert(vim.wait(5000, function()
+              return #(vim.lsp.semantic_tokens.get_at_pos(0, 0, 5) or {}) > 0
+            end))
+            vim.wait(80)
+            vim.cmd.redraw()
+            assert(#vim.inspect_pos(0, 0, 5).semantic_tokens == 0,
+              'offscreen source rows have no painted semantic extmarks')
+        `);
+        assert.equal(
+            headerColor(),
+            '#4ec9b0',
+            'late Rust type colors replace the cached plain header'
+        );
+        await lua(`
+            vim.api.nvim_set_hl(0, '@lsp.typemod.struct.declaration.rust', {fg='#4fc1ff'})
+            vim.lsp.semantic_tokens.force_refresh(0)
+            assert(vim.wait(5000, function() return #_G.sticky_semantic_requests > 0 end))
+            table.remove(_G.sticky_semantic_requests, 1)({data={0, 5, 6, 0, 1, 11, 12, 5, 1, 0}})
+            assert(vim.wait(5000, function()
+              local tokens = vim.lsp.semantic_tokens.get_at_pos(0, 0, 5) or {}
+              return tokens[1] and tokens[1].modifiers.declaration
+            end))
+            vim.wait(80)
+            vim.cmd.redraw()
+        `);
+        assert.equal(headerColor(), '#4fc1ff', 'semantic refreshes preserve modifier priority');
+        await lua(
+            'vim.lsp.get_client_by_id(_G.sticky_color_client):stop(true); vim.wait(300); vim.cmd.redraw()'
+        );
+        assert.equal(
+            headerColor(),
+            syntaxColor,
+            'detaching the server restores syntax-only colors'
+        );
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('sticky scope geometry shares the completed Neovim frame, survives pixel scrolling, and guards stale jumps', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-sticky-session-'));
     const grid = new Grid();
