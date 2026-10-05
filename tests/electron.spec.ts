@@ -2992,6 +2992,14 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
             };
         });
         const page = await running.firstWindow();
+        await page.evaluate(() => {
+            window.nido.onEvent((event) => {
+                if (event.type === 'state' && event.state.debug?.status === 'paused') {
+                    document.documentElement.dataset.debugPausedLocation =
+                        event.state.debug.location || '';
+                }
+            });
+        });
         await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
         await page.keyboard.press('Control+Shift+n');
         await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
@@ -3056,6 +3064,9 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
         await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
         await expect(page.getByRole('tab', { name: 'main.rs', exact: true })).toBeVisible();
         await page.keyboard.press('F10');
+        await expect
+            .poll(() => page.evaluate(() => document.documentElement.dataset.debugPausedLocation))
+            .toMatch(/main\.rs:4$/);
         await expect(page.getByRole('region', { name: 'Debugger' })).toHaveCount(0);
         await page.keyboard.press('Control+j');
         await expect(page.getByRole('treeitem', { name: /^answer = 42/ })).toBeVisible();

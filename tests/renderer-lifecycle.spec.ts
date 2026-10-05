@@ -497,5 +497,38 @@ test('App opens references and debugger on new events while respecting a closed 
         })
     );
     await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toBeVisible();
+    const debugStatus = async (status: 'paused' | 'running' | 'building'): Promise<void> => {
+        await page.evaluate(
+            (nextStatus) =>
+                window.rendererTest.emit({
+                    type: 'state',
+                    id: 'alpha',
+                    state: {
+                        buffers: [],
+                        current: 0,
+                        mode: 'n',
+                        line: 2,
+                        column: 1,
+                        filetype: '',
+                        debug: { status: nextStatus, output: '', variables: [], targets: [] }
+                    }
+                }),
+            status
+        );
+    };
+    await debugStatus('paused');
+    await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toContainText(
+        'Debug · paused'
+    );
+    await page.getByRole('button', { name: 'Hide debugger' }).click();
+    const input = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(input).toBeFocused();
+    await debugStatus('running');
+    await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toHaveCount(0);
+    await debugStatus('paused');
+    await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toHaveCount(0);
+    await expect(input).toBeFocused();
+    await debugStatus('building');
+    await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toBeVisible();
     expect(errors).toEqual([]);
 });
