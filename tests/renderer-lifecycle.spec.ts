@@ -94,7 +94,9 @@ test('Japanese command search and keyboard navigation keep working after a langu
         'aria-busy',
         'false'
     );
-    await expect(page.getByRole('listbox', { name: '変更されたファイル', exact: true })).toBeFocused();
+    await expect(
+        page.getByRole('listbox', { name: '変更されたファイル', exact: true })
+    ).toBeFocused();
     await expect(page.getByRole('button', { name: '3 ブランチ', exact: true })).toBeEnabled();
     await page.keyboard.press('3');
     await expect(page.getByRole('button', { name: '3 ブランチ', exact: true })).toHaveAttribute(
