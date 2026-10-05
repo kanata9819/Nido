@@ -2382,6 +2382,13 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
             '12px'
         );
         await page.keyboard.press('Control+Shift+r');
+        await expect(terminal.locator('canvas')).not.toHaveAttribute(
+            'aria-description',
+            /preserved\.txt/
+        );
+        await expect(terminal.locator('canvas')).toHaveAttribute('aria-description', /PS .*?>/, {
+            timeout: 15000
+        });
         await page.keyboard.type('Set-Content restarted.txt ([string]::IsNullOrEmpty($nidoValue))');
         await page.keyboard.press('Enter');
         await expect
@@ -2406,6 +2413,11 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
         const input = page.getByRole('textbox', { name: 'Terminal input' });
         await expect(input).toHaveCount(1);
         await expect(input).toBeFocused();
+        await expect(page.locator('canvas[aria-label="Terminal display"]:visible')).toHaveAttribute(
+            'aria-description',
+            /PS .*?>/,
+            { timeout: 15000 }
+        );
         await page.keyboard.type("Set-Content standalone.txt 'separate'");
         await page.keyboard.press('Enter');
         await expect
@@ -2430,6 +2442,9 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
         });
         await restored.keyboard.press('Alt+2');
         await expect(restored.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+        await expect(
+            restored.locator('canvas[aria-label="Terminal display"]:visible')
+        ).toHaveAttribute('aria-description', /PS .*?>/, { timeout: 15000 });
         await restored.keyboard.type("Set-Content restored.txt 'restored'");
         await restored.keyboard.press('Enter');
         await expect
