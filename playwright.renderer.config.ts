@@ -1,9 +1,9 @@
 import { defineConfig } from '@playwright/test';
+
 export default defineConfig({
     testDir: './tests',
-    testMatch: '**/*.spec.ts',
-    testIgnore: '**/renderer-lifecycle.spec.ts',
-    timeout: 60000,
+    testMatch: 'renderer-lifecycle.spec.ts',
+    timeout: 30000,
     workers: 1,
     reporter: 'list'
 });

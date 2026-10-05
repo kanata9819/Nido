@@ -112,9 +112,10 @@ return result`,
         }
         if (action === 'delete') {
             await trash(source);
-            for (const buf of affected)
+            for (const buf of affected) {
                 // Edits can arrive while the OS is moving the file to the trash.
                 await this.client.request('nvim_buf_delete', [buf.id, { force: false }]);
+            }
             return;
         }
         const result = await destination(target);

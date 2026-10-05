@@ -44,7 +44,8 @@ test('formatted Rust saves keep CodeLens rows visible', { timeout: 90000 }, asyn
         });
         await session.attach(100, 35);
         await session.openFile('src/main.rs');
-        const lua = (code: string) => session!.client.request('nvim_exec_lua', [code, []]);
+        const lua = (code: string): ReturnType<Session['client']['request']> =>
+            session!.client.request('nvim_exec_lua', [code, []]);
         await lua(`assert(vim.wait(30000, function()
           return #vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_get_namespaces().nido_runnables, 0, -1, {}) == 3
         end, 50), 'CodeLens did not load')`);

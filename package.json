@@ -27,6 +27,7 @@
         "build:linux": "electron-vite build && electron-builder --linux",
         "test": "tsx --test tests/session.test.ts tests/session-lifecycle.test.ts tests/git.test.ts tests/keyboard.test.ts tests/prepare-neovim.test.ts tests/scroll.test.ts tests/click.test.ts tests/updater.test.ts tests/sticky-scroll.test.ts",
         "test:e2e": "playwright test",
+        "test:renderer": "playwright test --config playwright.renderer.config.ts",
         "test:rust": "tsx --test tests/rust.test.ts",
         "test:typescript": "tsx --test tests/typescript.test.ts",
         "test:debug": "tsx --test tests/debug.test.ts"

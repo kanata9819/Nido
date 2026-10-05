@@ -9,16 +9,14 @@ export function useGitFileStatus(
     buffers: BufferInfo[],
     panel: string | null
 ): Record<string, Decoration> {
-    const [decorations, setDecorations] = useState<Record<string, Decoration>>({});
+    const [result, setResult] = useState<{
+        workspaceId: string;
+        decorations: Record<string, Decoration>;
+    }>();
     const files = JSON.stringify(buffers.map(({ name, modified }) => [name, modified]));
 
     useEffect(() => {
-        setDecorations({});
-    }, [workspaceId]);
-
-    useEffect(() => {
         if (!workspaceId) {
-            setDecorations({});
             return;
         }
         let cancelled = false;
@@ -55,12 +53,12 @@ export function useGitFileStatus(
                     };
                 }
                 if (!cancelled) {
-                    setDecorations(next);
+                    setResult({ workspaceId, decorations: next });
                 }
             } catch {
                 // Git is optional: ordinary folders and unavailable repositories have no badges.
                 if (!cancelled) {
-                    setDecorations({});
+                    setResult({ workspaceId, decorations: {} });
                 }
             } finally {
                 pending = false;
@@ -87,5 +85,5 @@ export function useGitFileStatus(
         };
     }, [workspaceId, files, panel]);
 
-    return decorations;
+    return result?.workspaceId === workspaceId ? result.decorations : {};
 }

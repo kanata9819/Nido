@@ -28,14 +28,18 @@ export default function ExplorerCommands({
     const [value, setValue] = useState(request?.value || '');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
+    const [previousRequest, setPreviousRequest] = useState(request);
+    if (request !== previousRequest) {
+        setPreviousRequest(request);
+        setValue(request?.value || '');
+        setError('');
+    }
     useLayoutEffect(() => {
         const element = dialog.current!;
         element.showModal();
         return () => element.close();
     }, []);
     useEffect(() => {
-        setValue(request?.value || '');
-        setError('');
         field.current?.focus();
         field.current?.select();
     }, [request]);

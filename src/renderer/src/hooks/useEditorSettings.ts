@@ -1,9 +1,9 @@
 import { terminalShells, uiThemes, type TerminalShell, type UITheme } from '../../../shared/types';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 
 export const defaultFontFamily = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
 
-export function useEditorSettings() {
+export function useEditorSettings(): EditorSettings {
     const [theme, setTheme] = useState<UITheme>(() => {
         const saved = localStorage.getItem('nido.theme') as UITheme;
         return uiThemes.includes(saved) ? saved : 'dark';
@@ -166,4 +166,41 @@ export function useEditorSettings() {
     };
 }
 
-export type EditorSettings = ReturnType<typeof useEditorSettings>;
+export interface EditorSettings {
+    theme: UITheme;
+    setTheme: Dispatch<SetStateAction<UITheme>>;
+    wordWrap: boolean;
+    setWordWrap: Dispatch<SetStateAction<boolean>>;
+    stickyScroll: boolean;
+    setStickyScroll: Dispatch<SetStateAction<boolean>>;
+    stickyScrollMaxLines: number;
+    setStickyScrollMaxLines: Dispatch<SetStateAction<number>>;
+    terminalShell: TerminalShell;
+    setTerminalShell: Dispatch<SetStateAction<TerminalShell>>;
+    editorConfig: boolean;
+    setEditorConfig: Dispatch<SetStateAction<boolean>>;
+    relativeLineNumbers: boolean;
+    setRelativeLineNumbers: Dispatch<SetStateAction<boolean>>;
+    sidebar: boolean;
+    setSidebar: Dispatch<SetStateAction<boolean>>;
+    animations: boolean;
+    setAnimations: Dispatch<SetStateAction<boolean>>;
+    smoothCursor: boolean;
+    setSmoothCursor: Dispatch<SetStateAction<boolean>>;
+    smoothBlink: boolean;
+    setSmoothBlink: Dispatch<SetStateAction<boolean>>;
+    scrollFollowCursor: boolean;
+    setScrollFollowCursor: Dispatch<SetStateAction<boolean>>;
+    formatOnSave: boolean;
+    setFormatOnSave: Dispatch<SetStateAction<boolean>>;
+    clipboardSharing: boolean;
+    setClipboardSharing: Dispatch<SetStateAction<boolean>>;
+    fontFamily: string;
+    setFontFamily: Dispatch<SetStateAction<string>>;
+    fontSize: number;
+    setFontSize: Dispatch<SetStateAction<number>>;
+    lineHeight: number;
+    setLineHeight: Dispatch<SetStateAction<number>>;
+    sidebarWidth: number;
+    resizeSidebar: (width: number) => void;
+}

@@ -56,6 +56,8 @@ pnpm typecheck # TypeScript型チェック
 pnpm lint      # ソースの静的解析
 pnpm test      # Neovim連携・スクロール状態
 pnpm test:e2e  # ビルド済みアプリの操作
+pnpm exec playwright install chromium # レンダラーのテスト用ブラウザーを初回に準備
+pnpm test:renderer # ChromiumでUIの状態遷移と非同期処理を検証（Electron/Neovim不要）
 ```
 
 型チェックはTypeScript 7を使います。Lintが利用するTypeScript APIは、公式の互換パッケージでTypeScript 6を併用しています。

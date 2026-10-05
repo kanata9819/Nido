@@ -78,7 +78,9 @@ export default function CompletionMenu({
     const card = useRef<HTMLDivElement>(null);
     const refreshing = useRef(false);
     const currentMenu = useRef(menu);
-    currentMenu.current = menu;
+    useLayoutEffect(() => {
+        currentMenu.current = menu;
+    }, [menu]);
     const placement = useRef<
         { element: HTMLDivElement; above: boolean; height: number } | undefined
     >(undefined);

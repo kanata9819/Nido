@@ -1,0 +1,380 @@
+import { test, expect } from '@playwright/test';
+import { createServer, type ViteDevServer } from 'vite';
+import react from '@vitejs/plugin-react';
+import { resolve } from 'node:path';
+import type {} from './renderer/harness';
+
+let server: ViteDevServer;
+let origin: string;
+test.beforeAll(async () => {
+    server = await createServer({
+        configFile: false,
+        root: resolve('tests/renderer'),
+        plugins: [react()],
+        server: { host: '127.0.0.1', port: 0, fs: { allow: [process.cwd()] } }
+    });
+    await server.listen();
+    origin = server.resolvedUrls!.local[0];
+});
+test.afterAll(async () => {
+    await server?.close();
+});
+
+test('Git diff ignores an older response after selecting another file', async ({ page }) => {
+    await page.goto(`${origin}?view=git&defer=gitDiff`);
+    const list = page.getByRole('listbox', { name: 'Changed files' });
+    await expect(list).toBeFocused();
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await list.press('j');
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(2);
+    await page.evaluate(() =>
+        window.rendererTest.settle('gitDiff', 1, '@@ -1 +1 @@\n-old\n+SECOND_CONTENT')
+    );
+    await expect(page.locator('[data-git-scroll="after"]')).toContainText('SECOND_CONTENT');
+    await page.evaluate(() =>
+        window.rendererTest.settle('gitDiff', 0, '@@ -1 +1 @@\n-old\n+STALE_CONTENT')
+    );
+    await expect(page.locator('[data-git-scroll="after"]')).toContainText('SECOND_CONTENT');
+    await expect(page.locator('[data-git-scroll="after"]')).not.toContainText('STALE_CONTENT');
+});
+
+test('Git history pagination does not reload the first page', async ({ page }) => {
+    await page.goto(`${origin}?view=git&defer=gitHistory`);
+    await page.getByRole('button', { name: '2 History', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle(
+            'gitHistory',
+            0,
+            Array.from({ length: 100 }, (_, index) => ({
+                hash: index.toString(16).padStart(40, '0'),
+                subject: `Commit ${index}`,
+                author: 'Ada',
+                date: '2026-01-01'
+            }))
+        )
+    );
+    await page.getByRole('button', { name: 'Load older commits' }).click();
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.args[1])).toBe(100);
+    await page.evaluate(() =>
+        window.rendererTest.settle('gitHistory', 0, [
+            { hash: 'f'.repeat(40), subject: 'Older commit', author: 'Ada', date: '2025-01-01' }
+        ])
+    );
+    await expect(
+        page.getByRole('listbox', { name: 'Commit history' }).getByRole('option')
+    ).toHaveCount(101);
+    expect(
+        await page.evaluate(
+            () => window.rendererTest.calls.filter((call) => call.method === 'gitHistory').length
+        )
+    ).toBe(2);
+    await page.getByRole('button', { name: '1 Changes', exact: true }).click();
+    await expect(page.getByRole('listbox', { name: 'Changed files' })).toBeVisible();
+    await page.getByRole('button', { name: '2 History', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.args[1])).toBe(0);
+    await expect(page.getByRole('button', { name: '2 History', exact: true })).toBeDisabled();
+    await page.evaluate(() => window.rendererTest.settle('gitHistory', 0, []));
+    await expect(page.getByRole('button', { name: '2 History', exact: true })).toBeEnabled();
+});
+
+test('A new diff clears the previous highlighting failure', async ({ page }) => {
+    await page.goto(`${origin}?view=highlight&defer=highlightSources`);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('highlightSources', 0, 'unavailable', true)
+    );
+    await expect(page.getByRole('status')).toHaveText('Syntax highlighting unavailable');
+    await page.evaluate(() => window.rendererTest.render({ path: 'second.ts' }));
+    await expect(page.getByRole('status')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() => window.rendererTest.settle('highlightSources', 0, [[], []]));
+    await expect(page.locator('[data-git-scroll="after"]')).toContainText('after');
+});
+
+test('Folder browsing cancels old results and clamps selection after favorites change', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=folders&defer=browseFolders`);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    const path = page.getByRole('textbox', { name: 'Folder path' });
+    await path.fill('/beta');
+    await path.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(2);
+    await page.evaluate(() =>
+        window.rendererTest.settle('browseFolders', 1, {
+            path: '/beta',
+            parent: '/',
+            folders: []
+        })
+    );
+    await page.evaluate(() =>
+        window.rendererTest.settle('browseFolders', 0, {
+            path: '/alpha',
+            parent: '/',
+            folders: [{ name: 'STALE_FOLDER', path: '/alpha/stale', directory: true }]
+        })
+    );
+    await expect(path).toHaveValue('/beta');
+    await expect(page.getByText('STALE_FOLDER')).toHaveCount(0);
+    await page.evaluate(() =>
+        window.rendererTest.render({
+            favorites: [
+                { root: '/first', name: 'First', kind: 'editor' },
+                { root: '/second', name: 'Second', kind: 'editor' }
+            ]
+        })
+    );
+    const list = page.getByRole('listbox', { name: 'Folders' });
+    await list.press('j');
+    await expect(list).toHaveAttribute('aria-activedescendant', 'folder-choice-1');
+    await page.evaluate(() =>
+        window.rendererTest.render({
+            favorites: [{ root: '/first', name: 'First', kind: 'editor' }]
+        })
+    );
+    await expect(list).toHaveAttribute('aria-activedescendant', 'folder-choice-0');
+});
+
+test('Notification replacement resets fading and cancels the previous dismissal', async ({
+    page
+}) => {
+    await page.clock.install();
+    await page.goto(`${origin}?view=notification`);
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'notification',
+            id: 'alpha',
+            severity: 'info',
+            title: 'First',
+            message: 'first notice'
+        })
+    );
+    await expect(page.getByRole('status')).toHaveText(/first notice/);
+    await page.clock.runFor(2000);
+    await expect(page.getByRole('status')).toHaveAttribute('data-fading', 'true');
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'notification',
+            id: 'alpha',
+            severity: 'info',
+            title: 'Second',
+            message: 'second notice'
+        })
+    );
+    await expect(page.getByRole('status')).toHaveAttribute('data-fading', 'false');
+    await page.clock.runFor(300);
+    await expect(page.getByRole('status')).toHaveText(/second notice/);
+    await page.evaluate(() => window.rendererTest.render({ workspaceId: 'beta' }));
+    await expect(page.getByRole('status')).toHaveCount(0);
+});
+
+test('Favorite toggling permits only one pending request', async ({ page }) => {
+    await page.goto(`${origin}?view=favorites&defer=setWorkspaceFavorite`);
+    const toggle = page.getByRole('button', { name: 'Toggle favorite' });
+    await toggle.click();
+    await expect(page.getByRole('status')).toHaveText('busy');
+    expect(await page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('setWorkspaceFavorite', 0, [
+            { root: '/alpha', name: 'Alpha', kind: 'editor' }
+        ])
+    );
+    await toggle.click();
+    expect(await page.evaluate(() => window.rendererTest.pending[0].args)).toEqual([
+        '/alpha',
+        'editor',
+        false
+    ]);
+});
+
+test('Git badges clear immediately when switching workspaces', async ({ page }) => {
+    await page.goto(`${origin}?view=badges&defer=gitStatus`);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('gitStatus', 0, {
+            root: '/alpha',
+            branch: 'main',
+            changes: [{ path: 'first.ts', status: 'M', staged: false }]
+        })
+    );
+    await expect(page.getByRole('status')).toContainText('Modified');
+    await page.evaluate(() => window.rendererTest.render({ workspaceId: 'beta' }));
+    await expect(page.getByRole('status')).toHaveText('{}');
+    await expect
+        .poll(() => page.evaluate(() => window.rendererTest.pending[0]?.args[0]))
+        .toBe('beta');
+    await page.evaluate(() =>
+        window.rendererTest.settle('gitStatus', 0, 'Not a Git repository', true)
+    );
+    await expect(page.getByRole('status')).toHaveText('{}');
+});
+
+test('Completion keeps pending navigation blocked and closes on punctuation', async ({ page }) => {
+    await page.goto(`${origin}?view=completion`);
+    const input = page.getByRole('textbox', { name: 'Neovim input' });
+    await input.focus();
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [['popupmenu_show', [[['word', 'Text', '', '']], 0, 1, 1]]]
+        })
+    );
+    const menu = page.getByRole('listbox', { name: 'Code completion' });
+    await expect(menu).toBeVisible();
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [
+                ['nido_completion_refresh', [true]],
+                ['popupmenu_hide', []]
+            ]
+        })
+    );
+    await expect(menu).toHaveAttribute('aria-busy', 'true');
+    await input.press('Tab');
+    await expect(input).toBeFocused();
+    await expect(menu).toBeVisible();
+    await input.press('.');
+    await expect(menu).toHaveCount(0);
+});
+
+test('Explorer requests reset their field and clear the previous validation error', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=explorer`);
+    await expect(page.getByRole('dialog', { name: 'Explorer commands' })).toBeVisible();
+    await page.evaluate(() =>
+        window.rendererTest.render({
+            request: {
+                action: 'rename',
+                path: 'first.ts',
+                title: 'Rename',
+                value: 'first.ts'
+            }
+        })
+    );
+    const field = page.getByRole('textbox');
+    await expect(field).toHaveValue('first.ts');
+    await field.fill('folder/new.ts');
+    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Use Move to');
+    await page.evaluate(() =>
+        window.rendererTest.render({
+            request: {
+                action: 'createFile',
+                path: '',
+                title: 'New file',
+                value: 'src/new.ts'
+            }
+        })
+    );
+    await expect(field).toHaveValue('src/new.ts');
+    await expect(field).toBeFocused();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('Reference selection resets with a new result and old previews cannot replace it', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=references&defer=previewReference`);
+    const list = page.getByRole('listbox', { name: 'Reference results' });
+    await expect(list).toBeFocused();
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await list.press('j');
+    await expect(list).toHaveAttribute('aria-activedescendant', 'reference-1');
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(2);
+    await page.evaluate(() =>
+        window.rendererTest.settle('previewReference', 1, {
+            first: 1,
+            line: 1,
+            lines: [[{ text: 'LATEST_PREVIEW', color: '#fff' }]]
+        })
+    );
+    await page.evaluate(() =>
+        window.rendererTest.settle('previewReference', 0, {
+            first: 1,
+            line: 1,
+            lines: [[{ text: 'STALE_PREVIEW', color: '#fff' }]]
+        })
+    );
+    await expect(page.getByRole('region', { name: 'Reference preview' })).toContainText(
+        'LATEST_PREVIEW'
+    );
+    await expect(page.getByText('STALE_PREVIEW')).toHaveCount(0);
+    await page.evaluate(() =>
+        window.rendererTest.render({
+            references: {
+                version: 2,
+                loading: false,
+                error: '',
+                items: [{ path: '/alpha/new.ts', line: 1, column: 1, text: 'new reference' }]
+            }
+        })
+    );
+    await expect(list).toHaveAttribute('aria-activedescendant', 'reference-0');
+    await expect
+        .poll(() => page.evaluate(() => window.rendererTest.pending[0]?.args.slice(1)))
+        .toEqual([1, 2]);
+});
+
+test('App opens references and debugger on new events while respecting a closed panel', async ({
+    page
+}) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto(`${origin}?view=app`);
+    await expect(page.getByRole('tab', { name: 'Workspace Alpha', exact: true })).toBeVisible();
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'state',
+            id: 'alpha',
+            state: {
+                buffers: [],
+                current: 0,
+                mode: 'n',
+                line: 1,
+                column: 1,
+                filetype: '',
+                references: { version: 1, loading: false, error: '', items: [] }
+            }
+        })
+    );
+    await expect(page.getByRole('region', { name: 'References', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Hide references' }).click();
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'state',
+            id: 'alpha',
+            state: {
+                buffers: [],
+                current: 0,
+                mode: 'n',
+                line: 2,
+                column: 1,
+                filetype: '',
+                references: { version: 1, loading: false, error: '', items: [] }
+            }
+        })
+    );
+    await expect(page.getByRole('region', { name: 'References', exact: true })).toBeHidden();
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'state',
+            id: 'alpha',
+            state: {
+                buffers: [],
+                current: 0,
+                mode: 'n',
+                line: 2,
+                column: 1,
+                filetype: '',
+                debug: { status: 'running', output: '', variables: [], targets: [] }
+            }
+        })
+    );
+    await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toBeVisible();
+    expect(errors).toEqual([]);
+});

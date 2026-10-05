@@ -5,9 +5,12 @@ export function useNotificationDismissal(
     animations: boolean,
     dismiss: () => void
 ): boolean {
-    const [fading, setFading] = useState(false);
+    const [fading, setFading] = useState<{
+        notice: typeof notice;
+        animations: boolean;
+        dismiss: typeof dismiss;
+    }>();
     useEffect(() => {
-        setFading(false);
         if (!notice) {
             return;
         }
@@ -20,7 +23,7 @@ export function useNotificationDismissal(
         let fadeTimer: ReturnType<typeof setTimeout> | undefined;
         const timer = setTimeout(() => {
             if (animations) {
-                setFading(true);
+                setFading({ notice, animations, dismiss });
                 fadeTimer = setTimeout(dismiss, 300);
             } else {
                 dismiss();
@@ -32,5 +35,10 @@ export function useNotificationDismissal(
             document.removeEventListener('keydown', onKey);
         };
     }, [notice, animations, dismiss]);
-    return fading;
+    return (
+        !!notice &&
+        fading?.notice === notice &&
+        fading.animations === animations &&
+        fading.dismiss === dismiss
+    );
 }
