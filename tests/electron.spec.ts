@@ -1451,6 +1451,17 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
         const canvas = page.locator('canvas:visible');
         await expect(canvas).toHaveAttribute('aria-description', /ab日本語xyz/);
         await canvas.evaluate((node: HTMLCanvasElement) => {
+            let pendingScrolls = 0;
+            node.dataset.pendingScrolls = '0';
+            const scroll = window.nido.scroll;
+            window.nido.scroll = async (...args) => {
+                node.dataset.pendingScrolls = String(++pendingScrolls);
+                try {
+                    await scroll(...args);
+                } finally {
+                    node.dataset.pendingScrolls = String(--pendingScrolls);
+                }
+            };
             const ctx = node.getContext('2d')!;
             let row = 0;
             const fill = ctx.fillRect.bind(ctx);
@@ -1501,6 +1512,22 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
         await canvas.evaluate((node) => node.removeAttribute('data-tab-point'));
         await page.mouse.wheel(0, 507);
         await expect(canvas).toHaveAttribute('data-tab-point', /x/);
+        await expect
+            .poll(() =>
+                canvas.evaluate(async (node) => {
+                    const before = node.getAttribute('data-tab-point');
+                    for (let frame = 0; frame < 2; frame++) {
+                        await new Promise<void>((resolve) =>
+                            requestAnimationFrame(() => resolve())
+                        );
+                        if (node.getAttribute('data-pending-scrolls') !== '0') {
+                            return false;
+                        }
+                    }
+                    return before === node.getAttribute('data-tab-point');
+                })
+            )
+            .toBe(true);
         await expect(page.getByText('Ln 2, Col 6', { exact: true })).toBeVisible();
         const tabPoint = JSON.parse((await canvas.getAttribute('data-tab-point'))!);
         await canvas.click({ position: tabPoint });
@@ -2297,6 +2324,9 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
             'NORMAL'
         );
         await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+        await expect(terminal.locator('canvas')).toHaveAttribute('aria-description', /PS .*?>/, {
+            timeout: 15000
+        });
         await page.keyboard.type(
             "$nidoValue = 'alive'; Start-Sleep -Milliseconds 500; Set-Content background.txt $nidoValue"
         );

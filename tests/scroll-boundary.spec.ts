@@ -124,8 +124,20 @@ test('upward touchpad gestures stop at the first row while replies are delayed',
                 id,
                 ":lua vim.api.nvim_buf_clear_namespace(0,vim.api.nvim_create_namespace('boundary-test'),0,-1); vim.cmd.redraw()<CR>"
             );
+            await window.nido.inputMode(id);
         }, restored.active);
-        await page.waitForTimeout(150);
+        await expect
+            .poll(() =>
+                page.evaluate(
+                    () =>
+                        (
+                            window as unknown as {
+                                boundaryMeasurement: { samples: { text: string }[] };
+                            }
+                        ).boundaryMeasurement.samples.at(-1)?.text
+                )
+            )
+            .toMatch(/import.*useLayoutEffect/);
         await canvas.evaluate(async (node) => {
             (
                 window as unknown as {

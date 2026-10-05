@@ -1300,7 +1300,7 @@ test(
             assert.notEqual(terminal.process.exitCode, null);
         } finally {
             await session?.stop();
-            await rm(root, { recursive: true, force: true });
+            await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
         }
     }
 );
