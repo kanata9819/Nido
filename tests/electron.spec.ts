@@ -1437,6 +1437,7 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
         args: [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`],
         env
     });
+    let failed = false;
     try {
         const page = await running.firstWindow();
         await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
@@ -1452,6 +1453,22 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
         ).toBeVisible();
         await page.keyboard.press('Enter');
         const canvas = page.locator('canvas:visible');
+        const waitForScroll = async (attribute: string): Promise<void> => {
+            await expect
+                .poll(() =>
+                    canvas.evaluate(async (node, pointAttribute) => {
+                        const before = node.getAttribute(pointAttribute);
+                        for (let frame = 0; frame < 2; frame++) {
+                            await new Promise<void>((resolve) =>
+                                requestAnimationFrame(() => resolve())
+                            );
+                            if (node.getAttribute('data-pending-scrolls') !== '0') return false;
+                        }
+                        return before === node.getAttribute(pointAttribute);
+                    }, attribute)
+                )
+                .toBe(true);
+        };
         await expect(canvas).toHaveAttribute('aria-description', /ab日本語xyz/);
         await canvas.evaluate((node: HTMLCanvasElement) => {
             let pendingScrolls = 0;
@@ -1494,6 +1511,7 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
         await canvas.hover();
         await page.mouse.wheel(0, 3);
         await expect(canvas).toHaveAttribute('data-wide-point', /x/);
+        await waitForScroll('data-wide-point');
         const point = JSON.parse((await canvas.getAttribute('data-wide-point'))!);
         const bounds = (await canvas.boundingBox())!;
         await page.mouse.move(bounds.x + point.x, bounds.y + point.y);
@@ -1515,22 +1533,7 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
         await canvas.evaluate((node) => node.removeAttribute('data-tab-point'));
         await page.mouse.wheel(0, 507);
         await expect(canvas).toHaveAttribute('data-tab-point', /x/);
-        await expect
-            .poll(() =>
-                canvas.evaluate(async (node) => {
-                    const before = node.getAttribute('data-tab-point');
-                    for (let frame = 0; frame < 2; frame++) {
-                        await new Promise<void>((resolve) =>
-                            requestAnimationFrame(() => resolve())
-                        );
-                        if (node.getAttribute('data-pending-scrolls') !== '0') {
-                            return false;
-                        }
-                    }
-                    return before === node.getAttribute('data-tab-point');
-                })
-            )
-            .toBe(true);
+        await waitForScroll('data-tab-point');
         await expect(page.getByText('Ln 2, Col 6', { exact: true })).toBeVisible();
         const tabPoint = JSON.parse((await canvas.getAttribute('data-tab-point'))!);
         await canvas.click({ position: tabPoint });
@@ -1550,10 +1553,12 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
         await page.keyboard.press('Enter');
         await expect.poll(() => readSavedFile(join(root, 'click.txt'))).toContain('\tXΩtarget');
     } catch (error) {
+        failed = true;
         running.process().kill();
         throw error;
     } finally {
-        await running.close().catch(() => {});
+        if (failed) await running.close().catch(() => {});
+        else await running.close();
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
 });
@@ -1812,9 +1817,13 @@ test('window size and maximized state survive restart', async () => {
         env
     };
     let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    const waitForStartup = async (): Promise<void> => {
+        const page = await running!.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    };
     try {
         running = await electron.launch(options);
-        await running.firstWindow();
+        await waitForStartup();
         await running.evaluate(({ BrowserWindow, screen }) => {
             const area = screen.getPrimaryDisplay().workAreaSize;
             BrowserWindow.getAllWindows()[0].setSize(
@@ -1827,7 +1836,7 @@ test('window size and maximized state survive restart', async () => {
         );
         await running.close();
         running = await electron.launch(options);
-        await running.firstWindow();
+        await waitForStartup();
         await expect
             .poll(() =>
                 running!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getSize())
@@ -1843,7 +1852,7 @@ test('window size and maximized state survive restart', async () => {
             .toBe(true);
         await running.close();
         running = await electron.launch(options);
-        await running.firstWindow();
+        await waitForStartup();
         await expect
             .poll(() =>
                 running!.evaluate(({ BrowserWindow }) =>

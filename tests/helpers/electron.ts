@@ -1,5 +1,6 @@
 import { _electron, test, type ElectronApplication, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 type LaunchOptions = Parameters<typeof _electron.launch>[0];
 
@@ -38,30 +39,74 @@ export const electron = {
             );
         }
         const close = running.close.bind(running);
-        running.close = async (): Promise<void> => {
+        const closeWithinDeadline = async (): Promise<void> => {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const timeoutError = new Error('Electron did not close within 30 seconds.');
             try {
-                if (info.status !== info.expectedStatus || errors.length) {
-                    for (const [index, page] of running.windows().entries()) {
-                        if (!page.isClosed()) {
-                            await info.attach(`electron-window-${index}`, {
-                                body: await page.screenshot().catch(() => Buffer.alloc(0)),
-                                contentType: 'image/png'
+                await Promise.race([
+                    close(),
+                    new Promise<never>((_resolve, reject) => {
+                        timer = setTimeout(() => reject(timeoutError), 30000);
+                    })
+                ]);
+            } catch (error) {
+                if (error === timeoutError) {
+                    const child = running.process();
+                    // Stop only this test's app and its descendants; keep shutdown a failure.
+                    if (process.platform === 'win32' && child.pid) {
+                        try {
+                            execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
+                                stdio: 'ignore',
+                                timeout: 10000
                             });
+                        } catch {
+                            child.kill();
+                        }
+                    } else {
+                        child.kill('SIGKILL');
+                    }
+                    await info.attach('electron-shutdown-stderr', {
+                        body: stderr,
+                        contentType: 'text/plain'
+                    });
+                }
+                throw error;
+            } finally {
+                clearTimeout(timer);
+            }
+        };
+        let closing: Promise<void> | undefined;
+        running.close = async (): Promise<void> => {
+            if (closing) return closing;
+            closing = (async () => {
+                try {
+                    if (info.status !== info.expectedStatus || errors.length) {
+                        for (const [index, page] of running.windows().entries()) {
+                            if (!page.isClosed()) {
+                                await info.attach(`electron-window-${index}`, {
+                                    body: await page.screenshot().catch(() => Buffer.alloc(0)),
+                                    contentType: 'image/png'
+                                });
+                            }
                         }
                     }
+                    // Tests may close the app in their finally block before Playwright marks a failure.
+                    await info.attach('electron-stderr', {
+                        body: stderr,
+                        contentType: 'text/plain'
+                    });
+                } finally {
+                    await closeWithinDeadline();
                 }
-                // Tests may close the app in their finally block before Playwright marks a failure.
-                await info.attach('electron-stderr', { body: stderr, contentType: 'text/plain' });
-            } finally {
-                await close();
-            }
-            if (errors.length) {
-                await info.attach('electron-runtime-errors', {
-                    body: errors.join('\n'),
-                    contentType: 'text/plain'
-                });
-                throw new Error(`Unhandled Electron runtime errors:\n${errors.join('\n')}`);
-            }
+                if (errors.length) {
+                    await info.attach('electron-runtime-errors', {
+                        body: errors.join('\n'),
+                        contentType: 'text/plain'
+                    });
+                    throw new Error(`Unhandled Electron runtime errors:\n${errors.join('\n')}`);
+                }
+            })();
+            return closing;
         };
         return running;
     }
