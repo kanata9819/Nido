@@ -105,6 +105,36 @@ test('Japanese command search and keyboard navigation keep working after a langu
     );
 });
 
+test('Git shortcuts use the enabled state as soon as loading finishes', async ({ page }) => {
+    await page.goto(`${origin}?view=git&defer=gitStatus`);
+    const branches = page.getByRole('button', { name: '3 Branches', exact: true });
+    const list = page.getByRole('listbox', { name: 'Changed files' });
+    await expect(branches).toBeDisabled();
+    await expect(list).toBeFocused();
+    await page.evaluate(() => {
+        document.getElementById('root')!.dataset.panel = 'git';
+        const button = [...document.querySelectorAll('button')].find(
+            (node) => node.textContent === '3 Branches'
+        )!;
+        const list = document.querySelector('[role="listbox"]')!;
+        const observer = new MutationObserver(() => {
+            if (!button.disabled) {
+                observer.disconnect();
+                list.dispatchEvent(
+                    new KeyboardEvent('keydown', {
+                        key: '3',
+                        bubbles: true,
+                        cancelable: true
+                    })
+                );
+            }
+        });
+        observer.observe(button, { attributes: true, attributeFilter: ['disabled'] });
+        window.rendererTest.settle('gitStatus', 0, { root: '/alpha', branch: 'main', changes: [] });
+    });
+    await expect(branches).toHaveAttribute('aria-current', 'page');
+});
+
 test('an invalid saved language safely opens the English interface', async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem('nido.language', 'unsupported'));
     await page.goto(`${origin}?view=app`);

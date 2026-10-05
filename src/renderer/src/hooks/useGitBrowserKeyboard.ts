@@ -1,5 +1,5 @@
 import type { GitView } from '../types';
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 
 export function useGitBrowserKeyboard({
     busy,
@@ -10,7 +10,8 @@ export function useGitBrowserKeyboard({
     back: () => void;
     changeView: (next: GitView) => void;
 }): void {
-    useEffect(() => {
+    // Keep keyboard handlers in sync with the enabled controls before browser events resume.
+    useLayoutEffect(() => {
         const keydown = (event: KeyboardEvent): void => {
             if (event.isComposing || event.keyCode === 229) {
                 return;

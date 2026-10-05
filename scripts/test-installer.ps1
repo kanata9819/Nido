@@ -1,6 +1,8 @@
 $ErrorActionPreference = 'Stop'
 $nidoRoot = Split-Path $PSScriptRoot -Parent
-$testDir = Join-Path $nidoRoot ".downloads/installer-tests/$([guid]::NewGuid().ToString('N'))"
+# NSIS stages files under TEMP. Keep the move fixture on that same volume,
+# even when the CI checkout lives on D: and its temporary directory lives on C:.
+$testDir = Join-Path ([IO.Path]::GetTempPath()) "nido-installer-tests/$([guid]::NewGuid().ToString('N'))"
 $unicodeName = -join ([char[]]@(0x65e5, 0x672c, 0x8a9e))
 New-Item -ItemType Directory -Force -Path "$testDir/source/resources", "$testDir/source/space $unicodeName" | Out-Null
 
@@ -9,10 +11,11 @@ Push-Location $nidoRoot
 try {
     [IO.File]::WriteAllText("$testDir/tools.cjs", @'
 const { createRequire } = require('node:module');
-const r = createRequire(require.resolve('electron-builder'));
+const path = require('node:path');
+const project = createRequire(path.join(process.argv[3], 'package.json'));
+const r = createRequire(project.resolve('electron-builder'));
 const w = r('app-builder-lib/out/toolsets/windows');
 const z = r('app-builder-lib/out/toolsets/7zip');
-const path = require('node:path');
 (async () => {
     const [nsis, plugins, sevenZip] = await Promise.all([
         w.getMakeNsisPath(), w.getNsisPluginsPath(), z.getPath7za()
@@ -21,7 +24,7 @@ const path = require('node:path');
     require('node:fs').writeFileSync(process.argv[2], JSON.stringify({ nsis, plugins, sevenZip, templates }));
 })().catch(e => { console.error(e); process.exitCode = 1; });
 '@)
-    & node "$testDir/tools.cjs" "$testDir/tools.json"
+    & node "$testDir/tools.cjs" "$testDir/tools.json" $nidoRoot
     if ($LASTEXITCODE -ne 0) { throw 'Unable to locate installer tools. Run pnpm build:win first.' }
     $tools = Get-Content -LiteralPath "$testDir/tools.json" -Raw | ConvertFrom-Json
     [IO.File]::WriteAllText("$testDir/source/nido.exe", 'fixture executable')
