@@ -1,6 +1,7 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import type { Grid } from '../grid';
 import { ScrollQueue, scrollOffset } from '../scroll';
+import { alignCanvasSurface } from '../canvasSurface';
 
 interface UseEditorRenderingOptions {
     backgroundOpacity: number;
@@ -100,6 +101,7 @@ export function useEditorRendering({
               }
             | undefined;
         let blinkTimer: ReturnType<typeof setTimeout> | undefined;
+        let scrollSettleTimer: ReturnType<typeof setTimeout> | undefined;
         let blinkFade: { from: number; to: number; start: number } | undefined;
         const input = inputRef.current!;
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -123,6 +125,17 @@ export function useEditorRendering({
             motion = undefined;
             scrollQueue.cancelQueued();
             grid.scrollPreview = 0;
+            grid.scrolling = false;
+            clearTimeout(scrollSettleTimer);
+            schedule();
+        };
+
+        const settleScroll = (): void => {
+            if (scrollQueue.pending || scrollQueue.hasQueued || prefetchPending) {
+                scrollSettleTimer = setTimeout(settleScroll, 40);
+                return;
+            }
+            grid.scrolling = false;
             schedule();
         };
 
@@ -172,6 +185,9 @@ export function useEditorRendering({
         };
 
         scrollRef.current = (lines, follow): void => {
+            grid.scrolling = true;
+            clearTimeout(scrollSettleTimer);
+            scrollSettleTimer = setTimeout(settleScroll, 160);
             scrollQueue.enqueue(lines, follow);
             directScroll = true;
             motion = undefined;
@@ -270,10 +286,14 @@ export function useEditorRendering({
                     }
                 }
             }
+            const dpr = window.devicePixelRatio || 1;
+            const bounds = alignCanvasSurface(surface, element, dpr);
+            grid.surfaceLeft = bounds.left;
+            grid.surfaceTop = bounds.top;
             const metrics = grid.draw(
                 surface,
-                element.clientWidth,
-                element.clientHeight,
+                bounds.width,
+                bounds.height,
                 fontSize,
                 fontFamily,
                 focused,
@@ -307,7 +327,8 @@ export function useEditorRendering({
                 ) {
                     motion = undefined;
                 } else {
-                    overlayOffset = offset;
+                    const snap = (value: number): number => Math.round(value * dpr) / dpr;
+                    overlayOffset = snap(offset);
                     if (
                         targetFrame.width !== surface.width ||
                         targetFrame.height !== surface.height
@@ -319,14 +340,18 @@ export function useEditorRendering({
                     targetContext.globalCompositeOperation = 'copy';
                     targetContext.drawImage(surface, 0, 0);
                     const ctx = surface.getContext('2d')!;
-                    const dpr = window.devicePixelRatio || 1;
-                    const top = grid.rowY(motion.top);
-                    const height = Math.min(
-                        grid.contentHeight - top,
-                        grid.rowTop(motion.bottom) - grid.rowTop(motion.top)
+                    const top = snap(grid.rowY(motion.top));
+                    const bottom = snap(
+                        Math.min(
+                            grid.contentHeight,
+                            grid.rowY(motion.top) +
+                                grid.rowTop(motion.bottom) -
+                                grid.rowTop(motion.top)
+                        )
                     );
-                    const left = motion.left * metrics.cellWidth;
-                    const width = (motion.right - motion.left) * metrics.cellWidth;
+                    const height = bottom - top;
+                    const left = snap(motion.left * metrics.cellWidth);
+                    const width = snap(motion.right * metrics.cellWidth) - left;
                     ctx.save();
                     ctx.beginPath();
                     ctx.rect(left, top, width, height);
@@ -346,11 +371,13 @@ export function useEditorRendering({
                         [targetFrame, offset, offsetX]
                     ] as const;
                     for (const [image, shift, shiftX] of layers) {
+                        const destinationLeft = left + snap(shiftX);
+                        const destinationTop = top + snap(shift);
                         ctx.save();
                         if (backgroundOpacity < 1) {
                             // Copy only this layer's destination; translucent overlap must not double text or tint.
                             ctx.beginPath();
-                            ctx.rect(left + shiftX, top + shift, width, height);
+                            ctx.rect(destinationLeft, destinationTop, width, height);
                             ctx.clip();
                             ctx.globalCompositeOperation = 'copy';
                         }
@@ -360,8 +387,8 @@ export function useEditorRendering({
                             top * dpr,
                             width * dpr,
                             height * dpr,
-                            left + shiftX,
-                            top + shift,
+                            destinationLeft,
+                            destinationTop,
                             width,
                             height
                         );
@@ -381,14 +408,14 @@ export function useEditorRendering({
             }
 
             if (inputRef.current) {
-                inputRef.current.style.left = `${grid.cursor.column * metrics.cellWidth}px`;
-                inputRef.current.style.top = `${grid.rowY(grid.cursor.row)}px`;
+                inputRef.current.style.left = `${bounds.left + grid.cursor.column * metrics.cellWidth}px`;
+                inputRef.current.style.top = `${bounds.top + grid.rowY(grid.cursor.row)}px`;
             }
 
-            const columns = Math.max(20, Math.floor(element.clientWidth / metrics.cellWidth));
+            const columns = Math.max(20, Math.floor(bounds.width / metrics.cellWidth));
             // Compact lenses free space for code; keep one extra row for fractional scrolling.
             const rows =
-                Math.max(4, Math.floor(element.clientHeight / metrics.cellHeight)) +
+                Math.max(4, Math.floor(bounds.height / metrics.cellHeight)) +
                 grid.extraRows +
                 (pixelScroll ? 1 : 0);
             if (!attachedRef.current) {
@@ -633,6 +660,19 @@ export function useEditorRendering({
 
         const observer = new ResizeObserver(stopMotion);
         observer.observe(element);
+        // Zoom and monitor changes can change DPR without resizing the editor host.
+        let resolution: MediaQueryList;
+        const watchResolution = (): void => {
+            resolution?.removeEventListener('change', resolutionChanged);
+            resolution = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+            resolution.addEventListener('change', resolutionChanged);
+        };
+        const resolutionChanged = (): void => {
+            watchResolution();
+            stopMotion();
+        };
+        watchResolution();
+        window.addEventListener('resize', stopMotion);
         resetBlink();
 
         return () => {
@@ -640,7 +680,9 @@ export function useEditorRendering({
             paintRef.current = () => {};
             scrollRef.current = () => {};
             grid.scrollPreview = 0;
+            grid.scrolling = false;
             clearTimeout(blinkTimer);
+            clearTimeout(scrollSettleTimer);
             surface.removeEventListener('pointerdown', pointerDown);
             for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart']) {
                 input.removeEventListener(event, resetBlink);
@@ -655,6 +697,8 @@ export function useEditorRendering({
             input.removeEventListener('compositionstart', stopMotion);
             input.removeEventListener('blur', stopMotion);
             observer.disconnect();
+            resolution.removeEventListener('change', resolutionChanged);
+            window.removeEventListener('resize', stopMotion);
             unsubscribe();
             cancelAnimationFrame(frame);
         };

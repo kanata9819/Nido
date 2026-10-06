@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { electron } from './helpers/electron';
 import { readSavedFile } from './helpers/files';
 import { attachEditorDiagnostics, recordEditorDiagnostics } from './helpers/editor-diagnostics';
+import { installRowImageProbe } from './helpers/row-image-probe';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -1464,6 +1465,7 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
                                 requestAnimationFrame(() => resolve())
                             );
                             if (node.getAttribute('data-pending-scrolls') !== '0') return false;
+                            if (node.getAttribute('data-filtered-rows') !== '0') return false;
                         }
                         return before === node.getAttribute(pointAttribute);
                     }, attribute)
@@ -1487,13 +1489,22 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
             let row = 0;
             const fill = ctx.fillRect.bind(ctx);
             ctx.fillRect = (x, y, width, height) => {
-                if (x === 0 && y === 0 && height > 100) row = 0;
+                if (x === 0 && y === 0 && height > 100) {
+                    row = 0;
+                    node.dataset.filteredRows = '0';
+                }
                 fill(x, y, width, height);
             };
             const draw = ctx.drawImage.bind(ctx);
             ctx.drawImage = ((...args: Parameters<typeof draw>) => {
                 draw(...args);
                 if (args.length !== 5) return;
+                if (
+                    (args[0] as HTMLCanvasElement).height >
+                    Math.ceil(Number(localStorage.getItem('nido.lineHeight')) * devicePixelRatio)
+                ) {
+                    node.dataset.filteredRows = String(Number(node.dataset.filteredRows) + 1);
+                }
                 const index = row++;
                 const y = Number(args[2]) + Number(args[4]) / 2;
                 queueMicrotask(() => {
@@ -2607,6 +2618,8 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
             env
         });
         const page = await running.firstWindow();
+        await page.addInitScript(installRowImageProbe);
+        await page.evaluate(installRowImageProbe);
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -2635,17 +2648,29 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
             const draw = context.drawImage.bind(context);
             context.drawImage = ((...args: Parameters<typeof draw>) => {
                 if (args.length === 5 && row++ === 0) {
-                    const fontSize = Number(context.font.match(/([\d.]+)px/)![1]);
                     surface.setAttribute(
                         'data-first-line-y',
-                        String(Number(args[2]) + (Number(args[4]) + fontSize) / 2 - 3)
+                        String(
+                            Number(args[2]) +
+                                Number((args[0] as HTMLCanvasElement).dataset.rowBaseline) /
+                                    devicePixelRatio
+                        )
                     );
                 }
-                if (args.length === 9)
+                if (args.length === 9) {
+                    // Cropping or moving a cached frame must still be a one-to-one pixel copy.
+                    const physical = [
+                        ...args.slice(1, 5).map(Number),
+                        ...args.slice(5).map((value) => Number(value) * devicePixelRatio)
+                    ];
+                    if (physical.some((value) => Math.abs(value - Math.round(value)) > 0.001)) {
+                        surface.setAttribute('data-resampled-animation', 'true');
+                    }
                     surface.setAttribute(
                         'data-animation-frames',
                         String(Number(surface.getAttribute('data-animation-frames') || 0) + 1)
                     );
+                }
                 draw(...args);
             }) as typeof draw;
         });
@@ -2654,21 +2679,24 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
             .toBeGreaterThan(0);
-        const firstY = Number(await canvas.getAttribute('data-first-line-y'));
         await page.waitForTimeout(300);
+        const firstY = Number(await canvas.getAttribute('data-first-line-y'));
+        const pixel = await page.evaluate(() => 1 / devicePixelRatio);
+        const nearBaseline = async (expected: number): Promise<void> => {
+            // Final positions snap to physical pixels after the wheel gesture settles.
+            await expect
+                .poll(async () =>
+                    Math.abs(Number(await canvas.getAttribute('data-first-line-y')) - expected)
+                )
+                .toBeLessThanOrEqual(pixel + 0.01);
+        };
         await page.mouse.wheel(0, 2);
-        await expect
-            .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
-            .toBeCloseTo(firstY - 2, 1);
+        await nearBaseline(firstY - 2);
         await page.screenshot({ path: 'test-results/pixel-scroll.png' });
         await page.mouse.wheel(0, -2);
-        await expect
-            .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
-            .toBeCloseTo(firstY, 1);
+        await nearBaseline(firstY);
         await page.mouse.wheel(0, -100);
-        await expect
-            .poll(async () => Number(await canvas.getAttribute('data-first-line-y')))
-            .toBeCloseTo(firstY + 3, 1);
+        await nearBaseline(firstY + 3);
         await page.mouse.wheel(0, 100);
         await expect(canvas).not.toHaveAttribute('aria-description', /^.*line 1 /);
         await page.waitForTimeout(250);
@@ -2679,7 +2707,7 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
         await page.getByRole('checkbox', { name: 'Smooth cursor movement' }).check();
         await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).uncheck();
         await page.keyboard.press('Escape');
-        await page.keyboard.type('20Gzz');
+        await page.keyboard.type('80Gzz');
         await page.waitForTimeout(200);
         await expect(page.locator('[aria-label^="File position "]')).toHaveAttribute(
             'aria-label',
@@ -2693,7 +2721,13 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
                 'textarea[aria-label="Neovim input"]'
             )!;
             const rows = node.getAttribute('aria-description')!.split('\n').length;
-            return { actual: parseFloat(input.style.top) + 12.5, expected: ((rows - 2) * 25) / 2 };
+            const height = Number(localStorage.getItem('nido.lineHeight'));
+            const offset =
+                node.getBoundingClientRect().top - node.parentElement!.getBoundingClientRect().top;
+            return {
+                actual: parseFloat(input.style.top) - offset + height / 2,
+                expected: ((rows - 2) * height) / 2
+            };
         });
         expect(center.actual).toBeCloseTo(center.expected, 1);
         await page.keyboard.type('gg');
@@ -2701,10 +2735,14 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
             .poll(() =>
                 page
                     .locator('textarea[aria-label="Neovim input"]')
-                    .evaluate((input) => parseFloat(input.style.top))
+                    .evaluate(
+                        (input) =>
+                            parseFloat(input.style.top) -
+                            parseFloat(input.parentElement!.querySelector('canvas')!.style.top)
+                    )
             )
             .toBe(0);
-        await page.keyboard.type('20Gzz');
+        await page.keyboard.type('80Gzz');
         await page.waitForTimeout(200);
         await canvas.evaluate((node: HTMLCanvasElement) => {
             const ctx = node.getContext('2d')!;
@@ -2715,8 +2753,27 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
             const draw = ctx.drawImage.bind(ctx);
             ctx.drawImage = ((...args: Parameters<typeof draw>) => {
                 if (firstRow && args.length === 5) {
-                    expected =
-                        anchorRow === undefined ? undefined : anchorRow * 25 + 1 + Number(args[2]);
+                    const source = args[0] as HTMLCanvasElement;
+                    const baseline = Number(source.dataset.rowBaseline);
+                    const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
+                    const y = Number(args[2]);
+                    queueMicrotask(() => {
+                        // Preview scrolling can clip row zero completely; use the row actually painted.
+                        const row = node
+                            .getAttribute('aria-description')!
+                            .split('\n')
+                            .findIndex(
+                                (line) => line.replaceAll(' ', '') === source.dataset.rowText
+                            );
+                        expected =
+                            anchorRow === undefined || row < 0
+                                ? undefined
+                                : (anchorRow - row) *
+                                      Number(localStorage.getItem('nido.lineHeight')) +
+                                  1 +
+                                  y +
+                                  phase;
+                    });
                     firstRow = false;
                 }
                 draw(...args);
@@ -2734,12 +2791,16 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
             });
             ctx.fillRect = (x, y, w, h) => {
                 if (x === 0 && y === 0 && h > 100) firstRow = true;
-                if (ctx.fillStyle === '#f5f5f5' && expected !== undefined && expected > 0) {
+                if (ctx.fillStyle === '#f5f5f5') {
                     const actual = y + ctx.getTransform().f / window.devicePixelRatio;
-                    const errors = JSON.parse(node.dataset.cursorErrors!) as number[];
-                    if (Math.abs(actual - expected) > 0.01) errors.push(actual - expected);
-                    node.dataset.cursorErrors = JSON.stringify(errors);
-                    node.dataset.checkedCursor = 'true';
+                    queueMicrotask(() => {
+                        if (expected === undefined || expected <= 0) return;
+                        const errors = JSON.parse(node.dataset.cursorErrors!) as number[];
+                        if (Math.abs(actual - expected) > 1 / devicePixelRatio + 0.01)
+                            errors.push(actual - expected);
+                        node.dataset.cursorErrors = JSON.stringify(errors);
+                        node.dataset.checkedCursor = 'true';
+                    });
                 }
                 fill(x, y, w, h);
             };
@@ -2786,6 +2847,7 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
             await page.waitForTimeout(150);
             frames = await canvas.getAttribute('data-animation-frames');
         }
+        expect(await canvas.getAttribute('data-resampled-animation')).toBeNull();
         await page.emulateMedia({ reducedMotion: 'reduce' });
         const before = await canvas.getAttribute('aria-description');
         await page.mouse.wheel(0, 100);

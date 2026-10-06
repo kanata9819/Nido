@@ -192,7 +192,7 @@ export default function CompletionMenu({
             }
             placement.current.height = Math.max(placement.current.height, list.offsetHeight);
             list.style.minHeight = `${placement.current.height}px`;
-            element.style.left = `${Math.max(6, Math.min(menu.column * cellWidth, host.clientWidth - element.offsetWidth - 6))}px`;
+            element.style.left = `${Math.max(6, Math.min(grid.current.surfaceLeft + menu.column * cellWidth, host.clientWidth - element.offsetWidth - 6))}px`;
             element.style.top = `${Math.max(
                 6,
                 Math.min(

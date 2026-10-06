@@ -74,10 +74,13 @@ export class Grid {
     cursorVisible = true;
     cursorOpacity = 1;
     pixelScrollEnabled = false;
+    scrolling = false;
     scrollFraction = 0;
     scrollPreview = 0;
     cellWidth = 0;
     cellHeight = 0;
+    surfaceLeft = 0;
+    surfaceTop = 0;
     contentHeight = 0;
     extraRows = 0;
     bracketGuides: BracketGuide[] = [];
@@ -542,6 +545,10 @@ export class Grid {
                   )
               )
             : 0;
+        // A wheel gesture can stop between pixels; do not leave filtered text on screen.
+        if (!this.scrolling) {
+            this.scrollPixels = Math.round(this.scrollPixels * dpr) / dpr;
+        }
         this.paintBackground(ctx, 0, 0, width, height);
         ctx.textBaseline = 'alphabetic';
         for (let row = this.scrollPixels < 0 ? -this.upperRows.length : 0; row < this.rows; row++) {
@@ -555,7 +562,7 @@ export class Grid {
             const rowHeight = this.rowTop(row + 1) - this.rowTop(row);
             // Resting rows at fractional DPI must not inherit scroll interpolation.
             const physicalY =
-                this.scrollPixels !== 0 && row < this.rows - 1
+                this.scrolling && this.scrollPixels !== 0 && row < this.rows - 1
                     ? Math.round(this.rowY(row) * dpr * Grid.rasterPhases) / Grid.rasterPhases
                     : Math.round(this.rowY(row) * dpr);
             const top = Math.floor(physicalY);

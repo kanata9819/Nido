@@ -83,8 +83,8 @@ export default function StickyScroll({
                 ? {
                       state,
                       rows,
-                      top,
-                      left: state.left * surface.cellWidth,
+                      top: top + surface.surfaceTop,
+                      left: state.left * surface.cellWidth + surface.surfaceLeft,
                       width: state.width * surface.cellWidth,
                       lineHeight: surface.cellHeight,
                       cellWidth: surface.cellWidth,

@@ -211,6 +211,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         await expect(canvas).toHaveAttribute('aria-description', /line 1/);
         const dpr = await page.evaluate(() => window.devicePixelRatio);
         const snapped = (pixels: number): number => Math.round(pixels * dpr * 4) / (dpr * 4);
+        const settled = (pixels: number): number => Math.round(pixels * dpr) / dpr;
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.waitForTimeout(300);
@@ -325,7 +326,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         await expect(canvas).toHaveAttribute('data-offsets', '2');
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-first-y')))
-            .toBeCloseTo(snapped(-1.45), 5);
+            .toBeCloseTo(settled(-1.45), 5);
         expect(await canvas.getAttribute('data-states')).toBe('0');
         const work = await page.evaluate(
             () =>

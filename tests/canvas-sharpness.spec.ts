@@ -50,8 +50,16 @@ for (const scale of [1, 1.25, 1.5]) {
             await page.getByRole('button', { name: 'Settings', exact: true }).click();
             await page.getByRole('checkbox', { name: 'UI animations' }).uncheck();
             await canvas.evaluate((node: HTMLCanvasElement) => {
+                // Force fractional layout edges, as sidebars and Windows scaling can produce.
+                node.parentElement!.style.marginLeft = '12.3px';
+                node.parentElement!.style.marginTop = '0.3px';
                 const ctx = node.getContext('2d')!;
                 const draw = ctx.drawImage.bind(ctx);
+                const fill = ctx.fillRect.bind(ctx);
+                ctx.fillRect = (x, y, width, height) => {
+                    if (x === 0 && y === 0 && height > 100) node.dataset.filteredRows = '0';
+                    fill(x, y, width, height);
+                };
                 node.dataset.copied = '0';
                 node.dataset.mismatches = '0';
                 node.dataset.fractional = '0';
@@ -60,6 +68,9 @@ for (const scale of [1, 1.25, 1.5]) {
                     if (args.length !== 5 || !(args[0] instanceof HTMLCanvasElement)) return;
                     const source = args[0];
                     const dpr = window.devicePixelRatio;
+                    if (source.height > Math.ceil(19 * dpr)) {
+                        node.dataset.filteredRows = String(Number(node.dataset.filteredRows) + 1);
+                    }
                     const y = Number(args[2]) * dpr;
                     const top = Math.round(y);
                     // Bottom buffer rows are intentionally clipped above the command line.
@@ -98,6 +109,19 @@ for (const scale of [1, 1.25, 1.5]) {
             expect(metrics.dpr).toBeCloseTo(scale, 4);
             expect(metrics.fractional).toBe('0');
             expect(metrics.mismatches).toBe('0');
+            const alignment = await canvas.evaluate((node: HTMLCanvasElement) => {
+                const bounds = node.getBoundingClientRect();
+                return [
+                    bounds.left * devicePixelRatio,
+                    bounds.top * devicePixelRatio,
+                    bounds.width * devicePixelRatio - node.width,
+                    bounds.height * devicePixelRatio - node.height
+                ];
+            });
+            expect(Math.abs(alignment[0] - Math.round(alignment[0]))).toBeLessThan(0.025);
+            expect(Math.abs(alignment[1] - Math.round(alignment[1]))).toBeLessThan(0.025);
+            expect(Math.abs(alignment[2])).toBeLessThan(0.025);
+            expect(Math.abs(alignment[3])).toBeLessThan(0.025);
             const copied = Number(await canvas.getAttribute('data-copied'));
             await canvas.hover();
             await page.mouse.wheel(0, 2.4);
@@ -106,6 +130,41 @@ for (const scale of [1, 1.25, 1.5]) {
                 .toBeGreaterThan(copied);
             await expect(canvas).toHaveAttribute('data-fractional', '0');
             await expect(canvas).toHaveAttribute('data-mismatches', '0');
+            await expect(canvas).toHaveAttribute('data-filtered-rows', '0');
+            // Changing zoom must rebuild backing pixels even without another editor command.
+            const nextScale = scale + 0.25;
+            await running.evaluate(({ BrowserWindow }, zoom) => {
+                BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(zoom);
+            }, nextScale / initialDpr);
+            await expect
+                .poll(() =>
+                    canvas.evaluate((node: HTMLCanvasElement) => {
+                        const bounds = node.getBoundingClientRect();
+                        return Math.max(
+                            Math.abs(bounds.width * devicePixelRatio - node.width),
+                            Math.abs(bounds.height * devicePixelRatio - node.height),
+                            Math.abs(
+                                bounds.left * devicePixelRatio -
+                                    Math.round(bounds.left * devicePixelRatio)
+                            ),
+                            Math.abs(
+                                bounds.top * devicePixelRatio -
+                                    Math.round(bounds.top * devicePixelRatio)
+                            )
+                        );
+                    })
+                )
+                .toBeLessThan(0.025);
+            // The settling repaint must still happen while the editor input is unfocused.
+            const beforeUnfocused = Number(await canvas.getAttribute('data-copied'));
+            await canvas.evaluate((node) => {
+                (document.activeElement as HTMLElement)?.blur();
+                node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 0.35 }));
+            });
+            await expect
+                .poll(async () => Number(await canvas.getAttribute('data-copied')))
+                .toBeGreaterThan(beforeUnfocused);
+            await expect(canvas).toHaveAttribute('data-filtered-rows', '0');
         } finally {
             await running.close();
             await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

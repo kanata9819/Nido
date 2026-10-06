@@ -146,11 +146,19 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                 const steps = samples
                     .slice(1)
                     .map((sample, i) => Math.sign(delta) * (sample.top - samples[i].top));
+                const pixel = await page.evaluate(() => 1 / window.devicePixelRatio);
                 const gaps = samples
                     .slice(1)
                     .map((sample, i) => sample.at - samples[i].at)
                     .sort((a, b) => a - b);
-                const reversals = steps.filter((step) => step < -0.1);
+                const reversals = steps.filter((step, index) => {
+                    // After input stops, sharpening snaps glyphs by at most one physical pixel.
+                    // Keep the continuous-motion assertion strict while the wheel is active.
+                    const idleSnap =
+                        samples[index + 1].at - samples[index].at > 100 &&
+                        Math.abs(step) <= pixel + 0.01;
+                    return step < -0.1 && !idleSnap;
+                });
                 reports.push({
                     direction: delta > 0 ? 'down' : 'up',
                     delta,
@@ -184,7 +192,6 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                 );
                 expect(samples.length).toBeGreaterThan(20);
                 // Rasterized row positions can differ by one physical pixel at fractional DPI.
-                const pixel = await page.evaluate(() => 1 / window.devicePixelRatio);
                 expect(Math.abs(samples.at(-1)!.top - start - delta * 100)).toBeLessThanOrEqual(
                     pixel + 0.01
                 );

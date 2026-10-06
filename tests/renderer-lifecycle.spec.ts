@@ -21,6 +21,66 @@ test.afterAll(async () => {
 });
 
 for (const scale of [1, 1.25, 1.5]) {
+    test(`editor canvas fits physical pixels at ${scale * 100}% scale`, async ({ browser }) => {
+        const context = await browser.newContext({ deviceScaleFactor: scale });
+        try {
+            const page = await context.newPage();
+            await page.route('**/canvas-probe', (route) =>
+                route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+            );
+            await page.goto(`${origin}canvas-probe`);
+            const samples = await page.evaluate(
+                async (moduleUrl) => {
+                    const { alignCanvasSurface } = await import(moduleUrl);
+                    const host = document.createElement('div');
+                    host.style.cssText =
+                        'position:absolute;left:31.3px;top:27.7px;width:413.3px;height:171.7px';
+                    const canvas = document.createElement('canvas');
+                    canvas.style.position = 'absolute';
+                    host.append(canvas);
+                    document.body.append(host);
+                    return [31.3, 42.7].map((left) => {
+                        host.style.left = `${left}px`;
+                        const surface = alignCanvasSurface(canvas, host, devicePixelRatio);
+                        canvas.width = Math.round(surface.width * devicePixelRatio);
+                        canvas.height = Math.round(surface.height * devicePixelRatio);
+                        const observer = new MutationObserver(() => {});
+                        observer.observe(canvas, { attributes: true, attributeFilter: ['style'] });
+                        alignCanvasSurface(canvas, host, devicePixelRatio);
+                        const repeatedWrites = observer.takeRecords().length;
+                        observer.disconnect();
+                        const bounds = canvas.getBoundingClientRect();
+                        const parent = host.getBoundingClientRect();
+                        return {
+                            edges: [bounds.left, bounds.top, bounds.right, bounds.bottom].map(
+                                (value) => value * devicePixelRatio
+                            ),
+                            width: bounds.width * devicePixelRatio - canvas.width,
+                            height: bounds.height * devicePixelRatio - canvas.height,
+                            repeatedWrites,
+                            inside:
+                                bounds.left >= parent.left &&
+                                bounds.top >= parent.top &&
+                                bounds.right <= parent.right &&
+                                bounds.bottom <= parent.bottom
+                        };
+                    });
+                },
+                `/@fs/${resolve('src/renderer/src/canvasSurface.ts').replaceAll('\\', '/')}`
+            );
+            for (const sample of samples) {
+                for (const edge of sample.edges)
+                    expect(Math.abs(edge - Math.round(edge))).toBeLessThan(0.025);
+                expect(Math.abs(sample.width)).toBeLessThan(0.025);
+                expect(Math.abs(sample.height)).toBeLessThan(0.025);
+                expect(sample.inside).toBe(true);
+                expect(sample.repeatedWrites).toBe(0);
+            }
+        } finally {
+            await context.close();
+        }
+    });
+
     test(`resting editor text has no color fringes or resampling at ${scale * 100}% scale`, async ({
         browser
     }) => {
@@ -58,6 +118,8 @@ for (const scale of [1, 1.25, 1.5]) {
                         ['flush']
                     ]);
                     const canvas = document.createElement('canvas');
+                    let originalRows: HTMLCanvasElement[] = [];
+                    let paintedRows: HTMLCanvasElement[] = [];
                     let copies = 0;
                     let resampled = 0;
                     let colored = 0;
@@ -72,6 +134,7 @@ for (const scale of [1, 1.25, 1.5]) {
                             return;
                         }
                         copies++;
+                        paintedRows.push(source);
                         const top = Math.round(Number(args[2]) * devicePixelRatio);
                         // The command row can extend one physical pixel beyond the canvas.
                         const height = Math.min(source.height, canvas.height - top);
@@ -102,14 +165,38 @@ for (const scale of [1, 1.25, 1.5]) {
                             undefined,
                             19
                         );
+                        originalRows = paintedRows;
+                        paintedRows = [];
+                        // A completed gesture may retain a fraction in Neovim's viewport.
+                        grid.scrollFraction = 0.3 / (19 * devicePixelRatio);
+                        grid.draw(
+                            canvas,
+                            400,
+                            114,
+                            15,
+                            '"Cascadia Code", Consolas, monospace',
+                            false,
+                            undefined,
+                            19
+                        );
                     } finally {
                         CanvasRenderingContext2D.prototype.drawImage = drawImage;
                     }
-                    return { copies, colored, resampled, mismatches };
+                    return {
+                        copies,
+                        colored,
+                        resampled,
+                        mismatches,
+                        nativeRows: paintedRows.every((row, index) => row === originalRows[index])
+                    };
                 },
                 `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
             );
-            expect(samples.copies).toBe(6);
+            expect(samples.copies).toBe(12);
+            expect(
+                samples.nativeRows,
+                'settled fractional scrolling must reuse the unfiltered glyphs'
+            ).toBe(true);
             expect(samples.colored, 'white text on gray must not gain red or blue edges').toBe(0);
             expect(samples.resampled, 'stationary rows must not interpolate a cached bitmap').toBe(
                 0
@@ -147,6 +234,7 @@ for (const scale of [1, 1.25, 1.5]) {
                         ['flush']
                     ]);
                     grid.pixelScrollEnabled = true;
+                    grid.scrolling = true;
                     const canvas = document.createElement('canvas');
                     const positions: number[] = [];
                     let glyphs = 0;
