@@ -28,10 +28,7 @@ export class SessionFiles {
         if (!(await stat(file)).isFile()) {
             throw new Error('Choose a file.');
         }
-        await this.client.request('nvim_exec_lua', [
-            'vim.cmd.edit(vim.fn.fnameescape(...))',
-            [file]
-        ]);
+        await this.client.request('nvim_exec_lua', ["require('nido_eol').open(...)", [file]]);
     }
 
     fileAction(

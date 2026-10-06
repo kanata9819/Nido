@@ -1843,6 +1843,38 @@ test('bracket guides follow the innermost scope, ignore quoted brackets and clea
     }
 });
 
+test('EditorConfig reads CRLF files cleanly when the project requests LF', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-editorconfig-eol-'));
+    let session: Session | undefined;
+    try {
+        await writeFile(join(root, '.editorconfig'), 'root = true\n[*]\nend_of_line = lf\n');
+        const original = 'first\r\nsecond\r\n';
+        await writeFile(join(root, 'dos.txt'), original);
+        session = await Session.create(root, () => {});
+        const lua = (code: string): Promise<unknown> =>
+            session!.client.request('nvim_exec_lua', [code, []]);
+        await session.setEditorConfig(true);
+        await session.openFile('dos.txt');
+        assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)'), [
+            'first',
+            'second'
+        ]);
+        assert.equal(await lua('return vim.bo.fileformat'), 'unix');
+        assert.equal(await lua("return require('nido_eol').detect()"), 'LF');
+        assert.equal(await readFile(join(root, 'dos.txt'), 'utf8'), original);
+        await lua('vim.cmd.edit({bang=true})');
+        assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)'), [
+            'first',
+            'second'
+        ]);
+        await session.save();
+        assert.equal(await readFile(join(root, 'dos.txt'), 'utf8'), 'first\nsecond\n');
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('EditorConfig toggles existing buffers, indentation guides and save rules', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-editorconfig-'));
     const grid = new Grid();
@@ -2230,6 +2262,52 @@ test('line endings normalize only in memory until saved, preserve content and su
         await session.save();
         assert.equal(await readFile(join(root, 'dos.txt'), 'utf8'), 'one\ntwo\n');
         await assert.rejects(session.setLineEnding('invalid' as 'LF'));
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test('GUI file opens and workspace restoration do not inherit binary mode', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-text-mode-'));
+    let session: Session | undefined;
+    try {
+        const samples = [
+            { name: 'dos.txt', text: 'first\r\ninside\rcarriage\r\nlast\r\n', format: 'dos' },
+            { name: 'unix.txt', text: 'first\ninside\rcarriage\nlast\n', format: 'unix' }
+        ];
+        for (const sample of samples) await writeFile(join(root, sample.name), sample.text);
+        session = await Session.create(root, () => {});
+        const lua = (code: string): Promise<unknown> =>
+            session!.client.request('nvim_exec_lua', [code, []]);
+        for (const sample of samples) {
+            await lua('vim.o.binary = true');
+            await session.openFile(sample.name);
+            assert.equal(await lua('return vim.bo.binary'), false);
+            assert.equal(await lua('return vim.bo.fileformat'), sample.format);
+            assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)'), [
+                'first',
+                'inside\rcarriage',
+                'last'
+            ]);
+            assert.equal(await lua('return vim.bo.modified'), false);
+            await session.save();
+            assert.equal(await readFile(join(root, sample.name), 'utf8'), sample.text);
+        }
+        await lua("vim.cmd('bwipeout! dos.txt'); vim.o.binary = true");
+        const path = join(root, 'dos.txt');
+        assert.deepEqual(
+            await session.restore({
+                root,
+                files: [{ path, line: 2, column: 1 }],
+                current: path
+            }),
+            []
+        );
+        assert.equal(await lua('return vim.bo.binary'), false);
+        assert.equal(await lua('return vim.bo.fileformat'), 'dos');
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'inside\rcarriage');
+        assert.equal(await readFile(path, 'utf8'), samples[0].text);
     } finally {
         await session?.stop();
         await rm(root, { recursive: true, force: true });

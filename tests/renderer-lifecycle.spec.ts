@@ -21,6 +21,108 @@ test.afterAll(async () => {
 });
 
 for (const scale of [1, 1.25, 1.5]) {
+    test(`resting editor text has no color fringes or resampling at ${scale * 100}% scale`, async ({
+        browser
+    }) => {
+        const context = await browser.newContext({ deviceScaleFactor: scale });
+        try {
+            const page = await context.newPage();
+            await page.route('**/canvas-probe', (route) =>
+                route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+            );
+            await page.goto(`${origin}canvas-probe`);
+            const samples = await page.evaluate(
+                async (moduleUrl) => {
+                    const { Grid } = await import(moduleUrl);
+                    const grid = new Grid();
+                    grid.background = '#111111';
+                    grid.foreground = '#ffffff';
+                    grid.busy = true;
+                    grid.pixelScrollEnabled = true;
+                    grid.apply([
+                        ['grid_resize', [1, 40, 6]],
+                        [
+                            'hl_attr_define',
+                            [1, { bold: true }, {}, []],
+                            [2, { italic: true }, {}, []]
+                        ],
+                        ...[0, 1, 2, 3].map((row) => [
+                            'grid_line',
+                            [
+                                1,
+                                row,
+                                0,
+                                Array.from('alacritty(options)?,', (text) => [text, row % 3])
+                            ]
+                        ]),
+                        ['flush']
+                    ]);
+                    const canvas = document.createElement('canvas');
+                    let copies = 0;
+                    let resampled = 0;
+                    let colored = 0;
+                    let mismatches = 0;
+                    const drawImage = CanvasRenderingContext2D.prototype.drawImage;
+                    CanvasRenderingContext2D.prototype.drawImage = function (...args) {
+                        Reflect.apply(drawImage, this, args);
+                        const source = args[0];
+                        if (!(source instanceof HTMLCanvasElement)) return;
+                        if (this.canvas !== canvas) {
+                            resampled++;
+                            return;
+                        }
+                        copies++;
+                        const top = Math.round(Number(args[2]) * devicePixelRatio);
+                        // The command row can extend one physical pixel beyond the canvas.
+                        const height = Math.min(source.height, canvas.height - top);
+                        const expected = source
+                            .getContext('2d')!
+                            .getImageData(0, 0, 220, height).data;
+                        const actual = this.getImageData(0, top, 220, height).data;
+                        for (let i = 0; i < expected.length; i++) {
+                            if (expected[i] !== actual[i]) mismatches++;
+                        }
+                        for (let i = 0; i < actual.length; i += 4) {
+                            if (
+                                Math.max(actual[i], actual[i + 1], actual[i + 2]) -
+                                    Math.min(actual[i], actual[i + 1], actual[i + 2]) >
+                                1
+                            )
+                                colored++;
+                        }
+                    };
+                    try {
+                        grid.draw(
+                            canvas,
+                            400,
+                            114,
+                            15,
+                            '"Cascadia Code", Consolas, monospace',
+                            false,
+                            undefined,
+                            19
+                        );
+                    } finally {
+                        CanvasRenderingContext2D.prototype.drawImage = drawImage;
+                    }
+                    return { copies, colored, resampled, mismatches };
+                },
+                `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+            );
+            expect(samples.copies).toBe(6);
+            expect(samples.colored, 'white text on gray must not gain red or blue edges').toBe(0);
+            expect(samples.resampled, 'stationary rows must not interpolate a cached bitmap').toBe(
+                0
+            );
+            expect(
+                samples.mismatches,
+                'cached glyphs must reach the screen without changed pixels'
+            ).toBe(0);
+        } finally {
+            await context.close();
+        }
+    });
+
     test(`slow pixel scrolling moves glyphs without whole-pixel jumps at ${scale * 100}% scale`, async ({
         browser
     }) => {
@@ -68,7 +170,7 @@ for (const scale of [1, 1.25, 1.5]) {
                                 const reference = document.createElement('canvas');
                                 reference.width = Math.floor(120 * dpr);
                                 reference.height = 28 * dpr;
-                                const native = reference.getContext('2d', { alpha: false })!;
+                                const native = reference.getContext('2d', { alpha: true })!;
                                 native.setTransform(dpr, 0, 0, dpr, 0, 0);
                                 native.fillStyle = '#191e23';
                                 native.fillRect(0, 0, 400, 28);

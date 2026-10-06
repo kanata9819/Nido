@@ -177,7 +177,7 @@ end
 function M.open(index, expected_version)
   local item = get_item(index, expected_version)
   vim.cmd("normal! m'")
-  vim.cmd.edit(vim.fn.fnameescape(item.filename))
+  require('nido_eol').open(item.filename)
   local line = math.min(item.lnum, vim.api.nvim_buf_line_count(0))
   local text = vim.api.nvim_buf_get_lines(0, line - 1, line, false)[1] or ''
   vim.api.nvim_win_set_cursor(0, { line, math.min(item.col - 1, #text) })

@@ -588,7 +588,7 @@ end`,
                 }
                 await this.client.request('nvim_exec_lua', [
                     `local path, line, column = ...
-          vim.cmd.edit(vim.fn.fnameescape(path))
+          require('nido_eol').open(path)
           line = math.min(line, vim.api.nvim_buf_line_count(0))
           vim.api.nvim_win_set_cursor(0, {line, column})`,
                     [file.path, file.line, file.column]
@@ -731,7 +731,7 @@ return ok and "" or tostring(err)`,
         await this.client.request('nvim_exec_lua', [
             `local path, line, column = ...
 vim.cmd("normal! m'")
-vim.cmd.edit(vim.fn.fnameescape(path))
+require('nido_eol').open(path)
 line = math.min(line, vim.api.nvim_buf_line_count(0))
 local text = vim.api.nvim_buf_get_lines(0, line-1, line, false)[1] or ''
 vim.api.nvim_win_set_cursor(0, {line, math.min(column-1, #text)})

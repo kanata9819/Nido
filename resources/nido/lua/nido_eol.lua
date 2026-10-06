@@ -1,5 +1,10 @@
 local M = {}
 
+function M.open(path)
+  -- GUI navigation opens text files; inherited binary mode bypasses CRLF detection.
+  vim.cmd('edit ++nobin ' .. vim.fn.fnameescape(path))
+end
+
 function M.detect()
   if vim.bo.buftype ~= '' then
     return nil

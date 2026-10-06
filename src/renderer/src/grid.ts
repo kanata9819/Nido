@@ -553,9 +553,9 @@ export class Grid {
                 continue;
             }
             const rowHeight = this.rowTop(row + 1) - this.rowTop(row);
-            // Cache fractional coverage while preserving the native glyph raster.
+            // Resting rows at fractional DPI must not inherit scroll interpolation.
             const physicalY =
-                this.pixelScrollEnabled && row < this.rows - 1
+                this.scrollPixels !== 0 && row < this.rows - 1
                     ? Math.round(this.rowY(row) * dpr * Grid.rasterPhases) / Grid.rasterPhases
                     : Math.round(this.rowY(row) * dpr);
             const top = Math.floor(physicalY);
@@ -576,7 +576,9 @@ export class Grid {
                 image.width = canvas.width;
                 image.height = imageHeight;
                 images[0] = image;
-                const ctx = image.getContext('2d', { alpha: translucent })!;
+                // Alpha surfaces use grayscale antialiasing, avoiding colored LCD fringes.
+                // Opaque themes still fill the row background before drawing text.
+                const ctx = image.getContext('2d', { alpha: true })!;
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 ctx.textBaseline = 'alphabetic';
                 const y = 0;
