@@ -409,6 +409,7 @@ export const japanese: Record<string, string> = {
     TypeParameter: '型パラメーター',
     'Markdown preview content': 'Markdownプレビューの内容',
     'Loading…': '読み込み中…',
+    'Loading workspaces…': 'ワークスペースを読み込み中…',
     'Toggle terminal': 'ターミナルを切り替え',
     'Toggle debugger': 'デバッガーを切り替え',
     'Toggle references': '参照を切り替え',

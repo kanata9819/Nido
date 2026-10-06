@@ -316,10 +316,28 @@
     flex-direction: column;
 }
 .editorContent {
+    position: relative;
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
+}
+.workspaceLoading {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: var(--surface-editor, #141414);
+    color: var(--ui-text-muted, #8996a3);
+    font-size: 13px;
+}
+.workspaceLoading .progressSpinner {
+    width: 22px;
+    height: 22px;
 }
 .fileTabs {
     height: 34px;

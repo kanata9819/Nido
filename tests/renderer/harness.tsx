@@ -100,6 +100,19 @@ window.nido = new Proxy({} as NidoAPI, {
                     pending.push({ method, args, resolve, reject })
                 );
             }
+            if (method === 'attach') {
+                queueMicrotask(() => {
+                    window.rendererTest.emit({
+                        type: 'redraw',
+                        id: String(args[0]),
+                        events: [
+                            ['grid_resize', [1, Number(args[1]), Number(args[2])]],
+                            ['grid_line', [1, 0, 0, Array.from('hello', (text) => [text, 0])]],
+                            ['flush']
+                        ]
+                    });
+                });
+            }
             return Promise.resolve(defaults[method]);
         };
     }

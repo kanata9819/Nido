@@ -20,6 +20,117 @@ test.afterAll(async () => {
     await server?.close();
 });
 
+test('slow startup shows loading through restoration until the first completed editor paint', async ({
+    page
+}) => {
+    await page.clock.install();
+    await page.goto(`${origin}?view=app&defer=restoreWorkspaces,attach`);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    const loading = page.getByRole('status', { name: 'Loading workspaces…' });
+    await page.clock.runFor(100);
+    await expect(loading).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toHaveCount(0);
+    await page.clock.runFor(150);
+    await expect(loading).toBeVisible();
+    await page.evaluate(() =>
+        window.rendererTest.settle('restoreWorkspaces', 0, {
+            workspaces: [{ id: 'alpha', root: '/alpha', name: 'Alpha' }],
+            active: 'alpha',
+            errors: []
+        })
+    );
+    await page.clock.runFor(50);
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.pending.some((call) => call.method === 'attach')
+            )
+        )
+        .toBe(true);
+    await expect(loading).toBeVisible();
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [
+                ['grid_resize', [1, 40, 10]],
+                ['grid_line', [1, 0, 0, Array.from('hello', (text) => [text, 0])]]
+            ]
+        })
+    );
+    await page.clock.runFor(50);
+    await expect(loading).toBeVisible();
+    await page.screenshot({ path: 'test-results/workspace-loading.png' });
+    await page.evaluate(() => {
+        window.rendererTest.emit({ type: 'redraw', id: 'alpha', events: [['flush']] });
+        window.rendererTest.settle('attach', 0, undefined);
+    });
+    await page.clock.runFor(50);
+    await expect(loading).toHaveCount(0);
+    await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /hello/);
+});
+
+test('fast startup never flashes a loading indicator', async ({ page }) => {
+    await page.clock.install();
+    await page.addInitScript(() => {
+        Object.assign(window, { loadingScreens: 0 });
+        new MutationObserver((records) => {
+            const selector = '[role="status"][aria-label="Loading workspaces…"]';
+            for (const record of records)
+                for (const node of record.addedNodes) {
+                    if (
+                        node instanceof Element &&
+                        (node.matches(selector) || node.querySelector(selector))
+                    ) {
+                        (window as unknown as { loadingScreens: number }).loadingScreens++;
+                    }
+                }
+        }).observe(document, { childList: true, subtree: true });
+    });
+    await page.goto(`${origin}?view=app`);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.clock.runFor(100);
+    await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /hello/);
+    await page.clock.runFor(500);
+    expect(
+        await page.evaluate(() => (window as unknown as { loadingScreens: number }).loadingScreens)
+    ).toBe(0);
+});
+
+test('failed restoration dismisses Japanese loading and returns to the welcome screen', async ({
+    page
+}) => {
+    await page.clock.install();
+    await page.addInitScript(() => localStorage.setItem('nido.language', 'ja'));
+    await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.clock.runFor(250);
+    const loading = page.getByRole('status', { name: 'ワークスペースを読み込み中…' });
+    await expect(loading).toBeVisible();
+    await page.evaluate(() =>
+        window.rendererTest.settle('restoreWorkspaces', 0, 'Restore failed', true)
+    );
+    await page.clock.runFor(50);
+    await expect(loading).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'ここから、あなたのコードを。' })).toBeVisible();
+    await expect(page.getByText('Restore failed', { exact: true })).toBeVisible();
+});
+
+test('failed editor attachment dismisses loading and displays the error', async ({ page }) => {
+    await page.clock.install();
+    await page.goto(`${origin}?view=app&defer=attach`);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.clock.runFor(250);
+    const loading = page.getByRole('status', { name: 'Loading workspaces…' });
+    await expect(loading).toBeVisible();
+    await page.evaluate(() =>
+        window.rendererTest.settle('attach', 0, 'Editor startup failed', true)
+    );
+    await page.clock.runFor(50);
+    await expect(loading).toHaveCount(0);
+    await expect(page.getByText('Editor startup failed', { exact: true })).toBeVisible();
+});
+
 for (const scale of [1, 1.25, 1.5]) {
     test(`editor canvas fits physical pixels at ${scale * 100}% scale`, async ({ browser }) => {
         const context = await browser.newContext({ deviceScaleFactor: scale });

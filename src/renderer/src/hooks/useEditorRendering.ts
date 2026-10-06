@@ -16,6 +16,7 @@ interface UseEditorRenderingOptions {
     active: boolean;
     focusTick: number;
     onError: (message: string) => void;
+    onReady?: (id: string) => void;
     errorRef: RefObject<(message: string) => void>;
     hostRef: RefObject<HTMLDivElement | null>;
     canvasRef: RefObject<HTMLCanvasElement | null>;
@@ -42,6 +43,7 @@ export function useEditorRendering({
     active,
     focusTick,
     onError,
+    onReady,
     errorRef,
     hostRef,
     canvasRef,
@@ -85,6 +87,8 @@ export function useEditorRendering({
         let disposed = false;
         let directScroll = false;
         let descriptionDirty = true;
+        let hasFrame = grid.rows > 0 && grid.columns > 0;
+        let ready = false;
         const scrollQueue = new ScrollQueue();
         let prefetchNeeded = true;
         let prefetchPending = false;
@@ -411,6 +415,10 @@ export function useEditorRendering({
                 inputRef.current.style.left = `${bounds.left + grid.cursor.column * metrics.cellWidth}px`;
                 inputRef.current.style.top = `${bounds.top + grid.rowY(grid.cursor.row)}px`;
             }
+            if (hasFrame && !ready) {
+                ready = true;
+                onReady?.(id);
+            }
 
             const columns = Math.max(20, Math.floor(bounds.width / metrics.cellWidth));
             // Compact lenses free space for code; keep one extra row for fractional scrolling.
@@ -623,6 +631,8 @@ export function useEditorRendering({
                 const { row, column } = grid.cursor;
                 const mode = grid.mode;
                 if (grid.apply(event.events)) {
+                    hasFrame = grid.rows > 0 && grid.columns > 0;
+                    descriptionDirty ||= !ready;
                     if (
                         !prefetchPending &&
                         (event.events.some(
@@ -704,6 +714,7 @@ export function useEditorRendering({
         };
     }, [
         backgroundOpacity,
+        onReady,
         id,
         fontSize,
         lineHeight,

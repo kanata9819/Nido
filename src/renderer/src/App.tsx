@@ -18,6 +18,7 @@ import ReferencesPanel from './components/ReferencesPanel';
 import StatusBar from './components/StatusBar';
 import TitleBar from './components/TitleBar';
 import { Welcome, WorkspaceWelcome } from './components/Welcome';
+import WorkspaceLoading from './components/WorkspaceLoading';
 import { buildItems } from './commands';
 import { fileDecorations } from './fileDecorations';
 import {
@@ -77,6 +78,28 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 
     const { workspaces, setWorkspaces, active, setActive, states, mode, restoring } =
         useWorkspaceSessions(report);
+    const [initializedEditors, setInitializedEditors] = useState<ReadonlySet<string>>(
+        () => new Set()
+    );
+    const finishEditorLoading = useCallback((id: string): void => {
+        setInitializedEditors((old) => (old.has(id) ? old : new Set([...old, id])));
+    }, []);
+    useEffect(
+        () =>
+            window.nido.onEvent((event) => {
+                if (event.type === 'exit') {
+                    setInitializedEditors((old) => {
+                        if (!old.has(event.id)) {
+                            return old;
+                        }
+                        const next = new Set(old);
+                        next.delete(event.id);
+                        return next;
+                    });
+                }
+            }),
+        []
+    );
     const {
         favorites,
         ready: favoritesReady,
@@ -527,9 +550,9 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                                 restartShell={restartShell}
                                 run={run}
                             />
-                        ) : (
+                        ) : !restoring ? (
                             <Welcome creating={creating} create={create} />
-                        )}
+                        ) : null}
                         {workspaces.map((w) => (
                             <Editor
                                 key={w.id}
@@ -548,7 +571,11 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                                 blocked={!!panel || leader}
                                 focusTick={focusTick}
                                 fontFamily={fontFamily.trim() || defaultFontFamily}
-                                onError={report}
+                                onReady={finishEditorLoading}
+                                onError={(message) => {
+                                    finishEditorLoading(w.id);
+                                    report(message);
+                                }}
                             >
                                 {w.kind !== 'terminal' &&
                                     states[w.id]?.empty &&
@@ -557,6 +584,9 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                                     )}
                             </Editor>
                         ))}
+                        {(restoring || (!!workspace && !initializedEditors.has(active))) && (
+                            <WorkspaceLoading />
+                        )}
                         {leader && <KeyboardGuide commands={commands} focusEditor={focusEditor} />}
                         {workspaces
                             .filter((w) => w.terminalId)

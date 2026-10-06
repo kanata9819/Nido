@@ -28,6 +28,7 @@ interface Props {
     focusTick: number;
     fontFamily: string;
     onError: (message: string) => void;
+    onReady?: (id: string) => void;
 }
 
 export default function Editor({
@@ -47,7 +48,8 @@ export default function Editor({
     blocked,
     focusTick,
     fontFamily,
-    onError
+    onError,
+    onReady
 }: Props): React.JSX.Element {
     const t = useI18n();
     const host = useRef<HTMLDivElement>(null);
@@ -83,6 +85,7 @@ export default function Editor({
         active,
         focusTick,
         onError,
+        onReady,
         errorRef: error,
         hostRef: host,
         canvasRef: canvas,
