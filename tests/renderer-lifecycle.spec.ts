@@ -377,12 +377,10 @@ test('Git shortcuts use the enabled state as soon as loading finishes', async ({
     await expect(list).toBeFocused();
     await page.evaluate(() => {
         document.getElementById('root')!.dataset.panel = 'git';
-        const button = [...document.querySelectorAll('button')].find(
-            (node) => node.textContent === '3 Branches'
-        )!;
+        const changes = document.querySelector('[aria-label="Git changes"]')!;
         const list = document.querySelector('[role="listbox"]')!;
         const observer = new MutationObserver(() => {
-            if (!button.disabled) {
+            if (changes.getAttribute('aria-busy') === 'false') {
                 observer.disconnect();
                 list.dispatchEvent(
                     new KeyboardEvent('keydown', {
@@ -393,7 +391,7 @@ test('Git shortcuts use the enabled state as soon as loading finishes', async ({
                 );
             }
         });
-        observer.observe(button, { attributes: true, attributeFilter: ['disabled'] });
+        observer.observe(changes, { attributes: true, attributeFilter: ['aria-busy'] });
         window.rendererTest.settle('gitStatus', 0, { root: '/alpha', branch: 'main', changes: [] });
     });
     await expect(branches).toHaveAttribute('aria-current', 'page');

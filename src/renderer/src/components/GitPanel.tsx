@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { GitChange, GitStatus } from '../../../shared/types';
 import styles from '../assets/GitPanel.module.css';
 import GitDiff from './GitDiff';
@@ -76,7 +76,7 @@ export default function GitPanel({
         }
     }
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         onBusyChange?.(busy);
     }, [busy, onBusyChange]);
 
