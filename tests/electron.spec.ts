@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { electron } from './helpers/electron';
 import { readSavedFile } from './helpers/files';
+import { attachEditorDiagnostics, recordEditorDiagnostics } from './helpers/editor-diagnostics';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -1887,6 +1888,7 @@ test('window size and maximized state survive restart', async () => {
 });
 
 test('Git changes can be reviewed, staged and committed with the keyboard', async () => {
+    const testInfo = test.info();
     const root = await mkdtemp(join(tmpdir(), 'nido-git-ui-'));
     const repository = join(root, 'repo');
     await mkdir(repository);
@@ -1906,6 +1908,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
     let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    let diagnosticPage: Page | undefined;
     try {
         const executablePath = process.env.NIDO_PACKAGED_EXE;
         running = await electron.launch({
@@ -1914,6 +1917,8 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
             env
         });
         const page = await running.firstWindow();
+        diagnosticPage = page;
+        await recordEditorDiagnostics(page);
         async function checkDiffKeys(label: string, listLabel: string): Promise<void> {
             const preview = page.getByLabel(label, { exact: true });
             await page.keyboard.press('Control+l');
@@ -1963,6 +1968,11 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
         );
         await page.keyboard.press('Control+p');
         await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
+        await expect(
+            page
+                .getByRole('dialog', { name: 'files palette' })
+                .getByRole('button', { name: /main.rs/ })
+        ).toBeVisible();
         await page.keyboard.press('Enter');
         const fileTabs = page.getByRole('tablist', { name: 'Files', exact: true });
         await expect(fileTabs.getByLabel('Git: Untracked', { exact: true })).toHaveText('U');
@@ -2159,11 +2169,17 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+p');
         await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
+        await expect(
+            page
+                .getByRole('dialog', { name: 'files palette' })
+                .getByRole('button', { name: /main.rs/ })
+        ).toBeVisible();
         await page.keyboard.press('Enter');
         await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
         await page.keyboard.press('i');
         await page.keyboard.type('unsaved');
         await page.keyboard.press('Escape');
+        await expect(fileTabs.getByLabel('Unsaved', { exact: true })).toHaveCount(1);
         await page.keyboard.press('Control+Shift+g');
         await expect(panel).toHaveAttribute('aria-busy', 'false');
         await page.keyboard.press('3');
@@ -2213,6 +2229,9 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
         await page.keyboard.press('Enter');
         await expect(fileTabs.locator('[data-diagnostic]')).toHaveCount(0);
         await expect(explorer.locator('[data-diagnostic]')).toHaveCount(0);
+    } catch (error) {
+        if (diagnosticPage) await attachEditorDiagnostics(diagnosticPage, testInfo);
+        throw error;
     } finally {
         await running?.evaluate(({ app }) => app.exit(0));
         await running?.close();
@@ -2839,10 +2858,12 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
 });
 
 test('references stay accessible after jumping and can be closed with the keyboard', async () => {
+    const testInfo = test.info();
     const root = await mkdtemp(join(tmpdir(), 'nido-references-'));
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
     let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    let diagnosticPage: Page | undefined;
     try {
         await mkdir(join(root, 'src'));
         await writeFile(
@@ -2860,6 +2881,8 @@ test('references stay accessible after jumping and can be closed with the keyboa
             env
         });
         const page = await running.firstWindow();
+        diagnosticPage = page;
+        await recordEditorDiagnostics(page);
         await page.evaluate(() => {
             Object.assign(window, { referenceState: { id: '', version: 0 } });
             window.nido.onEvent((event) => {
@@ -2887,7 +2910,9 @@ test('references stay accessible after jumping and can be closed with the keyboa
                     (window as Window & { referenceState: { version: number } }).referenceState
                         .version
             );
-            await page.keyboard.press('Control+k');
+            // Ctrl+K requests hover when the editor is already focused.
+            await page.keyboard.press('Control+l');
+            await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
             await page.keyboard.type('gg0wgr', { delay: 20 });
             await expect
                 .poll(() =>
@@ -2968,6 +2993,9 @@ test('references stay accessible after jumping and can be closed with the keyboa
         await expect(page.getByRole('tab', { name: '[Untitled]', exact: true })).toHaveCount(0);
         await page.keyboard.press('Shift+F12');
         await expect(page.getByRole('region', { name: 'References' })).toBeVisible();
+    } catch (error) {
+        if (diagnosticPage) await attachEditorDiagnostics(diagnosticPage, testInfo);
+        throw error;
     } finally {
         await running?.evaluate(({ app }) => app.exit(0));
         await running?.close();

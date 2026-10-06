@@ -588,8 +588,9 @@ export class Grid {
                 for (let col = 0; col < this.columns; col++) {
                     const h = this.highlights.get(cells[col]?.highlight || 0) || {};
                     const background = cellBackground(h, this.background, this.foreground);
-                    // Cache opaque glyphs and selection colors over a clear default background.
-                    if (translucent && background === this.background) {
+                    // The default background is already filled (or transparent for acrylic).
+                    // Repainting fractional cell edges can darken their native pixels.
+                    if (background === this.background) {
                         continue;
                     }
                     ctx.fillStyle = background;
