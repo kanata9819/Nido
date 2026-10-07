@@ -478,8 +478,15 @@ test('explorer commands create, rename, copy, move and recycle files from the ke
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+s');
         await expect.poll(() => readSavedFile(join(workspace, 'renamed.txt'))).toBe('hello!\n');
+        await expect(
+            tree.getByRole('treeitem', { name: 'renamed.txt', exact: true })
+        ).toHaveAttribute('aria-selected', 'true');
         await tree.focus();
+        await expect(tree).toBeFocused();
         await page.keyboard.press('Control+c');
+        await expect(page.getByRole('complementary', { name: 'File explorer' })).toContainText(
+            'Copied: renamed.txt'
+        );
         await page.keyboard.press('Control+v');
         await apply('copy.txt');
         await expect.poll(() => readSavedFile(join(workspace, 'copy.txt'))).toBe('hello!\n');
@@ -3249,7 +3256,12 @@ test('normal shutdown restores workspace order, active file and cursors', async 
         for (const key of Object.keys(env)) if (key.toLowerCase() === 'path') env[key] = '';
         env.VIMINIT = 'lua error("Personal configuration must not run")';
     }
-    const args = [...(executablePath ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`];
+    // Exact RGB samples below require one CSS pixel to map to one physical pixel.
+    const args = [
+        ...(executablePath ? [] : ['.']),
+        '--force-device-scale-factor=1',
+        `--user-data-dir=${join(root, 'profile')}`
+    ];
     let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
     try {
         await mkdir(join(root, 'One'));

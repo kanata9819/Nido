@@ -184,6 +184,42 @@ test('stage all includes the whole repository, deletions and literal names but e
     }
 });
 
+test('background Git status leaves the index unchanged and respects required write locks', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-git-read-locks-'));
+    const git = (...args: string[]): string =>
+        execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true });
+    const tracked = join(root, 'tracked.txt');
+    const index = join(root, '.git/index');
+    const lock = join(root, '.git/index.lock');
+    try {
+        git('init', '-q');
+        git('config', 'user.name', 'Nido Test');
+        git('config', 'user.email', 'nido@example.test');
+        git('config', 'commit.gpgsign', 'false');
+        git('config', 'core.autocrlf', 'false');
+        await writeFile(tracked, 'before\n');
+        git('add', '.');
+        git('commit', '-qm', 'Initial');
+        const originalIndex = await readFile(index);
+        const later = new Date(Date.now() + 60_000);
+        await utimes(tracked, later, later);
+        assert.deepEqual((await gitStatus(root)).changes, []);
+        assert.deepEqual(
+            await readFile(index),
+            originalIndex,
+            'background status must not write cached file timestamps to the index'
+        );
+        await writeFile(tracked, 'changed\n');
+        await Promise.all([...Array.from({ length: 8 }, () => gitStatus(root)), gitStageAll(root)]);
+        assert.equal(git('show', ':tracked.txt'), 'changed\n');
+        await writeFile(lock, 'another Git operation');
+        await assert.rejects(gitStageAll(root), /index\.lock.*File exists/s);
+        assert.equal(await readFile(lock, 'utf8'), 'another Git operation');
+    } finally {
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('ignore decorations follow Git rules, exceptions and tracked files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-ignore-'));
     try {
