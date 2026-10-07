@@ -139,6 +139,15 @@ export interface FileEntry {
 }
 export type FileAction = 'createFile' | 'createDirectory' | 'rename' | 'copy' | 'delete';
 export type Redraw = [string, ...unknown[][]][];
+export interface DiagnosticDetails {
+    path: string;
+    line: number;
+    column: number;
+    severity: number;
+    source: string;
+    code: string;
+    message: string;
+}
 export type NidoEvent =
     | { type: 'update'; id?: never; state: UpdateState }
     | {
@@ -155,6 +164,7 @@ export type NidoEvent =
           filetype: string;
           codeBlocks: ReferencePreview['lines'][];
       }
+    | { type: 'diagnostics'; id: string; items: DiagnosticDetails[]; focus: boolean }
     | { type: 'filesChanged'; id: string }
     | { type: 'redraw'; id: string; events: Redraw }
     | { type: 'state'; id: string; state: SessionState }

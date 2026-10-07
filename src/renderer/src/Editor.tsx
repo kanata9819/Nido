@@ -6,6 +6,7 @@ import { useEditorRendering } from './hooks/useEditorRendering';
 import { useEditorInput } from './hooks/useEditorInput';
 import styles from './assets/Nido.module.css';
 import TypeInformation from './components/TypeInformation';
+import DiagnosticInformation from './components/DiagnosticInformation';
 import CompletionMenu from './components/CompletionMenu';
 import StickyScroll from './components/StickyScroll';
 import type { UITheme } from '../../shared/types';
@@ -179,7 +180,9 @@ export default function Editor({
                     !active ||
                     event.ctrlKey ||
                     composing.current ||
-                    (event.target as Element).closest('[data-type-information]')
+                    (event.target as Element).closest(
+                        '[data-type-information], [data-diagnostic-information]'
+                    )
                 ) {
                     return;
                 }
@@ -251,7 +254,15 @@ export default function Editor({
                 />
             )}
             {active && !blocked && !terminal && (
-                <TypeInformation id={id} input={input} fontFamily={fontFamily} />
+                <>
+                    <TypeInformation id={id} input={input} fontFamily={fontFamily} />
+                    <DiagnosticInformation
+                        id={id}
+                        input={input}
+                        fontFamily={fontFamily}
+                        onError={onError}
+                    />
+                </>
             )}
             <textarea
                 ref={input}

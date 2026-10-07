@@ -7,6 +7,35 @@ import type {} from './renderer/harness';
 
 let server: ViteDevServer;
 let origin: string;
+const diagnosticItems = [
+    {
+        path: '/alpha/src/main.rs',
+        line: 42,
+        column: 18,
+        severity: 1,
+        source: 'rustc',
+        code: 'E0277',
+        message:
+            'The trait bound `String: From<u8>` is not satisfied\n`String` implements `From<&str>`.\n\nConsider converting the byte to a character first.'
+    },
+    {
+        path: '/alpha/src/main.rs',
+        line: 42,
+        column: 7,
+        severity: 2,
+        source: 'rustc',
+        code: 'unused_parens',
+        message:
+            'Unnecessary parentheses around function argument\n`#[warn(unused_parens)]` is enabled by default.'
+    }
+];
+async function showDiagnosticCard(page: Page): Promise<void> {
+    await page.evaluate(
+        (items) =>
+            window.rendererTest.emit({ type: 'diagnostics', id: 'alpha', items, focus: true }),
+        diagnosticItems
+    );
+}
 async function pauseRendererClock(page: Page): Promise<void> {
     // Installing the clock alone still lets CI wall time advance timers. Pause before mounting.
     await page.clock.install({ time: new Date(0) });
@@ -25,6 +54,219 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => {
     await server?.close();
+});
+
+test('native diagnostic cards show severity, source, codes and safe selectable text with keyboard navigation', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app`);
+    const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+    await expect(editor).toBeFocused();
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'diagnostics',
+            focus: true,
+            id: 'other',
+            items: [
+                {
+                    path: '',
+                    line: 1,
+                    column: 1,
+                    severity: 1,
+                    source: '',
+                    code: '',
+                    message: 'Wrong workspace'
+                }
+            ]
+        })
+    );
+    const popup = page.getByRole('dialog', { name: 'Diagnostic details', exact: true });
+    await expect(popup).toHaveCount(0);
+    await page.evaluate(
+        (items) =>
+            window.rendererTest.emit({ type: 'diagnostics', id: 'alpha', items, focus: false }),
+        diagnosticItems
+    );
+    await expect(popup).toBeVisible();
+    await expect(editor).toBeFocused();
+    await showDiagnosticCard(page);
+    const content = page.getByLabel('Diagnostic content', { exact: true });
+    await expect(content).toBeFocused();
+    await expect(popup).toContainText('main.rs');
+    await expect(popup).toContainText('Ln 42, Col 18');
+    await expect(popup).toContainText('2 on this line');
+    await expect(content.locator('article[data-severity="error"]')).toContainText('E0277');
+    await expect(content.locator('article[data-severity="warning"]')).toContainText(
+        'unused_parens'
+    );
+    await expect(content.locator('h3 code').first()).toHaveText('String: From<u8>');
+    await content
+        .locator('h3')
+        .first()
+        .evaluate((node) => {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            const selection = window.getSelection()!;
+            selection.removeAllRanges();
+            selection.addRange(range);
+        });
+    await page.keyboard.press('Control+c');
+    await expect(popup).toBeVisible();
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await page.keyboard.type(']d');
+    await page.keyboard.type('2[d');
+    await page.keyboard.type(']');
+    await page.evaluate(
+        (items) =>
+            window.rendererTest.emit({ type: 'diagnostics', id: 'alpha', items, focus: false }),
+        diagnosticItems
+    );
+    await page.keyboard.type('d');
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'input')
+                    .map((call) => call.args[1])
+            )
+        )
+        .toEqual([']d', '2[d', ']d']);
+    await page.keyboard.press('Tab');
+    await expect(
+        popup.getByRole('button', { name: 'Previous diagnostic', exact: true })
+    ).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.calls.filter((call) => call.method === 'input').at(-1)
+                        ?.args[1]
+            )
+        )
+        .toBe('[d');
+    await page.keyboard.press('Escape');
+    await expect(popup).toHaveCount(0);
+    await expect(editor).toBeFocused();
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'diagnostics',
+            focus: true,
+            id: 'alpha',
+            items: [
+                {
+                    path: '',
+                    line: 1,
+                    column: 1,
+                    severity: 4,
+                    source: '',
+                    code: '',
+                    message:
+                        '<script>window.diagnosticUnsafe = true</script>\n![Remote](https://example.com/image.png)'
+                }
+            ]
+        })
+    );
+    await expect(popup).toContainText('<script>');
+    await expect(popup.locator('script, img, a')).toHaveCount(0);
+    expect(await page.evaluate(() => 'diagnosticUnsafe' in window)).toBe(false);
+    await page.keyboard.press('Control+c');
+    await expect(popup).toHaveCount(0);
+    await expect(editor).toBeFocused();
+});
+
+test('diagnostic cards scroll long messages, stay inside the editor and clear on replacement or invalidation', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app`);
+    const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+    await expect(editor).toBeFocused();
+    await page.evaluate(
+        (items) =>
+            window.rendererTest.emit({
+                type: 'diagnostics',
+                focus: true,
+                id: 'alpha',
+                items: [
+                    {
+                        ...items[0],
+                        message:
+                            items[0].message + '\n' + 'Detailed compiler explanation.\n'.repeat(60)
+                    }
+                ]
+            }),
+        diagnosticItems
+    );
+    const popup = page.getByRole('dialog', { name: 'Diagnostic details', exact: true });
+    const content = page.getByLabel('Diagnostic content', { exact: true });
+    await expect(content).toBeFocused();
+    await page.keyboard.press('Control+d');
+    await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    await page.keyboard.press('End');
+    await expect
+        .poll(() =>
+            content.evaluate((node) =>
+                Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop)
+            )
+        )
+        .toBeLessThan(2);
+    await page.keyboard.press('Home');
+    await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
+    await page.setViewportSize({ width: 680, height: 460 });
+    await expect
+        .poll(() =>
+            popup.evaluate((node) => {
+                const host = node.parentElement!.getBoundingClientRect();
+                const rect = node.getBoundingClientRect();
+                return (
+                    rect.left >= host.left &&
+                    rect.top >= host.top &&
+                    rect.right <= host.right &&
+                    rect.bottom <= host.bottom
+                );
+            })
+        )
+        .toBe(true);
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'hover',
+            id: 'alpha',
+            markdown: 'Replacement type information',
+            filetype: 'rust',
+            codeBlocks: []
+        })
+    );
+    await expect(popup).toHaveCount(0);
+    await expect(page.getByLabel('Type information content', { exact: true })).toBeFocused();
+    await showDiagnosticCard(page);
+    await expect(page.getByRole('dialog', { name: 'Type information', exact: true })).toHaveCount(
+        0
+    );
+    await expect(content).toBeFocused();
+    await page.evaluate(() =>
+        window.rendererTest.emit({ type: 'diagnostics', id: 'alpha', items: [], focus: false })
+    );
+    await expect(popup).toHaveCount(0);
+    await expect(editor).toBeFocused();
+    await showDiagnosticCard(page);
+    await page.locator('canvas:visible').click({ position: { x: 2, y: 2 } });
+    await expect(popup).toHaveCount(0);
+    await expect(editor).toBeFocused();
+});
+
+test('Japanese diagnostics use translated labels and leave compiler text intact', async ({
+    page
+}) => {
+    await page.addInitScript(() => localStorage.setItem('nido.language', 'ja'));
+    await page.goto(`${origin}?view=app`);
+    await expect(page.getByRole('textbox', { name: 'Neovim入力', exact: true })).toBeFocused();
+    await showDiagnosticCard(page);
+    const popup = page.getByRole('dialog', { name: '診断の詳細', exact: true });
+    await expect(popup).toContainText('エラー');
+    await expect(popup).toContainText('警告');
+    await expect(popup).toContainText('42 行、18 列');
+    await expect(popup).toContainText('The trait bound');
+    await expect(popup.getByRole('button', { name: '次の診断', exact: true })).toBeVisible();
 });
 
 test('slow startup shows loading through restoration until the first completed editor paint', async ({

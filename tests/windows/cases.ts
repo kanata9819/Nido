@@ -14,6 +14,7 @@ export const windowsBaselineCases = [
     'Git changes can be reviewed, staged and committed with the keyboard',
     'stage all keeps HEAD gutter marks until commit and preserves unsaved edits',
     'Problems can be selected, filtered, opened and cleared with the keyboard',
+    'diagnostic jumps show native cards with severity, keyboard navigation and dismissal',
     'terminal toggle, focus, background execution and standalone terminal sessions',
     'references stay accessible after jumping and can be closed with the keyboard',
     'Rust debugger keyboard controls stop, inspect and step in the packaged app',

@@ -10,6 +10,7 @@ for _, key in ipairs({'*', '#', 'n', 'N', 'g*', 'g#'}) do
   end, {silent=true})
 end
 vim.keymap.set('n', '<Esc>', function()
+  require('nido_diagnostics').hide()
   vim.cmd.nohlsearch()
   vim.api.nvim_exec_autocmds('User', {pattern='NidoSearch'})
 end, {silent=true})
@@ -36,7 +37,7 @@ vim.o.showmode = false
 vim.o.ruler = false
 vim.o.showcmd = false
 -- Normal-mode Ctrl+C should cancel without Neovim's terminal quit hint.
-vim.keymap.set('n', '<C-c>', '<Esc>', { silent = true })
+vim.keymap.set('n', '<C-c>', '<Esc>', { remap = true, silent = true })
 -- Keep undo/redo progress out of the command line while retaining errors.
 for _, key in ipairs({'u', 'U', '<C-r>', 'g-', 'g+'}) do
   vim.keymap.set('n', key, function()
@@ -205,6 +206,10 @@ vim.api.nvim_set_hl(0, 'NormalFloat', {fg='#d4d4d4', bg='#1b1e21'})
 vim.api.nvim_set_hl(0, 'FloatBorder', {fg='#65717d', bg='#1b1e21'})
 vim.api.nvim_set_hl(0, 'FloatTitle', {fg='#a8cf9e', bg='#1b1e21', bold=true})
 local show_type_information = require('nido_hover').show
+local diagnostics = require('nido_diagnostics')
+vim.keymap.set('n', 'gl', function() diagnostics.show() end)
+vim.keymap.set('n', ']d', function() diagnostics.jump(1) end)
+vim.keymap.set('n', '[d', function() diagnostics.jump(-1) end)
 local runnables = require('nido_runnables')
 vim.keymap.set('n', 'gR', function() runnables.execute(false) end)
 vim.keymap.set('n', 'gD', function() runnables.execute(true) end)
@@ -231,9 +236,6 @@ vim.api.nvim_create_autocmd('LspAttach', {
     vim.keymap.set('n', '<F2>', vim.lsp.buf.rename, opts)
     vim.keymap.set('n', 'gra', vim.lsp.buf.code_action, opts)
     vim.keymap.set('n', 'g=', function() vim.lsp.buf.format({ async = true }) end, opts)
-    vim.keymap.set('n', 'gl', vim.diagnostic.open_float, opts)
-    vim.keymap.set('n', ']d', function() vim.diagnostic.jump({ count = 1, float = true }) end, opts)
-    vim.keymap.set('n', '[d', function() vim.diagnostic.jump({ count = -1, float = true }) end, opts)
     local client = vim.lsp.get_client_by_id(event.data.client_id)
     if client and client:supports_method('textDocument/completion') then
       vim.lsp.completion.enable(true, client.id, event.buf, {

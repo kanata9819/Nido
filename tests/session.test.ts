@@ -1229,6 +1229,96 @@ test('file decorations propagate to parents and prioritize errors without losing
     assert.equal(fileDecorations('C:/repo', {}, { 'C:/repository/a.rs': 1 })['c:/repo'], undefined);
 });
 
+test('diagnostic navigation publishes native details without floating windows and clears stale cards', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-diagnostic-details-'));
+    const cards: Extract<NidoEvent, { type: 'diagnostics' }>[] = [];
+    let session: Session | undefined;
+    try {
+        await writeFile(
+            join(root, 'sample.txt'),
+            'first line\nsecond line\nthird line\nfourth line\n'
+        );
+        session = await Session.create(root, (event) => {
+            if (event.type === 'diagnostics') cards.push(event);
+        });
+        await session.openFile('sample.txt');
+        await session.client.request('nvim_exec_lua', [
+            `local ns = vim.api.nvim_create_namespace('native-details-test')
+vim.g.details_test_ns = ns
+vim.diagnostic.set(ns, 0, {
+  {lnum=0, col=0, severity=2, source='rustc', code='unused_parens', message=[[Unnecessary parentheses
+Remove these parentheses.]]},
+  {lnum=1, col=1, severity=1, source='rustc', code='E0277', message='The trait bound is not satisfied'},
+  {lnum=1, col=3, severity=2, source='lint', code=123, message='Another warning'},
+  {lnum=3, col=0, severity=4, message='A hint'},
+})`,
+            []
+        ]);
+        const keys = async (sequence: string): Promise<void> => {
+            await session!.input(sequence);
+            await session!.client.request('nvim_eval', ['1']);
+        };
+        await keys('gl');
+        assert.equal(cards.at(-1)?.focus, true);
+        assert.equal(cards.at(-1)?.items[0]?.code, 'unused_parens');
+        assert.equal(cards.at(-1)?.items[0]?.source, 'rustc');
+        assert.equal(
+            cards.at(-1)?.items[0]?.message,
+            'Unnecessary parentheses\nRemove these parentheses.'
+        );
+        await keys(']d');
+        assert.equal(cards.at(-1)?.focus, false);
+        assert.deepEqual(
+            cards.at(-1)?.items.map((item) => [item.line, item.column, item.severity, item.code]),
+            [
+                [2, 2, 1, 'E0277'],
+                [2, 4, 2, '123']
+            ]
+        );
+        assert.match(cards.at(-1)!.items[0].path, /sample\.txt$/);
+        await keys('2]d');
+        assert.equal(cards.at(-1)?.items[0]?.line, 4);
+        await keys(']d');
+        assert.equal(cards.at(-1)?.items[0]?.line, 1);
+        await keys('[d');
+        assert.equal(cards.at(-1)?.items[0]?.line, 4);
+        assert.equal(((await session.client.request('nvim_list_wins', [])) as unknown[]).length, 1);
+        await keys('k');
+        assert.deepEqual(cards.at(-1)?.items, []);
+        await keys(']d<Esc>');
+        assert.deepEqual(cards.at(-1)?.items, []);
+        await keys(']d<C-c>');
+        assert.deepEqual(cards.at(-1)?.items, []);
+        await keys('3G0');
+        assert.deepEqual(cards.at(-1)?.items, []);
+        await keys('gl');
+        assert.deepEqual(cards.at(-1)?.items, []);
+        await keys(']d');
+        assert.ok(cards.at(-1)?.items.length);
+        await keys('i');
+        assert.deepEqual(cards.at(-1)?.items, []);
+        await keys('<Esc>gl');
+        assert.ok(cards.at(-1)?.items.length);
+        await session.client.request('nvim_exec_lua', [
+            'vim.diagnostic.reset(vim.g.details_test_ns, 0)',
+            []
+        ]);
+        await session.client.request('nvim_eval', ['1']);
+        assert.deepEqual(cards.at(-1)?.items, []);
+        await keys('gl');
+        assert.deepEqual(cards.at(-1)?.items, []);
+        assert.equal(((await session.client.request('nvim_list_wins', [])) as unknown[]).length, 1);
+        assert.equal(
+            await readFile(join(root, 'sample.txt'), 'utf8'),
+            'first line\nsecond line\nthird line\nfourth line\n'
+        );
+    } finally {
+        await session?.client.request('nvim_input', ['<Esc>']).catch(() => {});
+        await session?.stop();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('Neovim publishes and clears diagnostics including unopened files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-diagnostics-'));
     let session: Session | undefined;

@@ -72,7 +72,11 @@ export function useKeyboardShortcuts({
     }, [active, panel, leader, mode]);
 
     const keydown = (event: KeyboardEvent): void => {
-        if (document.activeElement?.closest('[data-type-information], [data-explorer-commands]')) {
+        if (
+            document.activeElement?.closest(
+                '[data-type-information], [data-diagnostic-information], [data-explorer-commands]'
+            )
+        ) {
             return;
         }
         if (event.isComposing || event.keyCode === 229) {

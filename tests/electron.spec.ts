@@ -1261,6 +1261,127 @@ test('Japanese editor text stays legible at fractional display scales', async ()
     }
 });
 
+test('diagnostic jumps show native cards with severity, keyboard navigation and dismissal', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-diagnostic-card-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+    const source = 'fn main() {\n    let byte = 42u8;\n    let text = String::from(byte);\n}\n';
+    await writeFile(join(workspace, 'main.rs'), source);
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        env
+    });
+    try {
+        const page = await running.firstWindow();
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+        await expect(editor).toBeFocused();
+        // Keep this UI regression independent of the installed Rust toolchain and server timing.
+        await page.keyboard.type(":lua vim.lsp.enable('rust_analyzer', false)");
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
+        await page.keyboard.press('Enter');
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /String::from/
+        );
+        await page.keyboard.type(
+            ":lua vim.diagnostic.set(vim.api.nvim_create_namespace('native-card-test'), 0, {{lnum=1,col=8,severity=2,source='rustc',code='unused_variables',message='Unused variable `byte`'}, {lnum=2,col=15,severity=1,source='rustc',code='E0277',message='The trait bound `String: From<u8>` is not satisfied' .. string.char(10) .. '`String` implements `From<&str>`.' .. string.char(10) .. 'Consider converting the byte to a character first.'}, {lnum=2,col=23,severity=2,source='rustc',code='unused_parens',message='Unnecessary parentheses around function argument' .. string.char(10) .. '`#[warn(unused_parens)]` is enabled by default.'}})"
+        );
+        await page.keyboard.press('Enter');
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /trait bound/
+        );
+        await page.keyboard.type('gg0]d');
+        const popup = page.getByRole('dialog', { name: 'Diagnostic details', exact: true });
+        const content = page.getByLabel('Diagnostic content', { exact: true });
+        await expect(editor).toBeFocused();
+        await expect(popup).toContainText('unused_variables');
+        await page.keyboard.press('Escape');
+        await expect(popup).toHaveCount(0);
+        await expect(editor).toBeFocused();
+        await page.keyboard.type(']d');
+        await expect(editor).toBeFocused();
+        await page.keyboard.type('gl');
+        await expect(content).toBeFocused();
+        await expect(popup).toContainText('2 on this line');
+        await expect(popup).toContainText('Ln 3, Col 16');
+        await expect(content.locator('article[data-severity="error"]')).toContainText('E0277');
+        await expect(content.locator('article[data-severity="warning"]')).toContainText(
+            'unused_parens'
+        );
+        await expect(content.locator('h3 code').first()).toHaveText('String: From<u8>');
+        await expect
+            .poll(() =>
+                popup.evaluate((node) => {
+                    const host = node.parentElement!;
+                    const anchor = host.querySelector<HTMLTextAreaElement>(
+                        '[data-editor-input="editor"]'
+                    )!;
+                    const expectedLeft = Math.max(
+                        12,
+                        Math.min(
+                            anchor.offsetLeft,
+                            host.clientWidth - (node as HTMLElement).offsetWidth - 12
+                        )
+                    );
+                    return Math.abs((node as HTMLElement).offsetLeft - expectedLeft);
+                })
+            )
+            .toBeLessThan(1);
+        await page.screenshot({ path: 'test-results/nido-diagnostic-card.png' });
+        await popup.screenshot({ path: 'test-results/nido-diagnostic-details.png' });
+        await page.keyboard.type('2]d');
+        await expect(popup).toContainText('unused_variables');
+        await page.keyboard.type('[d');
+        await expect(popup).toContainText('E0277');
+        await page.keyboard.press('Escape');
+        await expect(popup).toHaveCount(0);
+        await expect(editor).toBeFocused();
+        await page.keyboard.type('gl');
+        await expect(popup).toContainText('E0277');
+        await page.keyboard.press('Control+k');
+        await expect(popup).toHaveCount(0);
+        await expect(
+            page.getByRole('dialog', { name: 'Type information', exact: true })
+        ).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(editor).toBeFocused();
+        await page.keyboard.type('gl');
+        await expect(popup).toBeVisible();
+        await page.keyboard.press('Tab');
+        await expect(
+            popup.getByRole('button', { name: 'Previous diagnostic', exact: true })
+        ).toBeFocused();
+        await page.keyboard.press('Tab');
+        await expect(
+            popup.getByRole('button', { name: 'Next diagnostic', exact: true })
+        ).toBeFocused();
+        await page.keyboard.press('Tab');
+        await page.keyboard.press('Enter');
+        await expect(popup).toHaveCount(0);
+        await expect(editor).toBeFocused();
+        await page.keyboard.type(
+            ":lua assert(#vim.api.nvim_list_wins() == 1); vim.diagnostic.reset(vim.api.nvim_create_namespace('native-card-test')); vim.notify('Diagnostic windows verified')"
+        );
+        await page.keyboard.press('Enter');
+        await expect(page.getByText('Diagnostic windows verified', { exact: true })).toBeVisible();
+        await page.keyboard.type('gl');
+        await expect(page.getByText('No diagnostics on this line.', { exact: true })).toBeVisible();
+        await expect(popup).toHaveCount(0);
+        expect(await readFile(join(workspace, 'main.rs'), 'utf8')).toBe(source);
+    } finally {
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('type information is a selectable Nido card with keyboard scrolling and dismissal', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-hover-card-'));
     const workspace = join(root, 'workspace');

@@ -28,6 +28,10 @@ export default function TypeInformation({
     useEffect(
         () =>
             window.nido.onEvent((event) => {
+                if (event.type === 'diagnostics' && event.id === id && event.items.length) {
+                    setInfo(undefined);
+                    return;
+                }
                 if (event.type !== 'hover' || event.id !== id) {
                     return;
                 }

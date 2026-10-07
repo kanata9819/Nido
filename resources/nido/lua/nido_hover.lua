@@ -30,14 +30,15 @@ local function send(markdown)
   end
 end
 
-vim.api.nvim_create_autocmd({'CursorMoved', 'InsertEnter', 'BufLeave'}, {
-  callback = function()
-    generation = generation + 1
-    send('')
-  end,
-})
+function M.clear()
+  generation = generation + 1
+  send('')
+end
+
+vim.api.nvim_create_autocmd({'CursorMoved', 'InsertEnter', 'BufLeave'}, {callback=M.clear})
 
 function M.show()
+  require('nido_diagnostics').hide()
   generation = generation + 1
   local request = generation
   local buf, win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()

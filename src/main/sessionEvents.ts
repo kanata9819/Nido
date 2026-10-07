@@ -3,7 +3,8 @@ import type {
     NidoEvent,
     Redraw,
     SessionState,
-    ReferencePreview
+    ReferencePreview,
+    DiagnosticDetails
 } from '../shared/types';
 
 const rendererGridEvents = new Set([
@@ -99,6 +100,15 @@ export class SessionEvents {
                             : []
                     });
                 }
+                break;
+            }
+            case 'nido:diagnostics': {
+                this.sendToRenderer({
+                    type: 'diagnostics',
+                    id: this.workspaceId,
+                    focus: args[1] === true,
+                    items: Array.isArray(args[0]) ? (args[0] as DiagnosticDetails[]) : []
+                });
                 break;
             }
             case 'nido:scroll': {
