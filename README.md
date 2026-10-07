@@ -112,6 +112,7 @@ pnpm exec playwright test tests/update.spec.ts
 - `App.tsx`：画面全体の構成とパネル・フォーカスの連携。表示部品は `components/`、設定のセッション反映は `useSessionSettings.ts`。
 - `Sidebar.tsx`：ツリー表示とリサイズ。ファイル一覧・展開・ファイル操作は `useExplorer.ts`、移動キーは `sidebarKeyboard.ts`。
 - `Editor.tsx`：入力とエディタ領域。描画は `useEditorRendering.ts`、スクロールの送信待ち・描画待ちは `scroll.ts` の `ScrollQueue`。
+- `NeovimUI.tsx`：コマンド入力・補完・メッセージ・履歴・確認待ちの表示。`ext_cmdline` / `ext_messages` を `SessionEvents` と `shared/neovimUI.ts` で受け、Nidoのカードへ反映します。編集とキー操作はNeovimが担当し、メッセージ本文は `Alt+Shift+M` でフォーカスできます。
 - `GitBrowser.tsx`：Git画面の状態とデータ取得。リストは `GitBrowserList.tsx`、詳細は `GitDetails.tsx`、キー操作は `useGitBrowserKeyboard.ts`。
 - `Session`：Neovimプロセスと入力・終了の管理。通知と描画フレームは `SessionEvents`、ファイル操作は `SessionFiles`。
 - `handlers.ts`：IPCの送信元検証とエディタ操作。ワークスペースの保存・復元・終了は `workspaceHandlers.ts`、Git操作は `gitHandlers.ts`。

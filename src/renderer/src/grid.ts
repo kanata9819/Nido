@@ -759,6 +759,7 @@ export class Grid {
         const cursor = position ?? this.scrollCursor ?? this.cursor;
         if (
             !this.busy &&
+            !this.mode.startsWith('cmdline') &&
             cursor.row >= 0 &&
             cursor.row < this.rows &&
             (!focused || this.cursorVisible)

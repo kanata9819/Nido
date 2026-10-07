@@ -1,6 +1,8 @@
 -- Nido owns this configuration; personal Neovim config is not loaded.
 vim.g.nido = true
-vim.opt.shortmess:append('IWFSs')
+-- Candidate counts already appear in Nido's completion menu. Suppress native
+-- completion chatter so rapid refreshes cannot accumulate a hit-enter prompt.
+vim.opt.shortmess:append('IWFSsc')
 vim.o.hlsearch = true
 vim.o.incsearch = true
 for _, key in ipairs({'*', '#', 'n', 'N', 'g*', 'g#'}) do
@@ -36,6 +38,9 @@ vim.api.nvim_create_autocmd({ 'BufWinEnter', 'WinEnter' }, {
 vim.o.showmode = false
 vim.o.ruler = false
 vim.o.showcmd = false
+-- Command completion is displayed beside Nido's external command line.
+vim.o.wildmenu = true
+vim.opt.wildoptions:append('pum')
 -- Normal-mode Ctrl+C should cancel without Neovim's terminal quit hint.
 vim.keymap.set('n', '<C-c>', '<Esc>', { remap = true, silent = true })
 -- Keep undo/redo progress out of the command line while retaining errors.

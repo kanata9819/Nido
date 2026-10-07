@@ -420,7 +420,7 @@ export function useEditorRendering({
                 descriptionDirty = false;
             }
 
-            if (inputRef.current) {
+            if (inputRef.current && !inputRef.current.hasAttribute('data-nvim-command-active')) {
                 inputRef.current.style.left = `${bounds.left + grid.cursor.column * metrics.cellWidth}px`;
                 inputRef.current.style.top = `${bounds.top + grid.rowY(grid.cursor.row)}px`;
             }

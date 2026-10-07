@@ -109,6 +109,10 @@ export default function CompletionMenu({
                             }
                         }
                         if (name === 'popupmenu_show') {
+                            if (Number(args[4]) === -1) {
+                                setMenu(undefined);
+                                continue;
+                            }
                             setMenu({
                                 items: args[0] as Menu['items'],
                                 selected: Number(args[1]),

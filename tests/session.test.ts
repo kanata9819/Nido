@@ -19,6 +19,7 @@ import { accumulateScroll, scrollOffset } from '../src/renderer/src/scroll';
 import { readFavorites, readLayout, writeFavorites, writeLayout } from '../src/main/persistence';
 import { fileDecorations, gitFileKey } from '../src/renderer/src/fileDecorations';
 import type { NidoEvent, Redraw } from '../src/shared/types';
+import { emptyNeovimUI } from '../src/shared/neovimUI';
 
 test('input mode queries observe preceding queued keys before following text', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-input-mode-'));
@@ -1102,10 +1103,12 @@ return result`),
 test('normal Ctrl+C avoids the Neovim quit hint while command entry remains visible', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-quit-hint-'));
     const grid = new Grid();
+    let ui = emptyNeovimUI();
     let session: Session | undefined;
     try {
         session = await Session.create(root, (event) => {
             if (event.type === 'redraw') grid.apply(event.events);
+            if (event.type === 'neovimUI') ui = event.state;
         });
         await session.attach(80, 24);
         await session.input('<C-c>');
@@ -1115,7 +1118,9 @@ test('normal Ctrl+C avoids the Neovim quit hint while command entry remains visi
         assert.doesNotMatch(text(), /Type.*:qa.*exit Nvim/);
         await session.input(':echo');
         await new Promise((done) => setTimeout(done, 30));
-        assert.match(text(), /:echo/);
+        assert.doesNotMatch(text(), /:echo/);
+        assert.equal(ui.commands[1].firstCharacter, ':');
+        assert.equal(ui.commands[1].content.map((chunk) => chunk[1]).join(''), 'echo');
         await session.input('<C-c>');
         await session.client.request('nvim_eval', ['1']);
         assert.equal(await session.client.request('nvim_eval', ['mode()']), 'n');

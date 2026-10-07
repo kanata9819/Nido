@@ -6,6 +6,7 @@ import type {
     ReferencePreview,
     DiagnosticDetails
 } from '../shared/types';
+import { applyNeovimUI, emptyNeovimUI } from '../shared/neovimUI';
 
 const rendererGridEvents = new Set([
     'popupmenu_show',
@@ -30,6 +31,8 @@ export class SessionEvents {
     private pendingRedraw: Redraw = [];
     private isBatchingScroll = false;
     private pendingState = false;
+    private neovimUI = emptyNeovimUI();
+    private pendingUI = false;
 
     constructor(
         private workspaceId: string,
@@ -57,6 +60,23 @@ export class SessionEvents {
         const completedFrame = this.pendingRedraw;
         this.pendingRedraw = [];
         this.sendToRenderer({ type: 'redraw', id: this.workspaceId, events: completedFrame });
+        if (this.pendingUI) {
+            this.pendingUI = false;
+            this.replayUI();
+        }
+    }
+
+    replayUI(): void {
+        this.sendToRenderer({ type: 'neovimUI', id: this.workspaceId, state: this.neovimUI });
+    }
+
+    get hasInputPrompt(): boolean {
+        return (
+            Object.keys(this.neovimUI.commands).length > 0 ||
+            this.neovimUI.messages.some(
+                (message) => message.kind === 'confirm' || message.kind === 'return_prompt'
+            )
+        );
     }
 
     private publishState(): void {
@@ -175,6 +195,15 @@ export class SessionEvents {
             case 'redraw': {
                 // Other events can contain Neovim Window handles, which cannot cross Electron IPC.
                 for (const event of args as Redraw) {
+                    if (/^(cmdline_|msg_|popupmenu_)/.test(event[0])) {
+                        for (const args of event.slice(1) as unknown[][]) {
+                            const next = applyNeovimUI(this.neovimUI, event[0], args);
+                            if (next !== this.neovimUI) {
+                                this.neovimUI = next;
+                                this.pendingUI = true;
+                            }
+                        }
+                    }
                     if (!rendererGridEvents.has(event[0])) {
                         continue;
                     }

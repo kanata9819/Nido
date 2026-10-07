@@ -1,4 +1,5 @@
 import type { Language } from './i18n';
+import type { NeovimUIState } from './neovimUI';
 
 export const terminalShells = ['auto', 'pwsh', 'powershell.exe', 'cmd.exe', 'wsl.exe'] as const;
 export type TerminalShell = (typeof terminalShells)[number];
@@ -167,6 +168,7 @@ export type NidoEvent =
     | { type: 'diagnostics'; id: string; items: DiagnosticDetails[]; focus: boolean }
     | { type: 'filesChanged'; id: string }
     | { type: 'redraw'; id: string; events: Redraw }
+    | { type: 'neovimUI'; id: string; state: NeovimUIState }
     | { type: 'state'; id: string; state: SessionState }
     | { type: 'exit'; id: string }
     | { type: 'error'; id: string; message: string };
@@ -223,6 +225,7 @@ export interface NidoAPI {
     resize(id: string, columns: number, rows: number): Promise<void>;
     input(id: string, keys: string): Promise<void>;
     inputMode(id: string): Promise<string>;
+    selectCompletion(id: string, index: number): Promise<void>;
     markdownPreview(id: string): Promise<string>;
     setClipboardSharing(id: string, enabled: boolean): Promise<void>;
     setRelativeLineNumbers(id: string, enabled: boolean): Promise<void>;

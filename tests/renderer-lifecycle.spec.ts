@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type {} from './renderer/harness';
+import { applyNeovimUI, emptyNeovimUI } from '../src/shared/neovimUI';
 
 let server: ViteDevServer;
 let origin: string;
@@ -54,6 +55,218 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => {
     await server?.close();
+});
+
+test('external command cards preserve native input focus, UTF-8 cursor, nested prompts and completion', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app`);
+    const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+    await expect(input).toBeFocused();
+    let state = applyNeovimUI(emptyNeovimUI(), 'cmdline_show', [
+        [[0, 'echo "日本😀"']],
+        15,
+        ':',
+        '',
+        0,
+        1
+    ]);
+    const emit = async (): Promise<void> => {
+        await page.evaluate(
+            (state) => window.rendererTest.emit({ type: 'neovimUI', id: 'alpha', state }),
+            state
+        );
+    };
+    await emit();
+    const command = page.getByRole('dialog', { name: 'Neovim command line', exact: true });
+    await expect(command).toBeVisible();
+    await expect(command.getByLabel('Command content')).toHaveText(':echo "日本😀"');
+    await expect(command.locator('[data-neovim-caret]')).toHaveText('😀');
+    await expect(input).toHaveAttribute('data-nvim-command-active', '');
+    await expect(input).toBeFocused();
+    await command.getByLabel('Command content').click();
+    await expect(input).toBeFocused();
+    const positions = await input.evaluate((node) => {
+        const caret = document.querySelector('[data-neovim-caret]')!.getBoundingClientRect();
+        const anchor = node.getBoundingClientRect();
+        return { x: Math.abs(caret.x - anchor.x), y: Math.abs(caret.y - anchor.y) };
+    });
+    expect(positions.x).toBeLessThan(1);
+    expect(positions.y).toBeLessThan(1);
+    state = applyNeovimUI(state, 'cmdline_show', [[[0, '1+1']], 3, '=', '', 0, 2]);
+    await emit();
+    await expect(command.getByLabel('Command content')).toContainText('=1+1');
+    state = applyNeovimUI(state, 'cmdline_hide', [2, false]);
+    state = applyNeovimUI(state, 'popupmenu_show', [
+        [
+            ['echo', '', '', ''],
+            ['echomsg', '', '', '']
+        ],
+        0,
+        0,
+        0,
+        -1
+    ]);
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [['popupmenu_show', [[['echo', '', '', '']], 0, 0, 0, -1]]]
+        })
+    );
+    await emit();
+    await expect(page.getByRole('listbox', { name: 'Code completion' })).toHaveCount(0);
+    const completion = page.getByRole('listbox', { name: 'Command completion' });
+    await expect(completion).toBeVisible();
+    await completion.getByRole('option', { name: 'echomsg', exact: true }).click();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.calls
+                        .filter((call) => call.method === 'selectCompletion')
+                        .at(-1)?.args
+            )
+        )
+        .toEqual(['alpha', 1]);
+    await expect(input).toBeFocused();
+    await command.getByRole('button', { name: 'Cancel command' }).click();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.calls.filter((call) => call.method === 'input').at(-1)?.args
+            )
+        )
+        .toEqual(['alpha', '<Esc>']);
+    state = applyNeovimUI(state, 'cmdline_hide', [1, true]);
+    await emit();
+    await expect(command).toHaveCount(0);
+    await expect(input).not.toHaveAttribute('data-nvim-command-active');
+});
+
+test('external messages show safe selectable output, severity, history and keyboard scrolling', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app`);
+    const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+    await expect(input).toBeFocused();
+    let state = applyNeovimUI(emptyNeovimUI(), 'msg_show', [
+        'emsg',
+        [[0, '<img src=x onerror=alert(1)>\nE492: Unknown command']],
+        false
+    ]);
+    const emit = async (): Promise<void> => {
+        await page.evaluate(
+            (state) => window.rendererTest.emit({ type: 'neovimUI', id: 'alpha', state }),
+            state
+        );
+    };
+    await page.evaluate(
+        (state) => window.rendererTest.emit({ type: 'neovimUI', id: 'other', state }),
+        state
+    );
+    const messages = page.getByRole('dialog', { name: 'Neovim messages', exact: true });
+    await expect(messages).toHaveCount(0);
+    await emit();
+    await expect(messages).toBeVisible();
+    await expect(messages.locator('article[data-severity="error"]')).toContainText('E492');
+    await expect(messages.locator('img')).toHaveCount(0);
+    await expect(input).toBeFocused();
+    state = applyNeovimUI(state, 'msg_show', [
+        'shell_out',
+        [[0, Array.from({ length: 100 }, (_, i) => `line ${i}`).join('\n')]],
+        false
+    ]);
+    await emit();
+    await page.keyboard.press('Alt+Shift+m');
+    const body = page.getByLabel('Message content', { exact: true });
+    await expect(body).toBeFocused();
+    await expect
+        .poll(() => body.evaluate((node) => node.scrollHeight > node.clientHeight))
+        .toBe(true);
+    await page.keyboard.press('Control+u');
+    const before = await body.evaluate((node) => node.scrollTop);
+    await page.keyboard.press('Control+u');
+    await expect.poll(() => body.evaluate((node) => node.scrollTop)).toBeLessThan(before);
+    await body.evaluate((node) => {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const selection = window.getSelection()!;
+        selection.removeAllRanges();
+        selection.addRange(range);
+    });
+    await page.keyboard.press('Control+c');
+    await expect(messages).toBeVisible();
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await page.keyboard.press('Escape');
+    await expect(messages).toHaveCount(0);
+    await expect(input).toBeFocused();
+    state = applyNeovimUI(state, 'cmdline_show', [[[0, 'echo']], 4, ':', '', 0, 1]);
+    await emit();
+    await expect(messages).toHaveCount(0);
+    state = applyNeovimUI(state, 'msg_show', ['wmsg', [[0, 'New warning']], false]);
+    await emit();
+    await expect(messages.locator('article[data-severity="warning"]')).toContainText('New warning');
+    state = applyNeovimUI(state, 'cmdline_hide', [1, true]);
+    state = applyNeovimUI(state, 'msg_history_show', [[['echomsg', [[0, 'retained history']]]]]);
+    await emit();
+    const history = page.getByRole('dialog', { name: 'Message history' });
+    await expect(history).toContainText('retained history');
+    await history.getByRole('button', { name: 'Close messages' }).click();
+    await expect(history).toHaveCount(0);
+});
+
+test('external confirmation and hit-enter cards send replies to Neovim before dismissing', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app`);
+    const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+    await expect(input).toBeFocused();
+    let state = applyNeovimUI(emptyNeovimUI(), 'msg_show', [
+        'confirm',
+        [[0, 'Continue? [Y]es, (N)o: ']],
+        false
+    ]);
+    const emit = async (): Promise<void> => {
+        await page.evaluate(
+            (state) => window.rendererTest.emit({ type: 'neovimUI', id: 'alpha', state }),
+            state
+        );
+    };
+    await emit();
+    await page.keyboard.press('Alt+Shift+m');
+    await page.keyboard.press('n');
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.calls.filter((call) => call.method === 'input').at(-1)?.args
+            )
+        )
+        .toEqual(['alpha', 'n']);
+    await expect(input).toBeFocused();
+    state = applyNeovimUI(state, 'msg_clear', []);
+    state = applyNeovimUI(state, 'msg_show', [
+        'return_prompt',
+        [[0, 'Press ENTER or type command to continue']],
+        false
+    ]);
+    await emit();
+    const messages = page.getByRole('dialog', { name: 'Neovim messages' });
+    await messages.getByRole('button', { name: 'Enter Continue' }).click();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.calls.filter((call) => call.method === 'input').at(-1)?.args
+            )
+        )
+        .toEqual(['alpha', '<CR>']);
+    await expect(messages).toBeVisible();
+    state = applyNeovimUI(state, 'msg_clear', []);
+    await emit();
+    await expect(messages).toHaveCount(0);
 });
 
 test('native diagnostic cards show severity, source, codes and safe selectable text with keyboard navigation', async ({

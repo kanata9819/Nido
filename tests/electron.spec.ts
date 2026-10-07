@@ -694,7 +694,9 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
             ":lua assert(vim.wait(20000, function() local c = vim.lsp.get_clients({bufnr=0})[1]; return c and c.initialized end, 50)); print('COMPLETION_READY')"
         );
         await page.keyboard.press('Enter');
-        await expect(canvas).toHaveAttribute('aria-description', /COMPLETION_READY/, {
+        await expect(
+            page.getByRole('dialog', { name: 'Neovim messages', exact: true })
+        ).toContainText('COMPLETION_READY', {
             timeout: 25000
         });
         await page.keyboard.type(

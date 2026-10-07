@@ -180,9 +180,20 @@ export class Session {
                 await this.client.request('nvim_ui_attach', [
                     columns,
                     rows,
-                    { rgb: true, ext_linegrid: true, ext_popupmenu: true, ext_hlstate: true }
+                    {
+                        rgb: true,
+                        ext_linegrid: true,
+                        ext_popupmenu: true,
+                        ext_hlstate: true,
+                        ext_messages: true,
+                        ext_cmdline: true
+                    }
                 ]);
+                // Preserve the viewport's bottom inset and pixel-scroll overscan. All
+                // command text and messages are external even with cmdheight=1.
+                await this.client.request('nvim_set_option_value', ['cmdheight', 1, {}]);
                 this.attached = true;
+                this.events.replayUI();
                 this.emit({ type: 'state', id: this.workspace.id, state: this.state });
             } catch (error) {
                 this.attached = false;
@@ -327,12 +338,13 @@ end`,
             await this.restoreScroll();
             // Native completion bypasses insert mappings for Ctrl+N/P and inserts previews.
             if (
+                !this.events.hasInputPrompt &&
                 (keys === '<C-n>' || keys === '<C-p>') &&
                 (await this.client.request('nvim_eval', ['pumvisible()']))
             ) {
                 keys = keys === '<C-n>' ? '<Down>' : '<Up>';
             }
-            if (this.workspace.kind === 'terminal') {
+            if (this.workspace.kind === 'terminal' && !this.events.hasInputPrompt) {
                 await this.client.request('nvim_command', ['startinsert']);
             }
             let remainingInput = Buffer.from(keys);
@@ -393,6 +405,14 @@ end`,
             () => {},
             () => {}
         );
+        return next;
+    }
+
+    selectCompletion(index: number): Promise<void> {
+        const next = this.inputQueue.then(async () => {
+            await this.client.request('nvim_select_popupmenu_item', [index, false, false, {}]);
+        });
+        this.inputQueue = next.catch(() => {});
         return next;
     }
 

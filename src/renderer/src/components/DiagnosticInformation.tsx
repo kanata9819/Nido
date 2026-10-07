@@ -104,7 +104,7 @@ export default function DiagnosticInformation({
         };
         position();
         body.current!.scrollTop = 0;
-        if (info.focus || element.contains(document.activeElement)) {
+        if (info.focus) {
             body.current?.focus();
         }
         const observer = new ResizeObserver(position);

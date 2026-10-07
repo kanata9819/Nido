@@ -28,6 +28,7 @@ const api: NidoAPI = {
     resize: (id, columns, rows) => ipcRenderer.invoke('nido:resize', id, columns, rows),
     input: (id, keys) => ipcRenderer.invoke('nido:input', id, keys),
     inputMode: (id) => ipcRenderer.invoke('nido:inputMode', id),
+    selectCompletion: (id, index) => ipcRenderer.invoke('nido:selectCompletion', id, index),
     markdownPreview: (id) => ipcRenderer.invoke('nido:markdownPreview', id),
     setClipboardSharing: (id, enabled) => ipcRenderer.invoke('nido:clipboardSharing', id, enabled),
     setEditorConfig: (id, enabled) => ipcRenderer.invoke('nido:editorConfig', id, enabled),

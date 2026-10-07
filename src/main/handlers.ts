@@ -131,6 +131,12 @@ export function registerHandlers({
     );
     handle('input', (id, keys) => session(id).input(text(keys)));
     handle('inputMode', (id) => session(id).inputMode());
+    handle('selectCompletion', (id, index) => {
+        if (typeof index !== 'number') {
+            throw new Error('Invalid completion index.');
+        }
+        return session(id).selectCompletion(integer(index + 1) - 1);
+    });
     handle('markdownPreview', (id) => session(id).markdownPreview());
     handle('clipboardSharing', (id, enabled) => {
         if (typeof enabled !== 'boolean') {

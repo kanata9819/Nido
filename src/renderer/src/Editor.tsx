@@ -9,6 +9,7 @@ import TypeInformation from './components/TypeInformation';
 import DiagnosticInformation from './components/DiagnosticInformation';
 import CompletionMenu from './components/CompletionMenu';
 import StickyScroll from './components/StickyScroll';
+import NeovimUI from './components/NeovimUI';
 import type { UITheme } from '../../shared/types';
 
 interface Props {
@@ -119,6 +120,16 @@ export default function Editor({
             className={styles.editor}
             hidden={!active}
             onKeyDownCapture={(event) => {
+                if (!blocked && event.altKey && event.shiftKey && event.key.toLowerCase() === 'm') {
+                    const content = host.current?.querySelector<HTMLElement>(
+                        '[data-neovim-ui] [tabindex="0"]'
+                    );
+                    if (content) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        content.focus();
+                    }
+                }
                 if (!blocked && event.altKey && event.shiftKey && event.key.toLowerCase() === 's') {
                     const header = host.current?.querySelector<HTMLButtonElement>(
                         '[data-sticky-scroll] button'
@@ -181,7 +192,7 @@ export default function Editor({
                     event.ctrlKey ||
                     composing.current ||
                     (event.target as Element).closest(
-                        '[data-type-information], [data-diagnostic-information]'
+                        '[data-type-information], [data-diagnostic-information], [data-neovim-ui]'
                     )
                 ) {
                     return;
@@ -230,6 +241,15 @@ export default function Editor({
                 aria-label={terminal ? t('Terminal display') : t('Neovim editor display')}
             />
             {children}
+            <NeovimUI
+                id={id}
+                grid={grid}
+                input={input}
+                paint={paint}
+                fontFamily={fontFamily}
+                hidden={blocked || !active}
+                onError={onError}
+            />
             {!terminal && active && stickyScroll && (
                 <StickyScroll
                     id={id}

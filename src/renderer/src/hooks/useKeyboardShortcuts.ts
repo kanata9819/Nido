@@ -74,7 +74,7 @@ export function useKeyboardShortcuts({
     const keydown = (event: KeyboardEvent): void => {
         if (
             document.activeElement?.closest(
-                '[data-type-information], [data-diagnostic-information], [data-explorer-commands]'
+                '[data-type-information], [data-diagnostic-information], [data-explorer-commands], [data-neovim-ui]'
             )
         ) {
             return;
