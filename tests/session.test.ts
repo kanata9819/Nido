@@ -2576,6 +2576,7 @@ test('CodeLens rows compact while clicks, fractional scrolling and the command l
         assert.equal(grid.rowY(grid.rows - 1), 240);
         assert.equal(grid.rowAt(238), -1);
         assert.equal(grid.rowAt(240), -1);
+        grid.scrolling = true;
         grid.scrollFraction = 0.3;
         const originalGlyphs = glyphs;
         grid.draw(canvas, 160, 264, 14, 'monospace', false);
@@ -2583,6 +2584,13 @@ test('CodeLens rows compact while clicks, fractional scrolling and the command l
         assert.equal(grid.rowY(1), 11.9);
         assert.equal(grid.rowAt(grid.rowY(1) + 12), 1);
         assert.equal(grid.rowY(grid.rows - 1), 240);
+        grid.scrolling = false;
+        grid.draw(canvas, 160, 264, 14, 'monospace', false);
+        assert.equal(grid.rowY(1), 12, 'settled scrolling snaps to a physical pixel');
+        assert.equal(grid.rowAt(11.99), 0);
+        assert.equal(grid.rowAt(12), 1);
+        assert.equal(grid.rowY(grid.rows - 1), 240);
+        assert.equal(glyphs, originalGlyphs, 'settling reuses the native row images');
         grid.apply([['grid_line', [1, 0, 0, [['x', 0]]]], ['flush']]);
         grid.scrollFraction = 0;
         grid.draw(canvas, 160, 264, 14, 'monospace', false);

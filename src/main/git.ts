@@ -145,14 +145,20 @@ async function git(
     input?: string
 ): Promise<string> {
     try {
-        const task = exec('git', ['--no-pager', '--literal-pathspecs', ...args], {
-            cwd,
-            encoding: 'utf8',
-            windowsHide: true,
-            maxBuffer: 4 * 1024 * 1024,
-            timeout: 60_000,
-            env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
-        });
+        // Background reads must not compete with staging for an optional index refresh.
+        // Git mutations still acquire their required locks.
+        const task = exec(
+            'git',
+            ['--no-pager', '--literal-pathspecs', '--no-optional-locks', ...args],
+            {
+                cwd,
+                encoding: 'utf8',
+                windowsHide: true,
+                maxBuffer: 4 * 1024 * 1024,
+                timeout: 60_000,
+                env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+            }
+        );
         if (input !== undefined) {
             task.child.stdin?.end(input);
         }
