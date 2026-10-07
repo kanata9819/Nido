@@ -174,6 +174,8 @@ test('external command input keeps spaces, Unicode and control keys in order', a
             )
         )
         .toBe('Native message 日本語"<C-p>');
+    await page.keyboard.press('Control+Shift+m');
+    await expect(page.getByRole('listbox', { name: 'Problems', exact: true })).toBeFocused();
 });
 
 test('external messages show safe selectable output, severity, history and keyboard scrolling', async ({
