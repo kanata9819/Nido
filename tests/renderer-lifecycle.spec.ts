@@ -1,11 +1,18 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { createServer, type ViteDevServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import type {} from './renderer/harness';
 
 let server: ViteDevServer;
 let origin: string;
+async function pauseRendererClock(page: Page): Promise<void> {
+    // Installing the clock alone still lets CI wall time advance timers. Pause before mounting.
+    await page.clock.install({ time: new Date(0) });
+    await page.clock.pauseAt(new Date(1000));
+}
+
 test.beforeAll(async () => {
     server = await createServer({
         configFile: false,
@@ -23,9 +30,11 @@ test.afterAll(async () => {
 test('slow startup shows loading through restoration until the first completed editor paint', async ({
     page
 }) => {
-    await page.clock.install();
+    await pauseRendererClock(page);
     await page.goto(`${origin}?view=app&defer=restoreWorkspaces,attach`);
     await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    // A slow test runner must not advance the renderer's controlled startup clock.
+    await delay(300);
     const loading = page.getByRole('status', { name: 'Loading workspaces…' });
     await page.clock.runFor(100);
     await expect(loading).toHaveCount(0);
@@ -71,7 +80,7 @@ test('slow startup shows loading through restoration until the first completed e
 });
 
 test('fast startup never flashes a loading indicator', async ({ page }) => {
-    await page.clock.install();
+    await pauseRendererClock(page);
     await page.addInitScript(() => {
         Object.assign(window, { loadingScreens: 0 });
         new MutationObserver((records) => {
@@ -100,7 +109,7 @@ test('fast startup never flashes a loading indicator', async ({ page }) => {
 test('failed restoration dismisses Japanese loading and returns to the welcome screen', async ({
     page
 }) => {
-    await page.clock.install();
+    await pauseRendererClock(page);
     await page.addInitScript(() => localStorage.setItem('nido.language', 'ja'));
     await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
     await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
@@ -117,7 +126,7 @@ test('failed restoration dismisses Japanese loading and returns to the welcome s
 });
 
 test('failed editor attachment dismisses loading and displays the error', async ({ page }) => {
-    await page.clock.install();
+    await pauseRendererClock(page);
     await page.goto(`${origin}?view=app&defer=attach`);
     await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
     await page.clock.runFor(250);
@@ -946,7 +955,7 @@ test('Folder browsing cancels old results and clamps selection after favorites c
 test('Notification replacement resets fading and cancels the previous dismissal', async ({
     page
 }) => {
-    await page.clock.install();
+    await pauseRendererClock(page);
     await page.goto(`${origin}?view=notification`);
     await page.evaluate(() =>
         window.rendererTest.emit({

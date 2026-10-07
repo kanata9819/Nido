@@ -49,6 +49,16 @@ jobs:
             - name: Verify renderer state transitions
               if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
               run: pnpm test:renderer
+            - name: Repeat renderer timer checks
+              if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
+              env:
+                  PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/renderer-repeat
+              run: >-
+                  pnpm test:renderer
+                  --grep "startup|failed restoration|failed editor attachment|Notification replacement"
+                  --repeat-each 5
+                  --reporter=list,html
+                  --output=test-results/renderer-repeat
             - name: Verify the packaged Windows app
               if: ${{ !cancelled() && steps.build.outcome == 'success' }}
               run: pnpm test:windows
