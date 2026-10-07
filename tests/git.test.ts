@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, rename, rm, writeFile, mkdir, symlink } from 'node:fs/promises';
+import { mkdtemp, readFile, rename, rm, writeFile, mkdir, symlink, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { splitDiff } from '../src/renderer/src/gitDiff';
@@ -21,6 +21,33 @@ import {
     gitSwitch,
     gitIgnored
 } from '../src/main/git';
+
+test('background Git status does not rewrite the index when file timestamps change', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-status-index-'));
+    try {
+        execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root });
+        execFileSync('git', ['config', 'user.name', 'Nido Test'], { cwd: root });
+        execFileSync('git', ['config', 'user.email', 'nido@example.test'], { cwd: root });
+        execFileSync('git', ['config', 'commit.gpgsign', 'false'], { cwd: root });
+        const file = join(root, 'main.txt');
+        await writeFile(file, 'unchanged\n');
+        execFileSync('git', ['add', '.'], { cwd: root });
+        execFileSync('git', ['commit', '-qm', 'Initial'], { cwd: root });
+        const index = join(root, '.git', 'index');
+        const before = await readFile(index);
+        const changedTime = new Date(Date.now() + 10000);
+        await utimes(file, changedTime, changedTime);
+
+        assert.deepEqual((await gitStatus(root)).changes, []);
+        assert.deepEqual(
+            await readFile(index),
+            before,
+            'status polling must not refresh the index and compete with staging for index.lock'
+        );
+    } finally {
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
 
 test('branch switches protect sessions in the same repository and leave other projects alone', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-switch-sessions-'));
