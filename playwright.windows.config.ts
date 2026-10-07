@@ -9,6 +9,7 @@ export default defineConfig({
     testMatch: [
         'windows/*.spec.ts',
         'electron.spec.ts',
+        'neovim-ui.spec.ts',
         'theme.spec.ts',
         'scroll-boundary.spec.ts',
         'fast-wheel.spec.ts',

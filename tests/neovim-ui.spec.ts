@@ -19,7 +19,11 @@ test('Neovim commands, completion, messages and confirmation render in native Ni
             workspaces: [{ root, current: file, files: [{ path: file, line: 1, column: 0 }] }]
         })
     );
-    const env = { ...process.env };
+    const env = Object.fromEntries(
+        Object.entries(process.env).filter(
+            (entry): entry is [string, string] => entry[1] !== undefined
+        )
+    );
     delete env.ELECTRON_RUN_AS_NODE;
     const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
     try {

@@ -90,10 +90,11 @@ test(windowsBaselineCases[0], async () => {
         // Query the running Neovim, rather than merely checking that nvim.exe exists.
         await page.keyboard.type(':lua print("BUNDLED_NVIM=" .. vim.v.progpath:gsub("\\\\", "/"))');
         await page.keyboard.press('Enter');
-        await expect(canvas).toHaveAttribute(
-            'aria-description',
+        const messages = page.getByRole('dialog', { name: 'Neovim messages', exact: true });
+        await expect(messages).toContainText(
             /BUNDLED_NVIM=.*resources\/nvim-win64\/bin\/nvim\.exe/i
         );
+        await expect(canvas).not.toHaveAttribute('aria-description', /BUNDLED_NVIM=/);
         await page.keyboard.press('Escape');
         await page.keyboard.type('gg0iOK ');
         await page.keyboard.press('Escape');
