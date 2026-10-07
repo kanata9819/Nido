@@ -515,12 +515,15 @@ end`,
                 if (this.workspace.kind === 'terminal') {
                     await this.client.request('nvim_command', ['stopinsert']);
                 }
-                await this.client.request('nvim_exec_lua', [
-                    "require('nido_scroll').scroll(...)",
+                const changed = await this.client.request('nvim_exec_lua', [
+                    "return require('nido_scroll').scroll(...)",
                     [lines, follow, pixel]
                 ]);
                 // Neovim emits cursor/WinScrolled updates when the Lua request returns to its event loop.
-                await this.client.request('nvim_eval', ['1']);
+                // Pure fractional offsets have no editor updates to wait for.
+                if (changed) {
+                    await this.client.request('nvim_eval', ['1']);
+                }
             } finally {
                 // Publish the grid, fractional offset and anchored cursor as one frame, even for sub-line deltas.
                 this.events.endScrollBatch();

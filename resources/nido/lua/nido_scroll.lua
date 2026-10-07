@@ -229,11 +229,13 @@ function M.scroll(lines, follow, pixel)
     fraction = 0
   end
   -- Fractional movement only changes the renderer offset, not the editor state.
-  if lines ~= 0 or anchor ~= previous_anchor then
+  local changed = lines ~= 0 or anchor ~= previous_anchor
+  if changed then
     api.nvim_exec_autocmds('User', {pattern='NidoScroll'})
   end
   vim.cmd.redraw()
   publish_offset(pixel)
+  return changed
 end
 
 api.nvim_create_autocmd('BufLeave', {callback=function() M.restore() end})

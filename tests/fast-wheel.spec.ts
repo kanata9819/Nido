@@ -16,10 +16,22 @@ const scenarios = [
         delta: -120,
         history: 128,
         title: 'fast wheel up keeps moving while input exhausts cached history'
+    },
+    {
+        delta: 5,
+        history: 2,
+        prefetchFirst: true,
+        title: 'touchpad down keeps moving while an upward refill is pending'
+    },
+    {
+        delta: -5,
+        history: 2,
+        prefetchFirst: true,
+        title: 'touchpad up keeps moving while a refill is pending'
     }
 ];
 
-for (const { delta, history, title } of scenarios) {
+for (const { delta, history, prefetchFirst, title } of scenarios) {
     test(title, async () => {
         const root = await mkdtemp(join(tmpdir(), 'nido-fast-wheel-'));
         const profile = join(root, 'profile');
@@ -68,8 +80,10 @@ for (const { delta, history, title } of scenarios) {
                 const gate = new Promise<void>((resolve) => {
                     release = resolve;
                 });
-                Object.assign(globalThis, { releaseWheelPrefetch: release });
+                const probe = { calls: 0, release };
+                Object.assign(globalThis, { wheelPrefetch: probe });
                 handlers.set('nido:prefetchScroll', async (...args) => {
+                    probe.calls++;
                     await gate;
                     return prefetch(...args);
                 });
@@ -125,6 +139,37 @@ for (const { delta, history, title } of scenarios) {
             });
             const box = (await canvas.boundingBox())!;
             await page.mouse.move(box.x + 200, box.y + 200);
+            await canvas.evaluate(async () => {
+                window.dispatchEvent(new Event('focus'));
+                for (let i = 0; i < 2; i++) {
+                    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+                }
+            });
+            const documentTop = (): Promise<number> =>
+                page.evaluate(
+                    () =>
+                        (
+                            window as unknown as {
+                                fastWheelPositions: { top: number }[];
+                            }
+                        ).fastWheelPositions.at(-1)!.top
+                );
+            const start = await documentTop();
+            if (prefetchFirst) {
+                // A small upward gesture starts a refill before the sustained touchpad input.
+                await canvas.evaluate((node) =>
+                    node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -1 }))
+                );
+                await expect
+                    .poll(() =>
+                        running.evaluate(
+                            () =>
+                                (globalThis as unknown as { wheelPrefetch: { calls: number } })
+                                    .wheelPrefetch.calls
+                        )
+                    )
+                    .toBe(1);
+            }
             // Native wheel events exercise Chromium's coalescing and React's input path.
             const pending: Promise<void>[] = [];
             for (let i = 0; i < 60; i++) {
@@ -145,11 +190,22 @@ for (const { delta, history, title } of scenarios) {
             expect((positions.at(-1)!.top - positions[0].top) * Math.sign(delta)).toBeGreaterThan(
                 100
             );
+            await running.evaluate(() => {
+                (
+                    globalThis as unknown as { wheelPrefetch: { release: () => void } }
+                ).wheelPrefetch.release();
+            });
+            // Finishing a late refill must preserve the full gesture, including its initial step.
+            const target = start + delta * 60 - (prefetchFirst ? 1 : 0);
+            const pixel = await page.evaluate(() => 1 / devicePixelRatio);
+            await expect
+                .poll(async () => Math.abs((await documentTop()) - target))
+                .toBeLessThanOrEqual(pixel + 0.01);
         } finally {
             await running.evaluate(() => {
                 (
-                    globalThis as unknown as { releaseWheelPrefetch?: () => void }
-                ).releaseWheelPrefetch?.();
+                    globalThis as unknown as { wheelPrefetch?: { release: () => void } }
+                ).wheelPrefetch?.release();
             });
             await running.close();
             await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

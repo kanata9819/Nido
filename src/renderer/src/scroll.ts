@@ -38,7 +38,7 @@ interface PendingScroll extends ScrollCommand {
     completed: boolean;
 }
 
-// Keep one command in flight while coalescing new wheel input for the next frame.
+// Keep one command in flight while coalescing new wheel input.
 export class ScrollQueue {
     private queued = 0;
     private follow = true;

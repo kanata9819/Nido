@@ -47,6 +47,7 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                                 'nido_edit',
                                 'nido_pixel_scroll',
                                 'nido_scroll',
+                                'nido_scroll_cache',
                                 'mode_change'
                             ].includes(name)
                         )
@@ -171,14 +172,16 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                     maxGap: gaps.at(-1),
                     distance: samples.at(-1)!.top - start
                 });
-                if (reversals.length)
+                const maxStep = Math.abs(delta) * (Math.abs(delta) > 5 ? 3 : 2) + pixel;
+                const failed = reversals.length > 0 || Math.max(...steps) > maxStep;
+                if (failed)
                     Object.assign(reports.at(-1)!, {
                         samples,
                         events: await page.evaluate(
                             () => (window as unknown as { cadenceEvents: unknown[] }).cadenceEvents
                         )
                     });
-                if (reversals.length)
+                if (failed)
                     await writeFile(
                         join(
                             process.cwd(),
@@ -199,7 +202,7 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                 expect(
                     Math.max(...steps),
                     'cache refills must not stall then jump'
-                ).toBeLessThanOrEqual(Math.abs(delta) * (Math.abs(delta) > 5 ? 3 : 2) + pixel);
+                ).toBeLessThanOrEqual(maxStep);
             }
         }
     } finally {

@@ -33,45 +33,61 @@ export function useWorkspaceSessions(report: (message: string) => void): Workspa
         ? selectedWorkspace
         : workspaces[0]?.id || '';
 
-    useEffect(
-        () =>
-            window.nido.onEvent((event) => {
-                switch (event.type) {
-                    case 'state': {
-                        setStates((old) => ({ ...old, [event.id]: event.state }));
-                        break;
-                    }
-                    case 'redraw': {
-                        for (const [name, ...calls] of event.events) {
-                            if (name === 'mode_change') {
-                                mode.current[event.id] = String(calls.at(-1)?.[0]);
+    useEffect(() => {
+        const pendingStates = new Map<string, SessionState>();
+        let frame = 0;
+        const unsubscribe = window.nido.onEvent((event) => {
+            switch (event.type) {
+                case 'state': {
+                    // Scrolling can deliver several states before a paint. Render the shell once.
+                    pendingStates.set(event.id, event.state);
+                    if (!frame) {
+                        frame = requestAnimationFrame(() => {
+                            frame = 0;
+                            if (pendingStates.size) {
+                                const updates = Object.fromEntries(pendingStates);
+                                pendingStates.clear();
+                                setStates((old) => ({ ...old, ...updates }));
                             }
-                        }
-                        break;
-                    }
-                    case 'error': {
-                        report(event.message);
-                        break;
-                    }
-                    case 'exit': {
-                        setWorkspaces((old) =>
-                            old
-                                .filter((w) => w.id !== event.id)
-                                .map((w) =>
-                                    w.terminalId === event.id ? { ...w, terminalId: undefined } : w
-                                )
-                        );
-                        setStates((old) => {
-                            const next = { ...old };
-                            delete next[event.id];
-                            return next;
                         });
-                        break;
                     }
+                    break;
                 }
-            }),
-        [report]
-    );
+                case 'redraw': {
+                    for (const [name, ...calls] of event.events) {
+                        if (name === 'mode_change') {
+                            mode.current[event.id] = String(calls.at(-1)?.[0]);
+                        }
+                    }
+                    break;
+                }
+                case 'error': {
+                    report(event.message);
+                    break;
+                }
+                case 'exit': {
+                    pendingStates.delete(event.id);
+                    setWorkspaces((old) =>
+                        old
+                            .filter((w) => w.id !== event.id)
+                            .map((w) =>
+                                w.terminalId === event.id ? { ...w, terminalId: undefined } : w
+                            )
+                    );
+                    setStates((old) => {
+                        const next = { ...old };
+                        delete next[event.id];
+                        return next;
+                    });
+                    break;
+                }
+            }
+        });
+        return () => {
+            unsubscribe();
+            cancelAnimationFrame(frame);
+        };
+    }, [report]);
 
     useEffect(() => {
         let cancelled = false;

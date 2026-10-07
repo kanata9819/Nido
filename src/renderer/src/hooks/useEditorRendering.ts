@@ -143,12 +143,11 @@ export function useEditorRendering({
             schedule();
         };
 
-        // Refills can span several frames. Send wheel-sized steps to Neovim first;
-        // reserve refills for small upward steps that can preview the wait.
+        // Refill before fast gestures exhaust cached rows, while the cache can preview the wait.
+        // Cold wheel-sized steps still reach Neovim without starting a blocking traversal first.
         const needsScrollPrefetch = (): boolean =>
             prefetchNeeded &&
             scrollQueue.preview < 0 &&
-            scrollQueue.preview > -3 &&
             (grid.canPreviewUpwardScroll || scrollQueue.preview > -1);
 
         const finishScroll = (): void => {
@@ -156,12 +155,17 @@ export function useEditorRendering({
                 return;
             }
             if (scrollQueue.hasQueued) {
+                // The redraw and reply already arrived; do not add another frame of RPC latency.
+                if (!needsScrollPrefetch()) {
+                    flushScroll();
+                }
                 schedule();
             }
         };
 
         const flushScroll = (): void => {
-            if (prefetchPending || !scrollEnabledRef.current) {
+            // Session serializes native work. A pending refill must not block wheel dispatch here.
+            if (!scrollEnabledRef.current) {
                 return;
             }
             const command = scrollQueue.start();
@@ -198,6 +202,11 @@ export function useEditorRendering({
             grid.scrollPreview = scrollQueue.preview;
             if (lines < 0 && !prefetchPending && grid.needsUpperRows) {
                 prefetchNeeded = true;
+            }
+            // Start native movement during input; keep canvas paints coalesced on animation frames.
+            // Upward movement that needs a refill starts it in render first.
+            if (!needsScrollPrefetch()) {
+                flushScroll();
             }
             schedule();
         };
