@@ -62,13 +62,13 @@ jobs:
             - name: Verify the packaged Windows app
               if: ${{ !cancelled() && steps.build.outcome == 'success' }}
               run: pnpm test:windows
-            - name: Repeat Git and reference keyboard checks
+            - name: Repeat Git, reference and Neovim UI checks
               if: ${{ !cancelled() && steps.build.outcome == 'success' }}
               env:
                   PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/windows-repeat
               run: >-
                   pnpm test:windows
-                  --grep "Git changes can be reviewed|references stay accessible|stage all keeps HEAD gutter marks"
+                  --grep "Git changes can be reviewed|references stay accessible|stage all keeps HEAD gutter marks|Neovim commands, completion"
                   --repeat-each 3
                   --reporter=list,html
                   --output=test-results/windows-repeat

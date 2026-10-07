@@ -66,7 +66,9 @@ test('Neovim commands, completion, messages and confirmation render in native Ni
         await page.keyboard.press('Escape');
         await expect(command).toHaveCount(0);
 
-        await page.keyboard.type(':echomsg "Native message 日本語"');
+        await page.keyboard.type(':echomsg');
+        await expect(command.getByLabel('Command content')).toContainText(':echomsg');
+        await page.keyboard.type(' "Native message 日本語"');
         await page.keyboard.press('Enter');
         await expect(messages).toContainText('Native message 日本語');
         await expect(canvas).not.toHaveAttribute('aria-description', /Native message/);

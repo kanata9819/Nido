@@ -79,6 +79,14 @@ export function useKeyboardShortcuts({
         ) {
             return;
         }
+        // Neovim owns keys in external command prompts. Deferring Space for a Normal-mode
+        // shortcut would let Unicode input events overtake it. Ctrl+P must also reach Neovim.
+        if (
+            !checkingMode.current &&
+            document.activeElement?.hasAttribute('data-nvim-command-active')
+        ) {
+            return;
+        }
         if (event.isComposing || event.keyCode === 229) {
             return;
         }
