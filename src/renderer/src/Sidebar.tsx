@@ -272,8 +272,8 @@ function Sidebar({
                             >
                                 {entry.name}
                             </span>
-                            <DiagnosticBadges decoration={decoration} />
-                            {decoration?.code && (
+                            {!entry.directory && <DiagnosticBadges decoration={decoration} />}
+                            {!entry.directory && decoration?.code && (
                                 <span
                                     className={styles.gitBadge}
                                     data-status={decoration.code}
