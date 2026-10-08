@@ -170,6 +170,7 @@ export type NidoEvent =
     | { type: 'redraw'; id: string; events: Redraw }
     | { type: 'neovimUI'; id: string; state: NeovimUIState }
     | { type: 'state'; id: string; state: SessionState }
+    | { type: 'statePatch'; id: string; state: Partial<SessionState> }
     | { type: 'exit'; id: string }
     | { type: 'error'; id: string; message: string };
 export interface GitChange {

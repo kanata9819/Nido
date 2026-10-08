@@ -1525,6 +1525,182 @@ test('Favorite toggling permits only one pending request', async ({ page }) => {
     ]);
 });
 
+test('state patches coalesce without dropping diagnostics, other sessions or optional clears', async ({
+    page
+}) => {
+    await pauseRendererClock(page);
+    await page.goto(`${origin}?view=session-updates`);
+    await page.evaluate(() => {
+        window.rendererTest.emit({
+            type: 'state',
+            id: 'alpha',
+            state: {
+                buffers: [{ id: 1, name: '/alpha/main.rs', modified: false }],
+                current: 1,
+                mode: 'i',
+                line: 1,
+                column: 1,
+                filetype: 'rust',
+                lineEnding: 'LF',
+                problems: [
+                    {
+                        path: '/alpha/main.rs',
+                        line: 1,
+                        column: 1,
+                        severity: 1,
+                        message: 'error',
+                        source: 'rustc'
+                    }
+                ]
+            }
+        });
+        window.rendererTest.emit({
+            type: 'statePatch',
+            id: 'alpha',
+            state: { line: 9, column: 4, lspProgress: 'Indexing' }
+        });
+        window.rendererTest.emit({ type: 'statePatch', id: 'beta', state: { line: 3 } });
+    });
+    await page.clock.runFor(50);
+    const states = await page.getByRole('status').textContent();
+    expect(JSON.parse(states!)).toMatchObject({
+        alpha: {
+            line: 9,
+            column: 4,
+            mode: 'i',
+            lineEnding: 'LF',
+            problems: [{ message: 'error' }],
+            buffers: [{ name: '/alpha/main.rs' }],
+            lspProgress: 'Indexing'
+        },
+        beta: { line: 3, buffers: [], mode: 'n' }
+    });
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'statePatch',
+            id: 'alpha',
+            state: { lineEnding: undefined, mode: 'n' }
+        })
+    );
+    await page.clock.runFor(50);
+    const next = JSON.parse((await page.getByRole('status').textContent())!);
+    expect(next.alpha.lineEnding).toBeUndefined();
+    expect(next.alpha.mode).toBe('n');
+    expect(next.alpha.problems).toHaveLength(1);
+});
+
+test('workspace changes apply only missing settings and changed values', async ({ page }) => {
+    await page.goto(`${origin}?view=settings`);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(4);
+    const alpha = { id: 'alpha', name: 'Renamed Alpha', root: '/alpha' };
+    const beta = { id: 'beta', name: 'Beta', root: '/beta' };
+    await page.evaluate((alpha) => window.rendererTest.render({ workspaces: [alpha] }), alpha);
+    await expect(page.getByRole('status')).toHaveText('Ready');
+    await page.evaluate(
+        ([alpha, beta]) => window.rendererTest.render({ workspaces: [beta, alpha] }),
+        [alpha, beta]
+    );
+    await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(8);
+    expect(
+        await page.evaluate(() => window.rendererTest.calls.slice(4).map((call) => call.args[0]))
+    ).toEqual(['beta', 'beta', 'beta', 'beta']);
+    await page.evaluate(
+        ([alpha, beta]) =>
+            window.rendererTest.render({
+                workspaces: [alpha, beta],
+                settings: {
+                    clipboardSharing: true,
+                    relativeLineNumbers: true,
+                    editorConfig: true,
+                    wordWrap: true
+                }
+            }),
+        [alpha, beta]
+    );
+    await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(10);
+    expect(await page.evaluate(() => window.rendererTest.calls.slice(8))).toEqual([
+        { method: 'setWordWrap', args: ['alpha', true] },
+        { method: 'setWordWrap', args: ['beta', true] }
+    ]);
+    await page.evaluate(
+        ([alpha, beta]) =>
+            window.rendererTest.render({
+                workspaces: [
+                    { ...alpha, terminalId: 'shell' },
+                    beta,
+                    { id: 'terminal', root: '/terminal', name: 'Terminal', kind: 'terminal' }
+                ]
+            }),
+        [alpha, beta]
+    );
+    await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(12);
+    expect(await page.evaluate(() => window.rendererTest.calls.slice(10))).toEqual([
+        { method: 'setClipboardSharing', args: ['shell', true] },
+        { method: 'setClipboardSharing', args: ['terminal', true] }
+    ]);
+});
+
+test('unchanged Git polls avoid commits while changed and removed badges still update', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=badges&defer=gitStatus`);
+    const status = {
+        root: '/alpha',
+        branch: 'main',
+        changes: [{ path: 'first.ts', status: 'M', staged: false }]
+    };
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate((value) => window.rendererTest.settle('gitStatus', 0, value), status);
+    const badges = page.getByRole('status');
+    await expect(badges).toContainText('Modified');
+    const commits = await badges.getAttribute('data-commits');
+    await page.evaluate((value) => {
+        window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
+        window.rendererTest.settle('gitStatus', 0, value);
+    }, status);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(0);
+    expect(await badges.getAttribute('data-commits')).toBe(commits);
+    await page.evaluate(
+        (value) => {
+            window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
+            window.rendererTest.settle('gitStatus', 0, value);
+        },
+        { ...status, changes: [{ ...status.changes[0], staged: true }] }
+    );
+    await expect(badges).toContainText('(staged)');
+    await page.evaluate(
+        (value) => {
+            window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
+            window.rendererTest.settle('gitStatus', 0, value);
+        },
+        { ...status, changes: [] }
+    );
+    await expect(badges).toHaveText('{}');
+});
+
+test('cursor-only patches preserve completion and a normal-mode patch dismisses it', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=completion`);
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [['popupmenu_show', [[['word', 'Text', '', '']], 0, 1, 1]]]
+        })
+    );
+    const menu = page.getByRole('listbox', { name: 'Code completion' });
+    await expect(menu).toBeVisible();
+    await page.evaluate(() =>
+        window.rendererTest.emit({ type: 'statePatch', id: 'alpha', state: { line: 2, column: 3 } })
+    );
+    await expect(menu).toBeVisible();
+    await page.evaluate(() =>
+        window.rendererTest.emit({ type: 'statePatch', id: 'alpha', state: { mode: 'n' } })
+    );
+    await expect(menu).toHaveCount(0);
+});
+
 test('Git badges clear immediately when switching workspaces', async ({ page }) => {
     await page.goto(`${origin}?view=badges&defer=gitStatus`);
     await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);

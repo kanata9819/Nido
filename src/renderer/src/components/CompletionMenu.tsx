@@ -93,7 +93,11 @@ export default function CompletionMenu({
                 if (event.id !== id) {
                     return;
                 }
-                if (event.type === 'state' && !event.state.mode.startsWith('i')) {
+                if (
+                    (event.type === 'state' || event.type === 'statePatch') &&
+                    event.state.mode &&
+                    !event.state.mode.startsWith('i')
+                ) {
                     refreshing.current = false;
                     setMenu(undefined);
                 }

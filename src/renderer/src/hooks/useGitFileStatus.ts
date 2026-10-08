@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { BufferInfo } from '../../../shared/types';
 
 import { gitFileKey, type Decoration } from '../fileDecorations';
 export { gitFileKey, type Decoration } from '../fileDecorations';
+
+const emptyDecorations: Record<string, Decoration> = {};
 
 export function useGitFileStatus(
     workspaceId: string,
@@ -13,7 +15,10 @@ export function useGitFileStatus(
         workspaceId: string;
         decorations: Record<string, Decoration>;
     }>();
-    const files = JSON.stringify(buffers.map(({ name, modified }) => [name, modified]));
+    const files = useMemo(
+        () => JSON.stringify(buffers.map(({ name, modified }) => [name, modified])),
+        [buffers]
+    );
 
     useEffect(() => {
         if (!workspaceId) {
@@ -53,12 +58,31 @@ export function useGitFileStatus(
                     };
                 }
                 if (!cancelled) {
-                    setResult({ workspaceId, decorations: next });
+                    setResult((previous) => {
+                        const paths = Object.keys(next);
+                        if (
+                            previous?.workspaceId === workspaceId &&
+                            Object.keys(previous.decorations).length === paths.length &&
+                            paths.every(
+                                (path) =>
+                                    previous.decorations[path]?.code === next[path].code &&
+                                    previous.decorations[path]?.title === next[path].title
+                            )
+                        ) {
+                            return previous;
+                        }
+                        return { workspaceId, decorations: next };
+                    });
                 }
             } catch {
                 // Git is optional: ordinary folders and unavailable repositories have no badges.
                 if (!cancelled) {
-                    setResult({ workspaceId, decorations: {} });
+                    setResult((previous) =>
+                        previous?.workspaceId === workspaceId &&
+                        !Object.keys(previous.decorations).length
+                            ? previous
+                            : { workspaceId, decorations: emptyDecorations }
+                    );
                 }
             } finally {
                 pending = false;
@@ -85,5 +109,5 @@ export function useGitFileStatus(
         };
     }, [workspaceId, files, panel]);
 
-    return result?.workspaceId === workspaceId ? result.decorations : {};
+    return result?.workspaceId === workspaceId ? result.decorations : emptyDecorations;
 }

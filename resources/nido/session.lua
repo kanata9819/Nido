@@ -85,6 +85,30 @@ local diagnostics = vim.empty_dict()
 local diagnostics_dirty = true
 local problems = {}
 local diagnostics_version = 0
+local published_diagnostics_version = -1
+local buffers = {}
+local buffers_dirty = true
+local search_cache
+local function search_status()
+  local pattern = vim.fn.getreg('/')
+  if vim.v.hlsearch ~= 1 or pattern == '' or vim.bo.buftype ~= '' then
+    search_cache = nil
+    return false
+  end
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local key = table.concat({vim.api.nvim_get_current_buf(), vim.api.nvim_buf_get_changedtick(0),
+    cursor[1], cursor[2], pattern, tostring(vim.o.ignorecase), tostring(vim.o.smartcase),
+    tostring(vim.o.magic), vim.bo.iskeyword}, '\0')
+  if search_cache and search_cache.key == key then
+    return search_cache.value
+  end
+  local ok, count = pcall(vim.fn.searchcount, {recompute=1, maxcount=9999, timeout=10})
+  if not ok then return false end
+  local value = {pattern=pattern, current=count.current or 0, total=count.total or 0,
+    incomplete=count.incomplete or 0}
+  search_cache = {key=key, value=value}
+  return value
+end
 local function refresh_diagnostics()
   if not diagnostics_dirty then
     return
@@ -151,14 +175,18 @@ local function publish()
   vim.schedule(function()
     pending = false
     refresh_diagnostics()
-    local buffers = {}
-    for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
-      if vim.api.nvim_buf_is_valid(buffer) and vim.bo[buffer].buflisted then
-        table.insert(buffers, {
-          id = buffer,
-          name = vim.api.nvim_buf_get_name(buffer),
-          modified = vim.bo[buffer].modified,
-        })
+    local changed_buffers = buffers_dirty
+    if changed_buffers then
+      buffers_dirty = false
+      buffers = {}
+      for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_is_valid(buffer) and vim.bo[buffer].buflisted then
+          table.insert(buffers, {
+            id = buffer,
+            name = vim.api.nvim_buf_get_name(buffer),
+            modified = vim.bo[buffer].modified,
+          })
+        end
       end
     end
     local scroll = require('nido_scroll')
@@ -174,27 +202,14 @@ local function publish()
       and buffers[1].name == '' and not buffers[1].modified and vim.bo.buftype == ''
       and vim.api.nvim_buf_line_count(0) == 1 and vim.api.nvim_get_current_line() == ''
       and #vim.api.nvim_tabpage_list_wins(0) == 1
-    vim.rpcnotify(channel, 'nido:state', {
-      search = (function()
-        if vim.v.hlsearch ~= 1 or vim.fn.getreg('/') == '' or vim.bo.buftype ~= '' then
-          return false
-        end
-        -- ponytail: cap counting at 9999 matches/10 ms; show a partial count for huge files.
-        local ok, count = pcall(vim.fn.searchcount, {recompute=1, maxcount=9999, timeout=10})
-        if not ok then
-          return false
-        end
-        return {pattern=vim.fn.getreg('/'), current=count.current or 0, total=count.total or 0, incomplete=count.incomplete or 0}
-      end)(),
-      problems = problems,
+    local state = {
+      search = search_status(),
       diagnosticsVersion = diagnostics_version,
-      scrollCursor = scroll.screen_cursor(),
+      scrollCursor = scroll.screen_cursor() or vim.NIL,
       scrollPercent = math.min(100, math.floor(100 * (vim.fn.line('w0') - 1)
         / math.max(1, vim.api.nvim_buf_line_count(0) - (vim.fn.line('w$') - vim.fn.line('w0') + 1)) + 0.5)),
-      diagnostics = diagnostics,
-      buffers = buffers,
       current = vim.api.nvim_get_current_buf(),
-      lineEnding = ending,
+      lineEnding = ending or vim.NIL,
       lsp = clients,
       lspProgress = tasks,
       empty = empty,
@@ -202,7 +217,15 @@ local function publish()
       line = pos[1],
       column = pos[2] + 1,
       filetype = vim.bo.filetype,
-    })
+    }
+    -- Keep cursor updates small even in projects with thousands of diagnostics.
+    if diagnostics_version ~= published_diagnostics_version then
+      state.problems = problems
+      state.diagnostics = diagnostics
+      published_diagnostics_version = diagnostics_version
+    end
+    if changed_buffers then state.buffers = buffers end
+    vim.rpcnotify(channel, 'nido:state', state)
   end)
 end
 
@@ -230,6 +253,12 @@ vim.api.nvim_create_autocmd('LspProgress', {
     end
     publish()
   end,
+})
+vim.api.nvim_create_autocmd({
+  'BufEnter', 'BufAdd', 'BufDelete', 'BufWipeout', 'BufModifiedSet', 'BufFilePost', 'BufWritePost',
+}, {callback=function() buffers_dirty = true; publish() end})
+vim.api.nvim_create_autocmd('OptionSet', {
+  pattern={'buflisted', 'modified'}, callback=function() buffers_dirty = true; publish() end,
 })
 vim.api.nvim_create_autocmd({
   'BufEnter', 'BufAdd', 'BufDelete', 'BufModifiedSet', 'BufFilePost', 'BufWritePost',

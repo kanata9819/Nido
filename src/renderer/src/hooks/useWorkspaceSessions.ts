@@ -23,6 +23,15 @@ interface WorkspaceSessions {
     restoring: boolean;
 }
 
+const initialState: SessionState = {
+    buffers: [],
+    current: 0,
+    mode: 'n',
+    line: 1,
+    column: 1,
+    filetype: ''
+};
+
 export function useWorkspaceSessions(report: (message: string) => void): WorkspaceSessions {
     const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
     const [selectedWorkspace, setActive] = useState('');
@@ -34,20 +43,30 @@ export function useWorkspaceSessions(report: (message: string) => void): Workspa
         : workspaces[0]?.id || '';
 
     useEffect(() => {
-        const pendingStates = new Map<string, SessionState>();
+        const pendingStates = new Map<string, Partial<SessionState>>();
         let frame = 0;
         const unsubscribe = window.nido.onEvent((event) => {
             switch (event.type) {
-                case 'state': {
+                case 'state':
+                case 'statePatch': {
                     // Scrolling can deliver several states before a paint. Render the shell once.
-                    pendingStates.set(event.id, event.state);
+                    pendingStates.set(event.id, { ...pendingStates.get(event.id), ...event.state });
                     if (!frame) {
                         frame = requestAnimationFrame(() => {
                             frame = 0;
                             if (pendingStates.size) {
-                                const updates = Object.fromEntries(pendingStates);
+                                const updates = [...pendingStates];
                                 pendingStates.clear();
-                                setStates((old) => ({ ...old, ...updates }));
+                                setStates((old) => {
+                                    const next = { ...old };
+                                    for (const [id, update] of updates) {
+                                        next[id] = {
+                                            ...(old[id] || initialState),
+                                            ...update
+                                        };
+                                    }
+                                    return next;
+                                });
                             }
                         });
                     }

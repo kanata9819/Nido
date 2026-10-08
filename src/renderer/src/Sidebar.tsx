@@ -25,7 +25,16 @@ interface Props {
 // Hidden trees keep their DOM and local state; refresh parent props when activated.
 export default memo(
     Sidebar,
-    (previous, next) => !previous.active && !next.active && previous.workspace === next.workspace
+    (previous, next) =>
+        previous.workspace === next.workspace &&
+        ((!previous.active && !next.active) ||
+            (previous.active === next.active &&
+                previous.gitFiles === next.gitFiles &&
+                previous.width === next.width &&
+                previous.currentFile === next.currentFile &&
+                previous.onResize === next.onResize &&
+                previous.onOpen === next.onOpen &&
+                previous.onError === next.onError))
 );
 
 function Sidebar({

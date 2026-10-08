@@ -1,5 +1,5 @@
 import { terminalShells, uiThemes, type TerminalShell, type UITheme } from '../../../shared/types';
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { parseLanguage, type Language } from '../../../shared/i18n';
 
 export const defaultFontFamily = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
@@ -107,9 +107,9 @@ export function useEditorSettings(): EditorSettings {
         return Number.isFinite(saved) && saved >= 160 && saved <= 480 ? saved : 243;
     });
 
-    const resizeSidebar = (width: number): void => {
+    const resizeSidebar = useCallback((width: number): void => {
         setSidebarWidth(Math.max(160, Math.min(480, width)));
-    };
+    }, []);
 
     useEffect(() => {
         localStorage.setItem('nido.sidebarWidth', String(sidebarWidth));

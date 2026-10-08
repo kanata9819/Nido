@@ -31,6 +31,7 @@ export class SessionEvents {
     private pendingRedraw: Redraw = [];
     private isBatchingScroll = false;
     private pendingState = false;
+    private publishedState?: SessionState;
     private neovimUI = emptyNeovimUI();
     private pendingUI = false;
 
@@ -84,7 +85,28 @@ export class SessionEvents {
             this.pendingState = true;
             return;
         }
-        this.sendToRenderer({ type: 'state', id: this.workspaceId, state: this.state });
+        const previous = this.publishedState;
+        const current = this.state;
+        this.publishedState = current;
+        // Large collections change independently of the cursor and viewport. Send
+        // a snapshot when they change, and only lightweight changes between them.
+        if (
+            !previous ||
+            (['buffers', 'problems', 'diagnostics', 'references', 'debug'] as const).some(
+                (key) => previous[key] !== current[key]
+            )
+        ) {
+            this.sendToRenderer({ type: 'state', id: this.workspaceId, state: current });
+            return;
+        }
+        const patch = Object.fromEntries(
+            Object.entries(current).filter(
+                ([key, value]) => value !== previous[key as keyof SessionState]
+            )
+        );
+        if (Object.keys(patch).length) {
+            this.sendToRenderer({ type: 'statePatch', id: this.workspaceId, state: patch });
+        }
     }
 
     receiveNotification(method: string, args: unknown[]): void {
@@ -217,10 +239,18 @@ export class SessionEvents {
             }
             case 'nido:state': {
                 this.state = {
-                    ...(args[0] as SessionState),
+                    ...this.state,
+                    ...(args[0] as Partial<SessionState>),
                     debug: this.state.debug,
                     references: this.state.references
                 };
+                // MessagePack nil explicitly clears optional values in partial updates.
+                if (this.state.scrollCursor === null) {
+                    this.state.scrollCursor = undefined;
+                }
+                if (this.state.lineEnding === null) {
+                    this.state.lineEnding = undefined;
+                }
                 // Lua encodes an empty table as a map rather than an array.
                 if (!Array.isArray(this.state.buffers)) {
                     this.state.buffers = [];

@@ -76,17 +76,31 @@ test('restored workspaces start and switch without losing their editor or explor
                         },
                         true
                     );
-                    const setAttribute = HTMLCanvasElement.prototype.setAttribute;
-                    HTMLCanvasElement.prototype.setAttribute = function (name, value) {
-                        setAttribute.call(this, name, value);
+                    const fill = CanvasRenderingContext2D.prototype.fillRect;
+                    CanvasRenderingContext2D.prototype.fillRect = function (x, y, width, height) {
+                        fill.call(this, x, y, width, height);
+                        // Cached workspaces do not rewrite their accessibility description.
+                        // Measure the completed visible paint, including warm switches.
                         if (
                             target &&
-                            name === 'aria-description' &&
-                            value.includes(target) &&
-                            this.clientHeight
+                            x === 0 &&
+                            y === 0 &&
+                            width > 100 &&
+                            height > 100 &&
+                            this.canvas instanceof HTMLCanvasElement &&
+                            this.canvas.clientHeight
                         ) {
-                            timings.push(performance.now() - started);
-                            target = '';
+                            const canvas = this.canvas;
+                            queueMicrotask(() => {
+                                if (
+                                    target &&
+                                    canvas.clientHeight &&
+                                    canvas.getAttribute('aria-description')?.includes(target)
+                                ) {
+                                    timings.push(performance.now() - started);
+                                    target = '';
+                                }
+                            });
                         }
                     };
                 });
@@ -96,7 +110,7 @@ test('restored workspaces start and switch without losing their editor or explor
                             window as unknown as { workspaceSwitchTimings: number[] }
                         ).workspaceSwitchTimings.length = 0;
                     });
-                    for (const index of indices) {
+                    for (const [step, index] of indices.entries()) {
                         await page.keyboard.press(`Alt+${index}`);
                         await expect(page.locator('canvas:visible')).toHaveAttribute(
                             'aria-description',
@@ -105,6 +119,15 @@ test('restored workspaces start and switch without losing their editor or explor
                         await expect(
                             page.getByRole('textbox', { name: 'Neovim input' })
                         ).toBeFocused();
+                        await expect
+                            .poll(() =>
+                                page.evaluate(
+                                    () =>
+                                        (window as unknown as { workspaceSwitchTimings: number[] })
+                                            .workspaceSwitchTimings.length
+                                )
+                            )
+                            .toBe(step + 1);
                     }
                     const times = await page.evaluate(
                         () =>

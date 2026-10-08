@@ -31,7 +31,11 @@ test(
             const grid = new Grid();
             session = await Session.create(root, (event) => {
                 if (event.type === 'redraw') grid.apply(event.events);
-                if (event.type === 'state' && event.state.lspProgress) sawProgress = true;
+                if (
+                    (event.type === 'state' || event.type === 'statePatch') &&
+                    event.state.lspProgress
+                )
+                    sawProgress = true;
                 if (event.type === 'error' || event.type === 'notification')
                     messages.push(event.message);
                 if (event.type === 'hover') hovers.push(event.markdown);

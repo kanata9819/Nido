@@ -1,5 +1,6 @@
 import {
     useEffect,
+    useMemo,
     useRef,
     useState,
     type Dispatch,
@@ -95,7 +96,10 @@ export function useExplorer({
         };
     }, [workspace.id, active, onError, revision, expanded]);
 
-    const visible = getVisibleEntries(entriesByDirectory, expanded);
+    const visible = useMemo(
+        () => getVisibleEntries(entriesByDirectory, expanded),
+        [entriesByDirectory, expanded]
+    );
     const selectedEntry = visible.find((entry) => entry.path === selected);
     let targetDirectory = '';
     if (selectedEntry?.directory) {

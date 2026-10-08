@@ -263,7 +263,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
             node.dataset.offsets = '0';
             node.dataset.states = '0';
             window.nido.onEvent((event) => {
-                if (event.type === 'state')
+                if (event.type === 'state' || event.type === 'statePatch')
                     node.dataset.states = String(Number(node.dataset.states) + 1);
                 if (event.type === 'redraw')
                     for (const [name, ...calls] of event.events)

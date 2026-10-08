@@ -5,7 +5,8 @@ import type {
     FavoriteWorkspace,
     NidoAPI,
     NidoEvent,
-    ReferenceList
+    ReferenceList,
+    Workspace
 } from '../../src/shared/types';
 import App from '../../src/renderer/src/App';
 import ExplorerCommands from '../../src/renderer/src/components/ExplorerCommands';
@@ -15,12 +16,15 @@ import GitDiff from '../../src/renderer/src/components/GitDiff';
 import Notification from '../../src/renderer/src/components/Notification';
 import ReferencesPanel from '../../src/renderer/src/components/ReferencesPanel';
 import DebugPanel from '../../src/renderer/src/components/DebugPanel';
-import { Favorites, GitBadges, Completion } from './Probes';
+import { Favorites, GitBadges, Completion, Settings, SessionUpdates } from './Probes';
+import type { SessionSettings } from '../../src/renderer/src/hooks/useSessionSettings';
 import '../../src/renderer/src/assets/global.css';
 import '../../src/renderer/src/assets/themes.css';
 
 interface HarnessProps {
     debugState?: DebugState;
+    workspaces: Workspace[];
+    settings: SessionSettings;
     workspaceId: string;
     initialPath: string;
     favorites: FavoriteWorkspace[];
@@ -122,6 +126,13 @@ window.nido = new Proxy({} as NidoAPI, {
 const noop = (): void => {};
 const root = createRoot(document.getElementById('root')!);
 let props: HarnessProps = {
+    workspaces: [workspace],
+    settings: {
+        clipboardSharing: true,
+        relativeLineNumbers: true,
+        editorConfig: true,
+        wordWrap: false
+    },
     workspaceId: 'alpha',
     initialPath: '/alpha',
     favorites: [],
@@ -157,6 +168,12 @@ function render(updates: Partial<HarnessProps>): void {
             break;
         case 'app':
             root.render(<App />);
+            break;
+        case 'settings':
+            root.render(<Settings workspaces={props.workspaces} settings={props.settings} />);
+            break;
+        case 'session-updates':
+            root.render(<SessionUpdates />);
             break;
         case 'favorites':
             root.render(<Favorites workspace={workspace} />);

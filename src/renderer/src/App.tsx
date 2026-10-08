@@ -195,7 +195,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         () => fileDecorations(workspace?.root || '', gitFiles, state.diagnostics, state.problems),
         [workspace?.root, gitFiles, state.diagnostics, state.problems]
     );
-    const focusEditor = (): void => {
+    const focusEditor = useCallback((): void => {
         setPanel(null);
         setLeader(false);
         setFocusTick((n) => n + 1);
@@ -204,16 +204,19 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                 document.querySelector<HTMLElement>('[data-features-trigger]')?.focus()
             );
         }
-    };
+    }, [panel, active]);
 
     const closeReferences = (): void => {
         setReferencesVisible(false);
         focusEditor();
     };
 
-    const run = (promise: Promise<unknown>): void => {
-        void promise.catch((e) => report(String(e)));
-    };
+    const run = useCallback(
+        (promise: Promise<unknown>): void => {
+            void promise.catch((e) => report(String(e)));
+        },
+        [report]
+    );
 
     const showTerminal = (): void => {
         if (!active) {
@@ -363,9 +366,12 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         focusEditor();
     };
 
-    const openFile = (path: string): void => {
-        run(window.nido.openFile(active, path).then(focusEditor));
-    };
+    const openFile = useCallback(
+        (path: string): void => {
+            run(window.nido.openFile(active, path).then(focusEditor));
+        },
+        [active, run, focusEditor]
+    );
 
     const closeWorkspace = (id: string): void => {
         run(

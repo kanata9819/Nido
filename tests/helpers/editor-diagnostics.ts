@@ -14,16 +14,28 @@ type DiagnosticWindow = Window & { editorDiagnostics?: EditorDiagnostics };
 export async function recordEditorDiagnostics(page: Page): Promise<void> {
     await page.evaluate(() => {
         const diagnostics: EditorDiagnostics = { events: [], keys: [], focus: [] };
+        const states = new Map<string, SessionState>();
         (window as DiagnosticWindow).editorDiagnostics = diagnostics;
         const focused = (): string => {
             const element = document.activeElement;
             return `${element?.tagName} ${element?.getAttribute('aria-label') || ''}`;
         };
         window.nido.onEvent((event: NidoEvent) => {
-            if (event.type === 'state') {
+            if (event.type === 'state' || event.type === 'statePatch') {
                 diagnostics.id = event.id;
-                diagnostics.state = event.state;
+                diagnostics.state = {
+                    buffers: [],
+                    current: 0,
+                    mode: 'n',
+                    line: 1,
+                    column: 1,
+                    filetype: '',
+                    ...states.get(event.id),
+                    ...event.state
+                };
+                states.set(event.id, diagnostics.state);
             } else if (event.type !== 'redraw') {
+                if (event.type === 'exit') states.delete(event.id);
                 diagnostics.events.push(event);
                 diagnostics.events = diagnostics.events.slice(-20);
             }
