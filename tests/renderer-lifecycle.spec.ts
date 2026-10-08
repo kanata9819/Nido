@@ -164,6 +164,8 @@ test('external command input keeps spaces, Unicode and control keys in order', a
     await expect(input).toHaveAttribute('data-nvim-command-active', '');
     await page.keyboard.type('Native message 日本語"');
     await page.keyboard.press('Control+p');
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'c'));
     await expect
         .poll(() =>
             page.evaluate(() =>
@@ -176,6 +178,37 @@ test('external command input keeps spaces, Unicode and control keys in order', a
         .toBe('Native message 日本語"<C-p>');
     await page.keyboard.press('Control+Shift+m');
     await expect(page.getByRole('listbox', { name: 'Problems', exact: true })).toBeFocused();
+});
+
+test('file picker opens after command submission before the command card redraws', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=inputMode`);
+    const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+    await expect(input).toBeFocused();
+    const state = applyNeovimUI(emptyNeovimUI(), 'cmdline_show', [
+        [[0, 'echo 1']],
+        6,
+        ':',
+        '',
+        0,
+        1
+    ]);
+    await page.evaluate((state) => {
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [['mode_change', ['cmdline_normal', 0]]]
+        });
+        window.rendererTest.emit({ type: 'neovimUI', id: 'alpha', state });
+    }, state);
+    await expect(input).toHaveAttribute('data-nvim-command-active', '');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Control+p');
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    // Neovim processed Enter, but its redraw and the old command card are still pending.
+    await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'n'));
+    await expect(page.getByRole('textbox', { name: 'Filter items' })).toBeFocused();
 });
 
 test('external messages show safe selectable output, severity, history and keyboard scrolling', async ({

@@ -5,10 +5,11 @@ import { useLayoutEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 
 const needsMode = (event: KeyboardEvent): boolean =>
-    !event.ctrlKey &&
     !event.altKey &&
     !event.metaKey &&
-    (event.key === ' ' || (event.shiftKey && ['H', 'L'].includes(event.key)));
+    ((!event.ctrlKey &&
+        (event.key === ' ' || (event.shiftKey && ['H', 'L'].includes(event.key)))) ||
+        (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'p'));
 
 interface UseKeyboardShortcutsParams {
     save: () => void;
@@ -79,17 +80,15 @@ export function useKeyboardShortcuts({
         ) {
             return;
         }
-        // Neovim owns text and Ctrl+P in command prompts. Deferring Space for a Normal-mode
-        // shortcut would let Unicode input events overtake it. Application controls still apply.
+        // Deferring command text for Normal-mode shortcuts lets Unicode overtake spaces.
+        // Ctrl+P still checks the actual mode: the command card can outlive queued Enter input.
         if (
             !checkingMode.current &&
             document.activeElement?.hasAttribute('data-nvim-command-active') &&
-            ((!event.ctrlKey && !event.altKey && !event.metaKey && event.key.length === 1) ||
-                (event.ctrlKey &&
-                    !event.shiftKey &&
-                    !event.altKey &&
-                    !event.metaKey &&
-                    event.key.toLowerCase() === 'p'))
+            !event.ctrlKey &&
+            !event.altKey &&
+            !event.metaKey &&
+            event.key.length === 1
         ) {
             return;
         }
@@ -387,7 +386,8 @@ export function useKeyboardShortcuts({
             event.ctrlKey &&
             event.key.toLowerCase() === 'p' &&
             active &&
-            !mode.current[active]?.startsWith('insert')
+            !mode.current[active]?.startsWith('insert') &&
+            !mode.current[active]?.startsWith('c')
         ) {
             consume();
             showPanel('files');
