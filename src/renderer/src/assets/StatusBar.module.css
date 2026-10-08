@@ -1,0 +1,112 @@
+.lineEnding {
+    background: var(--surface-editor, #141414);
+    color: inherit;
+    border: 1px solid transparent;
+    font: inherit;
+    cursor: pointer;
+}
+.lineEnding:focus-visible {
+    outline: 1px solid var(--ui-accent, #a8cf9e);
+}
+.statusbar {
+    height: 32px;
+    display: flex;
+    gap: 22px;
+    align-items: center;
+    padding: 0 15px;
+    border-top: 1px solid var(--ui-border, #282c30);
+    background: var(--surface-panel, #17191b);
+    flex-shrink: 0;
+    font-size: 11px;
+    color: #91a0ad;
+}
+.statusbar > * {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.searchStatus {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 2px 7px;
+    border: 1px solid #49644e;
+    border-radius: 6px;
+    background: #26372b;
+    color: #bddab4;
+}
+.searchStatus strong {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+.searchStatus button {
+    display: inline-flex;
+    padding: 1px;
+}
+.mode {
+    background: var(--ui-accent, #9ac78b);
+    color: #18271b;
+    padding: 3px 11px;
+    border-radius: 5px;
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.4px;
+}
+.statusDivider {
+    height: 13px;
+    border-left: 1px solid #3a434b;
+}
+.mode[data-mode='INSERT'] {
+    background: #86bddd;
+}
+.mode[data-mode='VISUAL'] {
+    background: #c9a6e6;
+}
+.mode[data-mode='COMMAND'] {
+    background: #dbb98b;
+}
+.statusGap {
+    flex: 1;
+}
+.scrollPosition {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 76px;
+    font-variant-numeric: tabular-nums;
+}
+.scrollTrack {
+    width: 32px;
+    height: 3px;
+    border-radius: 2px;
+    background: #343b41;
+    overflow: hidden;
+}
+.scrollTrack > span {
+    display: block;
+    height: 100%;
+    background: var(--ui-accent, #a8cf9e);
+}
+.lspProgress {
+    display: flex;
+    flex-shrink: 1;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    max-width: 45vw;
+    color: var(--ui-accent, #a8cf9e);
+}
+.lspProgress > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.sessionCount {
+    color: #71808d;
+}
+
+:global(:root[data-theme='acrylic']) .statusbar {
+    box-shadow: var(--glass-highlight);
+}

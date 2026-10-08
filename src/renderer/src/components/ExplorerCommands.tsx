@@ -2,7 +2,7 @@ import { useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Command, X } from 'lucide-react';
 import type { FileAction } from '../../../shared/types';
-import styles from '../assets/Nido.module.css';
+import styles from '../assets/Palette.module.css';
 
 export interface FileRequest {
     action: FileAction;

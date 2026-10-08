@@ -1,3 +1,4 @@
+import referenceStyles from '../assets/ReferencesPanel.module.css';
 import { useI18n } from '../i18n';
 import Editor from '../Editor';
 import { defaultFontFamily, type EditorSettings } from '../hooks/useEditorSettings';
@@ -28,7 +29,7 @@ export default function TerminalPanel({
     const { fontSize, lineHeight, fontFamily, smoothCursor, smoothBlink } = settings;
     return (
         <section className={styles.terminalPanel} aria-label={t('Terminal')} hidden={!active}>
-            <div className={styles.referencesToolbar}>
+            <div className={referenceStyles.referencesToolbar}>
                 <strong>
                     {t('Terminal ·')} {name}
                 </strong>

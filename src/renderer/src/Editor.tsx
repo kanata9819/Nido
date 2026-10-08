@@ -4,7 +4,7 @@ import { Grid } from './grid';
 import { accumulateScroll } from './scroll';
 import { useEditorRendering } from './hooks/useEditorRendering';
 import { useEditorInput } from './hooks/useEditorInput';
-import styles from './assets/Nido.module.css';
+import styles from './assets/Editor.module.css';
 import TypeInformation from './components/TypeInformation';
 import DiagnosticInformation from './components/DiagnosticInformation';
 import CompletionMenu from './components/CompletionMenu';

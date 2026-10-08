@@ -1,0 +1,110 @@
+.settings {
+    min-height: 0;
+    overflow-y: auto;
+    padding: 5px 22px 24px;
+}
+.settings label {
+    position: relative;
+    color: #e0e7eb;
+    font-weight: 550;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px 0;
+}
+.settings label:has(+ small) {
+    padding-bottom: 7px;
+}
+.settings small {
+    display: block;
+    margin-bottom: 8px;
+    color: #95a2ad;
+    font-size: 11px;
+    line-height: 1.6;
+}
+.settings h3 {
+    margin: 20px 0 0;
+    padding-top: 18px;
+    border-top: 1px solid var(--ui-border, #354049);
+    color: var(--ui-accent, #a3cc94);
+    font-size: 13px;
+}
+.settings label:has(input[type='checkbox']:focus-visible) {
+    background: var(--ui-accent-soft, #a3cc940a);
+    border-radius: 4px;
+}
+.settings label:has(input[type='checkbox']:focus-visible)::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 12px;
+    bottom: 12px;
+    width: 2px;
+    background: var(--ui-accent, #a3cc94);
+    border-radius: 2px;
+}
+.settings input[type='number'] {
+    margin-left: auto;
+    width: 76px;
+    padding: 10px 12px;
+    color-scheme: dark;
+    color: #e0e7eb;
+    background: var(--surface-input, #121416);
+    border: 1px solid var(--ui-border-strong, #3f5145);
+    border-radius: 6px;
+    font: inherit;
+}
+.settings input[type='number']:focus-visible,
+.settings input[type='text']:focus-visible,
+.settings select:focus-visible {
+    border-color: var(--ui-accent, #a3cc94);
+    outline: 1px solid var(--ui-focus, #a3cc9460);
+    outline-offset: 2px;
+}
+.settings select {
+    margin-left: auto;
+    max-width: 75%;
+    padding: 10px 36px 10px 12px;
+    appearance: none;
+    color-scheme: dark;
+    color: #e0e7eb;
+    font: inherit;
+    font-weight: 400;
+    background: var(--surface-input, #121416)
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23a3cc94' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+        no-repeat right 12px center;
+    border: 1px solid var(--ui-border-strong, #3f5145);
+    border-radius: 6px;
+    cursor: pointer;
+}
+.settings select:hover {
+    border-color: var(--ui-accent, #a3cc94);
+}
+.settings .fontFamilyField {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 9px;
+}
+.fontFamilyField input {
+    width: 100%;
+    min-width: 0;
+    padding: 10px 12px;
+    color: #e0e7eb;
+    background: var(--surface-input, #121416);
+    border: 1px solid var(--ui-border-strong, #3f5145);
+    border-radius: 6px;
+}
+.fontFamilyField input::placeholder {
+    color: #8999a4;
+}
+.settings input[type='checkbox'] {
+    margin-left: auto;
+    accent-color: var(--ui-accent, #a3cc94);
+}
+.settings p {
+    font-size: 12px;
+    color: #8999a4;
+    line-height: 1.9;
+    border-top: 1px solid var(--ui-border, #354049);
+    padding-top: 19px;
+}

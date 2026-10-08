@@ -1,7 +1,7 @@
 import { useI18n } from '../i18n';
 import type { DebugAction, DebugState } from '../../../shared/types';
 import { useEffect, useRef, useState } from 'react';
-import styles from '../assets/Nido.module.css';
+import styles from '../assets/DebugPanel.module.css';
 
 export default function DebugPanel({
     state,

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { vimKey } from '../src/renderer/src/grid';
+import { vimKey } from '../src/renderer/src/keyboard';
 import { useEditorInput as createEditorInput } from '../src/renderer/src/hooks/useEditorInput';
 import { useKeyboardShortcuts as createKeyboardHandler } from '../src/renderer/src/hooks/useKeyboardShortcuts';
 

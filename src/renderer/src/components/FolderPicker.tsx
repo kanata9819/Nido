@@ -1,8 +1,9 @@
+import sharedStyles from '../assets/Nido.module.css';
 import { useI18n } from '../i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Star, X } from 'lucide-react';
 import type { FavoriteWorkspace, FileEntry } from '../../../shared/types';
-import styles from '../assets/Nido.module.css';
+import styles from '../assets/Palette.module.css';
 
 export default function FolderPicker({
     initialPath,
@@ -265,7 +266,7 @@ export default function FolderPicker({
                         }}
                         title={favorite.root}
                     >
-                        <Star size={16} className={styles.favoriteStar} />
+                        <Star size={16} className={sharedStyles.favoriteStar} />
                         <span>
                             <strong>{favorite.name}</strong>
                             <small>

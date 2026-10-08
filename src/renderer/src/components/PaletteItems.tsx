@@ -2,7 +2,7 @@ import { useI18n } from '../i18n';
 import { useEffect, useRef } from 'react';
 import { Command, FolderOpen, FileCode2, CircleAlert, TriangleAlert, Info } from 'lucide-react';
 import type { Panel, Item } from '../types';
-import styles from '../assets/Nido.module.css';
+import styles from '../assets/Palette.module.css';
 
 interface PaletteItemsProps {
     panel: Exclude<Panel, null>;

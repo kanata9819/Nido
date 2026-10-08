@@ -3,7 +3,7 @@ import SettingsPanel, { type SettingsPanelProps } from './SettingsPanel';
 import type { Panel, Item } from '../types';
 import { Command, X } from 'lucide-react';
 import PaletteItems from './PaletteItems';
-import styles from '../assets/Nido.module.css';
+import styles from '../assets/Palette.module.css';
 import FolderPicker from './FolderPicker';
 import GitBrowser from './GitBrowser';
 import MarkdownPreview from './MarkdownPreview';

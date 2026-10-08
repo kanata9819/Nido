@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n';
-import styles from '../assets/Nido.module.css';
+import styles from '../assets/Progress.module.css';
 
 export default function WorkspaceLoading(): React.JSX.Element | null {
     const t = useI18n();

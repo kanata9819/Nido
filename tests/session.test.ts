@@ -14,7 +14,8 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Session } from '../src/main/session';
-import { Grid, vimKey } from '../src/renderer/src/grid';
+import { Grid } from '../src/renderer/src/grid';
+import { vimKey } from '../src/renderer/src/keyboard';
 import { accumulateScroll, scrollOffset } from '../src/renderer/src/scroll';
 import { readFavorites, readLayout, writeFavorites, writeLayout } from '../src/main/persistence';
 import { fileDecorations, gitFileKey } from '../src/renderer/src/fileDecorations';

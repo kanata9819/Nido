@@ -1,63 +1,11 @@
 import type { Redraw, StickyScrollState } from '../../shared/types';
 import { color } from './gridColors';
 
-export interface Cell {
-    text: string;
-    highlight: number;
-}
-
-interface Highlight {
-    codeLens?: boolean;
-    indentGuide?: boolean;
-    foreground?: number;
-    background?: number;
-    special?: number;
-    bold?: boolean;
-    italic?: boolean;
-    underline?: boolean;
-    undercurl?: boolean;
-    reverse?: boolean;
-    strikethrough?: boolean;
-}
-
-interface BracketGuide {
-    column: number;
-    top: number;
-    bottom: number;
-    opening: number;
-    closing: number;
-    color: string;
-    active: boolean;
-}
-
-function cellBackground(h: Highlight, background: string, foreground: string): string {
-    if (h.reverse) {
-        if (h.foreground === undefined) {
-            return foreground;
-        }
-        return color(h.foreground);
-    }
-    if (h.background === undefined) {
-        return background;
-    }
-    return color(h.background);
-}
-
-function cellForeground(h: Highlight, background: string, foreground: string): string {
-    if (h.reverse) {
-        if (h.background === undefined) {
-            return background;
-        }
-        return color(h.background);
-    }
-    if (h.foreground === undefined) {
-        return foreground;
-    }
-    return color(h.foreground);
-}
+import type { Cell, Highlight, BracketGuide } from './gridTypes';
+import { GridCanvas } from './gridCanvas';
+export type { Cell } from './gridTypes';
 
 export class Grid {
-    private static readonly rasterPhases = 4;
     // Keep enough history for fast gestures while a refill spans several display frames.
     private static readonly upperRowLimit = 256;
     cells: Cell[][] = [];
@@ -88,8 +36,7 @@ export class Grid {
     private rowTops: number[] = [];
     private layoutDirty = true;
     private scrollPixels = 0;
-    private rowImages = new WeakMap<Cell[], HTMLCanvasElement[]>();
-    private imageStyle = '';
+    private readonly canvas = new GridCanvas(this);
     private upperRows: Cell[][] = [];
     private upperRowsAtStart = false;
     private upperTops: number[] = [0];
@@ -311,7 +258,7 @@ export class Grid {
                                             ) {
                                                 row = this.cells[Number(args[1])] = row.slice();
                                             }
-                                            this.rowImages.delete(row);
+                                            this.canvas.invalidate(row);
                                             changed = true;
                                         }
                                         row[column] = { text: cell[0], highlight };
@@ -348,7 +295,7 @@ export class Grid {
                             if (retainedRows?.has(this.cells[row])) {
                                 this.cells[row] = this.cells[row].slice();
                             }
-                            this.rowImages.delete(this.cells[row]);
+                            this.canvas.invalidate(this.cells[row]);
                             for (let col = left; col < right; col++) {
                                 const sourceRow = row + rows;
                                 const sourceCol = col + columns;
@@ -366,7 +313,7 @@ export class Grid {
                     case 'hl_attr_define': {
                         this.layoutDirty = true;
                         this.upperLayout = undefined;
-                        this.rowImages = new WeakMap();
+                        this.canvas.invalidate();
                         const info = args[3] as { hi_name?: string }[] | undefined;
                         this.highlights.set(Number(args[0]), {
                             ...(args[1] as Highlight),
@@ -382,7 +329,7 @@ export class Grid {
                         break;
                     }
                     case 'default_colors_set': {
-                        this.rowImages = new WeakMap();
+                        this.canvas.invalidate();
                         if (Number(args[0]) >= 0) {
                             this.foreground = color(Number(args[0]));
                         }
@@ -442,18 +389,7 @@ export class Grid {
         width: number,
         height: number
     ): void {
-        if (this.backgroundOpacity < 1) {
-            // Replace the previous frame so repeated paints never accumulate opacity.
-            context.clearRect(x, y, width, height);
-        }
-        context.fillStyle =
-            this.backgroundOpacity < 1
-                ? this.background +
-                  Math.round(this.backgroundOpacity * 255)
-                      .toString(16)
-                      .padStart(2, '0')
-                : this.background;
-        context.fillRect(x, y, width, height);
+        this.canvas.paintBackground(context, x, y, width, height);
     }
 
     draw(
@@ -466,35 +402,20 @@ export class Grid {
         cursorPosition?: { row: number; column: number },
         lineHeight = Math.ceil(fontSize * 1.65)
     ): { cellWidth: number; cellHeight: number } {
-        const translucent = this.backgroundOpacity < 1;
-        const ctx = canvas.getContext('2d', { alpha: translucent })!;
-        const dpr = window.devicePixelRatio || 1;
-        if (
-            canvas.width !== Math.round(width * dpr) ||
-            canvas.height !== Math.round(height * dpr)
-        ) {
-            canvas.width = Math.round(width * dpr);
-            canvas.height = Math.round(height * dpr);
-        }
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        // Cached glyphs are already antialiased; compositing must not blur them again.
-        ctx.imageSmoothingEnabled = false;
-        const family = fontFamily;
-        ctx.font = `${fontSize}px ${family}`;
-        const cellWidth = ctx.measureText('M').width;
-        const cellHeight = lineHeight;
-        const imageStyle = JSON.stringify([
+        return this.canvas.draw(
+            canvas,
             width,
-            dpr,
+            height,
             fontSize,
             fontFamily,
-            cellWidth,
-            translucent
-        ]);
-        if (imageStyle !== this.imageStyle) {
-            this.imageStyle = imageStyle;
-            this.rowImages = new WeakMap();
-        }
+            focused,
+            cursorPosition,
+            lineHeight
+        );
+    }
+
+    /** Compute shared row geometry before painting or hit-testing. */
+    prepareLayout(height: number, cellWidth: number, cellHeight: number, dpr: number): void {
         this.cellWidth = cellWidth;
         if (this.layoutDirty || this.cellHeight !== cellHeight) {
             this.rowTops = [0];
@@ -549,292 +470,13 @@ export class Grid {
         if (!this.scrolling) {
             this.scrollPixels = Math.round(this.scrollPixels * dpr) / dpr;
         }
-        this.paintBackground(ctx, 0, 0, width, height);
-        ctx.textBaseline = 'alphabetic';
-        for (let row = this.scrollPixels < 0 ? -this.upperRows.length : 0; row < this.rows; row++) {
-            const cells = row < 0 ? this.upperRows[this.upperRows.length + row] : this.cells[row];
-            if (
-                row < this.rows - 1 &&
-                (this.rowY(row + 1) <= 0 || this.rowY(row) >= this.contentHeight)
-            ) {
-                continue;
-            }
-            const rowHeight = this.rowTop(row + 1) - this.rowTop(row);
-            // Resting rows at fractional DPI must not inherit scroll interpolation.
-            const physicalY =
-                this.scrolling && this.scrollPixels !== 0 && row < this.rows - 1
-                    ? Math.round(this.rowY(row) * dpr * Grid.rasterPhases) / Grid.rasterPhases
-                    : Math.round(this.rowY(row) * dpr);
-            const top = Math.floor(physicalY);
-            const phase = Math.round((physicalY - top) * Grid.rasterPhases);
-            ctx.save();
-            if (row < this.rows - 1) {
-                ctx.beginPath();
-                ctx.rect(0, 0, width, this.contentHeight);
-                ctx.clip();
-            }
-            let images = this.rowImages.get(cells) ?? [];
-            let image = images[0];
-            const imageHeight = Math.ceil(rowHeight * dpr);
-            if (!image || image.height !== imageHeight) {
-                images = [];
-                this.rowImages.set(cells, images);
-                image = canvas.ownerDocument.createElement('canvas');
-                image.width = canvas.width;
-                image.height = imageHeight;
-                images[0] = image;
-                // Alpha surfaces use grayscale antialiasing, avoiding colored LCD fringes.
-                // Opaque themes still fill the row background before drawing text.
-                const ctx = image.getContext('2d', { alpha: true })!;
-                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-                ctx.textBaseline = 'alphabetic';
-                const y = 0;
-                if (!translucent) {
-                    ctx.fillStyle = this.background;
-                    ctx.fillRect(0, 0, width, image.height / dpr);
-                }
-                // Paint all cell backgrounds first so a wide glyph is not erased by its continuation cell.
-                for (let col = 0; col < this.columns; col++) {
-                    const h = this.highlights.get(cells[col]?.highlight || 0) || {};
-                    const background = cellBackground(h, this.background, this.foreground);
-                    // The default background is already filled (or transparent for acrylic).
-                    // Repainting fractional cell edges can darken their native pixels.
-                    if (background === this.background) {
-                        continue;
-                    }
-                    ctx.fillStyle = background;
-                    ctx.fillRect(col * cellWidth, y, cellWidth + 0.5, image.height / dpr);
-                }
-
-                for (let col = 0; col < this.columns; col++) {
-                    const cell = cells[col];
-                    if (!cell?.text || cell.text === ' ') {
-                        continue;
-                    }
-
-                    const h = this.highlights.get(cell.highlight) || {};
-                    if (h.codeLens) {
-                        let text = cell.text;
-                        const start = col;
-                        while (
-                            col + 1 < this.columns &&
-                            cells[col + 1]?.highlight === cell.highlight
-                        ) {
-                            text += cells[++col].text;
-                        }
-                        ctx.font = `${fontSize * 0.8}px ${family}`;
-                        ctx.fillStyle = cellForeground(h, this.background, this.foreground);
-                        ctx.fillText(
-                            text,
-                            Math.round(start * cellWidth * dpr) / dpr,
-                            Math.round((y + (rowHeight + fontSize * 0.8) / 2 - 3) * dpr) / dpr
-                        );
-                        continue;
-                    }
-                    ctx.font = `${h.italic ? 'italic ' : ''}${h.bold ? 'bold ' : ''}${fontSize}px ${family}`;
-                    ctx.fillStyle = cellForeground(h, this.background, this.foreground);
-
-                    const x = col * cellWidth;
-
-                    if (h.indentGuide) {
-                        // Use the same physical-pixel boundary as bracket pair guides.
-                        ctx.fillRect(
-                            Math.round(x * dpr) / dpr - 1 / dpr,
-                            y,
-                            1 / dpr,
-                            image.height / dpr
-                        );
-                    } else if (cell.text === '│') {
-                        // Box-drawing lines must span the cell, including the line spacing.
-                        ctx.fillRect(Math.round(x + cellWidth / 2), y, 1, rowHeight);
-                    } else {
-                        // Keep glyph origins on physical pixels, including fractional Windows scaling.
-                        ctx.fillText(
-                            cell.text,
-                            Math.round(x * dpr) / dpr,
-                            Math.round((y + (rowHeight + fontSize) / 2 - 3) * dpr) / dpr
-                        );
-                    }
-                    if (h.underline || h.undercurl || h.strikethrough) {
-                        if (h.special !== undefined) {
-                            ctx.fillStyle = color(h.special);
-                        }
-                        ctx.fillRect(
-                            x,
-                            y + (h.strikethrough ? rowHeight / 2 : rowHeight - 3),
-                            cellWidth,
-                            1
-                        );
-                    }
-                }
-            }
-            if (phase) {
-                let shifted = images[phase];
-                if (!shifted) {
-                    shifted = canvas.ownerDocument.createElement('canvas');
-                    shifted.width = image.width;
-                    shifted.height = image.height + 1;
-                    const shiftedContext = shifted.getContext('2d', { alpha: translucent })!;
-                    if (!translucent) {
-                        shiftedContext.fillStyle = this.background;
-                        shiftedContext.fillRect(0, 0, shifted.width, shifted.height);
-                    }
-                    // Interpolate the native bitmap once per phase, then reuse its physical pixels.
-                    shiftedContext.imageSmoothingEnabled = true;
-                    shiftedContext.imageSmoothingQuality = 'low';
-                    shiftedContext.drawImage(image, 0, phase / Grid.rasterPhases);
-                    images[phase] = shifted;
-                }
-                image = shifted;
-            }
-            // Reuse rasterized text; scroll and cursor animation only composite row images.
-            ctx.drawImage(image, 0, top / dpr, image.width / dpr, image.height / dpr);
-            ctx.restore();
-        }
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, 0, width, this.contentHeight);
-        ctx.clip();
-        for (const guide of this.bracketGuides) {
-            const snap = (value: number): number => Math.round(value * dpr) / dpr;
-            // Keep the vertical stroke outside the bracket's cell, including at fractional DPI.
-            const x = snap(guide.column * cellWidth) - 1 / dpr;
-            const top =
-                guide.opening >= 0 ? this.rowY(guide.top + 1) - 1 / dpr : this.rowY(guide.top);
-            const bottom =
-                guide.closing >= 0
-                    ? this.rowY(guide.bottom + 1) - 1 / dpr
-                    : this.rowY(guide.bottom);
-            ctx.fillStyle = guide.color;
-            ctx.globalAlpha = guide.active ? 0.9 : 0.3;
-            ctx.fillRect(x, top, 1 / dpr, bottom - top);
-            if (guide.active) {
-                for (const [column, y] of [
-                    [guide.opening, top],
-                    [guide.closing, bottom]
-                ]) {
-                    if (column >= 0) {
-                        ctx.fillRect(
-                            x,
-                            y,
-                            Math.max(1 / dpr, snap((column + 1) * cellWidth) - x),
-                            1 / dpr
-                        );
-                    }
-                }
-            }
-        }
-        ctx.restore();
-        const cursor = this.scrollCursor ?? this.cursor;
-        ctx.save();
-        if (cursor.row < this.rows - 1) {
-            ctx.beginPath();
-            ctx.rect(0, 0, width, this.contentHeight);
-            ctx.clip();
-        }
-        if (
-            focused &&
-            !this.busy &&
-            /^(normal|insert|replace|visual)/.test(this.mode) &&
-            cursor.row >= 0 &&
-            cursor.row < this.rows
-        ) {
-            const y = this.rowY(cursor.row);
-            ctx.fillStyle = '#46515c';
-            ctx.fillRect(0, y, width, 1);
-            ctx.fillRect(0, y + cellHeight - 1, width, 1);
-        }
-        this.drawCursor(ctx, cellWidth, cellHeight, focused, cursorPosition);
-        ctx.restore();
-        return { cellWidth, cellHeight };
     }
 
-    private drawCursor(
-        ctx: CanvasRenderingContext2D,
-        cellWidth: number,
-        cellHeight: number,
-        focused: boolean,
-        position?: { row: number; column: number }
-    ): void {
-        const cursor = position ?? this.scrollCursor ?? this.cursor;
-        if (
-            !this.busy &&
-            !this.mode.startsWith('cmdline') &&
-            cursor.row >= 0 &&
-            cursor.row < this.rows &&
-            (!focused || this.cursorVisible)
-        ) {
-            const x = cursor.column * cellWidth;
-            const y = this.rowY(cursor.row);
-            ctx.fillStyle = '#f5f5f5';
-            ctx.strokeStyle = '#d4d4d4';
-            ctx.globalAlpha = focused ? this.cursorOpacity : 1;
-            if (!focused) {
-                ctx.strokeRect(x + 0.5, y + 1, cellWidth - 1, cellHeight - 2);
-            } else if (this.mode.startsWith('insert')) {
-                ctx.fillRect(x, y + 1, 2, cellHeight - 2);
-            } else {
-                ctx.globalAlpha *= 0.7;
-                ctx.fillRect(x, y + 1, cellWidth, cellHeight - 2);
-            }
-            ctx.globalAlpha = 1;
-        }
-    }
-}
-
-export function isAltGraph(event: Partial<Pick<KeyboardEvent, 'getModifierState'>>): boolean {
-    return event.getModifierState?.('AltGraph') === true;
-}
-
-export function vimKey(
-    event: Pick<
-        KeyboardEvent,
-        'key' | 'ctrlKey' | 'altKey' | 'shiftKey' | 'metaKey' | 'isComposing'
-    > &
-        Partial<Pick<KeyboardEvent, 'getModifierState'>>
-): string | null {
-    if (
-        event.isComposing ||
-        ['Shift', 'Control', 'Alt', 'AltGraph', 'Meta', 'Dead', 'Process', 'Unidentified'].includes(
-            event.key
-        )
-    ) {
-        return null;
+    get historyRows(): readonly Cell[][] {
+        return this.upperRows;
     }
 
-    const special: Record<string, string> = {
-        Escape: 'Esc',
-        Enter: 'CR',
-        Backspace: 'BS',
-        Delete: 'Del',
-        Tab: 'Tab',
-        ArrowUp: 'Up',
-        ArrowDown: 'Down',
-        ArrowLeft: 'Left',
-        ArrowRight: 'Right',
-        Home: 'Home',
-        End: 'End',
-        PageUp: 'PageUp',
-        PageDown: 'PageDown',
-        Insert: 'Insert'
-    };
-
-    const altGraph = isAltGraph(event);
-    const ctrlKey = event.ctrlKey && !altGraph;
-    const altKey = event.altKey && !altGraph;
-    let key = special[event.key] || event.key;
-    if (/^F\d+$/.test(key) || special[event.key] || ctrlKey || altKey || event.metaKey) {
-        if (key === ' ') {
-            key = 'Space';
-        }
-        const modifiers =
-            (ctrlKey ? 'C-' : '') +
-            (altKey ? 'M-' : '') +
-            (event.metaKey ? 'D-' : '') +
-            (event.shiftKey && (special[event.key] || /^F\d+$/.test(event.key) || ctrlKey || altKey)
-                ? 'S-'
-                : '');
-        return `<${modifiers}${key}>`;
+    get scrollOffset(): number {
+        return this.scrollPixels;
     }
-    return key === '<' ? '<LT>' : key;
 }

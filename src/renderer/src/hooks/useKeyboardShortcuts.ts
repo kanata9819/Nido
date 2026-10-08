@@ -1,6 +1,6 @@
 import type { Panel, Item } from '../types';
 import type { DebugAction, Workspace } from '../../../shared/types';
-import { isAltGraph } from '../grid';
+import { isAltGraph } from '../keyboard';
 import { useLayoutEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 

@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { isAltGraph, vimKey } from '../grid';
+import { isAltGraph, vimKey } from '../keyboard';
 
 interface UseEditorInputOptions {
     id: string;

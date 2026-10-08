@@ -1,6 +1,6 @@
 import { useI18n } from '../i18n';
 import { ArrowRight, FolderOpen, Leaf } from 'lucide-react';
-import styles from '../assets/Nido.module.css';
+import styles from '../assets/Welcome.module.css';
 
 export function WorkspaceWelcome({ onOpen }: { onOpen: () => void }): React.JSX.Element {
     const t = useI18n();

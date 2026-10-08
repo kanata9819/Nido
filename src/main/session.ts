@@ -15,6 +15,7 @@ import type {
 import { SessionFiles } from './sessionFiles';
 import { SessionEvents } from './sessionEvents';
 import { SessionClient } from './sessionClient';
+import { SessionInteraction } from './sessionInteraction';
 
 export class Session {
     terminal?: Session;
@@ -35,8 +36,7 @@ export class Session {
     private stopping?: Promise<void>;
     private attached = false;
     private uiQueue: Promise<void> = Promise.resolve();
-    private inputQueue: Promise<void> = Promise.resolve();
-    private scrollDetached = false;
+    private readonly interaction: SessionInteraction;
 
     private constructor(
         root: string,
@@ -83,6 +83,12 @@ export class Session {
                 });
             }
         });
+        this.interaction = new SessionInteraction(
+            this.client,
+            this.events,
+            this.workspace,
+            () => this.stopped
+        );
         this.fileService = new SessionFiles(this.workspace.root, this.client);
         this.client.on('notification', (method: string, args: unknown[]) => {
             this.events.receiveNotification(method, args);
@@ -205,7 +211,7 @@ export class Session {
     }
 
     async startTerminal(shell = 'auto'): Promise<void> {
-        const next = this.inputQueue.then(async () => {
+        return this.interaction.enqueue(async () => {
             await this.client.request('nvim_exec_lua', [
                 "require('nido_terminal').start(...)",
                 [shell]
@@ -223,8 +229,6 @@ export class Session {
             }
             throw new Error('Terminal input did not become ready.');
         });
-        this.inputQueue = next.catch(() => {});
-        return next;
     }
 
     async openTerminal(shell = 'auto'): Promise<Session> {
@@ -330,231 +334,43 @@ end`,
     }
 
     input(keys: string): Promise<void> {
-        // nvim_input can accept only part of a byte sequence when its input queue is full.
-        const next = this.inputQueue.then(async () => {
-            if (this.stopped) {
-                throw new Error('Neovim session is closed.');
-            }
-            await this.restoreScroll();
-            // Native completion bypasses insert mappings for Ctrl+N/P and inserts previews.
-            if (
-                !this.events.hasInputPrompt &&
-                (keys === '<C-n>' || keys === '<C-p>') &&
-                (await this.client.request('nvim_eval', ['pumvisible()']))
-            ) {
-                keys = keys === '<C-n>' ? '<Down>' : '<Up>';
-            }
-            if (this.workspace.kind === 'terminal' && !this.events.hasInputPrompt) {
-                await this.client.request('nvim_command', ['startinsert']);
-            }
-            let remainingInput = Buffer.from(keys);
-            while (remainingInput.length && !this.stopped) {
-                const acceptedBytes = (await this.client.request('nvim_input', [
-                    remainingInput.toString()
-                ])) as number;
-                remainingInput = remainingInput.subarray(acceptedBytes);
-                if (acceptedBytes === 0) {
-                    await new Promise((done) => setTimeout(done, 2));
-                }
-            }
-        });
-        this.inputQueue = next.catch(() => {});
-        return next;
+        return this.interaction.input(keys);
     }
 
     inputMode(): Promise<string> {
-        // A deferred API request observes preceding input after Neovim has processed it.
-        const next = this.inputQueue.then(async () => {
-            if (this.stopped) {
-                throw new Error('Neovim session is closed.');
-            }
-            let completed = false;
-            let result = '';
-            let failure: unknown;
-            const deferred = this.client.request('nvim_eval', ['mode(1)']).then(
-                (value) => {
-                    result = value as string;
-                    completed = true;
-                },
-                (error) => {
-                    failure = error;
-                    completed = true;
-                }
-            );
-            while (!completed) {
-                // A deferred request cannot finish while r/f/getchar waits for its next key.
-                // The fast API stays available; let that key through instead of deadlocking.
-                const mode = (await this.client.request('nvim_get_mode', [])) as {
-                    mode: string;
-                    blocking: boolean;
-                };
-                if (mode.blocking) {
-                    return mode.mode === 'n' ? 'pending' : mode.mode;
-                }
-                if (!completed) {
-                    await new Promise((resolve) => setTimeout(resolve, 1));
-                }
-            }
-            await deferred;
-            if (failure) {
-                throw failure;
-            }
-            return result;
-        });
-        this.inputQueue = next.then(
-            () => {},
-            () => {}
-        );
-        return next;
+        return this.interaction.inputMode();
     }
 
     selectCompletion(index: number): Promise<void> {
-        const next = this.inputQueue.then(async () => {
-            await this.client.request('nvim_select_popupmenu_item', [index, false, false, {}]);
-        });
-        this.inputQueue = next.catch(() => {});
-        return next;
+        return this.interaction.selectCompletion(index);
     }
 
     click(row: number, column: number): Promise<void> {
-        const next = this.inputQueue.then(async () => {
-            this.events.beginScrollBatch();
-            try {
-                // Mouse coordinates refer to the visible viewport, not the pre-scroll editing anchor.
-                await this.client.request('nvim_exec_lua', [
-                    "require('nido_scroll').restore(true)",
-                    []
-                ]);
-                // Restore the keyboard cursor margin and pixel offset before the next input.
-                this.scrollDetached = true;
-                await this.client.request('nvim_input_mouse', [
-                    'left',
-                    'press',
-                    '',
-                    1,
-                    row,
-                    column
-                ]);
-                await this.client.request('nvim_input_mouse', [
-                    'left',
-                    'release',
-                    '',
-                    1,
-                    row,
-                    column
-                ]);
-                await this.client.request('nvim_eval', ['1']);
-            } finally {
-                this.events.endScrollBatch();
-            }
-        });
-        this.inputQueue = next.catch(() => {});
-        return next;
+        return this.interaction.click(row, column);
     }
 
     jumpSticky(window: number, buffer: number, line: number): Promise<void> {
-        const next = this.inputQueue.then(async () => {
-            this.events.beginScrollBatch();
-            try {
-                const moved = await this.client.request('nvim_exec_lua', [
-                    "return require('nido_sticky').jump(...)",
-                    [window, buffer, line]
-                ]);
-                if (moved) {
-                    this.scrollDetached = false;
-                }
-                await this.client.request('nvim_eval', ['1']);
-            } finally {
-                this.events.endScrollBatch();
-            }
-        });
-        this.inputQueue = next.catch(() => {});
-        return next;
+        return this.interaction.jumpSticky(window, buffer, line);
     }
 
     paste(text: string): Promise<void> {
-        const next = this.inputQueue.then(async () => {
-            if (this.stopped) {
-                throw new Error('Neovim session is closed.');
-            }
-            await this.restoreScroll();
-            if (this.workspace.kind === 'terminal') {
-                await this.client.request('nvim_command', ['startinsert']);
-            }
-            await this.client.request('nvim_paste', [text, true, -1]);
-        });
-        this.inputQueue = next.catch(() => {});
-        return next;
+        return this.interaction.paste(text);
     }
 
     async save(format = false): Promise<void> {
-        await this.write('write', format);
+        await this.interaction.write('write', format);
     }
 
-    private async restoreScroll(): Promise<void> {
-        if (!this.scrollDetached) {
-            return;
-        }
-        await this.client.request('nvim_exec_lua', ["require('nido_scroll').restore()", []]);
-        this.scrollDetached = false;
+    prefetchScroll(): Promise<void> {
+        return this.interaction.prefetchScroll();
     }
 
-    async prefetchScroll(): Promise<void> {
-        const next = this.inputQueue.then(async () => {
-            // This fast RPC remains available while Neovim waits for the rest of a command.
-            const mode = (await this.client.request('nvim_get_mode', [])) as {
-                mode: string;
-                blocking: boolean;
-            };
-            if ((mode.mode !== 'n' && mode.mode !== 'i') || mode.blocking) {
-                return;
-            }
-            this.events.beginScrollBatch();
-            try {
-                await this.client.request('nvim_exec_lua', [
-                    "require('nido_scroll').prefetch()",
-                    []
-                ]);
-                await this.client.request('nvim_eval', ['1']);
-            } finally {
-                this.events.endScrollBatch();
-            }
-        });
-        this.inputQueue = next.catch(() => {});
-        return next;
-    }
-
-    async scroll(lines: number, follow = true, pixel = false): Promise<void> {
-        if (!lines) {
-            return;
-        }
-        const next = this.inputQueue.then(async () => {
-            this.scrollDetached = true;
-            this.events.beginScrollBatch();
-            try {
-                if (this.workspace.kind === 'terminal') {
-                    await this.client.request('nvim_command', ['stopinsert']);
-                }
-                const changed = await this.client.request('nvim_exec_lua', [
-                    "return require('nido_scroll').scroll(...)",
-                    [lines, follow, pixel]
-                ]);
-                // Neovim emits cursor/WinScrolled updates when the Lua request returns to its event loop.
-                // Pure fractional offsets have no editor updates to wait for.
-                if (changed) {
-                    await this.client.request('nvim_eval', ['1']);
-                }
-            } finally {
-                // Publish the grid, fractional offset and anchored cursor as one frame, even for sub-line deltas.
-                this.events.endScrollBatch();
-            }
-        });
-        this.inputQueue = next.catch(() => {});
-        return next;
+    scroll(lines: number, follow = true, pixel = false): Promise<void> {
+        return this.interaction.scroll(lines, follow, pixel);
     }
 
     async debug(action: DebugAction, target?: number): Promise<void> {
-        await this.restoreScroll();
+        await this.interaction.restoreScroll();
         const [channel] = (await this.client.request('nvim_get_api_info', [])) as [number, unknown];
         await this.client.request('nvim_exec_lua', [
             "require('nido_debug').action(...)",
@@ -567,7 +383,7 @@ end`,
     }
 
     async snapshot(): Promise<SavedWorkspace> {
-        await this.restoreScroll();
+        await this.interaction.restoreScroll();
         if (this.workspace.kind === 'terminal') {
             return { root: this.workspace.root, kind: 'terminal', files: [], current: '' };
         }
@@ -657,47 +473,7 @@ return false`,
     }
 
     async saveAll(): Promise<void> {
-        await this.write('wall');
-    }
-
-    private write(command: 'write' | 'wall', format = false): Promise<void> {
-        // Saving must follow committed input and precede any subsequently queued edits.
-        const next = this.inputQueue.then(async () => {
-            if (this.stopped) {
-                throw new Error('Neovim session is closed.');
-            }
-            await this.restoreScroll();
-            const writing = this.client
-                .request('nvim_exec_lua', [
-                    `local command, format = ...
-local ok, err = pcall(function()
-  if format and #vim.lsp.get_clients({bufnr=0, method='textDocument/formatting'}) > 0 then
-    vim.lsp.buf.format({bufnr=0, async=false, timeout_ms=3000})
-  end
-  vim.cmd({cmd=command, mods={silent=true}})
-end)
-return ok and "" or tostring(err)`,
-                    [command, format]
-                ])
-                .then((error) => {
-                    if (error) {
-                        throw new Error(error as string);
-                    }
-                });
-            // A deferred write cannot complete while r/f/getchar waits for its next key.
-            // Let that key through while still returning the write's actual completion.
-            void writing.catch(() => {});
-            const mode = (await this.client.request('nvim_get_mode', [])) as { blocking: boolean };
-            if (!mode.blocking) {
-                await writing;
-            }
-            return { writing };
-        });
-        this.inputQueue = next.then(
-            () => {},
-            () => {}
-        );
-        return next.then(({ writing }) => writing);
+        await this.interaction.write('wall');
     }
 
     async selectBuffer(buffer: number): Promise<void> {
@@ -750,7 +526,7 @@ return ok and "" or tostring(err)`,
         if (!problem || version !== this.state.diagnosticsVersion) {
             throw new Error('Problems have changed. Select the item again.');
         }
-        await this.restoreScroll();
+        await this.interaction.restoreScroll();
         await this.client.request('nvim_exec_lua', [
             `local path, line, column = ...
 vim.cmd("normal! m'")

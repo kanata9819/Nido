@@ -1,0 +1,135 @@
+.debugPanel {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border-top: 1px solid var(--ui-border-strong, #34383c);
+    background: var(--surface-panel, #17191b);
+    font-size: 12px;
+}
+.debugToolbar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.debugPanel:focus-within {
+    border-top-color: var(--ui-accent, #a8cf9e);
+}
+.debugPanel button:focus-visible {
+    outline: 1px solid var(--ui-accent, #a8cf9e);
+    outline-offset: 2px;
+    background: #303b31;
+}
+.debugPanel [data-debug-target] {
+    padding: 4px 10px;
+    margin: 5px;
+    border: 1px solid #46515c;
+    border-radius: 4px;
+}
+.debugToolbar button {
+    color: #bfd8b6;
+    padding: 4px;
+}
+.debugToolbar button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+.debugLocation {
+    color: #e2ca86;
+    margin-top: 6px;
+}
+.debugDetails {
+    display: flex;
+    flex-direction: column;
+    height: clamp(220px, 34vh, 440px);
+    gap: 8px;
+    margin-top: 6px;
+}
+.debugVariables,
+.debugConsole {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border: 1px solid #30363b;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.debugVariables {
+    flex: 2;
+}
+.debugConsole {
+    flex: 1;
+}
+.debugHeading {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 8px;
+    background: #20252a;
+    flex-shrink: 0;
+}
+.debugHeading small {
+    color: #9aa5ae;
+}
+.debugColumns,
+.debugVariable {
+    display: grid;
+    grid-template-columns: minmax(140px, 1fr) minmax(160px, 2fr) minmax(100px, 1fr);
+    align-items: center;
+    text-align: left;
+    width: 100%;
+}
+.debugColumns {
+    padding: 4px 8px;
+    color: #9aa5ae;
+}
+.debugVariableScroll {
+    overflow: auto;
+    min-height: 0;
+}
+.debugScope {
+    padding: 4px 8px;
+    color: #cbd2d8;
+    background: #24292e;
+}
+.debugVariable {
+    min-height: 25px;
+    border-bottom: 1px solid #24292e;
+}
+.debugVariable > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 3px 6px;
+}
+.debugName {
+    color: #9cdcfe;
+}
+.debugValue {
+    color: #ce9178;
+}
+.debugType {
+    color: #4ec9b0;
+}
+.debugVariable[data-changed] .debugValue {
+    color: #e2ca86;
+    background: #e2ca8614;
+}
+.debugVariable:hover,
+.debugVariable[aria-selected='true']:focus {
+    background: #25394a;
+}
+.debugPanel .debugVariable:focus-visible {
+    outline-offset: -1px;
+}
+.debugVariableScroll p {
+    padding: 0 8px;
+    color: #9aa5ae;
+}
+.debugDetails pre {
+    overflow: auto;
+    padding: 6px 8px;
+    min-height: 0;
+    white-space: pre-wrap;
+    margin: 0;
+    flex: 1;
+}

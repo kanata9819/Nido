@@ -109,12 +109,14 @@ pnpm exec playwright test tests/update.spec.ts
 
 ## コードの責務
 
-- `App.tsx`：画面全体の構成とパネル・フォーカスの連携。表示部品は `components/`、設定のセッション反映は `useSessionSettings.ts`。
+- `App.tsx`：画面全体の構成とフォーカスの連携。ワークスペース操作は `useWorkspaceActions.ts`、下部パネルの開閉・フォーカス要求は `useBottomPanels.ts`、参照・デバッガの配置は `WorkspacePanels.tsx`。設定のセッション反映は `useSessionSettings.ts`。
 - `Sidebar.tsx`：ツリー表示とリサイズ。ファイル一覧・展開・ファイル操作は `useExplorer.ts`、移動キーは `sidebarKeyboard.ts`。
-- `Editor.tsx`：入力とエディタ領域。描画は `useEditorRendering.ts`、スクロールの送信待ち・描画待ちは `scroll.ts` の `ScrollQueue`。
+- `Editor.tsx`：入力とエディタ領域。`useEditorRendering.ts` は描画フレームとイベント購読の連携、`editorScroll.ts` はスクロール送信・描画待ち・先読み、`editorCursor.ts` はカーソル移動と点滅、`editorMotion.ts` はスクロール・行削除のフレーム合成を担当します。
+- `grid.ts`：Neovimの描画命令をセル・色・行の位置へ反映。`gridCanvas.ts` はCanvas描画と行画像のキャッシュ、`keyboard.ts` はキーイベントからNeovim入力への変換を担当します。
+- `assets/*.module.css`：部品ごとのスタイル。`Nido.module.css` は画面の骨格・タブ・サイドバー、`Palette.module.css` はコマンド・フォルダー・ファイル操作のダイアログ、ほかは対応する表示部品が所有します。
 - `NeovimUI.tsx`：コマンド入力・補完・メッセージ・履歴・確認待ちの表示。`ext_cmdline` / `ext_messages` を `SessionEvents` と `shared/neovimUI.ts` で受け、Nidoのカードへ反映します。編集とキー操作はNeovimが担当し、メッセージ本文は `Alt+Shift+M` でフォーカスできます。
 - `GitBrowser.tsx`：Git画面の状態とデータ取得。リストは `GitBrowserList.tsx`、詳細は `GitDetails.tsx`、キー操作は `useGitBrowserKeyboard.ts`。
-- `Session`：Neovimプロセスと入力・終了の管理。通知と描画フレームは `SessionEvents`、ファイル操作は `SessionFiles`。
+- `Session`：Neovimプロセスの起動・終了と公開操作の窓口。入力・保存・スクロールの順序と編集位置は `SessionInteraction`、通知と描画フレームは `SessionEvents`、ファイル操作は `SessionFiles`。ターミナル起動も同じ入力キューを使います。
 - `handlers.ts`：IPCの送信元検証とエディタ操作。ワークスペースの保存・復元・終了は `workspaceHandlers.ts`、Git操作は `gitHandlers.ts`。
 
 ## コードを読む順番

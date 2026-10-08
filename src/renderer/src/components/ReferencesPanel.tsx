@@ -3,7 +3,7 @@ import { useI18n } from '../i18n';
 import { createPortal } from 'react-dom';
 import type { ReferenceList, ReferencePreview } from '../../../shared/types';
 import FileIcon from './FileIcon';
-import styles from '../assets/Nido.module.css';
+import styles from '../assets/ReferencesPanel.module.css';
 
 interface Props {
     workspaceId: string;

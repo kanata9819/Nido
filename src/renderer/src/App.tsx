@@ -1,7 +1,7 @@
 import { LanguageContext, useI18n } from './i18n';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-import type { FavoriteWorkspace, FileEntry, SessionState } from '../../shared/types';
+import type { FileEntry, SessionState } from '../../shared/types';
 import type { Panel } from './types';
 import Editor from './Editor';
 import TerminalPanel from './components/TerminalPanel';
@@ -10,11 +10,12 @@ import NavigationRail from './components/NavigationRail';
 // import FeaturesPage from './components/FeaturesPage';
 import { useSessionSettings } from './hooks/useSessionSettings';
 import Sidebar from './Sidebar';
-import DebugPanel from './components/DebugPanel';
 import FileHeader from './components/FileHeader';
 import KeyboardGuide from './components/KeyboardGuide';
 import { Panel as PanelComponent } from './components/Panel';
-import ReferencesPanel from './components/ReferencesPanel';
+import WorkspacePanels from './components/WorkspacePanels';
+import { useBottomPanels } from './hooks/useBottomPanels';
+import { useWorkspaceActions } from './hooks/useWorkspaceActions';
 import StatusBar from './components/StatusBar';
 import TitleBar from './components/TitleBar';
 import { Welcome, WorkspaceWelcome } from './components/Welcome';
@@ -62,7 +63,6 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     const [selection, setSelection] = useState(0);
     const [fileList, setFileList] = useState<FileEntry[]>([]);
     const [loading, setLoading] = useState(false);
-    const [creating, setCreating] = useState(false);
     const [errorNotice, setErrorNotice] = useState<{ message: string }>();
     const error = errorNotice?.message || '';
     const setError = useCallback(
@@ -106,13 +106,6 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         busy: savingFavorite,
         toggleFavorite
     } = useFavoriteWorkspaces(report);
-    const [debugVisible, setDebugVisible] = useState(false);
-    const [debugFocusTick, setDebugFocusTick] = useState(0);
-    const [referencesVisible, setReferencesVisible] = useState(false);
-    const [referencesFocusTick, setReferencesFocusTick] = useState(0);
-    const [bottomPanel, setBottomPanel] = useState<'debug' | 'references' | 'terminal'>('debug');
-    const [terminalVisible, setTerminalVisible] = useState(false);
-    const [terminalFocusTick, setTerminalFocusTick] = useState(0);
     const [focusTick, setFocusTick] = useState(0);
     const {
         theme,
@@ -143,53 +136,6 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     const modal = useRef<HTMLDivElement>(null);
     const state = states[active] || defaultState;
     const gitFiles = useGitFileStatus(active, state.buffers, panel);
-    const hasDebugger = !!state.debug;
-    const referenceVersion = state.references?.version;
-    const referencesLoading = state.references?.loading;
-    const debugStatus = state.debug?.status;
-    const [previousPanelState, setPreviousPanelState] = useState({
-        active,
-        referenceVersion,
-        referencesLoading,
-        hasDebugger,
-        debugStatus
-    });
-    const workspaceChanged = previousPanelState.active !== active;
-    const referencesChanged =
-        workspaceChanged ||
-        previousPanelState.referenceVersion !== referenceVersion ||
-        previousPanelState.referencesLoading !== referencesLoading;
-    const debuggerChanged = workspaceChanged || previousPanelState.hasDebugger !== hasDebugger;
-    const debugStatusChanged = workspaceChanged || previousPanelState.debugStatus !== debugStatus;
-    // Reset only when the session's panel signals change, before committing the next UI.
-    if (referencesChanged || debuggerChanged || debugStatusChanged) {
-        setPreviousPanelState({
-            active,
-            referenceVersion,
-            referencesLoading,
-            hasDebugger,
-            debugStatus
-        });
-        if (referencesChanged && state.references) {
-            setBottomPanel('references');
-            setReferencesVisible(true);
-            setReferencesFocusTick((value) => value + 1);
-        }
-        if (debuggerChanged && hasDebugger) {
-            setDebugVisible(true);
-        }
-        // Stepping or continuing a paused session preserves the user's panel visibility.
-        if (
-            debugStatusChanged &&
-            (debugStatus === 'building' ||
-                (debugStatus === 'running' &&
-                    (workspaceChanged || previousPanelState.debugStatus !== 'paused')))
-        ) {
-            setBottomPanel('debug');
-            setDebugVisible(true);
-        }
-    }
-
     const workspace = workspaces.find((w) => w.id === active);
     const decorations = useMemo(
         () => fileDecorations(workspace?.root || '', gitFiles, state.diagnostics, state.problems),
@@ -206,11 +152,6 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         }
     }, [panel, active]);
 
-    const closeReferences = (): void => {
-        setReferencesVisible(false);
-        focusEditor();
-    };
-
     const run = useCallback(
         (promise: Promise<unknown>): void => {
             void promise.catch((e) => report(String(e)));
@@ -218,59 +159,46 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         [report]
     );
 
-    const showTerminal = (): void => {
-        if (!active) {
-            return;
-        }
-        if (workspace?.kind === 'terminal') {
-            focusEditor();
-            return;
-        }
-        setLeader(false);
-        if (workspace?.terminalId) {
-            setBottomPanel('terminal');
-            setTerminalVisible(true);
-            setTerminalFocusTick((value) => value + 1);
-            return;
-        }
-        const owner = active;
-        run(
-            window.nido.openTerminal(owner, settings.terminalShell).then((terminal) => {
-                setWorkspaces((old) =>
-                    old.map((w) => (w.id === owner ? { ...w, terminalId: terminal.id } : w))
-                );
-                setBottomPanel('terminal');
-                setTerminalVisible(true);
-                setTerminalFocusTick((value) => value + 1);
-            })
-        );
-    };
+    const panels = useBottomPanels({
+        active,
+        workspace,
+        state,
+        terminalShell: settings.terminalShell,
+        setWorkspaces,
+        focusEditor,
+        dismissLeader: () => setLeader(false),
+        closeOverlay: () => {
+            setLeader(false);
+            setPanel(null);
+        },
+        run
+    });
+    const { toggleTerminal, restartShell, closeReferences, openDebugger } = panels;
 
-    const toggleTerminal = (): void => {
-        if (terminalVisible && bottomPanel === 'terminal' && workspace?.kind !== 'terminal') {
-            setTerminalVisible(false);
-            focusEditor();
-        } else {
-            showTerminal();
-        }
-    };
-
-    const restartShell = (id: string): void => {
-        run(
-            window.nido.restartTerminal(id, settings.terminalShell).then(() => {
-                if (id === active) {
-                    focusEditor();
-                } else {
-                    setTerminalFocusTick((value) => value + 1);
-                }
-            })
-        );
-    };
-
-    const activate = (id: string): void => {
-        setActive(id);
-        focusEditor();
-    };
+    const {
+        creating,
+        create,
+        activate,
+        openWorkspace,
+        openFavorite,
+        nextWorkspace,
+        moveWorkspace,
+        closeWorkspace
+    } = useWorkspaceActions({
+        workspaces,
+        active,
+        restoring,
+        terminalShell: settings.terminalShell,
+        setWorkspaces,
+        setActive,
+        focusEditor,
+        requestEditorFocus: () => setFocusTick((value) => value + 1),
+        dismissLeader: () => setLeader(false),
+        showFolders: () => setPanel('folders'),
+        closeOverlay: () => setPanel(null),
+        report,
+        run
+    });
 
     useEffect(() => {
         if (panel !== 'files' || !active) {
@@ -299,87 +227,12 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         };
     }, [panel, active, report]);
 
-    const create = async (): Promise<void> => {
-        if (creating) {
-            return;
-        }
-        setLeader(false);
-        setPanel('folders');
-    };
-
-    const openWorkspace = async (path: string, kind: 'editor' | 'terminal'): Promise<void> => {
-        if (creating || restoring) {
-            return;
-        }
-        setCreating(true);
-        setLeader(false);
-
-        try {
-            const added = await window.nido.createWorkspace(path, kind, settings.terminalShell);
-            if (added) {
-                setWorkspaces((old) => [...old, added]);
-                setActive(added.id);
-                setPanel(null);
-            }
-        } catch (e) {
-            report(String(e));
-        } finally {
-            setCreating(false);
-            setFocusTick((n) => n + 1);
-        }
-    };
-
-    const openFavorite = async (favorite: FavoriteWorkspace): Promise<void> => {
-        const opened = workspaces.find(
-            (w) => w.root === favorite.root && (w.kind || 'editor') === favorite.kind
-        );
-        if (opened) {
-            activate(opened.id);
-        } else {
-            await openWorkspace(favorite.root, favorite.kind);
-        }
-    };
-
-    const nextWorkspace = (offset: number): void => {
-        if (!workspaces.length) {
-            return;
-        }
-        activate(
-            workspaces[
-                (workspaces.findIndex((w) => w.id === active) + offset + workspaces.length) %
-                    workspaces.length
-            ].id
-        );
-    };
-
-    const moveWorkspace = (offset: number): void => {
-        setWorkspaces((old) => {
-            const index = old.findIndex((w) => w.id === active);
-            const target = index + offset;
-            if (target < 0 || target >= old.length) {
-                return old;
-            }
-            const next = [...old];
-            [next[index], next[target]] = [next[target], next[index]];
-            return next;
-        });
-        focusEditor();
-    };
-
     const openFile = useCallback(
         (path: string): void => {
             run(window.nido.openFile(active, path).then(focusEditor));
         },
         [active, run, focusEditor]
     );
-
-    const closeWorkspace = (id: string): void => {
-        run(
-            window.nido.closeWorkspace(id).then(() => {
-                setFocusTick((n) => n + 1);
-            })
-        );
-    };
 
     const showPanel = (value: Panel): void => {
         setLeader(false);
@@ -407,13 +260,6 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     };
 
     const save = (): void => run(window.nido.save(active, formatOnSave));
-    const openDebugger = (): void => {
-        setLeader(false);
-        setPanel(null);
-        setBottomPanel('debug');
-        setDebugVisible(true);
-        setDebugFocusTick((value) => value + 1);
-    };
     const { commands, filtered } = buildItems(
         active,
         panel,
@@ -455,21 +301,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         },
         toggleTerminal,
         closeReferences,
-        showDebugger: () => {
-            setLeader(false);
-            if (
-                bottomPanel === 'terminal' ||
-                workspace?.kind === 'terminal' ||
-                (workspace?.terminalId && !state.debug && !state.references)
-            ) {
-                showTerminal();
-            } else if (bottomPanel === 'references' && state.references) {
-                setReferencesVisible(true);
-                setReferencesFocusTick((value) => value + 1);
-            } else {
-                openDebugger();
-            }
-        },
+        showDebugger: panels.showDebugger,
         panel,
         leader,
         error,
@@ -603,59 +435,28 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                                     name={w.name}
                                     active={
                                         w.id === active &&
-                                        terminalVisible &&
-                                        bottomPanel === 'terminal'
+                                        panels.terminalVisible &&
+                                        panels.bottomPanel === 'terminal'
                                     }
                                     blocked={!!panel || leader}
-                                    focusTick={terminalFocusTick}
+                                    focusTick={panels.terminalFocusTick}
                                     settings={settings}
                                     restartShell={restartShell}
                                     onError={report}
-                                    onClose={() => {
-                                        setTerminalVisible(false);
-                                        focusEditor();
-                                    }}
+                                    onClose={panels.closeTerminal}
                                 />
                             ))}
                     </div>
                     {/* {panel === 'features' && <FeaturesPage onClose={focusEditor} />} */}
                 </main>
             </div>
-            {active && state.references && (
-                <ReferencesPanel
-                    key={active}
-                    workspaceId={active}
-                    state={state.references}
-                    root={workspace?.root || ''}
-                    visible={referencesVisible && bottomPanel === 'references'}
-                    focusTick={referencesFocusTick}
-                    animations={animations}
-                    onClose={closeReferences}
-                    onOpen={(index) =>
-                        run(
-                            window.nido
-                                .openReference(active, index, state.references!.version)
-                                .then(focusEditor)
-                        )
-                    }
-                />
-            )}
-            {active &&
-                workspace?.kind !== 'terminal' &&
-                debugVisible &&
-                bottomPanel === 'debug' && (
-                    <DebugPanel
-                        state={state.debug}
-                        focusTick={debugFocusTick}
-                        onClose={() => {
-                            setDebugVisible(false);
-                            focusEditor();
-                        }}
-                        action={(action, target) => {
-                            run(window.nido.debug(active, action, target));
-                        }}
-                    />
-                )}
+            <WorkspacePanels
+                active={active}
+                workspace={workspace}
+                state={state}
+                panels={panels}
+                animations={animations}
+            />
             <StatusBar
                 onSearch={(key) => {
                     run(window.nido.input(active, '<Esc>' + key));
@@ -666,15 +467,8 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                 state={state}
                 sessionCount={workspaces.length}
                 onToggleTerminal={toggleTerminal}
-                onToggleDebugger={() => {
-                    setBottomPanel('debug');
-                    setDebugVisible(bottomPanel !== 'debug' || !debugVisible);
-                }}
-                onToggleReferences={() => {
-                    setBottomPanel('references');
-                    setReferencesVisible(bottomPanel !== 'references' || !referencesVisible);
-                    setReferencesFocusTick((value) => value + 1);
-                }}
+                onToggleDebugger={panels.toggleDebugger}
+                onToggleReferences={panels.toggleReferences}
                 onLineEnding={(format) => {
                     run(window.nido.setLineEnding(active, format));
                     focusEditor();

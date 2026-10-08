@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import prose from '../assets/TypeInformation.module.css';
-import styles from '../assets/Nido.module.css';
+import styles from '../assets/MarkdownPreview.module.css';
 
 export default function MarkdownPreview({
     workspaceId

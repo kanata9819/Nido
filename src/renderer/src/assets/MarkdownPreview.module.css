@@ -1,0 +1,30 @@
+.markdownPreview {
+    min-height: 0;
+    flex: 1;
+    overflow: auto;
+    padding: 32px clamp(20px, 5vw, 64px);
+    background: #12171b;
+    overscroll-behavior: contain;
+}
+.markdownPreview article {
+    max-width: 760px;
+    margin: auto;
+    font-size: 14px;
+    line-height: 1.85;
+}
+.markdownPreview article h1 {
+    font-size: 28px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #ffffff20;
+}
+.markdownPreview article h2 {
+    font-size: 21px;
+}
+.markdownPreview pre {
+    padding: 16px;
+    overflow-x: auto;
+    background: #1b2025;
+    border: 1px solid #ffffff0b;
+    border-radius: 8px;
+    font-size: 13px;
+}

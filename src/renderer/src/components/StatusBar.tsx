@@ -1,7 +1,8 @@
+import progressStyles from '../assets/Progress.module.css';
 import { useI18n } from '../i18n';
 import { Code2, Search, ChevronUp, ChevronDown, X } from 'lucide-react';
 import type { Workspace, SessionState } from '../../../shared/types';
-import styles from '../assets/Nido.module.css';
+import styles from '../assets/StatusBar.module.css';
 
 interface StatusBarProps {
     active: string;
@@ -113,7 +114,7 @@ export default function StatusBar({
             <span className={styles.statusGap} />
             {state.lspProgress && (
                 <span className={styles.lspProgress} role="status" title={state.lspProgress}>
-                    <span className={styles.progressSpinner} aria-hidden="true" />
+                    <span className={progressStyles.progressSpinner} aria-hidden="true" />
                     <span>{state.lspProgress}</span>
                 </span>
             )}

@@ -1,0 +1,87 @@
+.welcome {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+}
+.welcomeMark {
+    width: 88px;
+    height: 88px;
+    display: grid;
+    place-items: center;
+    color: var(--ui-accent, #a3cc94);
+    border: 1px solid #a3cc9420;
+    border-radius: 26px;
+    background: var(--ui-accent-soft, #a3cc9406);
+    margin-bottom: 27px;
+}
+.workspaceWelcome {
+    position: absolute;
+    inset: 0 0 36px;
+    background: var(--surface-editor, #141414);
+    overflow: auto;
+}
+.eyebrow {
+    font-size: 10px;
+    letter-spacing: 2.4px;
+    color: #8ea58a !important;
+    margin-bottom: 10px !important;
+}
+.welcome h1 {
+    font-weight: 450;
+    font-size: 33px;
+    letter-spacing: -0.7px;
+    margin: 0 0 14px;
+}
+.welcome p {
+    line-height: 1.9;
+    text-align: center;
+    color: #8996a3;
+    margin: 0;
+}
+.primary {
+    margin-top: 29px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--ui-accent, #a3cc94);
+    border: 1px solid #b9d9ad;
+    color: #1a2c20;
+    padding: 12px 18px;
+    border-radius: 7px;
+    font-weight: 600;
+}
+.primary:hover {
+    background: var(--ui-accent-hover, #b1d6a4);
+}
+.welcomeKeys {
+    display: flex;
+    gap: 24px;
+    font-size: 11px;
+    color: #7d8b97;
+    margin-top: 26px;
+}
+.welcomeKeys kbd {
+    margin-right: 7px;
+    font-size: 10px;
+}
+.welcomeNote {
+    font-size: 11px;
+    margin-top: 65px;
+    color: #677682;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.welcomeNote .liveDot {
+    width: 5px;
+    height: 5px;
+}
+.liveDot {
+    display: inline-block;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--ui-accent, #a3cc94);
+}

@@ -1,7 +1,7 @@
 import { useI18n } from '../i18n';
 import type { TerminalShell, UITheme } from '../../../shared/types';
 import type { EditorSettings } from '../hooks/useEditorSettings';
-import styles from '../assets/Nido.module.css';
+import styles from '../assets/SettingsPanel.module.css';
 import type { Language } from '../../../shared/i18n';
 
 export type SettingsPanelProps = Omit<EditorSettings, 'sidebarWidth' | 'resizeSidebar'>;

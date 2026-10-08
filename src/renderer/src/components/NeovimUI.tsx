@@ -15,7 +15,8 @@ import {
 } from '../../../shared/neovimUI';
 import { useI18n } from '../i18n';
 import { color } from '../gridColors';
-import { vimKey, type Grid } from '../grid';
+import { type Grid } from '../grid';
+import { vimKey } from '../keyboard';
 import styles from '../assets/NeovimUI.module.css';
 
 // Keep the existing IME textarea aligned with the external command cursor.
