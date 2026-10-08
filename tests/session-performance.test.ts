@@ -236,12 +236,23 @@ test('fractional gestures publish every offset without native repaints and prese
         await session.scroll(0.125, false, true);
         await session.client.request('nvim_exec_lua', [
             `
-            vim.wait(100,function() return false end,10)
+            local scroll=require('nido_scroll')
+            local original_scroll=scroll.scroll
             local original=vim.cmd.redraw
+            local scrolling=false
             vim.g.test_scroll_repaints=0
+            -- Deferred sticky-header redraws are independent of the scroll operation.
             vim.cmd.redraw=function(...)
-                vim.g.test_scroll_repaints=vim.g.test_scroll_repaints+1
+                if scrolling then
+                    vim.g.test_scroll_repaints=vim.g.test_scroll_repaints+1
+                end
                 return original(...)
+            end
+            scroll.scroll=function(...)
+                scrolling=true
+                local changed=original_scroll(...)
+                scrolling=false
+                return changed
             end
         `,
             []

@@ -2440,12 +2440,13 @@ test('Problems can be selected, filtered, opened and cleared with the keyboard',
 
 async function chooseWorkspace(page: Page, path: string, navigate = false): Promise<void> {
     const canonicalPath = await realpath(path);
-    await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
-        'aria-busy',
-        'false'
-    );
-    await page.getByRole('textbox', { name: 'Folder path' }).fill(path);
-    await page.keyboard.press('Enter');
+    const folders = page.getByRole('listbox', { name: 'Folders' });
+    await expect(folders).toHaveAttribute('aria-busy', 'false');
+    // Initial folder loading focuses the list on its next animation frame.
+    await expect(folders).toBeFocused();
+    const address = page.getByRole('textbox', { name: 'Folder path' });
+    await address.fill(path);
+    await address.press('Enter');
     await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
         'aria-busy',
         'false'
