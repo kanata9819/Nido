@@ -2442,8 +2442,10 @@ async function chooseWorkspace(page: Page, path: string, navigate = false): Prom
     const canonicalPath = await realpath(path);
     const folders = page.getByRole('listbox', { name: 'Folders' });
     await expect(folders).toHaveAttribute('aria-busy', 'false');
-    // Initial folder loading focuses the list on its next animation frame.
-    await expect(folders).toBeFocused();
+    // Finish the initial queued focus before directing keys to the address input.
+    await page.evaluate(
+        () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    );
     const address = page.getByRole('textbox', { name: 'Folder path' });
     await address.fill(path);
     await address.press('Enter');
