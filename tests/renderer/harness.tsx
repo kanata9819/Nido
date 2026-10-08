@@ -60,6 +60,7 @@ const defaults: Record<string, unknown> = {
     favoriteWorkspaces: [],
     restoreWorkspaces: { workspaces: [workspace], active: 'alpha', errors: [] },
     files: [],
+    findFiles: [],
     inputMode: 'n',
     gitStatus: {
         root: '/alpha',

@@ -40,6 +40,7 @@ test('global shortcuts leave AltGr input available to the editor', () => {
             value: {
                 activeElement: {
                     closest: (): null => null,
+                    hasAttribute: (): boolean => false,
                     getAttribute: (name: string): string =>
                         name === 'data-editor-input' ? 'editor' : 'Neovim input'
                 }
