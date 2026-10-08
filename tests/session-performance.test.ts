@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Session } from '../src/main/session';
 import { SessionEvents } from '../src/main/sessionEvents';
-import type { NidoEvent, SessionState } from '../src/shared/types';
+import { Grid } from '../src/renderer/src/grid';
+import type { NidoEvent, SessionState, Redraw } from '../src/shared/types';
 
 test('cursor patches preserve diagnostics and buffers, and explicit clears reach the renderer', () => {
     const sent: NidoEvent[] = [];
@@ -157,5 +161,108 @@ test('search counts reuse unchanged views and refresh for cursor, edits, pattern
         assert.equal(session.state.search, false);
     } finally {
         await session.stop();
+    }
+});
+
+test('upper-row prefetch keeps the viewport and cache while avoiding duplicate grid traffic', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-prefetch-traffic-'));
+    const frames: Redraw[] = [];
+    const grid = new Grid();
+    const session = await Session.create(root, (event) => {
+        if (event.type === 'redraw') {
+            grid.apply(event.events);
+            frames.push(event.events);
+        }
+    });
+    try {
+        await writeFile(
+            join(root, 'rows.txt'),
+            Array.from(
+                { length: 5000 },
+                (_, i) => `row ${i + 1} ${'nested { let x = 1; } '.repeat(8)}`
+            ).join('\n')
+        );
+        await session.attach(100, 40);
+        await session.openFile('rows.txt');
+        await session.input('2000Gzt');
+        // Finish delayed highlighting before measuring only the cache traversal.
+        await session.client.request('nvim_exec_lua', [
+            'vim.wait(400,function() return false end,10)',
+            []
+        ]);
+        const view = await session.client.request('nvim_exec_lua', [
+            'return vim.fn.winsaveview()',
+            []
+        ]);
+        const visible = grid.cells.slice();
+        frames.length = 0;
+        await session.prefetchScroll();
+        assert.deepEqual(
+            await session.client.request('nvim_exec_lua', ['return vim.fn.winsaveview()', []]),
+            view
+        );
+        assert.equal(frames.length, 1, 'temporary views must never become separate visible frames');
+        assert.ok(
+            Buffer.byteLength(JSON.stringify(frames)) < 200_000,
+            'one refill must not transfer both complete traversals'
+        );
+        for (let row = 0; row < visible.length; row++) assert.equal(grid.cells[row], visible[row]);
+        assert.equal(grid.needsUpperRows, false);
+        await session.scroll(-100, true, true);
+        assert.equal(
+            grid.hasUpperRows,
+            true,
+            'a fast upward move retains the remaining cached history'
+        );
+    } finally {
+        await session.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test('fractional gestures publish every offset without native repaints and preserve the edit anchor', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-fractional-work-'));
+    const frames: Redraw[] = [];
+    const session = await Session.create(root, (event) => {
+        if (event.type === 'redraw') frames.push(event.events);
+    });
+    try {
+        await writeFile(
+            join(root, 'rows.txt'),
+            Array.from({ length: 100 }, (_, i) => `row ${i + 1}`).join('\n')
+        );
+        await session.openFile('rows.txt');
+        await session.input('50Gzt');
+        await session.scroll(0.125, false, true);
+        await session.client.request('nvim_exec_lua', [
+            `
+            vim.wait(100,function() return false end,10)
+            local original=vim.cmd.redraw
+            vim.g.test_scroll_repaints=0
+            vim.cmd.redraw=function(...)
+                vim.g.test_scroll_repaints=vim.g.test_scroll_repaints+1
+                return original(...)
+            end
+        `,
+            []
+        ]);
+        frames.length = 0;
+        for (let i = 0; i < 4; i++) await session.scroll(0.125, false, true);
+        assert.equal(await session.client.request('nvim_eval', ['g:test_scroll_repaints']), 0);
+        const offsets = frames.flatMap((frame) =>
+            frame.flatMap(([name, ...calls]) =>
+                name === 'nido_pixel_scroll' ? calls.map((args) => Number(args[0])) : []
+            )
+        );
+        assert.deepEqual(offsets, [0.25, 0.375, 0.5, 0.625]);
+        assert.ok(frames.every((frame) => frame.at(-1)?.[0] === 'flush'));
+        await session.scroll(1, false, true);
+        assert.equal(await session.client.request('nvim_eval', ['g:test_scroll_repaints']), 1);
+        await session.input('iQ<Esc>');
+        assert.equal(await session.client.request('nvim_eval', ['line(".")']), 50);
+        assert.equal(await session.client.request('nvim_get_current_line', []), 'Qrow 50');
+    } finally {
+        await session.stop();
+        await rm(root, { recursive: true, force: true });
     }
 });

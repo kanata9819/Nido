@@ -164,7 +164,6 @@ function M.prefetch()
       views[#views + 1] = before
       local count = math.min(step, remaining)
       vim.cmd.normal({args={count .. string.char(25)}, bang=true})
-      vim.cmd.redraw()
       remaining = remaining - count
       local after = vim.fn.winsaveview()
       at_start = after.topline <= 1 and after.skipcol == 0
@@ -172,6 +171,9 @@ function M.prefetch()
         break
       end
     end
+    -- Only the return traversal supplies the upper-row cache. Paint the furthest
+    -- view once instead of drawing every temporary upward step too.
+    vim.cmd.redraw()
   end)
   for index = #views, 1, -1 do
     vim.fn.winrestview(views[index])
@@ -232,8 +234,9 @@ function M.scroll(lines, follow, pixel)
   local changed = lines ~= 0 or anchor ~= previous_anchor
   if changed then
     api.nvim_exec_autocmds('User', {pattern='NidoScroll'})
+    vim.cmd.redraw()
   end
-  vim.cmd.redraw()
+  -- Sub-line motion changes only the GUI offset; no native grid repaint is needed.
   publish_offset(pixel)
   return changed
 end
