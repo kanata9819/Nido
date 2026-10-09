@@ -1191,13 +1191,13 @@ test('save formats before writing only when enabled and a formatter is available
         await session.client.request('nvim_exec_lua', [
             `local get_clients = vim.lsp.get_clients
 vim.lsp.get_clients = function(opts)
-  if opts and opts.bufnr == 0 and opts.method == 'textDocument/formatting' then
+  if opts and opts.bufnr == vim.api.nvim_get_current_buf() and opts.method == 'textDocument/formatting' then
     return { {} }
   end
   return get_clients(opts)
 end
 vim.lsp.buf.format = function(opts)
-  assert(opts.async == false and opts.timeout_ms == 3000)
+  assert(opts.bufnr == vim.api.nvim_get_current_buf() and opts.async == false and opts.timeout_ms == 3000)
   vim.api.nvim_buf_set_lines(0, 0, -1, false, {'formatted'})
 end`,
             []
@@ -1212,6 +1212,44 @@ end`,
         ]);
         await session.save(true);
         assert.equal(await readFile(path, 'utf8'), 'no formatter\n');
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test('save preserves the requested buffer when a formatter fails or changes the active buffer', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-format-recovery-'));
+    let session: Session | undefined;
+    try {
+        await writeFile(join(root, 'draft.txt'), 'original\n');
+        await writeFile(join(root, 'other.txt'), 'other file\n');
+        session = await Session.create(root, () => {});
+        await session.openFile('other.txt');
+        const other = await session.client.request('nvim_get_current_buf', []);
+        await session.openFile('draft.txt');
+        await session.input('gg0Ckeep my draft<Esc>');
+        await session.inputMode();
+        await session.client.request('nvim_exec_lua', [
+            `local other = ...
+vim.lsp.get_clients = function(opts)
+  return opts and opts.method == 'textDocument/formatting' and { {} } or {}
+end
+vim.lsp.buf.format = function() error('Formatter failed') end
+vim.g.format_other = other`,
+            [other]
+        ]);
+        await assert.doesNotReject(session.save(true));
+        assert.equal(await readFile(join(root, 'draft.txt'), 'utf8'), 'keep my draft\n');
+        await session.input('gg0Csave the right file<Esc>');
+        await session.inputMode();
+        await session.client.request('nvim_exec_lua', [
+            'vim.lsp.buf.format = function() vim.api.nvim_set_current_buf(vim.g.format_other) end',
+            []
+        ]);
+        await session.save(true);
+        assert.equal(await readFile(join(root, 'draft.txt'), 'utf8'), 'save the right file\n');
+        assert.equal(await readFile(join(root, 'other.txt'), 'utf8'), 'other file\n');
     } finally {
         await session?.stop();
         await rm(root, { recursive: true, force: true });

@@ -2116,6 +2116,10 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
         await page.keyboard.press('Control+Shift+n');
         await chooseWorkspace(page, repository);
         await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        // This Git fixture has no Cargo project; formatter failures have dedicated regression coverage.
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page.getByRole('checkbox', { name: 'Format on save' }).uncheck();
+        await page.keyboard.press('Escape');
         const explorer = page.getByRole('complementary', { name: 'File explorer' });
         await expect(explorer.getByLabel('Git: Untracked', { exact: true })).toHaveText('U');
         await expect(explorer.getByText('main.rs', { exact: true })).toHaveCSS(

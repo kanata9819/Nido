@@ -617,6 +617,8 @@ export const japanese: Record<string, string> = {
     'Type a choice to continue': '選択肢のキーを入力してください',
     'Nido update': 'Nidoの更新',
     'Workspace recovery': 'ワークスペースの復元',
+    'Formatting failed. Your edits were saved without formatting.':
+        '自動整形に失敗しました。編集内容は整形せずに保存しました。',
     'Version restored. History could not be updated; your previous edits are preserved.':
         '編集は戻せましたが、履歴の更新に失敗しました。戻す前の編集は保管されています。',
     'Install Nido to enable updates.': '更新を利用するにはNidoをインストールしてください。',

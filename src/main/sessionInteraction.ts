@@ -257,12 +257,25 @@ export class SessionInteraction {
             const writing = this.client
                 .request('nvim_exec_lua', [
                     `local command, format = ...
+local buffer = vim.api.nvim_get_current_buf()
+local formatting_failed = false
 local ok, err = pcall(function()
-  if format and #vim.lsp.get_clients({bufnr=0, method='textDocument/formatting'}) > 0 then
-    vim.lsp.buf.format({bufnr=0, async=false, timeout_ms=3000})
+  if format and #vim.lsp.get_clients({bufnr=buffer, method='textDocument/formatting'}) > 0 then
+    -- Formatting is optional: its failure must not discard a requested save.
+    formatting_failed = not pcall(vim.lsp.buf.format, {bufnr=buffer, async=false, timeout_ms=3000})
   end
-  vim.cmd({cmd=command, mods={silent=true}})
+  if command == 'write' then
+    -- An LSP wait can run callbacks that switch buffers. Keep the original target.
+    vim.api.nvim_buf_call(buffer, function()
+      vim.cmd({cmd=command, mods={silent=true}})
+    end)
+  else
+    vim.cmd({cmd=command, mods={silent=true}})
+  end
 end)
+if ok and formatting_failed then
+  vim.notify('Formatting failed. Your edits were saved without formatting.', vim.log.levels.WARN, {title='Format on save'})
+end
 return ok and "" or tostring(err)`,
                     [command, format]
                 ])
