@@ -1392,27 +1392,35 @@ test(
             await terminal.input(
                 "$nidoValue = 'kept'; Set-Content -Path first.txt -Value $nidoValue<CR>"
             );
-            const waitFor = async (name: string): Promise<string> => {
+            const waitFor = async (name: string, expected: RegExp): Promise<string> => {
                 for (let i = 0; i < 100; i++) {
                     try {
-                        return await readFile(join(root, name), 'utf8');
-                    } catch {
-                        await new Promise((done) => setTimeout(done, 100));
+                        const content = await readFile(join(root, name), 'utf8');
+                        if (expected.test(content)) return content;
+                    } catch (error) {
+                        if (
+                            !['ENOENT', 'EBUSY', 'EACCES'].includes(
+                                (error as NodeJS.ErrnoException).code || ''
+                            )
+                        ) {
+                            throw error;
+                        }
                     }
+                    await new Promise((done) => setTimeout(done, 100));
                 }
-                throw new Error(`Terminal did not create ${name}`);
+                throw new Error(`Terminal did not write the expected content to ${name}`);
             };
-            assert.match(await waitFor('first.txt'), /kept/);
+            assert.match(await waitFor('first.txt', /kept/), /kept/);
             await terminal.resize(100, 20);
             assert.equal(await session.openTerminal(), terminal);
             await terminal.input('Set-Content -Path second.txt -Value $nidoValue<CR>');
-            assert.match(await waitFor('second.txt'), /kept/);
+            assert.match(await waitFor('second.txt', /kept/), /kept/);
             assert.equal((await session.snapshot()).terminal, true);
             assert.equal((await terminal.snapshot()).kind, 'terminal');
             await assert.rejects(terminal.startTerminal('invalid'), /Invalid terminal shell/);
             await terminal.startTerminal('cmd.exe');
             await terminal.input('echo cmd-selected>cmd.txt<CR>');
-            assert.match(await waitFor('cmd.txt'), /cmd-selected/);
+            assert.match(await waitFor('cmd.txt', /cmd-selected/), /cmd-selected/);
             await session.stop();
             assert.notEqual(terminal.process.exitCode, null);
         } finally {

@@ -1,5 +1,6 @@
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -51,7 +52,8 @@ async function stop(running: ElectronApplication | undefined, root: string): Pro
 }
 
 test('background checkpoints restore workspace order, active tab and cursors after an abrupt exit', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nido-windows-checkpoint-'));
+    // Windows CI can expose its temp directory through an 8.3 path alias.
+    const root = realpathSync.native(await mkdtemp(join(tmpdir(), 'nido-windows-checkpoint-')));
     const alpha = join(root, 'Alpha');
     const beta = join(root, 'Beta');
     const filename = 'notes.txt';
