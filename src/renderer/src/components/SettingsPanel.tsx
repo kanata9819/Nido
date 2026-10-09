@@ -7,6 +7,8 @@ import type { Language } from '../../../shared/i18n';
 export type SettingsPanelProps = Omit<EditorSettings, 'sidebarWidth' | 'resizeSidebar'>;
 
 export default function SettingsPanel({
+    historyEnabled,
+    setHistoryEnabled,
     language,
     setLanguage,
     theme,
@@ -165,6 +167,19 @@ export default function SettingsPanel({
                     onChange={(e) => setSidebar(e.target.checked)}
                 />
             </label>
+            <label>
+                {t('Automatic edit history')}{' '}
+                <input
+                    type="checkbox"
+                    checked={historyEnabled}
+                    onChange={(event) => setHistoryEnabled(event.target.checked)}
+                />
+            </label>
+            <small>
+                {t(
+                    'Time Machine keeps recent edits on this computer, including unsaved drafts. Ctrl+Shift+H to recover.'
+                )}
+            </small>
             <label>
                 {t('Format on save')}{' '}
                 <input

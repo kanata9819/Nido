@@ -7,6 +7,7 @@ import styles from '../assets/Palette.module.css';
 import FolderPicker from './FolderPicker';
 import GitBrowser from './GitBrowser';
 import MarkdownPreview from './MarkdownPreview';
+import TimeMachine from './TimeMachine';
 import type { FavoriteWorkspace } from '../../../shared/types';
 
 interface PanelProps {
@@ -31,6 +32,7 @@ interface PanelProps {
 }
 
 const panelTitles = {
+    history: 'Time Machine',
     markdown: 'Markdown preview',
     problems: 'Problems',
     git: 'Source control',
@@ -69,6 +71,11 @@ export function Panel({
 
     let content: React.JSX.Element;
     switch (panel) {
+        case 'history':
+            content = (
+                <TimeMachine key={workspaceId} workspaceId={workspaceId} onClose={focusEditor} />
+            );
+            break;
         case 'markdown':
             content = <MarkdownPreview key={workspaceId} workspaceId={workspaceId} />;
             break;
@@ -109,7 +116,7 @@ export function Panel({
 
     return (
         <div
-            className={`${styles.scrim} ${['git', 'markdown'].includes(panel) ? styles.gitScrim : ''}`}
+            className={`${styles.scrim} ${['git', 'markdown', 'history'].includes(panel) ? styles.gitScrim : ''}`}
             onMouseDown={(event) => {
                 if (event.target === event.currentTarget) {
                     focusEditor();
@@ -117,7 +124,7 @@ export function Panel({
             }}
         >
             <div
-                className={`${styles.palette} ${panel === 'git' ? styles.gitPalette : ''} ${panel === 'markdown' ? styles.markdownPalette : ''}`}
+                className={`${styles.palette} ${['git', 'history'].includes(panel) ? styles.gitPalette : ''} ${panel === 'markdown' ? styles.markdownPalette : ''}`}
                 role="dialog"
                 aria-modal="true"
                 aria-label={panel === 'settings' ? t('Settings') : t(`${panel} palette`)}

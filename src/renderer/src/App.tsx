@@ -132,6 +132,11 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     }, [settings.language, report]);
     const errorFading = useNotificationDismissal(errorNotice, animations, dismissError);
     useSessionSettings(workspaces, settings, report);
+    useEffect(() => {
+        void window.nido
+            .setHistoryEnabled(settings.historyEnabled)
+            .catch((error) => report(String(error)));
+    }, [settings.historyEnabled, report]);
 
     const modal = useRef<HTMLDivElement>(null);
     const state = states[active] || defaultState;

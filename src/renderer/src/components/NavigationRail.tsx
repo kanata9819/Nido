@@ -1,5 +1,14 @@
 import { useI18n } from '../i18n';
-import { Blocks, Files, GitBranch, Keyboard, Search, Settings2, Square } from 'lucide-react';
+import {
+    Blocks,
+    Files,
+    GitBranch,
+    History,
+    Keyboard,
+    Search,
+    Settings2,
+    Square
+} from 'lucide-react';
 import type { Panel } from '../types';
 import styles from '../assets/Nido.module.css';
 
@@ -49,6 +58,16 @@ export default function NavigationRail({
                 onClick={() => showPanel('git')}
             >
                 <GitBranch size={21} />
+            </button>
+            <button
+                className={panel === 'history' ? styles.railActive : ''}
+                aria-label={t('Time Machine')}
+                aria-pressed={panel === 'history'}
+                title={t('Time Machine (Ctrl+Shift+H / Space h)')}
+                disabled={!active}
+                onClick={() => showPanel('history')}
+            >
+                <History size={21} />
             </button>
             <button
                 className={panel === 'features' ? styles.railActive : ''}

@@ -17,12 +17,14 @@ export function registerWorkspaceHandlers({
     handle,
     session,
     text,
-    shellChoice
+    shellChoice,
+    captureHistory
 }: HandlerDeps & {
     handle: (name: string, action: (...args: unknown[]) => unknown) => void;
     session: (id: unknown) => Session;
     text: (value: unknown) => string;
     shellChoice: (value?: unknown) => TerminalShell;
+    captureHistory: (session: Session) => Promise<void>;
 }): () => Promise<boolean> {
     const favoritesPath = join(app.getPath('userData'), 'favorites.json');
     const layoutPath = join(app.getPath('userData'), 'workspaces.json');
@@ -163,6 +165,7 @@ export function registerWorkspaceHandlers({
                     return false;
                 }
             }
+            await Promise.all([...sessions.values()].map(captureHistory));
             // A background write must finish before the final shutdown snapshot replaces it.
             await checkpoints.idle();
             const ids = orderedIds();
@@ -304,6 +307,7 @@ export function registerWorkspaceHandlers({
         if (!(await confirmClose(s))) {
             return false;
         }
+        await captureHistory(s);
         await s.stop();
         sessions.delete(s.workspace.id);
         send({ type: 'exit', id: s.workspace.id });

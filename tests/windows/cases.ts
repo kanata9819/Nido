@@ -33,5 +33,6 @@ export const windowsBaselineCases = [
     'cached editor text preserves its pixels at 100% scale',
     'cached editor text preserves its pixels at 125% scale',
     'cached editor text preserves its pixels at 150% scale',
-    'background checkpoints restore workspace order, active tab and cursors after an abrupt exit'
+    'background checkpoints restore workspace order, active tab and cursors after an abrupt exit',
+    'Time Machine recovers an unsaved draft after an abrupt exit, supports undo and respects paused capture'
 ] as const;

@@ -13,6 +13,7 @@ import ExplorerCommands from '../../src/renderer/src/components/ExplorerCommands
 import FolderPicker from '../../src/renderer/src/components/FolderPicker';
 import GitBrowser from '../../src/renderer/src/components/GitBrowser';
 import GitDiff from '../../src/renderer/src/components/GitDiff';
+import TimeMachine from '../../src/renderer/src/components/TimeMachine';
 import Notification from '../../src/renderer/src/components/Notification';
 import ReferencesPanel from '../../src/renderer/src/components/ReferencesPanel';
 import DebugPanel from '../../src/renderer/src/components/DebugPanel';
@@ -216,6 +217,17 @@ function render(updates: Partial<HarnessProps>): void {
                     beforeLabel="Before"
                     afterLabel="After"
                 />
+            );
+            break;
+        case 'history':
+            root.render(
+                <div style={{ display: 'flex', height: '100%' }}>
+                    <TimeMachine
+                        key={props.workspaceId}
+                        workspaceId={props.workspaceId}
+                        onClose={noop}
+                    />
+                </div>
             );
             break;
         case 'notification':

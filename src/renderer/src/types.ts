@@ -11,6 +11,7 @@ export type Panel =
     | 'problems'
     | 'markdown'
     | 'features'
+    | 'history'
     | null;
 
 export interface Item {

@@ -4,6 +4,7 @@ import { isAbsolute, relative, sep } from 'node:path';
 import { Session } from './session';
 import { registerGitHandlers } from './gitHandlers';
 import { registerWorkspaceHandlers } from './workspaceHandlers';
+import { registerHistoryHandlers } from './historyHandlers';
 import { terminalShells, uiThemes, type TerminalShell, type UITheme } from '../shared/types';
 import type { DebugAction, FileAction, NidoEvent, Workspace } from '../shared/types';
 import type { Updates } from './updater';
@@ -16,6 +17,7 @@ export interface AppState {
     restoration: Promise<{ workspaces: Workspace[]; active: string; errors: string[] }> | undefined;
     prompting: boolean;
     closing: boolean;
+    historyEnabled?: boolean;
 }
 
 export interface HandlerDeps {
@@ -100,6 +102,16 @@ export function registerHandlers({
         }
     });
 
+    const captureHistory = registerHistoryHandlers({
+        window,
+        sessions,
+        state,
+        neovimResources,
+        send,
+        handle,
+        session,
+        text
+    });
     const prepareToQuit = registerWorkspaceHandlers({
         window,
         sessions,
@@ -109,7 +121,8 @@ export function registerHandlers({
         handle,
         session,
         text,
-        shellChoice
+        shellChoice,
+        captureHistory
     });
 
     handle('attach', (id, columns, rows) =>

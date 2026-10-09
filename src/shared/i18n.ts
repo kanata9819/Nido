@@ -8,6 +8,58 @@ export function parseLanguage(value: unknown): Language {
 
 // English source messages are also the fallback for messages from external tools.
 export const japanese: Record<string, string> = {
+    'Time Machine': '編集タイムマシン',
+    'Time Machine only supports text files.':
+        '編集タイムマシンはテキストファイルに対応しています。',
+    'Time Machine (Ctrl+Shift+H / Space h)': '編集タイムマシン（Ctrl+Shift+H / Space h）',
+    'Recover earlier edits · Ctrl+Shift+H': '過去の編集を取り戻す · Ctrl+Shift+H',
+    'history palette': '編集タイムマシン',
+    'Automatic edit history': '編集履歴を自動で残す',
+    'Time Machine keeps recent edits on this computer, including unsaved drafts. Ctrl+Shift+H to recover.':
+        '未保存の編集もこのPCに残します。Ctrl+Shift+Hで過去の内容を取り戻せます。',
+    'Your current edits are kept before restoring. Save when ready.':
+        '戻す前の編集も履歴に残ります。復元後は、確認してから保存できます。',
+    'Recent edits': '最近の編集',
+    '{count} versions': '{count}件の履歴',
+    '{count} lines': '{count}行',
+    'Refresh Time Machine': '編集履歴を更新',
+    'Restore to editor': 'エディタへ復元',
+    'Edit history': '編集履歴',
+    'Unsaved draft': '未保存の編集',
+    'Restored edit': '復元した編集',
+    'Saved content': '保存済みの内容',
+    'Loading history…': '編集履歴を読み込み中…',
+    'This version matches your current edits.': 'この履歴は現在の編集内容と一致しています。',
+    'Time Machine diff': '編集履歴の差分',
+    'Current edits': '現在の編集',
+    'Your history is still here. Refresh to try again.':
+        '履歴は保持しています。更新して再試行できます。',
+    'Select a version to compare it with your current edits.':
+        '履歴を選ぶと、現在の編集内容との差分を表示します。',
+    'j/k Versions · Enter Preview · Ctrl+H/L History / Diff · n/N Changes · Ctrl+Enter Restore · Esc Close':
+        'j/k 履歴選択 · Enter 差分へ · Ctrl+H/L 履歴 / 差分 · n/N 変更へ · Ctrl+Enter 復元 · Esc 閉じる',
+    'Open a named text file to use Time Machine.':
+        '名前のあるテキストファイルを開くと、編集タイムマシンを使えます。',
+    'Time Machine supports text files up to 1 MB and 20,000 lines.':
+        '編集タイムマシンは1MB・20,000行までのテキストファイルに対応しています。',
+    'The file changed. Refresh the preview before restoring.':
+        'ファイルが変更されています。差分を更新してから復元してください。',
+    'The active file changed. Reopen Time Machine.':
+        '編集中のファイルが変わりました。編集タイムマシンを開き直してください。',
+    'This history version is no longer available. Refresh Time Machine.':
+        'この履歴は保持期間を過ぎています。編集履歴を更新してください。',
+    'This file is read-only. History was preserved.':
+        'このファイルは読み取り専用です。履歴は保持しています。',
+    'Local history is damaged. Existing history was preserved.':
+        '編集履歴に破損があります。元の履歴は保持しています。',
+    'Local history exceeds its storage limit.': '編集履歴が容量制限を超えています。',
+    'Local history storage is full.': '編集履歴の保存領域がいっぱいです。',
+    'Finish the current Neovim command before opening Time Machine.':
+        '現在のNeovimコマンドを終えてから編集タイムマシンを開いてください。',
+    'Finish the current Neovim command before restoring.':
+        '現在のNeovimコマンドを終えてから復元してください。',
+    'Version restored into the editor. Save when ready.':
+        '編集内容を復元しました。確認してから保存できます。',
     Features: '機能一覧',
     'Features (Ctrl+Shift+X)': '機能一覧（Ctrl+Shift+X）',
     'Explore languages and built-in features · Ctrl+Shift+X':
@@ -565,6 +617,8 @@ export const japanese: Record<string, string> = {
     'Type a choice to continue': '選択肢のキーを入力してください',
     'Nido update': 'Nidoの更新',
     'Workspace recovery': 'ワークスペースの復元',
+    'Version restored. History could not be updated; your previous edits are preserved.':
+        '編集は戻せましたが、履歴の更新に失敗しました。戻す前の編集は保管されています。',
     'Install Nido to enable updates.': '更新を利用するにはNidoをインストールしてください。',
     'No updates available.': '利用可能な更新はありません。',
     'No updates have been published yet.': '更新はまだ公開されていません。',

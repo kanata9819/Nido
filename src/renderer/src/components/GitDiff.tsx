@@ -4,6 +4,9 @@ import type { ReferencePreview } from '../../../shared/types';
 import { splitDiff } from '../gitDiff';
 import styles from '../assets/GitPanel.module.css';
 
+const rowHeight = 22;
+const overscan = 20;
+
 export default function GitDiff({
     workspaceId,
     path,
@@ -21,12 +24,51 @@ export default function GitDiff({
 }): React.JSX.Element {
     const t = useI18n();
     const rows = useMemo(() => splitDiff(diff), [diff]);
-    const changes = rows.flatMap((row, index) =>
-        (row.before?.changed || row.after?.changed) &&
-        !(rows[index - 1]?.before?.changed || rows[index - 1]?.after?.changed)
-            ? [index]
-            : []
+    const sources = useMemo(
+        () =>
+            (['before', 'after'] as const).map((side) => {
+                const lines: string[] = [];
+                const positions = rows.map((row) => {
+                    if (!row[side]) {
+                        return -1;
+                    }
+                    lines.push(row[side].text);
+                    return lines.length - 1;
+                });
+                return { text: lines.join('\n'), positions };
+            }),
+        [rows]
     );
+    const changes = useMemo(
+        () =>
+            rows.flatMap((row, index) =>
+                (row.before?.changed || row.after?.changed) &&
+                !(rows[index - 1]?.before?.changed || rows[index - 1]?.after?.changed)
+                    ? [index]
+                    : []
+            ),
+        [rows]
+    );
+    const width = useMemo(
+        () =>
+            rows.reduce(
+                (max, row) =>
+                    Math.max(
+                        max,
+                        row.before?.text.length || 0,
+                        row.after?.text.length || 0,
+                        row.heading?.length || 0
+                    ),
+                0
+            ),
+        [rows]
+    );
+    const [viewport, setViewport] = useState({ diff, row: 0 });
+    const [height, setHeight] = useState(600);
+    const topRow = viewport.diff === diff ? viewport.row : 0;
+    const first = Math.max(0, topRow - overscan);
+    const last = Math.min(rows.length, topRow + Math.ceil(height / rowHeight) + overscan);
+    const visible = rows.slice(first, last);
     const [selectedChange, setSelectedChange] = useState<{ diff: string; row: number }>();
     const activeChange = selectedChange?.diff === diff ? changes.indexOf(selectedChange.row) : -1;
     const [highlighted, setHighlighted] = useState<{
@@ -46,14 +88,24 @@ export default function GitDiff({
     const before = useRef<HTMLPreElement>(null);
     const after = useRef<HTMLPreElement>(null);
     useEffect(() => {
+        const pane = after.current;
+        if (!pane) {
+            return;
+        }
+        const observer = new ResizeObserver(() => setHeight(pane.clientHeight));
+        observer.observe(pane);
+        return () => observer.disconnect();
+    }, []);
+    useEffect(() => {
+        before.current?.scrollTo({ top: 0, left: 0 });
+        after.current?.scrollTo({ top: 0, left: 0 });
+    }, [diff]);
+    useEffect(() => {
         let cancelled = false;
         if (!path || !rows.some((row) => row.before || row.after)) {
             return;
         }
-        const sources = (['before', 'after'] as const).map((side) =>
-            rows.flatMap((row) => (row[side] ? [row[side].text] : [])).join('\n')
-        );
-        void window.nido.highlightSources(workspaceId, path, sources[0], sources[1]).then(
+        void window.nido.highlightSources(workspaceId, path, sources[0].text, sources[1].text).then(
             (lines) => {
                 if (!cancelled) {
                     setHighlighted({ workspaceId, path, diff, lines });
@@ -73,7 +125,7 @@ export default function GitDiff({
         return () => {
             cancelled = true;
         };
-    }, [workspaceId, path, diff, rows]);
+    }, [workspaceId, path, diff, rows, sources]);
     return (
         <div className={styles.splitDiff}>
             {(['before', 'after'] as const).map((side) => (
@@ -123,17 +175,17 @@ export default function GitDiff({
                                     : (activeChange + direction + changes.length) % changes.length;
                             const row = changes[next];
                             setSelectedChange({ diff, row });
-                            const preview = event.currentTarget;
-                            const target = preview.children[row] as HTMLElement;
-                            const top =
-                                target.getBoundingClientRect().top -
-                                preview.getBoundingClientRect().top +
-                                preview.scrollTop;
+                            const top = row * rowHeight;
+                            setViewport({ diff, row });
                             for (const pane of [before.current, after.current]) {
                                 pane?.scrollTo({ top, behavior: 'instant' });
                             }
                         }}
                         onScroll={(event) => {
+                            const row = Math.floor(event.currentTarget.scrollTop / rowHeight);
+                            setViewport((old) =>
+                                old.diff === diff && old.row === row ? old : { diff, row }
+                            );
                             const other = side === 'before' ? after.current : before.current;
                             if (
                                 other &&
@@ -143,34 +195,54 @@ export default function GitDiff({
                             }
                         }}
                     >
-                        {rows.map((row, index) => (
-                            <div
-                                key={index}
-                                data-diff-active={
-                                    selectedChange?.diff === diff && selectedChange.row === index
-                                        ? 'true'
-                                        : undefined
-                                }
-                                className={`${styles.diffLine} ${row.heading ? styles.hunk : row[side]?.changed ? (side === 'before' ? styles.removed : styles.added) : !row[side] ? styles.emptyLine : ''}`}
-                            >
-                                <span className={styles.lineNumber} aria-hidden="true">
-                                    {row[side]?.number}
-                                </span>
-                                <code>
-                                    {currentHighlight?.lines && row[side]
-                                        ? currentHighlight.lines[side === 'before' ? 0 : 1][
-                                              row[side].number - 1
-                                          ]?.map((span, column) => (
-                                              <span key={column} style={{ color: span.color }}>
-                                                  {span.text || ' '}
-                                              </span>
-                                          )) ||
-                                          row[side].text ||
-                                          ' '
-                                        : row.heading || row[side]?.text || ' '}
-                                </code>
-                            </div>
-                        ))}
+                        <div
+                            style={{
+                                height: rows.length * rowHeight,
+                                minWidth: `calc(${width}ch + 90px)`,
+                                paddingTop: first * rowHeight
+                            }}
+                        >
+                            {visible.map((row, offset) => {
+                                const index = first + offset;
+                                return (
+                                    <div
+                                        key={index}
+                                        data-diff-row={index}
+                                        data-diff-active={
+                                            selectedChange?.diff === diff &&
+                                            selectedChange.row === index
+                                                ? 'true'
+                                                : undefined
+                                        }
+                                        className={`${styles.diffLine} ${row.heading ? styles.hunk : row[side]?.changed ? (side === 'before' ? styles.removed : styles.added) : !row[side] ? styles.emptyLine : ''}`}
+                                    >
+                                        <span className={styles.lineNumber} aria-hidden="true">
+                                            {row[side]?.number}
+                                        </span>
+                                        <code>
+                                            {currentHighlight?.lines && row[side]
+                                                ? currentHighlight.lines[
+                                                      side === 'before' ? 0 : 1
+                                                  ]?.[
+                                                      sources[side === 'before' ? 0 : 1].positions[
+                                                          index
+                                                      ]
+                                                  ]?.map((span, column) => (
+                                                      <span
+                                                          key={column}
+                                                          style={{ color: span.color }}
+                                                      >
+                                                          {span.text || ' '}
+                                                      </span>
+                                                  )) ||
+                                                  row[side].text ||
+                                                  ' '
+                                                : row.heading || row[side]?.text || ' '}
+                                        </code>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </pre>
                 </div>
             ))}

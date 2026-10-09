@@ -85,6 +85,17 @@ export function buildItems(
                       detail: 'Git changes, diff and commits · Ctrl+Shift+G',
                       run: () => showPanel('git')
                   },
+                  ...(state.buffers.some((buffer) => buffer.id === state.current && buffer.name) &&
+                  workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal'
+                      ? [
+                            {
+                                key: 'h',
+                                title: 'Time Machine',
+                                detail: 'Recover earlier edits · Ctrl+Shift+H',
+                                run: () => showPanel('history')
+                            }
+                        ]
+                      : []),
                   ...(state.filetype === 'markdown'
                       ? [
                             {

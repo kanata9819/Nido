@@ -258,6 +258,25 @@ export function useKeyboardShortcuts({
             }
             return;
         }
+        if (
+            active &&
+            !terminalFocused &&
+            event.ctrlKey &&
+            event.shiftKey &&
+            !event.altKey &&
+            !event.metaKey &&
+            event.key.toLowerCase() === 'h'
+        ) {
+            consume();
+            if (!event.repeat) {
+                if (panel === 'history') {
+                    focusEditor();
+                } else {
+                    showPanel('history');
+                }
+            }
+            return;
+        }
         if (panel) {
             if (event.key === 'Tab' && modal.current) {
                 const nodes = [

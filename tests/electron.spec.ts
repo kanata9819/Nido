@@ -1755,7 +1755,17 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await page.keyboard.press('Enter');
         await expect(explorer).toBeChecked();
         await page.keyboard.press('ArrowDown');
+        const history = page.getByRole('checkbox', { name: 'Automatic edit history' });
+        await expect(history).toBeFocused();
+        await expect(history).toBeChecked();
+        await page.keyboard.press('Space');
+        await expect(history).not.toBeChecked();
+        await page.keyboard.press('Enter');
+        await expect(history).toBeChecked();
+        await page.keyboard.press('ArrowDown');
         await expect(page.getByRole('checkbox', { name: 'Format on save' })).toBeFocused();
+        await page.keyboard.press('k');
+        await expect(history).toBeFocused();
         await page.keyboard.press('k');
         await expect(explorer).toBeFocused();
         await page.keyboard.press('Shift+Tab');
@@ -2075,7 +2085,8 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
             await page.keyboard.press('j');
             await expect.poll(top).toBeGreaterThan(0);
             await page.keyboard.press('k');
-            await expect.poll(top).toBe(0);
+            // Display scaling can round line steps to fractional CSS pixels.
+            await expect.poll(top).toBeLessThan(1);
             for (const [down, up] of [
                 ['Control+d', 'Control+u'],
                 ['Control+f', 'Control+b']
@@ -2097,7 +2108,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
             await page.keyboard.press('l');
             await expect.poll(() => preview.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
             await page.keyboard.press('h');
-            await expect.poll(() => preview.evaluate((node) => node.scrollLeft)).toBe(0);
+            await expect.poll(() => preview.evaluate((node) => node.scrollLeft)).toBeLessThan(1);
             await page.keyboard.press('Control+h');
             await expect(page.getByRole('listbox', { name: listLabel })).toBeFocused();
         }
@@ -2227,8 +2238,15 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
         await expect(page.getByLabel('Git diff', { exact: true })).toContainText(
             'fn main() { println!("Nido"); }'
         );
-        await expect(page.getByLabel('Git diff original', { exact: true })).toContainText('// 149');
-        await expect(page.getByLabel('Git diff', { exact: true })).toContainText('// 149');
+        // Offscreen rows are mounted on demand; verify the last row through actual scrolling.
+        await updated.evaluate((node) => {
+            node.scrollTop = node.scrollHeight;
+        });
+        await expect(original).toContainText('// 149');
+        await expect(updated).toContainText('// 149');
+        await updated.evaluate((node) => {
+            node.scrollTop = 0;
+        });
         for (const label of ['Git diff original', 'Git diff']) {
             const code = page.getByLabel(label, { exact: true }).locator('code').first();
             await expect(code.locator('span').first()).toHaveText('fn');

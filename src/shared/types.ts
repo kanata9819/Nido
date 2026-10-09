@@ -1,5 +1,6 @@
 import type { Language } from './i18n';
 import type { NeovimUIState } from './neovimUI';
+import type { HistoryList, HistoryPreview } from './history';
 
 export const terminalShells = ['auto', 'pwsh', 'powershell.exe', 'cmd.exe', 'wsl.exe'] as const;
 export type TerminalShell = (typeof terminalShells)[number];
@@ -187,6 +188,10 @@ export interface GitStatus {
 }
 
 export interface NidoAPI {
+    setHistoryEnabled(enabled: boolean): Promise<void>;
+    history(id: string): Promise<HistoryList>;
+    historyPreview(id: string, path: string, version: string): Promise<HistoryPreview>;
+    historyRestore(id: string, path: string, version: string, token: string): Promise<void>;
     highlightSources(
         id: string,
         path: string,

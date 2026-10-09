@@ -2,6 +2,12 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { NidoAPI, NidoEvent } from '../shared/types';
 
 const api: NidoAPI = {
+    setHistoryEnabled: (enabled) => ipcRenderer.invoke('nido:historyEnabled', enabled),
+    history: (id) => ipcRenderer.invoke('nido:history', id),
+    historyPreview: (id, path, version) =>
+        ipcRenderer.invoke('nido:historyPreview', id, path, version),
+    historyRestore: (id, path, version, token) =>
+        ipcRenderer.invoke('nido:historyRestore', id, path, version, token),
     highlightSources: (id, path, before, after) =>
         ipcRenderer.invoke('nido:highlightSources', id, path, before, after),
     gitHistory: (id, skip) => ipcRenderer.invoke('nido:gitHistory', id, skip),

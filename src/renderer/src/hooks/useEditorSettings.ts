@@ -21,6 +21,12 @@ export function useEditorSettings(): EditorSettings {
     const [wordWrap, setWordWrap] = useState(
         () => localStorage.getItem('nido.wordWrap') !== 'false'
     );
+    const [historyEnabled, setHistoryEnabled] = useState(
+        () => localStorage.getItem('nido.historyEnabled') !== 'false'
+    );
+    useEffect(() => {
+        localStorage.setItem('nido.historyEnabled', String(historyEnabled));
+    }, [historyEnabled]);
     useEffect(() => {
         localStorage.setItem('nido.wordWrap', String(wordWrap));
     }, [wordWrap]);
@@ -134,6 +140,8 @@ export function useEditorSettings(): EditorSettings {
     }, [lineHeight]);
 
     return {
+        historyEnabled,
+        setHistoryEnabled,
         language,
         setLanguage,
         theme,
@@ -176,6 +184,8 @@ export function useEditorSettings(): EditorSettings {
 }
 
 export interface EditorSettings {
+    historyEnabled: boolean;
+    setHistoryEnabled: Dispatch<SetStateAction<boolean>>;
     language: Language;
     setLanguage: Dispatch<SetStateAction<Language>>;
     theme: UITheme;

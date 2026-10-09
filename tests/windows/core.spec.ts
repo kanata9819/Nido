@@ -1,7 +1,7 @@
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { electron } from '../helpers/electron';
@@ -108,6 +108,116 @@ test('background checkpoints restore workspace order, active tab and cursors aft
         await expect(page.getByText('Ln 3, Col 1', { exact: true })).toBeVisible();
         expect(await readFile(join(alpha, filename), 'utf8')).toBe(text);
         expect(await readFile(join(beta, filename), 'utf8')).toBe(text);
+    } finally {
+        await stop(running, root);
+    }
+});
+
+test('Time Machine recovers an unsaved draft after an abrupt exit, supports undo and respects paused capture', async () => {
+    const root = realpathSync.native(await mkdtemp(join(tmpdir(), 'nido-history-recovery-')));
+    const workspace = join(root, 'Time Machine demo');
+    const filename = 'welcome.ts';
+    let running: ElectronApplication | undefined;
+    try {
+        await mkdir(workspace);
+        const original = [
+            'const mood = "original";',
+            '',
+            'export function greet() {',
+            '    return `Hello ${mood}`;',
+            '}',
+            ''
+        ].join('\n');
+        await writeFile(join(workspace, filename), original);
+        const profile = await profileFor(root, [workspace], filename);
+        const historyDirectory = join(profile, 'time-machine');
+        const historyTexts = async (): Promise<string[]> => {
+            try {
+                const files = (await readdir(historyDirectory)).filter((name) =>
+                    name.endsWith('.json')
+                );
+                const histories = await Promise.all(
+                    files.map(
+                        async (name) =>
+                            JSON.parse(
+                                (await readSavedFile(join(historyDirectory, name))) ||
+                                    '{"revisions":[]}'
+                            ) as {
+                                revisions: { text: string }[];
+                            }
+                    )
+                );
+                return histories.flatMap((history) =>
+                    history.revisions.map((revision) => revision.text)
+                );
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+                throw error;
+            }
+        };
+        running = await launch(profile);
+        let page = await running.firstWindow();
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.type('gg0Cconst mood = "rescued draft";');
+        await page.keyboard.press('Escape');
+        // Only the automatic timer can write this snapshot; the history UI has not opened yet.
+        await expect
+            .poll(
+                async () =>
+                    (await historyTexts()).some((text) =>
+                        text.startsWith('const mood = "rescued draft";')
+                    ),
+                { timeout: 15000 }
+            )
+            .toBe(true);
+        expect(await readFile(join(workspace, filename), 'utf8')).toBe(original);
+        await running.evaluate(({ app }) => app.exit(0));
+        await running.close();
+        running = undefined;
+        running = await launch(profile);
+        page = await running.firstWindow();
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.press('Control+Shift+H');
+        const dialog = page.getByRole('dialog', { name: 'history palette' });
+        await expect(dialog.getByRole('option', { selected: true })).toContainText('Unsaved draft');
+        await expect(dialog.locator('[data-git-scroll="before"]')).toContainText('rescued draft');
+        await expect(dialog.locator('[data-git-scroll="after"]')).toContainText('original');
+        await expect(dialog.getByRole('button', { name: /Restore to editor/ })).toBeEnabled();
+        await page.screenshot({ path: 'test-results/time-machine-preview.png' });
+        await page.keyboard.press('Control+Enter');
+        await expect(dialog).toHaveCount(0);
+        const input = page.getByRole('textbox', { name: 'Neovim input' });
+        const canvas = page.locator('canvas[aria-label="Neovim editor display"]:visible');
+        await expect(input).toBeFocused();
+        await expect(canvas).toHaveAttribute('aria-description', /rescued draft/);
+        expect(await readFile(join(workspace, filename), 'utf8')).toBe(original);
+        await page.keyboard.type('u');
+        await expect(canvas).toHaveAttribute('aria-description', /original/);
+        await page.keyboard.press('Control+Shift+H');
+        await expect(dialog.getByRole('button', { name: /Restore to editor/ })).toBeEnabled();
+        await page.keyboard.press('Control+Enter');
+        await expect(input).toBeFocused();
+        await page.keyboard.press('Control+s');
+        await expect
+            .poll(() => readSavedFile(join(workspace, filename)))
+            .toMatch(/^const mood = "rescued draft";/);
+        await page.keyboard.press('Space');
+        await page.keyboard.press(',');
+        const automatic = page.getByRole('checkbox', { name: 'Automatic edit history' });
+        await automatic.focus();
+        await page.keyboard.press('Space');
+        await expect(automatic).not.toBeChecked();
+        await page.keyboard.press('Escape');
+        await expect(input).toBeFocused();
+        await page.keyboard.type('gg0Cpaused draft');
+        await page.keyboard.press('Escape');
+        await expect(canvas).toHaveAttribute('aria-description', /paused draft/);
+        // Wait through a complete capture interval to check that paused edits stay unrecorded.
+        await page.waitForTimeout(2500);
+        expect((await historyTexts()).some((text) => text.includes('paused draft'))).toBe(false);
+        expect(await page.evaluate(() => localStorage.getItem('nido.historyEnabled'))).toBe(
+            'false'
+        );
     } finally {
         await stop(running, root);
     }
