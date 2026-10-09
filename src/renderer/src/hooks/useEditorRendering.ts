@@ -104,7 +104,7 @@ export function useEditorRendering({
         const scrolling = new EditorScroll({
             id,
             grid,
-            enabled: () => scrollEnabledRef.current,
+            enabled: () => scrollEnabledRef.current && !element.hidden && !document.hidden,
             schedule: () => schedule(),
             onError: (error) => errorRef.current(String(error)),
             onCompletion: (promise) => {
@@ -128,7 +128,7 @@ export function useEditorRendering({
 
         const render = (): void => {
             frame = 0;
-            if (disposed) {
+            if (disposed || element.hidden || document.hidden) {
                 return;
             }
             scrolling.pauseIfDisabled();
@@ -194,8 +194,15 @@ export function useEditorRendering({
             }
 
             if (inputRef.current && !inputRef.current.hasAttribute('data-nvim-command-active')) {
-                inputRef.current.style.left = `${bounds.left + grid.cursor.column * metrics.cellWidth}px`;
-                inputRef.current.style.top = `${bounds.top + grid.rowY(grid.cursor.row)}px`;
+                const left = bounds.left + grid.cursor.column * metrics.cellWidth;
+                const top = bounds.top + grid.rowY(grid.cursor.row);
+                // Unchanged styles wake popup observers and force layout during cursor blinking.
+                if (!(Math.abs(parseFloat(inputRef.current.style.left) - left) * dpr < 0.01)) {
+                    inputRef.current.style.left = `${left}px`;
+                }
+                if (!(Math.abs(parseFloat(inputRef.current.style.top) - top) * dpr < 0.01)) {
+                    inputRef.current.style.top = `${top}px`;
+                }
             }
             if (hasFrame && !ready) {
                 ready = true;
@@ -233,7 +240,8 @@ export function useEditorRendering({
         };
 
         const schedule = (): void => {
-            if (!disposed && !frame) {
+            scrolling.pauseIfDisabled();
+            if (!disposed && !frame && !element.hidden && !document.hidden) {
                 frame = requestAnimationFrame(render);
             }
         };

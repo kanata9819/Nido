@@ -196,15 +196,15 @@ export async function gitIgnored(cwd: string, paths: string[]): Promise<Set<stri
 
 export async function gitStatus(cwd: string): Promise<GitStatus> {
     const root = (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
-    let branch: string;
-    try {
-        branch = (await git(root, ['symbolic-ref', '--short', 'HEAD'])).trim();
-    } catch {
-        branch = `${(await git(root, ['rev-parse', '--short', 'HEAD'])).trim()} (detached)`;
-    }
-    const records = (
-        await git(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all'])
-    ).split('\0');
+    // Branch identity and worktree status are independent reads; avoid a serial process round trip.
+    const [branch, output] = await Promise.all([
+        git(root, ['symbolic-ref', '--short', 'HEAD']).then(
+            (value) => value.trim(),
+            async () => `${(await git(root, ['rev-parse', '--short', 'HEAD'])).trim()} (detached)`
+        ),
+        git(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all'])
+    ]);
+    const records = output.split('\0');
     const changes: GitChange[] = [];
     for (let i = 0; i < records.length; i++) {
         const record = records[i];

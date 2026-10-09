@@ -810,6 +810,8 @@ for (const scale of [1, 1.25, 1.5]) {
                         paintedRows = [];
                         // A completed gesture may retain a fraction in Neovim's viewport.
                         grid.scrollFraction = 0.3 / (19 * devicePixelRatio);
+                        // Compare complete row bitmaps here; partial paints may clip overlapping padding.
+                        grid.invalidatePaint();
                         grid.draw(
                             canvas,
                             400,

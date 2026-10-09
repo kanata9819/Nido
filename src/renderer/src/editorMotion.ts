@@ -121,6 +121,7 @@ export function paintEditorMotion({
                 ctx.restore();
             }
             ctx.restore();
+            grid.invalidatePaint();
         }
     }
 

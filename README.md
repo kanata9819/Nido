@@ -76,7 +76,7 @@ rustup component add rust-analyzer rust-src rustfmt
 pnpm verify:windows
 ```
 
-操作テスト26件は`dist/win-unpacked/nido.exe`を直接起動します。起動と同梱リソース、日本語・空白を含むパス、CRLFでの保存、貼り付けの入力順序、Windowsクリップボード、AltGrキーイベント、IMEの変換イベント、ワークスペースとファイル操作、Git、補完・診断・参照、ターミナル、Rustデバッグ、設定と終了・復元、100%・125%・150%表示を確認します。各テストには一時フォルダーと独立したプロファイルを使います。
+操作テスト34件は`dist/win-unpacked/nido.exe`を直接起動します。起動と同梱リソース、日本語・空白を含むパス、CRLFでの保存、貼り付けの入力順序、Windowsクリップボード、AltGrキーイベント、IMEの変換イベント、ワークスペースとファイル操作、Git、補完・診断・参照、ターミナル、Rustデバッグ、設定と終了・復元、100%・125%・150%表示を確認します。各テストには一時フォルダーと独立したプロファイルを使います。
 
 ビルド済みの場合は`pnpm test:windows`だけでも実行できます。必須ケースの欠落・スキップ・未処理のレンダラー例外も失敗扱いです。Windows以外では成功扱いにせず、実行条件のエラーを返します。
 
@@ -109,10 +109,10 @@ pnpm exec playwright test tests/update.spec.ts
 
 ## コードの責務
 
-- `App.tsx`：画面全体の構成とフォーカスの連携。ワークスペース操作は `useWorkspaceActions.ts`、下部パネルの開閉・フォーカス要求は `useBottomPanels.ts`、参照・デバッガの配置は `WorkspacePanels.tsx`。設定のセッション反映は `useSessionSettings.ts`。
+- `App.tsx`：画面全体の構成とフォーカスの連携。ワークスペース操作は `useWorkspaceActions.ts`、下部パネルの開閉・フォーカス要求は `useBottomPanels.ts`、参照・デバッガの配置は `WorkspacePanels.tsx`。設定のセッション反映は `useSessionSettings.ts`。`WorkspaceEditor.tsx` はワークスペース単位の表示をまとめ、カーソル通知によるエディタ全体の再レンダーを抑えます。
 - `Sidebar.tsx`：ツリー表示とリサイズ。ファイル一覧・展開・ファイル操作は `useExplorer.ts`、移動キーは `sidebarKeyboard.ts`。
 - `Editor.tsx`：入力とエディタ領域。`useEditorRendering.ts` は描画フレームとイベント購読の連携、`editorScroll.ts` はスクロール送信・描画待ち・先読み、`editorCursor.ts` はカーソル移動と点滅、`editorMotion.ts` はスクロール・行削除のフレーム合成を担当します。
-- `grid.ts`：Neovimの描画命令をセル・色・行の位置へ反映。`gridCanvas.ts` はCanvas描画と行画像のキャッシュ、`keyboard.ts` はキーイベントからNeovim入力への変換を担当します。
+- `grid.ts`：Neovimの描画命令をセル・色・行の位置へ反映。`gridCanvas.ts` はCanvas描画・行画像のキャッシュ・カーソルの部分再描画、`gridRowLayout.ts` はCodeLens行の高さ判定を担当します。`keyboard.ts` はキーイベントからNeovim入力への変換を担当します。
 - `assets/*.module.css`：部品ごとのスタイル。`Nido.module.css` は画面の骨格・タブ・サイドバー、`Palette.module.css` はコマンド・フォルダー・ファイル操作のダイアログ、ほかは対応する表示部品が所有します。
 - `NeovimUI.tsx`：コマンド入力・補完・メッセージ・履歴・確認待ちの表示。`ext_cmdline` / `ext_messages` を `SessionEvents` と `shared/neovimUI.ts` で受け、Nidoのカードへ反映します。編集とキー操作はNeovimが担当し、メッセージ本文は `Alt+Shift+M` でフォーカスできます。
 - `GitBrowser.tsx`：Git画面の状態とデータ取得。リストは `GitBrowserList.tsx`、詳細は `GitDetails.tsx`、キー操作は `useGitBrowserKeyboard.ts`。
@@ -128,3 +128,5 @@ pnpm exec playwright test tests/update.spec.ts
 - **ファイルの作成・移動**：`useExplorer.ts` → `components/ExplorerCommands.tsx` → `handlers.ts` → `sessionFiles.ts`。選択から操作先を決め、ダイアログで入力を受け、メインプロセスでファイルを操作します。
 - **Git画面**：`components/GitBrowser.tsx` → `GitBrowserList.tsx` / `GitDetails.tsx`。`view` は `changes`・`history`・`branches` のいずれか。取得先を調べたい場合は `gitHandlers.ts` を読みます。
 - **エディタの描画**：`session.ts` → `sessionEvents.ts` → `hooks/useEditorRendering.ts`。Neovimの通知を受け、`flush` までの描画命令を一つのフレームにまとめ、画面側へ送ります。スクロール中は行と端数の位置をまとめて反映します。
+
+描画・行配置・括弧通知の最適化と測定方法は [パフォーマンス検証](docs/performance.md) にまとめています。

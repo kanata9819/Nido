@@ -3,6 +3,7 @@ import { color } from './gridColors';
 
 import type { Cell, Highlight, BracketGuide } from './gridTypes';
 import { GridCanvas } from './gridCanvas';
+import { GridRowLayout } from './gridRowLayout';
 export type { Cell } from './gridTypes';
 
 export class Grid {
@@ -37,6 +38,7 @@ export class Grid {
     private layoutDirty = true;
     private scrollPixels = 0;
     private readonly canvas = new GridCanvas(this);
+    private readonly rowLayout = new GridRowLayout(this.highlights);
     private upperRows: Cell[][] = [];
     private upperRowsAtStart = false;
     private upperTops: number[] = [0];
@@ -199,9 +201,18 @@ export class Grid {
                         break;
                     }
                     case 'nido_bracket_guides': {
-                        this.bracketGuides = Array.isArray(args[0])
-                            ? (args[0] as BracketGuide[])
-                            : [];
+                        const guides = Array.isArray(args[0]) ? (args[0] as BracketGuide[]) : [];
+                        if (
+                            guides.length !== this.bracketGuides.length ||
+                            guides.some((guide, index) =>
+                                (Object.keys(guide) as (keyof BracketGuide)[]).some(
+                                    (key) => guide[key] !== this.bracketGuides[index]?.[key]
+                                )
+                            )
+                        ) {
+                            this.bracketGuides = guides;
+                            this.canvas.invalidatePaint();
+                        }
                         break;
                     }
                     case 'grid_resize': {
@@ -209,6 +220,7 @@ export class Grid {
                             break;
                         }
                         this.layoutDirty = true;
+                        this.canvas.invalidatePaint();
                         this.columns = Number(args[1]);
                         this.rows = Number(args[2]);
                         this.cells = Array.from({ length: this.rows }, (_, row) =>
@@ -224,6 +236,7 @@ export class Grid {
                             break;
                         }
                         this.layoutDirty = true;
+                        this.canvas.invalidatePaint();
                         this.cells = Array.from({ length: this.rows }, () =>
                             Array.from({ length: this.columns }, () => ({
                                 text: ' ',
@@ -236,7 +249,6 @@ export class Grid {
                         if (args[0] !== 1) {
                             break;
                         }
-                        this.layoutDirty = true;
                         let row = this.cells[Number(args[1])];
                         let changed = false;
                         let column = Number(args[2]);
@@ -252,16 +264,21 @@ export class Grid {
                                         row[column]?.highlight !== highlight
                                     ) {
                                         if (!changed) {
+                                            this.layoutDirty = true;
                                             if (
                                                 this.upperRows.includes(row) ||
                                                 retainedRows?.has(row)
                                             ) {
+                                                const previous = row;
                                                 row = this.cells[Number(args[1])] = row.slice();
+                                                this.rowLayout.clone(previous, row);
                                             }
                                             this.canvas.invalidate(row);
                                             changed = true;
                                         }
-                                        row[column] = { text: cell[0], highlight };
+                                        const next = { text: cell[0], highlight };
+                                        this.rowLayout.replace(row, row[column], next);
+                                        row[column] = next;
                                     }
                                 }
 
@@ -275,6 +292,7 @@ export class Grid {
                             break;
                         }
                         this.layoutDirty = true;
+                        this.canvas.invalidatePaint();
                         const [, top, bottom, left, right, rows, columns] = args as number[];
                         if (left === 0 && right === this.columns && columns === 0) {
                             const old = this.cells.slice();
@@ -290,12 +308,16 @@ export class Grid {
                             }
                             break;
                         }
-                        const old = this.cells.map((row) => row.slice());
+                        // Partial scrolls only read their rectangle, not the entire viewport.
+                        const old = this.cells
+                            .slice(top, bottom)
+                            .map((row) => row.slice(left, right));
                         for (let row = top; row < bottom; row++) {
                             if (retainedRows?.has(this.cells[row])) {
                                 this.cells[row] = this.cells[row].slice();
                             }
                             this.canvas.invalidate(this.cells[row]);
+                            this.rowLayout.invalidate(this.cells[row]);
                             for (let col = left; col < right; col++) {
                                 const sourceRow = row + rows;
                                 const sourceCol = col + columns;
@@ -304,7 +326,7 @@ export class Grid {
                                     sourceRow < bottom &&
                                     sourceCol >= left &&
                                     sourceCol < right
-                                        ? old[sourceRow][sourceCol]
+                                        ? old[sourceRow - top][sourceCol - left]
                                         : { text: ' ', highlight: 0 };
                             }
                         }
@@ -313,6 +335,7 @@ export class Grid {
                     case 'hl_attr_define': {
                         this.layoutDirty = true;
                         this.upperLayout = undefined;
+                        this.rowLayout.invalidate();
                         this.canvas.invalidate();
                         const info = args[3] as { hi_name?: string }[] | undefined;
                         this.highlights.set(Number(args[0]), {
@@ -392,6 +415,11 @@ export class Grid {
         this.canvas.paintBackground(context, x, y, width, height);
     }
 
+    /** External animation overlays must be erased before the next cursor-only paint. */
+    invalidatePaint(): void {
+        this.canvas.invalidatePaint();
+    }
+
     draw(
         canvas: HTMLCanvasElement,
         width: number,
@@ -421,14 +449,7 @@ export class Grid {
             this.rowTops = [0];
             for (let row = 0; row < this.rows; row++) {
                 const cells = this.cells[row];
-                const compact =
-                    row < this.rows - 1 &&
-                    cells.some(
-                        (cell) => cell.text.trim() && this.highlights.get(cell.highlight)?.codeLens
-                    ) &&
-                    cells.every(
-                        (cell) => !cell.text.trim() || this.highlights.get(cell.highlight)?.codeLens
-                    );
+                const compact = row < this.rows - 1 && this.rowLayout.compact(cells);
                 this.rowTops.push(
                     this.rowTops[row] + (compact ? Math.ceil(cellHeight * 0.7) : cellHeight)
                 );
@@ -441,18 +462,14 @@ export class Grid {
             ((this.rows - 1) * cellHeight - this.rowTop(this.rows - 1)) / cellHeight
         );
         if (this.upperRows !== this.upperLayout || this.upperFontHeight !== cellHeight) {
-            this.upperTops = [0];
-            for (const cells of this.upperRows.slice().reverse()) {
-                const compact =
-                    cells.some(
-                        (cell) => cell.text.trim() && this.highlights.get(cell.highlight)?.codeLens
-                    ) &&
-                    cells.every(
-                        (cell) => !cell.text.trim() || this.highlights.get(cell.highlight)?.codeLens
-                    );
-                this.upperTops.unshift(
-                    this.upperTops[0] - (compact ? Math.ceil(cellHeight * 0.7) : cellHeight)
-                );
+            this.upperTops = new Array(this.upperRows.length + 1);
+            this.upperTops[this.upperRows.length] = 0;
+            for (let index = this.upperRows.length - 1; index >= 0; index--) {
+                const cells = this.upperRows[index];
+                const compact = this.rowLayout.compact(cells);
+                this.upperTops[index] =
+                    this.upperTops[index + 1] -
+                    (compact ? Math.ceil(cellHeight * 0.7) : cellHeight);
             }
             this.upperLayout = this.upperRows;
             this.upperFontHeight = cellHeight;

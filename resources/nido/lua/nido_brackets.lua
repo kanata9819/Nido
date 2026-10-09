@@ -4,6 +4,8 @@ local colors = { '#FFD700', '#DA70D6', '#179FFF' }
 local closing = { [')'] = '(', [']'] = '[', ['}'] = '{' }
 local pending = {}
 local pairs_by_buffer = {}
+local parsed_ticks = {}
+local published_guides
 
 local function ignored(row, column)
   for _, id in ipairs(vim.fn.synstack(row, column)) do
@@ -72,6 +74,11 @@ local function update(buffer)
   if not api.nvim_buf_is_valid(buffer) or not api.nvim_buf_is_loaded(buffer) then
     return
   end
+  local tick = api.nvim_buf_get_changedtick(buffer)
+  if parsed_ticks[buffer] == tick then
+    return
+  end
+  parsed_ticks[buffer] = tick
   api.nvim_buf_clear_namespace(buffer, namespace, 0, -1)
   pairs_by_buffer[buffer] = {}
   if vim.bo[buffer].buftype ~= '' then
@@ -156,6 +163,12 @@ local function publish_guides(window, buffer, first, last, immediate)
         end
       end)
     end
+    -- Cursor movement inside the same scope leaves every guide unchanged.
+    -- Full redraws still publish the snapshot for UI reattachment and scroll batches.
+    if immediate and published_guides and vim.deep_equal(published_guides, guides) then
+      return false
+    end
+    published_guides = guides
     vim.rpcnotify(vim.g.nido_channel, 'nido:bracket_guides', guides, immediate == true)
     return false
 end
@@ -168,13 +181,20 @@ api.nvim_set_decoration_provider(api.nvim_create_namespace('nido_bracket_guides'
 api.nvim_create_autocmd({'CursorMoved', 'CursorMovedI'}, {callback=function(event)
   publish_guides(api.nvim_get_current_win(), event.buf, vim.fn.line('w0') - 1, vim.fn.line('w$'), true)
 end})
-api.nvim_create_autocmd('BufWipeout', {callback=function(event) pairs_by_buffer[event.buf] = nil end})
+api.nvim_create_autocmd('BufWipeout', {callback=function(event)
+  pairs_by_buffer[event.buf] = nil
+  parsed_ticks[event.buf] = nil
+end})
 
 set_colors()
 api.nvim_create_autocmd('ColorScheme', { callback = set_colors })
 api.nvim_create_autocmd({ 'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'TextChangedI', 'TextChangedP' }, {
   callback = function(event)
     local buffer = event.buf
+    -- Syntax can change bracket interpretation without changing the text.
+    if event.event == 'FileType' or event.event == 'Syntax' then
+      parsed_ticks[buffer] = nil
+    end
     if pending[buffer] then
       return
     end

@@ -779,12 +779,16 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
             menu.getByRole('option').filter({ hasText: 'toFixed' }).getByRole('img')
         ).toHaveAttribute('aria-label', 'Method');
         await expect(menu.getByText('Method', { exact: true })).toHaveCount(0);
+        await expect(menu).toHaveAttribute('aria-busy', 'false');
+        const methodCandidates = await menu.getByRole('option').allTextContents();
+        expect(methodCandidates.length).toBeGreaterThan(1);
         const popupBounds = await menu.boundingBox();
         await page.keyboard.type('F');
         await expect(menu.getByRole('option')).toHaveCount(1);
         expect(await menu.boundingBox()).toEqual(popupBounds);
         await page.keyboard.press('Backspace');
-        await expect(menu.getByRole('option')).toHaveCount(6);
+        // A broader prefix must restore the same candidates, regardless of server version.
+        await expect(menu.getByRole('option')).toHaveText(methodCandidates);
         expect(await menu.boundingBox()).toEqual(popupBounds);
         await page.keyboard.press('Control+e');
         await expect(menu).toHaveCount(0);

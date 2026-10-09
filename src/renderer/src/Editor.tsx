@@ -1,5 +1,5 @@
 import { useI18n } from './i18n';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Grid } from './grid';
 import { accumulateScroll } from './scroll';
 import { useEditorRendering } from './hooks/useEditorRendering';
@@ -33,7 +33,9 @@ interface Props {
     onReady?: (id: string) => void;
 }
 
-export default function Editor({
+export default memo(Editor);
+
+function Editor({
     theme,
     scrollFollowCursor = true,
     stickyScroll = true,
@@ -57,7 +59,8 @@ export default function Editor({
     const host = useRef<HTMLDivElement>(null);
     const canvas = useRef<HTMLCanvasElement>(null);
     const input = useRef<HTMLTextAreaElement>(null);
-    const grid = useRef(new Grid());
+    const [editorGrid] = useState(() => new Grid());
+    const grid = useRef(editorGrid);
     const composing = useRef(false);
     const attached = useRef(false);
     const wheel = useRef({ remainder: 0, time: 0 });
@@ -235,7 +238,7 @@ export default function Editor({
             }}
         >
             <canvas
-                key={theme}
+                key={theme === 'acrylic' ? 'acrylic' : 'opaque'}
                 ref={canvas}
                 className={styles.canvas}
                 aria-label={terminal ? t('Terminal display') : t('Neovim editor display')}

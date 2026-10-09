@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { X } from 'lucide-react';
 import type { FileEntry, SessionState } from '../../shared/types';
 import type { Panel } from './types';
-import Editor from './Editor';
+import WorkspaceEditor from './components/WorkspaceEditor';
 import TerminalPanel from './components/TerminalPanel';
 import Notification from './components/Notification';
 import NavigationRail from './components/NavigationRail';
@@ -18,7 +18,7 @@ import { useBottomPanels } from './hooks/useBottomPanels';
 import { useWorkspaceActions } from './hooks/useWorkspaceActions';
 import StatusBar from './components/StatusBar';
 import TitleBar from './components/TitleBar';
-import { Welcome, WorkspaceWelcome } from './components/Welcome';
+import { Welcome } from './components/Welcome';
 import WorkspaceLoading from './components/WorkspaceLoading';
 import { buildItems } from './commands';
 import { fileDecorations } from './fileDecorations';
@@ -234,7 +234,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         [active, run, focusEditor]
     );
 
-    const showPanel = (value: Panel): void => {
+    const showPanel = useCallback((value: Panel): void => {
         setLeader(false);
         setQuery('');
         setSelection(0);
@@ -244,7 +244,8 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
             setLoading(true);
             setFileList([]);
         }
-    };
+    }, []);
+    const openFiles = useCallback((): void => showPanel('files'), [showPanel]);
 
     const showExplorer = (): void => {
         if (workspace?.kind === 'terminal') {
@@ -392,7 +393,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                             <Welcome creating={creating} create={create} />
                         ) : null}
                         {workspaces.map((w) => (
-                            <Editor
+                            <WorkspaceEditor
                                 key={w.id}
                                 theme={theme}
                                 id={w.id}
@@ -410,17 +411,14 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                                 focusTick={focusTick}
                                 fontFamily={fontFamily.trim() || defaultFontFamily}
                                 onReady={finishEditorLoading}
-                                onError={(message) => {
-                                    finishEditorLoading(w.id);
-                                    report(message);
-                                }}
-                            >
-                                {w.kind !== 'terminal' &&
-                                    states[w.id]?.empty &&
-                                    states[w.id]?.mode === 'n' && (
-                                        <WorkspaceWelcome onOpen={() => showPanel('files')} />
-                                    )}
-                            </Editor>
+                                onError={report}
+                                empty={
+                                    w.kind !== 'terminal' &&
+                                    !!states[w.id]?.empty &&
+                                    states[w.id]?.mode === 'n'
+                                }
+                                onOpenFiles={openFiles}
+                            />
                         ))}
                         {(restoring || (!!workspace && !initializedEditors.has(active))) && (
                             <WorkspaceLoading />

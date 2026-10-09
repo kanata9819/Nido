@@ -33,15 +33,24 @@ export class GridCanvas {
     private static readonly rasterPhases = 4;
     private rowImages = new WeakMap<Cell[], HTMLCanvasElement[]>();
     private imageStyle = '';
+    private paintDirty = true;
+    private surface?: HTMLCanvasElement;
+    private scrolling = false;
+    private previousCursor?: { top: number; bottom: number };
 
     constructor(private readonly grid: Grid) {}
 
     invalidate(row?: Cell[]): void {
+        this.invalidatePaint();
         if (row) {
             this.rowImages.delete(row);
         } else {
             this.rowImages = new WeakMap();
         }
+    }
+
+    invalidatePaint(): void {
+        this.paintDirty = true;
     }
 
     paintBackground(
@@ -82,6 +91,7 @@ export class GridCanvas {
             canvas.width !== Math.round(width * dpr) ||
             canvas.height !== Math.round(height * dpr)
         ) {
+            this.invalidatePaint();
             canvas.width = Math.round(width * dpr);
             canvas.height = Math.round(height * dpr);
         }
@@ -98,13 +108,59 @@ export class GridCanvas {
             fontSize,
             fontFamily,
             cellWidth,
-            translucent
+            lineHeight,
+            this.grid.foreground,
+            this.grid.background,
+            this.grid.backgroundOpacity
         ]);
         if (imageStyle !== this.imageStyle) {
             this.imageStyle = imageStyle;
             this.rowImages = new WeakMap();
+            this.invalidatePaint();
         }
+        const previousOffset = this.grid.scrollOffset;
+        const previousHeight = this.grid.contentHeight;
         this.grid.prepareLayout(height, cellWidth, cellHeight, dpr);
+        if (
+            previousOffset !== this.grid.scrollOffset ||
+            previousHeight !== this.grid.contentHeight ||
+            this.surface !== canvas ||
+            this.scrolling !== this.grid.scrolling
+        ) {
+            this.invalidatePaint();
+        }
+        this.surface = canvas;
+        this.scrolling = this.grid.scrolling;
+        const target = this.grid.scrollCursor ?? this.grid.cursor;
+        const position = cursorPosition ?? target;
+        const cursorTop = Math.min(this.grid.rowY(target.row), this.grid.rowY(position.row));
+        const cursorBottom =
+            Math.max(this.grid.rowY(target.row), this.grid.rowY(position.row)) + cellHeight;
+        // Cursor motion and blinking only damage their old and new rows. Snap the clip
+        // to physical pixels so acrylic and fractional DPI match a complete repaint.
+        const paintTop = this.paintDirty
+            ? 0
+            : Math.max(
+                  0,
+                  Math.floor(
+                      (Math.min(cursorTop, this.previousCursor?.top ?? cursorTop) - 1 / dpr) * dpr
+                  ) / dpr
+              );
+        const paintBottom = this.paintDirty
+            ? canvas.height / dpr
+            : Math.min(
+                  canvas.height / dpr,
+                  Math.ceil(
+                      (Math.max(cursorBottom, this.previousCursor?.bottom ?? cursorBottom) +
+                          1 / dpr) *
+                          dpr
+                  ) / dpr
+              );
+        this.previousCursor = { top: cursorTop, bottom: cursorBottom };
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, paintTop, canvas.width / dpr, Math.max(0, paintBottom - paintTop));
+        ctx.clip();
         this.paintBackground(ctx, 0, 0, width, height);
         ctx.textBaseline = 'alphabetic';
         for (
@@ -116,13 +172,17 @@ export class GridCanvas {
                 row < 0
                     ? this.grid.historyRows[this.grid.historyRows.length + row]
                     : this.grid.cells[row];
+            const rowY = this.grid.rowY(row);
+            const rowHeight = this.grid.rowTop(row + 1) - this.grid.rowTop(row);
+            if (rowY + rowHeight + 1 / dpr < paintTop || rowY > paintBottom) {
+                continue;
+            }
             if (
                 row < this.grid.rows - 1 &&
                 (this.grid.rowY(row + 1) <= 0 || this.grid.rowY(row) >= this.grid.contentHeight)
             ) {
                 continue;
             }
-            const rowHeight = this.grid.rowTop(row + 1) - this.grid.rowTop(row);
             // Resting rows at fractional DPI must not inherit scroll interpolation.
             const physicalY =
                 this.grid.scrolling && this.grid.scrollOffset !== 0 && row < this.grid.rows - 1
@@ -320,6 +380,8 @@ export class GridCanvas {
         }
         this.drawCursor(ctx, cellWidth, cellHeight, focused, cursorPosition);
         ctx.restore();
+        ctx.restore();
+        this.paintDirty = false;
         return { cellWidth, cellHeight };
     }
 

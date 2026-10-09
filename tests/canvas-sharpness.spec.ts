@@ -35,6 +35,8 @@ for (const scale of [1, 1.25, 1.5]) {
                 'aria-busy',
                 'false'
             );
+            // Browsing schedules list focus on the next frame; finish it before editing the path.
+            await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
             await page.getByRole('textbox', { name: 'Folder path' }).fill(root);
             await page.keyboard.press('Enter');
             await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
