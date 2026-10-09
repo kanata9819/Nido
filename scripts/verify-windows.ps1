@@ -17,10 +17,12 @@ try {
     Invoke-Pnpm -Arguments @('typecheck:windows')
     Invoke-Pnpm -Arguments @('build:unpack')
     Invoke-Pnpm -Arguments @('test')
+    Invoke-Pnpm -Arguments @('test:prefetch')
     Invoke-Pnpm -Arguments @('exec', 'playwright', 'install', 'chromium')
     Invoke-Pnpm -Arguments @('test:renderer')
     $env:NIDO_PACKAGED_EXE = Join-Path $PWD 'dist/win-unpacked/nido.exe'
     Invoke-Pnpm -Arguments @('test:windows')
+    Invoke-Pnpm -Arguments @('verify:update')
 } finally {
     $env:NIDO_PACKAGED_EXE = $previousExecutable
     Pop-Location

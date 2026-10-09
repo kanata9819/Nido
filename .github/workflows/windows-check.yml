@@ -42,6 +42,8 @@ jobs:
               run: pnpm build:unpack
             - name: Run unit and Neovim integration tests
               run: pnpm test
+            - name: Repeat prefetch frame verification
+              run: pnpm test:prefetch
             - name: Prepare renderer browser
               id: browser
               if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -80,4 +82,16 @@ jobs:
                   path: |
                       playwright-report/
                       test-results/
+                  retention-days: 7
+            - name: Verify packaged update download, cancellation and save
+              if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+              run: pnpm verify:update
+            - name: Upload update test reports
+              if: always()
+              uses: actions/upload-artifact@v7
+              with:
+                  name: windows-updater-reports
+                  path: |
+                      playwright-report/updater/
+                      test-results/updater/
                   retention-days: 7

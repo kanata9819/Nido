@@ -206,4 +206,11 @@ api.nvim_create_autocmd({ 'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'T
   end,
 })
 
-return { pairs = function(buffer) return pairs_by_buffer[buffer] or {} end }
+return {
+  pairs = function(buffer) return pairs_by_buffer[buffer] or {} end,
+  -- Readiness includes deferred syntax updates, even when the text is unchanged.
+  ready = function(buffer)
+    return api.nvim_buf_is_valid(buffer) and not pending[buffer]
+      and parsed_ticks[buffer] == api.nvim_buf_get_changedtick(buffer)
+  end,
+}

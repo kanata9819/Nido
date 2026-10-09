@@ -382,8 +382,10 @@ end`,
         await this.client.request('nvim_exec_lua', ["require('nido_eol').convert(...)", [format]]);
     }
 
-    async snapshot(): Promise<SavedWorkspace> {
-        await this.interaction.restoreScroll();
+    async snapshot(options: { restoreScroll?: boolean } = {}): Promise<SavedWorkspace> {
+        if (options.restoreScroll !== false) {
+            await this.interaction.restoreScroll();
+        }
         if (this.workspace.kind === 'terminal') {
             return { root: this.workspace.root, kind: 'terminal', files: [], current: '' };
         }
@@ -396,6 +398,10 @@ end`,
           local wins = vim.fn.win_findbuf(b)
           if #wins > 0 then
             pos = vim.api.nvim_win_get_cursor(wins[1])
+            -- Background checkpoints preserve the detached viewport and the editing anchor.
+            if wins[1] == vim.api.nvim_get_current_win() then
+              pos = require('nido_scroll').cursor() or pos
+            end
           end
           table.insert(files, {path=name, line=math.max(1,pos[1]), column=pos[2]})
         end

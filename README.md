@@ -29,6 +29,8 @@ pnpm dev
 
 編集はVimの操作に対応。設定からEditorConfig・相対行番号などを切り替えられます。
 
+ワークスペース・タブ順・選択中のファイル・カーソル位置は5秒ごとに保存し、強制終了後も直近の状態を復元します。保存データが破損した場合は、直前の正常なバックアップから復元します。通常終了時と更新前には最新状態を保存します。この保存はファイル本文の自動保存ではなく、未保存の編集内容は含みません。
+
 左の機能一覧ボタン、`Ctrl+Shift+X`、コマンドパレットの **Features / 機能一覧** から、**Languages / 対応言語** を確認できます。補完・診断・コード操作に対応する言語、プレビュー対応、色分けのみの対応を分けて表示し、Rustの導入コマンドも確認できます。言語名・拡張子で検索でき、ビルトイン機能一覧へはタブで切り替えます。ワークスペースを開く前でも利用でき、Escで編集画面に戻れます。
 
 設定の **Language / 言語** で **English / 日本語** を選べます。UIはその場で切り替わり、再起動後も選択を維持します。初期値は英語です。メニュー・コマンド検索・操作ガイド・確認ダイアログも選択した言語で表示します。
@@ -63,6 +65,7 @@ pnpm test      # Neovim連携・スクロール状態
 pnpm test:e2e  # ビルド済みアプリの操作
 pnpm exec playwright install chromium # レンダラーのテスト用ブラウザーを初回に準備
 pnpm test:renderer # ChromiumでUIの状態遷移と非同期処理を検証（Electron/Neovim不要）
+pnpm test:prefetch # 先読みの画面保持を5回反復検証
 ```
 
 型チェックはTypeScript 7を使います。Lintが利用するTypeScript APIは、公式の互換パッケージでTypeScript 6を併用しています。
@@ -76,7 +79,7 @@ rustup component add rust-analyzer rust-src rustfmt
 pnpm verify:windows
 ```
 
-操作テスト34件は`dist/win-unpacked/nido.exe`を直接起動します。起動と同梱リソース、日本語・空白を含むパス、CRLFでの保存、貼り付けの入力順序、Windowsクリップボード、AltGrキーイベント、IMEの変換イベント、ワークスペースとファイル操作、Git、補完・診断・参照、ターミナル、Rustデバッグ、設定と終了・復元、100%・125%・150%表示を確認します。各テストには一時フォルダーと独立したプロファイルを使います。
+操作テスト35件は`dist/win-unpacked/nido.exe`を直接起動します。起動と同梱リソース、日本語・空白を含むパス、CRLFでの保存、貼り付けの入力順序、Windowsクリップボード、AltGrキーイベント、IMEの変換イベント、ワークスペースとファイル操作、Git、補完・診断・参照、ターミナル、Rustデバッグ、設定と終了・復元、強制終了後のワークスペース・カーソル復元、100%・125%・150%表示を確認します。各テストには一時フォルダーと独立したプロファイルを使います。
 
 ビルド済みの場合は`pnpm test:windows`だけでも実行できます。必須ケースの欠落・スキップ・未処理のレンダラー例外も失敗扱いです。Windows以外では成功扱いにせず、実行条件のエラーを返します。
 
@@ -98,13 +101,13 @@ Windowsのインストールでは、一時フォルダへの展開後、同じ�
 `pnpm test:installer` は隔離フォルダで移動・コピー・使用中ファイル・展開失敗を確認します。実際のインストール先やユーザー設定は変更しません。
 展開後のフックは `patches/app-builder-lib@26.15.3.patch` で追加しています。electron-builderを更新する際も、このテストで移動処理が使われることを確認してください。
 
-配布前の検証は `tests/update.spec.ts` にあります。ローカルHTTPサーバーから実際のインストーラーを取得し、ハッシュ検証・保存確認のキャンセル・保存後のインストーラー呼び出しを確認します。OSへのインストール実行はテストで置き換えています。
-`dist/auto-update` にWindows版を生成した後、以下で実行できます。
+配布前の検証は `tests/update.spec.ts` にあります。ローカルHTTPサーバーから実際のインストーラーを取得し、ハッシュ検証・保存確認のキャンセル・保存後のインストーラー呼び出しを確認します。OSへのインストール実行はテストで置き換えています。通常CIとリリースCIでこの検証を必須にしています。
+ビルド済みアプリから `dist/auto-update` に隔離したWindows版を作成し、検証を実行できます。
 
 ```powershell
-$env:NIDO_PACKAGED_EXE = "$PWD/dist/auto-update/win-unpacked/nido.exe"
-$env:NIDO_UPDATER_FIXTURE = '1'
-pnpm exec playwright test tests/update.spec.ts
+pnpm build
+pnpm verify:update
+# フィクスチャが作成済みの場合は pnpm test:update だけで再実行できます。
 ```
 
 ## コードの責務

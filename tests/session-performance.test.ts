@@ -187,11 +187,20 @@ test('upper-row prefetch keeps the viewport and cache while avoiding duplicate g
         await session.attach(100, 40);
         await session.openFile('rows.txt');
         await session.input('2000Gzt');
-        // Finish delayed highlighting before measuring only the cache traversal.
-        await session.client.request('nvim_exec_lua', [
-            'vim.wait(400,function() return false end,10)',
-            []
-        ]);
+        // Wait for actual bracket decorations instead of assuming a timer has finished.
+        assert.equal(
+            await session.client.request('nvim_exec_lua', [
+                `local namespace = vim.api.nvim_create_namespace('nido_brackets')
+local ready = vim.wait(5000, function()
+  return #vim.api.nvim_buf_get_extmarks(0, namespace, {1999, 0}, {1999, -1}, {limit=1}) > 0
+end, 5)
+vim.cmd.redraw()
+return ready`,
+                []
+            ]),
+            true,
+            'Bracket highlighting must complete before measuring prefetch frames.'
+        );
         const view = await session.client.request('nvim_exec_lua', [
             // A timer wait can finish before Neovim flushes its last cursor-line repaint.
             'vim.cmd.redraw(); return vim.fn.winsaveview()',

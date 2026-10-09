@@ -564,6 +564,7 @@ export const japanese: Record<string, string> = {
     'No messages': 'メッセージはありません',
     'Type a choice to continue': '選択肢のキーを入力してください',
     'Nido update': 'Nidoの更新',
+    'Workspace recovery': 'ワークスペースの復元',
     'Install Nido to enable updates.': '更新を利用するにはNidoをインストールしてください。',
     'No updates available.': '利用可能な更新はありません。',
     'No updates have been published yet.': '更新はまだ公開されていません。',

@@ -32,5 +32,6 @@ export const windowsBaselineCases = [
     'touchpad up keeps moving while a refill is pending',
     'cached editor text preserves its pixels at 100% scale',
     'cached editor text preserves its pixels at 125% scale',
-    'cached editor text preserves its pixels at 150% scale'
+    'cached editor text preserves its pixels at 150% scale',
+    'background checkpoints restore workspace order, active tab and cursors after an abrupt exit'
 ] as const;

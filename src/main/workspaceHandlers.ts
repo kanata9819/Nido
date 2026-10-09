@@ -3,6 +3,7 @@ import { basename, dirname, isAbsolute, join } from 'node:path';
 import { readdir, realpath, stat } from 'node:fs/promises';
 import { Session } from './session';
 import { readFavorites, readLayout, writeFavorites, writeLayout } from './persistence';
+import { WorkspaceCheckpoints } from './workspaceCheckpoints';
 import type { TerminalShell } from '../shared/types';
 import type { HandlerDeps } from './handlers';
 import { createTranslator } from '../shared/i18n';
@@ -24,6 +25,67 @@ export function registerWorkspaceHandlers({
     shellChoice: (value?: unknown) => TerminalShell;
 }): () => Promise<boolean> {
     const favoritesPath = join(app.getPath('userData'), 'favorites.json');
+    const layoutPath = join(app.getPath('userData'), 'workspaces.json');
+    let checkpointReady = false;
+    const orderedIds = (): string[] => [
+        ...state.order.filter((id) => sessions.has(id)),
+        ...[...sessions.keys()].filter((id) => !state.order.includes(id))
+    ];
+    const windowLayout = (): { width: number; height: number; maximized: boolean } => ({
+        width: window.getNormalBounds().width,
+        height: window.getNormalBounds().height,
+        maximized: window.isMaximized()
+    });
+    const canCheckpoint = (): boolean =>
+        checkpointReady && !state.prompting && !state.closing && !window.isDestroyed();
+    const checkpoints = new WorkspaceCheckpoints(
+        async () => {
+            if (!canCheckpoint()) {
+                return;
+            }
+            const ids = orderedIds();
+            const active = state.active;
+            const current = ids.map((id) => session(id));
+            // Fast mode queries remain available while Vim waits for a prompt or a key.
+            const modes = await Promise.all(
+                current.map((s) => s.client.request('nvim_get_mode', []))
+            );
+            if (modes.some((mode: { blocking: boolean }) => mode.blocking)) {
+                return;
+            }
+            const workspaces = await Promise.all(
+                current.map((s) => s.snapshot({ restoreScroll: false }))
+            );
+            if (
+                !canCheckpoint() ||
+                active !== state.active ||
+                JSON.stringify(ids) !== JSON.stringify(orderedIds())
+            ) {
+                return;
+            }
+            return {
+                version: 1,
+                window: windowLayout(),
+                workspaces,
+                active: Math.max(0, ids.indexOf(active))
+            };
+        },
+        (layout) => writeLayout(layoutPath, layout),
+        (error) =>
+            send({
+                type: 'notification',
+                id: state.active,
+                title: 'Workspace recovery',
+                message: String(error),
+                severity: 'error'
+            })
+    );
+    const checkpointTimer = setInterval(() => void checkpoints.save(), 5000);
+    checkpointTimer.unref();
+    window.once('closed', () => {
+        clearInterval(checkpointTimer);
+        checkpoints.dispose();
+    });
     let favoriteWrite: Promise<unknown> = Promise.resolve();
     handle('favorites', async () => {
         await favoriteWrite;
@@ -101,17 +163,12 @@ export function registerWorkspaceHandlers({
                     return false;
                 }
             }
-            const ids = [
-                ...state.order.filter((id) => sessions.has(id)),
-                ...[...sessions.keys()].filter((id) => !state.order.includes(id))
-            ];
-            await writeLayout(join(app.getPath('userData'), 'workspaces.json'), {
+            // A background write must finish before the final shutdown snapshot replaces it.
+            await checkpoints.idle();
+            const ids = orderedIds();
+            await writeLayout(layoutPath, {
                 version: 1,
-                window: {
-                    width: window.getNormalBounds().width,
-                    height: window.getNormalBounds().height,
-                    maximized: window.isMaximized()
-                },
+                window: windowLayout(),
                 workspaces: await Promise.all(ids.map((id) => session(id).snapshot())),
                 active: Math.max(0, ids.indexOf(state.active))
             });
@@ -143,7 +200,7 @@ export function registerWorkspaceHandlers({
         state.restoration ??= (async () => {
             const errors: string[] = [];
             try {
-                const saved = await readLayout(join(app.getPath('userData'), 'workspaces.json'));
+                const saved = await readLayout(layoutPath);
                 // Independent sessions can start together; insert results in saved tab order.
                 const restored = await Promise.all(
                     saved.workspaces.map(async (workspace, index) => {
@@ -167,6 +224,7 @@ export function registerWorkspaceHandlers({
                         sessions.set(s.workspace.id, s);
                     }
                 }
+                checkpointReady = true;
             } catch (error) {
                 errors.push(`Workspace restore failed: ${String(error)}`);
             }
@@ -237,6 +295,7 @@ export function registerWorkspaceHandlers({
             throw error;
         }
         sessions.set(s.workspace.id, s);
+        checkpointReady = true;
         return s.workspace;
     });
 

@@ -10,15 +10,26 @@ export interface SavedLayout {
 }
 
 export async function readLayout(path: string): Promise<SavedLayout> {
-    let data: SavedLayout;
     try {
-        data = JSON.parse(await readFile(path, 'utf8'));
+        return parseLayout(await readFile(path, 'utf8'));
     } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-            return { version: 1, workspaces: [], active: 0 };
+        // Keep a last-known-good layout available after interrupted or corrupt writes.
+        try {
+            return parseLayout(await readFile(`${path}.bak`, 'utf8'));
+        } catch (backupError) {
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+                if ((backupError as NodeJS.ErrnoException).code === 'ENOENT') {
+                    return { version: 1, workspaces: [], active: 0 };
+                }
+                throw backupError;
+            }
+            throw error;
         }
-        throw error;
     }
+}
+
+function parseLayout(content: string): SavedLayout {
+    const data: SavedLayout = JSON.parse(content);
     if (
         !data ||
         data.version !== 1 ||
@@ -51,6 +62,23 @@ export async function readLayout(path: string): Promise<SavedLayout> {
 }
 
 export async function writeLayout(path: string, data: SavedLayout): Promise<void> {
+    parseLayout(JSON.stringify(data));
+    let previous: SavedLayout | undefined;
+    try {
+        previous = parseLayout(await readFile(path, 'utf8'));
+    } catch (error) {
+        if (
+            (error as NodeJS.ErrnoException).code !== 'ENOENT' &&
+            !(error instanceof SyntaxError) &&
+            !(error instanceof Error && error.message === 'Invalid saved workspace data.')
+        ) {
+            throw error;
+        }
+    }
+    // A damaged primary file must never replace a valid backup.
+    if (previous && JSON.stringify(previous) !== JSON.stringify(data)) {
+        await writeJson(`${path}.bak`, previous);
+    }
     await writeJson(path, data);
 }
 

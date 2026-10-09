@@ -13,12 +13,23 @@ test('unchanged bracket scopes avoid duplicate cursor notifications and buffer r
     const lua = (code: string): ReturnType<Session['client']['request']> =>
         session.client.request('nvim_exec_lua', [code, []]);
     try {
+        await session.attach(80, 24);
         await lua(`
             local lines = {'{', string.rep('content ', 20), '}'}
             vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
             vim.api.nvim_win_set_cursor(0, {2, 0})
-            vim.wait(150, function() return false end, 5)
         `);
+        // The first native input can finish the undo header and advance changedtick.
+        await session.input('l');
+        await session.client.request('nvim_eval', ['1']);
+        await lua(`
+            local buffer = vim.api.nvim_get_current_buf()
+            assert(vim.wait(5000, function() return require('nido_brackets').ready(buffer) end, 5),
+              'Initial bracket analysis did not complete')
+            vim.cmd.redraw({bang=true})
+            vim.api.nvim_exec_autocmds('CursorMoved', {buffer=buffer})
+        `);
+        await lua('return 1');
         measuring = true;
         for (let i = 0; i < 20; i++) {
             await session.input('l');
@@ -34,7 +45,9 @@ test('unchanged bracket scopes avoid duplicate cursor notifications and buffer r
                 return original(buffer, ns, ...)
             end
             vim.api.nvim_exec_autocmds('BufWinEnter', {buffer=0})
-            vim.wait(150, function() return false end, 5)
+            local buffer = vim.api.nvim_get_current_buf()
+            assert(vim.wait(5000, function() return require('nido_brackets').ready(buffer) end, 5),
+              'Bracket analysis after buffer entry did not complete')
         `);
         const writes = Number(await lua('return vim.g.bracket_writes'));
         context.diagnostic(
@@ -47,7 +60,9 @@ test('unchanged bracket scopes avoid duplicate cursor notifications and buffer r
         await lua(`
             vim.api.nvim_buf_set_lines(0, 1, 2, false, {'nested { content }'})
             vim.api.nvim_exec_autocmds('TextChanged', {buffer=0})
-            vim.wait(150, function() return false end, 5)
+            local buffer = vim.api.nvim_get_current_buf()
+            assert(vim.wait(5000, function() return require('nido_brackets').ready(buffer) end, 5),
+              'Bracket analysis after editing did not complete')
         `);
         assert.ok(Number(await lua('return vim.g.bracket_writes')) > writes);
         assert.equal(

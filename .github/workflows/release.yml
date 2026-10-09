@@ -34,6 +34,7 @@ jobs:
             - run: pnpm typecheck:windows
             - run: pnpm build
             - run: pnpm test
+            - run: pnpm test:prefetch
             - name: Verify the packaged Windows app before publishing
               run: |
                   pnpm exec electron-builder --win --dir --publish never
@@ -42,6 +43,8 @@ jobs:
                   if ($LASTEXITCODE -ne 0) { throw 'Windows baseline failed.' }
             - name: Verify installer file transfer
               run: pnpm test:installer
+            - name: Verify packaged update download, cancellation and save
+              run: pnpm verify:update
             - name: Prepare a single draft release
               shell: pwsh
               run: |
@@ -59,7 +62,7 @@ jobs:
               with:
                   name: windows-release-test-reports
                   path: |
-                      playwright-report/windows/
+                      playwright-report/
                       test-results/
                   retention-days: 7
             - name: Publish installer and update metadata

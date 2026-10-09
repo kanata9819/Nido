@@ -10,7 +10,9 @@
         "tests/helpers/*.ts",
         "tests/fast-wheel.spec.ts",
         "tests/neovim-ui.spec.ts",
+        "tests/update.spec.ts",
         "tests/windows/*.ts",
-        "playwright.windows.config.ts"
+        "playwright.windows.config.ts",
+        "playwright.updater.config.ts"
     ]
 }

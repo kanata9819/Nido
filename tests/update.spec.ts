@@ -1,4 +1,5 @@
-import { test, expect, _electron as electron } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import { electron } from './helpers/electron';
 import assert from 'node:assert/strict';
 import { createReadStream } from 'node:fs';
 import { mkdtemp, mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises';
@@ -9,7 +10,11 @@ import { Transform } from 'node:stream';
 
 test('the update button sits directly left of minimize and is disabled in development', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-update-button-'));
-    const env = { ...process.env };
+    const env = Object.fromEntries(
+        Object.entries(process.env).filter(
+            (entry): entry is [string, string] => entry[1] !== undefined
+        )
+    );
     delete env.ELECTRON_RUN_AS_NODE;
     const running = await electron.launch({ args: ['.', `--user-data-dir=${root}`], env });
     try {
@@ -90,7 +95,11 @@ test('a packaged update downloads and verifies an installer, permits cancellatio
         })
     );
     await writeFile(marker, 'Nido updater test fixture only', { flag: 'wx' });
-    const env = { ...process.env };
+    const env = Object.fromEntries(
+        Object.entries(process.env).filter(
+            (entry): entry is [string, string] => entry[1] !== undefined
+        )
+    );
     delete env.ELECTRON_RUN_AS_NODE;
     const running = await electron.launch({
         executablePath: executable,
@@ -132,7 +141,10 @@ test('a packaged update downloads and verifies an installer, permits cancellatio
         await expect(input).toBeFocused();
         await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
         const download = page.getByRole('button', { name: 'Download update', exact: true });
-        await expect(download).toHaveAttribute('title', `Download update · ${nextVersion}`);
+        await expect(download).toHaveAttribute(
+            'title',
+            new RegExp(`^Download update\\s+${nextVersion.replaceAll('.', '\\.')}$`)
+        );
         await download.click();
         await expect(
             page.getByRole('button', { name: /^Downloading update \d+%$/ })
@@ -140,7 +152,7 @@ test('a packaged update downloads and verifies an installer, permits cancellatio
         const restart = page.getByRole('button', { name: 'Restart to update', exact: true });
         await expect(restart).toBeVisible({ timeout: 90000 });
         await page.screenshot({
-            path: process.env.NIDO_UPDATE_SCREENSHOT ?? 'test-results/update-ready.png'
+            path: process.env.NIDO_UPDATE_SCREENSHOT ?? test.info().outputPath('update-ready.png')
         });
         await page.evaluate(() => localStorage.setItem('nido.animations', 'false'));
         await page.reload();

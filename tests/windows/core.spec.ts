@@ -50,6 +50,67 @@ async function stop(running: ElectronApplication | undefined, root: string): Pro
     }
 }
 
+test('background checkpoints restore workspace order, active tab and cursors after an abrupt exit', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-windows-checkpoint-'));
+    const alpha = join(root, 'Alpha');
+    const beta = join(root, 'Beta');
+    const filename = 'notes.txt';
+    let running: ElectronApplication | undefined;
+    try {
+        await mkdir(alpha);
+        await mkdir(beta);
+        const text = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join('\n');
+        await writeFile(join(alpha, filename), text);
+        await writeFile(join(beta, filename), text);
+        const profile = await profileFor(root, [alpha, beta], filename);
+        running = await launch(profile);
+        let page = await running.firstWindow();
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.type('3G');
+        await expect(page.getByText('Ln 3, Col 1', { exact: true })).toBeVisible();
+        await page.keyboard.press('Alt+2');
+        await expect(
+            page.getByRole('tab', { name: 'Workspace Beta', exact: true })
+        ).toHaveAttribute('aria-selected', 'true');
+        await page.keyboard.type('4G');
+        await expect(page.getByText('Ln 4, Col 1', { exact: true })).toBeVisible();
+        await expect
+            .poll(
+                async () => {
+                    const content = await readSavedFile(join(profile, 'workspaces.json'));
+                    if (!content) return null;
+                    const layout = JSON.parse(content) as {
+                        active: number;
+                        workspaces: { root: string; files: { line: number }[] }[];
+                    };
+                    return {
+                        active: layout.active,
+                        roots: layout.workspaces.map((w) => w.root),
+                        lines: layout.workspaces.map((w) => w.files[0].line)
+                    };
+                },
+                { timeout: 15000 }
+            )
+            .toEqual({ active: 1, roots: [alpha, beta], lines: [3, 4] });
+        // app.exit bypasses the close/save path, so only the background checkpoint can restore it.
+        await running.evaluate(({ app }) => app.exit(0));
+        await running.close();
+        running = undefined;
+        running = await launch(profile);
+        page = await running.firstWindow();
+        await expect(
+            page.getByRole('tab', { name: 'Workspace Beta', exact: true })
+        ).toHaveAttribute('aria-selected', 'true');
+        await expect(page.getByText('Ln 4, Col 1', { exact: true })).toBeVisible();
+        await page.keyboard.press('Alt+1');
+        await expect(page.getByText('Ln 3, Col 1', { exact: true })).toBeVisible();
+        expect(await readFile(join(alpha, filename), 'utf8')).toBe(text);
+        expect(await readFile(join(beta, filename), 'utf8')).toBe(text);
+    } finally {
+        await stop(running, root);
+    }
+});
+
 test(windowsBaselineCases[0], async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-windows-unicode-'));
     const workspace = join(root, '日本語 project');
