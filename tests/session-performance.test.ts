@@ -167,11 +167,13 @@ test('search counts reuse unchanged views and refresh for cursor, edits, pattern
 test('upper-row prefetch keeps the viewport and cache while avoiding duplicate grid traffic', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-prefetch-traffic-'));
     const frames: Redraw[] = [];
+    const visibleFrames: Grid['cells'][] = [];
     const grid = new Grid();
     const session = await Session.create(root, (event) => {
         if (event.type === 'redraw') {
             grid.apply(event.events);
             frames.push(event.events);
+            visibleFrames.push(grid.cells.slice());
         }
     });
     try {
@@ -196,17 +198,49 @@ test('upper-row prefetch keeps the viewport and cache while avoiding duplicate g
         ]);
         const visible = grid.cells.slice();
         frames.length = 0;
+        visibleFrames.length = 0;
+        // Cursor-only guide refreshes share the redraw channel with cache refills.
+        await session.client.request('nvim_exec_lua', [
+            "vim.api.nvim_exec_autocmds('CursorMoved', {buffer=0})",
+            []
+        ]);
         await session.prefetchScroll();
         assert.deepEqual(
             await session.client.request('nvim_exec_lua', ['return vim.fn.winsaveview()', []]),
             view
         );
-        assert.equal(frames.length, 1, 'temporary views must never become separate visible frames');
+        const viewportFrames = frames.filter((frame) =>
+            frame.some(([name]) =>
+                [
+                    'grid_resize',
+                    'grid_clear',
+                    'grid_line',
+                    'grid_scroll',
+                    'nido_scroll',
+                    'nido_scroll_cache'
+                ].includes(name)
+            )
+        );
+        assert.equal(
+            viewportFrames.length,
+            1,
+            `temporary views must never become separate visible frames: ${JSON.stringify(
+                frames.map((frame) => frame.map(([name]) => name))
+            )}`
+        );
         assert.ok(
             Buffer.byteLength(JSON.stringify(frames)) < 200_000,
             'one refill must not transfer both complete traversals'
         );
-        for (let row = 0; row < visible.length; row++) assert.equal(grid.cells[row], visible[row]);
+        for (const rendered of visibleFrames) {
+            for (let row = 0; row < visible.length; row++) {
+                assert.equal(
+                    rendered[row],
+                    visible[row],
+                    'every published frame must preserve the visible row images'
+                );
+            }
+        }
         assert.equal(grid.needsUpperRows, false);
         await session.scroll(-100, true, true);
         assert.equal(
