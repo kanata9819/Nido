@@ -16,6 +16,10 @@ export function useGitBrowserKeyboard({
             if (event.isComposing || event.keyCode === 229) {
                 return;
             }
+            // Exit animation keeps the DOM mounted after keyboard control has returned.
+            if (document.querySelector('[data-panel="git"]')?.closest('[inert]')) {
+                return;
+            }
             if (event.key === 'Escape') {
                 event.preventDefault();
                 if (!busy) {

@@ -196,7 +196,9 @@ test('Time Machine recovers an unsaved draft after an abrupt exit, supports undo
         await page.keyboard.press('Control+Shift+H');
         await expect(dialog.getByRole('button', { name: /Restore to editor/ })).toBeEnabled();
         await page.keyboard.press('Control+Enter');
+        await expect(dialog).toHaveCount(0);
         await expect(input).toBeFocused();
+        await expect(canvas).toHaveAttribute('aria-description', /rescued draft/);
         await page.keyboard.press('Control+s');
         await expect
             .poll(() => readSavedFile(join(workspace, filename)))

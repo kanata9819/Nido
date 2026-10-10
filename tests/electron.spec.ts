@@ -2458,6 +2458,7 @@ test('Problems can be selected, filtered, opened and cleared with the keyboard',
         await expect(page.getByText('No problems reported.')).toBeVisible();
         await page.keyboard.press('Control+Shift+m');
         await expect(problems).toHaveCount(0);
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
     } finally {
         await running.close();
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

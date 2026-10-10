@@ -10,6 +10,7 @@ import MarkdownPreview from './MarkdownPreview';
 import TimeMachine from './TimeMachine';
 import type { FavoriteWorkspace } from '../../../shared/types';
 import OverlayPresence from './OverlayPresence';
+import { useState } from 'react';
 
 interface PanelProps {
     settings: SettingsPanelProps;
@@ -66,6 +67,11 @@ export function Panel({
     setSelection
 }: PanelProps): React.JSX.Element | null {
     const t = useI18n();
+    const [opening, setOpening] = useState({ panel, generation: 0 });
+    if (opening.panel !== panel) {
+        // A fading panel is a visual snapshot, not the next opening's live state.
+        setOpening({ panel, generation: opening.generation + Number(!!panel) });
+    }
     if (!panel || panel === 'features') {
         return <OverlayPresence>{null}</OverlayPresence>;
     }
@@ -118,6 +124,7 @@ export function Panel({
     return (
         <OverlayPresence>
             <div
+                key={opening.generation}
                 className={`${styles.scrim} ${['git', 'markdown', 'history'].includes(panel) ? styles.gitScrim : ''}`}
                 onMouseDown={(event) => {
                     if (event.target === event.currentTarget) {

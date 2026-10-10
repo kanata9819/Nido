@@ -20,13 +20,18 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => server?.close());
 
-async function openApp(page: Page, animations = true, reducedMotion = false): Promise<void> {
+async function openApp(
+    page: Page,
+    animations = true,
+    reducedMotion = false,
+    deferred = ''
+): Promise<void> {
     await page.addInitScript((enabled) => {
         localStorage.setItem('nido.language', 'en');
         localStorage.setItem('nido.animations', String(enabled));
     }, animations);
     await page.emulateMedia({ reducedMotion: reducedMotion ? 'reduce' : 'no-preference' });
-    await page.goto(`${origin}?view=app`);
+    await page.goto(`${origin}?view=app&defer=${deferred}`);
     await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
     await page.clock.install({ time: new Date(0) });
     await page.clock.pauseAt(new Date(1000));
@@ -156,6 +161,165 @@ test('reopening during the fade cancels removal and shows the new search', async
     await expect(card).not.toHaveAttribute('inert');
     await page.clock.runFor(200);
     await expect(card).toContainText('?second');
+});
+
+test('Git reopened during its exit animation focuses the list and reloads changes', async ({
+    page
+}) => {
+    await openApp(page);
+    const changes = page.getByRole('listbox', { name: 'Changed files' });
+    await page.keyboard.press('Control+Shift+g');
+    await expect(changes).toBeFocused();
+    await page.keyboard.press('Escape');
+    const fading = page.locator('[data-overlay-phase="closing"]:has([data-panel="git"])');
+    await expect(fading).toHaveCount(1);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.press('Control+Shift+g');
+    await expect(changes).toBeFocused();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.rendererTest.calls.filter((call) => call.method === 'gitStatus').length
+            )
+        )
+        .toBe(2);
+    await page.clock.runFor(200);
+    await expect(changes).toBeFocused();
+});
+
+test('Problems reopened during its fade returns keyboard input to the results', async ({
+    page
+}) => {
+    await openApp(page);
+    await emit(page, {
+        type: 'statePatch',
+        id: 'alpha',
+        state: {
+            diagnosticsVersion: 1,
+            problems: [
+                {
+                    path: '/alpha/main.ts',
+                    line: 1,
+                    column: 1,
+                    severity: 1,
+                    message: 'Sample error',
+                    source: 'test'
+                },
+                {
+                    path: '/alpha/main.ts',
+                    line: 3,
+                    column: 1,
+                    severity: 2,
+                    message: 'Sample warning',
+                    source: 'test'
+                }
+            ]
+        }
+    });
+    await page.clock.runFor(50);
+    await page.keyboard.press('Control+Shift+m');
+    const problems = page.getByRole('listbox', { name: 'Problems', exact: true });
+    await expect(problems).toBeFocused();
+    await page.keyboard.press('/');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('Sample error');
+    await expect(problems.getByRole('option')).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await expect(
+        page.locator('[data-overlay-phase="closing"]:has([data-panel="problems"])')
+    ).toHaveCount(1);
+    await page.keyboard.press('Control+Shift+m');
+    await expect(problems).toBeFocused();
+    await expect(problems.getByRole('option')).toHaveCount(2);
+    await page.keyboard.press('j');
+    await expect(problems.getByRole('option').nth(1)).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'openProblem')
+                    .map((call) => call.args)
+            )
+        )
+        .toEqual([['alpha', 2, 1]]);
+});
+
+test('Time Machine reopened during its fade waits for a fresh preview before restoring', async ({
+    page
+}) => {
+    await openApp(page, true, false, 'history,historyPreview');
+    const version = { id: 'draft', timestamp: 1, kind: 'draft', bytes: 5, lines: 1 };
+    const history = { path: '/alpha/notes.txt', versions: [version] };
+    await page.keyboard.press('Control+Shift+h');
+    await page.evaluate((history) => window.rendererTest.settle('history', 0, history), history);
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.pending.filter((call) => call.method === 'historyPreview')
+                        .length
+            )
+        )
+        .toBe(1);
+    await page.evaluate(
+        (version) =>
+            window.rendererTest.settle('historyPreview', 0, {
+                path: '/alpha/notes.txt',
+                version,
+                token: 'old',
+                diff: '@@ -1 +1 @@\n-old\n+draft',
+                identical: false
+            }),
+        version
+    );
+    const restore = page.getByRole('button', { name: /Restore to editor/ });
+    await expect(restore).toBeEnabled();
+    await page.keyboard.press('Escape');
+    await expect(
+        page.locator('[data-overlay-phase="closing"]:has([data-panel="history"])')
+    ).toHaveCount(1);
+    await page.keyboard.press('Control+Shift+h');
+    await expect(page.getByRole('listbox', { name: 'Edit history' })).toBeFocused();
+    await expect(restore).toBeDisabled();
+    await page.keyboard.press('Control+Enter');
+    expect(
+        await page.evaluate(() =>
+            window.rendererTest.calls.filter((call) => call.method === 'historyRestore')
+        )
+    ).toEqual([]);
+    await page.evaluate((history) => window.rendererTest.settle('history', 0, history), history);
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.pending.filter((call) => call.method === 'historyPreview')
+                        .length
+            )
+        )
+        .toBe(1);
+    await page.evaluate(
+        (version) =>
+            window.rendererTest.settle('historyPreview', 0, {
+                path: '/alpha/notes.txt',
+                version,
+                token: 'fresh',
+                diff: '@@ -1 +1 @@\n-current\n+draft',
+                identical: false
+            }),
+        version
+    );
+    await expect(restore).toBeEnabled();
+    await page.keyboard.press('Control+Enter');
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'historyRestore')
+                    .map((call) => call.args)
+            )
+        )
+        .toEqual([['alpha', '/alpha/notes.txt', 'draft', 'fresh']]);
 });
 
 for (const disabledBy of ['setting', 'system'] as const) {
