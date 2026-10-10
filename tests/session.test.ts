@@ -1822,7 +1822,12 @@ vim.lsp.start({
           local labels = prefix == 'println'
             and {'TOUCHPREDICTIONPARAMETERS_DEFAULT_RLS_LAMBDA_LEARNING_RATE', 'println'}
             or prefix == 'printl' and {'println', 'printLine'} or {'printLegacy'}
-          result = {isIncomplete = false, items = {}}
+          -- TypeScript returns unfiltered items with a shared edit range.
+          table.insert(labels, 'convertUnits')
+          result = {isIncomplete = false, items = {}, itemDefaults = {editRange = {
+            start = {line = 0, character = 0},
+            ['end'] = {line = 0, character = params.position.character},
+          }}}
           for _, label in ipairs(labels) do
             table.insert(result.items, {label = label, kind = 3})
           end

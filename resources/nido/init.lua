@@ -243,6 +243,22 @@ vim.api.nvim_create_autocmd('LspAttach', {
     vim.keymap.set('n', 'g=', function() vim.lsp.buf.format({ async = true }) end, opts)
     local client = vim.lsp.get_client_by_id(event.data.client_id)
     if client and client:supports_method('textDocument/completion') then
+      if not client.nido_completion_filter then
+        client.nido_completion_filter = true
+        local request = client.rpc.request
+        client.rpc.request = function(method, params, callback, ...)
+          if method ~= 'textDocument/completion' then
+            return request(method, params, callback, ...)
+          end
+          return request(method, params, function(err, result)
+            -- Neovim otherwise assumes textEdit candidates were already filtered by the server.
+            for _, item in ipairs(result and (result.items or result) or {}) do
+              item.filterText = item.filterText or item.label
+            end
+            callback(err, result)
+          end, ...)
+        end
+      end
       vim.lsp.completion.enable(true, client.id, event.buf, {
         autotrigger = true,
         convert = function(item)

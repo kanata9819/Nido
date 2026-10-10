@@ -784,7 +784,8 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
         expect(methodCandidates.length).toBeGreaterThan(1);
         const popupBounds = await menu.boundingBox();
         await page.keyboard.type('F');
-        await expect(menu.getByRole('option')).toHaveCount(1);
+        await expect(canvas).toHaveAttribute('aria-description', /amount\.toF\s*\n/);
+        await expect(menu.getByRole('option')).toHaveText([/^toFixed/]);
         expect(await menu.boundingBox()).toEqual(popupBounds);
         await page.keyboard.press('Backspace');
         // A broader prefix must restore the same candidates, regardless of server version.
