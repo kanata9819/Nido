@@ -296,7 +296,7 @@ test('Dark Modern syntax colors match the official palette in TypeScript, TSX an
         const cases: [string, string, [number, string, string][]][] = [
             [
                 'sample.ts',
-                '/** Documentation */\nfunction pick<T>(value: T): T { return value; }\nconst upper = "ok".toUpperCase();\nconst pattern = /hello/;\nconst escaped = "a\\nb";\nconst length = upper.length;\nclass Example { apply() { this.busy = true; } }',
+                '/** Documentation */\nfunction pick<T>(value: T): T { return value; }\nconst upper = "ok".toUpperCase();\nconst pattern = /hello/;\nconst escaped = "a\\nb";\nconst length = upper.length;\nclass Example { apply() { this.busy = true; } }\nconst style = styles?.theme.emptyTree;',
                 [
                     [0, 'Documentation', '#6a9955'],
                     [1, 'pick', '#dcdcaa'],
@@ -307,21 +307,28 @@ test('Dark Modern syntax colors match the official palette in TypeScript, TSX an
                     [3, 'hello', '#d16969'],
                     [4, '\\n', '#d7ba7d'],
                     [5, 'length', '#9cdcfe'],
-                    [6, 'this', '#569cd6']
+                    [6, 'this', '#569cd6'],
+                    [7, 'theme', '#9cdcfe'],
+                    [7, 'emptyTree', '#9cdcfe']
                 ]
             ],
             [
                 'sample.tsx',
-                'const view = <div title="ok">Hello</div>;\nclass Example { apply() { this.busy = true; } }\nconst component = <FeaturesPage onClose={focusEditor} />;\nconst nested = <Example><span /></Example>;',
+                'const view = <div title="ok">Hello</div>;\nclass Example { apply() { this.busy = true; } }\nconst component = <FeaturesPage onClose={focusEditor} />;\nconst nested = <Example><span /></Example>;\nconst styled = <ReactComponent className={styles.emptyTree} />;\nconst namespaced = <UI.View>\n</UI.View>;',
                 [
                     [0, 'div', '#569cd6'],
                     [0, 'title', '#9cdcfe'],
                     [0, 'ok', '#ce9178'],
                     [1, 'this', '#569cd6'],
                     [0, '</', '#808080'],
-                    [2, 'FeaturesPage', '#dcdcaa'],
+                    [2, 'FeaturesPage', '#4ec9b0'],
                     [2, '/>', '#808080'],
-                    [3, '/>', '#808080']
+                    [3, '/>', '#808080'],
+                    [3, 'Example', '#4ec9b0'],
+                    [4, 'ReactComponent', '#4ec9b0'],
+                    [4, 'emptyTree', '#9cdcfe'],
+                    [5, 'UI.View', '#4ec9b0'],
+                    [6, 'UI.View', '#4ec9b0']
                 ]
             ],
             [
