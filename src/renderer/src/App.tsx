@@ -35,6 +35,8 @@ import { useWorkspaceSessions } from './hooks/useWorkspaceSessions';
 import styles from './assets/Nido.module.css';
 import notificationStyles from './assets/Notification.module.css';
 import { useNotificationDismissal } from './hooks/useNotificationDismissal';
+import { OverlayMotionContext, useReducedMotion } from './overlayMotion';
+import OverlayPresence from './components/OverlayPresence';
 
 const defaultState: SessionState = {
     buffers: [],
@@ -47,9 +49,12 @@ const defaultState: SessionState = {
 
 export default function App(): React.JSX.Element {
     const settings = useEditorSettings();
+    const reducedMotion = useReducedMotion();
     return (
         <LanguageContext value={settings.language}>
-            <AppContent settings={settings} />
+            <OverlayMotionContext value={settings.animations && !reducedMotion}>
+                <AppContent settings={settings} />
+            </OverlayMotionContext>
         </LanguageContext>
     );
 }
@@ -428,7 +433,11 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                         {(restoring || (!!workspace && !initializedEditors.has(active))) && (
                             <WorkspaceLoading />
                         )}
-                        {leader && <KeyboardGuide commands={commands} focusEditor={focusEditor} />}
+                        <KeyboardGuide
+                            visible={leader}
+                            commands={commands}
+                            focusEditor={focusEditor}
+                        />
                         {workspaces
                             .filter((w) => w.terminalId)
                             .map((w) => (
@@ -478,25 +487,27 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                 }}
             />
             <Notification workspaceId={active} animations={animations} />
-            {error && (
-                <div
-                    className={`${styles.error} ${notificationStyles.dismissal}`}
-                    data-animations={animations}
-                    data-fading={errorFading}
-                    role="alert"
-                >
-                    <span>{error}</span>
-                    <button
-                        aria-label={t('Dismiss error')}
-                        onClick={() => {
-                            setError('');
-                            setFocusTick((n) => n + 1);
-                        }}
+            <OverlayPresence>
+                {error ? (
+                    <div
+                        className={`${styles.error} ${notificationStyles.dismissal}`}
+                        data-animations={animations}
+                        data-fading={errorFading}
+                        role="alert"
                     >
-                        <X size={16} />
-                    </button>
-                </div>
-            )}
+                        <span>{error}</span>
+                        <button
+                            aria-label={t('Dismiss error')}
+                            onClick={() => {
+                                setError('');
+                                setFocusTick((n) => n + 1);
+                            }}
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+                ) : null}
+            </OverlayPresence>
             <PanelComponent
                 settings={settings}
                 workspaceId={active}

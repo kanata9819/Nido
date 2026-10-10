@@ -20,7 +20,7 @@
 .notice[data-severity='warning'] {
     --accent: #d4b779;
 }
-.dismissal[data-animations='true'] {
+.dismissal[data-animations='true'][data-fading='true'] {
     transition: opacity 0.3s ease;
 }
 .dismissal[data-fading='true'] {

@@ -5,19 +5,29 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import styles from '../assets/TypeInformation.module.css';
 import type { NidoEvent } from '../../../shared/types';
+import OverlayPresence from './OverlayPresence';
 
 export default function TypeInformation({
     id,
     input,
-    fontFamily
+    fontFamily,
+    hidden = false
 }: {
     id: string;
     input: RefObject<HTMLTextAreaElement | null>;
     fontFamily: string;
+    hidden?: boolean;
 }): React.JSX.Element | null {
     const t = useI18n();
     const [info, setInfo] = useState<Extract<NidoEvent, { type: 'hover' }>>();
     const [linkError, setLinkError] = useState('');
+    const [previousHidden, setPreviousHidden] = useState(hidden);
+    if (hidden !== previousHidden) {
+        setPreviousHidden(hidden);
+        if (hidden) {
+            setInfo(undefined);
+        }
+    }
     const card = useRef<HTMLDivElement>(null);
     const body = useRef<HTMLDivElement>(null);
     const close = (): void => {
@@ -25,29 +35,30 @@ export default function TypeInformation({
         input.current?.focus();
     };
 
-    useEffect(
-        () =>
-            window.nido.onEvent((event) => {
-                if (event.type === 'diagnostics' && event.id === id && event.items.length) {
-                    setInfo(undefined);
-                    return;
-                }
-                if (event.type !== 'hover' || event.id !== id) {
-                    return;
-                }
-                setLinkError('');
-                if (!event.markdown && card.current?.contains(document.activeElement)) {
-                    input.current?.focus();
-                }
-                setInfo(event.markdown ? event : undefined);
-            }),
-        [id, input]
-    );
+    useEffect(() => {
+        if (hidden) {
+            return;
+        }
+        return window.nido.onEvent((event) => {
+            if (event.type === 'diagnostics' && event.id === id && event.items.length) {
+                setInfo(undefined);
+                return;
+            }
+            if (event.type !== 'hover' || event.id !== id) {
+                return;
+            }
+            setLinkError('');
+            if (!event.markdown && card.current?.contains(document.activeElement)) {
+                input.current?.focus();
+            }
+            setInfo(event.markdown ? event : undefined);
+        });
+    }, [id, input, hidden]);
 
     useLayoutEffect(() => {
         const element = card.current;
         const anchor = input.current;
-        if (!info || !element || !anchor) {
+        if (hidden || !info || !element || !anchor) {
             return;
         }
         const host = element.parentElement!;
@@ -80,10 +91,10 @@ export default function TypeInformation({
             observer.disconnect();
             document.removeEventListener('pointerdown', outside, true);
         };
-    }, [info, input]);
+    }, [info, input, hidden]);
 
-    if (!info) {
-        return null;
+    if (!info || hidden) {
+        return <OverlayPresence>{null}</OverlayPresence>;
     }
     // Match existing Neovim highlights to source positions, leaving other Markdown code blocks as plain text.
     const highlights = new Map(
@@ -93,164 +104,172 @@ export default function TypeInformation({
         ])
     );
     return (
-        <div
-            ref={card}
-            className={styles.card}
-            role="dialog"
-            aria-label={t('Type information')}
-            data-type-information
-            onClick={(event) => event.stopPropagation()}
-            onWheel={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-                event.stopPropagation();
-                const key = event.key.toLowerCase();
-                const ctrl = event.ctrlKey && !event.altKey && !event.metaKey;
-                if (event.key === 'Escape' || (ctrl && ['c', 'k'].includes(key))) {
-                    event.preventDefault();
-                    close();
-                } else if (ctrl && ['d', 'u', 'f', 'b'].includes(key)) {
-                    event.preventDefault();
-                    const content = body.current!;
-                    content.scrollTop +=
-                        (['d', 'f'].includes(key) ? 1 : -1) *
-                        content.clientHeight *
-                        (['d', 'u'].includes(key) ? 0.5 : 1);
-                } else if (
-                    !event.ctrlKey &&
-                    !event.altKey &&
-                    !event.metaKey &&
-                    !event.nativeEvent.isComposing &&
-                    ['h', 'l', 'ArrowLeft', 'ArrowRight'].includes(event.key)
-                ) {
-                    event.preventDefault();
-                    const bounds = body.current!.getBoundingClientRect();
-                    const content = [
-                        ...body.current!.querySelectorAll<HTMLElement>('pre, table')
-                    ].find((node) => {
-                        const rect = node.getBoundingClientRect();
-                        return (
-                            node.scrollWidth > node.clientWidth &&
-                            rect.bottom > bounds.top &&
-                            rect.top < bounds.bottom
-                        );
-                    });
-                    if (content) {
-                        content.scrollLeft += ['l', 'ArrowRight'].includes(event.key) ? 48 : -48;
-                    }
-                } else if (event.key === 'Tab') {
-                    event.preventDefault();
-                    const nodes = [
-                        body.current!,
-                        ...card.current!.querySelectorAll<HTMLElement>('button, a[href]')
-                    ];
-                    const index = nodes.indexOf(document.activeElement as HTMLElement);
-                    nodes[
-                        (index + (event.shiftKey ? -1 : 1) + nodes.length) % nodes.length
-                    ]?.focus();
-                } else if (
-                    !event.ctrlKey &&
-                    !event.altKey &&
-                    ['j', 'k', 'PageDown', 'PageUp', 'Home', 'End'].includes(event.key)
-                ) {
-                    event.preventDefault();
-                    const content = body.current!;
-                    if (event.key === 'Home') {
-                        content.scrollTop = 0;
-                    } else if (event.key === 'End') {
-                        content.scrollTop = content.scrollHeight;
-                    } else {
-                        content.scrollTop +=
-                            (['j', 'PageDown'].includes(event.key) ? 1 : -1) *
-                            (event.key.length === 1 ? 32 : content.clientHeight * 0.8);
-                    }
-                }
-            }}
-        >
-            <header>
-                <Braces size={17} />
-                <strong>{t('Type information')}</strong>
-                <span>{info.filetype}</span>
-                <button
-                    aria-label={t('Close type information')}
-                    title={t('Close (Esc / Ctrl+C)')}
-                    onClick={close}
-                >
-                    <X size={16} />
-                </button>
-            </header>
+        <OverlayPresence>
             <div
-                ref={body}
-                className={styles.body}
-                tabIndex={0}
-                aria-label={t('Type information content')}
+                ref={card}
+                className={styles.card}
+                role="dialog"
+                aria-label={t('Type information')}
+                data-type-information
+                onClick={(event) => event.stopPropagation()}
+                onWheel={(event) => event.stopPropagation()}
+                onKeyDown={(event) => {
+                    event.stopPropagation();
+                    const key = event.key.toLowerCase();
+                    const ctrl = event.ctrlKey && !event.altKey && !event.metaKey;
+                    if (event.key === 'Escape' || (ctrl && ['c', 'k'].includes(key))) {
+                        event.preventDefault();
+                        close();
+                    } else if (ctrl && ['d', 'u', 'f', 'b'].includes(key)) {
+                        event.preventDefault();
+                        const content = body.current!;
+                        content.scrollTop +=
+                            (['d', 'f'].includes(key) ? 1 : -1) *
+                            content.clientHeight *
+                            (['d', 'u'].includes(key) ? 0.5 : 1);
+                    } else if (
+                        !event.ctrlKey &&
+                        !event.altKey &&
+                        !event.metaKey &&
+                        !event.nativeEvent.isComposing &&
+                        ['h', 'l', 'ArrowLeft', 'ArrowRight'].includes(event.key)
+                    ) {
+                        event.preventDefault();
+                        const bounds = body.current!.getBoundingClientRect();
+                        const content = [
+                            ...body.current!.querySelectorAll<HTMLElement>('pre, table')
+                        ].find((node) => {
+                            const rect = node.getBoundingClientRect();
+                            return (
+                                node.scrollWidth > node.clientWidth &&
+                                rect.bottom > bounds.top &&
+                                rect.top < bounds.bottom
+                            );
+                        });
+                        if (content) {
+                            content.scrollLeft += ['l', 'ArrowRight'].includes(event.key)
+                                ? 48
+                                : -48;
+                        }
+                    } else if (event.key === 'Tab') {
+                        event.preventDefault();
+                        const nodes = [
+                            body.current!,
+                            ...card.current!.querySelectorAll<HTMLElement>('button, a[href]')
+                        ];
+                        const index = nodes.indexOf(document.activeElement as HTMLElement);
+                        nodes[
+                            (index + (event.shiftKey ? -1 : 1) + nodes.length) % nodes.length
+                        ]?.focus();
+                    } else if (
+                        !event.ctrlKey &&
+                        !event.altKey &&
+                        ['j', 'k', 'PageDown', 'PageUp', 'Home', 'End'].includes(event.key)
+                    ) {
+                        event.preventDefault();
+                        const content = body.current!;
+                        if (event.key === 'Home') {
+                            content.scrollTop = 0;
+                        } else if (event.key === 'End') {
+                            content.scrollTop = content.scrollHeight;
+                        } else {
+                            content.scrollTop +=
+                                (['j', 'PageDown'].includes(event.key) ? 1 : -1) *
+                                (event.key.length === 1 ? 32 : content.clientHeight * 0.8);
+                        }
+                    }
+                }}
             >
-                <div className={styles.prose}>
-                    <Markdown
-                        remarkPlugins={[remarkGfm]}
-                        skipHtml
-                        components={{
-                            img: ({ alt }) => <span>{alt}</span>,
-                            a: ({ href, children }) =>
-                                href && /^https?:\/\//i.test(href) ? (
-                                    <a
-                                        href={href}
-                                        onClick={(event) => {
-                                            event.preventDefault();
-                                            void window.nido
-                                                .openDocumentation(href)
-                                                .catch((error) => setLinkError(String(error)));
-                                        }}
-                                    >
-                                        {children}
-                                    </a>
-                                ) : (
-                                    <span>{children}</span>
-                                ),
-                            pre: ({ node, children }) => {
-                                const lines = highlights.get(node?.position?.start.offset ?? -1);
-                                return (
-                                    <section className={styles.code}>
-                                        <pre style={{ fontFamily }}>
-                                            {lines?.length ? (
-                                                <code>
-                                                    {lines.map((line, row) => (
-                                                        <span key={row}>
-                                                            {row > 0 && '\n'}
-                                                            {line.map((span, col) => (
-                                                                <span
-                                                                    key={col}
-                                                                    style={{ color: span.color }}
-                                                                >
-                                                                    {span.text}
-                                                                </span>
-                                                            ))}
-                                                        </span>
-                                                    ))}
-                                                </code>
-                                            ) : (
-                                                children
-                                            )}
-                                        </pre>
-                                    </section>
-                                );
-                            }
-                        }}
+                <header>
+                    <Braces size={17} />
+                    <strong>{t('Type information')}</strong>
+                    <span>{info.filetype}</span>
+                    <button
+                        aria-label={t('Close type information')}
+                        title={t('Close (Esc / Ctrl+C)')}
+                        onClick={close}
                     >
-                        {info.markdown}
-                    </Markdown>
-                </div>
-                {linkError && <p role="alert">{linkError}</p>}
-            </div>
-            <footer>
-                <span
-                    title={t(
-                        'h/l / ← →: horizontal · j/k: line · Ctrl+D/U: half page · Ctrl+F/B: page'
-                    )}
+                        <X size={16} />
+                    </button>
+                </header>
+                <div
+                    ref={body}
+                    className={styles.body}
+                    tabIndex={0}
+                    aria-label={t('Type information content')}
                 >
-                    {t('h / l · Horizontal · Ctrl D / U · Scroll')}
-                </span>
-                <span>{t('Esc / Ctrl C · Back to editor')}</span>
-            </footer>
-        </div>
+                    <div className={styles.prose}>
+                        <Markdown
+                            remarkPlugins={[remarkGfm]}
+                            skipHtml
+                            components={{
+                                img: ({ alt }) => <span>{alt}</span>,
+                                a: ({ href, children }) =>
+                                    href && /^https?:\/\//i.test(href) ? (
+                                        <a
+                                            href={href}
+                                            onClick={(event) => {
+                                                event.preventDefault();
+                                                void window.nido
+                                                    .openDocumentation(href)
+                                                    .catch((error) => setLinkError(String(error)));
+                                            }}
+                                        >
+                                            {children}
+                                        </a>
+                                    ) : (
+                                        <span>{children}</span>
+                                    ),
+                                pre: ({ node, children }) => {
+                                    const lines = highlights.get(
+                                        node?.position?.start.offset ?? -1
+                                    );
+                                    return (
+                                        <section className={styles.code}>
+                                            <pre style={{ fontFamily }}>
+                                                {lines?.length ? (
+                                                    <code>
+                                                        {lines.map((line, row) => (
+                                                            <span key={row}>
+                                                                {row > 0 && '\n'}
+                                                                {line.map((span, col) => (
+                                                                    <span
+                                                                        key={col}
+                                                                        style={{
+                                                                            color: span.color
+                                                                        }}
+                                                                    >
+                                                                        {span.text}
+                                                                    </span>
+                                                                ))}
+                                                            </span>
+                                                        ))}
+                                                    </code>
+                                                ) : (
+                                                    children
+                                                )}
+                                            </pre>
+                                        </section>
+                                    );
+                                }
+                            }}
+                        >
+                            {info.markdown}
+                        </Markdown>
+                    </div>
+                    {linkError && <p role="alert">{linkError}</p>}
+                </div>
+                <footer>
+                    <span
+                        title={t(
+                            'h/l / ← →: horizontal · j/k: line · Ctrl+D/U: half page · Ctrl+F/B: page'
+                        )}
+                    >
+                        {t('h / l · Horizontal · Ctrl D / U · Scroll')}
+                    </span>
+                    <span>{t('Esc / Ctrl C · Back to editor')}</span>
+                </footer>
+            </div>
+        </OverlayPresence>
     );
 }

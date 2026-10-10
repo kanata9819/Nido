@@ -311,15 +311,14 @@ function Sidebar({
                     : t('File commands')}{' '}
                 <kbd>:</kbd>
             </div>
-            {operation && (
-                <ExplorerCommands
-                    workspaceId={workspace.id}
-                    request={operation.request}
-                    commands={commands}
-                    onClose={closeOperation}
-                    onDone={onDone}
-                />
-            )}
+            <ExplorerCommands
+                visible={!!operation}
+                workspaceId={workspace.id}
+                request={operation?.request}
+                commands={commands}
+                onClose={closeOperation}
+                onDone={onDone}
+            />
         </aside>
     );
 }

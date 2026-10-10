@@ -4,6 +4,7 @@ import { CircleAlert, Info, X } from 'lucide-react';
 import type { NidoEvent } from '../../../shared/types';
 import styles from '../assets/Notification.module.css';
 import { useNotificationDismissal } from '../hooks/useNotificationDismissal';
+import OverlayPresence from './OverlayPresence';
 
 type Notice = Extract<NidoEvent, { type: 'notification' }>;
 
@@ -35,27 +36,29 @@ export default function Notification({
     }, [workspaceId]);
 
     if (!notice) {
-        return null;
+        return <OverlayPresence>{null}</OverlayPresence>;
     }
     const Icon = notice.severity === 'info' ? Info : CircleAlert;
     return (
-        <aside
-            className={`${styles.notice} ${styles.dismissal}`}
-            data-severity={notice.severity}
-            data-animations={animations}
-            data-fading={fading}
-            role={notice.severity === 'info' ? 'status' : 'alert'}
-            aria-label={t(notice.title)}
-        >
-            <Icon size={19} className={styles.icon} aria-hidden="true" />
-            <div className={styles.content}>
-                <strong>{t(notice.title)}</strong>
-                <p>{t(notice.message)}</p>
-                <small>{t('Esc to dismiss')}</small>
-            </div>
-            <button aria-label={t('Dismiss notification')} onClick={() => setNotice(undefined)}>
-                <X size={16} />
-            </button>
-        </aside>
+        <OverlayPresence>
+            <aside
+                className={`${styles.notice} ${styles.dismissal}`}
+                data-severity={notice.severity}
+                data-animations={animations}
+                data-fading={fading}
+                role={notice.severity === 'info' ? 'status' : 'alert'}
+                aria-label={t(notice.title)}
+            >
+                <Icon size={19} className={styles.icon} aria-hidden="true" />
+                <div className={styles.content}>
+                    <strong>{t(notice.title)}</strong>
+                    <p>{t(notice.message)}</p>
+                    <small>{t('Esc to dismiss')}</small>
+                </div>
+                <button aria-label={t('Dismiss notification')} onClick={() => setNotice(undefined)}>
+                    <X size={16} />
+                </button>
+            </aside>
+        </OverlayPresence>
     );
 }

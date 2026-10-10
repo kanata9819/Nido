@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import type { ReferenceList, ReferencePreview } from '../../../shared/types';
 import FileIcon from './FileIcon';
 import styles from '../assets/ReferencesPanel.module.css';
+import OverlayPresence from './OverlayPresence';
 
 interface Props {
     workspaceId: string;
@@ -183,21 +184,24 @@ export default function ReferencesPanel({
                 }
             }}
         >
-            {visible &&
-                focused &&
-                item &&
-                !state.loading &&
-                previewHost &&
+            {previewHost &&
                 createPortal(
-                    <section
-                        className={styles.referencePreview}
-                        aria-label={t('Reference preview')}
-                        aria-busy={preview?.key !== previewKey}
-                    >
-                        <div ref={currentContent} className={styles.referencePreviewContent}>
-                            <ReferencePreviewContent {...(preview ?? { item })} />
-                        </div>
-                    </section>,
+                    <OverlayPresence>
+                        {previewEnabled ? (
+                            <section
+                                className={styles.referencePreview}
+                                aria-label={t('Reference preview')}
+                                aria-busy={preview?.key !== previewKey}
+                            >
+                                <div
+                                    ref={currentContent}
+                                    className={styles.referencePreviewContent}
+                                >
+                                    <ReferencePreviewContent {...(preview ?? { item })} />
+                                </div>
+                            </section>
+                        ) : null}
+                    </OverlayPresence>,
                     previewHost
                 )}
             <div className={styles.referencesToolbar}>

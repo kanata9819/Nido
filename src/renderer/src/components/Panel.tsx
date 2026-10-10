@@ -9,6 +9,7 @@ import GitBrowser from './GitBrowser';
 import MarkdownPreview from './MarkdownPreview';
 import TimeMachine from './TimeMachine';
 import type { FavoriteWorkspace } from '../../../shared/types';
+import OverlayPresence from './OverlayPresence';
 
 interface PanelProps {
     settings: SettingsPanelProps;
@@ -66,7 +67,7 @@ export function Panel({
 }: PanelProps): React.JSX.Element | null {
     const t = useI18n();
     if (!panel || panel === 'features') {
-        return null;
+        return <OverlayPresence>{null}</OverlayPresence>;
     }
 
     let content: React.JSX.Element;
@@ -115,31 +116,33 @@ export function Panel({
     }
 
     return (
-        <div
-            className={`${styles.scrim} ${['git', 'markdown', 'history'].includes(panel) ? styles.gitScrim : ''}`}
-            onMouseDown={(event) => {
-                if (event.target === event.currentTarget) {
-                    focusEditor();
-                }
-            }}
-        >
+        <OverlayPresence>
             <div
-                className={`${styles.palette} ${['git', 'history'].includes(panel) ? styles.gitPalette : ''} ${panel === 'markdown' ? styles.markdownPalette : ''}`}
-                role="dialog"
-                aria-modal="true"
-                aria-label={panel === 'settings' ? t('Settings') : t(`${panel} palette`)}
-                data-panel={panel}
-                ref={modal}
+                className={`${styles.scrim} ${['git', 'markdown', 'history'].includes(panel) ? styles.gitScrim : ''}`}
+                onMouseDown={(event) => {
+                    if (event.target === event.currentTarget) {
+                        focusEditor();
+                    }
+                }}
             >
-                <div className={styles.paletteHeading}>
-                    <Command size={17} />
-                    <span>{t(panelTitles[panel])}</span>
-                    <button aria-label={t('Close palette')} onClick={focusEditor}>
-                        <X size={17} />
-                    </button>
+                <div
+                    className={`${styles.palette} ${['git', 'history'].includes(panel) ? styles.gitPalette : ''} ${panel === 'markdown' ? styles.markdownPalette : ''}`}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={panel === 'settings' ? t('Settings') : t(`${panel} palette`)}
+                    data-panel={panel}
+                    ref={modal}
+                >
+                    <div className={styles.paletteHeading}>
+                        <Command size={17} />
+                        <span>{t(panelTitles[panel])}</span>
+                        <button aria-label={t('Close palette')} onClick={focusEditor}>
+                            <X size={17} />
+                        </button>
+                    </div>
+                    {content}
                 </div>
-                {content}
             </div>
-        </div>
+        </OverlayPresence>
     );
 }

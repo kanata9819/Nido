@@ -1,0 +1,20 @@
+@media (prefers-reduced-motion: no-preference) {
+    [data-overlay-motion='true'] {
+        opacity: 1;
+        transition: opacity 130ms ease-out;
+    }
+
+    [data-overlay-motion='true'][data-overlay-phase='closing'] {
+        opacity: 0;
+    }
+
+    @starting-style {
+        [data-overlay-motion='true'] {
+            opacity: 0;
+        }
+    }
+}
+
+[data-overlay-phase='closing'] {
+    pointer-events: none;
+}

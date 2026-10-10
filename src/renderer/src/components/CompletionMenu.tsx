@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import type { Grid } from '../grid';
 import styles from '../assets/CompletionMenu.module.css';
+import OverlayPresence from './OverlayPresence';
 
 interface Menu {
     items: [string, string, string, string][];
@@ -231,76 +232,78 @@ export default function CompletionMenu({
         };
     }, [menu, grid, input, listId, hidden]);
     if (!menu?.items.length || hidden) {
-        return null;
+        return <OverlayPresence>{null}</OverlayPresence>;
     }
     return (
-        <div
-            ref={card}
-            className={styles.card}
-            style={{ fontFamily }}
-            onMouseDown={(event) => event.preventDefault()}
-        >
-            <div className={styles.heading}>
-                <Braces size={14} /> {t('Completion')}{' '}
-                <span>
-                    {menu.items.length} {t('candidates')}
-                </span>
-            </div>
+        <OverlayPresence>
             <div
-                id={listId}
-                className={styles.list}
-                role="listbox"
-                aria-label={t('Code completion')}
-                aria-busy={menu.pending ?? false}
+                ref={card}
+                className={styles.card}
+                style={{ fontFamily }}
+                onMouseDown={(event) => event.preventDefault()}
             >
-                {menu.items.map(([word, kind, detail], index) => {
-                    const Icon = Object.hasOwn(kindIcons, kind) ? kindIcons[kind] : Text;
-                    return (
-                        <div
-                            key={index}
-                            id={`${listId}-${index}`}
-                            className={styles.item}
-                            role="option"
-                            aria-selected={menu.selected === index}
-                            aria-disabled={menu.pending ?? false}
-                            title={detail || word}
-                            onClick={() => {
-                                if (menu.pending) {
-                                    return;
-                                }
-                                const keys = `<Cmd>lua vim.api.nvim_select_popupmenu_item(${index}, false, false, {})<CR>`;
-                                void window.nido
-                                    .input(id, keys)
-                                    .catch((error) => onError(String(error)));
-                                input.current?.focus();
-                            }}
-                        >
-                            <span
-                                className={styles.kind}
-                                data-kind={kind}
-                                role="img"
-                                aria-label={t(kind || 'Text')}
-                                title={t(kind || 'Text')}
+                <div className={styles.heading}>
+                    <Braces size={14} /> {t('Completion')}{' '}
+                    <span>
+                        {menu.items.length} {t('candidates')}
+                    </span>
+                </div>
+                <div
+                    id={listId}
+                    className={styles.list}
+                    role="listbox"
+                    aria-label={t('Code completion')}
+                    aria-busy={menu.pending ?? false}
+                >
+                    {menu.items.map(([word, kind, detail], index) => {
+                        const Icon = Object.hasOwn(kindIcons, kind) ? kindIcons[kind] : Text;
+                        return (
+                            <div
+                                key={index}
+                                id={`${listId}-${index}`}
+                                className={styles.item}
+                                role="option"
+                                aria-selected={menu.selected === index}
+                                aria-disabled={menu.pending ?? false}
+                                title={detail || word}
+                                onClick={() => {
+                                    if (menu.pending) {
+                                        return;
+                                    }
+                                    const keys = `<Cmd>lua vim.api.nvim_select_popupmenu_item(${index}, false, false, {})<CR>`;
+                                    void window.nido
+                                        .input(id, keys)
+                                        .catch((error) => onError(String(error)));
+                                    input.current?.focus();
+                                }}
                             >
-                                <Icon size={16} aria-hidden="true" />
-                            </span>
-                            <span className={styles.word}>{word}</span>
-                            <span className={styles.detail}>{detail}</span>
-                        </div>
-                    );
-                })}
+                                <span
+                                    className={styles.kind}
+                                    data-kind={kind}
+                                    role="img"
+                                    aria-label={t(kind || 'Text')}
+                                    title={t(kind || 'Text')}
+                                >
+                                    <Icon size={16} aria-hidden="true" />
+                                </span>
+                                <span className={styles.word}>{word}</span>
+                                <span className={styles.detail}>{detail}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+                <div className={styles.footer}>
+                    <span>
+                        <kbd>↑ ↓</kbd> {t('Select')}
+                    </span>
+                    <span>
+                        <kbd>Tab</kbd> {t('Accept')}
+                    </span>
+                    <span>
+                        <kbd>Esc</kbd> {t('Close')}
+                    </span>
+                </div>
             </div>
-            <div className={styles.footer}>
-                <span>
-                    <kbd>↑ ↓</kbd> {t('Select')}
-                </span>
-                <span>
-                    <kbd>Tab</kbd> {t('Accept')}
-                </span>
-                <span>
-                    <kbd>Esc</kbd> {t('Close')}
-                </span>
-            </div>
-        </div>
+        </OverlayPresence>
     );
 }

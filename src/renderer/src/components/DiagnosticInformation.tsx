@@ -11,6 +11,7 @@ import {
 import type { NidoEvent } from '../../../shared/types';
 import { useI18n } from '../i18n';
 import styles from '../assets/DiagnosticInformation.module.css';
+import OverlayPresence from './OverlayPresence';
 
 const severities = [
     { label: 'Error', name: 'error', icon: CircleAlert },
@@ -39,15 +40,24 @@ export default function DiagnosticInformation({
     id,
     input,
     fontFamily,
-    onError
+    onError,
+    hidden = false
 }: {
     id: string;
     input: RefObject<HTMLTextAreaElement | null>;
     fontFamily: string;
     onError: (message: string) => void;
+    hidden?: boolean;
 }): React.JSX.Element | null {
     const t = useI18n();
     const [info, setInfo] = useState<Extract<NidoEvent, { type: 'diagnostics' }>>();
+    const [previousHidden, setPreviousHidden] = useState(hidden);
+    if (hidden !== previousHidden) {
+        setPreviousHidden(hidden);
+        if (hidden) {
+            setInfo(undefined);
+        }
+    }
     const card = useRef<HTMLDivElement>(null);
     const body = useRef<HTMLDivElement>(null);
     const keys = useRef('');
@@ -61,32 +71,39 @@ export default function DiagnosticInformation({
         void window.nido.input(id, sequence).catch((error) => onError(String(error)));
     };
 
-    useEffect(
-        () =>
-            window.nido.onEvent((event) => {
-                if (event.id !== id) {
-                    return;
-                }
-                if (event.type === 'diagnostics') {
-                    if (!event.items.length) {
-                        keys.current = '';
-                    }
-                    if (!event.items.length && card.current?.contains(document.activeElement)) {
-                        input.current?.focus();
-                    }
-                    setInfo(event.items.length ? event : undefined);
-                } else if (event.type === 'hover' && event.markdown) {
+    useEffect(() => {
+        if (hidden) {
+            keys.current = '';
+        }
+    }, [hidden]);
+
+    useEffect(() => {
+        if (hidden) {
+            return;
+        }
+        return window.nido.onEvent((event) => {
+            if (event.id !== id) {
+                return;
+            }
+            if (event.type === 'diagnostics') {
+                if (!event.items.length) {
                     keys.current = '';
-                    setInfo(undefined);
                 }
-            }),
-        [id, input]
-    );
+                if (!event.items.length && card.current?.contains(document.activeElement)) {
+                    input.current?.focus();
+                }
+                setInfo(event.items.length ? event : undefined);
+            } else if (event.type === 'hover' && event.markdown) {
+                keys.current = '';
+                setInfo(undefined);
+            }
+        });
+    }, [id, input, hidden]);
 
     useLayoutEffect(() => {
         const element = card.current;
         const anchor = input.current;
-        if (!info || !element || !anchor) {
+        if (hidden || !info || !element || !anchor) {
             return;
         }
         const host = element.parentElement!;
@@ -125,176 +142,185 @@ export default function DiagnosticInformation({
             anchorObserver.disconnect();
             document.removeEventListener('pointerdown', outside, true);
         };
-    }, [info, input]);
+    }, [info, input, hidden]);
 
-    if (!info) {
-        return null;
+    if (!info || hidden) {
+        return <OverlayPresence>{null}</OverlayPresence>;
     }
     const first = info.items[0];
     const filename = first.path.replaceAll('\\', '/').split('/').pop() || t('Untitled');
     return (
-        <div
-            ref={card}
-            className={styles.card}
-            role="dialog"
-            aria-label={t('Diagnostic details')}
-            data-diagnostic-information
-            onClick={(event) => event.stopPropagation()}
-            onWheel={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-                event.stopPropagation();
-                if (event.nativeEvent.isComposing) {
-                    return;
-                }
-                const key = event.key.toLowerCase();
-                const ctrl = event.ctrlKey && !event.altKey && !event.metaKey;
-                const plain = !event.ctrlKey && !event.altKey && !event.metaKey;
-                if (
-                    key === 'escape' ||
-                    (ctrl && key === 'c' && !window.getSelection()?.toString())
-                ) {
-                    event.preventDefault();
-                    close();
-                } else if (ctrl && key === 'k') {
-                    event.preventDefault();
-                    close();
-                    jump('<C-k>');
-                } else if (
-                    plain &&
-                    /^[0-9]$/.test(key) &&
-                    !/\[|\]/.test(keys.current) &&
-                    (key !== '0' || keys.current)
-                ) {
-                    event.preventDefault();
-                    keys.current = (keys.current + key).slice(0, 6);
-                } else if (plain && ['[', ']'].includes(key)) {
-                    event.preventDefault();
-                    keys.current = keys.current.replace(/(\[|\])$/, '') + key;
-                } else if (plain && key === 'd' && /(\[|\])$/.test(keys.current)) {
-                    event.preventDefault();
-                    jump(keys.current + 'd');
-                } else {
-                    keys.current = '';
-                    const content = body.current!;
-                    if (ctrl && ['d', 'u', 'f', 'b'].includes(key)) {
-                        event.preventDefault();
-                        content.scrollTop +=
-                            (['d', 'f'].includes(key) ? 1 : -1) *
-                            content.clientHeight *
-                            (['d', 'u'].includes(key) ? 0.5 : 1);
-                    } else if (key === 'tab') {
-                        event.preventDefault();
-                        const nodes = [
-                            content,
-                            ...card.current!.querySelectorAll<HTMLElement>('button')
-                        ];
-                        const index = nodes.indexOf(document.activeElement as HTMLElement);
-                        nodes[
-                            (index + (event.shiftKey ? -1 : 1) + nodes.length) % nodes.length
-                        ]?.focus();
-                    } else if (
-                        plain &&
-                        [
-                            'j',
-                            'k',
-                            'arrowdown',
-                            'arrowup',
-                            'pagedown',
-                            'pageup',
-                            'home',
-                            'end'
-                        ].includes(key)
+        <OverlayPresence>
+            <div
+                ref={card}
+                className={styles.card}
+                role="dialog"
+                aria-label={t('Diagnostic details')}
+                data-diagnostic-information
+                onClick={(event) => event.stopPropagation()}
+                onWheel={(event) => event.stopPropagation()}
+                onKeyDown={(event) => {
+                    event.stopPropagation();
+                    if (event.nativeEvent.isComposing) {
+                        return;
+                    }
+                    const key = event.key.toLowerCase();
+                    const ctrl = event.ctrlKey && !event.altKey && !event.metaKey;
+                    const plain = !event.ctrlKey && !event.altKey && !event.metaKey;
+                    if (
+                        key === 'escape' ||
+                        (ctrl && key === 'c' && !window.getSelection()?.toString())
                     ) {
                         event.preventDefault();
-                        if (key === 'home') {
-                            content.scrollTop = 0;
-                        } else if (key === 'end') {
-                            content.scrollTop = content.scrollHeight;
-                        } else {
+                        close();
+                    } else if (ctrl && key === 'k') {
+                        event.preventDefault();
+                        close();
+                        jump('<C-k>');
+                    } else if (
+                        plain &&
+                        /^[0-9]$/.test(key) &&
+                        !/\[|\]/.test(keys.current) &&
+                        (key !== '0' || keys.current)
+                    ) {
+                        event.preventDefault();
+                        keys.current = (keys.current + key).slice(0, 6);
+                    } else if (plain && ['[', ']'].includes(key)) {
+                        event.preventDefault();
+                        keys.current = keys.current.replace(/(\[|\])$/, '') + key;
+                    } else if (plain && key === 'd' && /(\[|\])$/.test(keys.current)) {
+                        event.preventDefault();
+                        jump(keys.current + 'd');
+                    } else {
+                        keys.current = '';
+                        const content = body.current!;
+                        if (ctrl && ['d', 'u', 'f', 'b'].includes(key)) {
+                            event.preventDefault();
                             content.scrollTop +=
-                                (['j', 'arrowdown', 'pagedown'].includes(key) ? 1 : -1) *
-                                (key.startsWith('page') ? content.clientHeight * 0.8 : 32);
+                                (['d', 'f'].includes(key) ? 1 : -1) *
+                                content.clientHeight *
+                                (['d', 'u'].includes(key) ? 0.5 : 1);
+                        } else if (key === 'tab') {
+                            event.preventDefault();
+                            const nodes = [
+                                content,
+                                ...card.current!.querySelectorAll<HTMLElement>('button')
+                            ];
+                            const index = nodes.indexOf(document.activeElement as HTMLElement);
+                            nodes[
+                                (index + (event.shiftKey ? -1 : 1) + nodes.length) % nodes.length
+                            ]?.focus();
+                        } else if (
+                            plain &&
+                            [
+                                'j',
+                                'k',
+                                'arrowdown',
+                                'arrowup',
+                                'pagedown',
+                                'pageup',
+                                'home',
+                                'end'
+                            ].includes(key)
+                        ) {
+                            event.preventDefault();
+                            if (key === 'home') {
+                                content.scrollTop = 0;
+                            } else if (key === 'end') {
+                                content.scrollTop = content.scrollHeight;
+                            } else {
+                                content.scrollTop +=
+                                    (['j', 'arrowdown', 'pagedown'].includes(key) ? 1 : -1) *
+                                    (key.startsWith('page') ? content.clientHeight * 0.8 : 32);
+                            }
                         }
                     }
-                }
-            }}
-        >
-            <header className={styles.header}>
-                <CircleAlert size={16} />
-                <strong>{t('Diagnostics')}</strong>
-                <span className={styles.count}>
-                    {t('{count} on this line', { count: info.items.length })}
-                </span>
-                <div className={styles.actions}>
-                    <button
-                        aria-label={t('Previous diagnostic')}
-                        title={`${t('Previous diagnostic')} ([d)`}
-                        onClick={() => jump('[d')}
-                    >
-                        <ChevronUp size={16} />
-                    </button>
-                    <button
-                        aria-label={t('Next diagnostic')}
-                        title={`${t('Next diagnostic')} (]d)`}
-                        onClick={() => jump(']d')}
-                    >
-                        <ChevronDown size={16} />
-                    </button>
-                    <button
-                        aria-label={t('Close diagnostics')}
-                        title={t('Close (Esc / Ctrl+C)')}
-                        onClick={close}
-                    >
-                        <X size={16} />
-                    </button>
-                </div>
-            </header>
-            <div className={styles.location} title={first.path}>
-                <span>{filename}</span>
-                <span>
-                    {t('Ln {line}, Col {column}', { line: first.line, column: first.column })}
-                </span>
-            </div>
-            <div
-                ref={body}
-                className={styles.body}
-                tabIndex={0}
-                aria-label={t('Diagnostic content')}
+                }}
             >
-                {info.items.map((item, index) => {
-                    const severity = severities[item.severity - 1] || severities[0];
-                    const Icon = severity.icon;
-                    const [headline, ...details] = item.message.split('\n');
-                    return (
-                        <article key={index} className={styles.item} data-severity={severity.name}>
-                            <div className={styles.metadata}>
-                                <span className={styles.severity}>
-                                    <Icon size={14} />
-                                    {t(severity.label)}
-                                </span>
-                                {item.source && <span>{item.source}</span>}
-                                {item.code && <code style={{ fontFamily }}>{item.code}</code>}
-                                <span className={styles.column}>
-                                    {t('Col {column}', { column: item.column })}
-                                </span>
-                            </div>
-                            <h3>
-                                <Message text={headline} fontFamily={fontFamily} />
-                            </h3>
-                            {details.length > 0 && (
-                                <p>
-                                    <Message text={details.join('\n')} fontFamily={fontFamily} />
-                                </p>
-                            )}
-                        </article>
-                    );
-                })}
+                <header className={styles.header}>
+                    <CircleAlert size={16} />
+                    <strong>{t('Diagnostics')}</strong>
+                    <span className={styles.count}>
+                        {t('{count} on this line', { count: info.items.length })}
+                    </span>
+                    <div className={styles.actions}>
+                        <button
+                            aria-label={t('Previous diagnostic')}
+                            title={`${t('Previous diagnostic')} ([d)`}
+                            onClick={() => jump('[d')}
+                        >
+                            <ChevronUp size={16} />
+                        </button>
+                        <button
+                            aria-label={t('Next diagnostic')}
+                            title={`${t('Next diagnostic')} (]d)`}
+                            onClick={() => jump(']d')}
+                        >
+                            <ChevronDown size={16} />
+                        </button>
+                        <button
+                            aria-label={t('Close diagnostics')}
+                            title={t('Close (Esc / Ctrl+C)')}
+                            onClick={close}
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+                </header>
+                <div className={styles.location} title={first.path}>
+                    <span>{filename}</span>
+                    <span>
+                        {t('Ln {line}, Col {column}', { line: first.line, column: first.column })}
+                    </span>
+                </div>
+                <div
+                    ref={body}
+                    className={styles.body}
+                    tabIndex={0}
+                    aria-label={t('Diagnostic content')}
+                >
+                    {info.items.map((item, index) => {
+                        const severity = severities[item.severity - 1] || severities[0];
+                        const Icon = severity.icon;
+                        const [headline, ...details] = item.message.split('\n');
+                        return (
+                            <article
+                                key={index}
+                                className={styles.item}
+                                data-severity={severity.name}
+                            >
+                                <div className={styles.metadata}>
+                                    <span className={styles.severity}>
+                                        <Icon size={14} />
+                                        {t(severity.label)}
+                                    </span>
+                                    {item.source && <span>{item.source}</span>}
+                                    {item.code && <code style={{ fontFamily }}>{item.code}</code>}
+                                    <span className={styles.column}>
+                                        {t('Col {column}', { column: item.column })}
+                                    </span>
+                                </div>
+                                <h3>
+                                    <Message text={headline} fontFamily={fontFamily} />
+                                </h3>
+                                {details.length > 0 && (
+                                    <p>
+                                        <Message
+                                            text={details.join('\n')}
+                                            fontFamily={fontFamily}
+                                        />
+                                    </p>
+                                )}
+                            </article>
+                        );
+                    })}
+                </div>
+                <footer className={styles.footer}>
+                    <span>{t('[d / ]d · Previous / Next')}</span>
+                    <span>{t('gl · Read · j / k · Scroll')}</span>
+                    <span>{t('Esc / Ctrl C · Back to editor')}</span>
+                </footer>
             </div>
-            <footer className={styles.footer}>
-                <span>{t('[d / ]d · Previous / Next')}</span>
-                <span>{t('gl · Read · j / k · Scroll')}</span>
-                <span>{t('Esc / Ctrl C · Back to editor')}</span>
-            </footer>
-        </div>
+        </OverlayPresence>
     );
 }

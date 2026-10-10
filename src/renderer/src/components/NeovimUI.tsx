@@ -18,6 +18,7 @@ import { color } from '../gridColors';
 import { type Grid } from '../grid';
 import { vimKey } from '../keyboard';
 import styles from '../assets/NeovimUI.module.css';
+import OverlayPresence from './OverlayPresence';
 
 // Keep the existing IME textarea aligned with the external command cursor.
 function positionCommandInput(
@@ -222,196 +223,213 @@ export default function NeovimUI({
 
     return (
         <>
-            {showCommand && (
-                <div
-                    ref={commandCard}
-                    className={styles.command}
-                    data-neovim-ui
-                    role="dialog"
-                    aria-label={t('Neovim command line')}
-                    style={{ fontFamily }}
-                    onMouseDown={(event) => {
-                        event.preventDefault();
-                        input.current?.focus();
-                    }}
-                >
-                    <div className={styles.header} id={`neovim-command-${id}`}>
-                        {current?.firstCharacter === '/' || current?.firstCharacter === '?' ? (
-                            <Search size={15} />
-                        ) : (
-                            <Terminal size={15} />
-                        )}
-                        <strong>
-                            {t(
-                                current?.firstCharacter === '/' || current?.firstCharacter === '?'
-                                    ? 'Search'
-                                    : 'Command line'
-                            )}
-                        </strong>
-                        <span className={styles.hint}>
-                            <kbd>Enter</kbd> {t('Run')} · <kbd>Esc</kbd> {t('Cancel')}
-                        </span>
-                        <button aria-label={t('Cancel command')} onClick={() => send('<Esc>')}>
-                            <X size={16} />
-                        </button>
-                    </div>
+            <OverlayPresence>
+                {showCommand ? (
                     <div
-                        ref={commandBody}
-                        className={styles.commandBody}
-                        aria-label={t('Command content')}
-                    >
-                        {state.block.map((line, index) => (
-                            <div key={index} className={styles.blockLine}>
-                                <Chunks content={line} grid={grid.current} />
-                            </div>
-                        ))}
-                        {commands.map((command) => (
-                            <CommandLine
-                                key={command.level}
-                                command={command}
-                                grid={grid.current}
-                                caret={caret}
-                                current={command.level === current?.level}
-                            />
-                        ))}
-                    </div>
-                    {state.completion && (
-                        <div
-                            className={styles.completion}
-                            id={`neovim-completion-${id}`}
-                            role="listbox"
-                            aria-label={t('Command completion')}
-                        >
-                            {state.completion.items.map(([word, , detail], index) => (
-                                <div
-                                    key={index}
-                                    role="option"
-                                    id={`neovim-completion-${id}-${index}`}
-                                    aria-selected={index === state.completion?.selected}
-                                    onClick={() => {
-                                        void window.nido
-                                            .selectCompletion(id, index)
-                                            .catch((error) => onError(String(error)));
-                                        input.current?.focus();
-                                    }}
-                                >
-                                    <span>{word}</span>
-                                    {detail && <small>{detail}</small>}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-            {showMessages && (
-                <div
-                    className={styles.messages}
-                    data-neovim-ui
-                    role="dialog"
-                    aria-label={t(showHistory ? 'Message history' : 'Neovim messages')}
-                    style={{ fontFamily }}
-                >
-                    <div className={styles.header}>
-                        {showHistory ? <History size={15} /> : <MessageSquare size={15} />}
-                        <strong>{t(showHistory ? 'Message history' : 'Neovim messages')}</strong>
-                        <span className={styles.count}>{messages.length}</span>
-                        <span className={styles.hint}>
-                            <kbd>Alt Shift M</kbd> {t('Focus')}
-                        </span>
-                        <button aria-label={t('Close messages')} onClick={closeMessages}>
-                            <X size={16} />
-                        </button>
-                    </div>
-                    <div
-                        ref={messageBody}
-                        className={styles.messageBody}
-                        tabIndex={0}
-                        aria-label={t('Message content')}
-                        onKeyDown={(event) => {
-                            if (event.key === 'Escape') {
-                                event.preventDefault();
-                                closeMessages();
-                            } else if (
-                                prompt &&
-                                !event.ctrlKey &&
-                                !event.metaKey &&
-                                !event.altKey
-                            ) {
-                                const key = vimKey(event.nativeEvent);
-                                if (key) {
-                                    event.preventDefault();
-                                    send(key);
-                                }
-                            } else if (
-                                (event.ctrlKey && ['u', 'd'].includes(event.key)) ||
-                                (!event.ctrlKey && !event.altKey && ['j', 'k'].includes(event.key))
-                            ) {
-                                event.preventDefault();
-                                const down = event.key === 'j' || event.key === 'd';
-                                event.currentTarget.scrollBy({
-                                    top:
-                                        (down ? 1 : -1) *
-                                        (event.ctrlKey ? event.currentTarget.clientHeight / 2 : 32)
-                                });
-                            }
+                        ref={commandCard}
+                        className={styles.command}
+                        data-neovim-ui
+                        role="dialog"
+                        aria-label={t('Neovim command line')}
+                        style={{ fontFamily }}
+                        onMouseDown={(event) => {
+                            event.preventDefault();
+                            input.current?.focus();
                         }}
                     >
-                        {messages.map((message, index) => (
-                            <article
-                                key={index}
-                                data-kind={message.kind}
-                                data-severity={
-                                    /emsg|echoerr|lua_error|rpc_error|shell_err/.test(message.kind)
-                                        ? 'error'
-                                        : message.kind === 'wmsg'
-                                          ? 'warning'
-                                          : 'info'
-                                }
-                            >
-                                {/emsg|echoerr|lua_error|rpc_error|shell_err|wmsg/.test(
-                                    message.kind
-                                ) && <CircleAlert size={14} aria-hidden="true" />}
-                                <pre>
-                                    <Chunks content={message.content} grid={grid.current} />
-                                </pre>
-                            </article>
-                        ))}
-                        {showHistory && !messages.length && (
-                            <p className={styles.empty}>{t('No messages')}</p>
-                        )}
-                    </div>
-                    {prompt && (
-                        <div className={styles.footer}>
-                            {prompt.kind === 'return_prompt' ? (
-                                <button onClick={() => send('<CR>')}>
-                                    <kbd>Enter</kbd> {t('Continue')}
-                                </button>
+                        <div className={styles.header} id={`neovim-command-${id}`}>
+                            {current?.firstCharacter === '/' || current?.firstCharacter === '?' ? (
+                                <Search size={15} />
                             ) : (
-                                <button onClick={() => input.current?.focus()}>
-                                    {t('Type a choice to continue')}
-                                </button>
+                                <Terminal size={15} />
                             )}
-                            <button onClick={closeMessages}>
-                                <kbd>Esc</kbd> {t('Cancel')}
+                            <strong>
+                                {t(
+                                    current?.firstCharacter === '/' ||
+                                        current?.firstCharacter === '?'
+                                        ? 'Search'
+                                        : 'Command line'
+                                )}
+                            </strong>
+                            <span className={styles.hint}>
+                                <kbd>Enter</kbd> {t('Run')} · <kbd>Esc</kbd> {t('Cancel')}
+                            </span>
+                            <button aria-label={t('Cancel command')} onClick={() => send('<Esc>')}>
+                                <X size={16} />
                             </button>
                         </div>
-                    )}
-                </div>
-            )}
-            {!hidden && auxiliary.length > 0 && (
-                <div
-                    className={styles.auxiliary}
-                    data-neovim-ui
-                    role="status"
-                    style={{ fontFamily }}
-                >
-                    {auxiliary.map((content, index) => (
-                        <span key={index}>
-                            <Chunks content={content} grid={grid.current} />
-                        </span>
-                    ))}
-                </div>
-            )}
+                        <div
+                            ref={commandBody}
+                            className={styles.commandBody}
+                            aria-label={t('Command content')}
+                        >
+                            {state.block.map((line, index) => (
+                                <div key={index} className={styles.blockLine}>
+                                    <Chunks content={line} grid={grid.current} />
+                                </div>
+                            ))}
+                            {commands.map((command) => (
+                                <CommandLine
+                                    key={command.level}
+                                    command={command}
+                                    grid={grid.current}
+                                    caret={caret}
+                                    current={command.level === current?.level}
+                                />
+                            ))}
+                        </div>
+                        <OverlayPresence>
+                            {state.completion ? (
+                                <div
+                                    className={styles.completion}
+                                    id={`neovim-completion-${id}`}
+                                    role="listbox"
+                                    aria-label={t('Command completion')}
+                                >
+                                    {state.completion.items.map(([word, , detail], index) => (
+                                        <div
+                                            key={index}
+                                            role="option"
+                                            id={`neovim-completion-${id}-${index}`}
+                                            aria-selected={index === state.completion?.selected}
+                                            onClick={() => {
+                                                void window.nido
+                                                    .selectCompletion(id, index)
+                                                    .catch((error) => onError(String(error)));
+                                                input.current?.focus();
+                                            }}
+                                        >
+                                            <span>{word}</span>
+                                            {detail && <small>{detail}</small>}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : null}
+                        </OverlayPresence>
+                    </div>
+                ) : null}
+            </OverlayPresence>
+            <OverlayPresence>
+                {showMessages ? (
+                    <div
+                        className={styles.messages}
+                        data-neovim-ui
+                        role="dialog"
+                        aria-label={t(showHistory ? 'Message history' : 'Neovim messages')}
+                        style={{ fontFamily }}
+                    >
+                        <div className={styles.header}>
+                            {showHistory ? <History size={15} /> : <MessageSquare size={15} />}
+                            <strong>
+                                {t(showHistory ? 'Message history' : 'Neovim messages')}
+                            </strong>
+                            <span className={styles.count}>{messages.length}</span>
+                            <span className={styles.hint}>
+                                <kbd>Alt Shift M</kbd> {t('Focus')}
+                            </span>
+                            <button aria-label={t('Close messages')} onClick={closeMessages}>
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <div
+                            ref={messageBody}
+                            className={styles.messageBody}
+                            tabIndex={0}
+                            aria-label={t('Message content')}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Escape') {
+                                    event.preventDefault();
+                                    closeMessages();
+                                } else if (
+                                    prompt &&
+                                    !event.ctrlKey &&
+                                    !event.metaKey &&
+                                    !event.altKey
+                                ) {
+                                    const key = vimKey(event.nativeEvent);
+                                    if (key) {
+                                        event.preventDefault();
+                                        send(key);
+                                    }
+                                } else if (
+                                    (event.ctrlKey && ['u', 'd'].includes(event.key)) ||
+                                    (!event.ctrlKey &&
+                                        !event.altKey &&
+                                        ['j', 'k'].includes(event.key))
+                                ) {
+                                    event.preventDefault();
+                                    const down = event.key === 'j' || event.key === 'd';
+                                    event.currentTarget.scrollBy({
+                                        top:
+                                            (down ? 1 : -1) *
+                                            (event.ctrlKey
+                                                ? event.currentTarget.clientHeight / 2
+                                                : 32)
+                                    });
+                                }
+                            }}
+                        >
+                            {messages.map((message, index) => (
+                                <article
+                                    key={index}
+                                    data-kind={message.kind}
+                                    data-severity={
+                                        /emsg|echoerr|lua_error|rpc_error|shell_err/.test(
+                                            message.kind
+                                        )
+                                            ? 'error'
+                                            : message.kind === 'wmsg'
+                                              ? 'warning'
+                                              : 'info'
+                                    }
+                                >
+                                    {/emsg|echoerr|lua_error|rpc_error|shell_err|wmsg/.test(
+                                        message.kind
+                                    ) && <CircleAlert size={14} aria-hidden="true" />}
+                                    <pre>
+                                        <Chunks content={message.content} grid={grid.current} />
+                                    </pre>
+                                </article>
+                            ))}
+                            {showHistory && !messages.length && (
+                                <p className={styles.empty}>{t('No messages')}</p>
+                            )}
+                        </div>
+                        {prompt && (
+                            <div className={styles.footer}>
+                                {prompt.kind === 'return_prompt' ? (
+                                    <button onClick={() => send('<CR>')}>
+                                        <kbd>Enter</kbd> {t('Continue')}
+                                    </button>
+                                ) : (
+                                    <button onClick={() => input.current?.focus()}>
+                                        {t('Type a choice to continue')}
+                                    </button>
+                                )}
+                                <button onClick={closeMessages}>
+                                    <kbd>Esc</kbd> {t('Cancel')}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                ) : null}
+            </OverlayPresence>
+            <OverlayPresence>
+                {!hidden && auxiliary.length > 0 ? (
+                    <div
+                        className={styles.auxiliary}
+                        data-neovim-ui
+                        role="status"
+                        style={{ fontFamily }}
+                    >
+                        {auxiliary.map((content, index) => (
+                            <span key={index}>
+                                <Chunks content={content} grid={grid.current} />
+                            </span>
+                        ))}
+                    </div>
+                ) : null}
+            </OverlayPresence>
         </>
     );
 }

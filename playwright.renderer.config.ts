@@ -5,7 +5,8 @@ export default defineConfig({
     testMatch: [
         'renderer-lifecycle.spec.ts',
         'renderer-performance.spec.ts',
-        'history-renderer.spec.ts'
+        'history-renderer.spec.ts',
+        'overlay-motion.spec.ts'
     ],
     timeout: 30000,
     outputDir: 'test-results/renderer',

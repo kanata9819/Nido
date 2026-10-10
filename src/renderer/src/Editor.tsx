@@ -273,17 +273,23 @@ function Editor({
                     input={input}
                     fontFamily={fontFamily}
                     onError={onError}
-                    hidden={blocked}
+                    hidden={blocked || !active}
                 />
             )}
-            {active && !blocked && !terminal && (
+            {!terminal && (
                 <>
-                    <TypeInformation id={id} input={input} fontFamily={fontFamily} />
+                    <TypeInformation
+                        id={id}
+                        input={input}
+                        fontFamily={fontFamily}
+                        hidden={!active || blocked}
+                    />
                     <DiagnosticInformation
                         id={id}
                         input={input}
                         fontFamily={fontFamily}
                         onError={onError}
+                        hidden={!active || blocked}
                     />
                 </>
             )}
