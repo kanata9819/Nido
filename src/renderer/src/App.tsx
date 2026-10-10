@@ -393,7 +393,8 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                         {workspace ? (
                             <FileHeader
                                 workspace={workspace}
-                                state={state}
+                                buffers={state.buffers}
+                                current={state.current}
                                 decorations={decorations}
                                 focusEditor={focusEditor}
                                 restartShell={restartShell}

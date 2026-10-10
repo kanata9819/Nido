@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 import type { DebugAction, SessionState, TerminalShell, Workspace } from '../../../shared/types';
 
 interface Options {
@@ -139,17 +139,20 @@ export function useBottomPanels({
             showTerminal();
         }
     };
-    const restartShell = (id: string): void => {
-        run(
-            window.nido.restartTerminal(id, terminalShell).then(() => {
-                if (id === active) {
-                    focusEditor();
-                } else {
-                    setTerminalFocusTick((value) => value + 1);
-                }
-            })
-        );
-    };
+    const restartShell = useCallback(
+        (id: string): void => {
+            run(
+                window.nido.restartTerminal(id, terminalShell).then(() => {
+                    if (id === active) {
+                        focusEditor();
+                    } else {
+                        setTerminalFocusTick((value) => value + 1);
+                    }
+                })
+            );
+        },
+        [run, terminalShell, active, focusEditor]
+    );
     const openDebugger = (): void => {
         closeOverlay();
         setBottomPanel('debug');

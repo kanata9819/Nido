@@ -5,6 +5,8 @@ local api = vim.api
 local namespace = api.nvim_create_namespace('nido_git_signs')
 local generations = {}
 local pending = {}
+local bases = {}
+local rendered = {}
 local M = {}
 
 local function colors()
@@ -35,12 +37,17 @@ function M.refresh(buffer)
     if not valid() then
       return
     end
+    local eol = vim.bo[buffer].endofline
+    local previous = rendered[buffer]
+    if previous and previous.tick == tick and previous.base == base and previous.eol == eol then
+      return
+    end
     local lines = api.nvim_buf_get_lines(buffer, 0, -1, false)
-    local text = table.concat(lines, '\n') .. (vim.bo[buffer].endofline and '\n' or '')
+    local text = table.concat(lines, '\n') .. (eol and '\n' or '')
     if #lines == 1 and lines[1] == '' then
       text = ''
     end
-    -- ponytail: diff the whole buffer; cache the base and diff incrementally if large files become slow.
+    -- Changed buffers still use a full diff; unchanged buffers reuse their signs.
     local hunks = base and vim.diff(base, text, { result_type = 'indices' }) or {}
     local wanted = {}
     local function sign(row, group, symbol)
@@ -78,6 +85,7 @@ function M.refresh(buffer)
       })
     end
     for _, id in ipairs(stale) do api.nvim_buf_del_extmark(buffer, namespace, id) end
+    rendered[buffer] = {tick=tick, base=base, eol=eol}
     if changed then
       vim.cmd('redraw')
     end
@@ -91,27 +99,45 @@ function M.refresh(buffer)
       end
     end))
   end
-  git(vim.fs.dirname(name), {'rev-parse', '--show-toplevel'}, function(result)
-    if result.code ~= 0 then
+  git(vim.fs.dirname(name), {'rev-parse', '--show-toplevel', '--verify', 'HEAD'}, function(result)
+    local root, head = (result.stdout or ''):match('^(.*)\n([%x]+)\n$')
+    -- An unborn repository still prints its root before HEAD verification fails.
+    root = root or vim.trim(result.stdout or '')
+    if root == '' then
+      bases[buffer] = nil
       render(nil)
       return
     end
-    local root = vim.trim(result.stdout)
     local path = vim.fs.relpath(root, name)
     if not path then
       render(nil)
       return
     end
     path = path:gsub('\\', '/')
-    git(root, {'show', 'HEAD:' .. path}, function(committed)
+    local cached = bases[buffer]
+    if head and cached and cached.name == name and cached.root == root and cached.head == head then
+      render(cached.text)
+      return
+    end
+    local function untracked()
+      bases[buffer] = nil
+      -- Recheck index/ignore rules because they can change without a new commit.
+      git(root, {'ls-files', '--cached', '--others', '--exclude-standard', '--error-unmatch', '--', path}, function(listed)
+        render(listed.code == 0 and '' or nil)
+      end)
+    end
+    if not head then
+      untracked()
+      return
+    end
+    git(root, {'show', head .. ':' .. path}, function(committed)
       if committed.code == 0 then
+        bases[buffer] = {name=name, root=root, head=head, text=committed.stdout}
         render(committed.stdout)
         return
       end
       -- New files include staged additions and untracked files, but exclude ignored files.
-      git(root, {'ls-files', '--cached', '--others', '--exclude-standard', '--error-unmatch', '--', path}, function(listed)
-        render(listed.code == 0 and '' or nil)
-      end)
+      untracked()
     end)
   end)
 end
@@ -138,9 +164,11 @@ api.nvim_create_autocmd({'BufEnter', 'BufWritePost', 'TextChanged', 'TextChanged
   end,
 })
 api.nvim_create_autocmd('FocusGained', { callback = function() M.refresh() end })
-api.nvim_create_autocmd('BufWipeout', { callback = function(event)
+api.nvim_create_autocmd({'BufUnload', 'BufWipeout'}, { callback = function(event)
   generations[event.buf] = nil
   pending[event.buf] = nil
+  bases[event.buf] = nil
+  rendered[event.buf] = nil
 end })
 -- Refresh the visible buffer after external commits, checkouts and Git panel actions.
 local timer = vim.uv.new_timer()

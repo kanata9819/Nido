@@ -2126,6 +2126,49 @@ vim.cmd('redraw!')`,
             lua('vim.api.nvim_buf_set_lines(0, 0, -1, false, ...)', [lines]);
         await session.openFile('tracked.txt');
         await signs([]);
+        await lua(`
+local module = require('nido_git_signs')
+local buffer = vim.api.nvim_get_current_buf()
+local system, diff, get_lines = vim.system, vim.diff, vim.api.nvim_buf_get_lines
+local active = 0
+local metrics = {git=0, shows=0, diffs=0, reads=0}
+vim.system = function(command, options, callback)
+  if command[1] ~= 'git' then return system(command, options, callback) end
+  metrics.git = metrics.git + 1
+  if vim.tbl_contains(command, 'show') then metrics.shows = metrics.shows + 1 end
+  active = active + 1
+  return system(command, options, function(result)
+    callback(result)
+    vim.schedule(function() active = active - 1 end)
+  end)
+end
+vim.diff = function(...) metrics.diffs = metrics.diffs + 1; return diff(...) end
+vim.api.nvim_buf_get_lines = function(buf, first, last, strict)
+  if buf == buffer and first == 0 and last == -1 then metrics.reads = metrics.reads + 1 end
+  return get_lines(buf, first, last, strict)
+end
+local function refresh()
+  module.refresh(buffer)
+  assert(vim.wait(3000, function() return active == 0 end, 5), 'Git refresh completed')
+end
+local ok, err = pcall(function()
+  refresh()
+  metrics = {git=0, shows=0, diffs=0, reads=0}
+  for _=1,10 do refresh() end
+  assert(metrics.git >= 10, 'still verify external HEAD changes')
+  assert(metrics.shows == 0, 'reuse the committed file until HEAD changes')
+  assert(metrics.diffs == 0 and metrics.reads == 0, 'unchanged refreshes skip full-buffer work')
+  local tick = vim.api.nvim_buf_get_changedtick(buffer)
+  vim.bo[buffer].endofline = false
+  assert(vim.api.nvim_buf_get_changedtick(buffer) == tick, 'option change leaves changedtick unchanged')
+  refresh()
+  assert(metrics.diffs == 1, 'endofline change invalidates the rendered signs')
+  vim.bo[buffer].endofline = true
+  refresh()
+end)
+vim.system, vim.diff, vim.api.nvim_buf_get_lines = system, diff, get_lines
+assert(ok, err)
+`);
         await edit(['first', 'changed', 'third', 'added']);
         await signs([
             [1, 'NidoGitChanged'],
@@ -2178,6 +2221,13 @@ vim.cmd('redraw!')`,
         await signs([], false);
         await writeFile(join(root, 'new.txt'), 'new\nfile\n');
         await session.openFile('new.txt');
+        await signs([
+            [0, 'NidoGitAdded'],
+            [1, 'NidoGitAdded']
+        ]);
+        await writeFile(join(root, '.gitignore'), 'ignored.txt\nnew.txt\n');
+        await signs([]);
+        git('add', '-f', 'new.txt');
         await signs([
             [0, 'NidoGitAdded'],
             [1, 'NidoGitAdded']

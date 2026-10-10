@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n';
-import { useLayoutEffect, useRef } from 'react';
+import { memo, useLayoutEffect, useRef } from 'react';
 import { ChevronRight, X } from 'lucide-react';
 import type { Workspace, SessionState } from '../../../shared/types';
 import { gitFileKey, type Decoration } from '../fileDecorations';
@@ -10,16 +10,18 @@ import styles from '../assets/Nido.module.css';
 
 interface FileHeaderProps {
     workspace: Workspace;
-    state: SessionState;
+    buffers: SessionState['buffers'];
+    current: SessionState['current'];
     decorations: Record<string, Decoration>;
     focusEditor: () => void;
     restartShell: (id: string) => void;
     run: (promise: Promise<unknown>) => void;
 }
 
-export default function FileHeader({
+function FileHeader({
     workspace,
-    state,
+    buffers,
+    current: currentId,
     decorations,
     focusEditor,
     restartShell,
@@ -27,7 +29,7 @@ export default function FileHeader({
 }: FileHeaderProps): React.JSX.Element {
     const t = useI18n();
     const active = workspace.id;
-    const current = state.buffers.find((buffer) => buffer.id === state.current);
+    const current = buffers.find((buffer) => buffer.id === currentId);
     const selectedTab = useRef<HTMLDivElement>(null);
     useLayoutEffect(() => {
         selectedTab.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -41,17 +43,17 @@ export default function FileHeader({
                 aria-label={t('Files')}
                 hidden={workspace.kind === 'terminal'}
             >
-                {state.buffers.map((buffer) => {
+                {buffers.map((buffer) => {
                     const decoration = decorations[gitFileKey(buffer.name)];
                     return (
                         <div
                             key={buffer.id}
-                            ref={state.current === buffer.id ? selectedTab : undefined}
-                            className={`${styles.fileTab} ${state.current === buffer.id ? styles.activeFile : ''}`}
+                            ref={currentId === buffer.id ? selectedTab : undefined}
+                            className={`${styles.fileTab} ${currentId === buffer.id ? styles.activeFile : ''}`}
                         >
                             <button
                                 role="tab"
-                                aria-selected={state.current === buffer.id}
+                                aria-selected={currentId === buffer.id}
                                 title={buffer.name}
                                 onClick={() => {
                                     run(window.nido.selectBuffer(active, buffer.id));
@@ -122,3 +124,5 @@ export default function FileHeader({
         </>
     );
 }
+
+export default memo(FileHeader);

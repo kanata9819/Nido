@@ -23,6 +23,95 @@ test.afterAll(async () => {
     await server?.close();
 });
 
+test('cursor-only state updates leave file tabs untouched while real tab changes still render', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=gitStatus`);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.evaluate(() => {
+        const buffers = Array.from({ length: 100 }, (_, i) => ({
+            id: i + 1,
+            name: `/alpha/file-${i}.txt`,
+            modified: false
+        }));
+        const map = buffers.map;
+        Object.assign(window, { tabMaps: 0, performanceBuffers: buffers });
+        buffers.map = function (...args: Parameters<typeof map>) {
+            (window as unknown as { tabMaps: number }).tabMaps++;
+            return map.apply(this, args);
+        } as typeof map;
+        window.rendererTest.emit({
+            type: 'statePatch',
+            id: 'alpha',
+            state: { buffers, current: 1 }
+        });
+    });
+    const tabs = page.getByRole('tablist', { name: 'Files', exact: true });
+    await expect(tabs.getByRole('tab')).toHaveCount(100);
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.pending.some((call) => call.method === 'gitStatus')
+            )
+        )
+        .toBe(true);
+    await page.evaluate(() => {
+        while (window.rendererTest.pending.some((call) => call.method === 'gitStatus')) {
+            window.rendererTest.settle('gitStatus', 0, {
+                root: '/alpha',
+                branch: 'main',
+                changes: [{ path: 'file-0.txt', status: 'M', staged: false }]
+            });
+        }
+    });
+    await expect(
+        tabs.getByRole('tab').first().getByLabel('Git: Modified', { exact: true })
+    ).toBeVisible();
+    await page.evaluate(() => {
+        (window as unknown as { tabMaps: number }).tabMaps = 0;
+    });
+    for (let i = 0; i < 20; i++) {
+        await page.evaluate(async (column) => {
+            window.rendererTest.emit({ type: 'statePatch', id: 'alpha', state: { column } });
+            await new Promise<void>((resolve) =>
+                requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+            );
+        }, i + 2);
+    }
+    const maps = await page.evaluate(() => (window as unknown as { tabMaps: number }).tabMaps);
+    console.log(`100 file tabs, 20 cursor-only updates: ${maps} tab list maps`);
+    expect(maps).toBe(0);
+    await page.evaluate(() => {
+        const buffers = (
+            window as unknown as {
+                performanceBuffers: { id: number; name: string; modified: boolean }[];
+            }
+        ).performanceBuffers;
+        window.rendererTest.emit({
+            type: 'statePatch',
+            id: 'alpha',
+            state: {
+                current: 2,
+                buffers: buffers.map((buffer, i) =>
+                    i === 1 ? { ...buffer, modified: true } : buffer
+                )
+            }
+        });
+    });
+    await expect(tabs.getByRole('tab', { selected: true })).toHaveText('file-1.txt');
+    await expect(tabs.getByRole('tab', { selected: true }).getByLabel('Unsaved')).toBeVisible();
+    await tabs.getByRole('tab').first().click();
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'selectBuffer')
+                    .map((call) => call.args)
+            )
+        )
+        .toEqual([['alpha', 1]]);
+});
+
 test('hidden editors keep their state without scheduling paints, and cursor blinking does not rewrite input styles', async ({
     page
 }) => {
