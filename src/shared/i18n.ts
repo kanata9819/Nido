@@ -471,6 +471,7 @@ export const japanese: Record<string, string> = {
     Operator: '演算子',
     TypeParameter: '型パラメーター',
     'Markdown preview content': 'Markdownプレビューの内容',
+    'Close preview': 'プレビューを閉じる',
     'Loading…': '読み込み中…',
     'Loading workspaces…': 'ワークスペースを読み込み中…',
     'Toggle terminal': 'ターミナルを切り替え',

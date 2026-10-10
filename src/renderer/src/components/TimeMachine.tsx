@@ -78,21 +78,26 @@ export default function TimeMachine({
             return;
         }
         let cancelled = false;
-        void window.nido.historyPreview(workspaceId, data.path, selected).then(
-            (value) => {
-                if (!cancelled) {
-                    setPreview({ list: data, id: selected, value });
-                }
-            },
-            (failure) => {
-                if (!cancelled) {
-                    setPreview({ list: data, id: selected, error: message(failure) });
-                }
-            }
+        const timer = window.setTimeout(
+            () =>
+                void window.nido.historyPreview(workspaceId, data.path, selected).then(
+                    (value) => {
+                        if (!cancelled) {
+                            setPreview({ list: data, id: selected, value });
+                        }
+                    },
+                    (failure) => {
+                        if (!cancelled) {
+                            setPreview({ list: data, id: selected, error: message(failure) });
+                        }
+                    }
+                ),
+            75
         );
         list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
         return () => {
             cancelled = true;
+            window.clearTimeout(timer);
         };
     }, [workspaceId, data, selected]);
 

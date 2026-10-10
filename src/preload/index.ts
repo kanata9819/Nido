@@ -35,7 +35,7 @@ const api: NidoAPI = {
     input: (id, keys) => ipcRenderer.invoke('nido:input', id, keys),
     inputMode: (id) => ipcRenderer.invoke('nido:inputMode', id),
     selectCompletion: (id, index) => ipcRenderer.invoke('nido:selectCompletion', id, index),
-    markdownPreview: (id) => ipcRenderer.invoke('nido:markdownPreview', id),
+    markdownPreview: (id, token) => ipcRenderer.invoke('nido:markdownPreview', id, token),
     setClipboardSharing: (id, enabled) => ipcRenderer.invoke('nido:clipboardSharing', id, enabled),
     setEditorConfig: (id, enabled) => ipcRenderer.invoke('nido:editorConfig', id, enabled),
     setWordWrap: (id, enabled) => ipcRenderer.invoke('nido:wordWrap', id, enabled),
@@ -53,7 +53,8 @@ const api: NidoAPI = {
     files: (id, path) => ipcRenderer.invoke('nido:files', id, path),
     fileAction: (id, action, path, target) =>
         ipcRenderer.invoke('nido:fileAction', id, action, path, target),
-    findFiles: (id) => ipcRenderer.invoke('nido:findFiles', id),
+    findFiles: (id, query) => ipcRenderer.invoke('nido:findFiles', id, query),
+    cancelFindFiles: (id) => ipcRenderer.invoke('nido:cancelFindFiles', id),
     openFile: (id, path) => ipcRenderer.invoke('nido:openFile', id, path),
     openReference: (id, index, version) =>
         ipcRenderer.invoke('nido:openReference', id, index, version),

@@ -5,6 +5,7 @@ export default defineConfig({
     testMatch: [
         'renderer-lifecycle.spec.ts',
         'renderer-performance.spec.ts',
+        'feature-performance.spec.ts',
         'history-renderer.spec.ts',
         'overlay-motion.spec.ts'
     ],

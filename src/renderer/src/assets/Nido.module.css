@@ -309,6 +309,13 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    min-width: 0;
+}
+.editorSplit {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
 }
 .fileTabs {
     height: 34px;

@@ -6,6 +6,11 @@ import type { FileAction, FileEntry } from '../shared/types';
 
 export class SessionFiles {
     private mutations: Promise<void> = Promise.resolve();
+    private searchGeneration = 0;
+    private searchDirectories = new Map<
+        string,
+        { mtime: number; checked: number; entries: FileEntry[] }
+    >();
     constructor(
         private readonly root: string,
         private readonly client: NeovimClient
@@ -37,7 +42,16 @@ export class SessionFiles {
         target: string,
         trash: (path: string) => Promise<void>
     ): Promise<void> {
-        const next = this.mutations.then(() => this.mutate(action, path, target, trash));
+        const next = this.mutations.then(async () => {
+            this.cancelFindFiles();
+            this.searchDirectories.clear();
+            try {
+                await this.mutate(action, path, target, trash);
+            } finally {
+                this.cancelFindFiles();
+                this.searchDirectories.clear();
+            }
+        });
         this.mutations = next.catch(() => {});
         return next;
     }
@@ -195,29 +209,82 @@ return false`,
         return files.map((file) => ({ ...file, ignored: ignored.has(file.path) }));
     }
 
-    async findFiles(): Promise<FileEntry[]> {
+    cancelFindFiles(): void {
+        this.searchGeneration++;
+    }
+
+    async findFiles(query = ''): Promise<FileEntry[]> {
+        const generation = ++this.searchGeneration;
+        const needle = query.toLowerCase();
         const result: FileEntry[] = [];
-        const visit = async (directory: string, depth: number): Promise<void> => {
-            if (depth > 12 || result.length >= 5000) {
-                return;
+        const directories = [''];
+        while (directories.length && result.length < 100) {
+            if (generation !== this.searchGeneration) {
+                return [];
             }
-            for (const entry of await this.files(directory, false)) {
-                if (result.length >= 5000) {
-                    break;
+            const directory = directories.pop()!;
+            let entries: FileEntry[];
+            try {
+                const info = await stat(await this.path(directory));
+                const cached = this.searchDirectories.get(directory);
+                entries =
+                    cached && cached.mtime === info.mtimeMs && Date.now() - cached.checked < 2000
+                        ? cached.entries
+                        : await this.files(directory, false);
+                this.searchDirectories.delete(directory);
+                // shortcut: retain at most 64 small directories; use an index for larger workspaces.
+                if (entries.length <= 2000) {
+                    if (this.searchDirectories.size >= 64) {
+                        this.searchDirectories.delete(this.searchDirectories.keys().next().value!);
+                    }
+                    this.searchDirectories.set(directory, {
+                        mtime: info.mtimeMs,
+                        checked: cached?.entries === entries ? cached.checked : Date.now(),
+                        entries
+                    });
+                }
+            } catch (error) {
+                if (
+                    directory &&
+                    ['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM'].includes(
+                        (error as NodeJS.ErrnoException).code || ''
+                    )
+                ) {
+                    continue;
+                }
+                throw error;
+            }
+            if (generation !== this.searchGeneration) {
+                return [];
+            }
+            const children: string[] = [];
+            let inspected = 0;
+            for (const entry of entries) {
+                if (++inspected % 512 === 0) {
+                    await new Promise<void>((resolve) => setImmediate(resolve));
+                    if (generation !== this.searchGeneration) {
+                        return [];
+                    }
                 }
                 if (!entry.directory) {
-                    result.push(entry);
+                    if (`${entry.name} ${entry.path}`.toLowerCase().includes(needle)) {
+                        result.push(entry);
+                    }
+                    if (result.length >= 100) {
+                        break;
+                    }
                 } else if (
                     !['node_modules', 'dist', 'out', 'build', 'target', '.next'].includes(
                         entry.name
                     )
                 ) {
-                    await visit(entry.path, depth + 1);
+                    children.push(entry.path);
                 }
             }
-        };
-        // ponytail: cap at 5,000 files/12 levels; use a cancellable indexed search for larger projects.
-        await visit('', 0);
+            for (let index = children.length - 1; index >= 0; index--) {
+                directories.push(children[index]);
+            }
+        }
         return result;
     }
 }

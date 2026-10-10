@@ -1,17 +1,33 @@
 local M = {}
 local version = 0
 local items = {}
+local search = 0
+local pending = {}
+local deadline
+
+local function stop_deadline()
+  if deadline and not deadline:is_closing() then deadline:stop(); deadline:close() end
+  deadline = nil
+end
 
 local function publish(state)
   vim.rpcnotify(vim.g.nido_channel, 'nido:references', state)
 end
 
 function M.find()
+  search = search + 1
+  local current = search
+  stop_deadline()
+  for _, request in ipairs(pending) do
+    if not request.done and request.id then
+      pcall(request.client.cancel_request, request.client, request.id)
+    end
+  end
+  pending = {}
   version = version + 1
-  local current = version
   local buffer = vim.api.nvim_get_current_buf()
   local clients = vim.lsp.get_clients({ bufnr = buffer, method = 'textDocument/references' })
-  local state = { version = current, items = {}, loading = true, error = '' }
+  local state = { version = version, search = current, items = {}, loading = true, error = '' }
   items = {}
   publish(state)
   if #clients == 0 then
@@ -23,13 +39,26 @@ function M.find()
 
   local remaining = #clients
   local seen = {}
+  deadline = vim.defer_fn(function()
+    if current ~= search then return end
+    for _, request in ipairs(pending) do
+      if not request.done then
+        if request.id then pcall(request.client.cancel_request, request.client, request.id) end
+        request.receive({message='The references request timed out.'})
+      end
+    end
+  end, 10000)
   for _, client in ipairs(clients) do
+    local request = {client=client, done=false}
+    table.insert(pending, request)
     local params = vim.lsp.util.make_position_params(0, client.offset_encoding)
     params.context = { includeDeclaration = true }
     local function receive(err, locations)
-      if current ~= version then
+      if current ~= search or request.done then
         return
       end
+      request.done = true
+      local added = false
       if err then
         state.error = err.message or tostring(err)
       else
@@ -38,11 +67,12 @@ function M.find()
           if not seen[key] then
             seen[key] = true
             table.insert(items, item)
+            added = true
           end
         end
       end
       remaining = remaining - 1
-      if remaining == 0 then
+      if added then
         table.sort(items, function(a, b)
           if a.filename ~= b.filename then
             return a.filename < b.filename
@@ -52,17 +82,27 @@ function M.find()
           end
           return a.col < b.col
         end)
+        state.items = {}
         for _, item in ipairs(items) do
           table.insert(state.items, { path = item.filename, line = item.lnum, column = item.col, text = item.text or '' })
         end
-        state.loading = false
-        publish(state)
+        -- A new result ordering invalidates indices held by previews or jump requests.
+        version = version + 1
+        state.version = version
+      end
+      state.loading = remaining > 0
+      publish(state)
+      if remaining == 0 then
+        stop_deadline()
+        pending = {}
         if #items == 0 and state.error == '' then
           vim.notify('No references found at the cursor.', vim.log.levels.INFO, {title = 'References'})
         end
       end
     end
-    local accepted = client:request('textDocument/references', params, receive, buffer)
+    request.receive = receive
+    local accepted, id = client:request('textDocument/references', params, receive, buffer)
+    request.id = id
     if not accepted then
       receive({ message = 'The language server could not accept the references request.' })
     end

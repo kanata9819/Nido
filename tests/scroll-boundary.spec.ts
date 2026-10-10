@@ -9,18 +9,21 @@ test('upward touchpad gestures stop at the first row while replies are delayed',
     const root = await mkdtemp(join(tmpdir(), 'nido-scroll-boundary-'));
     const profile = join(root, 'profile');
     const file = join(root, 'ReferencesPanel.tsx');
+    const source = await readFile('src/renderer/src/components/ReferencesPanel.tsx', 'utf8');
+    const startLine =
+        source.split('\n').findIndex((line) => line.includes('referencesToolbar')) + 1;
+    expect(startLine).toBeGreaterThan(100);
     await mkdir(profile);
-    await writeFile(
-        file,
-        await readFile('src/renderer/src/components/ReferencesPanel.tsx', 'utf8')
-    );
+    await writeFile(file, source);
     await writeFile(
         join(profile, 'workspaces.json'),
         JSON.stringify({
             version: 1,
             active: 0,
             window: { width: 1200, height: 900, maximized: false },
-            workspaces: [{ root, current: file, files: [{ path: file, line: 200, column: 0 }] }]
+            workspaces: [
+                { root, current: file, files: [{ path: file, line: startLine, column: 0 }] }
+            ]
         })
     );
     const env = { ...process.env };
@@ -83,7 +86,7 @@ test('upward touchpad gestures stop at the first row while replies are delayed',
                     );
             });
         });
-        await page.keyboard.type('200Gzt');
+        await page.keyboard.type(`${startLine}Gzt`);
         await expect(canvas).toHaveAttribute('aria-description', /referencesToolbar/);
         await running.evaluate(({ ipcMain }) => {
             const handlers = (

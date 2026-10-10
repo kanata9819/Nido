@@ -10,18 +10,25 @@ local launch_args = {}
 local launch_cwd = root
 local launch_env
 local state = {status='idle', output='', variables={}, targets={}}
+local output_pending
 local function publish()
+  output_pending = nil
   if channel then
     vim.rpcnotify(channel, 'nido:debug', state)
   end
 end
 local function output(text)
   state.output = (state.output .. text):sub(-20000)
-  publish()
+  if not output_pending then
+    local token = {}
+    output_pending = token
+    vim.defer_fn(function() if output_pending == token then publish() end end, 50)
+  end
 end
 local function fail(message)
   state.status = 'error'
   output(tostring(message) .. '\n')
+  publish()
 end
 -- Windows LLDB does not consistently forward console stdout through DAP.
 local terminal_buf, timer

@@ -25,6 +25,9 @@ interface PreviewContent {
     error?: string;
 }
 
+const rowHeight = 30;
+const overscan = 8;
+
 function ReferencePreviewContent({
     item,
     data,
@@ -76,6 +79,15 @@ export default function ReferencesPanel({
     const [focused, setFocused] = useState(false);
     const [preview, setPreview] = useState<PreviewContent>();
     const selectionKey = `${workspaceId}:${state.version}`;
+    const [viewport, setViewport] = useState({ key: selectionKey, top: 0 });
+    const [height, setHeight] = useState(200);
+    const top = viewport.key === selectionKey ? viewport.top : 0;
+    const first = Math.max(0, Math.floor(top / rowHeight) - overscan);
+    const last = Math.min(state.items.length, Math.ceil((top + height) / rowHeight) + overscan);
+    const indices = Array.from({ length: last - first }, (_, index) => first + index);
+    if (state.items[selected] && (selected < first || selected >= last)) {
+        indices.push(selected);
+    }
     const [previousSelectionKey, setPreviousSelectionKey] = useState(selectionKey);
     if (selectionKey !== previousSelectionKey) {
         setPreviousSelectionKey(selectionKey);
@@ -87,7 +99,7 @@ export default function ReferencesPanel({
     const item = state.items[selected];
     const previewKey = `${state.version}:${selected}`;
     const previewHost = document.getElementById('editor-preview-host');
-    const previewEnabled = visible && focused && !!item && !state.loading;
+    const previewEnabled = visible && focused && !!item;
     const [previousPreviewEnabled, setPreviousPreviewEnabled] = useState(previewEnabled);
     if (previewEnabled !== previousPreviewEnabled) {
         setPreviousPreviewEnabled(previewEnabled);
@@ -96,7 +108,7 @@ export default function ReferencesPanel({
         }
     }
     useEffect(() => {
-        if (!visible || !focused || !item || state.loading) {
+        if (!visible || !focused || !item) {
             return;
         }
         let cancelled = false;
@@ -107,12 +119,17 @@ export default function ReferencesPanel({
             // Keep the old preview (including its header) until the next result is ready.
             setPreview({ key: previewKey, index: selected, item, data, error });
         };
-        void window.nido.previewReference(workspaceId, selected + 1, state.version).then(
-            (result) => show(result),
-            (error) => show(undefined, String(error))
+        const timer = window.setTimeout(
+            () =>
+                void window.nido.previewReference(workspaceId, selected + 1, state.version).then(
+                    (result) => show(result),
+                    (error) => show(undefined, String(error))
+                ),
+            75
         );
         return () => {
             cancelled = true;
+            window.clearTimeout(timer);
         };
     }, [workspaceId, selected, previewKey, state.version, state.loading, visible, focused, item]);
     useLayoutEffect(() => {
@@ -148,9 +165,28 @@ export default function ReferencesPanel({
             list.current?.focus();
         }
     }, [focusTick, visible]);
+    useLayoutEffect(() => {
+        const node = list.current;
+        if (!node || !visible) {
+            return;
+        }
+        const top = selected * rowHeight + 5;
+        if (top < node.scrollTop) {
+            node.scrollTop = top;
+        } else if (top + rowHeight > node.scrollTop + node.clientHeight) {
+            node.scrollTop = top + rowHeight - node.clientHeight;
+        }
+        setViewport({ key: selectionKey, top: node.scrollTop });
+    }, [selected, selectionKey, visible]);
     useEffect(() => {
-        list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
-    }, [selected, visible]);
+        const node = list.current;
+        if (!node) {
+            return;
+        }
+        const observer = new ResizeObserver(() => setHeight(node.clientHeight));
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, []);
 
     return (
         <section
@@ -222,6 +258,9 @@ export default function ReferencesPanel({
                 data-reference-version={state.version}
                 tabIndex={0}
                 aria-busy={state.loading}
+                onScroll={(event) =>
+                    setViewport({ key: selectionKey, top: event.currentTarget.scrollTop })
+                }
                 aria-activedescendant={state.items[selected] ? `reference-${selected}` : undefined}
                 onKeyDown={(event) => {
                     if (
@@ -249,36 +288,47 @@ export default function ReferencesPanel({
                     }
                 }}
             >
-                {state.items.map((item, index) => {
-                    const path = item.path.replaceAll('\\', '/');
-                    const prefix = root.replaceAll('\\', '/').replace(/\/$/, '') + '/';
-                    const relative = path.toLowerCase().startsWith(prefix.toLowerCase())
-                        ? path.slice(prefix.length)
-                        : path;
-                    return (
-                        <div
-                            key={`${item.path}:${item.line}:${item.column}`}
-                            id={`reference-${index}`}
-                            role="option"
-                            aria-selected={selected === index}
-                            className={styles.referenceRow}
-                            onClick={() => {
-                                setSelected(index);
-                                list.current?.focus();
-                            }}
-                            onDoubleClick={() => onOpen(index + 1)}
-                        >
-                            <FileIcon path={item.path} />
-                            <span className={styles.referencePath} title={item.path}>
-                                {relative}
-                            </span>
-                            <span className={styles.referencePosition}>
-                                {item.line}:{item.column}
-                            </span>
-                            <code>{item.text.trim()}</code>
-                        </div>
-                    );
-                })}
+                <div style={{ height: state.items.length * rowHeight, position: 'relative' }}>
+                    {indices.map((index) => {
+                        const item = state.items[index];
+                        const path = item.path.replaceAll('\\', '/');
+                        const prefix = root.replaceAll('\\', '/').replace(/\/$/, '') + '/';
+                        const relative = path.toLowerCase().startsWith(prefix.toLowerCase())
+                            ? path.slice(prefix.length)
+                            : path;
+                        return (
+                            <div
+                                key={`${item.path}:${item.line}:${item.column}`}
+                                id={`reference-${index}`}
+                                role="option"
+                                aria-posinset={index + 1}
+                                aria-setsize={state.items.length}
+                                style={{
+                                    position: 'absolute',
+                                    top: index * rowHeight,
+                                    left: 0,
+                                    right: 0
+                                }}
+                                aria-selected={selected === index}
+                                className={styles.referenceRow}
+                                onClick={() => {
+                                    setSelected(index);
+                                    list.current?.focus();
+                                }}
+                                onDoubleClick={() => onOpen(index + 1)}
+                            >
+                                <FileIcon path={item.path} />
+                                <span className={styles.referencePath} title={item.path}>
+                                    {relative}
+                                </span>
+                                <span className={styles.referencePosition}>
+                                    {item.line}:{item.column}
+                                </span>
+                                <code>{item.text.trim()}</code>
+                            </div>
+                        );
+                    })}
+                </div>
                 {state.error && <p role="alert">{state.error}</p>}
                 {!state.loading && !state.error && !state.items.length && (
                     <p>{t('No references found.')}</p>

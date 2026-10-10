@@ -926,7 +926,7 @@ test('Markdown preview renders unsaved edits and supports keyboard scrolling and
             /Unsaved heading/
         );
         await page.keyboard.press('Control+Shift+v');
-        const popup = page.getByRole('dialog', { name: 'markdown palette' });
+        const popup = page.getByRole('region', { name: 'Markdown preview', exact: true });
         const content = page.getByLabel('Markdown preview content', { exact: true });
         await expect(popup).toBeVisible();
         await expect(content).toBeFocused();
@@ -939,6 +939,14 @@ test('Markdown preview renders unsaved edits and supports keyboard scrolling and
         await expect(content.getByRole('link', { name: 'Unsafe' })).toHaveCount(0);
         expect(await page.evaluate(() => 'previewUnsafe' in window)).toBe(false);
         expect(await readFile(join(workspace, 'preview.md'), 'utf8')).toBe(source);
+        await page.keyboard.press('Control+j');
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await expect(popup).toBeVisible();
+        await page.keyboard.type('Go## Live heading');
+        await page.keyboard.press('Escape');
+        await expect(content.getByRole('heading', { name: 'Live heading' })).toHaveCount(1);
+        expect(await readFile(join(workspace, 'preview.md'), 'utf8')).toBe(source);
+        await content.focus();
         await page.keyboard.press('Control+d');
         await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
         await page.keyboard.press('Control+u');

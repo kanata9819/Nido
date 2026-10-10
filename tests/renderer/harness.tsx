@@ -66,6 +66,7 @@ const defaults: Record<string, unknown> = {
     restoreWorkspaces: { workspaces: [workspace], active: 'alpha', errors: [] },
     files: [],
     findFiles: [],
+    markdownPreview: { token: '1:1', path: '/alpha/notes.md', text: '# Preview' },
     inputMode: 'n',
     gitStatus: {
         root: '/alpha',

@@ -79,6 +79,7 @@ export interface SessionState {
 }
 export interface ReferenceList {
     version: number;
+    search?: number;
     loading: boolean;
     error: string;
     items: { path: string; line: number; column: number; text: string }[];
@@ -138,6 +139,11 @@ export interface FileEntry {
     path: string;
     directory: boolean;
     ignored?: boolean;
+}
+export interface MarkdownSnapshot {
+    token: string;
+    path: string;
+    text?: string;
 }
 export type FileAction = 'createFile' | 'createDirectory' | 'rename' | 'copy' | 'delete';
 export type Redraw = [string, ...unknown[][]][];
@@ -232,7 +238,7 @@ export interface NidoAPI {
     input(id: string, keys: string): Promise<void>;
     inputMode(id: string): Promise<string>;
     selectCompletion(id: string, index: number): Promise<void>;
-    markdownPreview(id: string): Promise<string>;
+    markdownPreview(id: string, token?: string): Promise<MarkdownSnapshot>;
     setClipboardSharing(id: string, enabled: boolean): Promise<void>;
     setRelativeLineNumbers(id: string, enabled: boolean): Promise<void>;
     setWordWrap(id: string, enabled: boolean): Promise<void>;
@@ -246,7 +252,8 @@ export interface NidoAPI {
     pasteClipboard(id: string): Promise<void>;
     files(id: string, relative: string): Promise<FileEntry[]>;
     fileAction(id: string, action: FileAction, path: string, target?: string): Promise<void>;
-    findFiles(id: string): Promise<FileEntry[]>;
+    findFiles(id: string, query?: string): Promise<FileEntry[]>;
+    cancelFindFiles(id: string): Promise<void>;
     openFile(id: string, relative: string): Promise<void>;
     openReference(id: string, index: number, version: number): Promise<void>;
     openProblem(id: string, index: number, version: number): Promise<void>;

@@ -6,7 +6,6 @@ import PaletteItems from './PaletteItems';
 import styles from '../assets/Palette.module.css';
 import FolderPicker from './FolderPicker';
 import GitBrowser from './GitBrowser';
-import MarkdownPreview from './MarkdownPreview';
 import TimeMachine from './TimeMachine';
 import type { FavoriteWorkspace } from '../../../shared/types';
 import OverlayPresence from './OverlayPresence';
@@ -72,7 +71,7 @@ export function Panel({
         // A fading panel is a visual snapshot, not the next opening's live state.
         setOpening({ panel, generation: opening.generation + Number(!!panel) });
     }
-    if (!panel || panel === 'features') {
+    if (!panel || panel === 'features' || panel === 'markdown') {
         return <OverlayPresence>{null}</OverlayPresence>;
     }
 
@@ -82,9 +81,6 @@ export function Panel({
             content = (
                 <TimeMachine key={workspaceId} workspaceId={workspaceId} onClose={focusEditor} />
             );
-            break;
-        case 'markdown':
-            content = <MarkdownPreview key={workspaceId} workspaceId={workspaceId} />;
             break;
         case 'git':
             content = (
@@ -125,7 +121,7 @@ export function Panel({
         <OverlayPresence>
             <div
                 key={opening.generation}
-                className={`${styles.scrim} ${['git', 'markdown', 'history'].includes(panel) ? styles.gitScrim : ''}`}
+                className={`${styles.scrim} ${['git', 'history'].includes(panel) ? styles.gitScrim : ''}`}
                 onMouseDown={(event) => {
                     if (event.target === event.currentTarget) {
                         focusEditor();
@@ -133,7 +129,7 @@ export function Panel({
                 }}
             >
                 <div
-                    className={`${styles.palette} ${['git', 'history'].includes(panel) ? styles.gitPalette : ''} ${panel === 'markdown' ? styles.markdownPalette : ''}`}
+                    className={`${styles.palette} ${['git', 'history'].includes(panel) ? styles.gitPalette : ''}`}
                     role="dialog"
                     aria-modal="true"
                     aria-label={panel === 'settings' ? t('Settings') : t(`${panel} palette`)}

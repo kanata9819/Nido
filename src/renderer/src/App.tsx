@@ -11,6 +11,7 @@ import NavigationRail from './components/NavigationRail';
 import { useSessionSettings } from './hooks/useSessionSettings';
 import Sidebar from './Sidebar';
 import FileHeader from './components/FileHeader';
+import MarkdownPreview from './components/MarkdownPreview';
 import KeyboardGuide from './components/KeyboardGuide';
 import { Panel as PanelComponent } from './components/Panel';
 import WorkspacePanels from './components/WorkspacePanels';
@@ -63,6 +64,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     const t = useI18n();
     const pointerHidden = usePointerVisibility();
     const [panel, setPanel] = useState<Panel>(null);
+    const [markdownVisible, setMarkdownVisible] = useState(false);
     const [leader, setLeader] = useState(false);
     const [query, setQuery] = useState('');
     const [selection, setSelection] = useState(0);
@@ -161,6 +163,10 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
             );
         }
     }, [panel, active]);
+    const closeMarkdown = useCallback((): void => {
+        setMarkdownVisible(false);
+        focusEditor();
+    }, [focusEditor]);
 
     const run = useCallback(
         (promise: Promise<unknown>): void => {
@@ -215,27 +221,43 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
             return;
         }
         let cancelled = false;
-        window.nido
-            .findFiles(active)
-            .then((files) => {
-                if (!cancelled) {
-                    setFileList(files);
-                }
-            })
-            .catch((e) => {
-                if (!cancelled) {
-                    report(String(e));
-                }
-            })
-            .finally(() => {
-                if (!cancelled) {
-                    setLoading(false);
-                }
-            });
+        let generation = 0;
+        const refresh = (): void => {
+            const current = ++generation;
+            setLoading(true);
+            window.nido
+                .findFiles(active, query)
+                .then((files) => {
+                    if (!cancelled && current === generation) {
+                        setFileList(files);
+                    }
+                })
+                .catch((e) => {
+                    if (!cancelled && current === generation) {
+                        report(String(e));
+                    }
+                })
+                .finally(() => {
+                    if (!cancelled && current === generation) {
+                        setLoading(false);
+                    }
+                });
+        };
+        const timer = window.setTimeout(refresh, 75);
+        const unsubscribe = window.nido.onEvent((event) => {
+            if (event.type === 'filesChanged' && event.id === active) {
+                refresh();
+            }
+        });
+        window.addEventListener('focus', refresh);
         return () => {
             cancelled = true;
+            window.clearTimeout(timer);
+            unsubscribe();
+            window.removeEventListener('focus', refresh);
+            void window.nido.cancelFindFiles(active).catch(() => {});
         };
-    }, [panel, active, report]);
+    }, [panel, active, query, report]);
 
     const openFile = useCallback(
         (path: string): void => {
@@ -248,6 +270,12 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         setLeader(false);
         setQuery('');
         setSelection(0);
+        if (value === 'markdown') {
+            setMarkdownVisible((visible) => !visible);
+            setPanel(null);
+            setFocusTick((value) => value + 1);
+            return;
+        }
         setPanel(value);
 
         if (value === 'files') {
@@ -385,80 +413,92 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                         />
                     ))}
                 <main id="editor-preview-host" className={styles.main}>
-                    <div
-                        className={styles.editorContent}
-                        inert={panel === 'features'}
-                        aria-hidden={panel === 'features' || undefined}
-                    >
-                        {workspace ? (
-                            <FileHeader
-                                workspace={workspace}
-                                buffers={state.buffers}
-                                current={state.current}
-                                decorations={decorations}
-                                focusEditor={focusEditor}
-                                restartShell={restartShell}
-                                run={run}
-                            />
-                        ) : !restoring ? (
-                            <Welcome creating={creating} create={create} />
-                        ) : null}
-                        {workspaces.map((w) => (
-                            <WorkspaceEditor
-                                key={w.id}
-                                theme={theme}
-                                id={w.id}
-                                terminal={w.kind === 'terminal'}
-                                active={w.id === active}
-                                fontSize={fontSize}
-                                lineHeight={lineHeight}
-                                animations={animations}
-                                smoothCursor={smoothCursor}
-                                smoothBlink={smoothBlink}
-                                scrollFollowCursor={scrollFollowCursor}
-                                stickyScroll={settings.stickyScroll}
-                                stickyScrollMaxLines={settings.stickyScrollMaxLines}
-                                blocked={!!panel || leader}
-                                focusTick={focusTick}
-                                fontFamily={fontFamily.trim() || defaultFontFamily}
-                                onReady={finishEditorLoading}
-                                onError={report}
-                                empty={
-                                    w.kind !== 'terminal' &&
-                                    !!states[w.id]?.empty &&
-                                    states[w.id]?.mode === 'n'
-                                }
-                                onOpenFiles={openFiles}
-                            />
-                        ))}
-                        {(restoring || (!!workspace && !initializedEditors.has(active))) && (
-                            <WorkspaceLoading />
-                        )}
-                        <KeyboardGuide
-                            visible={leader}
-                            commands={commands}
-                            focusEditor={focusEditor}
-                        />
-                        {workspaces
-                            .filter((w) => w.terminalId)
-                            .map((w) => (
-                                <TerminalPanel
-                                    key={w.id}
-                                    id={w.terminalId!}
-                                    name={w.name}
-                                    active={
-                                        w.id === active &&
-                                        panels.terminalVisible &&
-                                        panels.bottomPanel === 'terminal'
-                                    }
-                                    blocked={!!panel || leader}
-                                    focusTick={panels.terminalFocusTick}
-                                    settings={settings}
+                    <div className={styles.editorSplit}>
+                        <div
+                            className={styles.editorContent}
+                            inert={panel === 'features'}
+                            aria-hidden={panel === 'features' || undefined}
+                        >
+                            {workspace ? (
+                                <FileHeader
+                                    workspace={workspace}
+                                    buffers={state.buffers}
+                                    current={state.current}
+                                    decorations={decorations}
+                                    focusEditor={focusEditor}
                                     restartShell={restartShell}
+                                    run={run}
+                                />
+                            ) : !restoring ? (
+                                <Welcome creating={creating} create={create} />
+                            ) : null}
+                            {workspaces.map((w) => (
+                                <WorkspaceEditor
+                                    key={w.id}
+                                    theme={theme}
+                                    id={w.id}
+                                    terminal={w.kind === 'terminal'}
+                                    active={w.id === active}
+                                    fontSize={fontSize}
+                                    lineHeight={lineHeight}
+                                    animations={animations}
+                                    smoothCursor={smoothCursor}
+                                    smoothBlink={smoothBlink}
+                                    scrollFollowCursor={scrollFollowCursor}
+                                    stickyScroll={settings.stickyScroll}
+                                    stickyScrollMaxLines={settings.stickyScrollMaxLines}
+                                    blocked={!!panel || leader}
+                                    focusTick={focusTick}
+                                    fontFamily={fontFamily.trim() || defaultFontFamily}
+                                    onReady={finishEditorLoading}
                                     onError={report}
-                                    onClose={panels.closeTerminal}
+                                    empty={
+                                        w.kind !== 'terminal' &&
+                                        !!states[w.id]?.empty &&
+                                        states[w.id]?.mode === 'n'
+                                    }
+                                    onOpenFiles={openFiles}
                                 />
                             ))}
+                            {(restoring || (!!workspace && !initializedEditors.has(active))) && (
+                                <WorkspaceLoading />
+                            )}
+                            <KeyboardGuide
+                                visible={leader}
+                                commands={commands}
+                                focusEditor={focusEditor}
+                            />
+                            {workspaces
+                                .filter((w) => w.terminalId)
+                                .map((w) => (
+                                    <TerminalPanel
+                                        key={w.id}
+                                        id={w.terminalId!}
+                                        name={w.name}
+                                        active={
+                                            w.id === active &&
+                                            panels.terminalVisible &&
+                                            panels.bottomPanel === 'terminal'
+                                        }
+                                        blocked={!!panel || leader}
+                                        focusTick={panels.terminalFocusTick}
+                                        settings={settings}
+                                        restartShell={restartShell}
+                                        onError={report}
+                                        onClose={panels.closeTerminal}
+                                    />
+                                ))}
+                        </div>
+                        {markdownVisible &&
+                            workspace?.kind !== 'terminal' &&
+                            state.filetype === 'markdown' && (
+                                <MarkdownPreview
+                                    key={active}
+                                    workspaceId={active}
+                                    onClose={closeMarkdown}
+                                    focusEditor={focusEditor}
+                                />
+                            )}
                     </div>
                     {/* {panel === 'features' && <FeaturesPage onClose={focusEditor} />} */}
                 </main>
@@ -526,7 +566,13 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                 loading={loading}
                 modal={modal}
                 focusEditor={focusEditor}
-                setQuery={setQuery}
+                setQuery={(value) => {
+                    setQuery(value);
+                    if (panel === 'files') {
+                        setLoading(true);
+                        setFileList([]);
+                    }
+                }}
                 setSelection={setSelection}
             />
         </div>

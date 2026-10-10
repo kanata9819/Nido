@@ -54,26 +54,21 @@ export function useBottomPanels({
     const [terminalVisible, setTerminalVisible] = useState(false);
     const [terminalFocusTick, setTerminalFocusTick] = useState(0);
     const hasDebugger = !!state.debug;
-    const referenceVersion = state.references?.version;
-    const referencesLoading = state.references?.loading;
+    const referenceVersion = state.references?.search ?? state.references?.version;
     const debugStatus = state.debug?.status;
     const [previous, setPrevious] = useState({
         active,
         referenceVersion,
-        referencesLoading,
         hasDebugger,
         debugStatus
     });
     const workspaceChanged = previous.active !== active;
-    const referencesChanged =
-        workspaceChanged ||
-        previous.referenceVersion !== referenceVersion ||
-        previous.referencesLoading !== referencesLoading;
+    const referencesChanged = workspaceChanged || previous.referenceVersion !== referenceVersion;
     const debuggerChanged = workspaceChanged || previous.hasDebugger !== hasDebugger;
     const debugStatusChanged = workspaceChanged || previous.debugStatus !== debugStatus;
     // Apply new session signals before committing UI, while preserving a user-closed panel.
     if (referencesChanged || debuggerChanged || debugStatusChanged) {
-        setPrevious({ active, referenceVersion, referencesLoading, hasDebugger, debugStatus });
+        setPrevious({ active, referenceVersion, hasDebugger, debugStatus });
         if (referencesChanged && state.references) {
             setBottomPanel('references');
             setReferencesVisible(true);

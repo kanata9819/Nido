@@ -253,6 +253,7 @@ test('Time Machine reopened during its fade waits for a fresh preview before res
     const history = { path: '/alpha/notes.txt', versions: [version] };
     await page.keyboard.press('Control+Shift+h');
     await page.evaluate((history) => window.rendererTest.settle('history', 0, history), history);
+    await page.clock.runFor(100);
     await expect
         .poll(() =>
             page.evaluate(
@@ -289,6 +290,7 @@ test('Time Machine reopened during its fade waits for a fresh preview before res
         )
     ).toEqual([]);
     await page.evaluate((history) => window.rendererTest.settle('history', 0, history), history);
+    await page.clock.runFor(100);
     await expect
         .poll(() =>
             page.evaluate(

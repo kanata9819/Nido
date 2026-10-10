@@ -47,6 +47,15 @@ export default function PaletteItems({
     const t = useI18n();
     const results = useRef<HTMLDivElement>(null);
     const filter = useRef<HTMLInputElement>(null);
+    const pendingEnter = useRef<string | undefined>(undefined);
+    useEffect(() => {
+        if (!loading && pendingEnter.current === query) {
+            pendingEnter.current = undefined;
+            if (document.activeElement === filter.current) {
+                filtered[Math.max(0, selection)]?.run();
+            }
+        }
+    }, [loading, query, filtered, selection]);
     useEffect(() => {
         if (panel === 'problems') {
             results.current?.focus();
@@ -67,8 +76,12 @@ export default function PaletteItems({
                 placeholder={panel === 'files' ? t('Type a filename…') : t('Type to search…')}
                 value={query}
                 onChange={(event) => {
+                    pendingEnter.current = undefined;
                     setQuery(event.target.value);
                     setSelection(0);
+                }}
+                onBlur={() => {
+                    pendingEnter.current = undefined;
                 }}
                 onKeyDown={(event) => {
                     if (event.key === 'ArrowDown' || (event.ctrlKey && event.key === 'j')) {
@@ -79,7 +92,11 @@ export default function PaletteItems({
                         setSelection((n) => Math.max(0, n - 1));
                     } else if (event.key === 'Enter') {
                         event.preventDefault();
-                        filtered[Math.max(0, selection)]?.run();
+                        if (panel === 'files' && loading) {
+                            pendingEnter.current = query;
+                        } else {
+                            filtered[Math.max(0, selection)]?.run();
+                        }
                     }
                 }}
             />

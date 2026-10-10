@@ -13,6 +13,7 @@ export class HistoryService {
     private tokens = new WeakMap<Session, Map<number, HistoryToken>>();
     private pending = new WeakMap<Session, Promise<void>>();
     private operations = new WeakMap<Session, Promise<unknown>>();
+    private previews = new WeakMap<Session, object>();
 
     constructor(readonly store: LocalHistory) {}
 
@@ -122,12 +123,24 @@ export class HistoryService {
     }
 
     preview(session: Session, path: string, id: string): Promise<HistoryPreview> {
+        const request = {};
+        this.previews.set(session, request);
+        const currentRequest = (): void => {
+            if (this.previews.get(session) !== request) {
+                throw new Error('History preview was superseded.');
+            }
+        };
         return this.serial(session, async () => {
+            currentRequest();
             const current = await session.historyCurrent();
+            currentRequest();
             if (current.path !== path) {
                 throw new Error('The active file changed. Reopen Time Machine.');
             }
             const version = await this.store.version(path, id);
+            currentRequest();
+            const diff = await session.historyDiff(version.text, current.text);
+            currentRequest();
             return {
                 path,
                 version: {
@@ -138,7 +151,7 @@ export class HistoryService {
                     lines: version.lines
                 },
                 token: this.token(current),
-                diff: await session.historyDiff(version.text, current.text),
+                diff,
                 identical:
                     version.text === current.text &&
                     version.endOfLine === current.endOfLine &&

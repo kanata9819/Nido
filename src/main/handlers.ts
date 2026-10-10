@@ -150,7 +150,9 @@ export function registerHandlers({
         }
         return session(id).selectCompletion(integer(index + 1) - 1);
     });
-    handle('markdownPreview', (id) => session(id).markdownPreview());
+    handle('markdownPreview', (id, token) =>
+        session(id).markdownPreview(token === undefined ? '' : text(token))
+    );
     handle('clipboardSharing', (id, enabled) => {
         if (typeof enabled !== 'boolean') {
             throw new Error('Invalid clipboard setting.');
@@ -195,7 +197,10 @@ export function registerHandlers({
         session(id).highlightSources(text(path), text(before), text(after))
     );
     registerGitHandlers({ handle, session, text, sessions, send });
-    handle('findFiles', (id) => session(id).findFiles());
+    handle('findFiles', (id, query) =>
+        session(id).findFiles(query === undefined ? '' : text(query))
+    );
+    handle('cancelFindFiles', (id) => session(id).cancelFindFiles());
     handle('openFile', (id, path) => session(id).openFile(text(path)));
     handle('fileAction', async (id, action, path, target) => {
         if (

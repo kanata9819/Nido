@@ -6,6 +6,7 @@ import type {
     DebugAction,
     FileEntry,
     FileAction,
+    MarkdownSnapshot,
     NidoEvent,
     ReferencePreview,
     SavedWorkspace,
@@ -282,13 +283,17 @@ export class Session {
         ]);
     }
 
-    async markdownPreview(): Promise<string> {
+    async markdownPreview(known = ''): Promise<MarkdownSnapshot> {
         return this.client.request('nvim_exec_lua', [
             `if vim.bo.filetype ~= 'markdown' then
   error('Open a Markdown file to preview.')
 end
-return table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\\n')`,
-            []
+local known = ...
+local buffer = vim.api.nvim_get_current_buf()
+local token = buffer .. ':' .. vim.api.nvim_buf_get_changedtick(buffer)
+return {token=token, path=vim.api.nvim_buf_get_name(buffer),
+  text=token ~= known and table.concat(vim.api.nvim_buf_get_lines(buffer, 0, -1, false), '\\n') or nil}`,
+            [known]
         ]);
     }
 
@@ -638,8 +643,12 @@ return {highlight(before), highlight(after)}`,
         return result;
     }
 
-    async findFiles(): Promise<FileEntry[]> {
-        return this.fileService.findFiles();
+    async findFiles(query = ''): Promise<FileEntry[]> {
+        return this.fileService.findFiles(query);
+    }
+
+    cancelFindFiles(): void {
+        this.fileService.cancelFindFiles();
     }
 
     stop(): Promise<void> {
