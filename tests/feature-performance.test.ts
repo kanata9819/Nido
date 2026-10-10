@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, mkdir, writeFile, rm, unlink, utimes } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, unlink, utimes, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Session } from '../src/main/session';
@@ -215,7 +215,7 @@ test('file search finds matches past 5000 entries and twelve levels, supports ca
         const deep = Array(14).fill('deep').join('/');
         await mkdir(join(root, deep), { recursive: true });
         await writeFile(join(root, deep, 'unique-target.ts'), '');
-        const files = new SessionFiles(root, {} as Session['client']);
+        const files = new SessionFiles(await realpath(root), {} as Session['client']);
         assert.equal((await files.findFiles()).length, 100);
         assert.equal((await files.findFiles('file-5099')).length, 1);
         assert.equal((await files.findFiles('unique-target')).length, 1);
@@ -225,7 +225,7 @@ test('file search finds matches past 5000 entries and twelve levels, supports ca
         const small = join(root, 'small');
         await mkdir(small);
         await writeFile(join(small, 'before.txt'), '');
-        const cached = new SessionFiles(small, {} as Session['client']);
+        const cached = new SessionFiles(await realpath(small), {} as Session['client']);
         let reads = 0;
         const read = cached.files.bind(cached);
         cached.files = async (...args) => {

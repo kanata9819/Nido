@@ -2144,7 +2144,11 @@ vim.system = function(command, options, callback)
 end
 vim.diff = function(...) metrics.diffs = metrics.diffs + 1; return diff(...) end
 vim.api.nvim_buf_get_lines = function(buf, first, last, strict)
-  if buf == buffer and first == 0 and last == -1 then metrics.reads = metrics.reads + 1 end
+  -- Other decoration providers read this buffer while vim.wait processes their timers.
+  if buf == buffer and first == 0 and last == -1
+      and debug.getinfo(2, 'S').source:match('nido_git_signs%.lua$') then
+    metrics.reads = metrics.reads + 1
+  end
   return get_lines(buf, first, last, strict)
 end
 local function refresh()
@@ -2154,15 +2158,17 @@ end
 local ok, err = pcall(function()
   refresh()
   metrics = {git=0, shows=0, diffs=0, reads=0}
+  vim.api.nvim_exec_autocmds('Syntax', {buffer=buffer})
   for _=1,10 do refresh() end
+  assert(vim.wait(3000, function() return require('nido_brackets').ready(buffer) end, 5), 'background bracket scan completed')
   assert(metrics.git >= 10, 'still verify external HEAD changes')
   assert(metrics.shows == 0, 'reuse the committed file until HEAD changes')
-  assert(metrics.diffs == 0 and metrics.reads == 0, 'unchanged refreshes skip full-buffer work')
+  assert(metrics.diffs == 0 and metrics.reads == 0, 'unchanged refreshes skip full-buffer work: ' .. vim.inspect(metrics))
   local tick = vim.api.nvim_buf_get_changedtick(buffer)
   vim.bo[buffer].endofline = false
   assert(vim.api.nvim_buf_get_changedtick(buffer) == tick, 'option change leaves changedtick unchanged')
   refresh()
-  assert(metrics.diffs == 1, 'endofline change invalidates the rendered signs')
+  assert(metrics.diffs == 1 and metrics.reads == 1, 'endofline change invalidates the rendered signs')
   vim.bo[buffer].endofline = true
   refresh()
 end)
