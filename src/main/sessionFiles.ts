@@ -316,6 +316,9 @@ return false`,
                     if (generation !== this.searchGeneration) {
                         return { matches: [], truncated: false };
                     }
+                    if (!text.includes(query)) {
+                        continue;
+                    }
                     const lines = text.split(/\r\n|\n|\r/);
                     for (let index = 0; index < lines.length; index++) {
                         const column = lines[index].indexOf(query);

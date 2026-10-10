@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { SearchResults } from '../../../shared/types';
 import { useI18n } from '../i18n';
 import PaletteItems from './PaletteItems';
@@ -46,17 +46,21 @@ export default function WorkspaceSearch({
         };
     }, [workspaceId, query]);
 
-    const items = result.matches.map((match) => ({
-        key: '',
-        title: `${match.path}:${match.line}:${match.column}`,
-        detail: match.text,
-        run: () => {
-            void window.nido
-                .openFile(workspaceId, match.path, match.line, match.column)
-                .then(onClose)
-                .catch((error) => setError(String(error)));
-        }
-    }));
+    const items = useMemo(
+        () =>
+            result.matches.map((match) => ({
+                key: '',
+                title: `${match.path}:${match.line}:${match.column}`,
+                detail: match.text,
+                run: () => {
+                    void window.nido
+                        .openFile(workspaceId, match.path, match.line, match.column)
+                        .then(onClose)
+                        .catch((error) => setError(String(error)));
+                }
+            })),
+        [result.matches, workspaceId, onClose]
+    );
 
     return (
         <>

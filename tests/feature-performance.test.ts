@@ -22,6 +22,33 @@ async function withSession(check: (session: Session) => Promise<void>): Promise<
     }
 }
 
+test('workspace grep skips line inspection in large nonmatching files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-grep-performance-'));
+    const query = 'grep-performance-target';
+    const indexOf = String.prototype.indexOf;
+    let inspected = 0;
+    try {
+        for (let index = 0; index < 8; index++) {
+            await writeFile(join(root, `empty-${index}.txt`), 'ordinary row\n'.repeat(4000));
+        }
+        await writeFile(join(root, 'match.txt'), `first\n日本語 ${query}\nlast\n`);
+        const files = new SessionFiles(await realpath(root), {} as Session['client']);
+        String.prototype.indexOf = function (search, position) {
+            if (search === query) inspected++;
+            return indexOf.call(this, search, position);
+        };
+        const result = await files.searchText(query);
+        assert.deepEqual(result, {
+            matches: [{ path: 'match.txt', line: 2, column: 11, text: `日本語 ${query}` }],
+            truncated: false
+        });
+        assert.ok(inspected <= 4, `${inspected} lines inspected for one matching file`);
+    } finally {
+        String.prototype.indexOf = indexOf;
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('line ending detection scans only changed lines and tracks inserts, deletes, options and reloads', () =>
     withSession(async (session) => {
         await session.client.request('nvim_exec_lua', [

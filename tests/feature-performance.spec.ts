@@ -149,6 +149,63 @@ test('file search sends the query, cancels closing searches and ignores old resu
     ).toBe(cancelled + 1);
 });
 
+test('workspace grep keeps its result list while navigating and receives fresh results for a new query', async ({
+    page
+}) => {
+    await open(page, 'app', 'searchText');
+    await page.keyboard.press('Control+Shift+f');
+    const query = page.getByRole('textbox', { name: 'Search in files', exact: true });
+    await query.fill('needle');
+    await page.clock.runFor(100);
+    await page.evaluate(() => {
+        const matches = Array.from({ length: 200 }, (_, index) => ({
+            path: `file-${index}.txt`,
+            line: index + 1,
+            column: 11,
+            text: `日本語 needle ${index}`
+        }));
+        const map = matches.map;
+        Object.assign(window, { searchMaps: 0 });
+        matches.map = function (...args: Parameters<typeof map>) {
+            (window as unknown as { searchMaps: number }).searchMaps++;
+            return map.apply(this, args);
+        } as typeof map;
+        window.rendererTest.settle('searchText', 0, { matches, truncated: false });
+    });
+    const search = page.getByRole('dialog', { name: 'search palette', exact: true });
+    await expect(search.getByRole('status')).toHaveText('200 matching lines');
+    await page.evaluate(() => {
+        (window as unknown as { searchMaps: number }).searchMaps = 0;
+    });
+    for (let index = 0; index < 20; index++) await query.press('ArrowDown');
+    await expect(search.getByRole('button', { name: /file-20.txt:21:11/ })).toHaveClass(
+        /selectedItem/
+    );
+    const maps = await page.evaluate(
+        () => (window as unknown as { searchMaps: number }).searchMaps
+    );
+    console.log(`200 grep results, 20 selection changes: ${maps} result list maps`);
+    expect(maps).toBe(0);
+    await query.fill('fresh');
+    await page.clock.runFor(100);
+    await page.evaluate(() =>
+        window.rendererTest.settle('searchText', 0, {
+            matches: [{ path: 'fresh.txt', line: 7, column: 3, text: 'fresh' }],
+            truncated: false
+        })
+    );
+    await expect(search.getByRole('status')).toHaveText('1 matching lines');
+    await query.press('Enter');
+    expect(
+        await page.evaluate(() =>
+            window.rendererTest.calls
+                .filter((call) => call.method === 'openFile')
+                .map((call) => call.args)
+        )
+    ).toEqual([['alpha', 'fresh.txt', 7, 3]]);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+});
+
 test('partial references never steal editor focus or reopen a closed panel; a new search opens it', async ({
     page
 }) => {
