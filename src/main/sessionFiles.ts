@@ -1,8 +1,19 @@
-import { realpath, readdir, stat, lstat, mkdir, writeFile, rename, cp } from 'node:fs/promises';
+import {
+    realpath,
+    readdir,
+    stat,
+    lstat,
+    mkdir,
+    writeFile,
+    rename,
+    cp,
+    open
+} from 'node:fs/promises';
+import { isUtf8 } from 'node:buffer';
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { type NeovimClient } from 'neovim';
 import { gitIgnored } from './git';
-import type { FileAction, FileEntry } from '../shared/types';
+import type { FileAction, FileEntry, SearchResults } from '../shared/types';
 
 export class SessionFiles {
     private mutations: Promise<void> = Promise.resolve();
@@ -28,12 +39,30 @@ export class SessionFiles {
         return actual;
     }
 
-    async openFile(relativePath: string): Promise<void> {
+    async openFile(relativePath: string, line?: number, column = 1): Promise<void> {
         const file = await this.path(relativePath);
         if (!(await stat(file)).isFile()) {
             throw new Error('Choose a file.');
         }
-        await this.client.request('nvim_exec_lua', ["require('nido_eol').open(...)", [file]]);
+        await this.client.request('nvim_exec_lua', [
+            `local path, line, column = ...
+local buffer = vim.fn.bufnr(path)
+if line > 0 then require('nido_scroll').restore() end
+-- Search navigation must preserve edits already held in an open buffer.
+if line > 0 and buffer > 0 and vim.api.nvim_buf_is_loaded(buffer) then
+  vim.cmd.buffer(buffer)
+else
+  require('nido_eol').open(path)
+end
+if line > 0 then
+  vim.cmd.stopinsert()
+  line = math.min(line, vim.api.nvim_buf_line_count(0))
+  local text = vim.api.nvim_buf_get_lines(0, line - 1, line, false)[1] or ''
+  vim.api.nvim_win_set_cursor(0, {line, math.min(column - 1, #text)})
+  vim.cmd('normal! zvzz')
+end`,
+            [file, line ?? 0, column]
+        ]);
     }
 
     fileAction(
@@ -211,6 +240,112 @@ return false`,
 
     cancelFindFiles(): void {
         this.searchGeneration++;
+    }
+
+    async searchText(query: string): Promise<SearchResults> {
+        const generation = ++this.searchGeneration;
+        const result: SearchResults = { matches: [], truncated: false };
+        if (!query) {
+            return result;
+        }
+        if (query.length > 1000 || /[\r\n]/.test(query)) {
+            throw new Error('Enter a single-line search up to 1,000 characters.');
+        }
+        // shortcut: search saved UTF-8 files up to 1 MiB and return 200 lines; use a search index for larger projects.
+        const buffer = Buffer.alloc(1024 * 1024 + 1);
+        const directories = [''];
+        while (directories.length) {
+            const directory = directories.pop()!;
+            try {
+                for (const entry of await this.files(directory)) {
+                    if (generation !== this.searchGeneration) {
+                        return { matches: [], truncated: false };
+                    }
+                    if (entry.ignored) {
+                        continue;
+                    }
+                    if (entry.directory) {
+                        if (
+                            !['node_modules', 'dist', 'out', 'build', 'target', '.next'].includes(
+                                entry.name
+                            )
+                        ) {
+                            directories.push(entry.path);
+                        }
+                        continue;
+                    }
+                    let text: string;
+                    try {
+                        const file = await open(await this.path(entry.path), 'r');
+                        try {
+                            const info = await file.stat();
+                            if (!info.isFile() || info.size >= buffer.length) {
+                                continue;
+                            }
+                            let length = 0;
+                            while (length < buffer.length) {
+                                const { bytesRead } = await file.read(
+                                    buffer,
+                                    length,
+                                    buffer.length - length,
+                                    null
+                                );
+                                if (!bytesRead) {
+                                    break;
+                                }
+                                length += bytesRead;
+                            }
+                            const data = buffer.subarray(0, length);
+                            if (length === buffer.length || data.includes(0) || !isUtf8(data)) {
+                                continue;
+                            }
+                            text = data.toString('utf8').replace(/^\uFEFF/, '');
+                        } finally {
+                            await file.close();
+                        }
+                    } catch (error) {
+                        if (
+                            ['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM', 'EBUSY'].includes(
+                                (error as NodeJS.ErrnoException).code || ''
+                            )
+                        ) {
+                            continue;
+                        }
+                        throw error;
+                    }
+                    if (generation !== this.searchGeneration) {
+                        return { matches: [], truncated: false };
+                    }
+                    const lines = text.split(/\r\n|\n|\r/);
+                    for (let index = 0; index < lines.length; index++) {
+                        const column = lines[index].indexOf(query);
+                        if (column < 0) {
+                            continue;
+                        }
+                        if (result.matches.length === 200) {
+                            return { ...result, truncated: true };
+                        }
+                        result.matches.push({
+                            path: entry.path,
+                            line: index + 1,
+                            column: Buffer.byteLength(lines[index].slice(0, column)) + 1,
+                            text: lines[index].slice(Math.max(0, column - 80), column + 220).trim()
+                        });
+                    }
+                }
+            } catch (error) {
+                if (
+                    directory &&
+                    ['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM'].includes(
+                        (error as NodeJS.ErrnoException).code || ''
+                    )
+                ) {
+                    continue;
+                }
+                throw error;
+            }
+        }
+        return generation === this.searchGeneration ? result : { matches: [], truncated: false };
     }
 
     async findFiles(query = ''): Promise<FileEntry[]> {

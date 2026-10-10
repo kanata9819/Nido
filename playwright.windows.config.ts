@@ -10,6 +10,7 @@ export default defineConfig({
         'windows/*.spec.ts',
         'electron.spec.ts',
         'neovim-ui.spec.ts',
+        'workspace-search.spec.ts',
         'theme.spec.ts',
         'scroll-boundary.spec.ts',
         'fast-wheel.spec.ts',

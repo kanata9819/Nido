@@ -283,6 +283,21 @@ export function useKeyboardShortcuts({
             }
             return;
         }
+        if (
+            active &&
+            workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal' &&
+            event.ctrlKey &&
+            event.shiftKey &&
+            !event.altKey &&
+            !event.metaKey &&
+            event.key.toLowerCase() === 'f'
+        ) {
+            consume();
+            if (!event.repeat) {
+                showPanel('search');
+            }
+            return;
+        }
         if (panel) {
             if (event.key === 'Tab' && modal.current) {
                 const nodes = [

@@ -28,6 +28,7 @@ function itemIcon(panel: Exclude<Panel, null>, severity: number | undefined): Re
         case 'workspaces':
             return <FolderOpen size={18} />;
         case 'files':
+        case 'search':
         case 'buffers':
             return <FileCode2 size={18} />;
         default:
@@ -72,8 +73,14 @@ export default function PaletteItems({
                 ref={filter}
                 autoFocus={panel !== 'problems'}
                 className={styles.paletteInput}
-                aria-label={t('Filter items')}
-                placeholder={panel === 'files' ? t('Type a filename…') : t('Type to search…')}
+                aria-label={panel === 'search' ? t('Search in files') : t('Filter items')}
+                placeholder={
+                    panel === 'files'
+                        ? t('Type a filename…')
+                        : panel === 'search'
+                          ? t('Type text to grep…')
+                          : t('Type to search…')
+                }
                 value={query}
                 onChange={(event) => {
                     pendingEnter.current = undefined;
@@ -84,6 +91,9 @@ export default function PaletteItems({
                     pendingEnter.current = undefined;
                 }}
                 onKeyDown={(event) => {
+                    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+                        return;
+                    }
                     if (event.key === 'ArrowDown' || (event.ctrlKey && event.key === 'j')) {
                         event.preventDefault();
                         setSelection((n) => Math.min(n + 1, filtered.length - 1));
@@ -92,7 +102,7 @@ export default function PaletteItems({
                         setSelection((n) => Math.max(0, n - 1));
                     } else if (event.key === 'Enter') {
                         event.preventDefault();
-                        if (panel === 'files' && loading) {
+                        if ((panel === 'files' || panel === 'search') && loading) {
                             pendingEnter.current = query;
                         } else {
                             filtered[Math.max(0, selection)]?.run();
@@ -168,9 +178,13 @@ export default function PaletteItems({
                     <p className={styles.noResults}>
                         {loading
                             ? t('Looking through your project…')
-                            : panel === 'problems' && !query
-                              ? t('No problems reported.')
-                              : t('No matching items.')}
+                            : panel === 'search'
+                              ? query
+                                  ? t('No matching lines.')
+                                  : t('Enter text to search this workspace.')
+                              : panel === 'problems' && !query
+                                ? t('No problems reported.')
+                                : t('No matching items.')}
                     </p>
                 )}
             </div>
@@ -178,7 +192,7 @@ export default function PaletteItems({
                 <span>
                     {panel === 'problems'
                         ? t('{count} problems · j/k Select · / Filter', { count: filtered.length })
-                        : '↑ ↓ or Ctrl+j / k to navigate'}
+                        : t('↑ ↓ or Ctrl+j / k to navigate')}
                 </span>
                 <span>{t('Enter to select · Esc to return')}</span>
             </div>

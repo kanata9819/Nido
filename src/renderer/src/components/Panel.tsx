@@ -3,6 +3,7 @@ import SettingsPanel, { type SettingsPanelProps } from './SettingsPanel';
 import type { Panel, Item } from '../types';
 import { Command, X } from 'lucide-react';
 import PaletteItems from './PaletteItems';
+import WorkspaceSearch from './WorkspaceSearch';
 import styles from '../assets/Palette.module.css';
 import FolderPicker from './FolderPicker';
 import GitBrowser from './GitBrowser';
@@ -39,6 +40,7 @@ const panelTitles = {
     git: 'Source control',
     folders: 'Open a workspace',
     files: 'Find a file',
+    search: 'Search in files',
     workspaces: 'Your workspaces',
     buffers: 'Open files',
     settings: 'Settings',
@@ -77,6 +79,15 @@ export function Panel({
 
     let content: React.JSX.Element;
     switch (panel) {
+        case 'search':
+            content = (
+                <WorkspaceSearch
+                    key={workspaceId}
+                    workspaceId={workspaceId}
+                    onClose={focusEditor}
+                />
+            );
+            break;
         case 'history':
             content = (
                 <TimeMachine key={workspaceId} workspaceId={workspaceId} onClose={focusEditor} />

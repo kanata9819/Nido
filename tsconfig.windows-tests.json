@@ -10,6 +10,7 @@
         "tests/helpers/*.ts",
         "tests/fast-wheel.spec.ts",
         "tests/neovim-ui.spec.ts",
+        "tests/workspace-search.spec.ts",
         "tests/update.spec.ts",
         "tests/windows/*.ts",
         "playwright.windows.config.ts",

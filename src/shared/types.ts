@@ -140,6 +140,16 @@ export interface FileEntry {
     directory: boolean;
     ignored?: boolean;
 }
+export interface SearchMatch {
+    path: string;
+    line: number;
+    column: number;
+    text: string;
+}
+export interface SearchResults {
+    matches: SearchMatch[];
+    truncated: boolean;
+}
 export interface MarkdownSnapshot {
     token: string;
     path: string;
@@ -253,8 +263,9 @@ export interface NidoAPI {
     files(id: string, relative: string): Promise<FileEntry[]>;
     fileAction(id: string, action: FileAction, path: string, target?: string): Promise<void>;
     findFiles(id: string, query?: string): Promise<FileEntry[]>;
+    searchText(id: string, query: string): Promise<SearchResults>;
     cancelFindFiles(id: string): Promise<void>;
-    openFile(id: string, relative: string): Promise<void>;
+    openFile(id: string, relative: string, line?: number, column?: number): Promise<void>;
     openReference(id: string, index: number, version: number): Promise<void>;
     openProblem(id: string, index: number, version: number): Promise<void>;
     previewReference(id: string, index: number, version: number): Promise<ReferencePreview>;

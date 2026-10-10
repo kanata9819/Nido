@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import type {
     DebugAction,
     FileEntry,
+    SearchResults,
     FileAction,
     MarkdownSnapshot,
     NidoEvent,
@@ -512,11 +513,11 @@ return false`,
         return this.fileService.path(relativePath);
     }
 
-    async openFile(relativePath: string): Promise<void> {
+    async openFile(relativePath: string, line?: number, column?: number): Promise<void> {
         if (this.workspace.kind === 'terminal') {
             throw new Error('Open an Editor session to edit files.');
         }
-        await this.fileService.openFile(relativePath);
+        await this.fileService.openFile(relativePath, line, column);
     }
 
     async fileAction(
@@ -645,6 +646,10 @@ return {highlight(before), highlight(after)}`,
 
     async findFiles(query = ''): Promise<FileEntry[]> {
         return this.fileService.findFiles(query);
+    }
+
+    searchText(query: string): Promise<SearchResults> {
+        return this.fileService.searchText(query);
     }
 
     cancelFindFiles(): void {

@@ -18,6 +18,7 @@ export const windowsBaselineCases = [
     'Neovim commands, completion, messages and confirmation render in native Nido cards',
     'terminal toggle, focus, background execution and standalone terminal sessions',
     'references stay accessible after jumping and can be closed with the keyboard',
+    'Ctrl+Shift+F searches and jumps; F2 renames related symbols from Insert mode',
     'Rust debugger keyboard controls stop, inspect and step in the packaged app',
     'normal shutdown restores workspace order, active file and cursors',
     'window size and maximized state survive restart',

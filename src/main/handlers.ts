@@ -201,7 +201,14 @@ export function registerHandlers({
         session(id).findFiles(query === undefined ? '' : text(query))
     );
     handle('cancelFindFiles', (id) => session(id).cancelFindFiles());
-    handle('openFile', (id, path) => session(id).openFile(text(path)));
+    handle('searchText', (id, query) => session(id).searchText(text(query)));
+    handle('openFile', (id, path, line, column) =>
+        session(id).openFile(
+            text(path),
+            line === undefined ? undefined : integer(line, 2_000_000),
+            column === undefined ? undefined : integer(column, 2_000_000)
+        )
+    );
     handle('fileAction', async (id, action, path, target) => {
         if (
             typeof action !== 'string' ||

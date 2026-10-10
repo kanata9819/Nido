@@ -186,6 +186,16 @@ export function buildItems(
                       detail: 'Search project filenames · Ctrl+P',
                       run: () => showPanel('files')
                   },
+                  ...(workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal'
+                      ? [
+                            {
+                                key: '',
+                                title: 'Search in files',
+                                detail: 'Search project text · Ctrl+Shift+F',
+                                run: () => showPanel('search')
+                            }
+                        ]
+                      : []),
                   {
                       key: 'b',
                       title: 'Switch file',

@@ -4,6 +4,7 @@ export type Panel =
     | 'commands'
     | 'workspaces'
     | 'files'
+    | 'search'
     | 'buffers'
     | 'settings'
     | 'folders'

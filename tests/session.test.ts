@@ -22,6 +22,88 @@ import { fileDecorations, gitFileKey } from '../src/renderer/src/fileDecorations
 import type { NidoEvent, Redraw } from '../src/shared/types';
 import { emptyNeovimUI } from '../src/shared/neovimUI';
 
+test('workspace grep finds saved text beyond filename limits, respects ignores and opens byte positions', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-workspace-grep-'));
+    const outside = await mkdtemp(join(tmpdir(), 'nido-grep-outside-'));
+    let session: Session | undefined;
+    try {
+        execFileSync('git', ['init', '-q', root], { windowsHide: true });
+        await writeFile(join(root, '.gitignore'), 'ignored/\n');
+        for (const name of ['src', 'ignored', 'node_modules']) await mkdir(join(root, name));
+        for (let index = 0; index < 105; index++) {
+            await writeFile(join(root, `empty-${index}.txt`), 'nothing here\n');
+        }
+        const path = join('src', '日本語.txt');
+        const original = '\uFEFFfirst\r\n日本語 needle.* needle.*\r\nlast\r\n';
+        await writeFile(join(root, path), original);
+        await writeFile(join(root, 'ignored/secret.txt'), 'needle.*');
+        await writeFile(join(root, 'node_modules/dependency.txt'), 'needle.*');
+        await writeFile(join(root, 'binary.bin'), Buffer.from('needle.*\0'));
+        await writeFile(join(root, 'invalid.bin'), Buffer.from([0xff, ...Buffer.from('needle.*')]));
+        await writeFile(join(root, 'huge.txt'), 'needle.*' + 'x'.repeat(1024 * 1024));
+        await writeFile(join(outside, 'outside.txt'), 'needle.*');
+        await symlink(outside, join(root, 'link'), 'junction');
+        session = await Session.create(root, () => {});
+        await session.attach(80, 24);
+        const result = await session.searchText('needle.*');
+        assert.deepEqual(result, {
+            matches: [{ path, line: 2, column: 11, text: '日本語 needle.* needle.*' }],
+            truncated: false
+        });
+        assert.deepEqual((await session.searchText('NEEDLE.*')).matches, []);
+        assert.deepEqual((await session.searchText('')).matches, []);
+        await assert.rejects(session.searchText('x\ny'), /single-line/);
+        await assert.rejects(session.searchText('x'.repeat(1001)), /1,000/);
+        const searching = session.searchText('needle.*');
+        session.cancelFindFiles();
+        assert.deepEqual((await searching).matches, []);
+        await session.openFile(path, 2, 11);
+        assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), [2, 10]);
+        await session.input('iUNSAVED<Esc>');
+        await session.inputMode();
+        assert.equal((await session.searchText('UNSAVED')).matches.length, 0);
+        await session.openFile(path, 99, 999);
+        assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), [3, 3]);
+        assert.equal(await session.modified(), true);
+        assert.equal(await readFile(join(root, path), 'utf8'), original);
+        await assert.rejects(session.openFile('../outside.txt', 1, 1));
+        await writeFile(join(root, 'many.txt'), 'needle.*\n'.repeat(201));
+        const capped = await session.searchText('needle.*');
+        assert.equal(capped.matches.length, 200);
+        assert.equal(capped.truncated, true);
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+        await rm(outside, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
+test('F2 and NidoRename report unsupported files without modifying their text', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-rename-unavailable-'));
+    const messages: string[] = [];
+    let session: Session | undefined;
+    try {
+        await writeFile(join(root, 'notes.txt'), 'original\n');
+        session = await Session.create(root, (event) => {
+            if (event.type === 'notification') messages.push(event.message);
+        });
+        await session.attach(80, 24);
+        await session.openFile('notes.txt');
+        for (const keys of ['<F2>', 'i<F2><Esc>', ':NidoRename<CR>']) {
+            await session.input(keys);
+            assert.equal(await session.inputMode(), 'n');
+        }
+        assert.equal(
+            messages.filter((text) => /No language server supports renaming/.test(text)).length,
+            3
+        );
+        assert.equal(await session.modified(), false);
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('input mode queries observe preceding queued keys before following text', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-input-mode-'));
     let session: Session | undefined;

@@ -8,6 +8,22 @@ export function parseLanguage(value: unknown): Language {
 
 // English source messages are also the fallback for messages from external tools.
 export const japanese: Record<string, string> = {
+    'Search in files': 'ファイル内を検索',
+    'search palette': 'ファイル内を検索',
+    'Search project text · Ctrl+Shift+F': 'プロジェクトの本文を検索 · Ctrl+Shift+F',
+    'Type text to grep…': '検索する文字列を入力…',
+    'No matching lines.': '一致する行はありません。',
+    'Enter text to search this workspace.':
+        'このワークスペースで検索する文字列を入力してください。',
+    '{count} matching lines': '{count} 行が一致',
+    'Showing the first 200 matching lines.': '最初の200行を表示しています。',
+    'Saved UTF-8 files up to 1 MiB · Case-sensitive · Git ignores respected':
+        '保存済みUTF-8・1 MiB以内 · 大文字と小文字を区別 · Gitの除外設定に対応',
+    'No language server supports renaming in this file.':
+        'このファイルのリネームに対応する言語サーバーがありません。',
+    'Enter a single-line search up to 1,000 characters.':
+        '検索文字列は改行なし・1,000文字以内で入力してください。',
+    '↑ ↓ or Ctrl+j / k to navigate': '↑ ↓ または Ctrl+j / k で移動',
     'Time Machine': '編集タイムマシン',
     'Time Machine only supports text files.':
         '編集タイムマシンはテキストファイルに対応しています。',
