@@ -164,7 +164,7 @@ test('search counts reuse unchanged views and refresh for cursor, edits, pattern
     }
 });
 
-test('upper-row prefetch keeps the viewport and cache while avoiding duplicate grid traffic', async () => {
+test('directional prefetch keeps the viewport and cached rows without duplicate grid traffic', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-prefetch-traffic-'));
     const frames: Redraw[] = [];
     const visibleFrames: Grid['cells'][] = [];
@@ -230,10 +230,8 @@ return ready`,
                 frames.map((frame) => frame.map(([name]) => name))
             )}`
         );
-        assert.ok(
-            Buffer.byteLength(JSON.stringify(viewportFrames)) < 200_000,
-            'one refill must not transfer both complete traversals'
-        );
+        const bytes = Buffer.byteLength(JSON.stringify(viewportFrames));
+        assert.ok(bytes < 200_000, `one refill must transfer only its return traversal: ${bytes}`);
         for (const rendered of visibleFrames) {
             for (let row = 0; row < visible.length; row++) {
                 assert.equal(
@@ -250,6 +248,63 @@ return ready`,
             true,
             'a fast upward move retains the remaining cached history'
         );
+        const downView = await session.client.request('nvim_exec_lua', [
+            'return vim.fn.winsaveview()',
+            []
+        ]);
+        const downRows = grid.cells.slice();
+        frames.length = 0;
+        visibleFrames.length = 0;
+        await session.prefetchScroll(true);
+        assert.deepEqual(
+            await session.client.request('nvim_exec_lua', ['return vim.fn.winsaveview()', []]),
+            downView
+        );
+        assert.equal(
+            frames.filter((frame) => frame.some(([name]) => name === 'nido_scroll_cache')).length,
+            1
+        );
+        assert.ok(Buffer.byteLength(JSON.stringify(frames)) < 200_000);
+        for (const rendered of visibleFrames) assert.deepEqual(rendered, downRows);
+        assert.equal(grid.needsLowerRows, false);
+        assert.equal(grid.futureRows.length, 256);
+        const future = grid.futureRows.slice(0, 3);
+        await session.scroll(3, true, true);
+        const text = (rows: Grid['cells']): string[] =>
+            rows.map((row) => row.map((cell) => cell.text).join(''));
+        assert.deepEqual(
+            text(grid.cells.slice(grid.rows - 4, grid.rows - 2)),
+            text(future.slice(0, 2))
+        );
+        // Neovim replaces the end of an incomplete wrapped bottom row with @ markers.
+        assert.deepEqual(
+            text([grid.cells[grid.rows - 2].slice(0, -3)]),
+            text([future[2].slice(0, -3)])
+        );
+        await session.input('gg');
+        await session.prefetchScroll(true);
+        assert.equal(grid.futureRows.length, 256, 'BOF still permits downward prefetch');
+        await session.input('Gzt');
+        await session.scroll(1000, true, true);
+        const wrappedEnd = await session.client.request('nvim_exec_lua', [
+            'return vim.fn.winsaveview()',
+            []
+        ]);
+        await session.prefetchScroll(true);
+        assert.deepEqual(
+            await session.client.request('nvim_exec_lua', ['return vim.fn.winsaveview()', []]),
+            wrappedEnd,
+            'prefetch preserves a wrapped viewport near EOF'
+        );
+        await session.client.request('nvim_exec_lua', [
+            'vim.wo.wrap=false; vim.wo.scrolloff=0',
+            []
+        ]);
+        await session.input('Gzt');
+        await session.scroll(1000, true, true);
+        await session.prefetchScroll(true);
+        assert.equal(grid.futureRows.length, 0);
+        assert.equal(grid.needsLowerRows, false, 'EOF must not repeatedly refill an empty cache');
     } finally {
         await session.stop();
         await rm(root, { recursive: true, force: true });

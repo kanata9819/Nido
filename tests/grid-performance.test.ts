@@ -68,3 +68,61 @@ test('compact row counts follow edits, highlight changes and rectangular scrolli
     grid.apply([['hl_attr_define', [1, {}, {}, []]], ['flush']]);
     assert.equal(height(), 28);
 });
+
+test('downward preview uses cached lower rows and leaves the command line fixed', () => {
+    const grid = new Grid();
+    grid.pixelScrollEnabled = true;
+    grid.apply([
+        ['grid_resize', [1, 8, 4]],
+        ['hl_attr_define', [1, {}, {}, [{ hi_name: 'NidoCodeLens' }]]],
+        ['grid_line', [1, 0, 0, [['A', 0]]], [1, 1, 0, [['B', 0]]], [1, 2, 0, [['Run', 1]]]],
+        ['flush']
+    ]);
+    const future = grid.cells[2];
+    grid.apply([
+        ['nido_scroll', [1, 0, 3, 0, 8, -1, 0]],
+        ['grid_scroll', [1, 0, 3, 0, 8, -1, 0]],
+        ['grid_line', [1, 0, 0, [['Z', 0]]]],
+        ['flush']
+    ]);
+    assert.equal(grid.futureRows[0], future);
+    grid.scrollFraction = 0.8;
+    grid.scrollPreview = 0.7;
+    grid.prepareLayout(60, 8, 20, 1);
+    assert.equal(grid.scrollOffset, 30, 'preview must continue beyond the old one-row limit');
+    assert.equal(grid.rowY(3), 40, 'command line stays below the code viewport');
+    assert.equal(grid.rowTop(4) - grid.rowTop(3), 14, 'future CodeLens rows stay compact');
+    assert.ok(Number.isFinite(grid.rowTop(100.5)));
+
+    grid.apply([
+        ['nido_scroll', [1, 0, 3, 0, 8, 1, 0]],
+        ['grid_scroll', [1, 0, 3, 0, 8, 1, 0]],
+        ['grid_line', [1, 2, 0, [['Run', 1]]]],
+        ['flush']
+    ]);
+    assert.equal(grid.cells[2], future, 'native movement reuses the cached row image');
+    assert.equal(grid.futureRows.length, 0);
+});
+
+test('lower preview cache is bounded, cleared on edits and stops at EOF', () => {
+    const grid = new Grid();
+    grid.pixelScrollEnabled = true;
+    grid.apply([['grid_resize', [1, 8, 40]], ['flush']]);
+    for (let i = 0; i < 10; i++) {
+        grid.apply([
+            ['nido_scroll', [1, 0, 39, 0, 8, -30, 0]],
+            ['grid_scroll', [1, 0, 39, 0, 8, -30, 0]],
+            ['flush']
+        ]);
+    }
+    assert.equal(grid.futureRows.length, 256);
+    grid.apply([['nido_edit', []], ['flush']]);
+    assert.equal(grid.futureRows.length, 0);
+    grid.scrollPreview = 1.5;
+    grid.apply([['nido_scroll_cache', [false, false, true]], ['flush']]);
+    grid.prepareLayout(800, 8, 20, 1);
+    assert.equal(grid.scrollOffset, 0, 'EOF must not expose empty preview rows');
+    assert.equal(grid.needsLowerRows, false);
+    grid.apply([['grid_resize', [1, 8, 40]], ['flush']]);
+    assert.equal(grid.needsLowerRows, true, 'resize invalidates the cached boundary');
+});

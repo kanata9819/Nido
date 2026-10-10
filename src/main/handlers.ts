@@ -285,7 +285,7 @@ export function registerHandlers({
     });
 
     handle('save', (id, format) => session(id).save(format === true));
-    handle('prefetchScroll', (id) => session(id).prefetchScroll());
+    handle('prefetchScroll', (id, down) => session(id).prefetchScroll(down === true));
     handle('jumpSticky', (id, window, buffer, line) =>
         session(id).jumpSticky(integer(window), integer(buffer), integer(line))
     );

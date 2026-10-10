@@ -995,6 +995,13 @@ test('scroll prefetch caches upper rows without changing the view, cursor or buf
             0,
             'prefetch must not republish an already delivered edit and cancel pending wheel movement'
         );
+        await session.prefetchScroll(true);
+        assert.deepEqual(
+            await snapshot(),
+            inserting,
+            'downward prefetch also preserves Insert mode'
+        );
+        assert.equal(grid.needsLowerRows, false, 'the lower cache reaches EOF');
     } finally {
         await session?.stop();
         await rm(root, { recursive: true, force: true });
@@ -1043,6 +1050,15 @@ vim.cmd.redraw()`,
         assert.ok(
             grid.cells.filter((row) => images.has(row)).length > grid.rows / 2,
             'wrapped scrolling must reuse unchanged text images instead of rasterizing the viewport'
+        );
+        await session.prefetchScroll(true);
+        assert.equal(grid.needsLowerRows, false, 'wrapped rows also fill the lower cache');
+        const future = grid.futureRows.slice(0, 3);
+        await session.scroll(3, false, true);
+        assert.deepEqual(
+            grid.cells.slice(grid.rows - 4, grid.rows - 1),
+            future,
+            'downward movement reveals the prefetched wrapped screen rows'
         );
     } finally {
         await session?.stop();

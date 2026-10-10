@@ -1,6 +1,67 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ScrollQueue } from '../src/renderer/src/scroll';
+import { EditorScroll } from '../src/renderer/src/editorScroll';
+import { Grid } from '../src/renderer/src/grid';
+
+test('cold gestures send movement first and refill the final direction after reversing', async () => {
+    const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    const calls: (string | boolean | undefined)[][] = [];
+    const completions: Promise<void>[] = [];
+    Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: {
+            nido: {
+                scroll: async (): Promise<void> => {
+                    calls.push(['scroll']);
+                },
+                prefetchScroll: async (_id: string, down?: boolean): Promise<void> => {
+                    calls.push(['prefetch', down]);
+                }
+            }
+        }
+    });
+    try {
+        for (const [first, second] of [
+            [-7, -7],
+            [7, 7],
+            [-7, 7]
+        ]) {
+            calls.length = 0;
+            completions.length = 0;
+            const scrolling = new EditorScroll({
+                id: 'alpha',
+                grid: new Grid(),
+                enabled: () => true,
+                schedule: () => {},
+                onError: (error) => {
+                    throw error;
+                },
+                onCompletion: (promise) => {
+                    completions.push(promise);
+                }
+            });
+            try {
+                scrolling.request(first, true);
+                scrolling.request(second, true);
+                assert.deepEqual(calls, [['scroll'], ['prefetch', first > 0]]);
+                await Promise.all(completions);
+                assert.deepEqual(
+                    calls,
+                    first === second
+                        ? [['scroll'], ['prefetch', first > 0]]
+                        : [['scroll'], ['prefetch', first > 0], ['prefetch', second > 0]]
+                );
+                await Promise.all(completions);
+            } finally {
+                scrolling.dispose();
+            }
+        }
+    } finally {
+        if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+        else Reflect.deleteProperty(globalThis, 'window');
+    }
+});
 
 for (const first of ['reply', 'redraw'] as const) {
     test(`wheel input waits for both reply and redraw when ${first} arrives first`, () => {

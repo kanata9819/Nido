@@ -17,10 +17,10 @@ local function publish_offset(pixel)
   end
 end
 
-local function publish_cache(at_start)
+local function publish_cache(at_start, at_end)
   local view_start = view_at_start(vim.fn.winsaveview())
   for _, ui in ipairs(api.nvim_list_uis()) do
-    vim.rpcnotify(ui.chan, 'nido:scroll_cache', at_start, view_start)
+    vim.rpcnotify(ui.chan, 'nido:scroll_cache', at_start, view_start, at_end)
   end
 end
 
@@ -133,7 +133,7 @@ function M.page(key, count)
   end
 end
 
-function M.prefetch()
+function M.prefetch(down)
   if vim.bo.buftype ~= '' or api.nvim_win_get_config(0).relative ~= '' then
     return
   end
@@ -143,48 +143,46 @@ function M.prefetch()
     return
   end
   local view = vim.fn.winsaveview()
-  if view.topline <= 1 and view.skipcol == 0 then
-    publish_cache(true)
-    return
-  end
-  -- Match Grid's bounded history; collect each viewport before restoring it in reverse order.
-  -- Each step is smaller than the window so grid_scroll retains the outgoing rows.
-  -- The whole traversal is one batch, so none of these temporary views are displayed.
+  local scrolloff = vim.wo.scrolloff
+  local step = math.max(1, api.nvim_win_get_height(0) - 1)
+  -- Cache the requested side in one hidden batch, using steps smaller than the viewport.
   local views = {}
   local remaining = 256
-  local step = math.max(1, api.nvim_win_get_height(0) - 1)
-  local at_start = false
+  local at_edge = false
   local ok, err = pcall(function()
     while remaining > 0 do
       local before = vim.fn.winsaveview()
-      if before.topline <= 1 and before.skipcol == 0 then
-        at_start = true
+      if not down and view_at_start(before) then
+        at_edge = true
         break
       end
       views[#views + 1] = before
       local count = math.min(step, remaining)
-      vim.cmd.normal({args={count .. string.char(25)}, bang=true})
+      vim.cmd.normal({args={count .. string.char(down and 5 or 25)}, bang=true})
       remaining = remaining - count
       local after = vim.fn.winsaveview()
-      at_start = after.topline <= 1 and after.skipcol == 0
-      if after.topline == before.topline and after.skipcol == before.skipcol then
+      if (not down and view_at_start(after)) or
+        (after.topline == before.topline and after.skipcol == before.skipcol) then
+        at_edge = true
         break
       end
     end
-    -- Only the return traversal supplies the upper-row cache. Paint the furthest
-    -- view once instead of drawing every temporary upward step too.
+    -- Only the return traversal supplies cached rows; paint the furthest view once.
     vim.cmd.redraw()
   end)
+  -- Restoring a mouse-scrolled wrapped view must not reapply the keyboard cursor margin.
+  vim.wo.scrolloff = 0
   for index = #views, 1, -1 do
     vim.fn.winrestview(views[index])
     vim.cmd.redraw()
   end
   vim.fn.winrestview(view)
   vim.cmd.redraw()
+  vim.wo.scrolloff = scrolloff
   if not ok then
     error(err)
   end
-  publish_cache(at_start)
+  publish_cache(not down and at_edge, down and at_edge)
 end
 
 function M.scroll(lines, follow, pixel)

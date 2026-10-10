@@ -370,8 +370,8 @@ end`,
         await this.interaction.write('write', format);
     }
 
-    prefetchScroll(): Promise<void> {
-        return this.interaction.prefetchScroll();
+    prefetchScroll(down = false): Promise<void> {
+        return this.interaction.prefetchScroll(down);
     }
 
     scroll(lines: number, follow = true, pixel = false): Promise<void> {

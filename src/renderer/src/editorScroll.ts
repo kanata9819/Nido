@@ -14,6 +14,7 @@ interface Options {
 export class EditorScroll {
     private readonly queue = new ScrollQueue();
     private prefetchNeeded = true;
+    private down = false;
     private fetching = false;
     private disposed = false;
     private settleTimer?: ReturnType<typeof setTimeout>;
@@ -31,8 +32,10 @@ export class EditorScroll {
     get needsPrefetch(): boolean {
         return (
             this.prefetchNeeded &&
-            this.queue.preview < 0 &&
-            (this.options.grid.canPreviewUpwardScroll || this.queue.preview > -1)
+            ((this.queue.preview < 0 &&
+                (this.options.grid.canPreviewUpwardScroll || this.queue.preview > -1)) ||
+                (this.queue.preview > 0 &&
+                    (this.options.grid.canPreviewDownwardScroll || this.queue.preview < 1)))
         );
     }
 
@@ -74,13 +77,18 @@ export class EditorScroll {
         clearTimeout(this.settleTimer);
         this.settleTimer = setTimeout(this.settle, 160);
         this.queue.enqueue(lines, follow);
+        this.down = lines > 0;
         grid.scrollPreview = this.queue.preview;
-        if (lines < 0 && !this.fetching && grid.needsUpperRows) {
+        if (!this.fetching && (lines < 0 ? grid.needsUpperRows : grid.needsLowerRows)) {
             this.prefetchNeeded = true;
         }
         // Start native movement during input; paints stay coalesced on animation frames.
         if (!this.needsPrefetch) {
             this.flush();
+            // A cold fast gesture still needs a cache; send native movement first.
+            if (this.prefetchNeeded && !this.fetching && this.options.enabled()) {
+                this.prefetch();
+            }
         }
         schedule();
     }
@@ -140,11 +148,12 @@ export class EditorScroll {
     }
 
     prefetch(): void {
+        const down = this.down;
         this.prefetchNeeded = false;
         this.fetching = true;
         this.options.onCompletion(
             window.nido
-                .prefetchScroll(this.options.id)
+                .prefetchScroll(this.options.id, down)
                 .catch((error) => {
                     if (!this.disposed) {
                         this.options.onError(error);
@@ -155,6 +164,16 @@ export class EditorScroll {
                         return;
                     }
                     this.fetching = false;
+                    // Warm the final direction even if input stopped during the previous refill.
+                    if (
+                        down !== this.down &&
+                        this.options.enabled() &&
+                        (this.down
+                            ? this.options.grid.needsLowerRows
+                            : this.options.grid.needsUpperRows)
+                    ) {
+                        this.prefetch();
+                    }
                     if (this.queue.hasQueued) {
                         this.options.schedule();
                     }

@@ -37,14 +37,18 @@ export class GridCanvas {
     private surface?: HTMLCanvasElement;
     private scrolling = false;
     private previousCursor?: { top: number; bottom: number };
+    private firstDirtyRow = Infinity;
+    private lastDirtyRow = -Infinity;
 
     constructor(private readonly grid: Grid) {}
 
-    invalidate(row?: Cell[]): void {
-        this.invalidatePaint();
-        if (row) {
-            this.rowImages.delete(row);
+    invalidate(row?: number): void {
+        if (row !== undefined) {
+            this.rowImages.delete(this.grid.cells[row]);
+            this.firstDirtyRow = Math.min(this.firstDirtyRow, row);
+            this.lastDirtyRow = Math.max(this.lastDirtyRow, row);
         } else {
+            this.invalidatePaint();
             this.rowImages = new WeakMap();
         }
     }
@@ -136,26 +140,20 @@ export class GridCanvas {
         const cursorTop = Math.min(this.grid.rowY(target.row), this.grid.rowY(position.row));
         const cursorBottom =
             Math.max(this.grid.rowY(target.row), this.grid.rowY(position.row)) + cellHeight;
-        // Cursor motion and blinking only damage their old and new rows. Snap the clip
-        // to physical pixels so acrylic and fractional DPI match a complete repaint.
+        let damageTop = Math.min(cursorTop, this.previousCursor?.top ?? cursorTop);
+        let damageBottom = Math.max(cursorBottom, this.previousCursor?.bottom ?? cursorBottom);
+        if (this.firstDirtyRow !== Infinity) {
+            damageTop = Math.min(damageTop, this.grid.rowY(this.firstDirtyRow));
+            damageBottom = Math.max(damageBottom, this.grid.rowY(this.lastDirtyRow) + cellHeight);
+        }
+        // Include changed rows and cursor motion, snapping the clip to physical pixels
+        // so acrylic and fractional DPI match a complete repaint.
         const paintTop = this.paintDirty
             ? 0
-            : Math.max(
-                  0,
-                  Math.floor(
-                      (Math.min(cursorTop, this.previousCursor?.top ?? cursorTop) - 1 / dpr) * dpr
-                  ) / dpr
-              );
+            : Math.max(0, Math.floor((damageTop - 1 / dpr) * dpr) / dpr);
         const paintBottom = this.paintDirty
             ? canvas.height / dpr
-            : Math.min(
-                  canvas.height / dpr,
-                  Math.ceil(
-                      (Math.max(cursorBottom, this.previousCursor?.bottom ?? cursorBottom) +
-                          1 / dpr) *
-                          dpr
-                  ) / dpr
-              );
+            : Math.min(canvas.height / dpr, Math.ceil((damageBottom + 1 / dpr) * dpr) / dpr);
         this.previousCursor = { top: cursorTop, bottom: cursorBottom };
         ctx.save();
         ctx.beginPath();
@@ -165,34 +163,39 @@ export class GridCanvas {
         ctx.textBaseline = 'alphabetic';
         for (
             let row = this.grid.scrollOffset < 0 ? -this.grid.historyRows.length : 0;
-            row < this.grid.rows;
+            row < this.grid.rows + (this.grid.scrollOffset > 0 ? this.grid.futureRows.length : 0);
             row++
         ) {
             const cells =
                 row < 0
                     ? this.grid.historyRows[this.grid.historyRows.length + row]
-                    : this.grid.cells[row];
-            const rowY = this.grid.rowY(row);
-            const rowHeight = this.grid.rowTop(row + 1) - this.grid.rowTop(row);
+                    : row >= this.grid.rows
+                      ? this.grid.futureRows[row - this.grid.rows]
+                      : this.grid.cells[row];
+            const commandLine = row === this.grid.rows - 1;
+            const layoutRow = row >= this.grid.rows ? row - 1 : row;
+            const rowY =
+                row >= this.grid.rows
+                    ? this.grid.rowTop(layoutRow) - this.grid.scrollOffset
+                    : this.grid.rowY(row);
+            const rowHeight = commandLine
+                ? cellHeight
+                : this.grid.rowTop(layoutRow + 1) - this.grid.rowTop(layoutRow);
             if (rowY + rowHeight + 1 / dpr < paintTop || rowY > paintBottom) {
                 continue;
             }
-            if (
-                row < this.grid.rows - 1 &&
-                (this.grid.rowY(row + 1) <= 0 || this.grid.rowY(row) >= this.grid.contentHeight)
-            ) {
+            if (!commandLine && (rowY + rowHeight <= 0 || rowY >= this.grid.contentHeight)) {
                 continue;
             }
             // Resting rows at fractional DPI must not inherit scroll interpolation.
             const physicalY =
-                this.grid.scrolling && this.grid.scrollOffset !== 0 && row < this.grid.rows - 1
-                    ? Math.round(this.grid.rowY(row) * dpr * GridCanvas.rasterPhases) /
-                      GridCanvas.rasterPhases
-                    : Math.round(this.grid.rowY(row) * dpr);
+                this.grid.scrolling && this.grid.scrollOffset !== 0 && !commandLine
+                    ? Math.round(rowY * dpr * GridCanvas.rasterPhases) / GridCanvas.rasterPhases
+                    : Math.round(rowY * dpr);
             const top = Math.floor(physicalY);
             const phase = Math.round((physicalY - top) * GridCanvas.rasterPhases);
             ctx.save();
-            if (row < this.grid.rows - 1) {
+            if (!commandLine) {
                 ctx.beginPath();
                 ctx.rect(0, 0, width, this.grid.contentHeight);
                 ctx.clip();
@@ -382,6 +385,8 @@ export class GridCanvas {
         ctx.restore();
         ctx.restore();
         this.paintDirty = false;
+        this.firstDirtyRow = Infinity;
+        this.lastDirtyRow = -Infinity;
         return { cellWidth, cellHeight };
     }
 

@@ -193,7 +193,7 @@ export class SessionInteraction {
         this.scrollDetached = false;
     }
 
-    async prefetchScroll(): Promise<void> {
+    async prefetchScroll(down = false): Promise<void> {
         const next = this.inputQueue.then(async () => {
             // This fast RPC remains available while Neovim waits for the rest of a command.
             const mode = (await this.client.request('nvim_get_mode', [])) as {
@@ -206,8 +206,8 @@ export class SessionInteraction {
             this.events.beginScrollBatch();
             try {
                 await this.client.request('nvim_exec_lua', [
-                    "require('nido_scroll').prefetch()",
-                    []
+                    "require('nido_scroll').prefetch(...)",
+                    [down]
                 ]);
                 await this.client.request('nvim_eval', ['1']);
             } finally {

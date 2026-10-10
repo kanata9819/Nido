@@ -8,7 +8,7 @@ export type { Cell } from './gridTypes';
 
 export class Grid {
     // Keep enough history for fast gestures while a refill spans several display frames.
-    private static readonly upperRowLimit = 256;
+    private static readonly cacheRowLimit = 256;
     cells: Cell[][] = [];
     highlights = new Map<number, Highlight>();
     columns = 0;
@@ -44,6 +44,11 @@ export class Grid {
     private upperTops: number[] = [0];
     private upperLayout?: Cell[][];
     private upperFontHeight = 0;
+    private lowerRows: Cell[][] = [];
+    private lowerRowsAtEnd = false;
+    private lowerTops: number[] = [0];
+    private lowerLayout?: Cell[][];
+    private lowerFontHeight = 0;
 
     get hasUpperRows(): boolean {
         return this.upperRows.length > 0;
@@ -56,7 +61,20 @@ export class Grid {
     get needsUpperRows(): boolean {
         const remaining =
             this.upperRows.length + Math.min(0, this.scrollFraction + this.scrollPreview);
-        return !this.upperRowsAtStart && remaining <= Grid.upperRowLimit * 0.75;
+        return !this.upperRowsAtStart && remaining <= Grid.cacheRowLimit * 0.75;
+    }
+
+    get canPreviewDownwardScroll(): boolean {
+        return (
+            this.scrollFraction + this.scrollPreview <=
+            this.lowerRows.length + (this.lowerRowsAtEnd ? 0 : 1)
+        );
+    }
+
+    get needsLowerRows(): boolean {
+        const remaining =
+            this.lowerRows.length - Math.max(0, this.scrollFraction + this.scrollPreview);
+        return !this.lowerRowsAtEnd && remaining <= Grid.cacheRowLimit * 0.75;
     }
 
     rowTop(row: number): number {
@@ -65,6 +83,13 @@ export class Grid {
             const top = this.upperTops[index] ?? row * this.cellHeight;
             const bottom = this.upperTops[index + 1] ?? top + this.cellHeight;
             return top + (row - Math.floor(row)) * (bottom - top);
+        }
+        if (row >= this.rows - 1 && this.lowerRows.length) {
+            const index = Math.floor(row) - (this.rows - 1);
+            const offset = this.lowerTops[index] ?? index * this.cellHeight;
+            const top = (this.rowTops[this.rows - 1] ?? (this.rows - 1) * this.cellHeight) + offset;
+            const bottom = this.lowerTops[index + 1] ?? offset + this.cellHeight;
+            return top + (row - Math.floor(row)) * (bottom - offset);
         }
         const index = Math.max(0, Math.min(this.rows - 1, Math.floor(row)));
         const top = this.rowTops[index] ?? index * this.cellHeight;
@@ -99,10 +124,11 @@ export class Grid {
         const prefetched = events.some(([name]) => name === 'nido_scroll_cache');
         const retainedRows =
             prefetched || viewportMoves.length
-                ? new Set([...this.upperRows, ...this.cells])
+                ? new Set([...this.upperRows, ...this.cells, ...this.lowerRows])
                 : undefined;
         const retainedView = retainedRows ? this.cells.slice() : undefined;
         const retainedUpper = retainedRows ? this.upperRows.slice() : [];
+        const retainedLower = retainedRows ? this.lowerRows.slice() : [];
         const shift =
             !prefetched &&
             viewportMoves.every(
@@ -122,6 +148,8 @@ export class Grid {
         ) {
             this.upperRows = [];
             this.upperRowsAtStart = false;
+            this.lowerRows = [];
+            this.lowerRowsAtEnd = false;
         }
         let flush = false;
         let atStart: boolean | undefined;
@@ -164,7 +192,7 @@ export class Grid {
                         if (
                             rows > 0 &&
                             (rows >= bottom - top ||
-                                this.upperRows.length + rows > Grid.upperRowLimit)
+                                this.upperRows.length + rows > Grid.cacheRowLimit)
                         ) {
                             this.upperRowsAtStart = false;
                         }
@@ -175,20 +203,39 @@ export class Grid {
                                 ? rows >= bottom - top
                                     ? []
                                     : [...this.upperRows, ...this.cells.slice(0, rows)].slice(
-                                          -Grid.upperRowLimit
+                                          -Grid.cacheRowLimit
                                       )
                                 : this.upperRows.slice(
                                       0,
                                       Math.max(0, this.upperRows.length + rows)
                                   );
+                        if (
+                            rows < 0 &&
+                            (-rows >= bottom - top ||
+                                this.lowerRows.length - rows > Grid.cacheRowLimit)
+                        ) {
+                            this.lowerRowsAtEnd = false;
+                        }
+                        this.lowerRows =
+                            rows < 0
+                                ? -rows >= bottom - top
+                                    ? []
+                                    : [
+                                          ...this.cells.slice(bottom + rows, bottom),
+                                          ...this.lowerRows
+                                      ].slice(0, Grid.cacheRowLimit)
+                                : this.lowerRows.slice(rows);
                     } else {
                         this.upperRows = [];
                         this.upperRowsAtStart = false;
+                        this.lowerRows = [];
+                        this.lowerRowsAtEnd = false;
                     }
                 }
                 switch (name) {
                     case 'nido_scroll_cache': {
                         this.upperRowsAtStart = args[0] === true;
+                        this.lowerRowsAtEnd = args[2] === true;
                         if (typeof args[1] === 'boolean') {
                             atStart = args[1];
                         }
@@ -267,13 +314,14 @@ export class Grid {
                                             this.layoutDirty = true;
                                             if (
                                                 this.upperRows.includes(row) ||
+                                                this.lowerRows.includes(row) ||
                                                 retainedRows?.has(row)
                                             ) {
                                                 const previous = row;
                                                 row = this.cells[Number(args[1])] = row.slice();
                                                 this.rowLayout.clone(previous, row);
                                             }
-                                            this.canvas.invalidate(row);
+                                            this.canvas.invalidate(Number(args[1]));
                                             changed = true;
                                         }
                                         const next = { text: cell[0], highlight };
@@ -316,7 +364,7 @@ export class Grid {
                             if (retainedRows?.has(this.cells[row])) {
                                 this.cells[row] = this.cells[row].slice();
                             }
-                            this.canvas.invalidate(this.cells[row]);
+                            this.canvas.invalidate(row);
                             this.rowLayout.invalidate(this.cells[row]);
                             for (let col = left; col < right; col++) {
                                 const sourceRow = row + rows;
@@ -335,6 +383,7 @@ export class Grid {
                     case 'hl_attr_define': {
                         this.layoutDirty = true;
                         this.upperLayout = undefined;
+                        this.lowerLayout = undefined;
                         this.rowLayout.invalidate();
                         this.canvas.invalidate();
                         const info = args[3] as { hi_name?: string }[] | undefined;
@@ -382,12 +431,15 @@ export class Grid {
             this.upperRowsAtStart = true;
         }
         if (retainedView) {
+            this.canvas.invalidatePaint();
             for (let row = 0; row < this.rows; row++) {
                 const source = row < this.rows - 1 ? row + shift : row;
                 const before =
                     source < 0
                         ? retainedUpper[retainedUpper.length + source]
-                        : retainedView[source];
+                        : row < this.rows - 1 && source >= this.rows - 1
+                          ? retainedLower[source - (this.rows - 1)]
+                          : retainedView[source];
                 const after = this.cells[row];
                 if (
                     before &&
@@ -446,6 +498,7 @@ export class Grid {
     prepareLayout(height: number, cellWidth: number, cellHeight: number, dpr: number): void {
         this.cellWidth = cellWidth;
         if (this.layoutDirty || this.cellHeight !== cellHeight) {
+            const previousTops = this.rowTops;
             this.rowTops = [0];
             for (let row = 0; row < this.rows; row++) {
                 const cells = this.cells[row];
@@ -453,6 +506,10 @@ export class Grid {
                 this.rowTops.push(
                     this.rowTops[row] + (compact ? Math.ceil(cellHeight * 0.7) : cellHeight)
                 );
+                // Compact rows shift every row below them.
+                if (this.rowTops[row + 1] !== previousTops[row + 1]) {
+                    this.canvas.invalidatePaint();
+                }
             }
             this.layoutDirty = false;
         }
@@ -474,12 +531,26 @@ export class Grid {
             this.upperLayout = this.upperRows;
             this.upperFontHeight = cellHeight;
         }
+        if (this.lowerRows !== this.lowerLayout || this.lowerFontHeight !== cellHeight) {
+            this.lowerTops = [0];
+            for (const cells of this.lowerRows) {
+                this.lowerTops.push(
+                    this.lowerTops[this.lowerTops.length - 1] +
+                        (this.rowLayout.compact(cells) ? Math.ceil(cellHeight * 0.7) : cellHeight)
+                );
+            }
+            this.lowerLayout = this.lowerRows;
+            this.lowerFontHeight = cellHeight;
+        }
         // Only preview rows whose text and decorations are already available.
         this.scrollPixels = this.pixelScrollEnabled
             ? this.rowTop(
                   Math.max(
                       -this.upperRows.length,
-                      Math.min(1, this.scrollFraction + this.scrollPreview)
+                      Math.min(
+                          this.lowerRows.length + (this.lowerRowsAtEnd ? 0 : 1),
+                          this.scrollFraction + this.scrollPreview
+                      )
                   )
               )
             : 0;
@@ -491,6 +562,10 @@ export class Grid {
 
     get historyRows(): readonly Cell[][] {
         return this.upperRows;
+    }
+
+    get futureRows(): readonly Cell[][] {
+        return this.lowerRows;
     }
 
     get scrollOffset(): number {

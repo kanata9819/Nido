@@ -36,7 +36,16 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
             const fill = ctx.fillRect.bind(ctx);
             const draw = ctx.drawImage.bind(ctx);
             let first = true;
-            Object.assign(window, { cadence: { samples: [] as { top: number; at: number }[] } });
+            const cadence = {
+                samples: [] as { top: number; at: number; input: number }[],
+                inputs: [] as { pixels: number; at: number }[],
+                input: 0
+            };
+            Object.assign(window, { cadence });
+            node.addEventListener('wheel', (event) => {
+                cadence.input += event.deltaY;
+                cadence.inputs.push({ pixels: event.deltaY, at: performance.now() });
+            });
             Object.assign(window, { cadenceEvents: [] as unknown[] });
             window.nido.onEvent((event) => {
                 if (event.type === 'redraw')
@@ -67,11 +76,7 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                         const baseline = Number(source.dataset.rowBaseline);
                         const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
                         const top = (Number(row[1]) - 1) * rowHeight - Number(args[2]) - phase;
-                        (
-                            window as unknown as {
-                                cadence: { samples: { top: number; at: number }[] };
-                            }
-                        ).cadence.samples.push({ top, at: performance.now() });
+                        cadence.samples.push({ top, at: performance.now(), input: cadence.input });
                         node.dataset.documentTop = String(top);
                     }
                 }
@@ -124,7 +129,14 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                 await page.waitForTimeout(250);
                 const start = Number(await canvas.getAttribute('data-document-top'));
                 await canvas.evaluate(async (node, delta) => {
-                    (window as unknown as { cadence: { samples: unknown[] } }).cadence.samples = [];
+                    const cadence = (
+                        window as unknown as {
+                            cadence: { samples: unknown[]; inputs: unknown[]; input: number };
+                        }
+                    ).cadence;
+                    cadence.samples = [];
+                    cadence.inputs = [];
+                    cadence.input = 0;
                     (window as unknown as { cadenceEvents: unknown[] }).cadenceEvents = [];
                     for (let i = 0; i < 100; i++) {
                         await new Promise<void>((resolve) =>
@@ -140,7 +152,7 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                     () =>
                         (
                             window as unknown as {
-                                cadence: { samples: { top: number; at: number }[] };
+                                cadence: { samples: { top: number; at: number; input: number }[] };
                             }
                         ).cadence.samples
                 );
@@ -177,6 +189,11 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                 if (failed)
                     Object.assign(reports.at(-1)!, {
                         samples,
+                        inputs: await page.evaluate(
+                            () =>
+                                (window as unknown as { cadence: { inputs: unknown[] } }).cadence
+                                    .inputs
+                        ),
                         events: await page.evaluate(
                             () => (window as unknown as { cadenceEvents: unknown[] }).cadenceEvents
                         )

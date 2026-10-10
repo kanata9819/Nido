@@ -178,7 +178,7 @@ test('hidden editors keep their state without scheduling paints, and cursor blin
 
 for (const scale of [1, 1.25, 1.5, 2]) {
     for (const opacity of [1, 0.5]) {
-        test(`cursor paints preserve pixels at ${scale * 100}% scale and ${opacity} opacity`, async ({
+        test(`cursor and edit paints preserve pixels at ${scale * 100}% scale and ${opacity} opacity`, async ({
             browser
         }) => {
             const context = await browser.newContext({ deviceScaleFactor: scale });
@@ -266,6 +266,8 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                             ] as const) {
                                 Reflect.set(referenceGrid, key, grid[key]);
                             }
+                            Reflect.set(referenceGrid, 'upperRows', grid.historyRows);
+                            Reflect.set(referenceGrid, 'lowerRows', grid.futureRows);
                             for (const [id, highlight] of grid.highlights) {
                                 referenceGrid.highlights.set(id, highlight);
                             }
@@ -299,6 +301,21 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                             samples.push(performance.now() - start);
                         }
                         const cursorCopies = copies;
+                        grid.cursor = { row: 17, column: 10 };
+                        paint(canvas);
+                        copies = 0;
+                        const editSamples: number[] = [];
+                        for (let i = 0; i < 160; i++) {
+                            const start = performance.now();
+                            grid.apply([
+                                ['grid_line', [1, 17, 10, [[String(i % 10), 0]]]],
+                                ['flush']
+                            ]);
+                            paint(canvas);
+                            editSamples.push(performance.now() - start);
+                        }
+                        const editCopies = copies;
+                        compare();
                         for (const row of [0, 1, 17, 38, 39]) {
                             grid.cursor.row = row;
                             for (const mode of ['normal', 'insert', 'cmdline_normal']) {
@@ -348,6 +365,11 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                         compare();
                         grid.apply([['grid_line', [1, 5, 0, [['EDITED', 1]]]], ['flush']]);
                         compare();
+                        grid.apply([
+                            ['grid_line', [1, 0, 10, [['TOP', 0]]], [1, 39, 0, [['COMMAND', 0]]]],
+                            ['flush']
+                        ]);
+                        compare();
                         grid.scrollFraction = 0.25;
                         grid.scrolling = true;
                         compare();
@@ -366,13 +388,36 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                             grid.cursor.row = row;
                             compare();
                         }
+                        grid.apply([['grid_line', [1, 5, 7, [['x', 0]]]], ['flush']]);
+                        compare();
+                        grid.apply([['grid_line', [1, 5, 7, [[' ', 0]]]], ['flush']]);
+                        compare();
+                        grid.apply([['grid_scroll', [1, 0, 10, 4, 30, 1, 0]], ['flush']]);
+                        compare();
+                        grid.apply([['grid_scroll', [1, 0, 38, 0, 140, -1, 0]], ['flush']]);
+                        compare();
+                        grid.apply([
+                            ['nido_scroll', [1, 0, 39, 0, 140, -3, 0]],
+                            ['grid_scroll', [1, 0, 39, 0, 140, -3, 0]],
+                            ['flush']
+                        ]);
+                        for (const preview of [1.5, 2.5, 0]) {
+                            grid.scrollPreview = preview;
+                            compare();
+                        }
+                        grid.apply([['grid_clear', [1]], ['flush']]);
+                        compare();
                         samples.sort((a, b) => a - b);
+                        editSamples.sort((a, b) => a - b);
                         return {
                             fullCopies,
                             cursorCopies,
+                            editCopies,
                             mismatches,
                             p50: samples[80],
-                            p95: samples[152]
+                            p95: samples[152],
+                            editP50: editSamples[80],
+                            editP95: editSamples[152]
                         };
                     },
                     {
@@ -384,6 +429,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                 expect(result.mismatches).toBe(0);
                 if (!process.env.NIDO_PERFORMANCE_BASELINE) {
                     expect(result.cursorCopies).toBeLessThanOrEqual(160 * 3);
+                    expect(result.editCopies).toBeLessThanOrEqual(160 * 3);
                 }
             } finally {
                 await context.close();
