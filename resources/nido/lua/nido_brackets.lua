@@ -4,9 +4,43 @@ local colors = { '#FFD700', '#DA70D6', '#179FFF' }
 local closing = { [')'] = '(', [']'] = '[', ['}'] = '{' }
 local pending = {}
 local pairs_by_buffer = {}
+local matches_by_buffer = {}
 local parsed_ticks = {}
 local marks_by_buffer = {}
 local published_guides
+local matched
+local match_namespace = api.nvim_create_namespace('nido_bracket_match')
+
+local function match_brackets()
+  local buffer = api.nvim_get_current_buf()
+  local cursor = require('nido_scroll').cursor() or api.nvim_win_get_cursor(0)
+  local active
+  if parsed_ticks[buffer] == api.nvim_buf_get_changedtick(buffer)
+      and vim.fn.mode():match('^[niR]') and vim.bo.buftype == '' then
+    for _, pair in ipairs(matches_by_buffer[buffer] or {}) do
+      local a, b = pair.first, pair.last
+      if (cursor[1] - 1 > a.row or (cursor[1] - 1 == a.row and cursor[2] >= a.column))
+          and (cursor[1] - 1 < b.row or (cursor[1] - 1 == b.row and cursor[2] <= b.column))
+          and (not active or a.row > active.first.row
+            or (a.row == active.first.row and a.column > active.first.column)) then
+        active = pair
+      end
+    end
+  end
+  local next_match = active and {buffer=buffer, pair=active} or nil
+  if vim.deep_equal(matched, next_match) then return end
+  if matched and api.nvim_buf_is_valid(matched.buffer) then
+    api.nvim_buf_clear_namespace(matched.buffer, match_namespace, 0, -1)
+  end
+  matched = next_match
+  if active then
+    for _, position in ipairs({active.first, active.last}) do
+      api.nvim_buf_set_extmark(buffer, match_namespace, position.row, position.column, {
+        end_col=position.column + 1, hl_group='NidoBracketMatch', priority=160,
+      })
+    end
+  end
+end
 
 local function ignored(row, column)
   for _, id in ipairs(vim.fn.synstack(row, column)) do
@@ -69,6 +103,9 @@ local function set_colors()
   for level, color in ipairs(colors) do
     api.nvim_set_hl(0, 'NidoBracket' .. level, { fg = color })
   end
+  -- The GUI renders this underline attribute as a border without replacing bracket colors.
+  api.nvim_set_hl(0, 'NidoBracketMatch', {underline=true, sp='#ffffff'})
+  api.nvim_set_hl(0, 'MatchParen', {})
 end
 
 local function update(buffer)
@@ -81,6 +118,11 @@ local function update(buffer)
   end
   parsed_ticks[buffer] = tick
   pairs_by_buffer[buffer] = {}
+  matches_by_buffer[buffer] = {}
+  if matched and matched.buffer == buffer then
+    api.nvim_buf_clear_namespace(buffer, match_namespace, 0, -1)
+    matched = nil
+  end
   if vim.bo[buffer].buftype ~= ''
       or api.nvim_buf_get_offset(buffer, api.nvim_buf_line_count(buffer)) > 1024 * 1024 then
     api.nvim_buf_clear_namespace(buffer, namespace, 0, -1)
@@ -138,6 +180,9 @@ local function update(buffer)
           elseif #stack > 0 and stack[#stack].bracket == closing[bracket] then
             local group = 'NidoBracket' .. ((#stack - 1) % #colors + 1)
             local opening = table.remove(stack)
+            table.insert(matches_by_buffer[buffer], {
+              first=opening, last={row=row - 1, column=column - 1},
+            })
             if opening.row < row - 1 then
               table.insert(pairs_by_buffer[buffer], {
                 first=opening, last={row=row - 1, column=column - 1},
@@ -225,10 +270,13 @@ api.nvim_set_decoration_provider(api.nvim_create_namespace('nido_bracket_guides'
 })
 -- Cursor-only redraws do not call on_win; update the active scope without repainting Neovim's text.
 api.nvim_create_autocmd({'CursorMoved', 'CursorMovedI'}, {callback=function(event)
+  match_brackets()
   publish_guides(api.nvim_get_current_win(), event.buf, vim.fn.line('w0') - 1, vim.fn.line('w$'), true)
 end})
+api.nvim_create_autocmd('ModeChanged', {callback=match_brackets})
 api.nvim_create_autocmd('BufWipeout', {callback=function(event)
   pairs_by_buffer[event.buf] = nil
+  matches_by_buffer[event.buf] = nil
   parsed_ticks[event.buf] = nil
   marks_by_buffer[event.buf] = nil
   pending[event.buf] = nil
@@ -249,6 +297,7 @@ api.nvim_create_autocmd({ 'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'T
       if pending[buffer] ~= ticket then return end
       pending[buffer] = nil
       update(buffer)
+      match_brackets()
     end, 80)
   end,
 })

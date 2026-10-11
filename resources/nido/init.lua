@@ -189,6 +189,7 @@ require('nido_indent')
 require('nido_editorconfig')
 require('nido_text_edits')
 require('nido_brackets')
+require('nido_word_highlights')
 require('nido_sticky')
 require('nido_git_signs')
 -- Darken surfaces without changing Azami's token colors.

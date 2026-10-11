@@ -112,6 +112,23 @@ test(
                 (item) => item.path.endsWith('main.rs') && item.line === 3
             );
             assert.ok(call >= 0, 'References include the call site');
+            await lua("vim.api.nvim_exec_autocmds('CursorMoved', {buffer=0})");
+            let highlights: number[][] = [];
+            for (let attempt = 0; attempt < 50 && highlights.length === 0; attempt++) {
+                await new Promise((done) => setTimeout(done, 100));
+                highlights = (await lua(`
+                  local positions = {}
+                  local ns = vim.api.nvim_create_namespace('nvim.lsp.references')
+                  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {})) do
+                    positions[#positions + 1] = {mark[2], mark[3]}
+                  end
+                  return positions
+                `)) as number[][];
+            }
+            assert.ok(
+                highlights.some(([row, column]) => row === 2 && column === 17),
+                'Rust document highlights include the function under the cursor'
+            );
             const beforePreview = await lua(
                 'return {vim.api.nvim_get_current_buf(), vim.api.nvim_win_get_cursor(0)}'
             );

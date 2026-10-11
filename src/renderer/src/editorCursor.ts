@@ -3,6 +3,7 @@ import type { Grid } from './grid';
 interface Position {
     row: number;
     column: number;
+    width: number;
 }
 
 /** Own cursor interpolation, blink timing and their focus listeners. */
@@ -31,7 +32,10 @@ export class EditorCursor {
     }
 
     update(now: number, smooth: boolean, interrupted: boolean, focused: boolean): Position {
-        const target = this.grid.scrollCursor ?? this.grid.cursor;
+        const target = {
+            ...(this.grid.scrollCursor ?? this.grid.cursor),
+            width: this.grid.cursorWidth
+        };
         if (this.fade) {
             const progress = this.canBlink() ? Math.min(1, (now - this.fade.start) / 180) : 1;
             const eased = progress * progress * (3 - 2 * progress);
@@ -54,7 +58,11 @@ export class EditorCursor {
             this.motion = undefined;
         } else {
             const previousTarget = this.motion?.to ?? this.position;
-            if (target.row !== previousTarget.row || target.column !== previousTarget.column) {
+            if (
+                target.row !== previousTarget.row ||
+                target.column !== previousTarget.column ||
+                target.width !== previousTarget.width
+            ) {
                 this.motion = { from: { ...this.position }, to: { ...target }, start: now };
             }
             if (this.motion) {
@@ -64,7 +72,10 @@ export class EditorCursor {
                     row: this.motion.from.row + (this.motion.to.row - this.motion.from.row) * eased,
                     column:
                         this.motion.from.column +
-                        (this.motion.to.column - this.motion.from.column) * eased
+                        (this.motion.to.column - this.motion.from.column) * eased,
+                    width:
+                        this.motion.from.width +
+                        (this.motion.to.width - this.motion.from.width) * eased
                 };
                 if (progress === 1) {
                     this.motion = undefined;

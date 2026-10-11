@@ -1,0 +1,317 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Session } from '../src/main/session';
+import { Grid } from '../src/renderer/src/grid';
+import { EditorCursor } from '../src/renderer/src/editorCursor';
+import { setTimeout as delay } from 'node:timers/promises';
+
+test('matching brackets follow the innermost pair, syntax, edits and visual mode', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.attach(80, 24);
+        await session.client.request('nvim_exec_lua', [
+            `
+local api = vim.api
+local buffer = api.nvim_get_current_buf()
+local ns = api.nvim_create_namespace('nido_bracket_match')
+local function move(row, col)
+  api.nvim_win_set_cursor(0, {row, col})
+  api.nvim_exec_autocmds('CursorMoved', {buffer=buffer})
+end
+local function ready()
+  api.nvim_exec_autocmds('TextChanged', {buffer=buffer})
+  vim.cmd('redraw!')
+  assert(vim.wait(5000, function() return require('nido_brackets').ready(buffer) end, 5))
+end
+local function marks()
+  local positions = {}
+  for _, mark in ipairs(api.nvim_buf_get_extmarks(buffer, ns, 0, -1, {})) do
+    positions[#positions + 1] = {mark[2], mark[3]}
+  end
+  return positions
+end
+api.nvim_buf_set_lines(buffer, 0, -1, false, {'{', '  call([value]); "{ignored}"', '}', 'outside'})
+vim.bo.filetype = 'javascript'
+move(2, 8)
+ready()
+assert(vim.deep_equal(marks(), {{1,7}, {1,13}}), vim.inspect(marks()))
+move(2, 7)
+assert(vim.deep_equal(marks(), {{1,7}, {1,13}}))
+move(2, 13)
+assert(vim.deep_equal(marks(), {{1,7}, {1,13}}))
+move(2, 14)
+assert(vim.deep_equal(marks(), {{1,6}, {1,14}}))
+move(2, 21)
+assert(vim.deep_equal(marks(), {{0,0}, {2,0}}), 'String brackets must be ignored')
+move(4, 0)
+assert(#marks() == 0, 'Leaving a scope must remove its borders')
+move(2, 8)
+vim.cmd('normal! v')
+assert(#marks() == 0, 'Visual selection must hide matching borders')
+vim.cmd('normal! ' .. string.char(27))
+api.nvim_buf_set_lines(buffer, 0, -1, false, {'[new]'})
+move(1, 1)
+ready()
+assert(vim.deep_equal(marks(), {{0,0}, {0,4}}), 'Edits must not leave stale borders')
+`,
+            []
+        ]);
+    } finally {
+        await session.stop();
+    }
+});
+
+test('word fallback is case sensitive, uses whole words and clears on whitespace and selection', async () => {
+    const grid = new Grid();
+    const session = await Session.create(process.cwd(), (event) => {
+        if (event.type === 'redraw') grid.apply(event.events);
+    });
+    try {
+        await session.attach(80, 24);
+        await session.client.request('nvim_exec_lua', [
+            String.raw`
+local api = vim.api
+api.nvim_buf_set_lines(0, 0, -1, false, {'cells cells cellsOther Cells', '日本 日本 日本語', '  cells'})
+api.nvim_win_set_cursor(0, {1, 0})
+api.nvim_exec_autocmds('CursorMoved', {buffer=0})
+assert(vim.wait(3000, function() return #vim.fn.getmatches() > 0 end, 5))
+local matches = vim.fn.getmatches()
+assert(#matches == 1 and matches[1].pattern == [[\C\V\<cells\>]], vim.inspect(matches))
+vim.cmd('redraw!')
+`,
+            []
+        ]);
+        await session.client.request('nvim_eval', ['1']);
+        await delay(400);
+        await session.client.request('nvim_command', ['redraw!']);
+        await session.client.request('nvim_eval', ['1']);
+        const cells = grid.cells[0];
+        const start = cells.findIndex((cell) => cell.text === 'c');
+        const highlighted = cells
+            .map((cell, index) => (grid.highlights.get(cell.highlight)?.wordHighlight ? index : -1))
+            .filter((index) => index >= 0);
+        assert.deepEqual(
+            highlighted,
+            Array.from({ length: 11 }, (_, i) => start + i).filter((i) => i !== start + 5)
+        );
+        assert.equal(grid.highlights.get(cells[start].highlight)?.background, 0xffffff);
+        await session.client.request('nvim_exec_lua', [
+            String.raw`
+local api = vim.api
+api.nvim_win_set_cursor(0, {2, 0})
+api.nvim_exec_autocmds('CursorMoved', {buffer=0})
+assert(vim.wait(3000, function() return #vim.fn.getmatches() > 0 end, 5))
+assert(vim.fn.getmatches()[1].pattern == [[\C\V\<日本\>]])
+api.nvim_win_set_cursor(0, {3, 0})
+api.nvim_exec_autocmds('CursorMoved', {buffer=0})
+vim.wait(300)
+assert(#vim.fn.getmatches() == 0, 'Whitespace must not select the next word')
+api.nvim_win_set_cursor(0, {1, 0})
+api.nvim_exec_autocmds('CursorMoved', {buffer=0})
+assert(vim.wait(3000, function() return #vim.fn.getmatches() > 0 end, 5))
+vim.cmd('normal! v')
+vim.wait(300)
+assert(#vim.fn.getmatches() == 0, 'Visual selection must clear word matches')
+`,
+            []
+        ]);
+    } finally {
+        await session.stop();
+    }
+});
+
+test('document highlights reject late responses after moving, editing and leaving the buffer', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.attach(80, 24);
+        await session.client.request('nvim_exec_lua', [
+            `
+local api = vim.api
+local buffer = api.nvim_get_current_buf()
+local ns = api.nvim_create_namespace('nvim.lsp.references')
+api.nvim_buf_set_lines(buffer, 0, -1, false, {'value other value'})
+local callbacks, requests = {}, 0
+local original = {vim.lsp.get_clients, vim.lsp.get_client_by_id, vim.lsp.buf_request_all}
+local client = {id=1, offset_encoding='utf-16'}
+vim.lsp.get_clients = function(filter)
+  if filter and filter.method == 'textDocument/documentHighlight' then return {client} end
+  return original[1](filter)
+end
+vim.lsp.get_client_by_id = function(id) return id == 1 and client or original[2](id) end
+vim.lsp.buf_request_all = function(buf, method, params, callback)
+  if method ~= 'textDocument/documentHighlight' then return original[3](buf, method, params, callback) end
+  requests = requests + 1
+  callbacks[requests] = callback
+  return function() end
+end
+local result = {[1]={result={
+  {range={start={line=0, character=0}, ['end']={line=0, character=5}}, kind=2},
+  {range={start={line=0, character=12}, ['end']={line=0, character=17}}, kind=3},
+}}}
+local function request(column)
+  api.nvim_win_set_cursor(0, {1, column})
+  api.nvim_exec_autocmds('CursorMoved', {buffer=buffer})
+  local expected = requests + 1
+  assert(vim.wait(3000, function() return requests >= expected end, 5))
+  return callbacks[requests]
+end
+local function marks() return api.nvim_buf_get_extmarks(buffer, ns, 0, -1, {}) end
+local ok, err = pcall(function()
+  local old = request(0)
+  request(6)
+  old(result)
+  assert(#marks() == 0, 'A late response highlighted the previous word')
+  local fresh = request(0)
+  fresh(result)
+  assert(#marks() == 2, 'The current response was not applied')
+  local edited = request(6)
+  api.nvim_buf_set_lines(buffer, 0, -1, false, {'changed other value'})
+  api.nvim_exec_autocmds('TextChanged', {buffer=buffer})
+  edited(result)
+  assert(#marks() == 0, 'A late response survived an edit')
+  local leaving = request(0)
+  vim.cmd('enew!')
+  leaving(result)
+  assert(#marks() == 0, 'A late response survived a buffer switch')
+end)
+vim.lsp.get_clients, vim.lsp.get_client_by_id, vim.lsp.buf_request_all = unpack(original)
+assert(ok, err)
+`,
+            []
+        ]);
+    } finally {
+        await session.stop();
+    }
+});
+
+for (const server of ['auto', 'legacy']) {
+    test(`TypeScript ${server} occurrence highlights distinguish a shadowed variable after Unicode`, async () => {
+        const root = await mkdtemp(join(tmpdir(), 'nido-occurrences-'));
+        const grid = new Grid();
+        let session: Session | undefined;
+        try {
+            await writeFile(join(root, 'tsconfig.json'), '{}');
+            await writeFile(
+                join(root, 'sample.ts'),
+                [
+                    'export function outer() {',
+                    '  const value = 1;',
+                    '  console.log("日本😀", value);',
+                    '  function inner() { const value = 2; return value; }',
+                    '  return value;',
+                    '}'
+                ].join('\n')
+            );
+            session = await Session.create(root, (event) => {
+                if (event.type === 'redraw') grid.apply(event.events);
+            });
+            const config = join(root, 'lsp.json');
+            await writeFile(config, JSON.stringify({ typescript: { server } }));
+            await session.client.request('nvim_exec_lua', [
+                "vim.env.NIDO_LSP_CONFIG = ...; require('nido_typescript').setup()",
+                [config]
+            ]);
+            await session.openFile('sample.ts');
+            await session.attach(100, 24);
+            await session.client.request('nvim_exec_lua', [
+                `
+local api = vim.api
+local ns = api.nvim_create_namespace('nvim.lsp.references')
+assert(vim.wait(20000, function()
+  return #vim.lsp.get_clients({bufnr=0, method='textDocument/documentHighlight'}) > 0
+end, 20), 'TypeScript server did not attach')
+local line = api.nvim_buf_get_lines(0, 2, 3, false)[1]
+api.nvim_win_set_cursor(0, {3, line:find('value', 1, true) - 1})
+api.nvim_exec_autocmds('CursorMoved', {buffer=0})
+`,
+                []
+            ]);
+            let positions: number[][] = [];
+            for (let attempt = 0; attempt < 200 && positions.length < 3; attempt++) {
+                await delay(100);
+                positions = await session.client.request('nvim_exec_lua', [
+                    `
+local api = vim.api
+local ns = api.nvim_create_namespace('nvim.lsp.references')
+local positions = {}
+for _, mark in ipairs(api.nvim_buf_get_extmarks(0, ns, 0, -1, {})) do
+  positions[#positions + 1] = {mark[2], mark[3]}
+end
+vim.cmd('redraw!')
+return positions
+`,
+                    []
+                ]);
+            }
+            assert.deepEqual(positions, [
+                [1, 8],
+                [2, Buffer.byteLength('  console.log("日本😀", ')],
+                [4, 9]
+            ]);
+            await session.client.request('nvim_eval', ['1']);
+            assert.ok(
+                grid.cells.some((row) =>
+                    row.some((cell) => grid.highlights.get(cell.highlight)?.wordHighlight)
+                ),
+                'Document highlights must reach the GUI grid'
+            );
+        } finally {
+            await session?.stop();
+            await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+        }
+    });
+}
+
+test('cursor width follows wide cells and interpolates in both directions and during stationary edits', () => {
+    const grid = new Grid();
+    grid.apply([
+        ['grid_resize', [1, 12, 3]],
+        ['grid_line', [1, 0, 0, [['a', 0], ['日'], [''], ['😀'], [''], ['e\u0301'], ['x']]]],
+        ['flush']
+    ]);
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    Object.defineProperty(globalThis, 'document', {
+        configurable: true,
+        value: { hasFocus: () => true }
+    });
+    try {
+        const media = { matches: false } as MediaQueryList;
+        const cursor = new EditorCursor(
+            grid,
+            {} as HTMLElement,
+            {} as HTMLTextAreaElement,
+            media,
+            false,
+            () => {}
+        );
+        const update = (now: number, smooth = true): number =>
+            cursor.update(now, smooth, false, true).width;
+        assert.equal(update(0), 1);
+        grid.cursor.column = 1;
+        assert.equal(update(10), 1);
+        assert.ok(update(60) > 1 && update(60) < 2);
+        assert.equal(update(110), 2);
+        grid.cursor.column = 3;
+        assert.equal(update(120), 2, 'Emoji uses its continuation cell');
+        grid.cursor.column = 5;
+        update(130);
+        assert.ok(update(180) > 1 && update(180) < 2);
+        assert.equal(update(230), 1, 'Combining marks stay in one cell');
+        grid.cells[0][5] = { text: '本', highlight: 0 };
+        grid.cells[0][6] = { text: '', highlight: 0 };
+        update(240);
+        assert.ok(update(290) > 1 && update(290) < 2);
+        assert.equal(update(340), 2);
+        grid.cursor.column = 0;
+        assert.equal(update(350, false), 1);
+        grid.cursor.column = 1;
+        media.matches = true;
+        assert.equal(update(360), 2, 'Reduced motion skips interpolation');
+    } finally {
+        if (original) Object.defineProperty(globalThis, 'document', original);
+        else Reflect.deleteProperty(globalThis, 'document');
+    }
+});

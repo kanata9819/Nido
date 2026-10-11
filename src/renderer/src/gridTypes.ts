@@ -6,6 +6,9 @@ export interface Cell {
 export interface Highlight {
     codeLens?: boolean;
     indentGuide?: boolean;
+    bracketMatch?: boolean;
+    wordHighlight?: boolean;
+    blend?: number;
     foreground?: number;
     background?: number;
     special?: number;

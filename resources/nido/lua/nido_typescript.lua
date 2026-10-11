@@ -81,6 +81,18 @@ function M.setup()
   vim.lsp.config('typescript', {
     cmd = command or {node, vim.fs.joinpath(modules, 'typescript-language-server/lib/cli.mjs'), '--stdio'},
     cmd_env = environment,
+    on_init = native and function(client)
+      local request = client.rpc.request
+      client.rpc.request = function(method, params, ...)
+        if method == 'textDocument/documentHighlight' then
+          -- Native TS compares highlight URIs literally; match its drive and percent encoding.
+          params.textDocument.uri = params.textDocument.uri:gsub('^file:///([A-Za-z]):', function(drive)
+            return 'file:///' .. drive:lower() .. '%3A'
+          end):gsub('%%%x%x', string.upper)
+        end
+        return request(method, params, ...)
+      end
+    end or nil,
     filetypes = {'typescript', 'typescriptreact', 'javascript', 'javascriptreact'},
     root_dir = vim.fn.getcwd(),
     init_options = not native and {

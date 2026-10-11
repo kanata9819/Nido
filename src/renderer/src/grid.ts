@@ -50,6 +50,12 @@ export class Grid {
     private lowerLayout?: Cell[][];
     private lowerFontHeight = 0;
 
+    get cursorWidth(): number {
+        const cursor = this.scrollCursor ?? this.cursor;
+        // Neovim sends an empty continuation cell after a wide glyph, including emoji.
+        return this.cells[cursor.row]?.[cursor.column + 1]?.text === '' ? 2 : 1;
+    }
+
     get hasUpperRows(): boolean {
         return this.upperRows.length > 0;
     }
@@ -396,6 +402,10 @@ export class Grid {
                             ),
                             indentGuide: info?.some((item) =>
                                 /^NidoIndent\d+$/.test(item.hi_name || '')
+                            ),
+                            bracketMatch: info?.some((item) => item.hi_name === 'NidoBracketMatch'),
+                            wordHighlight: info?.some((item) =>
+                                /^LspReference(Text|Read|Write)$/.test(item.hi_name || '')
                             )
                         });
                         break;
@@ -479,7 +489,7 @@ export class Grid {
         fontSize: number,
         fontFamily: string,
         focused: boolean,
-        cursorPosition?: { row: number; column: number },
+        cursorPosition?: { row: number; column: number; width?: number },
         lineHeight = Math.ceil(fontSize * 1.65)
     ): { cellWidth: number; cellHeight: number } {
         return this.canvas.draw(

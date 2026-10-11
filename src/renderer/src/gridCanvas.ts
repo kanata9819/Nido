@@ -12,6 +12,14 @@ function cellBackground(h: Highlight, background: string, foreground: string): s
     if (h.background === undefined) {
         return background;
     }
+    if (h.wordHighlight && h.background === 0xffffff) {
+        return (
+            '#ffffff' +
+            Math.round(255 * (1 - (h.blend ?? 85) / 100))
+                .toString(16)
+                .padStart(2, '0')
+        );
+    }
     return color(h.background);
 }
 
@@ -85,7 +93,7 @@ export class GridCanvas {
         fontSize: number,
         fontFamily: string,
         focused: boolean,
-        cursorPosition?: { row: number; column: number },
+        cursorPosition?: { row: number; column: number; width?: number },
         lineHeight = Math.ceil(fontSize * 1.65)
     ): { cellWidth: number; cellHeight: number } {
         const translucent = this.grid.backgroundOpacity < 1;
@@ -290,7 +298,19 @@ export class GridCanvas {
                             Math.round((y + (rowHeight + fontSize) / 2 - 3) * dpr) / dpr
                         );
                     }
-                    if (h.underline || h.undercurl || h.strikethrough) {
+                    if (h.bracketMatch) {
+                        const left = Math.round(x * dpr);
+                        const right = Math.round((x + cellWidth) * dpr);
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 1 / dpr;
+                        ctx.strokeRect(
+                            (left + 0.5) / dpr,
+                            0.5 / dpr,
+                            (right - left - 1) / dpr,
+                            (imageHeight - 1) / dpr
+                        );
+                    }
+                    if ((!h.bracketMatch && h.underline) || h.undercurl || h.strikethrough) {
                         if (h.special !== undefined) {
                             ctx.fillStyle = color(h.special);
                         }
@@ -395,7 +415,7 @@ export class GridCanvas {
         cellWidth: number,
         cellHeight: number,
         focused: boolean,
-        position?: { row: number; column: number }
+        position?: { row: number; column: number; width?: number }
     ): void {
         const cursor = position ?? this.grid.scrollCursor ?? this.grid.cursor;
         if (
@@ -407,16 +427,17 @@ export class GridCanvas {
         ) {
             const x = cursor.column * cellWidth;
             const y = this.grid.rowY(cursor.row);
+            const width = (position?.width ?? this.grid.cursorWidth) * cellWidth;
             ctx.fillStyle = '#f5f5f5';
             ctx.strokeStyle = '#d4d4d4';
             ctx.globalAlpha = focused ? this.grid.cursorOpacity : 1;
             if (!focused) {
-                ctx.strokeRect(x + 0.5, y + 1, cellWidth - 1, cellHeight - 2);
+                ctx.strokeRect(x + 0.5, y + 1, width - 1, cellHeight - 2);
             } else if (this.grid.mode.startsWith('insert')) {
                 ctx.fillRect(x, y + 1, 2, cellHeight - 2);
             } else {
                 ctx.globalAlpha *= 0.7;
-                ctx.fillRect(x, y + 1, cellWidth, cellHeight - 2);
+                ctx.fillRect(x, y + 1, width, cellHeight - 2);
             }
             ctx.globalAlpha = 1;
         }

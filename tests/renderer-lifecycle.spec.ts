@@ -53,6 +53,139 @@ test.beforeAll(async () => {
     await server.listen();
     origin = server.resolvedUrls!.local[0];
 });
+
+for (const scale of [1, 1.25, 1.5]) {
+    test(`bracket borders, translucent word highlights and wide cursors render at ${scale * 100}% scale`, async ({
+        browser
+    }) => {
+        const context = await browser.newContext({ deviceScaleFactor: scale });
+        try {
+            const page = await context.newPage();
+            await page.route('**/highlight-probe', (route) =>
+                route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+            );
+            await page.goto(`${origin}highlight-probe`);
+            const result = await page.evaluate(
+                async (moduleUrl) => {
+                    const { Grid } = await import(moduleUrl);
+                    const grid = new Grid();
+                    grid.background = '#121212';
+                    grid.foreground = '#4ec9b0';
+                    grid.busy = true;
+                    grid.apply([
+                        ['grid_resize', [1, 40, 6]],
+                        [
+                            'hl_attr_define',
+                            [
+                                1,
+                                { underline: true, special: 0xffffff },
+                                {},
+                                [{ hi_name: 'NidoBracketMatch' }]
+                            ],
+                            [
+                                2,
+                                { background: 0xffffff, blend: 85 },
+                                {},
+                                [{ hi_name: 'LspReferenceRead' }]
+                            ],
+                            [
+                                3,
+                                { background: 0xffffff, blend: 75 },
+                                {},
+                                [{ hi_name: 'LspReferenceWrite' }]
+                            ]
+                        ],
+                        [
+                            'grid_line',
+                            [
+                                1,
+                                0,
+                                0,
+                                [
+                                    ['{', 1],
+                                    [' ', 0, 2],
+                                    ['}', 1]
+                                ]
+                            ],
+                            [
+                                1,
+                                1,
+                                0,
+                                [
+                                    ...Array.from('cells', (text) => [text, 2]),
+                                    [' ', 0],
+                                    ...Array.from('cells', (text) => [text, 3])
+                                ]
+                            ],
+                            [1, 2, 0, [['a', 0], ['日'], [''], ['😀'], [''], ['e\u0301']]]
+                        ],
+                        ['flush']
+                    ]);
+                    const canvas = document.createElement('canvas');
+                    document.body.append(canvas);
+                    const draw = (position?: {
+                        row: number;
+                        column: number;
+                        width?: number;
+                    }): { cellWidth: number; cellHeight: number } =>
+                        grid.draw(canvas, 400, 150, 14, 'monospace', true, position, 24);
+                    const { cellWidth } = draw();
+                    const ctx = canvas.getContext('2d')!;
+                    const dpr = devicePixelRatio;
+                    const pixel = (x: number, y: number): number[] =>
+                        Array.from(
+                            ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data
+                        ).slice(0, 3);
+                    const border = pixel(cellWidth / 2, 0);
+                    const read = pixel(cellWidth / 2, 25);
+                    const write = pixel(cellWidth * 6.5, 25);
+                    grid.apply([
+                        [
+                            'grid_line',
+                            [
+                                1,
+                                0,
+                                0,
+                                [
+                                    ['{', 0],
+                                    [' ', 0, 2],
+                                    ['}', 0]
+                                ]
+                            ]
+                        ],
+                        ['flush']
+                    ]);
+                    draw();
+                    const erased = pixel(cellWidth / 2, 0);
+                    const widths: number[] = [];
+                    const fill = ctx.fillRect.bind(ctx);
+                    ctx.fillRect = function (x, y, width, height) {
+                        if (this.fillStyle === '#f5f5f5') widths.push(width);
+                        fill(x, y, width, height);
+                    };
+                    grid.busy = false;
+                    grid.cursor = { row: 2, column: 1 };
+                    draw();
+                    draw({ row: 2, column: 1, width: 1.5 });
+                    grid.mode = 'insert';
+                    draw();
+                    return { border, read, write, erased, widths, cellWidth };
+                },
+                `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+            );
+            expect(result.border).toEqual([255, 255, 255]);
+            expect(result.erased).toEqual([18, 18, 18]);
+            expect(result.read[0]).toBeGreaterThan(18);
+            expect(result.read[0]).toBeLessThan(80);
+            expect(result.read[0]).toBe(result.read[1]);
+            expect(result.read[1]).toBe(result.read[2]);
+            expect(result.write[0]).toBeGreaterThan(result.read[0]);
+            expect(result.widths).toEqual([result.cellWidth * 2, result.cellWidth * 1.5, 2]);
+        } finally {
+            await context.close();
+        }
+    });
+}
 test.afterAll(async () => {
     await server?.close();
 });
