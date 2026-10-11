@@ -5,6 +5,7 @@ local closing = { [')'] = '(', [']'] = '[', ['}'] = '{' }
 local pending = {}
 local pairs_by_buffer = {}
 local parsed_ticks = {}
+local marks_by_buffer = {}
 local published_guides
 
 local function ignored(row, column)
@@ -79,15 +80,54 @@ local function update(buffer)
     return
   end
   parsed_ticks[buffer] = tick
-  api.nvim_buf_clear_namespace(buffer, namespace, 0, -1)
   pairs_by_buffer[buffer] = {}
-  if vim.bo[buffer].buftype ~= '' then
+  if vim.bo[buffer].buftype ~= ''
+      or api.nvim_buf_get_offset(buffer, api.nvim_buf_line_count(buffer)) > 1024 * 1024 then
+    api.nvim_buf_clear_namespace(buffer, namespace, 0, -1)
+    -- Keep an existing attachment so returning to ordinary text cannot register it twice.
+    marks_by_buffer[buffer] = marks_by_buffer[buffer] and {}
     return
   end
-  -- ponytail: full-buffer scan up to 1 MiB; use incremental parsing for larger files.
-  if api.nvim_buf_get_offset(buffer, api.nvim_buf_line_count(buffer)) > 1024 * 1024 then
-    return
+  if not marks_by_buffer[buffer] then
+    api.nvim_buf_clear_namespace(buffer, namespace, 0, -1)
+    marks_by_buffer[buffer] = {}
+    api.nvim_buf_attach(buffer, false, {
+      on_lines = function(_, buf, _, first, last, new_last)
+        local marks = marks_by_buffer[buf]
+        if not marks then return true end
+        -- Extmarks on replaced lines can move to the next line; discard only those rows.
+        for row=first,last-1 do
+          for _, mark in pairs(marks[row] or {}) do api.nvim_buf_del_extmark(buf, namespace, mark.id) end
+          marks[row] = nil
+        end
+        if new_last ~= last then
+          local shifted = {}
+          for row, items in pairs(marks) do shifted[row >= last and row + new_last - last or row] = items end
+          marks_by_buffer[buf] = shifted
+        end
+      end,
+      on_detach = function(_, buf)
+        marks_by_buffer[buf], parsed_ticks[buf] = nil, nil
+      end,
+    })
   end
+  local marks = marks_by_buffer[buffer]
+  local version = {}
+  local function highlight(position, group)
+    local row = marks[position.row]
+    if not row then row = {}; marks[position.row] = row end
+    local mark = row[position.column]
+    if not mark or mark.group ~= group then
+      local id = api.nvim_buf_set_extmark(buffer, namespace, position.row, position.column, {
+        id=mark and mark.id or nil,
+        end_col=position.column + 1, hl_group=group, priority=150,
+      })
+      mark = {id=id, group=group}
+      row[position.column] = mark
+    end
+    mark.version = version
+  end
+  -- shortcut: rescan syntax up to 1 MiB; use incremental parsing if large buffers still block input.
   api.nvim_buf_call(buffer, function()
     local stack = {}
     for row, line in ipairs(api.nvim_buf_get_lines(buffer, 0, -1, false)) do
@@ -104,16 +144,22 @@ local function update(buffer)
                 color=colors[(#stack % #colors) + 1],
               })
             end
-            for _, position in ipairs({ opening, { row = row - 1, column = column - 1 } }) do
-              api.nvim_buf_set_extmark(buffer, namespace, position.row, position.column, {
-                end_col = position.column + 1, hl_group = group, priority = 150,
-              })
-            end
+            highlight(opening, group)
+            highlight({row=row - 1, column=column - 1}, group)
           end
         end
       end
     end
   end)
+  for row, items in pairs(marks) do
+    for column, mark in pairs(items) do
+      if mark.version ~= version then
+        api.nvim_buf_del_extmark(buffer, namespace, mark.id)
+        items[column] = nil
+      end
+    end
+    if next(items) == nil then marks[row] = nil end
+  end
 end
 
 -- Screen positions include folds, wrapping, tabs, wide characters and virtual CodeLens rows.
@@ -184,6 +230,8 @@ end})
 api.nvim_create_autocmd('BufWipeout', {callback=function(event)
   pairs_by_buffer[event.buf] = nil
   parsed_ticks[event.buf] = nil
+  marks_by_buffer[event.buf] = nil
+  pending[event.buf] = nil
 end})
 
 set_colors()
@@ -195,11 +243,10 @@ api.nvim_create_autocmd({ 'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'T
     if event.event == 'FileType' or event.event == 'Syntax' then
       parsed_ticks[buffer] = nil
     end
-    if pending[buffer] then
-      return
-    end
-    pending[buffer] = true
+    local ticket = {}
+    pending[buffer] = ticket
     vim.defer_fn(function()
+      if pending[buffer] ~= ticket then return end
       pending[buffer] = nil
       update(buffer)
     end, 80)

@@ -553,7 +553,7 @@ test('explorer supports half-page, page and first/last selection with Vim keys',
         await page.keyboard.press('Control+h');
         const tree = page.getByRole('tree', { name: 'Project files' });
         await expect(tree).toBeFocused();
-        await expect(tree.getByRole('treeitem')).toHaveCount(80);
+        await expect(tree).toHaveAttribute('data-row-count', '80');
         const selected = tree.locator('[aria-selected="true"]');
         await page.keyboard.type('gg');
         await expect(selected).toHaveText('file-00.txt');
@@ -3089,6 +3089,7 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
 });
 
 test('references stay accessible after jumping and can be closed with the keyboard', async () => {
+    test.setTimeout(120000);
     const testInfo = test.info();
     const root = await mkdtemp(join(tmpdir(), 'nido-references-'));
     const env = { ...process.env };
@@ -3135,6 +3136,7 @@ test('references stay accessible after jumping and can be closed with the keyboa
         await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
         await expect(page.getByRole('button', { name: /main.rs/ })).toBeVisible();
         await page.keyboard.press('Enter');
+        // A cold rust-analyzer can still be scanning the standard library after 30 seconds.
         await expect(async () => {
             const before = await page.evaluate(
                 () =>
@@ -3183,7 +3185,7 @@ test('references stay accessible after jumping and can be closed with the keyboa
             await expect(
                 page.getByRole('region', { name: 'Reference preview', exact: true })
             ).toContainText('fn main()');
-        }).toPass({ timeout: 30000 });
+        }).toPass({ timeout: 90000 });
         const list = page.getByRole('listbox', { name: 'Reference results' });
         await expect(list).toBeFocused();
         const preview = page.getByRole('region', { name: 'Reference preview', exact: true });
@@ -3924,7 +3926,7 @@ test('explorer zz centers selection without opening or changing files', async ()
         await page.keyboard.press('Control+Shift+n');
         await chooseWorkspace(page, workspace);
         const tree = page.getByRole('tree', { name: 'Project files' });
-        await expect(tree.getByRole('treeitem')).toHaveCount(100);
+        await expect(tree).toHaveAttribute('data-row-count', '100');
         await tree.focus();
         await page.keyboard.press('Home');
         await page.keyboard.type('j'.repeat(50));

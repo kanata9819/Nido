@@ -147,7 +147,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 
     const modal = useRef<HTMLDivElement>(null);
     const state = states[active] || defaultState;
-    const gitFiles = useGitFileStatus(active, state.buffers, panel);
+    const gitFiles = useGitFileStatus(active, state.buffers);
     const workspace = workspaces.find((w) => w.id === active);
     const decorations = useMemo(
         () => fileDecorations(workspace?.root || '', gitFiles, state.diagnostics, state.problems),

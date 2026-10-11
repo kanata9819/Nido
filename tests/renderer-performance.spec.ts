@@ -23,6 +23,136 @@ test.afterAll(async () => {
     await server?.close();
 });
 
+test('large explorer trees mount only the viewport and preserve keyboard navigation and sibling semantics', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=files`);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await expect
+        .poll(() =>
+            page.evaluate(() => window.rendererTest.pending.some((call) => call.method === 'files'))
+        )
+        .toBe(true);
+    await page.evaluate(() =>
+        window.rendererTest.settle('files', 0, [
+            { path: 'src', name: 'src', directory: true },
+            ...Array.from({ length: 10000 }, (_, i) => ({
+                path: `file-${String(i).padStart(5, '0')}.txt`,
+                name: `file-${String(i).padStart(5, '0')}.txt`,
+                directory: false
+            }))
+        ])
+    );
+    const tree = page.getByRole('tree', { name: 'Project files' });
+    await expect(tree).toHaveAttribute('data-row-count', '10001');
+    expect(await tree.getByRole('treeitem').count()).toBeLessThan(70);
+    await tree.focus();
+    const selected = tree.locator('[aria-selected="true"]');
+    await tree.press('End');
+    await expect(selected).toHaveText('file-09999.txt');
+    await expect(selected).toBeInViewport();
+    expect(await tree.getByRole('treeitem').count()).toBeLessThan(70);
+    await tree.press('Control+u');
+    await expect(selected).not.toHaveText('file-09999.txt');
+    await expect(selected).toBeInViewport();
+    await tree.press('Home');
+    await expect(selected).toHaveText('src');
+    await tree.press('ArrowRight');
+    await expect
+        .poll(() =>
+            page.evaluate(() => window.rendererTest.pending.some((call) => call.method === 'files'))
+        )
+        .toBe(true);
+    await page.evaluate(() =>
+        window.rendererTest.settle('files', 0, [
+            { path: 'src/one.ts', name: 'one.ts', directory: false },
+            { path: 'src/two.ts', name: 'two.ts', directory: false }
+        ])
+    );
+    await expect(tree).toHaveAttribute('data-row-count', '10003');
+    await tree.press('ArrowDown');
+    await expect(selected).toHaveText('one.ts');
+    await expect(selected).toHaveAttribute('aria-level', '2');
+    await expect(selected).toHaveAttribute('aria-posinset', '1');
+    await expect(selected).toHaveAttribute('aria-setsize', '2');
+    const descendant = await tree.getAttribute('aria-activedescendant');
+    expect(await selected.getAttribute('id')).toBe(descendant);
+    await tree.press('Enter');
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'openFile')
+                    .map((call) => call.args)
+            )
+        )
+        .toEqual([['alpha', 'src/one.ts']]);
+});
+
+test('opening and closing Git does not duplicate badge status reads, and file changes still refresh', async ({
+    page
+}) => {
+    await page.clock.install();
+    await page.goto(`${origin}?view=app&defer=gitStatus`);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'statePatch',
+            id: 'alpha',
+            state: { buffers: [{ id: 1, name: '/alpha/changed.ts', modified: false }], current: 1 }
+        })
+    );
+    await page.clock.runFor(50);
+    await expect(page.getByRole('tab', { name: 'changed.ts' })).toBeVisible();
+    await page.clock.runFor(300);
+    await page.evaluate(() => {
+        while (window.rendererTest.pending.some((call) => call.method === 'gitStatus'))
+            window.rendererTest.settle('gitStatus', 0, {
+                root: '/alpha',
+                branch: 'main',
+                changes: []
+            });
+    });
+    const before = await page.evaluate(
+        () => window.rendererTest.calls.filter((call) => call.method === 'gitStatus').length
+    );
+    await page.keyboard.press('Control+Shift+g');
+    await page.clock.runFor(300);
+    expect(
+        await page.evaluate(
+            () => window.rendererTest.pending.filter((call) => call.method === 'gitStatus').length
+        )
+    ).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('gitStatus', 0, { root: '/alpha', branch: 'main', changes: [] })
+    );
+    await page.keyboard.press('Escape');
+    await page.clock.runFor(300);
+    expect(
+        await page.evaluate(
+            () => window.rendererTest.calls.filter((call) => call.method === 'gitStatus').length
+        )
+    ).toBe(before + 1);
+    await page.evaluate(() => window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' }));
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.pending.some((call) => call.method === 'gitStatus')
+            )
+        )
+        .toBe(true);
+    await page.evaluate(() =>
+        window.rendererTest.settle('gitStatus', 0, {
+            root: '/alpha',
+            branch: 'main',
+            changes: [{ path: 'changed.ts', status: 'M', staged: false }]
+        })
+    );
+    await expect(
+        page.getByRole('tab', { name: 'changed.ts' }).getByLabel('Git: Modified', { exact: true })
+    ).toBeVisible();
+});
+
 test('cursor-only state updates leave file tabs untouched while real tab changes still render', async ({
     page
 }) => {

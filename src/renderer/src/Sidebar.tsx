@@ -1,5 +1,5 @@
 import { useI18n } from './i18n';
-import { memo, useRef, type CSSProperties } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { ChevronDown, ChevronRight, Folder, FolderOpen, RefreshCw, Command } from 'lucide-react';
 import ExplorerCommands from './components/ExplorerCommands';
 import FileIcon from './components/FileIcon';
@@ -21,6 +21,9 @@ interface Props {
     onOpen: (path: string) => void;
     onError: (message: string) => void;
 }
+
+const rowHeight = 26;
+const overscan = 8;
 
 // Hidden trees keep their DOM and local state; refresh parent props when activated.
 export default memo(
@@ -65,6 +68,48 @@ function Sidebar({
         closeOperation,
         onDone
     } = useExplorer({ workspace, active, onError });
+    const [top, setTop] = useState(0);
+    const [height, setHeight] = useState(200);
+    const selectedIndex = visible.findIndex((entry) => entry.path === selected);
+    const first = Math.max(
+        0,
+        Math.min(visible.length - 1, Math.floor(Math.max(0, top - 5) / rowHeight) - overscan)
+    );
+    const last = Math.min(visible.length, Math.ceil((top + height) / rowHeight) + overscan);
+    const indices = Array.from({ length: Math.max(0, last - first) }, (_, index) => first + index);
+    if (selectedIndex >= 0 && selectedIndex < first) {
+        indices.unshift(selectedIndex);
+    } else if (selectedIndex >= last) {
+        indices.push(selectedIndex);
+    }
+    useLayoutEffect(() => {
+        const node = tree.current;
+        if (!node || !active) {
+            return;
+        }
+        setHeight(node.clientHeight);
+        if (selectedIndex >= 0) {
+            const rowTop = selectedIndex * rowHeight + 5;
+            if (rowTop < node.scrollTop) {
+                node.scrollTo({ top: rowTop });
+            } else if (rowTop + rowHeight > node.scrollTop + node.clientHeight) {
+                node.scrollTo({ top: rowTop + rowHeight - node.clientHeight });
+            }
+        }
+        setTop(node.scrollTop);
+    }, [selectedIndex, visible, active, tree]);
+    useEffect(() => {
+        const node = tree.current;
+        if (!node) {
+            return;
+        }
+        const observer = new ResizeObserver(() => {
+            setHeight(node.clientHeight);
+            setTop(node.scrollTop);
+        });
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [tree]);
     const rootDecoration = gitFiles[gitFileKey(workspace.root).replace(/\/$/, '')];
 
     return (
@@ -160,12 +205,16 @@ function Sidebar({
                 ref={tree}
                 className={styles.tree}
                 role="tree"
+                data-row-count={visible.length}
                 tabIndex={0}
                 aria-label={t('Project files')}
                 title={t(
                     'j/k Select · zz Center selection · : Commands · a/A New file/folder · F2 Rename · Ctrl+C/X/V Copy/Cut/Paste · Delete'
                 )}
-                aria-activedescendant={selected ? `file-${workspace.id}-${selected}` : undefined}
+                aria-activedescendant={
+                    selectedIndex >= 0 ? `file-${workspace.id}-${selected}` : undefined
+                }
+                onScroll={(event) => setTop(event.currentTarget.scrollTop)}
                 onBlur={() => {
                     centerPrefix.current = false;
                 }}
@@ -229,72 +278,93 @@ function Sidebar({
                         setSelected,
                         setExpanded,
                         load,
-                        onOpen,
-                        workspaceId: workspace.id
+                        onOpen
                     })(event);
                 }}
             >
-                {visible.map((entry) => {
-                    const decoration = gitFiles[gitFileKey(`${workspace.root}/${entry.path}`)];
-                    return (
-                        <div
-                            key={entry.path}
-                            id={`file-${workspace.id}-${entry.path}`}
-                            role="treeitem"
-                            aria-level={entry.depth + 1}
-                            aria-expanded={entry.directory ? expanded.has(entry.path) : undefined}
-                            aria-selected={selected === entry.path}
-                            data-ignored={entry.ignored || undefined}
-                            className={`${styles.treeItem} ${selected === entry.path ? styles.treeSelected : ''} ${currentFile.endsWith(entry.path) ? styles.currentFile : ''}`}
-                            style={{ '--tree-depth': entry.depth } as CSSProperties}
-                            onContextMenu={(event) => {
-                                event.preventDefault();
-                                setSelected(entry.path);
-                                setOperation({});
-                            }}
-                            onClick={() =>
-                                toggle({ entry, expanded, setExpanded, setSelected, onOpen, load })
-                            }
-                        >
-                            {entry.directory ? (
-                                expanded.has(entry.path) ? (
-                                    <ChevronDown size={13} />
-                                ) : (
-                                    <ChevronRight size={13} />
-                                )
-                            ) : (
-                                <span className={styles.treeSpacer} />
-                            )}
-                            {entry.directory ? (
-                                expanded.has(entry.path) ? (
-                                    <FolderOpen size={15} />
-                                ) : (
-                                    <Folder size={15} />
-                                )
-                            ) : (
-                                <FileIcon path={entry.path} className={styles.fileIcon} />
-                            )}
-                            <span
-                                className={`${styles.treeName} ${styles.gitName}`}
-                                data-status={decoration?.code || undefined}
-                                data-diagnostic={decoration?.diagnostic}
+                <div style={{ height: visible.length * rowHeight, position: 'relative' }}>
+                    {indices.map((index) => {
+                        const entry = visible[index];
+                        const decoration = gitFiles[gitFileKey(`${workspace.root}/${entry.path}`)];
+                        return (
+                            <div
+                                key={entry.path}
+                                id={`file-${workspace.id}-${entry.path}`}
+                                role="treeitem"
+                                aria-level={entry.depth + 1}
+                                aria-posinset={entry.position}
+                                aria-setsize={entry.siblings}
+                                aria-expanded={
+                                    entry.directory ? expanded.has(entry.path) : undefined
+                                }
+                                aria-selected={selected === entry.path}
+                                data-ignored={entry.ignored || undefined}
+                                className={`${styles.treeItem} ${selected === entry.path ? styles.treeSelected : ''} ${currentFile.endsWith(entry.path) ? styles.currentFile : ''}`}
+                                style={
+                                    {
+                                        '--tree-depth': entry.depth,
+                                        position: 'absolute',
+                                        top: index * rowHeight,
+                                        left: 0,
+                                        right: 0
+                                    } as CSSProperties
+                                }
+                                onContextMenu={(event) => {
+                                    event.preventDefault();
+                                    setSelected(entry.path);
+                                    setOperation({});
+                                }}
+                                onClick={() =>
+                                    toggle({
+                                        entry,
+                                        expanded,
+                                        setExpanded,
+                                        setSelected,
+                                        onOpen,
+                                        load
+                                    })
+                                }
                             >
-                                {entry.name}
-                            </span>
-                            {!entry.directory && <DiagnosticBadges decoration={decoration} />}
-                            {!entry.directory && decoration?.code && (
+                                {entry.directory ? (
+                                    expanded.has(entry.path) ? (
+                                        <ChevronDown size={13} />
+                                    ) : (
+                                        <ChevronRight size={13} />
+                                    )
+                                ) : (
+                                    <span className={styles.treeSpacer} />
+                                )}
+                                {entry.directory ? (
+                                    expanded.has(entry.path) ? (
+                                        <FolderOpen size={15} />
+                                    ) : (
+                                        <Folder size={15} />
+                                    )
+                                ) : (
+                                    <FileIcon path={entry.path} className={styles.fileIcon} />
+                                )}
                                 <span
-                                    className={styles.gitBadge}
-                                    data-status={decoration.code}
-                                    title={t(decoration.title)}
-                                    aria-label={t(decoration.title)}
+                                    className={`${styles.treeName} ${styles.gitName}`}
+                                    data-status={decoration?.code || undefined}
+                                    data-diagnostic={decoration?.diagnostic}
                                 >
-                                    {decoration.code}
+                                    {entry.name}
                                 </span>
-                            )}
-                        </div>
-                    );
-                })}
+                                {!entry.directory && <DiagnosticBadges decoration={decoration} />}
+                                {!entry.directory && decoration?.code && (
+                                    <span
+                                        className={styles.gitBadge}
+                                        data-status={decoration.code}
+                                        title={t(decoration.title)}
+                                        aria-label={t(decoration.title)}
+                                    >
+                                        {decoration.code}
+                                    </span>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
                 {!visible.length && (
                     <p className={styles.emptyTree}>
                         {t('No files yet.')}

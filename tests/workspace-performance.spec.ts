@@ -138,7 +138,7 @@ test('restored workspaces start and switch without losing their editor or explor
                     return times.reduce((sum, time) => sum + time, 0) / times.length;
                 };
                 const firstSwitch = await switching([1, 2, 3, 4]);
-                await expect(page.getByRole('treeitem')).toHaveCount(150);
+                await expect(page.getByRole('tree')).toHaveAttribute('data-row-count', '150');
                 const warmSwitch = await switching([1, 2, 3, 4, 1, 2, 3, 4]);
                 measurements.push({ startup, firstSwitch, warmSwitch });
                 await page.getByRole('treeitem', { name: 'file10.txt', exact: true }).click();
@@ -160,9 +160,13 @@ test('restored workspaces start and switch without losing their editor or explor
                     'aria-description',
                     /Project4 file10/
                 );
+                const tree = page.getByRole('tree');
+                await expect(tree).toHaveAttribute('data-row-count', '151');
+                await tree.focus();
+                await tree.press('End');
                 await expect(
                     page.getByRole('treeitem', { name: 'new.txt', exact: true })
-                ).toBeVisible();
+                ).toBeInViewport();
                 // Keep every timing sample's fixture identical.
                 await rm(join(workspaces[3].root, 'new.txt'));
             } finally {

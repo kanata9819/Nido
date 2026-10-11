@@ -31,7 +31,7 @@ export function Favorites({ workspace }: { workspace: Workspace }): React.JSX.El
 }
 
 export function GitBadges({ workspaceId }: { workspaceId: string }): React.JSX.Element {
-    const badges = useGitFileStatus(workspaceId, [], null);
+    const badges = useGitFileStatus(workspaceId, []);
     const output = useRef<HTMLParagraphElement>(null);
     const commits = useRef(0);
     useLayoutEffect(() => {

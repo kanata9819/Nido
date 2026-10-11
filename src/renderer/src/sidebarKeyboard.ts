@@ -9,7 +9,6 @@ interface ExplorerKeyboardOptions {
     setExpanded: (next: Set<string>) => void;
     load: (path: string) => Promise<void>;
     onOpen: (path: string) => void;
-    workspaceId: string;
 }
 
 export function createExplorerKeyHandler({
@@ -19,8 +18,7 @@ export function createExplorerKeyHandler({
     setSelected,
     setExpanded,
     load,
-    onOpen,
-    workspaceId
+    onOpen
 }: ExplorerKeyboardOptions): (event: React.KeyboardEvent) => void {
     return (event: React.KeyboardEvent): void => {
         if (
@@ -78,9 +76,6 @@ export function createExplorerKeyHandler({
             const nextEntry = visible[nextIndex];
             if (nextEntry) {
                 setSelected(nextEntry.path);
-                document
-                    .getElementById(`file-${workspaceId}-${nextEntry.path}`)
-                    ?.scrollIntoView({ block: 'nearest' });
             }
         } else if (selectedEntry && ['Enter', 'l', 'ArrowRight'].includes(event.key)) {
             event.preventDefault();

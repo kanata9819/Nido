@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { mkdtemp, mkdir, writeFile, rm, unlink, utimes, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { Session } from '../src/main/session';
 import { SessionFiles } from '../src/main/sessionFiles';
 import { HistoryService } from '../src/main/historyService';
@@ -45,6 +46,77 @@ test('workspace grep skips line inspection in large nonmatching files', async ()
         assert.ok(inspected <= 4, `${inspected} lines inspected for one matching file`);
     } finally {
         String.prototype.indexOf = indexOf;
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
+test('workspace grep batches directory ignores, bounds parallel reads and cancels in-flight searches', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-grep-batches-')));
+    try {
+        execFileSync('git', ['init', '-q', root], { windowsHide: true });
+        await writeFile(join(root, '.gitignore'), '*.log\nignored/\n');
+        await mkdir(join(root, 'ignored'));
+        await writeFile(join(root, 'ignored', 'secret.txt'), 'batch-target');
+        await writeFile(join(root, 'tracked.log'), 'batch-target');
+        execFileSync('git', ['add', '-f', '--', 'tracked.log'], { cwd: root, windowsHide: true });
+        for (let i = 0; i < 32; i++) {
+            const directory = join(root, `dir-${i}`);
+            await mkdir(directory);
+            await Promise.all(
+                ['one.txt', 'two.txt', 'ignored.log'].map((name) =>
+                    writeFile(join(directory, name), '日本語 batch-target\n')
+                )
+            );
+        }
+        const service = new SessionFiles(root, {} as Session['client']);
+        const files = service.files.bind(service);
+        const path = service.path.bind(service);
+        let reading = 0;
+        let maximum = 0;
+        let cancel = false;
+        service.files = async (directory, checkIgnored) => {
+            assert.equal(checkIgnored, false, 'directories must share a Git ignore check');
+            assert.notEqual(directory, 'ignored');
+            return files(directory, checkIgnored);
+        };
+        service.path = async (relative) => {
+            if (!relative.endsWith('.txt')) return path(relative);
+            assert(!relative.includes('ignored'));
+            reading++;
+            maximum = Math.max(maximum, reading);
+            try {
+                if (cancel) {
+                    cancel = false;
+                    service.cancelFindFiles();
+                }
+                await new Promise((resolve) => setTimeout(resolve, 2));
+                return await path(relative);
+            } finally {
+                reading--;
+            }
+        };
+        const result = await service.searchText('batch-target');
+        assert.equal(result.matches.length, 65);
+        assert.equal(result.truncated, false);
+        assert(maximum > 1 && maximum <= 8, `unexpected concurrency: ${maximum}`);
+        assert(
+            result.matches
+                .filter((match) => match.path !== 'tracked.log')
+                .every((match) => match.column === 11)
+        );
+        assert.deepEqual(
+            await service.searchText('batch-target'),
+            result,
+            'parallel completion must not reorder results'
+        );
+        await writeFile(join(root, '.gitignore'), '*.log\nignored/\ndir-3/two.txt\n');
+        assert.equal((await service.searchText('batch-target')).matches.length, 64);
+        cancel = true;
+        assert.deepEqual(await service.searchText('batch-target'), {
+            matches: [],
+            truncated: false
+        });
+    } finally {
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
 });

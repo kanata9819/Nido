@@ -12,7 +12,7 @@ import {
 import { isUtf8 } from 'node:buffer';
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { type NeovimClient } from 'neovim';
-import { gitIgnored } from './git';
+import { gitIgnored, gitRoot } from './git';
 import type { FileAction, FileEntry, SearchResults } from '../shared/types';
 
 export class SessionFiles {
@@ -252,16 +252,66 @@ return false`,
             throw new Error('Enter a single-line search up to 1,000 characters.');
         }
         // shortcut: search saved UTF-8 files up to 1 MiB and return 200 lines; use a search index for larger projects.
-        const buffer = Buffer.alloc(1024 * 1024 + 1);
+        const buffers = Array.from({ length: 8 }, () => Buffer.alloc(1024 * 1024 + 1));
         const directories = [''];
+        const checkIgnored = await gitRoot(this.root).then(
+            () => true,
+            () => false
+        );
         while (directories.length) {
-            const directory = directories.pop()!;
-            try {
-                for (const entry of await this.files(directory)) {
-                    if (generation !== this.searchGeneration) {
-                        return { matches: [], truncated: false };
-                    }
-                    if (entry.ignored) {
+            if (generation !== this.searchGeneration) {
+                return { matches: [], truncated: false };
+            }
+            const listings = await Promise.all(
+                directories
+                    .splice(-16)
+                    .reverse()
+                    .map(async (directory) => {
+                        try {
+                            return await this.files(directory, false);
+                        } catch (error) {
+                            if (
+                                directory &&
+                                ['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM'].includes(
+                                    (error as NodeJS.ErrnoException).code || ''
+                                )
+                            ) {
+                                return [];
+                            }
+                            throw error;
+                        }
+                    })
+            );
+            let ignored = new Set<string>();
+            if (checkIgnored) {
+                ignored = await gitIgnored(
+                    this.root,
+                    listings.flat().map((entry) => entry.path)
+                )
+                    // A submodule can reject one group; keep unrelated groups' ignore rules.
+                    .catch(
+                        async () =>
+                            new Set(
+                                (
+                                    await Promise.all(
+                                        listings.map((entries) =>
+                                            gitIgnored(
+                                                this.root,
+                                                entries.map((entry) => entry.path)
+                                            ).catch(() => new Set<string>())
+                                        )
+                                    )
+                                ).flatMap((paths) => [...paths])
+                            )
+                    );
+            }
+            if (generation !== this.searchGeneration) {
+                return { matches: [], truncated: false };
+            }
+            const files: FileEntry[] = [];
+            for (const entries of listings) {
+                for (const entry of entries) {
+                    if (ignored.has(entry.path)) {
                         continue;
                     }
                     if (entry.directory) {
@@ -274,78 +324,91 @@ return false`,
                         }
                         continue;
                     }
-                    let text: string;
-                    try {
-                        const file = await open(await this.path(entry.path), 'r');
+                    files.push(entry);
+                }
+            }
+            for (let first = 0; first < files.length; first += buffers.length) {
+                if (generation !== this.searchGeneration) {
+                    return { matches: [], truncated: false };
+                }
+                const matches = await Promise.all(
+                    files.slice(first, first + buffers.length).map(async (entry, slot) => {
+                        const buffer = buffers[slot];
+                        let text: string;
                         try {
-                            const info = await file.stat();
-                            if (!info.isFile() || info.size >= buffer.length) {
-                                continue;
-                            }
-                            let length = 0;
-                            while (length < buffer.length) {
-                                const { bytesRead } = await file.read(
-                                    buffer,
-                                    length,
-                                    buffer.length - length,
-                                    null
-                                );
-                                if (!bytesRead) {
-                                    break;
+                            const file = await open(await this.path(entry.path), 'r');
+                            try {
+                                const info = await file.stat();
+                                if (!info.isFile() || info.size >= buffer.length) {
+                                    return [];
                                 }
-                                length += bytesRead;
+                                let length = 0;
+                                while (length < buffer.length) {
+                                    const { bytesRead } = await file.read(
+                                        buffer,
+                                        length,
+                                        buffer.length - length,
+                                        null
+                                    );
+                                    if (!bytesRead) {
+                                        break;
+                                    }
+                                    length += bytesRead;
+                                }
+                                const data = buffer.subarray(0, length);
+                                if (length === buffer.length || data.includes(0) || !isUtf8(data)) {
+                                    return [];
+                                }
+                                text = data.toString('utf8').replace(/^\uFEFF/, '');
+                            } finally {
+                                await file.close();
                             }
-                            const data = buffer.subarray(0, length);
-                            if (length === buffer.length || data.includes(0) || !isUtf8(data)) {
+                        } catch (error) {
+                            if (
+                                ['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM', 'EBUSY'].includes(
+                                    (error as NodeJS.ErrnoException).code || ''
+                                )
+                            ) {
+                                return [];
+                            }
+                            throw error;
+                        }
+                        if (generation !== this.searchGeneration || !text.includes(query)) {
+                            return [];
+                        }
+                        const found: SearchResults['matches'] = [];
+                        const lines = text.split(/\r\n|\n|\r/);
+                        for (let index = 0; index < lines.length; index++) {
+                            const column = lines[index].indexOf(query);
+                            if (column < 0) {
                                 continue;
                             }
-                            text = data.toString('utf8').replace(/^\uFEFF/, '');
-                        } finally {
-                            await file.close();
+                            found.push({
+                                path: entry.path,
+                                line: index + 1,
+                                column: Buffer.byteLength(lines[index].slice(0, column)) + 1,
+                                text: lines[index]
+                                    .slice(Math.max(0, column - 80), column + 220)
+                                    .trim()
+                            });
+                            if (found.length === 201) {
+                                break;
+                            }
                         }
-                    } catch (error) {
-                        if (
-                            ['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM', 'EBUSY'].includes(
-                                (error as NodeJS.ErrnoException).code || ''
-                            )
-                        ) {
-                            continue;
-                        }
-                        throw error;
-                    }
-                    if (generation !== this.searchGeneration) {
-                        return { matches: [], truncated: false };
-                    }
-                    if (!text.includes(query)) {
-                        continue;
-                    }
-                    const lines = text.split(/\r\n|\n|\r/);
-                    for (let index = 0; index < lines.length; index++) {
-                        const column = lines[index].indexOf(query);
-                        if (column < 0) {
-                            continue;
-                        }
+                        return found;
+                    })
+                );
+                if (generation !== this.searchGeneration) {
+                    return { matches: [], truncated: false };
+                }
+                for (const found of matches) {
+                    for (const match of found) {
                         if (result.matches.length === 200) {
                             return { ...result, truncated: true };
                         }
-                        result.matches.push({
-                            path: entry.path,
-                            line: index + 1,
-                            column: Buffer.byteLength(lines[index].slice(0, column)) + 1,
-                            text: lines[index].slice(Math.max(0, column - 80), column + 220).trim()
-                        });
+                        result.matches.push(match);
                     }
                 }
-            } catch (error) {
-                if (
-                    directory &&
-                    ['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM'].includes(
-                        (error as NodeJS.ErrnoException).code || ''
-                    )
-                ) {
-                    continue;
-                }
-                throw error;
             }
         }
         return generation === this.searchGeneration ? result : { matches: [], truncated: false };

@@ -28,8 +28,10 @@ export function registerGitHandlers({
     sessions: Map<string, Session>;
     send: (event: NidoEvent) => void;
 }): void {
+    const statusRequests = new Map<string, ReturnType<typeof gitStatus>>();
     async function refreshGitState(selected: Iterable<Session> = sessions.values()): Promise<void> {
         for (const open of selected) {
+            statusRequests.delete(open.workspace.root);
             try {
                 await open.refreshGitSigns();
             } catch (error) {
@@ -42,7 +44,19 @@ export function registerGitHandlers({
             send({ type: 'filesChanged', id: open.workspace.id });
         }
     }
-    handle('gitStatus', (id) => gitStatus(session(id).workspace.root));
+    handle('gitStatus', (id) => {
+        const root = session(id).workspace.root;
+        let pending = statusRequests.get(root);
+        if (!pending) {
+            pending = gitStatus(root).finally(() => {
+                if (statusRequests.get(root) === pending) {
+                    statusRequests.delete(root);
+                }
+            });
+            statusRequests.set(root, pending);
+        }
+        return pending;
+    });
     handle('gitHistory', (id, skip) => {
         if (typeof skip !== 'number') {
             throw new Error('Invalid history offset.');

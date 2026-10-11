@@ -22,6 +22,58 @@ import {
     gitIgnored
 } from '../src/main/git';
 
+test('Git IPC shares pending status reads but refreshes after changes and failures', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-status-sharing-'));
+    const plain = await mkdtemp(join(tmpdir(), 'nido-status-plain-'));
+    try {
+        execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root, windowsHide: true });
+        const sessions = new Map(
+            ['current', 'mirror', 'plain'].map((id) => [
+                id,
+                {
+                    workspace: { id, root: id === 'plain' ? plain : root },
+                    refreshGitSigns: async () => {}
+                } as Session
+            ])
+        );
+        const handlers = new Map<string, (...args: unknown[]) => unknown>();
+        registerGitHandlers({
+            handle: (name, action) => {
+                handlers.set(name, action);
+            },
+            session: (id) => sessions.get(String(id))!,
+            text: (value) => String(value),
+            sessions,
+            send: () => {}
+        });
+        const status = handlers.get('gitStatus')!;
+        const first = status('current');
+        assert.equal(status('mirror'), first);
+        await first;
+        await writeFile(join(root, 'new.txt'), 'new\n');
+        const next = status('current');
+        assert.notEqual(next, first);
+        assert.equal(
+            ((await next) as Awaited<ReturnType<typeof gitStatus>>).changes[0].path,
+            'new.txt'
+        );
+        await handlers.get('gitStageAll')!('current');
+        assert.equal(
+            ((await status('mirror')) as Awaited<ReturnType<typeof gitStatus>>).changes[0].staged,
+            true
+        );
+        const failed = status('plain') as Promise<unknown>;
+        assert.equal(status('plain'), failed);
+        await assert.rejects(failed);
+        const retry = status('plain') as Promise<unknown>;
+        assert.notEqual(retry, failed);
+        await assert.rejects(retry);
+    } finally {
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+        await rm(plain, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('background Git status does not rewrite the index when file timestamps change', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-status-index-'));
     try {

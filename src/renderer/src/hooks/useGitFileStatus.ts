@@ -8,8 +8,7 @@ const emptyDecorations: Record<string, Decoration> = {};
 
 export function useGitFileStatus(
     workspaceId: string,
-    buffers: BufferInfo[],
-    panel: string | null
+    buffers: BufferInfo[]
 ): Record<string, Decoration> {
     const [result, setResult] = useState<{
         workspaceId: string;
@@ -107,7 +106,7 @@ export function useGitFileStatus(
             window.removeEventListener('focus', focus);
             unsubscribe();
         };
-    }, [workspaceId, files, panel]);
+    }, [workspaceId, files]);
 
     return result?.workspaceId === workspaceId ? result.decorations : emptyDecorations;
 }
