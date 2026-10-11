@@ -84,13 +84,13 @@ for (const scale of [1, 1.25, 1.5]) {
                             ],
                             [
                                 2,
-                                { background: 0xffffff, blend: 85 },
+                                { background: 0xffffff, blend: 88 },
                                 {},
                                 [{ hi_name: 'LspReferenceRead' }]
                             ],
                             [
                                 3,
-                                { background: 0xffffff, blend: 75 },
+                                { background: 0xffffff, blend: 80 },
                                 {},
                                 [{ hi_name: 'LspReferenceWrite' }]
                             ]
@@ -136,9 +136,10 @@ for (const scale of [1, 1.25, 1.5]) {
                         Array.from(
                             ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data
                         ).slice(0, 3);
-                    const border = pixel(cellWidth / 2, 0);
-                    const read = pixel(cellWidth / 2, 25);
-                    const write = pixel(cellWidth * 6.5, 25);
+                    const border = pixel(0, 4);
+                    const read = pixel(cellWidth / 2, 28);
+                    const write = pixel(cellWidth * 6.5, 28);
+                    const margins = [0, 23, 24, 47].map((y) => pixel(cellWidth / 2, y));
                     grid.apply([
                         [
                             'grid_line',
@@ -156,7 +157,7 @@ for (const scale of [1, 1.25, 1.5]) {
                         ['flush']
                     ]);
                     draw();
-                    const erased = pixel(cellWidth / 2, 0);
+                    const erased = pixel(0, 4);
                     const widths: number[] = [];
                     const fill = ctx.fillRect.bind(ctx);
                     ctx.fillRect = function (x, y, width, height) {
@@ -169,14 +170,15 @@ for (const scale of [1, 1.25, 1.5]) {
                     draw({ row: 2, column: 1, width: 1.5 });
                     grid.mode = 'insert';
                     draw();
-                    return { border, read, write, erased, widths, cellWidth };
+                    return { border, read, write, margins, erased, widths, cellWidth };
                 },
                 `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
             );
-            expect(result.border).toEqual([255, 255, 255]);
+            expect(result.border).toEqual([137, 137, 137]);
+            expect(result.margins).toEqual(Array.from({ length: 4 }, () => [18, 18, 18]));
             expect(result.erased).toEqual([18, 18, 18]);
             expect(result.read[0]).toBeGreaterThan(18);
-            expect(result.read[0]).toBeLessThan(80);
+            expect(result.read[0]).toBeLessThan(55);
             expect(result.read[0]).toBe(result.read[1]);
             expect(result.read[1]).toBe(result.read[2]);
             expect(result.write[0]).toBeGreaterThan(result.read[0]);

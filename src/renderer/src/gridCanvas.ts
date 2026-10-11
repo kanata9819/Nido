@@ -15,7 +15,7 @@ function cellBackground(h: Highlight, background: string, foreground: string): s
     if (h.wordHighlight && h.background === 0xffffff) {
         return (
             '#ffffff' +
-            Math.round(255 * (1 - (h.blend ?? 85) / 100))
+            Math.round(255 * (1 - (h.blend ?? 88) / 100))
                 .toString(16)
                 .padStart(2, '0')
         );
@@ -224,6 +224,14 @@ export class GridCanvas {
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 ctx.textBaseline = 'alphabetic';
                 const y = 0;
+                const highlightTop = Math.max(
+                    0,
+                    Math.round(((rowHeight - fontSize - 2) / 2) * dpr)
+                );
+                const highlightHeight = Math.min(
+                    imageHeight - highlightTop,
+                    Math.round((fontSize + 2) * dpr)
+                );
                 if (!translucent) {
                     ctx.fillStyle = this.grid.background;
                     ctx.fillRect(0, 0, width, image.height / dpr);
@@ -242,7 +250,12 @@ export class GridCanvas {
                         continue;
                     }
                     ctx.fillStyle = background;
-                    ctx.fillRect(col * cellWidth, y, cellWidth + 0.5, image.height / dpr);
+                    ctx.fillRect(
+                        col * cellWidth,
+                        h.wordHighlight ? highlightTop / dpr : y,
+                        cellWidth + 0.5,
+                        h.wordHighlight ? highlightHeight / dpr : image.height / dpr
+                    );
                 }
 
                 for (let col = 0; col < this.grid.columns; col++) {
@@ -301,13 +314,13 @@ export class GridCanvas {
                     if (h.bracketMatch) {
                         const left = Math.round(x * dpr);
                         const right = Math.round((x + cellWidth) * dpr);
-                        ctx.strokeStyle = '#ffffff';
+                        ctx.strokeStyle = '#ffffff80';
                         ctx.lineWidth = 1 / dpr;
                         ctx.strokeRect(
                             (left + 0.5) / dpr,
-                            0.5 / dpr,
+                            (highlightTop + 0.5) / dpr,
                             (right - left - 1) / dpr,
-                            (imageHeight - 1) / dpr
+                            (highlightHeight - 1) / dpr
                         );
                     }
                     if ((!h.bracketMatch && h.underline) || h.undercurl || h.strikethrough) {

@@ -59,9 +59,9 @@ local function refresh()
 end
 
 local function set_colors()
-  api.nvim_set_hl(0, 'LspReferenceText', {bg='#ffffff', blend=85})
-  api.nvim_set_hl(0, 'LspReferenceRead', {bg='#ffffff', blend=85})
-  api.nvim_set_hl(0, 'LspReferenceWrite', {bg='#ffffff', blend=75})
+  api.nvim_set_hl(0, 'LspReferenceText', {bg='#ffffff', blend=88})
+  api.nvim_set_hl(0, 'LspReferenceRead', {bg='#ffffff', blend=88})
+  api.nvim_set_hl(0, 'LspReferenceWrite', {bg='#ffffff', blend=80})
 end
 set_colors()
 api.nvim_create_autocmd('ColorScheme', {callback=set_colors})
