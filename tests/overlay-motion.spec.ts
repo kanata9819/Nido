@@ -31,10 +31,10 @@ async function openApp(
         localStorage.setItem('nido.animations', String(enabled));
     }, animations);
     await page.emulateMedia({ reducedMotion: reducedMotion ? 'reduce' : 'no-preference' });
-    await page.goto(`${origin}?view=app&defer=${deferred}`);
-    await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
     await page.clock.install({ time: new Date(0) });
     await page.clock.pauseAt(new Date(1000));
+    await page.goto(`${origin}?view=app&defer=${deferred}`);
+    await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
     await page.evaluate(() => {
         // Pause actual CSS transitions on their first frame, independent of CI wall time.
         document.addEventListener('transitionrun', (event) => {
@@ -167,9 +167,14 @@ test('Git reopened during its exit animation focuses the list and reloads change
     page
 }) => {
     await openApp(page);
+    await page.clock.runFor(300);
+    const before = await page.evaluate(
+        () => window.rendererTest.calls.filter((call) => call.method === 'gitStatus').length
+    );
     const changes = page.getByRole('listbox', { name: 'Changed files' });
     await page.keyboard.press('Control+Shift+g');
     await expect(changes).toBeFocused();
+    await expect(changes.getByRole('option')).toHaveCount(2);
     await page.keyboard.press('Escape');
     const fading = page.locator('[data-overlay-phase="closing"]:has([data-panel="git"])');
     await expect(fading).toHaveCount(1);
@@ -182,7 +187,7 @@ test('Git reopened during its exit animation focuses the list and reloads change
                 () => window.rendererTest.calls.filter((call) => call.method === 'gitStatus').length
             )
         )
-        .toBe(2);
+        .toBe(before + 2);
     await page.clock.runFor(200);
     await expect(changes).toBeFocused();
 });
