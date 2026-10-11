@@ -1211,12 +1211,12 @@ test.skip('Languages distinguishes code tools from highlighting, shows setup and
     const features = page.getByRole('region', { name: 'Features', exact: true });
     const languagesTab = features.getByRole('tab', { name: 'Languages', exact: true });
     await expect(languagesTab).toHaveAttribute('aria-selected', 'true');
-    await expect(features.locator('[data-language]')).toHaveCount(11);
+    await expect(features.locator('[data-language]')).toHaveCount(12);
     await expect(
         features
             .getByRole('region', { name: 'Code intelligence', exact: true })
             .locator('[data-language]')
-    ).toHaveCount(3);
+    ).toHaveCount(4);
     await expect(
         features
             .getByRole('region', { name: 'Syntax highlighting', exact: true })
@@ -1228,6 +1228,7 @@ test.skip('Languages distinguishes code tools from highlighting, shows setup and
     await expect(features.locator('[data-language="typescript"]')).toContainText(
         'Language server included.'
     );
+    await expect(features.locator('[data-language="deno"]')).toContainText('deno.json');
     const search = features.getByRole('textbox', { name: 'Search languages' });
     await search.fill('React');
     await expect(features.locator('[data-language]')).toHaveCount(2);

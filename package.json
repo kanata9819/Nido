@@ -37,6 +37,7 @@
         "test:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-installer.ps1",
         "test:rust": "tsx --test tests/rust.test.ts",
         "test:typescript": "tsx --test tests/typescript.test.ts",
+        "test:deno": "tsx --test tests/deno.test.ts",
         "test:debug": "tsx --test tests/debug.test.ts"
     },
     "dependencies": {

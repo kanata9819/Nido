@@ -76,6 +76,8 @@ Rustの`main`・テスト・テストモジュールにはRun / Debugの案内�
 
 - Rust：`rustup component add rust-analyzer rust-src rustfmt`
 - TypeScript / JavaScript：プロジェクトのTypeScriptを優先し、なければ外部または同梱サーバーを使用。
+- Deno：インストール済みの`deno lsp`を使用。`deno.json`・`deno.jsonc`・`deno.lock`を自動検出し、補完・診断・定義・参照・リネーム・整形・コードアクション・単語ハイライトに対応。Denoの型定義やキャッシュ済み依存も読み取り専用で開けます。
+- Denoが未導入の場合：`winget install --id DenoLand.Deno -e`を実行後、ワークスペースを開き直してください。設定ファイルのないDenoプロジェクトには`deno.json`（`{}`でも可）を追加してください。
 - Git操作にはPATH上のGitが必要です。
 
 ## ビルド・テスト
@@ -85,6 +87,7 @@ pnpm build:win  # Windowsインストーラー
 pnpm typecheck # TypeScript型チェック
 pnpm lint      # ソースの静的解析
 pnpm test      # Neovim連携・スクロール状態
+pnpm test:deno # 実際のDeno LSPとTypeScriptとの切り替え
 pnpm test:e2e  # ビルド済みアプリの操作
 pnpm exec playwright install chromium # レンダラーのテスト用ブラウザーを初回に準備
 pnpm test:renderer # ChromiumでUIの状態遷移と非同期処理を検証（Electron/Neovim不要）

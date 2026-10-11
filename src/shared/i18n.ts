@@ -8,6 +8,10 @@ export function parseLanguage(value: unknown): Language {
 
 // English source messages are also the fallback for messages from external tools.
 export const japanese: Record<string, string> = {
+    'Uses your installed Deno. Projects with deno.json, deno.jsonc or deno.lock are detected automatically.':
+        'インストール済みのDenoを使用します。deno.json・deno.jsonc・deno.lockのあるプロジェクトを自動で判定します。',
+    'Deno language support needs Deno. Install it, then reopen this workspace.':
+        'Denoの言語サポートにはDenoが必要です。インストール後、ワークスペースを開き直してください。',
     'Search in files': 'ファイル内を検索',
     'search palette': 'ファイル内を検索',
     'Search project text · Ctrl+Shift+F': 'プロジェクトの本文を検索 · Ctrl+Shift+F',

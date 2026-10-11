@@ -59,6 +59,17 @@ export const supportedLanguages: SupportedLanguage[] = [
         setup: 'Language server included. JSX is supported without an extra plugin.'
     },
     {
+        id: 'deno',
+        title: 'Deno',
+        mark: 'D',
+        category: 'tools',
+        extensions: '.ts · .tsx · .js · .jsx · .mts · .mjs',
+        keywords: 'deno.json deno.jsonc deno.lock',
+        description: codeIntelligence,
+        setup: 'Uses your installed Deno. Projects with deno.json, deno.jsonc or deno.lock are detected automatically.',
+        command: 'winget install --id DenoLand.Deno -e'
+    },
+    {
         id: 'rust',
         title: 'Rust',
         mark: 'Rs',

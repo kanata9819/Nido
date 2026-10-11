@@ -289,6 +289,7 @@ vim.api.nvim_create_autocmd('LspAttach', {
 })
 
 -- Prefer independently updated project/external language servers, with a bundled fallback.
+require('nido_deno').setup()
 if vim.env.NIDO_NODE and vim.env.NIDO_LANGUAGES then
   local ok, err = pcall(function() require('nido_typescript').setup() end)
   if not ok then

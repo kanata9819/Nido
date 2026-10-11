@@ -29,6 +29,7 @@ jobs:
             - run: pnpm install --frozen-lockfile
             - name: Prepare Rust language and debugging tests
               run: rustup component add rust-analyzer rust-src rustfmt
+            - uses: denoland/setup-deno@v2
             - name: Lint without warnings
               run: pnpm lint --max-warnings 0
             - name: Check application and Windows test types
@@ -42,6 +43,8 @@ jobs:
               run: pnpm build:unpack
             - name: Run unit and Neovim integration tests
               run: pnpm test
+            - name: Verify Deno language support
+              run: pnpm test:deno
             - name: Repeat prefetch frame verification
               run: pnpm test:prefetch
             - name: Prepare renderer browser

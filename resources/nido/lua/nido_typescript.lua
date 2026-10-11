@@ -94,7 +94,11 @@ function M.setup()
       end
     end or nil,
     filetypes = {'typescript', 'typescriptreact', 'javascript', 'javascriptreact'},
-    root_dir = vim.fn.getcwd(),
+    root_dir = function(buffer, on_dir)
+      if not vim.api.nvim_buf_get_name(buffer):match('^deno:') and not require('nido_deno').root(buffer) then
+        on_dir(vim.fn.getcwd())
+      end
+    end,
     init_options = not native and {
       hostInfo='Nido', disableAutomaticTypingAcquisition=true,
       tsserver={path=tsserver or vim.fs.joinpath(modules, 'typescript/lib/tsserver.js')},
