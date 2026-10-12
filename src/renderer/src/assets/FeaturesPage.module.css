@@ -217,9 +217,14 @@
     font-size: 14px;
     font-weight: 600;
 }
+.languageTitle > div {
+    min-width: 0;
+}
 .extensions {
+    display: block;
     font-size: 10px;
     color: #85929b;
+    overflow-wrap: anywhere;
 }
 .setup {
     margin-top: 14px;

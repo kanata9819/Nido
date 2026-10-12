@@ -45,7 +45,7 @@ export function buildItems(
         {
             key: '',
             title: 'Features',
-            detail: 'Explore languages and built-in features · Ctrl+Shift+X',
+            detail: 'Explore languages, runtimes and built-in features · Ctrl+Shift+X',
             run: () => showPanel('features')
         },
         {

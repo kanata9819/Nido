@@ -1,4 +1,4 @@
-export type LanguageCategory = 'tools' | 'preview' | 'syntax';
+export type LanguageCategory = 'tools' | 'runtimes' | 'preview' | 'syntax';
 
 export interface SupportedLanguage {
     id: string;
@@ -8,12 +8,19 @@ export interface SupportedLanguage {
     extensions: string;
     description: string;
     keywords?: string;
+    requirement?: string;
     setup?: string;
     command?: string;
 }
 
 export const languageCategories: { id: LanguageCategory; title: string; description?: string }[] = [
     { id: 'tools', title: 'Code intelligence' },
+    {
+        id: 'runtimes',
+        title: 'Runtimes',
+        description:
+            'TypeScript and JavaScript project support. Install the runtime separately to run your code in the terminal.'
+    },
     { id: 'preview', title: 'Preview' },
     {
         id: 'syntax',
@@ -59,25 +66,39 @@ export const supportedLanguages: SupportedLanguage[] = [
         setup: 'Language server included. JSX is supported without an extra plugin.'
     },
     {
-        id: 'deno',
-        title: 'Deno',
-        mark: 'D',
-        category: 'tools',
-        extensions: '.ts · .tsx · .js · .jsx · .mts · .mjs',
-        keywords: 'deno.json deno.jsonc deno.lock',
-        description: codeIntelligence,
-        setup: 'Uses your installed Deno. Projects with deno.json, deno.jsonc or deno.lock are detected automatically.',
-        command: 'winget install --id DenoLand.Deno -e'
-    },
-    {
         id: 'rust',
         title: 'Rust',
         mark: 'Rs',
         category: 'tools',
         extensions: '.rs',
         description: codeIntelligence,
+        requirement: 'Requires Rust',
         setup: 'Uses your Rust toolchain. Install Rust, then add these components. Run and debug are also supported.',
         command: 'rustup component add rust-analyzer rust-src rustfmt'
+    },
+    {
+        id: 'node',
+        title: 'Node.js',
+        mark: 'N',
+        category: 'runtimes',
+        extensions: 'TypeScript · JavaScript',
+        keywords: 'npm package.json',
+        description:
+            'TypeScript and JavaScript projects use the included language server. Run scripts and package commands in the terminal.',
+        requirement: 'Requires Node.js',
+        setup: 'Language tools work out of the box. Running your project requires Node.js on PATH.'
+    },
+    {
+        id: 'deno',
+        title: 'Deno',
+        mark: 'D',
+        category: 'runtimes',
+        extensions: 'TypeScript · JavaScript',
+        keywords: 'deno.json deno.jsonc deno.lock .ts .tsx .js .jsx .mts .mjs',
+        description: codeIntelligence,
+        requirement: 'Requires Deno',
+        setup: 'Uses your installed Deno. Projects with deno.json, deno.jsonc or deno.lock are detected automatically.',
+        command: 'winget install --id DenoLand.Deno -e'
     },
     {
         id: 'markdown',

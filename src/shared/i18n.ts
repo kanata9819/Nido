@@ -82,19 +82,26 @@ export const japanese: Record<string, string> = {
         '編集内容を復元しました。確認してから保存できます。',
     Features: '機能一覧',
     'Features (Ctrl+Shift+X)': '機能一覧（Ctrl+Shift+X）',
-    'Explore languages and built-in features · Ctrl+Shift+X':
-        '対応言語・ビルトイン機能を確認 · Ctrl+Shift+X',
+    'Explore languages, runtimes and built-in features · Ctrl+Shift+X':
+        '対応言語・ランタイム・ビルトイン機能を確認 · Ctrl+Shift+X',
     'Close features': '機能一覧を閉じる',
     'Built-in': 'ビルトイン',
     'Built-in features': 'ビルトイン機能',
     'Feature catalog': '機能カタログ',
-    Languages: '対応言語',
-    'See which languages are supported and what you need to get started.':
-        '対応言語・利用できる機能・導入に必要なツールを確認できます。',
-    'Search languages': '対応言語を検索',
-    'Search languages or file extensions': '言語名や拡張子で検索',
-    'No languages match your search.': '検索に一致する言語はありません。',
+    'Languages & runtimes': '対応言語・ランタイム',
+    'See supported languages, runtimes, available tools and setup requirements.':
+        '対応言語・ランタイムごとに、使える機能と導入に必要なツールを確認できます。',
+    'Search languages and runtimes': '対応言語・ランタイムを検索',
+    'Search languages, runtimes or file extensions': '言語名・ランタイム・拡張子で検索',
+    'No languages or runtimes match your search.': '検索に一致する言語・ランタイムはありません。',
     'Code intelligence': '補完・診断・コード操作',
+    Runtimes: 'ランタイム',
+    'TypeScript and JavaScript project support. Install the runtime separately to run your code in the terminal.':
+        'TypeScript・JavaScriptのプロジェクトに対応します。ターミナルでコードを実行するには、ランタイムを別途インストールしてください。',
+    'TypeScript and JavaScript projects use the included language server. Run scripts and package commands in the terminal.':
+        'TypeScript・JavaScriptの編集には同梱の言語サーバーを使用します。スクリプトやパッケージのコマンドはターミナルで実行できます。',
+    'Language tools work out of the box. Running your project requires Node.js on PATH.':
+        '言語ツールは追加の導入なしで利用できます。プロジェクトの実行には、Node.jsをインストールしてPATHを通してください。',
     Preview: 'プレビュー',
     'Syntax highlighting': 'シンタックスハイライト',
     'These common languages include highlighting and editing. Completion, diagnostics and symbol navigation are not configured.':
@@ -111,6 +118,8 @@ export const japanese: Record<string, string> = {
         '色分けと保存前の編集内容のプレビューに対応します。Ctrl+Shift+Vでプレビューを開けます。',
     'Built-in syntax highlighting only.': '標準のシンタックスハイライトに対応します。',
     'Requires Rust': 'Rustの導入が必要',
+    'Requires Node.js': 'Node.jsの導入が必要',
+    'Requires Deno': 'Denoの導入が必要',
     Setup: '導入方法',
     'Discover what Nido can do.': 'Nidoで、できること。',
     'Explore the features included with Nido.': 'Nidoに組み込まれている機能を一覧で確認できます。',
@@ -143,9 +152,9 @@ export const japanese: Record<string, string> = {
         'プロジェクトのファイル検索と、開いているバッファーの切り替えができます。',
     'Review diffs, stage changes, commit and switch branches. Requires Git.':
         '差分の確認・ステージ・コミット・ブランチの切り替えができます。Gitが必要です。',
-    'Rust and TypeScript language tools': 'RustとTypeScriptの言語ツール',
-    'Use definitions, rename, formatting and code actions. Rust uses your installed toolchain.':
-        '定義への移動・名前変更・整形・コードアクションに対応します。Rustはインストール済みのツールチェーンを使用します。',
+    'Language tools': '言語ツール',
+    'Use definitions, rename, formatting and code actions in TypeScript, JavaScript, Rust and Deno projects.':
+        'TypeScript・JavaScript・Rust・Denoのプロジェクトで、定義への移動・名前変更・整形・コードアクションを利用できます。',
     'References and documentation': '参照とドキュメント',
     'Browse symbol references and syntax-highlighted documentation.':
         'シンボルの参照先と、シンタックスハイライト付きのドキュメントを確認できます。',

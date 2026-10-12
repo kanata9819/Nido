@@ -35,6 +35,8 @@ export default function FeaturesPage({ onClose }: { onClose: () => void }): Reac
             language.setup ?? '',
             t(language.setup ?? ''),
             language.command ?? '',
+            language.requirement ?? '',
+            t(language.requirement ?? ''),
             t(languageCategories.find((category) => category.id === language.category)!.title)
         ].some((value) => value.toLocaleLowerCase().includes(needle))
     );
@@ -85,7 +87,7 @@ export default function FeaturesPage({ onClose }: { onClose: () => void }): Reac
                             tabs.current[next]?.focus();
                         }}
                     >
-                        {t(tab === 'languages' ? 'Languages' : 'Built-in features')}
+                        {t(tab === 'languages' ? 'Languages & runtimes' : 'Built-in features')}
                     </button>
                 ))}
             </div>
@@ -99,13 +101,15 @@ export default function FeaturesPage({ onClose }: { onClose: () => void }): Reac
             >
                 <div className={styles.intro}>
                     <span className={styles.eyebrow}>
-                        NIDO / {t(isLanguages ? 'Languages' : 'Built-in')}
+                        NIDO / {t(isLanguages ? 'Languages & runtimes' : 'Built-in')}
                     </span>
-                    <h2>{t(isLanguages ? 'Languages' : 'Discover what Nido can do.')}</h2>
+                    <h2>
+                        {t(isLanguages ? 'Languages & runtimes' : 'Discover what Nido can do.')}
+                    </h2>
                     <p>
                         {t(
                             isLanguages
-                                ? 'See which languages are supported and what you need to get started.'
+                                ? 'See supported languages, runtimes, available tools and setup requirements.'
                                 : 'Explore the features included with Nido.'
                         )}
                     </p>
@@ -115,10 +119,12 @@ export default function FeaturesPage({ onClose }: { onClose: () => void }): Reac
                         <Search size={17} />
                         <input
                             ref={search}
-                            aria-label={t(isLanguages ? 'Search languages' : 'Search features')}
+                            aria-label={t(
+                                isLanguages ? 'Search languages and runtimes' : 'Search features'
+                            )}
                             placeholder={t(
                                 isLanguages
-                                    ? 'Search languages or file extensions'
+                                    ? 'Search languages, runtimes or file extensions'
                                     : 'Search built-in features'
                             )}
                             value={query}
@@ -179,16 +185,12 @@ export default function FeaturesPage({ onClose }: { onClose: () => void }): Reac
                                                     </div>
                                                     <span
                                                         className={
-                                                            language.command
+                                                            language.requirement
                                                                 ? styles.neutralBadge
                                                                 : styles.badge
                                                         }
                                                     >
-                                                        {t(
-                                                            language.command
-                                                                ? 'Requires Rust'
-                                                                : 'Built-in'
-                                                        )}
+                                                        {t(language.requirement ?? 'Built-in')}
                                                     </span>
                                                 </div>
                                                 <p>{t(language.description)}</p>
@@ -210,7 +212,9 @@ export default function FeaturesPage({ onClose }: { onClose: () => void }): Reac
                             );
                         })}
                         {!languages.length && (
-                            <p className={styles.empty}>{t('No languages match your search.')}</p>
+                            <p className={styles.empty}>
+                                {t('No languages or runtimes match your search.')}
+                            </p>
                         )}
                     </>
                 )}

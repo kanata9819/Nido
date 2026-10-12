@@ -7,7 +7,7 @@ import WorkspaceEditor from './components/WorkspaceEditor';
 import TerminalPanel from './components/TerminalPanel';
 import Notification from './components/Notification';
 import NavigationRail from './components/NavigationRail';
-// import FeaturesPage from './components/FeaturesPage';
+import FeaturesPage from './components/FeaturesPage';
 import { useSessionSettings } from './hooks/useSessionSettings';
 import Sidebar from './Sidebar';
 import FileHeader from './components/FileHeader';
@@ -500,7 +500,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                                 />
                             )}
                     </div>
-                    {/* {panel === 'features' && <FeaturesPage onClose={focusEditor} />} */}
+                    {panel === 'features' && <FeaturesPage onClose={focusEditor} />}
                 </main>
             </div>
             <WorkspacePanels

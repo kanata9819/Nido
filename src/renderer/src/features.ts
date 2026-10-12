@@ -78,9 +78,9 @@ export const builtinFeatures: BuiltinFeature[] = [
     {
         id: 'languages',
         category: 'tools',
-        title: 'Rust and TypeScript language tools',
+        title: 'Language tools',
         description:
-            'Use definitions, rename, formatting and code actions. Rust uses your installed toolchain.',
+            'Use definitions, rename, formatting and code actions in TypeScript, JavaScript, Rust and Deno projects.',
         shortcut: 'F12'
     },
     {
