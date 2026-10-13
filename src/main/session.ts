@@ -39,6 +39,7 @@ export class Session {
     private stopping?: Promise<void>;
     private attached = false;
     private uiQueue: Promise<void> = Promise.resolve();
+    private resizeGeneration = 0;
     private readonly interaction: SessionInteraction;
 
     private constructor(
@@ -103,6 +104,7 @@ export class Session {
         });
         this.process.on('exit', () => {
             this.stopped = true;
+            this.fileService.cancelFindFiles();
             void this.terminal?.stop();
             this.emit({ type: 'exit', id: this.workspace.id });
         });
@@ -267,8 +269,9 @@ export class Session {
     }
 
     async resize(columns: number, rows: number): Promise<void> {
+        const generation = ++this.resizeGeneration;
         const next = this.uiQueue.then(async () => {
-            if (this.attached) {
+            if (this.attached && generation === this.resizeGeneration) {
                 await this.client.request('nvim_ui_try_resize', [columns, rows]);
             }
         });
@@ -661,6 +664,7 @@ return {highlight(before), highlight(after)}`,
             return this.stopping;
         }
         this.stopped = true;
+        this.fileService.cancelFindFiles();
         this.client.cancelRequests();
         this.stopping = (async () => {
             // A child being created must finish its own cancellation and cleanup first.

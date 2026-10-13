@@ -108,15 +108,17 @@ local function set_colors()
   api.nvim_set_hl(0, 'MatchParen', {})
 end
 
-local function update(buffer)
+local function update(buffer, ticket)
   if not api.nvim_buf_is_valid(buffer) or not api.nvim_buf_is_loaded(buffer) then
+    pending[buffer] = nil
     return
   end
   local tick = api.nvim_buf_get_changedtick(buffer)
   if parsed_ticks[buffer] == tick then
+    pending[buffer] = nil
+    match_brackets()
     return
   end
-  parsed_ticks[buffer] = tick
   pairs_by_buffer[buffer] = {}
   matches_by_buffer[buffer] = {}
   if matched and matched.buffer == buffer then
@@ -128,6 +130,7 @@ local function update(buffer)
     api.nvim_buf_clear_namespace(buffer, namespace, 0, -1)
     -- Keep an existing attachment so returning to ordinary text cannot register it twice.
     marks_by_buffer[buffer] = marks_by_buffer[buffer] and {}
+    parsed_ticks[buffer], pending[buffer] = tick, nil
     return
   end
   if not marks_by_buffer[buffer] then
@@ -169,8 +172,17 @@ local function update(buffer)
     end
     mark.version = version
   end
-  -- shortcut: rescan syntax up to 1 MiB; use incremental parsing if large buffers still block input.
-  api.nvim_buf_call(buffer, function()
+  -- Keep full syntax correctness while giving input a turn between bounded chunks.
+  local task = coroutine.create(function()
+    local work, started = 0, vim.uv.hrtime()
+    local function yield_if_busy()
+      work = work + 1
+      if work % 256 == 0 and vim.uv.hrtime() - started >= 4000000 then
+        coroutine.yield()
+        started = vim.uv.hrtime()
+      end
+    end
+    local matches, scopes = {}, {}
     local stack = {}
     for row, line in ipairs(api.nvim_buf_get_lines(buffer, 0, -1, false)) do
       for column, bracket in line:gmatch('()([%(%)%[%]{}])') do
@@ -180,11 +192,11 @@ local function update(buffer)
           elseif #stack > 0 and stack[#stack].bracket == closing[bracket] then
             local group = 'NidoBracket' .. ((#stack - 1) % #colors + 1)
             local opening = table.remove(stack)
-            table.insert(matches_by_buffer[buffer], {
+            table.insert(matches, {
               first=opening, last={row=row - 1, column=column - 1},
             })
             if opening.row < row - 1 then
-              table.insert(pairs_by_buffer[buffer], {
+              table.insert(scopes, {
                 first=opening, last={row=row - 1, column=column - 1},
                 color=colors[(#stack % #colors) + 1],
               })
@@ -193,18 +205,43 @@ local function update(buffer)
             highlight({row=row - 1, column=column - 1}, group)
           end
         end
+        yield_if_busy()
       end
+      yield_if_busy()
     end
+    for row, items in pairs(marks) do
+      for column, mark in pairs(items) do
+        if mark.version ~= version then
+          api.nvim_buf_del_extmark(buffer, namespace, mark.id)
+          items[column] = nil
+        end
+        yield_if_busy()
+      end
+      if next(items) == nil then marks[row] = nil end
+    end
+    matches_by_buffer[buffer], pairs_by_buffer[buffer], parsed_ticks[buffer] = matches, scopes, tick
   end)
-  for row, items in pairs(marks) do
-    for column, mark in pairs(items) do
-      if mark.version ~= version then
-        api.nvim_buf_del_extmark(buffer, namespace, mark.id)
-        items[column] = nil
-      end
+  local function resume()
+    if pending[buffer] ~= ticket then return end
+    if not api.nvim_buf_is_valid(buffer) or not api.nvim_buf_is_loaded(buffer)
+        or api.nvim_buf_get_changedtick(buffer) ~= tick then
+      pending[buffer] = nil
+      return
     end
-    if next(items) == nil then marks[row] = nil end
+    local ok, err
+    api.nvim_buf_call(buffer, function() ok, err = coroutine.resume(task) end)
+    if not ok then
+      pending[buffer] = nil
+      vim.notify('Bracket analysis failed: ' .. tostring(err), vim.log.levels.ERROR)
+    elseif coroutine.status(task) == 'dead' then
+      pending[buffer] = nil
+      match_brackets()
+      api.nvim_exec_autocmds('User', {pattern='NidoBracketsUpdated', data={buffer=buffer}})
+    else
+      vim.defer_fn(resume, 1)
+    end
   end
+  resume()
 end
 
 -- Screen positions include folds, wrapping, tabs, wide characters and virtual CodeLens rows.
@@ -295,9 +332,7 @@ api.nvim_create_autocmd({ 'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'T
     pending[buffer] = ticket
     vim.defer_fn(function()
       if pending[buffer] ~= ticket then return end
-      pending[buffer] = nil
-      update(buffer)
-      match_brackets()
+      update(buffer, ticket)
     end, 80)
   end,
 })

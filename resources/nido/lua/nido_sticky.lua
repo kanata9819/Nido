@@ -186,6 +186,10 @@ end})
 api.nvim_create_autocmd({'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'TextChangedI', 'TextChangedP', 'LspAttach', 'LspDetach'}, {
   callback=function(event) schedule(event.buf) end,
 })
+api.nvim_create_autocmd('User', {pattern='NidoBracketsUpdated', callback=function(event)
+  -- A long parse can finish after the initial indentation fallback was cached.
+  if not pending[event.data.buffer] then schedule(event.data.buffer) end
+end})
 api.nvim_create_autocmd('LspTokenUpdate', {callback=function(event) recolor(event.buf) end})
 api.nvim_create_autocmd('LspRequest', {callback=function(event)
   local request = event.data.request

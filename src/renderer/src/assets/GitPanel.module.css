@@ -260,6 +260,7 @@
     padding: 0 0 12px;
     font-size: 13px;
     overflow: scroll;
+    overflow-anchor: none;
     scrollbar-gutter: stable;
 }
 .diffLine {

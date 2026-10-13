@@ -64,7 +64,7 @@ test('Sticky Scroll pins nested headers, jumps by mouse and keyboard, and saves 
         await expect(sticky.locator('[data-source-line="1"]')).toContainText('class Panel');
         await expect(sticky.locator('[data-source-line="2"]')).toContainText('render()');
         await page.screenshot({
-            path: 'C:/Users/taka9/.codex/visualizations/2026/10/04/01a10505-e4c9-7da0-8c10-398bac9823f1/sticky-scroll.png'
+            path: test.info().outputPath('sticky-scroll.png')
         });
 
         await page.keyboard.press('Alt+Shift+S');

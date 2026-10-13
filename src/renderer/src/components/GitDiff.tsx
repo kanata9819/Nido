@@ -87,6 +87,7 @@ export default function GitDiff({
     const error = currentHighlight?.error || '';
     const before = useRef<HTMLPreElement>(null);
     const after = useRef<HTMLPreElement>(null);
+    const synchronized = useRef(new WeakMap<HTMLPreElement, number>());
     useEffect(() => {
         const pane = after.current;
         if (!pane) {
@@ -179,19 +180,30 @@ export default function GitDiff({
                             setViewport({ diff, row });
                             for (const pane of [before.current, after.current]) {
                                 pane?.scrollTo({ top, behavior: 'instant' });
+                                if (pane) {
+                                    synchronized.current.set(pane, pane.scrollTop);
+                                }
                             }
                         }}
                         onScroll={(event) => {
-                            const row = Math.floor(event.currentTarget.scrollTop / rowHeight);
+                            const pane = event.currentTarget;
+                            const expected = synchronized.current.get(pane);
+                            // A delayed programmatic event must not overwrite a newer gesture in the other pane.
+                            if (
+                                expected !== undefined &&
+                                Math.abs(pane.scrollTop - expected) <= 1
+                            ) {
+                                return;
+                            }
+                            synchronized.current.delete(pane);
+                            const row = Math.floor(pane.scrollTop / rowHeight);
                             setViewport((old) =>
                                 old.diff === diff && old.row === row ? old : { diff, row }
                             );
                             const other = side === 'before' ? after.current : before.current;
-                            if (
-                                other &&
-                                Math.abs(other.scrollTop - event.currentTarget.scrollTop) > 1
-                            ) {
-                                other.scrollTop = event.currentTarget.scrollTop;
+                            if (other && Math.abs(other.scrollTop - pane.scrollTop) > 1) {
+                                other.scrollTop = pane.scrollTop;
+                                synchronized.current.set(other, other.scrollTop);
                             }
                         }}
                     >

@@ -3,6 +3,36 @@ import { once } from 'node:events';
 import { test } from 'node:test';
 import { Session } from '../src/main/session';
 import type { NidoEvent } from '../src/shared/types';
+import { SessionFiles } from '../src/main/sessionFiles';
+
+test('closing a workspace cancels in-flight filesystem searches', { timeout: 15000 }, async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    const files = SessionFiles.prototype.files;
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    try {
+        SessionFiles.prototype.files = async () => {
+            entered();
+            await gate;
+            return [{ name: 'late.txt', path: 'late.txt', directory: false }];
+        };
+        const searching = session.findFiles('late');
+        await started;
+        await session.stop();
+        release();
+        assert.deepEqual(await searching, []);
+    } finally {
+        release();
+        SessionFiles.prototype.files = files;
+        await session.stop();
+    }
+});
 
 test(
     'closing during terminal creation waits for child cleanup and rejects later opens',

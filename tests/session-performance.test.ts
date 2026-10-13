@@ -8,6 +8,47 @@ import { SessionEvents } from '../src/main/sessionEvents';
 import { Grid } from '../src/renderer/src/grid';
 import type { NidoEvent, SessionState, Redraw } from '../src/shared/types';
 
+test('resize bursts skip obsolete queued sizes and keep the latest viewport', async (context) => {
+    const session = await Session.create(process.cwd(), () => {});
+    const request = session.client.request.bind(session.client);
+    const sizes: unknown[][] = [];
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    try {
+        session.client.request = async (method, args = []) => {
+            if (method === 'nvim_ui_try_resize') {
+                sizes.push(args);
+                if (sizes.length === 1) {
+                    entered();
+                    await gate;
+                }
+            }
+            return request(method, args);
+        };
+        const first = session.resize(81, 24);
+        await started;
+        const queued = Array.from({ length: 20 }, (_, index) =>
+            session.resize(82 + index, 25 + index)
+        );
+        release();
+        await Promise.all([first, ...queued]);
+        context.diagnostic(JSON.stringify({ resizeRequests: sizes.length, sizes }));
+        assert.equal(sizes.length, 2);
+        const uis = (await request('nvim_list_uis', [])) as { width: number; height: number }[];
+        assert.deepEqual([uis[0].width, uis[0].height], [101, 44]);
+    } finally {
+        release();
+        session.client.request = request;
+        await session.stop();
+    }
+});
+
 test('cursor patches preserve diagnostics and buffers, and explicit clears reach the renderer', () => {
     const sent: NidoEvent[] = [];
     const events = new SessionEvents('alpha', (event) => sent.push(event));

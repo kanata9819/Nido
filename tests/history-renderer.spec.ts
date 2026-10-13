@@ -147,6 +147,16 @@ test('ten thousand diff rows stay bounded in the DOM while scrolling and jumping
         node.scrollTop = 5000 * 22;
     });
     await expect(after).toContainText('row 5000');
+    await after.evaluate((node) => {
+        const original = document.querySelector<HTMLElement>('[data-git-scroll="before"]')!;
+        original.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'N', shiftKey: true, bubbles: true })
+        );
+        node.scrollTop = 5000 * 22;
+        original.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+    await expect(after).toContainText('row 5000');
+    await expect.poll(() => after.evaluate((node) => node.scrollTop)).toBe(5000 * 22);
     expect(await page.locator('[data-diff-row]').count()).toBeLessThan(200);
     const mounted = await page.locator('[data-diff-row]').count();
     console.log(`10,000-row diff: ${mounted} mounted rows across both panes (previously 20,000).`);

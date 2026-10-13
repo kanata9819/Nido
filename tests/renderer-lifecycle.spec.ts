@@ -1618,6 +1618,7 @@ test('Folder browsing cancels old results and clamps selection after favorites c
         })
     );
     const list = page.getByRole('listbox', { name: 'Folders' });
+    await expect(list.getByRole('option')).toHaveCount(2);
     await list.press('j');
     await expect(list).toHaveAttribute('aria-activedescendant', 'folder-choice-1');
     await page.evaluate(() =>
@@ -1795,6 +1796,45 @@ test('workspace changes apply only missing settings and changed values', async (
     ]);
 });
 
+test('Explorer discards obsolete manual refreshes and loads started before a file change', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=files`);
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.rendererTest.pending.filter((call) => call.method === 'files').length
+            )
+        )
+        .toBe(1);
+    const tree = page.getByRole('tree', { name: 'Project files' });
+    const initial = [{ name: 'initial.txt', path: 'initial.txt', directory: false }];
+    await page.evaluate((value) => window.rendererTest.settle('files', 0, value), initial);
+    await expect(tree).toContainText('initial.txt');
+    const refresh = page.getByRole('button', { name: 'Refresh files' });
+    await refresh.click();
+    await refresh.click();
+    const fresh = [{ name: 'fresh.txt', path: 'fresh.txt', directory: false }];
+    await page.evaluate((value) => window.rendererTest.settle('files', 1, value), fresh);
+    await expect(tree).toContainText('fresh.txt');
+    await page.evaluate((value) => window.rendererTest.settle('files', 0, value), initial);
+    await expect(tree).toContainText('fresh.txt');
+    await expect(tree).not.toContainText('initial.txt');
+    await refresh.click();
+    await page.evaluate(() => window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' }));
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.rendererTest.pending.filter((call) => call.method === 'files').length
+            )
+        )
+        .toBe(2);
+    await page.evaluate((value) => window.rendererTest.settle('files', 1, value), fresh);
+    await page.evaluate((value) => window.rendererTest.settle('files', 0, value), initial);
+    await expect(tree).toContainText('fresh.txt');
+    await expect(tree).not.toContainText('initial.txt');
+});
+
 test('unchanged Git polls avoid commits while changed and removed badges still update', async ({
     page
 }) => {
@@ -1831,6 +1871,76 @@ test('unchanged Git polls avoid commits while changed and removed badges still u
         { ...status, changes: [] }
     );
     await expect(badges).toHaveText('{}');
+});
+
+test('Git changes during an in-flight poll trigger a fresh request without waiting for the next poll', async ({
+    page
+}) => {
+    await pauseRendererClock(page);
+    await page.goto(`${origin}?view=badges&defer=gitStatus`);
+    await page.clock.runFor(250);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() => {
+        window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
+        window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
+        window.rendererTest.settle('gitStatus', 0, { root: '/alpha', branch: 'main', changes: [] });
+    });
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('gitStatus', 0, {
+            root: '/alpha',
+            branch: 'main',
+            changes: [{ path: 'first.ts', status: 'M', staged: false }]
+        })
+    );
+    await expect(page.getByRole('status')).toContainText('Modified');
+    expect(
+        await page.evaluate(
+            () => window.rendererTest.calls.filter((call) => call.method === 'gitStatus').length
+        )
+    ).toBe(2);
+});
+
+test('settings ignore obsolete failures after a newer request for the same value succeeds', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=settings&defer=setWordWrap`);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.render({
+            settings: {
+                clipboardSharing: true,
+                relativeLineNumbers: true,
+                editorConfig: true,
+                wordWrap: true
+            }
+        })
+    );
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(2);
+    await page.evaluate(() =>
+        window.rendererTest.render({
+            settings: {
+                clipboardSharing: true,
+                relativeLineNumbers: true,
+                editorConfig: true,
+                wordWrap: false
+            }
+        })
+    );
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(3);
+    await page.evaluate(() => {
+        window.rendererTest.settle('setWordWrap', 2, undefined);
+        window.rendererTest.settle('setWordWrap', 0, 'Obsolete request failed', true);
+        window.rendererTest.render({
+            workspaces: [{ id: 'alpha', root: '/alpha', name: 'Renamed' }]
+        });
+    });
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    expect(
+        await page.evaluate(
+            () => window.rendererTest.calls.filter((call) => call.method === 'setWordWrap').length
+        )
+    ).toBe(3);
 });
 
 test('cursor-only patches preserve completion and a normal-mode patch dismisses it', async ({

@@ -12,7 +12,9 @@ export function useSessionSettings(
     { clipboardSharing, relativeLineNumbers, editorConfig, wordWrap }: SessionSettings,
     setError: (message: string) => void
 ): void {
-    const applied = useRef(new Map<string, Partial<SessionSettings>>());
+    const applied = useRef(
+        new Map<string, Partial<Record<keyof SessionSettings, { value: boolean }>>>()
+    );
     useEffect(() => {
         const currentIds = new Set<string>();
         const apply = (
@@ -23,16 +25,18 @@ export function useSessionSettings(
         ): void => {
             currentIds.add(id);
             const previous = applied.current.get(id) || {};
-            if (previous[key] === value) {
+            if (previous[key]?.value === value) {
                 return;
             }
             // Record queued requests too, so rerenders do not duplicate in-flight work.
-            applied.current.set(id, { ...previous, [key]: value });
+            const request = { value };
+            applied.current.set(id, { ...previous, [key]: request });
             void update(id, value).catch((error) => {
                 const latest = applied.current.get(id);
-                if (latest?.[key] === value) {
-                    delete latest[key];
+                if (latest?.[key] !== request) {
+                    return;
                 }
+                delete latest[key];
                 setError(String(error));
             });
         };

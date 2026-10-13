@@ -25,8 +25,13 @@ export function useGitFileStatus(
         }
         let cancelled = false;
         let pending = false;
+        let queued = false;
         const refresh = async (): Promise<void> => {
-            if (pending || document.hidden) {
+            if (cancelled || document.hidden) {
+                return;
+            }
+            if (pending) {
+                queued = true;
                 return;
             }
             pending = true;
@@ -85,6 +90,10 @@ export function useGitFileStatus(
                 }
             } finally {
                 pending = false;
+                if (queued) {
+                    queued = false;
+                    void refresh();
+                }
             }
         };
         const initial = window.setTimeout(() => void refresh(), 200);

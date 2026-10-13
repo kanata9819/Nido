@@ -2,6 +2,128 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Session } from '../src/main/session';
 
+test('sticky scopes refresh after bracket analysis completes in later chunks', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.client.request('nvim_exec_lua', [
+            `
+local api, brackets, sticky = vim.api, require('nido_brackets'), require('nido_sticky')
+local buffer = api.nvim_get_current_buf()
+local lines = {}
+for i=1,10000 do
+  table.insert(lines, 'function scope() {')
+  table.insert(lines, '  content();')
+  table.insert(lines, '}')
+end
+local original_defer, original_notify = vim.defer_fn, vim.rpcnotify
+local held, latest = {}, nil
+vim.defer_fn = function(fn, ms)
+  if ms == 1 then table.insert(held, fn); return end
+  return original_defer(fn, ms)
+end
+vim.rpcnotify = function(channel, name, state, ...)
+  if name == 'nido:sticky_scroll' then latest = state end
+  return original_notify(channel, name, state, ...)
+end
+local ok, err = pcall(function()
+  api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
+  api.nvim_exec_autocmds('TextChanged', {buffer=buffer})
+  assert(vim.wait(10000, function() return #held > 0 end, 1), 'Analysis did not yield')
+  vim.wait(180)
+  assert(not brackets.ready(buffer), 'Analysis must still be pending')
+  sticky.publish(api.nvim_get_current_win(), buffer)
+  assert(latest and latest.scopes[1] and latest.scopes[1].ending == 2,
+    'The early indentation fallback did not run')
+  vim.defer_fn = original_defer
+  for _, fn in ipairs(held) do original_defer(fn, 1) end
+  assert(vim.wait(10000, function() return brackets.ready(buffer) end, 1), 'Analysis timed out')
+  vim.wait(180)
+  sticky.publish(api.nvim_get_current_win(), buffer)
+  assert(latest and latest.scopes[1] and latest.scopes[1].ending == 3,
+    'Sticky Scroll retained the incomplete indentation fallback')
+end)
+vim.defer_fn, vim.rpcnotify = original_defer, original_notify
+assert(ok, err)
+`,
+            []
+        ]);
+    } finally {
+        await session.stop();
+    }
+});
+
+test('large bracket analysis yields to edits and discards obsolete partial work', async (context) => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        const result = (await session.client.request('nvim_exec_lua', [
+            `
+local api, module = vim.api, require('nido_brackets')
+local buffer = api.nvim_get_current_buf()
+local namespace = api.nvim_create_namespace('nido_brackets')
+local lines = {}
+for i=1,10000 do
+  table.insert(lines, '{')
+  table.insert(lines, '  return [1, 2];')
+  table.insert(lines, '}')
+end
+api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
+local original_call, original_syntax = api.nvim_buf_call, vim.fn.synstack
+local longest, callbacks, inspected, interleaved = 0, 0, 0, false
+api.nvim_buf_call = function(buf, fn)
+  local start = vim.uv.hrtime()
+  local value = original_call(buf, fn)
+  if buf == buffer then
+    callbacks = callbacks + 1
+    longest = math.max(longest, (vim.uv.hrtime() - start) / 1e6)
+  end
+  return value
+end
+local ok, err = pcall(function()
+  api.nvim_exec_autocmds('TextChanged', {buffer=buffer})
+  assert(vim.wait(10000, function() return module.ready(buffer) end, 1), 'Initial analysis timed out')
+  vim.fn.synstack = function(...)
+    inspected = inspected + 1
+    if inspected == 1000 then
+      vim.schedule(function()
+        interleaved = not module.ready(buffer)
+        api.nvim_buf_set_lines(buffer, 0, -1, false, {'[latest]'})
+        api.nvim_exec_autocmds('TextChanged', {buffer=buffer})
+      end)
+    end
+    return original_syntax(...)
+  end
+  api.nvim_buf_set_lines(buffer, 1, 2, false, {'  return [2, 3];'})
+  api.nvim_exec_autocmds('TextChanged', {buffer=buffer})
+  assert(vim.wait(10000, function()
+    return api.nvim_buf_line_count(buffer) == 1 and module.ready(buffer)
+  end, 1), 'Latest analysis timed out')
+  local marks = api.nvim_buf_get_extmarks(buffer, namespace, 0, -1, {})
+  assert(#marks == 2 and marks[1][2] == 0 and marks[2][2] == 0,
+    'Obsolete analysis published stale bracket marks')
+  assert(#module.pairs(buffer) == 0, 'Obsolete scopes survived the edit')
+end)
+api.nvim_buf_call, vim.fn.synstack = original_call, original_syntax
+assert(ok, err)
+return {interleaved=interleaved, longestCallbackMs=longest, callbacks=callbacks, inspected=inspected}
+`,
+            []
+        ])) as {
+            interleaved: boolean;
+            longestCallbackMs: number;
+            callbacks: number;
+            inspected: number;
+        };
+        context.diagnostic(JSON.stringify(result));
+        assert.equal(
+            result.interleaved,
+            true,
+            'Editing must run before the entire bracket scan finishes'
+        );
+    } finally {
+        await session.stop();
+    }
+});
+
 test('unchanged bracket scopes avoid duplicate cursor notifications and buffer rescans', async (context) => {
     let guides = 0;
     let measuring = false;

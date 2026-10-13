@@ -41,6 +41,7 @@ export function useExplorer({
     const [selected, setSelected] = useState('');
     const [revision, setRevision] = useState(0);
     const loadedRevision = useRef(-1);
+    const requests = useRef(new Map<string, object>());
     const tree = useRef<HTMLDivElement>(null);
     const [operation, setOperation] = useState<{ request?: FileRequest }>();
     const [clipboard, setClipboard] = useState<{ path: string; name: string; cut: boolean }>();
@@ -48,17 +49,25 @@ export function useExplorer({
         () =>
             window.nido.onEvent((event) => {
                 if (event.type === 'filesChanged' && event.id === workspace.id) {
+                    requests.current.clear();
                     setRevision((value) => value + 1);
                 }
             }),
         [workspace.id]
     );
+    useEffect(() => () => requests.current.clear(), [workspace.id]);
     const load = async (path: string): Promise<void> => {
+        const request = {};
+        requests.current.set(path, request);
         try {
             const files = await window.nido.files(workspace.id, path);
-            setEntries((old) => ({ ...old, [path]: files }));
+            if (requests.current.get(path) === request) {
+                setEntries((old) => ({ ...old, [path]: files }));
+            }
         } catch (error) {
-            onError(String(error));
+            if (requests.current.get(path) === request) {
+                onError(String(error));
+            }
         }
     };
 
@@ -69,21 +78,33 @@ export function useExplorer({
         }
         let cancelled = false;
         Promise.all(
-            ['', ...expanded].map(async (path) => {
+            ['', ...expanded].map(async (path): Promise<[string, FileEntry[], object]> => {
+                const request = {};
+                requests.current.set(path, request);
                 try {
-                    return [path, await window.nido.files(workspace.id, path)] as const;
+                    return [path, await window.nido.files(workspace.id, path), request];
                 } catch (error) {
+                    if (requests.current.get(path) !== request) {
+                        return [path, [], request];
+                    }
                     if (!path || !String(error).includes('ENOENT')) {
                         throw error;
                     }
-                    return [path, []] as const;
+                    return [path, [], request];
                 }
             })
         )
             .then((files) => {
                 if (!cancelled) {
                     loadedRevision.current = revision;
-                    setEntries(Object.fromEntries(files));
+                    setEntries((old) =>
+                        Object.fromEntries(
+                            files.map(([path, entries, request]) => [
+                                path,
+                                requests.current.get(path) === request ? entries : old[path] || []
+                            ])
+                        )
+                    );
                 }
             })
             .catch((error) => {
