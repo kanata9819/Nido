@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,7 +9,8 @@ import { Session } from '../src/main/session';
 import { Grid } from '../src/renderer/src/grid';
 
 test('Deno markers select one server per file, including mixed workspaces and nested Node projects', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nido-deno-roots-'));
+    // CI's Windows temp directory can use an 8.3 alias; match Session and Neovim's real paths.
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-deno-roots-')));
     let session: Session | undefined;
     try {
         await writeFile(join(root, 'pnpm-lock.yaml'), '');
@@ -51,7 +52,7 @@ return {deno or false, selected or false}`,
 });
 
 test('missing Deno warns once for Deno files and avoids misleading TypeScript diagnostics', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nido-deno-missing-'));
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-deno-missing-')));
     let session: Session | undefined;
     try {
         await writeFile(join(root, 'deno.json'), '{}');
@@ -92,7 +93,7 @@ for (const [extension, configName] of [
         `Deno ${extension}: real completion, navigation, diagnostics, rename, formatting and highlights`,
         { timeout: 60000 },
         async () => {
-            const root = await mkdtemp(join(tmpdir(), 'nido-deno-lsp-'));
+            const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-deno-lsp-')));
             const grid = new Grid();
             let session: Session | undefined;
             try {
@@ -253,7 +254,7 @@ test(
     'Deno cache code actions download a dependency and open its definition read-only',
     { timeout: 30000 },
     async () => {
-        const root = await mkdtemp(join(tmpdir(), 'nido-deno-cache-'));
+        const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-deno-cache-')));
         const fetched: string[] = [];
         const server = createServer((_request, response) => {
             fetched.push(_request.url ?? '');

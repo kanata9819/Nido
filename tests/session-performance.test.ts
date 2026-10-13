@@ -228,19 +228,22 @@ test('directional prefetch keeps the viewport and cached rows without duplicate 
         await session.attach(100, 40);
         await session.openFile('rows.txt');
         await session.input('2000Gzt');
-        // Wait for actual bracket decorations instead of assuming a timer has finished.
+        // Partial bracket marks do not mean parsing or delayed word highlights have finished.
         assert.equal(
             await session.client.request('nvim_exec_lua', [
-                `local namespace = vim.api.nvim_create_namespace('nido_brackets')
+                `local buffer = vim.api.nvim_get_current_buf()
+local namespace = vim.api.nvim_create_namespace('nido_brackets')
+vim.api.nvim_exec_autocmds('CursorMoved', {buffer=buffer})
 local ready = vim.wait(5000, function()
-  return #vim.api.nvim_buf_get_extmarks(0, namespace, {1999, 0}, {1999, -1}, {limit=1}) > 0
+  return require('nido_brackets').ready(buffer) and #vim.fn.getmatches() > 0
+    and #vim.api.nvim_buf_get_extmarks(buffer, namespace, {1999, 0}, {1999, -1}, {limit=1}) > 0
 end, 5)
 vim.cmd.redraw()
 return ready`,
                 []
             ]),
             true,
-            'Bracket highlighting must complete before measuring prefetch frames.'
+            'Bracket analysis and word highlighting must complete before measuring prefetch frames.'
         );
         const view = await session.client.request('nvim_exec_lua', [
             // A timer wait can finish before Neovim flushes its last cursor-line repaint.
@@ -251,10 +254,7 @@ return ready`,
         frames.length = 0;
         visibleFrames.length = 0;
         // Independent highlighting and guide refreshes share the redraw channel with cache refills.
-        await session.client.request('nvim_exec_lua', [
-            "vim.cmd.redraw({bang=true}); vim.api.nvim_exec_autocmds('CursorMoved', {buffer=0})",
-            []
-        ]);
+        await session.client.request('nvim_exec_lua', ['vim.cmd.redraw({bang=true})', []]);
         await session.prefetchScroll();
         assert.deepEqual(
             await session.client.request('nvim_exec_lua', ['return vim.fn.winsaveview()', []]),
