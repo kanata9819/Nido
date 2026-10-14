@@ -39,6 +39,7 @@ export class Grid {
     private scrollPixels = 0;
     private readonly canvas = new GridCanvas(this);
     private readonly rowLayout = new GridRowLayout(this.highlights);
+    private readonly rowText = new WeakMap<Cell[], string>();
     private upperRows: Cell[][] = [];
     private upperRowsAtStart = false;
     private upperTops: number[] = [0];
@@ -54,6 +55,20 @@ export class Grid {
         const cursor = this.scrollCursor ?? this.cursor;
         // Neovim sends an empty continuation cell after a wide glyph, including emoji.
         return this.cells[cursor.row]?.[cursor.column + 1]?.text === '' ? 2 : 1;
+    }
+
+    /** Keep accessibility text current without rereading the entire viewport after every edit. */
+    get description(): string {
+        return this.cells
+            .map((row) => {
+                let text = this.rowText.get(row);
+                if (text === undefined) {
+                    text = row.map((cell) => cell.text).join('');
+                    this.rowText.set(row, text);
+                }
+                return text;
+            })
+            .join('\n');
     }
 
     get hasUpperRows(): boolean {
@@ -326,11 +341,18 @@ export class Grid {
                                                 const previous = row;
                                                 row = this.cells[Number(args[1])] = row.slice();
                                                 this.rowLayout.clone(previous, row);
+                                                const text = this.rowText.get(previous);
+                                                if (text !== undefined) {
+                                                    this.rowText.set(row, text);
+                                                }
                                             }
                                             this.canvas.invalidate(Number(args[1]));
                                             changed = true;
                                         }
                                         const next = { text: cell[0], highlight };
+                                        if (row[column]?.text !== next.text) {
+                                            this.rowText.delete(row);
+                                        }
                                         this.rowLayout.replace(row, row[column], next);
                                         row[column] = next;
                                     }
@@ -372,6 +394,7 @@ export class Grid {
                             }
                             this.canvas.invalidate(row);
                             this.rowLayout.invalidate(this.cells[row]);
+                            this.rowText.delete(this.cells[row]);
                             for (let col = left; col < right; col++) {
                                 const sourceRow = row + rows;
                                 const sourceCol = col + columns;

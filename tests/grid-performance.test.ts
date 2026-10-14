@@ -2,6 +2,83 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Grid } from '../src/renderer/src/grid';
 
+test('editor text snapshots read only changed rows during repeated typing', (context) => {
+    const grid = new Grid();
+    grid.apply([
+        ['grid_resize', [1, 160, 45]],
+        ...Array.from({ length: 45 }, (_, row) => ['grid_line', [1, row, 0, [['x', 0, 160]]]]),
+        ['flush']
+    ]);
+    const snapshot = (): string =>
+        'description' in grid
+            ? (grid.description as string)
+            : grid.cells.map((row) => row.map((cell) => cell.text).join('')).join('\n');
+    snapshot();
+    let reads = 0;
+    for (const row of grid.cells) {
+        for (const cell of row) {
+            const text = cell.text;
+            Object.defineProperty(cell, 'text', {
+                get: () => {
+                    reads++;
+                    return text;
+                }
+            });
+        }
+    }
+    for (let i = 0; i < 20; i++) {
+        grid.apply([['grid_line', [1, 17, 10, [[String(i % 10), 0]]]], ['flush']]);
+        const lines = snapshot().split('\n');
+        assert.equal(lines.length, 45);
+        assert.equal(lines[17], 'x'.repeat(10) + String(i % 10) + 'x'.repeat(149));
+    }
+    context.diagnostic(JSON.stringify({ snapshotCellReads: reads, edits: 20 }));
+    if (!process.env.NIDO_PERFORMANCE_BASELINE) {
+        assert.ok(reads <= 20 * 165, `typing read ${reads} cells for 20 edited rows`);
+    }
+});
+
+test('text snapshots preserve Unicode, highlight changes, cached scrolling, partial scrolling and resize', () => {
+    const grid = new Grid();
+    const snapshot = (): string =>
+        'description' in grid
+            ? (grid.description as string)
+            : grid.cells.map((row) => row.map((cell) => cell.text).join('')).join('\n');
+    const check = (): void => {
+        assert.equal(
+            snapshot(),
+            grid.cells.map((row) => row.map((cell) => cell.text).join('')).join('\n')
+        );
+    };
+    grid.apply([
+        ['grid_resize', [1, 8, 4]],
+        ['grid_line', [1, 0, 0, [['日', 0], [''], ['e\u0301'], ['🙂'], [''], [' ', 0, 3]]]],
+        ['grid_line', [1, 1, 0, [['B', 0, 8]]], [1, 2, 0, [['C', 0, 8]]]],
+        ['flush']
+    ]);
+    assert.equal(snapshot().split('\n')[0], '日e\u0301🙂   ');
+    for (const events of [
+        [['grid_line', [1, 0, 0, [['日', 2]]]]],
+        [
+            ['nido_scroll', [1, 0, 3, 0, 8, 1, 0]],
+            ['grid_scroll', [1, 0, 3, 0, 8, 1, 0]]
+        ],
+        [['grid_line', [1, 2, 0, [['D', 0, 8]]]]],
+        [
+            ['nido_scroll', [1, 0, 3, 0, 8, -1, 0]],
+            ['grid_scroll', [1, 0, 3, 0, 8, -1, 0]],
+            ['grid_line', [1, 0, 0, [['日', 2], [''], ['e\u0301'], ['🙂'], [''], [' ', 0, 3]]]]
+        ],
+        [['grid_scroll', [1, 0, 3, 2, 6, 0, 1]]],
+        [['grid_line', [1, 0, 3, [['Z', 0]]]]],
+        [['grid_resize', [1, 10, 5]]],
+        [['grid_clear', [1]]]
+    ]) {
+        grid.apply([...events, ['flush']]);
+        check();
+    }
+});
+
 test('gutter updates reuse row geometry without scanning unchanged cells', () => {
     const grid = new Grid();
     grid.apply([

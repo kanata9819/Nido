@@ -98,6 +98,32 @@ pnpm exec tsx --test --test-name-pattern 'history retention' tests/local-history
 pnpm test:renderer --grep 'Explorer refresh bounds|expanding a folder during refresh|Explorer removes missing' --repeat-each 3
 ```
 
+## エディタの文字更新と括弧検索
+
+2026-10-14にWindowsで `3218c49` と今回の変更を比較しました。
+
+| 対象                                            |    変更前 |  変更後 | 条件                                                                        |
+| ----------------------------------------------- | --------: | ------: | --------------------------------------------------------------------------- |
+| 編集後の画面説明を更新する際のセル文字読み取り  | 143,981回 | 3,182回 | 160列×45行、初回取得後に同じ行の1セルを20回変更。差分適用時の読み取りも含む |
+| カーソル移動での括弧スコープ開始位置の読み取り  | 120,000回 |   140回 | 3,000スコープ・9,000行の実Neovimで、画面中央付近のカーソルを20回移動        |
+| 文字が同じで色だけ変わった際の画面説明のDOM更新 |       1回 |     0回 | 同じ「hello」を別のハイライトで再描画                                       |
+
+画面説明の文字列は行ごとにキャッシュし、文字が変わった行だけ再取得します。行がスクロールしても文字列を再利用し、部分スクロールでは変更した行を無効にします。キャッシュはWeakMapで保持するため、使われなくなった行は回収できます。文字列が同じ場合は `aria-description` を書き直しません。日本語、結合文字、絵文字、空の継続セルを含む画面説明は従来と一致します。
+
+括弧解析では閉じ位置の順序に沿った索引を構築し、カーソルを含む最も内側の括弧と表示範囲に重なるスコープを検索します。索引構築も既存の分割処理内で行い、途中の編集で古くなった索引を公開しません。括弧の色、端点を含む対応判定、構文上の文字列・コメント除外、ガイドの順序を維持しています。
+
+上表は検証ケースでの処理回数です。索引内の探索回数や全文解析の時間を表すものではなく、アプリ全体の応答時間が同じ割合で短くなる意味ではありません。文字列の行結合と、編集後の括弧の全文解析は引き続き行います。
+
+`tests/grid-performance.test.ts` は読み取り数、Unicode、ハイライト変更、キャッシュを伴うスクロール、部分スクロール、リサイズとクリアを検証します。`tests/bracket-performance.test.ts` は入れ子・カーソル境界・表示範囲で従来の全件検索と結果を比較し、実Neovimでのカーソル移動の処理量と編集中の解析中断を検証します。`tests/renderer-performance.spec.ts` は画面説明が編集・スクロール・クリアに追従し、色変更だけではDOMを更新しないことを検証します。
+
+この変更では `pnpm test` 159件、`pnpm test:renderer` 92件、実Electronの括弧ガイド・100%/125%/150%倍率の画素一致・キーボードでの編集と保存・連続スクロールの6件が成功しました。画面説明の新規テストも3回連続で成功しています。lint、アプリの型チェック、`pnpm exec electron-vite build` も成功しました。
+
+```powershell
+pnpm exec tsx --test tests/bracket-performance.test.ts tests/grid-performance.test.ts tests/editor-highlights.test.ts
+pnpm test:renderer --grep 'editor descriptions stay current' --repeat-each 3
+pnpm test:e2e tests/bracket-guides.spec.ts tests/canvas-sharpness.spec.ts tests/scroll-cadence.spec.ts tests/electron.spec.ts --grep 'bracket pair guides|cached editor text preserves|continuous wheel scrolling|keyboard-only workspace switching'
+```
+
 ## 再実行
 
 ```powershell

@@ -4,7 +4,9 @@ local colors = { '#FFD700', '#DA70D6', '#179FFF' }
 local closing = { [')'] = '(', [']'] = '[', ['}'] = '{' }
 local pending = {}
 local pairs_by_buffer = {}
-local matches_by_buffer = {}
+local match_indices = {}
+local scope_indices = {}
+local index = require('nido_bracket_index')
 local parsed_ticks = {}
 local marks_by_buffer = {}
 local published_guides
@@ -17,15 +19,7 @@ local function match_brackets()
   local active
   if parsed_ticks[buffer] == api.nvim_buf_get_changedtick(buffer)
       and vim.fn.mode():match('^[niR]') and vim.bo.buftype == '' then
-    for _, pair in ipairs(matches_by_buffer[buffer] or {}) do
-      local a, b = pair.first, pair.last
-      if (cursor[1] - 1 > a.row or (cursor[1] - 1 == a.row and cursor[2] >= a.column))
-          and (cursor[1] - 1 < b.row or (cursor[1] - 1 == b.row and cursor[2] <= b.column))
-          and (not active or a.row > active.first.row
-            or (a.row == active.first.row and a.column > active.first.column)) then
-        active = pair
-      end
-    end
+    active = match_indices[buffer] and match_indices[buffer].innermost(cursor[1] - 1, cursor[2])
   end
   local next_match = active and {buffer=buffer, pair=active} or nil
   if vim.deep_equal(matched, next_match) then return end
@@ -120,7 +114,7 @@ local function update(buffer, ticket)
     return
   end
   pairs_by_buffer[buffer] = {}
-  matches_by_buffer[buffer] = {}
+  match_indices[buffer], scope_indices[buffer] = nil, nil
   if matched and matched.buffer == buffer then
     api.nvim_buf_clear_namespace(buffer, match_namespace, 0, -1)
     matched = nil
@@ -153,6 +147,7 @@ local function update(buffer, ticket)
       end,
       on_detach = function(_, buf)
         marks_by_buffer[buf], parsed_ticks[buf] = nil, nil
+        match_indices[buf], scope_indices[buf] = nil, nil
       end,
     })
   end
@@ -219,7 +214,11 @@ local function update(buffer, ticket)
       end
       if next(items) == nil then marks[row] = nil end
     end
-    matches_by_buffer[buffer], pairs_by_buffer[buffer], parsed_ticks[buffer] = matches, scopes, tick
+    -- Build within the same yielding task; incomplete or obsolete indices stay private.
+    local matches_index = index.new(matches, yield_if_busy)
+    local scopes_index = index.new(scopes, yield_if_busy)
+    match_indices[buffer], scope_indices[buffer] = matches_index, scopes_index
+    pairs_by_buffer[buffer], parsed_ticks[buffer] = scopes, tick
   end)
   local function resume()
     if pending[buffer] ~= ticket then return end
@@ -255,17 +254,9 @@ local function publish_guides(window, buffer, first, last, immediate)
         local info = vim.fn.getwininfo(window)[1]
         local view = vim.fn.winsaveview()
         local cursor = require('nido_scroll').cursor() or api.nvim_win_get_cursor(window)
-        local active
-        for _, pair in ipairs(pairs_by_buffer[buffer] or {}) do
-          local a, b = pair.first, pair.last
-          if (cursor[1] - 1 > a.row or (cursor[1] - 1 == a.row and cursor[2] >= a.column))
-              and (cursor[1] - 1 < b.row or (cursor[1] - 1 == b.row and cursor[2] <= b.column))
-              and (not active or a.row > active.first.row
-                or (a.row == active.first.row and a.column > active.first.column)) then
-            active = pair
-          end
-        end
-        for _, pair in ipairs(pairs_by_buffer[buffer] or {}) do
+        local scopes = scope_indices[buffer]
+        local active = scopes and scopes.innermost(cursor[1] - 1, cursor[2])
+        for _, pair in ipairs(scopes and scopes.overlapping(first, last) or {}) do
           local a, b = pair.first, pair.last
           -- Offscreen pairs cannot draw a guide; avoid querying Neovim for every pair in the file.
           if a.row < last and b.row >= first
@@ -313,7 +304,7 @@ end})
 api.nvim_create_autocmd('ModeChanged', {callback=match_brackets})
 api.nvim_create_autocmd('BufWipeout', {callback=function(event)
   pairs_by_buffer[event.buf] = nil
-  matches_by_buffer[event.buf] = nil
+  match_indices[event.buf], scope_indices[event.buf] = nil, nil
   parsed_ticks[event.buf] = nil
   marks_by_buffer[event.buf] = nil
   pending[event.buf] = nil

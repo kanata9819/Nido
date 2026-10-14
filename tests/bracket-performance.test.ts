@@ -2,6 +2,125 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Session } from '../src/main/session';
 
+test('bracket index agrees with a full scan for nested pairs, cursor boundaries and viewport ranges', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.client.request('nvim_exec_lua', [
+            `
+local factory = require('nido_bracket_index')
+local empty = factory.new({})
+assert(empty.innermost(0, 0) == nil and #empty.overlapping(0, 10) == 0)
+local pairs = {}
+local function add(first_row, first_column, last_row, last_column)
+  pairs[#pairs + 1] = {
+    first={row=first_row, column=first_column}, last={row=last_row, column=last_column},
+  }
+end
+for block=0,19 do
+  local first = block * 10
+  add(first, 0, first + 9, 0)
+  for row=first+1,first+8 do
+    add(row, 2, row, 18)
+    add(row, 5, row, 7)
+  end
+end
+local function before(a, b)
+  return a.row < b.row or (a.row == b.row and a.column < b.column)
+end
+table.sort(pairs, function(a, b) return before(a.last, b.last) end)
+local index = factory.new(pairs)
+for row=-1,201 do
+  for column=0,20 do
+    local cursor, expected = {row=row, column=column}, nil
+    for _, pair in ipairs(pairs) do
+      if not before(cursor, pair.first) and not before(pair.last, cursor)
+          and (not expected or before(expected.first, pair.first)) then expected = pair end
+    end
+    assert(index.innermost(row, column) == expected, 'Indexed cursor query changed the innermost pair')
+  end
+end
+for first=-1,201,3 do
+  for height=1,12 do
+    local expected = {}
+    for _, pair in ipairs(pairs) do
+      if pair.first.row < first + height and pair.last.row >= first then
+        expected[#expected + 1] = pair
+      end
+    end
+    assert(vim.deep_equal(index.overlapping(first, first + height), expected),
+      'Indexed viewport query omitted or reordered visible pairs')
+  end
+end
+`,
+            []
+        ]);
+    } finally {
+        await session.stop();
+    }
+});
+
+test('cursor movement inspects only visible bracket scopes in a large file', async (context) => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        const result = (await session.client.request('nvim_exec_lua', [
+            `
+local api, brackets = vim.api, require('nido_brackets')
+local buffer = api.nvim_get_current_buf()
+local lines = {}
+for i=1,3000 do
+  lines[#lines + 1] = 'scope ' .. i .. ' {'
+  lines[#lines + 1] = string.rep('  content', 8)
+  lines[#lines + 1] = '}'
+end
+api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
+api.nvim_win_set_cursor(0, {4499, 0})
+vim.cmd('normal! zz')
+api.nvim_exec_autocmds('TextChanged', {buffer=buffer})
+assert(vim.wait(10000, function() return brackets.ready(buffer) end, 5))
+assert(#brackets.pairs(buffer) == 3000)
+local reads = 0
+for _, pair in ipairs(brackets.pairs(buffer)) do
+  local first = pair.first
+  pair.first = nil
+  setmetatable(pair, {__index=function(_, key)
+    if key == 'first' then reads = reads + 1; return first end
+  end})
+end
+local original_notify, latest = vim.rpcnotify, nil
+vim.rpcnotify = function(channel, name, guides, ...)
+  if name == 'nido:bracket_guides' then latest = guides end
+  return original_notify(channel, name, guides, ...)
+end
+local ok, err = pcall(function()
+  vim.cmd('redraw!')
+  reads = 0
+  for column=1,20 do
+    api.nvim_win_set_cursor(0, {4499, column})
+    api.nvim_exec_autocmds('CursorMoved', {buffer=buffer})
+  end
+  assert(latest and #latest > 0 and #latest < 12, vim.inspect(latest))
+  local active = 0
+  for _, guide in ipairs(latest) do if guide.active then active = active + 1 end end
+  assert(active == 1, 'Exactly the innermost visible scope must be active')
+end)
+vim.rpcnotify = original_notify
+assert(ok, err)
+return {scopeReads=reads, moves=20, scopes=3000}
+`,
+            []
+        ])) as { scopeReads: number; moves: number; scopes: number };
+        context.diagnostic(JSON.stringify(result));
+        if (!process.env.NIDO_PERFORMANCE_BASELINE) {
+            assert.ok(
+                result.scopeReads <= 1000,
+                `cursor movement inspected ${result.scopeReads} scopes`
+            );
+        }
+    } finally {
+        await session.stop();
+    }
+});
+
 test('sticky scopes refresh after bracket analysis completes in later chunks', async () => {
     const session = await Session.create(process.cwd(), () => {});
     try {

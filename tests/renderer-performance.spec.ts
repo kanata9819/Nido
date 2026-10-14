@@ -23,6 +23,91 @@ test.afterAll(async () => {
     await server?.close();
 });
 
+test('editor descriptions stay current through Unicode edits and scrolling without rewriting unchanged text', async ({
+    page
+}) => {
+    await page.addInitScript(() => {
+        localStorage.setItem('nido.language', 'en');
+        localStorage.setItem('nido.animations', 'false');
+    });
+    await page.goto(`${origin}?view=app`);
+    const canvas = page.locator('canvas:visible');
+    await expect(canvas).toHaveAttribute('aria-description', /hello/);
+    await page.clock.install();
+    await page.clock.pauseAt(new Date(Date.now() + 1000));
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [
+                ['grid_resize', [1, 8, 4]],
+                ['grid_line', [1, 0, 0, Array.from('hello', (text) => [text, 0])]],
+                ['flush']
+            ]
+        })
+    );
+    await page.clock.runFor(32);
+    await page.evaluate(() => {
+        const counter = { writes: 0 };
+        Object.assign(window, { descriptionCounter: counter });
+        const setAttribute = Element.prototype.setAttribute;
+        Element.prototype.setAttribute = function (name, value) {
+            if (this instanceof HTMLCanvasElement && name === 'aria-description') counter.writes++;
+            setAttribute.call(this, name, value);
+        };
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [['grid_line', [1, 0, 0, Array.from('hello', (text) => [text, 1])]], ['flush']]
+        });
+    });
+    await page.clock.runFor(32);
+    expect(
+        await page.evaluate(
+            () =>
+                (window as unknown as { descriptionCounter: { writes: number } }).descriptionCounter
+                    .writes
+        )
+    ).toBe(0);
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [
+                ['grid_line', [1, 2, 0, [['日', 0], [''], ['e\u0301'], ['🙂'], ['']]]],
+                ['flush']
+            ]
+        })
+    );
+    await page.clock.runFor(32);
+    await expect(canvas).toHaveAttribute('aria-description', /日e\u0301🙂/);
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [['grid_scroll', [1, 0, 3, 0, 8, 1, 0]], ['flush']]
+        })
+    );
+    await page.clock.runFor(32);
+    expect((await canvas.getAttribute('aria-description'))!.split('\n')[1]).toMatch(/^日e\u0301🙂/);
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [['grid_clear', [1]], ['flush']]
+        })
+    );
+    await page.clock.runFor(32);
+    await expect(canvas).not.toHaveAttribute('aria-description', /hello|日|🙂/);
+    expect(
+        await page.evaluate(
+            () =>
+                (window as unknown as { descriptionCounter: { writes: number } }).descriptionCounter
+                    .writes
+        )
+    ).toBe(3);
+});
+
 test('large explorer trees mount only the viewport and preserve keyboard navigation and sibling semantics', async ({
     page
 }) => {

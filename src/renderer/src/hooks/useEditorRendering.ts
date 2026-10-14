@@ -186,10 +186,10 @@ export function useEditorRendering({
 
             afterPaintRef.current(overlayOffset);
             if (descriptionDirty) {
-                surface.setAttribute(
-                    'aria-description',
-                    grid.cells.map((row) => row.map((cell) => cell.text).join('')).join('\n')
-                );
+                const description = grid.description;
+                if (surface.getAttribute('aria-description') !== description) {
+                    surface.setAttribute('aria-description', description);
+                }
                 descriptionDirty = false;
             }
 
