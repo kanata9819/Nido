@@ -127,9 +127,10 @@ export class LocalHistory {
         kind: HistoryVersion['kind']
     ): Promise<HistoryVersion> {
         const writing = this.pending.then(async () => {
+            const lines = content.text.split('\n').length;
             if (
                 Buffer.byteLength(content.text) > historyLimits.fileBytes ||
-                content.text.split('\n').length > historyLimits.lines + 1 ||
+                lines > historyLimits.lines + 1 ||
                 content.text.includes('\0')
             ) {
                 throw new Error('Time Machine supports text files up to 1 MB and 20,000 lines.');
@@ -152,25 +153,37 @@ export class LocalHistory {
                 timestamp: Date.now(),
                 kind,
                 bytes: Buffer.byteLength(content.text),
-                lines: Math.max(1, content.text.split('\n').length - Number(content.endOfLine))
+                lines: Math.max(1, lines - Number(content.endOfLine))
             };
             data.revisions.unshift(revision);
             data.revisions.length = Math.min(data.revisions.length, this.limits.versions);
-            let serialized = JSON.stringify(data);
             const budget = Math.min(this.limits.historyBytes, this.limits.totalBytes);
-            while (Buffer.byteLength(serialized) > budget && data.revisions.length > 1) {
-                data.revisions.pop();
-                serialized = JSON.stringify(data);
+            const prefix =
+                JSON.stringify({ version: data.version, path: data.path }).slice(0, -1) +
+                ',"revisions":[';
+            let bytes = Buffer.byteLength(prefix) + 2;
+            const revisions: string[] = [];
+            // Encode each revision once; repeatedly encoding the whole history stalls the main process.
+            // Count escaped JSON bytes, including UTF-8 paths and separators, before joining the result.
+            for (const item of data.revisions) {
+                const encoded = JSON.stringify(item);
+                const nextBytes = bytes + Number(revisions.length > 0) + Buffer.byteLength(encoded);
+                if (nextBytes > budget) {
+                    if (!revisions.length) {
+                        throw new Error('Local history storage is full.');
+                    }
+                    break;
+                }
+                revisions.push(encoded);
+                bytes = nextBytes;
             }
-            if (Buffer.byteLength(serialized) > budget) {
-                throw new Error('Local history storage is full.');
-            }
+            const serialized = prefix + revisions.join(',') + ']}';
             const name = `${this.key(path)}.json`;
             const destination = join(this.directory, name);
             // An interrupted write leaves the previously committed history intact.
             await writeFile(`${destination}.tmp`, serialized, { encoding: 'utf8', mode: 0o600 });
             await rename(`${destination}.tmp`, destination);
-            this.entries.set(name, { bytes: Buffer.byteLength(serialized), time: Date.now() });
+            this.entries.set(name, { bytes, time: Date.now() });
             let total = [...this.entries.values()].reduce((sum, entry) => sum + entry.bytes, 0);
             const oldest = [...this.entries]
                 .filter(([file]) => file !== name)

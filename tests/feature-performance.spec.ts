@@ -29,6 +29,197 @@ async function open(page: Page, view: string, deferred: string): Promise<void> {
     await page.clock.pauseAt(new Date(Date.now() + 1000));
 }
 
+test('Explorer refresh bounds directory requests and stops obsolete queued work', async ({
+    page
+}) => {
+    await open(page, 'app', 'files');
+    const directories = Array.from({ length: 12 }, (_, i) => ({
+        name: `dir-${i}`,
+        path: `dir-${i}`,
+        directory: true
+    }));
+    await page.evaluate((value) => window.rendererTest.settle('files', 0, value), directories);
+    const tree = page.getByRole('tree', { name: 'Project files' });
+    for (const directory of directories) {
+        await tree.getByRole('treeitem', { name: directory.name, exact: true }).click();
+        await page.evaluate(() => window.rendererTest.settle('files', 0, []));
+    }
+    await page.evaluate(() => {
+        window.rendererTest.calls.length = 0;
+        window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
+    });
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+            )
+        )
+        .toBe(4);
+    await page.evaluate((value) => {
+        // Supersede a refresh before any of its queued directories can start.
+        window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
+        for (let i = 0; i < 4; i++) window.rendererTest.settle('files', 0, value);
+    }, []);
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+            )
+        )
+        .toBe(4);
+    let completed = 0;
+    while (completed < directories.length + 1) {
+        const count = await page.evaluate((value) => {
+            const batch = window.rendererTest.pending.filter(({ method }) => method === 'files');
+            if (batch.length > 4) throw new Error(`Unbounded refresh: ${batch.length}`);
+            for (const request of batch) {
+                const path = String(request.args[1]);
+                window.rendererTest.settle(
+                    'files',
+                    0,
+                    path
+                        ? [{ name: 'fresh.txt', path: `${path}/fresh.txt`, directory: false }]
+                        : value
+                );
+            }
+            return batch.length;
+        }, directories);
+        completed += count;
+        if (completed < directories.length + 1) {
+            await expect
+                .poll(() =>
+                    page.evaluate(
+                        () =>
+                            window.rendererTest.pending.filter(({ method }) => method === 'files')
+                                .length
+                    )
+                )
+                .toBeGreaterThan(0);
+        }
+    }
+    await expect(tree).toHaveAttribute('data-row-count', '24');
+    expect(
+        await page.evaluate(
+            () => window.rendererTest.calls.filter(({ method }) => method === 'files').length
+        )
+    ).toBe(17);
+    // Closing the workspace cancels queued directories even before React removes its UI.
+    await page.evaluate(() => window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' }));
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+            )
+        )
+        .toBe(4);
+    await page.getByRole('button', { name: 'Close workspace Alpha', exact: true }).click();
+    await page.evaluate((value) => {
+        window.rendererTest.emit({ type: 'exit', id: 'alpha' });
+        for (let i = 0; i < 4; i++) window.rendererTest.settle('files', 0, value);
+    }, directories);
+    await expect(tree).toHaveCount(0);
+    expect(
+        await page.evaluate(
+            () => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+        )
+    ).toBe(0);
+    expect(
+        await page.evaluate(
+            () => window.rendererTest.calls.filter(({ method }) => method === 'files').length
+        )
+    ).toBe(21);
+});
+
+test('expanding a folder during refresh reuses the other directory reads', async ({ page }) => {
+    await open(page, 'app', 'files');
+    const directories = ['first', 'second', 'third'].map((path) => ({
+        name: path,
+        path,
+        directory: true
+    }));
+    await page.evaluate((value) => window.rendererTest.settle('files', 0, value), directories);
+    const tree = page.getByRole('tree', { name: 'Project files' });
+    await tree.getByRole('treeitem', { name: 'first', exact: true }).click();
+    await page.evaluate(() => window.rendererTest.settle('files', 0, []));
+    await page.evaluate(() => {
+        window.rendererTest.calls.length = 0;
+        window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
+    });
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+            )
+        )
+        .toBe(2);
+    await tree.getByRole('treeitem', { name: 'second', exact: true }).click();
+    expect(
+        await page.evaluate(() =>
+            window.rendererTest.calls
+                .filter(({ method }) => method === 'files')
+                .map(({ args }) => args[1])
+        )
+    ).toEqual(['', 'first', 'second']);
+    await page.evaluate((value) => {
+        window.rendererTest.settle('files', 0, value);
+        window.rendererTest.settle('files', 0, [
+            { name: 'one.txt', path: 'first/one.txt', directory: false }
+        ]);
+        window.rendererTest.settle('files', 0, [
+            { name: 'two.txt', path: 'second/two.txt', directory: false }
+        ]);
+    }, directories);
+    await expect(tree).toHaveAttribute('data-row-count', '5');
+    await expect(tree).toContainText('one.txt');
+    await expect(tree).toContainText('two.txt');
+});
+
+test('Explorer removes missing directories and retries failed reads without reusing their errors', async ({
+    page
+}) => {
+    await open(page, 'app', 'files');
+    const directories = [{ name: 'src', path: 'src', directory: true }];
+    await page.evaluate((value) => window.rendererTest.settle('files', 0, value), directories);
+    const tree = page.getByRole('tree', { name: 'Project files' });
+    await tree.getByRole('treeitem', { name: 'src', exact: true }).click();
+    await page.evaluate(() =>
+        window.rendererTest.settle('files', 0, [
+            { name: 'old.txt', path: 'src/old.txt', directory: false }
+        ])
+    );
+    await expect(tree).toHaveAttribute('data-row-count', '2');
+    await page.evaluate(() => window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' }));
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+            )
+        )
+        .toBe(2);
+    await page.evaluate((value) => {
+        window.rendererTest.settle('files', 0, value);
+        window.rendererTest.settle('files', 0, 'ENOENT: missing directory', true);
+    }, directories);
+    await expect(tree).toHaveAttribute('data-row-count', '1');
+    const folder = tree.getByRole('treeitem', { name: 'src', exact: true });
+    await folder.click();
+    await folder.click();
+    await page.evaluate(() =>
+        window.rendererTest.settle('files', 0, 'EACCES: denied directory', true)
+    );
+    await expect(page.getByRole('alert')).toContainText('EACCES');
+    await folder.click();
+    await folder.click();
+    await page.evaluate(() =>
+        window.rendererTest.settle('files', 0, [
+            { name: 'fresh.txt', path: 'src/fresh.txt', directory: false }
+        ])
+    );
+    await expect(tree).toHaveAttribute('data-row-count', '2');
+    await expect(tree).toContainText('fresh.txt');
+    await expect(tree).not.toContainText('old.txt');
+});
+
 test('ten thousand references keep bounded DOM and keyboard jumps, and rapid selection requests only the final preview', async ({
     page
 }) => {

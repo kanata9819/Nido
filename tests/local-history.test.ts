@@ -68,6 +68,86 @@ test('history retention bounds per-file revisions and total disk usage without t
     assert.equal((await store.list(first)).length, 0);
 });
 
+test('history retention budgets escaped JSON and UTF-8 exactly and preserves history on overflow', async (context) => {
+    const root = await fixture(context);
+    const directory = join(root, 'history');
+    const file = join(root, '日本語 "notes".txt');
+    const original = new LocalHistory(directory);
+    const first = await original.record(file, content('日本語\\\t\r\n'), 'saved');
+    const historyPath = join(directory, (await readdir(directory))[0]);
+    const saved = await readFile(historyPath, 'utf8');
+    const bytes = Buffer.byteLength(saved);
+    const exact = new LocalHistory(directory, {
+        versions: 20,
+        historyBytes: bytes,
+        totalBytes: bytes,
+        files: 200
+    });
+    const second = await exact.record(file, content('日本語\\\t\r\n'), 'draft');
+    assert.equal(second.id, first.id, 'an identical revision fits the exact byte limit');
+    const replacement = await exact.record(file, content('別の語\\\t\r\n'), 'draft');
+    assert.equal((await stat(historyPath)).size, bytes);
+    assert.deepEqual(
+        (await exact.list(file)).map(({ id }) => id),
+        [replacement.id]
+    );
+    assert.equal((await exact.version(file, replacement.id)).text, '別の語\\\t\r\n');
+    const before = await readFile(historyPath, 'utf8');
+    await assert.rejects(
+        exact.record(file, content('\u0001'.repeat(bytes)), 'draft'),
+        /storage is full/
+    );
+    assert.equal(await readFile(historyPath, 'utf8'), before);
+    assert.deepEqual(await new LocalHistory(directory).list(file), await exact.list(file));
+});
+
+test('history retention serializes large revisions once while discarding the oldest versions', async (context) => {
+    const root = await fixture(context);
+    const directory = join(root, 'history');
+    const file = join(root, 'large.txt');
+    const store = new LocalHistory(directory);
+    const versions: HistoryVersion[] = [];
+    for (let i = 0; i < 8; i++) {
+        versions.push(await store.record(file, content(`${i}${'x'.repeat(800_000)}`), 'draft'));
+    }
+    const stringify = JSON.stringify;
+    let serializedBytes = 0;
+    let latest: HistoryVersion;
+    const started = performance.now();
+    try {
+        JSON.stringify = (value, replacer, space) => {
+            const result = stringify(value, replacer as never, space);
+            if (typeof result === 'string') serializedBytes += Buffer.byteLength(result);
+            return result;
+        };
+        latest = await store.record(file, content('\u0001'.repeat(800_000)), 'draft');
+    } finally {
+        JSON.stringify = stringify;
+    }
+    context.diagnostic(JSON.stringify({ serializedBytes, recordMs: performance.now() - started }));
+    if (!process.env.NIDO_PERFORMANCE_BASELINE) {
+        assert.ok(
+            serializedBytes < 12 * 1024 * 1024,
+            `encoded ${serializedBytes} bytes for an 8 MiB history`
+        );
+    }
+    const remaining = await store.list(file);
+    assert.deepEqual(
+        remaining.map(({ id }) => id),
+        [
+            latest.id,
+            ...versions
+                .slice(-4)
+                .reverse()
+                .map(({ id }) => id)
+        ]
+    );
+    assert.equal((await store.version(file, latest.id)).text, '\u0001'.repeat(800_000));
+    const historyPath = join(directory, (await readdir(directory))[0]);
+    assert.ok((await stat(historyPath)).size <= 8 * 1024 * 1024);
+    assert.deepEqual(await new LocalHistory(directory).list(file), remaining);
+});
+
 test('damaged history is reported and preserved instead of overwritten', async (context) => {
     const root = await fixture(context);
     const directory = join(root, 'history');

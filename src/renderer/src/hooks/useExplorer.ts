@@ -1,4 +1,5 @@
 import {
+    useCallback,
     useEffect,
     useMemo,
     useRef,
@@ -27,6 +28,10 @@ interface ExplorerState {
     onDone: (path: string) => void;
 }
 
+interface DirectoryRequest {
+    files: Promise<FileEntry[]>;
+}
+
 export function useExplorer({
     workspace,
     active,
@@ -41,31 +46,56 @@ export function useExplorer({
     const [selected, setSelected] = useState('');
     const [revision, setRevision] = useState(0);
     const loadedRevision = useRef(-1);
-    const requests = useRef(new Map<string, object>());
+    const requests = useRef(new Map<string, DirectoryRequest>());
+    const requestGeneration = useRef(0);
     const tree = useRef<HTMLDivElement>(null);
     const [operation, setOperation] = useState<{ request?: FileRequest }>();
     const [clipboard, setClipboard] = useState<{ path: string; name: string; cut: boolean }>();
     useEffect(
         () =>
             window.nido.onEvent((event) => {
-                if (event.type === 'filesChanged' && event.id === workspace.id) {
+                if (
+                    (event.type === 'filesChanged' || event.type === 'exit') &&
+                    event.id === workspace.id
+                ) {
+                    requestGeneration.current++;
                     requests.current.clear();
-                    setRevision((value) => value + 1);
+                    if (event.type === 'filesChanged') {
+                        setRevision((value) => value + 1);
+                    }
                 }
             }),
         [workspace.id]
     );
-    useEffect(() => () => requests.current.clear(), [workspace.id]);
+    useEffect(
+        () => () => {
+            requestGeneration.current++;
+            requests.current.clear();
+        },
+        [workspace.id]
+    );
+    const requestDirectory = useCallback(
+        (path: string, replace = false): DirectoryRequest => {
+            let request = requests.current.get(path);
+            if (!request || replace) {
+                request = { files: window.nido.files(workspace.id, path) };
+                requests.current.set(path, request);
+            }
+            return request;
+        },
+        [workspace.id]
+    );
     const load = async (path: string): Promise<void> => {
-        const request = {};
-        requests.current.set(path, request);
+        // Explicit refreshes supersede old reads; automatic reloads can reuse this request.
+        const request = requestDirectory(path, true);
         try {
-            const files = await window.nido.files(workspace.id, path);
+            const files = await request.files;
             if (requests.current.get(path) === request) {
                 setEntries((old) => ({ ...old, [path]: files }));
             }
         } catch (error) {
             if (requests.current.get(path) === request) {
+                requests.current.delete(path);
                 onError(String(error));
             }
         }
@@ -77,25 +107,34 @@ export function useExplorer({
             return;
         }
         let cancelled = false;
+        const generation = requestGeneration.current;
+        const current = (): boolean => !cancelled && generation === requestGeneration.current;
+        const paths = ['', ...expanded];
+        const files: [string, FileEntry[], DirectoryRequest][] = [];
+        let nextPath = 0;
+        // Bound automatic reloads instead of launching one Git/filesystem request per open folder.
         Promise.all(
-            ['', ...expanded].map(async (path): Promise<[string, FileEntry[], object]> => {
-                const request = {};
-                requests.current.set(path, request);
-                try {
-                    return [path, await window.nido.files(workspace.id, path), request];
-                } catch (error) {
-                    if (requests.current.get(path) !== request) {
-                        return [path, [], request];
+            Array.from({ length: Math.min(4, paths.length) }, async () => {
+                while (current() && nextPath < paths.length) {
+                    const path = paths[nextPath++];
+                    const request = requestDirectory(path);
+                    try {
+                        files.push([path, await request.files, request]);
+                    } catch (error) {
+                        if (!current() || requests.current.get(path) !== request) {
+                            continue;
+                        }
+                        if (!path || !String(error).includes('ENOENT')) {
+                            requests.current.delete(path);
+                            throw error;
+                        }
+                        files.push([path, [], request]);
                     }
-                    if (!path || !String(error).includes('ENOENT')) {
-                        throw error;
-                    }
-                    return [path, [], request];
                 }
             })
         )
-            .then((files) => {
-                if (!cancelled) {
+            .then(() => {
+                if (current()) {
                     loadedRevision.current = revision;
                     setEntries((old) =>
                         Object.fromEntries(
@@ -108,14 +147,15 @@ export function useExplorer({
                 }
             })
             .catch((error) => {
-                if (!cancelled) {
+                if (current()) {
+                    cancelled = true;
                     onError(String(error));
                 }
             });
         return () => {
             cancelled = true;
         };
-    }, [workspace.id, active, onError, revision, expanded]);
+    }, [workspace.id, active, onError, revision, expanded, requestDirectory]);
 
     const visible = useMemo(
         () => getVisibleEntries(entriesByDirectory, expanded),
@@ -205,6 +245,8 @@ export function useExplorer({
     ];
 
     const finishFileOperation = (path: string): void => {
+        requestGeneration.current++;
+        requests.current.clear();
         setRevision((value) => value + 1);
         setSelected(toTreePath(path));
         setExpanded((old) => {
