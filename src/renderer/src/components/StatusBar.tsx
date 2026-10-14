@@ -46,8 +46,8 @@ export default function StatusBar({
     const displayMode = modeLabel(state.mode);
     return (
         <footer className={styles.statusbar}>
-            <span className={styles.mode} data-mode={t(displayMode)}>
-                {t(displayMode)}
+            <span className={styles.mode} data-mode={displayMode}>
+                {displayMode}
             </span>
             {active && (
                 <button aria-label={t('Toggle terminal')} onClick={onToggleTerminal}>
