@@ -10,7 +10,9 @@ import {
     open
 } from 'node:fs/promises';
 import { isUtf8 } from 'node:buffer';
-import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, resolve, sep } from 'node:path';
+import { workspaceRelative as relative } from './workspacePaths';
+import { editorPath, hostPath } from '../shared/wsl';
 import { type NeovimClient } from 'neovim';
 import { gitIgnored, gitRoot } from './git';
 import type { FileAction, FileEntry, SearchResults } from '../shared/types';
@@ -61,7 +63,7 @@ if line > 0 then
   vim.api.nvim_win_set_cursor(0, {line, math.min(column - 1, #text)})
   vim.cmd('normal! zvzz')
 end`,
-            [file, line ?? 0, column]
+            [editorPath(this.root, file), line ?? 0, column]
         ]);
     }
 
@@ -140,6 +142,9 @@ end
 return result`,
             []
         ])) as { id: number; name: string; modified: boolean }[];
+        for (const buffer of buffers) {
+            buffer.name = hostPath(this.root, buffer.name);
+        }
         const affected = buffers.filter((buf) => {
             if (!buf.name) {
                 return false;
@@ -174,7 +179,7 @@ return result`,
                 buffers.some(
                     (buf) =>
                         !affected.includes(buf) &&
-                        renamed.some((item) => item.name.toLowerCase() === buf.name.toLowerCase())
+                        renamed.some((item) => relative(item.name, buf.name) === '')
                 )
             ) {
                 throw new Error('Close the destination file tab first.');
@@ -197,7 +202,7 @@ for _, item in ipairs(renamed) do
   end
 end
 return false`,
-                [renamed]
+                [renamed.map((item) => ({ ...item, name: editorPath(this.root, item.name) }))]
             ]);
             if (edited) {
                 // Undo the disk move before touching buffer names; never overwrite a new source.

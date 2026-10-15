@@ -7,6 +7,8 @@ import { WorkspaceCheckpoints } from './workspaceCheckpoints';
 import type { TerminalShell } from '../shared/types';
 import type { HandlerDeps } from './handlers';
 import { createTranslator } from '../shared/i18n';
+import { parseWslPath } from '../shared/wsl';
+import { resolveWslFolder, wslDistributions } from './wsl';
 
 export function registerWorkspaceHandlers({
     window,
@@ -104,7 +106,12 @@ export function registerWorkspaceHandlers({
         }
         // Serialize read/modify/write so simultaneous requests cannot overwrite each other.
         const update = favoriteWrite.then(async () => {
-            const root = enabled ? await realpath(path) : path;
+            const remote = parseWslPath(path);
+            const root = enabled
+                ? remote
+                    ? await resolveWslFolder(remote.distribution, remote.path)
+                    : await realpath(path)
+                : path;
             if (enabled && !(await stat(root)).isDirectory()) {
                 throw new Error('Choose a project folder.');
             }
@@ -256,12 +263,19 @@ export function registerWorkspaceHandlers({
         state.active = selected;
     });
 
-    handle('browseFolders', async (value) => {
+    handle('wslDistributions', wslDistributions);
+    handle('browseFolders', async (value, distribution) => {
         const requested = value === undefined || value === '' ? app.getPath('home') : text(value);
-        if (!isAbsolute(requested)) {
+        const remote = parseWslPath(requested);
+        if (distribution === undefined && !isAbsolute(requested)) {
             throw new Error('Enter an absolute folder path.');
         }
-        const path = await realpath(requested);
+        const path =
+            distribution !== undefined
+                ? await resolveWslFolder(text(distribution), value === undefined ? '' : text(value))
+                : remote
+                  ? await resolveWslFolder(remote.distribution, remote.path)
+                  : await realpath(requested);
         const entries = await readdir(path, { withFileTypes: true });
         return {
             path,

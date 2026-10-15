@@ -5,6 +5,15 @@
     font: inherit;
     cursor: pointer;
 }
+.connection {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ui-accent, #a8cf9e);
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .lineEnding:focus-visible {
     outline: 1px solid var(--ui-accent, #a8cf9e);
 }

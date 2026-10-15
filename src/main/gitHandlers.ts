@@ -1,4 +1,5 @@
-import { dirname, isAbsolute, relative } from 'node:path';
+import { dirname, isAbsolute } from 'node:path';
+import { workspaceRelative as relative } from './workspacePaths';
 import type { Session } from './session';
 import type { NidoEvent } from '../shared/types';
 import {

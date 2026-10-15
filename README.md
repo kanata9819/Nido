@@ -80,6 +80,24 @@ Rustの`main`・テスト・テストモジュールにはRun / Debugの案内�
 - Denoが未導入の場合：`winget install --id DenoLand.Deno -e`を実行後、ワークスペースを開き直してください。設定ファイルのないDenoプロジェクトには`deno.json`（`{}`でも可）を追加してください。
 - Git操作にはPATH上のGitが必要です。
 
+## WSLに接続
+
+左下の **Local / ローカル**、`Ctrl+Shift+N`、またはコマンドパレットの **Connect to WSL / WSLに接続** からフォルダー選択を開きます。**Connection / 接続先** で `WSL: FedoraLinux-44` などを選び、Linux側のフォルダーを選択して `Ctrl+Enter` で開きます。パス欄には `/home/ユーザー名/project` のようなLinuxの絶対パスを入力できます。`\\wsl.localhost\ディストリビューション名\home\…` と `\\wsl$\…` の直接指定にも対応します。
+
+WSLのワークスペースではLinux版Neovim・ターミナル・言語サーバー・Gitを使用します。Windows側のワークスペースと別のタブで併用でき、接続先は左下の **WSL: ディストリビューション名** で確認できます。ファイルの編集・保存・検索・作成・移動、お気に入り、再起動後のタブ復元、編集タイムマシンも利用できます。大文字・小文字が異なるLinuxファイルは個別に扱います。
+
+WSLとディストリビューションは事前にインストールしてください（[Microsoft公式手順](https://learn.microsoft.com/en-us/windows/wsl/install)）。初回接続時、WSL側に対応するNeovimやNode.jsがなければ、公式アーカイブのSHA256を検証して `~/.cache/nido/runtime`（`XDG_CACHE_HOME` 指定時はその配下）に用意します。初回のダウンロードにはインターネット接続と `curl`・`tar`・`sha256sum` が必要です。管理者権限やシェル設定の変更は不要です。TypeScript / JavaScriptの補完・診断は同梱サーバーをLinux版Node.jsで実行します。
+
+Rust・Deno・Gitなどの開発ツールは、接続したディストリビューションにも導入してください。WSLでファイルを削除するとLinuxのゴミ箱へ移動します（`gio` が必要）。WSLのターミナルは、このPCで選んだWindowsシェル設定にかかわらず接続先のLinuxシェルを使います。Rustデバッグ用の同梱CodeLLDBはWindows専用です。
+
+実際のWSLでの確認は、インストール済みの名前を指定して実行できます。テストは専用の一時フォルダーを使います。
+
+```powershell
+$env:NIDO_TEST_WSL_DISTRO = 'FedoraLinux-44'
+pnpm test:wsl
+pnpm exec playwright test tests/wsl.spec.ts
+```
+
 ## ビルド・テスト
 
 ```powershell

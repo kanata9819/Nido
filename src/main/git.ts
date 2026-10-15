@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { GitChange, GitStatus, GitCommitEntry, GitBranchEntry } from '../shared/types';
+import { parseWslPath, wslHostPath } from '../shared/wsl';
+import { wslArguments } from './wsl';
 
 const exec = promisify(execFile);
 
@@ -147,11 +149,20 @@ async function git(
     try {
         // Background reads must not compete with staging for an optional index refresh.
         // Git mutations still acquire their required locks.
+        const remote = parseWslPath(cwd);
+        const gitArgs = ['--no-pager', '--literal-pathspecs', '--no-optional-locks', ...args];
         const task = exec(
-            'git',
-            ['--no-pager', '--literal-pathspecs', '--no-optional-locks', ...args],
+            remote ? 'wsl.exe' : 'git',
+            remote
+                ? wslArguments(remote.distribution, remote.path, [
+                      'env',
+                      'GIT_TERMINAL_PROMPT=0',
+                      'git',
+                      ...gitArgs
+                  ])
+                : gitArgs,
             {
-                cwd,
+                ...(!remote ? { cwd } : {}),
                 encoding: 'utf8',
                 windowsHide: true,
                 maxBuffer: 4 * 1024 * 1024,
@@ -163,7 +174,9 @@ async function git(
             task.child.stdin?.end(input);
         }
         const { stdout } = await task;
-        return stdout;
+        return remote && args[0] === 'rev-parse' && args[1] === '--show-toplevel'
+            ? wslHostPath(remote.distribution, stdout.trim())
+            : stdout;
     } catch (error) {
         const failure = error as Error & {
             code?: number | string;
@@ -185,13 +198,16 @@ export async function gitIgnored(cwd: string, paths: string[]): Promise<Set<stri
     if (!paths.length) {
         return new Set();
     }
+    const remote = parseWslPath(cwd);
+    const normalized = remote ? paths.map((path) => path.replaceAll('\\', '/')) : paths;
     const output = await git(
         cwd,
         ['--no-literal-pathspecs', 'check-ignore', '-z', '--stdin'],
         true,
-        `${paths.join('\0')}\0`
+        `${normalized.join('\0')}\0`
     );
-    return new Set(output.split('\0').filter(Boolean));
+    const ignored = new Set(output.split('\0').filter(Boolean));
+    return new Set(paths.filter((_path, index) => ignored.has(normalized[index])));
 }
 
 export async function gitStatus(cwd: string): Promise<GitStatus> {

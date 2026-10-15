@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { NidoAPI, NidoEvent } from '../shared/types';
 
 const api: NidoAPI = {
+    wslDistributions: () => ipcRenderer.invoke('nido:wslDistributions'),
     setHistoryEnabled: (enabled) => ipcRenderer.invoke('nido:historyEnabled', enabled),
     history: (id) => ipcRenderer.invoke('nido:history', id),
     historyPreview: (id, path, version) =>
@@ -28,7 +29,8 @@ const api: NidoAPI = {
     createWorkspace: (path, kind, shell) => ipcRenderer.invoke('nido:create', path, kind, shell),
     openTerminal: (id, shell) => ipcRenderer.invoke('nido:openTerminal', id, shell),
     restartTerminal: (id, shell) => ipcRenderer.invoke('nido:restartTerminal', id, shell),
-    browseFolders: (path) => ipcRenderer.invoke('nido:browseFolders', path),
+    browseFolders: (path, distribution) =>
+        ipcRenderer.invoke('nido:browseFolders', path, distribution),
     closeWorkspace: (id) => ipcRenderer.invoke('nido:close', id),
     attach: (id, columns, rows) => ipcRenderer.invoke('nido:attach', id, columns, rows),
     resize: (id, columns, rows) => ipcRenderer.invoke('nido:resize', id, columns, rows),

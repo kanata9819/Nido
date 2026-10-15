@@ -11,6 +11,9 @@ function M.start(choice)
   }
   local command = commands[choice or 'auto']
   assert(command, 'Invalid terminal shell.')
+  if vim.env.NIDO_WSL == '1' then
+    command = {vim.env.SHELL or '/bin/sh', '-l'}
+  end
   assert(vim.fn.executable(command[1]) == 1, 'Shell is not installed or not on PATH: ' .. command[1])
   vim.cmd('stopinsert')
   if job and vim.fn.jobwait({ job }, 0)[1] == -1 then

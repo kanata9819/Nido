@@ -44,6 +44,12 @@ export function buildItems(
     const commands: Item[] = [
         {
             key: '',
+            title: 'Connect to WSL',
+            detail: 'Choose a Linux distribution and open a folder',
+            run: () => void create()
+        },
+        {
+            key: '',
             title: 'Features',
             detail: 'Explore languages, runtimes and built-in features · Ctrl+Shift+X',
             run: () => showPanel('features')

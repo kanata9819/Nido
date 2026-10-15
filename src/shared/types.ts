@@ -27,6 +27,7 @@ export interface UpdateState {
 export type UpdateAction = 'check' | 'download' | 'install';
 
 export interface Workspace {
+    wsl?: string;
     kind?: 'editor' | 'terminal';
     terminalId?: string;
     id: string;
@@ -204,6 +205,7 @@ export interface GitStatus {
 }
 
 export interface NidoAPI {
+    wslDistributions(): Promise<string[]>;
     setHistoryEnabled(enabled: boolean): Promise<void>;
     history(id: string): Promise<HistoryList>;
     historyPreview(id: string, path: string, version: string): Promise<HistoryPreview>;
@@ -241,7 +243,10 @@ export interface NidoAPI {
     ): Promise<Workspace | null>;
     openTerminal(id: string, shell?: TerminalShell): Promise<Workspace>;
     restartTerminal(id: string, shell?: TerminalShell): Promise<void>;
-    browseFolders(path?: string): Promise<{ path: string; parent: string; folders: FileEntry[] }>;
+    browseFolders(
+        path?: string,
+        distribution?: string
+    ): Promise<{ path: string; parent: string; folders: FileEntry[] }>;
     closeWorkspace(id: string): Promise<boolean>;
     attach(id: string, columns: number, rows: number): Promise<void>;
     resize(id: string, columns: number, rows: number): Promise<void>;

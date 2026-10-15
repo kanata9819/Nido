@@ -37,7 +37,8 @@ export class SessionEvents {
 
     constructor(
         private workspaceId: string,
-        private sendToRenderer: (event: NidoEvent) => void
+        private sendToRenderer: (event: NidoEvent) => void,
+        private filePath?: (path: string) => string
     ) {}
 
     beginScrollBatch(): void {
@@ -110,6 +111,7 @@ export class SessionEvents {
     }
 
     receiveNotification(method: string, args: unknown[]): void {
+        const filePath = this.filePath;
         switch (method) {
             case 'nido:sticky_scroll': {
                 this.pendingRedraw.push(['nido_sticky_scroll', args]);
@@ -149,7 +151,14 @@ export class SessionEvents {
                     type: 'diagnostics',
                     id: this.workspaceId,
                     focus: args[1] === true,
-                    items: Array.isArray(args[0]) ? (args[0] as DiagnosticDetails[]) : []
+                    items: Array.isArray(args[0])
+                        ? filePath
+                            ? (args[0] as DiagnosticDetails[]).map((item) => ({
+                                  ...item,
+                                  path: filePath(item.path)
+                              }))
+                            : (args[0] as DiagnosticDetails[])
+                        : []
                 });
                 break;
             }
@@ -238,9 +247,30 @@ export class SessionEvents {
                 break;
             }
             case 'nido:state': {
+                const update = { ...(args[0] as Partial<SessionState>) };
+                if (filePath && Array.isArray(update.buffers)) {
+                    update.buffers = update.buffers.map((buffer) => ({
+                        ...buffer,
+                        name: filePath(buffer.name)
+                    }));
+                }
+                if (filePath && Array.isArray(update.problems)) {
+                    update.problems = update.problems.map((problem) => ({
+                        ...problem,
+                        path: filePath(problem.path)
+                    }));
+                }
+                if (filePath && update.diagnostics) {
+                    update.diagnostics = Object.fromEntries(
+                        Object.entries(update.diagnostics).map(([path, severity]) => [
+                            filePath(path),
+                            severity
+                        ])
+                    );
+                }
                 this.state = {
                     ...this.state,
-                    ...(args[0] as Partial<SessionState>),
+                    ...update,
                     debug: this.state.debug,
                     references: this.state.references
                 };
@@ -265,6 +295,12 @@ export class SessionEvents {
                 const references = args[0] as NonNullable<SessionState['references']>;
                 if (!Array.isArray(references.items)) {
                     references.items = [];
+                }
+                if (filePath) {
+                    references.items = references.items.map((item) => ({
+                        ...item,
+                        path: filePath(item.path)
+                    }));
                 }
                 this.state = { ...this.state, references };
                 this.publishState();

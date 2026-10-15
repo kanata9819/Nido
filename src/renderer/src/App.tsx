@@ -511,6 +511,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                 animations={animations}
             />
             <StatusBar
+                onConnect={() => void create()}
                 onSearch={(key) => {
                     run(window.nido.input(active, '<Esc>' + key));
                     focusEditor();

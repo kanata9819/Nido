@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { historyLimits, type HistoryContent, type HistoryVersion } from '../shared/history';
+import { parseWslPath } from '../shared/wsl';
 
 interface Revision extends HistoryVersion, HistoryContent {}
 interface HistoryFile {
@@ -27,8 +28,15 @@ export class LocalHistory {
 
     private key(path: string): string {
         const normalized = resolve(path).replaceAll('\\', '/');
+        const remote = parseWslPath(path);
         return createHash('sha256')
-            .update(process.platform === 'win32' ? normalized.toLowerCase() : normalized)
+            .update(
+                remote
+                    ? `wsl://${remote.distribution.toLowerCase()}${remote.path}`
+                    : process.platform === 'win32'
+                      ? normalized.toLowerCase()
+                      : normalized
+            )
             .digest('hex');
     }
 

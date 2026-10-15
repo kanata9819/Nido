@@ -8,6 +8,19 @@ export function parseLanguage(value: unknown): Language {
 
 // English source messages are also the fallback for messages from external tools.
 export const japanese: Record<string, string> = {
+    Connection: '接続先',
+    'This computer': 'このPC',
+    'WSL unavailable': 'WSLを利用できません',
+    'Install a WSL distribution to connect.': '接続にはWSLのディストリビューションが必要です。',
+    'Connect to WSL': 'WSLに接続',
+    'Choose a Linux distribution and open a folder':
+        'Linuxのディストリビューションを選んでフォルダーを開く',
+    'Open a local or WSL workspace': 'ローカルまたはWSLのワークスペースを開く',
+    'Enter an absolute Linux folder path.': 'Linuxの絶対パスを入力してください。',
+    'Connecting to WSL… Initial setup may take a few minutes.':
+        'WSLに接続中… 初回の準備には数分かかることがあります。',
+    'Files, terminal and language tools run in this WSL distribution.':
+        'ファイル編集・ターミナル・言語ツールを、このWSLで実行します。',
     'Uses your installed Deno. Projects with deno.json, deno.jsonc or deno.lock are detected automatically.':
         'インストール済みのDenoを使用します。deno.json・deno.jsonc・deno.lockのあるプロジェクトを自動で判定します。',
     'Deno language support needs Deno. Install it, then reopen this workspace.':

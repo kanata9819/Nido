@@ -1,4 +1,5 @@
 import type { SessionState } from '../../shared/types';
+import { parseWslPath } from '../../shared/wsl';
 
 export interface Decoration {
     code: string;
@@ -9,6 +10,10 @@ export interface Decoration {
 }
 
 export function gitFileKey(path: string): string {
+    const remote = parseWslPath(path);
+    if (remote) {
+        return `//wsl.localhost/${remote.distribution.toLowerCase()}${remote.path}`;
+    }
     return path.replaceAll('\\', '/').toLowerCase();
 }
 

@@ -1,5 +1,9 @@
 -- Nido owns this configuration; personal Neovim config is not loaded.
 vim.g.nido = true
+if vim.env.NIDO_WSL == '1' then
+  -- Language servers and their child tools must use Linux executables.
+  vim.env.PATH = vim.fs.dirname(vim.env.NIDO_NODE) .. ':' .. vim.fs.dirname(vim.v.progpath) .. ':' .. (vim.env.PATH or '')
+end
 -- Candidate counts already appear in Nido's completion menu. Suppress native
 -- completion chatter so rapid refreshes cannot accumulate a hit-enter prompt.
 vim.opt.shortmess:append('IWFSsc')

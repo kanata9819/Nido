@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Star, X } from 'lucide-react';
 import type { FavoriteWorkspace, FileEntry } from '../../../shared/types';
 import styles from '../assets/Palette.module.css';
+import { parseWslPath, wslHostPath } from '../../../shared/wsl';
 
 export default function FolderPicker({
     initialPath,
@@ -23,7 +24,14 @@ export default function FolderPicker({
     onOpen: (path: string, kind: 'editor' | 'terminal') => void;
 }): React.JSX.Element {
     const t = useI18n();
-    const [path, setPath] = useState(initialPath);
+    const [location, setLocation] = useState(() => ({
+        distribution: parseWslPath(initialPath)?.distribution || '',
+        initialPath
+    }));
+    const distribution = location.distribution;
+    const [distributions, setDistributions] = useState<string[]>([]);
+    const [wslError, setWslError] = useState('');
+    const [path, setPath] = useState(parseWslPath(initialPath)?.path || initialPath);
     const [kind, setKind] = useState<'editor' | 'terminal'>('editor');
     const [directory, setDirectory] = useState('');
     const [parent, setParent] = useState('');
@@ -40,9 +48,18 @@ export default function FolderPicker({
         setPreviousChoiceCount(choiceCount);
         setSelected((value) => Math.max(0, Math.min(value, choiceCount - 1)));
     }
+    function changeConnection(next: string, initial = ''): void {
+        request.current.id++;
+        setLoading(true);
+        setError('');
+        setDirectory('');
+        setFolders([]);
+        setPath(parseWslPath(initial)?.path || initial);
+        setLocation({ distribution: next, initialPath: initial });
+    }
     const applyFolders = useCallback(
         (result: Awaited<ReturnType<typeof window.nido.browseFolders>>): void => {
-            setPath(result.path);
+            setPath(parseWslPath(result.path)?.path || result.path);
             setDirectory(result.path);
             setParent(result.parent);
             setFolders(result.folders);
@@ -51,11 +68,16 @@ export default function FolderPicker({
         []
     );
     async function browse(next: string): Promise<void> {
+        const remote = parseWslPath(next);
+        if (remote && remote.distribution !== distribution) {
+            changeConnection(remote.distribution, next);
+            return;
+        }
         const id = ++request.current.id;
         setLoading(true);
         setError('');
         try {
-            const result = await window.nido.browseFolders(next);
+            const result = await window.nido.browseFolders(next, distribution || undefined);
             if (id !== request.current.id) {
                 return;
             }
@@ -76,10 +98,28 @@ export default function FolderPicker({
         }
     }
     useEffect(() => {
+        let cancelled = false;
+        void window.nido.wslDistributions().then(
+            (names) => {
+                if (!cancelled) {
+                    setDistributions(Array.isArray(names) ? names : []);
+                }
+            },
+            (error) => {
+                if (!cancelled) {
+                    setWslError(String(error));
+                }
+            }
+        );
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+    useEffect(() => {
         const counter = request.current;
         const id = ++counter.id;
         void window.nido
-            .browseFolders(initialPath)
+            .browseFolders(location.initialPath, location.distribution || undefined)
             .then(
                 (result) => {
                     if (id !== counter.id) {
@@ -106,7 +146,7 @@ export default function FolderPicker({
         return () => {
             counter.id++;
         };
-    }, [initialPath, applyFolders]);
+    }, [location, applyFolders]);
     useEffect(() => {
         list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
     }, [selected]);
@@ -121,10 +161,47 @@ export default function FolderPicker({
                 }
                 if (event.ctrlKey && event.key === 'Enter' && !busy && !loading) {
                     event.preventDefault();
-                    onOpen(path, kind);
+                    if (distribution && !parseWslPath(path) && !path.startsWith('/')) {
+                        setError(t('Enter an absolute Linux folder path.'));
+                        return;
+                    }
+                    onOpen(
+                        distribution && !parseWslPath(path)
+                            ? wslHostPath(distribution, path)
+                            : path,
+                        kind
+                    );
                 }
             }}
         >
+            <div className={styles.folderActions}>
+                <label>
+                    {t('Connection')}{' '}
+                    <select
+                        aria-label={t('Connection')}
+                        value={distribution}
+                        disabled={busy}
+                        onChange={(event) => changeConnection(event.target.value)}
+                    >
+                        <option value="">{t('This computer')}</option>
+                        {[
+                            ...new Set([...(distribution ? [distribution] : []), ...distributions])
+                        ].map((name) => (
+                            <option key={name} value={name}>
+                                WSL: {name}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                {wslError && (
+                    <small role="status">
+                        {t('WSL unavailable')} · {wslError}
+                    </small>
+                )}
+                {!wslError && !distributions.length && (
+                    <small>{t('Install a WSL distribution to connect.')}</small>
+                )}
+            </div>
             <input
                 ref={address}
                 className={`${styles.paletteInput} ${styles.folderPath}`}
@@ -169,6 +246,13 @@ export default function FolderPicker({
                     {busy ? t('Opening…') : t('Open current folder')}
                 </button>
             </div>
+            {distribution && (
+                <p className={styles.folderActions} role="status">
+                    {busy
+                        ? t('Connecting to WSL… Initial setup may take a few minutes.')
+                        : t('Files, terminal and language tools run in this WSL distribution.')}
+                </p>
+            )}
             {error && <p role="alert">{error}</p>}
             <div
                 ref={list}

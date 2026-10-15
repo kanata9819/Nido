@@ -1629,6 +1629,94 @@ test('Folder browsing cancels old results and clamps selection after favorites c
     await expect(list).toHaveAttribute('aria-activedescendant', 'folder-choice-0');
 });
 
+test('Switching WSL connections ignores stale listings and displays Linux paths', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=folders&defer=browseFolders,wslDistributions`);
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.pending.filter((call) => call.method === 'browseFolders')
+                        .length
+            )
+        )
+        .toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('wslDistributions', 0, ['Fedora', 'Ubuntu'])
+    );
+    const connection = page.getByRole('combobox', { name: 'Connection', exact: true });
+    await connection.selectOption('Fedora');
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.pending.filter((call) => call.method === 'browseFolders')
+                        .length
+            )
+        )
+        .toBe(2);
+    await connection.selectOption('Ubuntu');
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.pending.filter((call) => call.method === 'browseFolders')
+                        .length
+            )
+        )
+        .toBe(3);
+    await page.evaluate(() =>
+        window.rendererTest.settle('browseFolders', 2, {
+            path: '\\\\wsl.localhost\\Ubuntu\\home\\me',
+            parent: '\\\\wsl.localhost\\Ubuntu\\home',
+            folders: []
+        })
+    );
+    await page.evaluate(() =>
+        window.rendererTest.settle('browseFolders', 1, {
+            path: '\\\\wsl.localhost\\Fedora\\home\\old',
+            parent: '\\\\wsl.localhost\\Fedora\\home',
+            folders: [{ name: 'STALE_WSL_FOLDER', path: 'old', directory: true }]
+        })
+    );
+    await page.evaluate(() =>
+        window.rendererTest.settle('browseFolders', 0, {
+            path: '/alpha',
+            parent: '/',
+            folders: []
+        })
+    );
+    const address = page.getByRole('textbox', { name: 'Folder path' });
+    await expect(address).toHaveValue('/home/me');
+    await expect(page.getByText('STALE_WSL_FOLDER')).toHaveCount(0);
+    await address.fill('/home/me/project with spaces');
+    await address.press('Enter');
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.calls
+                        .filter((call) => call.method === 'browseFolders')
+                        .at(-1)?.args
+            )
+        )
+        .toEqual(['/home/me/project with spaces', 'Ubuntu']);
+    await address.fill('\\\\wsl$\\Fedora\\home\\me\\direct');
+    await address.press('Enter');
+    await expect(connection).toHaveValue('Fedora');
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.calls
+                        .filter((call) => call.method === 'browseFolders')
+                        .at(-1)?.args
+            )
+        )
+        .toEqual(['\\\\wsl$\\Fedora\\home\\me\\direct', 'Fedora']);
+});
+
 test('Notification replacement resets fading and cancels the previous dismissal', async ({
     page
 }) => {

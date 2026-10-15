@@ -1,6 +1,7 @@
 import { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } from 'electron';
 import { release } from 'node:os';
-import { isAbsolute, relative, sep } from 'node:path';
+import { isAbsolute, sep } from 'node:path';
+import { workspaceRelative as relative } from './workspacePaths';
 import { Session } from './session';
 import { registerGitHandlers } from './gitHandlers';
 import { registerWorkspaceHandlers } from './workspaceHandlers';

@@ -19,6 +19,8 @@ import { SessionEvents } from './sessionEvents';
 import { SessionClient } from './sessionClient';
 import { SessionInteraction } from './sessionInteraction';
 import type { HistoryContent, HistorySnapshot, HistoryToken } from '../shared/history';
+import { editorPath, hostPath, parseWslPath } from '../shared/wsl';
+import { prepareWsl, resolveWslFolder, trashWslFile, wslArguments } from './wsl';
 
 export class Session {
     terminal?: Session;
@@ -45,37 +47,76 @@ export class Session {
     private constructor(
         root: string,
         private emit: (event: NidoEvent) => void,
-        private resources: string
+        private resources: string,
+        runtime?: Awaited<ReturnType<typeof prepareWsl>>
     ) {
-        this.workspace = { id: randomUUID(), root, name: basename(root) || root };
-        this.events = new SessionEvents(this.workspace.id, emit);
+        const remote = parseWslPath(root);
+        this.workspace = {
+            id: randomUUID(),
+            root,
+            name: basename(root) || root,
+            ...(remote ? { wsl: remote.distribution } : {})
+        };
+        this.events = new SessionEvents(
+            this.workspace.id,
+            emit,
+            remote ? (path) => hostPath(root, path) : undefined
+        );
+        const args = [
+            '--embed',
+            '--noplugin',
+            // Time Machine owns recovery; an embedded startup cannot answer swap prompts.
+            '-n',
+            '-i',
+            'NONE',
+            '-u',
+            runtime ? `${runtime.resources}/nido/init.lua` : resolve(resources, 'nido/init.lua'),
+            '--cmd',
+            // Keep bundled parser DLLs discoverable while excluding personal config.
+            "lua vim.opt.runtimepath = {vim.env.VIMRUNTIME, vim.fn.fnamemodify(vim.v.progpath, ':h:h') .. '/lib/nvim'}; vim.opt.packpath = {}"
+        ];
         this.process = spawn(
-            resolve(resources, 'nvim-win64/bin/nvim.exe'),
-            [
-                '--embed',
-                '--noplugin',
-                // Time Machine owns recovery; an embedded startup cannot answer swap prompts.
-                '-n',
-                '-i',
-                'NONE',
-                '-u',
-                resolve(resources, 'nido/init.lua'),
-                '--cmd',
-                // Keep bundled parser DLLs discoverable while excluding personal config.
-                "lua vim.opt.runtimepath = {vim.env.VIMRUNTIME, vim.fn.fnamemodify(vim.v.progpath, ':h:h') .. '/lib/nvim'}; vim.opt.packpath = {}"
-            ],
+            runtime && remote ? 'wsl.exe' : resolve(resources, 'nvim-win64/bin/nvim.exe'),
+            runtime && remote
+                ? wslArguments(remote.distribution, remote.path, [
+                      'env',
+                      '-u',
+                      'VIMRUNTIME',
+                      '-u',
+                      'VIMINIT',
+                      '-u',
+                      'EXINIT',
+                      '-u',
+                      'NVIM',
+                      '-u',
+                      'NVIM_LISTEN_ADDRESS',
+                      '-u',
+                      'NODE_OPTIONS',
+                      '-u',
+                      'NIDO_LSP_CONFIG',
+                      'NVIM_APPNAME=nido',
+                      'NIDO_WSL=1',
+                      `NIDO_WORKSPACE_ROOT=${remote.path}`,
+                      `NIDO_NODE=${runtime.node}`,
+                      `NIDO_LANGUAGES=${runtime.resources}/languages`,
+                      runtime.nvim,
+                      ...args
+                  ])
+                : args,
             {
-                cwd: root,
-                env: {
-                    ...process.env,
-                    NVIM_APPNAME: 'nido',
-                    NIDO_WORKSPACE_ROOT: root,
-                    NIDO_NODE: process.execPath,
-                    NIDO_LANGUAGES: resolve(resources, 'languages'),
-                    VIMRUNTIME: resolve(resources, 'nvim-win64/share/nvim/runtime'),
-                    VIMINIT: '',
-                    EXINIT: ''
-                },
+                cwd: runtime ? resources : root,
+                env: runtime
+                    ? process.env
+                    : {
+                          ...process.env,
+                          NVIM_APPNAME: 'nido',
+                          NIDO_WORKSPACE_ROOT: root,
+                          NIDO_NODE: process.execPath,
+                          NIDO_LANGUAGES: resolve(resources, 'languages'),
+                          VIMRUNTIME: resolve(resources, 'nvim-win64/share/nvim/runtime'),
+                          VIMINIT: '',
+                          EXINIT: ''
+                      },
                 windowsHide: true,
                 stdio: 'pipe'
             }
@@ -99,10 +140,14 @@ export class Session {
         this.client.on('notification', (method: string, args: unknown[]) => {
             this.events.receiveNotification(method, args);
         });
-        this.process.stderr.on('data', () => {
-            /* Drain the child pipe; RPC errors are surfaced separately. */
+        let stderr = '';
+        this.process.stderr.on('data', (data: Buffer) => {
+            stderr = (stderr + data.toString()).slice(-4000);
         });
         this.process.on('exit', () => {
+            if (!this.stopped && stderr.trim()) {
+                this.emit({ type: 'error', id: this.workspace.id, message: stderr.trim() });
+            }
             this.stopped = true;
             this.fileService.cancelFindFiles();
             void this.terminal?.stop();
@@ -121,12 +166,15 @@ export class Session {
         emit: (event: NidoEvent) => void,
         resources = resolve(__dirname, '../../resources')
     ): Promise<Session> {
-        const actual = await realpath(root);
+        const remote = parseWslPath(root);
+        const actual = remote
+            ? await resolveWslFolder(remote.distribution, remote.path)
+            : await realpath(root);
         if (!(await stat(actual)).isDirectory()) {
             throw new Error('Choose a project folder.');
         }
         for (const file of [
-            'nvim-win64/bin/nvim.exe',
+            ...(!remote ? ['nvim-win64/bin/nvim.exe'] : ['nido/wsl-runtime.sh']),
             'nido/init.lua',
             'nido/session.lua',
             'languages/node_modules/typescript-language-server/lib/cli.mjs',
@@ -141,7 +189,8 @@ export class Session {
             }
         }
         const setup = await readFile(resolve(resources, 'nido/session.lua'), 'utf8');
-        const session = new Session(actual, emit, resources);
+        const runtime = remote ? await prepareWsl(remote.distribution, resources) : undefined;
+        const session = new Session(actual, emit, resources, runtime);
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
             await Promise.race([
@@ -165,7 +214,9 @@ export class Session {
                         () =>
                             reject(
                                 new Error(
-                                    'Bundled Neovim did not start. Check the Nido installation.'
+                                    remote
+                                        ? 'WSL Neovim did not start. Reconnect to this workspace.'
+                                        : 'Bundled Neovim did not start. Check the Nido installation.'
                                 )
                             ),
                         12000
@@ -288,7 +339,7 @@ export class Session {
     }
 
     async markdownPreview(known = ''): Promise<MarkdownSnapshot> {
-        return this.client.request('nvim_exec_lua', [
+        const snapshot = (await this.client.request('nvim_exec_lua', [
             `if vim.bo.filetype ~= 'markdown' then
   error('Open a Markdown file to preview.')
 end
@@ -298,7 +349,8 @@ local token = buffer .. ':' .. vim.api.nvim_buf_get_changedtick(buffer)
 return {token=token, path=vim.api.nvim_buf_get_name(buffer),
   text=token ~= known and table.concat(vim.api.nvim_buf_get_lines(buffer, 0, -1, false), '\\n') or nil}`,
             [known]
-        ]);
+        ])) as MarkdownSnapshot;
+        return { ...snapshot, path: hostPath(this.workspace.root, snapshot.path) };
     }
 
     async setRelativeLineNumbers(enabled: boolean): Promise<void> {
@@ -425,7 +477,13 @@ end`,
             root: this.workspace.root,
             terminal: !!this.terminal,
             ...data,
-            files: Array.isArray(data.files) ? data.files : []
+            current: hostPath(this.workspace.root, data.current),
+            files: Array.isArray(data.files)
+                ? data.files.map((file) => ({
+                      ...file,
+                      path: hostPath(this.workspace.root, file.path)
+                  }))
+                : []
         };
     }
 
@@ -448,7 +506,7 @@ end`,
           require('nido_eol').open(path)
           line = math.min(line, vim.api.nvim_buf_line_count(0))
           vim.api.nvim_win_set_cursor(0, {line, column})`,
-                    [file.path, file.line, file.column]
+                    [editorPath(this.workspace.root, file.path), file.line, file.column]
                 ]);
             } catch (error) {
                 errors.push(`${file.path}: ${String(error)}`);
@@ -459,7 +517,7 @@ end`,
       if b > 0 then
         vim.api.nvim_set_current_buf(b)
       end`,
-            [saved.current]
+            [editorPath(this.workspace.root, saved.current)]
         ]);
         return errors;
     }
@@ -529,7 +587,12 @@ return false`,
         target: string,
         trash: (path: string) => Promise<void>
     ): Promise<void> {
-        await this.fileService.fileAction(action, path, target, trash);
+        await this.fileService.fileAction(
+            action,
+            path,
+            target,
+            this.workspace.wsl ? trashWslFile : trash
+        );
     }
 
     async openReference(index: number, version: number): Promise<void> {
@@ -554,7 +617,7 @@ local text = vim.api.nvim_buf_get_lines(0, line-1, line, false)[1] or ''
 vim.api.nvim_win_set_cursor(0, {line, math.min(column-1, #text)})
 vim.cmd('normal! zv')
 require('nido_scroll').center()`,
-            [problem.path, problem.line, problem.column]
+            [editorPath(this.workspace.root, problem.path), problem.line, problem.column]
         ]);
     }
 
@@ -584,7 +647,7 @@ local function highlight(source)
   return require('nido_references').highlight_text(vim.split(source, '\\n', {plain=true}), language)
 end
 return {highlight(before), highlight(after)}`,
-            [path, before, after]
+            [editorPath(this.workspace.root, path), before, after]
         ]);
     }
 
@@ -604,7 +667,12 @@ return {highlight(before), highlight(after)}`,
             "return require('nido_history').changed(...)",
             [tokens]
         ])) as HistorySnapshot[];
-        return Array.isArray(result) ? result : [];
+        return Array.isArray(result)
+            ? result.map((value) => ({
+                  ...value,
+                  path: hostPath(this.workspace.root, value.path)
+              }))
+            : [];
     }
 
     historyCurrent(): Promise<HistorySnapshot> {
@@ -631,7 +699,7 @@ return {highlight(before), highlight(after)}`,
                 throw new Error('Finish the current Neovim command before restoring.');
             }
             return this.historyResult("return require('nido_history').restore(...)", [
-                path,
+                editorPath(this.workspace.root, path),
                 token,
                 content
             ]);
@@ -644,7 +712,7 @@ return {highlight(before), highlight(after)}`,
         if ('error' in result) {
             throw new Error(result.error);
         }
-        return result;
+        return { ...result, path: hostPath(this.workspace.root, result.path) };
     }
 
     async findFiles(query = ''): Promise<FileEntry[]> {

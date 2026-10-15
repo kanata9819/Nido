@@ -1,6 +1,6 @@
 import progressStyles from '../assets/Progress.module.css';
 import { useI18n } from '../i18n';
-import { Code2, Search, ChevronUp, ChevronDown, X } from 'lucide-react';
+import { Code2, Search, ChevronUp, ChevronDown, X, SquareTerminal } from 'lucide-react';
 import type { Workspace, SessionState } from '../../../shared/types';
 import styles from '../assets/StatusBar.module.css';
 
@@ -10,6 +10,7 @@ interface StatusBarProps {
     state: SessionState;
     sessionCount: number;
     onToggleTerminal: () => void;
+    onConnect: () => void;
     onToggleDebugger: () => void;
     onToggleReferences: () => void;
     onLineEnding: (format: 'LF' | 'CRLF') => void;
@@ -36,6 +37,7 @@ export default function StatusBar({
     workspace,
     state,
     sessionCount,
+    onConnect,
     onToggleTerminal,
     onToggleDebugger,
     onToggleReferences,
@@ -46,6 +48,15 @@ export default function StatusBar({
     const displayMode = modeLabel(state.mode);
     return (
         <footer className={styles.statusbar}>
+            <button
+                className={styles.connection}
+                aria-label={t('Open a local or WSL workspace')}
+                title={workspace?.root || t('Open a local or WSL workspace')}
+                onClick={onConnect}
+            >
+                <SquareTerminal size={14} />
+                {workspace?.wsl ? `WSL: ${workspace.wsl}` : t('Local')}
+            </button>
             <span className={styles.mode} data-mode={displayMode}>
                 {displayMode}
             </span>
