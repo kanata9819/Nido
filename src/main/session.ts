@@ -138,6 +138,10 @@ export class Session {
         );
         this.fileService = new SessionFiles(this.workspace.root, this.client);
         this.client.on('notification', (method: string, args: unknown[]) => {
+            if (method === 'nido:terminal_exit') {
+                void this.stop();
+                return;
+            }
             this.events.receiveNotification(method, args);
         });
         let stderr = '';
@@ -308,6 +312,12 @@ export class Session {
                 }
                 this.terminal = terminal;
                 this.workspace.terminalId = terminal.workspace.id;
+                terminal.process.once('exit', () => {
+                    if (this.terminal === terminal) {
+                        this.terminal = undefined;
+                        this.workspace.terminalId = undefined;
+                    }
+                });
                 return terminal;
             } catch (error) {
                 await terminal.stop();

@@ -298,7 +298,8 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
                             new WheelEvent('wheel', {
                                 bubbles: true,
                                 deltaMode: 0,
-                                deltaY: delta
+                                // Keep the same rendered distances at half wheel sensitivity.
+                                deltaY: delta * 2
                             })
                         );
                 },

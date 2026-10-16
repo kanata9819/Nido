@@ -43,8 +43,8 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
             };
             Object.assign(window, { cadence });
             node.addEventListener('wheel', (event) => {
-                cadence.input += event.deltaY;
-                cadence.inputs.push({ pixels: event.deltaY, at: performance.now() });
+                cadence.input += event.deltaY * 0.5;
+                cadence.inputs.push({ pixels: event.deltaY * 0.5, at: performance.now() });
             });
             Object.assign(window, { cadenceEvents: [] as unknown[] });
             window.nido.onEvent((event) => {
@@ -184,7 +184,7 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                     maxGap: gaps.at(-1),
                     distance: samples.at(-1)!.top - start
                 });
-                const maxStep = Math.abs(delta) * (Math.abs(delta) > 5 ? 3 : 2) + pixel;
+                const maxStep = Math.abs(delta) * 0.5 * (Math.abs(delta) > 5 ? 3 : 2) + pixel;
                 const failed = reversals.length > 0 || Math.max(...steps) > maxStep;
                 if (failed)
                     Object.assign(reports.at(-1)!, {
@@ -212,7 +212,7 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                 );
                 expect(samples.length).toBeGreaterThan(20);
                 // Rasterized row positions can differ by one physical pixel at fractional DPI.
-                expect(Math.abs(samples.at(-1)!.top - start - delta * 100)).toBeLessThanOrEqual(
+                expect(Math.abs(samples.at(-1)!.top - start - delta * 50)).toBeLessThanOrEqual(
                     pixel + 0.01
                 );
                 expect(reversals).toEqual([]);

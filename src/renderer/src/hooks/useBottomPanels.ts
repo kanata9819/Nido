@@ -1,4 +1,11 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    type Dispatch,
+    type SetStateAction
+} from 'react';
 import type { DebugAction, SessionState, TerminalShell, Workspace } from '../../../shared/types';
 
 interface Options {
@@ -53,6 +60,22 @@ export function useBottomPanels({
     const [bottomPanel, setBottomPanel] = useState<'debug' | 'references' | 'terminal'>('debug');
     const [terminalVisible, setTerminalVisible] = useState(false);
     const [terminalFocusTick, setTerminalFocusTick] = useState(0);
+    const terminalId = workspace?.terminalId;
+    const previousTerminal = useRef({ active, terminalId });
+    useEffect(() => {
+        const previous = previousTerminal.current;
+        previousTerminal.current = { active, terminalId };
+        if (previous.active === active && previous.terminalId && !terminalId) {
+            setTerminalVisible(false);
+            if (
+                terminalVisible &&
+                bottomPanel === 'terminal' &&
+                document.activeElement === document.body
+            ) {
+                focusEditor();
+            }
+        }
+    }, [active, terminalId, terminalVisible, bottomPanel, focusEditor]);
     const hasDebugger = !!state.debug;
     const referenceVersion = state.references?.search ?? state.references?.version;
     const debugStatus = state.debug?.status;

@@ -201,10 +201,11 @@ function Editor({
                     return;
                 }
 
+                const delta = event.deltaY * 0.5;
                 if (!terminal) {
                     const height = lineHeight;
                     const pixels =
-                        event.deltaY *
+                        delta *
                         (event.deltaMode === 1
                             ? height
                             : event.deltaMode === 2
@@ -219,7 +220,7 @@ function Editor({
                 const now = performance.now();
                 const result = accumulateScroll(
                     now - wheel.current.time > 200 ? 0 : wheel.current.remainder,
-                    event.deltaY,
+                    delta,
                     event.deltaMode,
                     lineHeight,
                     event.currentTarget.clientHeight

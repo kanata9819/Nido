@@ -2543,9 +2543,7 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
         assert.ok(
             explorerBounds.y + explorerBounds.height >= terminalBounds.y + terminalBounds.height - 1
         );
-        await expect(page.getByRole('contentinfo').locator(':scope > :first-child')).toHaveText(
-            'NORMAL'
-        );
+        await expect(page.getByRole('contentinfo').locator('[data-mode]')).toHaveText('NORMAL');
         await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
         await expect(terminal.locator('canvas')).toHaveAttribute('aria-description', /PS .*?>/, {
             timeout: 15000
@@ -2860,12 +2858,12 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
                 .toBeLessThanOrEqual(pixel + 0.01);
         };
         await page.mouse.wheel(0, 2);
-        await nearBaseline(firstY - 2);
+        await nearBaseline(firstY - 1);
         await page.screenshot({ path: 'test-results/pixel-scroll.png' });
         await page.mouse.wheel(0, -2);
         await nearBaseline(firstY);
         await page.mouse.wheel(0, -100);
-        await nearBaseline(firstY + 3);
+        await nearBaseline(firstY + 1.5);
         await page.mouse.wheel(0, 100);
         await expect(canvas).not.toHaveAttribute('aria-description', /^.*line 1 /);
         await page.waitForTimeout(250);

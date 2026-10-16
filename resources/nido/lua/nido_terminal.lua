@@ -16,8 +16,10 @@ function M.start(choice)
   end
   assert(vim.fn.executable(command[1]) == 1, 'Shell is not installed or not on PATH: ' .. command[1])
   vim.cmd('stopinsert')
-  if job and vim.fn.jobwait({ job }, 0)[1] == -1 then
-    vim.fn.jobstop(job)
+  local previous_job = job
+  job = nil
+  if previous_job and vim.fn.jobwait({ previous_job }, 0)[1] == -1 then
+    vim.fn.jobstop(previous_job)
   end
   local previous = buffer
   buffer = vim.api.nvim_create_buf(false, true)
@@ -31,7 +33,18 @@ function M.start(choice)
   vim.wo.statusline = ' '
   vim.o.ruler = false
   vim.bo[buffer].scrollback = 10000
-  job = vim.fn.jobstart(command, { term = true, cwd = vim.fn.getcwd() })
+  job = vim.fn.jobstart(command, {
+    term = true,
+    cwd = vim.fn.getcwd(),
+    on_exit = function(exited_job)
+      vim.schedule(function()
+        -- Restarting the shell also exits a job; only close the current shell.
+        if job == exited_job then
+          vim.rpcnotify(vim.g.nido_channel, 'nido:terminal_exit')
+        end
+      end)
+    end,
+  })
   assert(job > 0, 'Could not start ' .. command[1])
   vim.cmd('startinsert')
 end

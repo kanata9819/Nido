@@ -188,7 +188,7 @@ for (const { delta, history, prefetchFirst, title } of scenarios) {
             });
             expect(new Set(positions.map(({ top }) => Math.round(top))).size).toBeGreaterThan(3);
             expect((positions.at(-1)!.top - positions[0].top) * Math.sign(delta)).toBeGreaterThan(
-                100
+                50
             );
             await running.evaluate(() => {
                 (
@@ -196,7 +196,7 @@ for (const { delta, history, prefetchFirst, title } of scenarios) {
                 ).wheelPrefetch.release();
             });
             // Finishing a late refill must preserve the full gesture, including its initial step.
-            const target = start + delta * 60 - (prefetchFirst ? 1 : 0);
+            const target = start + delta * 30 - (prefetchFirst ? 0.5 : 0);
             const pixel = await page.evaluate(() => 1 / devicePixelRatio);
             await expect
                 .poll(async () => Math.abs((await documentTop()) - target))
