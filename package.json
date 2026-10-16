@@ -1,6 +1,6 @@
 {
     "name": "nido",
-    "version": "0.2.5",
+    "version": "0.2.6",
     "description": "Nido — a keyboard-first Neovim desktop client",
     "main": "./out/main/index.js",
     "author": "",

@@ -20,7 +20,7 @@ test('upward touchpad gestures stop at the first row while replies are delayed',
         JSON.stringify({
             version: 1,
             active: 0,
-            window: { width: 1200, height: 900, maximized: false },
+            window: { width: 960, height: 900, maximized: false },
             workspaces: [
                 { root, current: file, files: [{ path: file, line: startLine, column: 0 }] }
             ]
@@ -105,13 +105,26 @@ test('upward touchpad gestures stop at the first row while replies are delayed',
                 });
             }
         });
-        await canvas.evaluate(async (node) => {
-            for (let index = 0; index < 150; index++) {
-                await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-                node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -60 }));
-            }
-        });
-        await expect(canvas).toHaveAttribute('aria-description', /import.*useLayoutEffect/);
+        // Wrapped rows and wheel sensitivity change the distance to the first line.
+        // Keep exercising the wheel path until it reaches the boundary under test.
+        await expect
+            .poll(
+                async () => {
+                    await canvas.evaluate(async (node) => {
+                        for (let index = 0; index < 30; index++) {
+                            await new Promise<void>((resolve) =>
+                                requestAnimationFrame(() => resolve())
+                            );
+                            node.dispatchEvent(
+                                new WheelEvent('wheel', { bubbles: true, deltaY: -60 })
+                            );
+                        }
+                    });
+                    return canvas.getAttribute('aria-description');
+                },
+                { timeout: 15000, intervals: [0] }
+            )
+            .toMatch(/import.*useLayoutEffect/);
         await page.waitForTimeout(400);
         // A language-server decoration can scroll the grid without moving the viewport.
         const restored = await page.evaluate(() => window.nido.restoreWorkspaces());
