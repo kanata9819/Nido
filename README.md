@@ -129,7 +129,7 @@ pnpm verify:windows
 
 ビルド済みの場合は`pnpm test:windows`だけでも実行できます。必須ケースの欠落・スキップ・未処理のレンダラー例外も失敗扱いです。Windows以外では成功扱いにせず、実行条件のエラーを返します。
 
-PRとmainへのpushでGitHub Actionsの **Windows baseline** が実行され、リリースも同じ操作テストの成功後に公開されます。失敗時はActionsの`windows-baseline-reports`からレポートとログを取得できます。このセットは主要機能の回帰確認用で、実際のIME・キーボード配列やインストーラーによる更新は別途確認してください。
+PRとmainへのpushでGitHub Actionsの **Windows baseline** が実行され、インストーラーのファイル転送と更新処理まで検証します。成功したCIは、検証済みのインストーラー・`.blockmap`・`latest.yml`を`windows-release-assets`として7日間保存します。失敗時はActionsの`windows-baseline-reports`からレポートとログを取得できます。このセットは主要機能の回帰確認用で、実際のIME・キーボード配列やインストーラーによる更新は別途確認してください。
 
 ## アプリの更新
 
@@ -138,7 +138,7 @@ PRとmainへのpushでGitHub Actionsの **Windows baseline** が実行され、�
 開発版や `win-unpacked` の直接起動では更新を無効にしています。失敗時は既存の通知で理由を表示し、再試行できます。
 
 更新元は公開リポジトリ `kanata9819/Nido` のGitHub Releasesです。
-`package.json` のバージョンを上げて、その変更を含む `v0.2.6` のようなタグをpushすると、GitHub ActionsがWindows版をビルド・テストして公開します。
+`package.json` のバージョンを上げてmainへpushし、そのコミットの **Windows baseline** が成功してから、`v0.2.6` のようなタグをpushします。リリースは同じコミットの成功したCIから検証済みファイルを取得し、再ビルド・再テストせずに公開します。別コミットの成功結果は使いません。成果物の保存期間を過ぎた場合は、そのコミットの **Windows baseline** を再実行してください。
 タグとバージョンが一致しなければ公開しません。インストーラー、`.blockmap`、`latest.yml` を同じReleaseへ配布し、Neovimや言語サーバーなどの同梱リソースもまとめて更新します。
 ローカルの `pnpm build:win` は公開せず、インストーラーと更新情報を生成します。
 

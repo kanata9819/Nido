@@ -64,6 +64,7 @@ test('a packaged update downloads and verifies an installer, permits cancellatio
         `version: ${nextVersion}`
     );
     const installerSize = (await stat(installer)).size;
+    assert.ok((await stat(`${installer}.blockmap`)).size > 0);
     const server = createServer((request, response) => {
         if (request.url?.split('?')[0] === '/latest.yml') {
             response.writeHead(200, { 'Content-Type': 'text/yaml' });
