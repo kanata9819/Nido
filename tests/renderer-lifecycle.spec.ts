@@ -1122,7 +1122,7 @@ for (const scale of [1, 1.25, 1.5]) {
     });
 }
 
-test('Features opens without a workspace, searches built-ins and restores navigation focus', async ({
+test('Extensions opens without a workspace, searches language packs and restores navigation focus', async ({
     page
 }) => {
     await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
@@ -1134,33 +1134,33 @@ test('Features opens without a workspace, searches built-ins and restores naviga
             errors: []
         })
     );
-    const trigger = page.getByRole('button', { name: 'Features', exact: true });
+    const trigger = page.getByRole('button', { name: 'Extensions', exact: true });
     await trigger.click();
-    const features = page.getByRole('region', { name: 'Features', exact: true });
-    await expect(
-        features.getByRole('textbox', { name: 'Search languages and runtimes' })
-    ).toBeFocused();
-    await features.getByRole('tab', { name: 'Built-in features', exact: true }).click();
-    const search = features.getByRole('textbox', { name: 'Search features' });
+    const extensions = page.getByRole('region', { name: 'Extensions', exact: true });
+    const search = extensions.getByRole('textbox', { name: 'Search language packs' });
+    await expect(search).toBeFocused();
     await expect(trigger).toHaveAttribute('aria-pressed', 'true');
-    await expect(features.locator('[data-feature]')).toHaveCount(16);
-    await search.fill('sticky');
-    await expect(features.locator('[data-feature]')).toHaveCount(1);
-    await expect(
-        features.getByRole('heading', { name: 'Sticky Scroll', exact: true })
-    ).toBeVisible();
+    await expect(extensions.locator('[data-pack]')).toHaveCount(3);
+    await expect(extensions.getByRole('tab')).toHaveText(['Languages', 'Other extensions']);
+    await expect(extensions.locator('[data-feature], [data-language]')).toHaveCount(0);
+    await search.fill('Deno');
+    await expect(extensions.locator('[data-pack]')).toHaveCount(1);
+    await expect(extensions.locator('[data-pack="deno"]')).toBeVisible();
+    await search.fill('.rs');
+    await expect(extensions.locator('[data-pack]')).toHaveCount(1);
+    await expect(extensions.locator('[data-pack="rust"]')).toBeVisible();
     await search.fill('does-not-exist');
-    await expect(features.getByText('No features match your search.')).toBeVisible();
+    await expect(extensions.getByText('No language packs match your search.')).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(features).toHaveCount(0);
+    await expect(extensions).toHaveCount(0);
     await expect(trigger).toBeFocused();
     await page.keyboard.press('Control+Shift+x');
-    await expect(features).toBeVisible();
+    await expect(extensions).toBeVisible();
     await page.keyboard.press('Control+Shift+x');
-    await expect(features).toHaveCount(0);
+    await expect(extensions).toHaveCount(0);
 });
 
-test('Features shortcut preserves the editor and supports Japanese and command palette access', async ({
+test('Extensions shortcut preserves the editor and supports Japanese and command palette access', async ({
     page
 }) => {
     await page.addInitScript(() => localStorage.setItem('nido.language', 'ja'));
@@ -1170,20 +1170,15 @@ test('Features shortcut preserves the editor and supports Japanese and command p
         page.getByRole('tab', { name: 'ワークスペース Alpha', exact: true })
     ).toBeVisible();
     await page.keyboard.press('Control+Shift+x');
-    const features = page.getByRole('region', { name: '機能一覧', exact: true });
-    const languageSearch = features.getByRole('textbox', { name: '対応言語・ランタイムを検索' });
-    await expect(languageSearch).toBeFocused();
-    await languageSearch.fill('診断');
-    await expect(features.locator('[data-language]')).toHaveCount(4);
-    await expect(features.getByText('Rustの導入が必要', { exact: true })).toBeVisible();
-    await expect(features.locator('[data-language="deno"]')).toContainText('Denoの導入が必要');
-    await languageSearch.fill('ランタイム');
-    await expect(features.locator('[data-language]')).toHaveCount(2);
-    await expect(features.locator('[data-language="node"]')).toContainText('Node.jsの導入が必要');
-    await features.getByRole('tab', { name: 'ビルトイン機能', exact: true }).click();
-    const search = features.getByRole('textbox', { name: '機能を検索' });
-    await search.fill('スクロール');
-    await expect(features.locator('[data-feature="sticky-scroll"]')).toBeVisible();
+    const extensions = page.getByRole('region', { name: '拡張機能', exact: true });
+    const search = extensions.getByRole('textbox', { name: '言語パックを検索' });
+    await expect(search).toBeFocused();
+    await search.fill('診断');
+    await expect(extensions.locator('[data-pack]')).toHaveCount(3);
+    await expect(extensions.locator('[data-pack="deno"]')).toContainText('Denoの導入が必要');
+    await extensions.getByRole('tab', { name: 'その他の拡張', exact: true }).click();
+    await expect(extensions.getByText('その他の拡張はまだ追加されていません。')).toBeVisible();
+    await expect(extensions.locator('[data-feature]')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(editor).toBeFocused();
     await expect(
@@ -1191,10 +1186,10 @@ test('Features shortcut preserves the editor and supports Japanese and command p
     ).toBeVisible();
     await page.keyboard.press('Control+Shift+p');
     const palette = page.getByRole('dialog', { name: 'すべてのコマンド' });
-    await palette.getByRole('textbox').fill('機能一覧');
-    await palette.getByRole('button', { name: /機能一覧/ }).click();
-    await expect(features).toBeVisible();
-    await features.getByRole('button', { name: '機能一覧を閉じる' }).click();
+    await palette.getByRole('textbox').fill('拡張');
+    await palette.getByRole('button', { name: /拡張機能/ }).click();
+    await expect(extensions).toBeVisible();
+    await extensions.getByRole('button', { name: '拡張機能を閉じる' }).click();
     await expect(editor).toBeFocused();
     await expect
         .poll(() =>
@@ -1208,64 +1203,37 @@ test('Features shortcut preserves the editor and supports Japanese and command p
         .toBe(0);
 });
 
-test('Languages and runtimes distinguish code tools from highlighting, show setup and support keyboard tabs', async ({
+test('Extensions separates language packs from other extensions and supports keyboard tabs', async ({
     page
 }) => {
     await page.goto(`${origin}?view=app`);
     await page.keyboard.press('Control+Shift+x');
-    const features = page.getByRole('region', { name: 'Features', exact: true });
-    const languagesTab = features.getByRole('tab', { name: 'Languages & runtimes', exact: true });
+    const extensions = page.getByRole('region', { name: 'Extensions', exact: true });
+    const languagesTab = extensions.getByRole('tab', { name: 'Languages', exact: true });
     await expect(languagesTab).toHaveAttribute('aria-selected', 'true');
-    await expect(features.locator('[data-language]')).toHaveCount(13);
-    await expect(
-        features
-            .getByRole('region', { name: 'Code intelligence', exact: true })
-            .locator('[data-language]')
-    ).toHaveCount(3);
-    await expect(
-        features.getByRole('region', { name: 'Runtimes', exact: true }).locator('[data-language]')
-    ).toHaveCount(2);
-    await expect(
-        features
-            .getByRole('region', { name: 'Syntax highlighting', exact: true })
-            .locator('[data-language]')
-    ).toHaveCount(7);
-    await expect(features.locator('[data-language="rust"]')).toContainText(
-        'rustup component add rust-analyzer rust-src rustfmt'
-    );
-    await expect(features.locator('[data-language="typescript"]')).toContainText(
-        'Language server included.'
-    );
-    await expect(features.locator('[data-language="deno"]')).toContainText('deno.json');
-    await expect(features.locator('[data-language="deno"]')).toContainText('Requires Deno');
-    await expect(features.locator('[data-language="deno"]')).not.toContainText('Requires Rust');
-    await expect(features.locator('[data-language="node"]')).toContainText('Requires Node.js');
-    await expect(features.locator('[data-language="typescript"]')).toContainText('Built-in');
-    const search = features.getByRole('textbox', { name: 'Search languages and runtimes' });
-    await search.fill('Deno');
-    await expect(features.locator('[data-language]')).toHaveCount(1);
-    await expect(features.locator('[data-language="deno"]')).toBeVisible();
-    await search.fill('React');
-    await expect(features.locator('[data-language]')).toHaveCount(2);
-    await search.fill('.py');
-    await expect(features.locator('[data-language]')).toHaveCount(1);
-    await expect(features.locator('[data-language="python"]')).toContainText(
-        'Built-in syntax highlighting only.'
-    );
-    await search.fill('does-not-exist');
-    await expect(features.getByText('No languages or runtimes match your search.')).toBeVisible();
+    await expect(extensions.locator('[data-pack]')).toHaveCount(3);
+    const search = extensions.getByRole('textbox', { name: 'Search language packs' });
+    await search.fill('Rust');
+    await expect(extensions.locator('[data-pack]')).toHaveCount(1);
     await languagesTab.focus();
     await page.keyboard.press('ArrowRight');
-    const builtinsTab = features.getByRole('tab', { name: 'Built-in features', exact: true });
-    await expect(builtinsTab).toBeFocused();
-    await expect(features.locator('[data-feature]')).toHaveCount(16);
-    await expect(features.getByRole('textbox', { name: 'Search features' })).toHaveValue('');
+    const otherTab = extensions.getByRole('tab', { name: 'Other extensions', exact: true });
+    await expect(otherTab).toBeFocused();
+    await expect(otherTab).toHaveAttribute('aria-selected', 'true');
+    await expect(extensions.getByRole('tabpanel', { name: 'Other extensions' })).toBeVisible();
+    await expect(extensions.getByText('No other extensions installed.')).toBeVisible();
+    await expect(extensions.getByRole('textbox')).toHaveCount(0);
+    await expect(extensions.locator('[data-pack], [data-feature]')).toHaveCount(0);
+    await page.keyboard.press('ArrowRight');
+    await expect(languagesTab).toBeFocused();
+    await expect(search).toHaveValue('');
+    await expect(extensions.locator('[data-pack]')).toHaveCount(3);
+    await page.keyboard.press('ArrowLeft');
+    await expect(otherTab).toBeFocused();
     await page.keyboard.press('Home');
     await expect(languagesTab).toBeFocused();
-    await expect(
-        features.getByRole('tabpanel', { name: 'Languages & runtimes', exact: true })
-    ).toBeVisible();
-    await expect(features.locator('[data-language]')).toHaveCount(13);
+    await page.keyboard.press('End');
+    await expect(otherTab).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
 });

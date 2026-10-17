@@ -50,9 +50,9 @@ export function buildItems(
         },
         {
             key: '',
-            title: 'Features',
-            detail: 'Explore languages, runtimes and built-in features · Ctrl+Shift+X',
-            run: () => showPanel('features')
+            title: 'Extensions',
+            detail: 'Manage language packs and other extensions · Ctrl+Shift+X',
+            run: () => showPanel('extensions')
         },
         {
             key: 'w',

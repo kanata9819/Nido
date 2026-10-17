@@ -47,7 +47,11 @@ test('language packs install from the manager, run, toggle without losing edits 
             page.getByRole('tab', { name: 'Workspace Project', exact: true })
         ).toBeVisible();
         await page.keyboard.press('Control+Shift+x');
-        await page.getByRole('tab', { name: 'Language packs', exact: true }).click();
+        await expect(page.getByRole('region', { name: 'Extensions', exact: true })).toBeVisible();
+        await expect(
+            page.getByRole('tablist', { name: 'Extension categories' }).getByRole('tab')
+        ).toHaveText(['Languages', 'Other extensions']);
+        await page.getByRole('tab', { name: 'Languages', exact: true }).click();
         await expect(page.locator('[data-pack]')).toHaveCount(3);
         await running.evaluate(({ dialog }, path) => {
             dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
@@ -68,13 +72,22 @@ test('language packs install from the manager, run, toggle without losing edits 
         await page.keyboard.press('Enter');
         await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /print/);
         await page.keyboard.press('Control+Shift+x');
-        await page.getByRole('tab', { name: 'Language packs', exact: true }).click();
+        await page.getByRole('tab', { name: 'Languages', exact: true }).click();
         await expect(page.locator('[data-pack="python-ui"] [data-status]')).toHaveAttribute(
             'data-status',
             'running'
         );
         await page.setViewportSize({ width: 960, height: 720 });
         await page.screenshot({ path: 'test-results/language-packs-en.png' });
+        await page.getByRole('tab', { name: 'Other extensions', exact: true }).click();
+        await expect(page.getByText('No other extensions installed.')).toBeVisible();
+        await expect(page.locator('[data-pack], [data-feature]')).toHaveCount(0);
+        await page.screenshot({ path: 'test-results/other-extensions-en.png' });
+        await page.getByRole('tab', { name: 'Languages', exact: true }).click();
+        await expect(page.locator('[data-pack="python-ui"] [data-status]')).toHaveAttribute(
+            'data-status',
+            'running'
+        );
         await page.getByRole('checkbox', { name: 'Enable Python UI', exact: true }).uncheck();
         await expect(page.locator('[data-pack="python-ui"] [data-status]')).toHaveAttribute(
             'data-status',
@@ -97,7 +110,7 @@ test('language packs install from the manager, run, toggle without losing edits 
             page.getByRole('tab', { name: 'Workspace Project', exact: true })
         ).toBeVisible();
         await page.keyboard.press('Control+Shift+x');
-        await page.getByRole('tab', { name: 'Language packs', exact: true }).click();
+        await page.getByRole('tab', { name: 'Languages', exact: true }).click();
         await expect(page.locator('[data-pack]')).toHaveCount(4);
         await expect(
             page.getByRole('checkbox', { name: 'Enable Python UI', exact: true })
@@ -112,7 +125,7 @@ test('language packs install from the manager, run, toggle without losing edits 
         await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('ja');
         await page.keyboard.press('Escape');
         await page.keyboard.press('Control+Shift+x');
-        await page.getByRole('tab', { name: '言語パック', exact: true }).click();
+        await page.getByRole('tab', { name: '言語', exact: true }).click();
         await expect(
             page.getByRole('button', { name: '言語パックを追加', exact: true })
         ).toBeVisible();
@@ -122,6 +135,9 @@ test('language packs install from the manager, run, toggle without losing edits 
                 .locator('[role="tabpanel"]')
                 .evaluate((element) => element.scrollWidth <= element.clientWidth)
         ).toBe(true);
+        await page.getByRole('tab', { name: 'その他の拡張', exact: true }).click();
+        await expect(page.getByText('その他の拡張はまだ追加されていません。')).toBeVisible();
+        await page.screenshot({ path: 'test-results/other-extensions-ja.png' });
     } finally {
         await running?.close();
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

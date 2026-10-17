@@ -11,7 +11,7 @@ export type Panel =
     | 'git'
     | 'problems'
     | 'markdown'
-    | 'features'
+    | 'extensions'
     | 'history'
     | null;
 

@@ -9,6 +9,9 @@ import type {
     Workspace
 } from '../../src/shared/types';
 import App from '../../src/renderer/src/App';
+import typescriptPack from '../../resources/nido/language-packs/typescript/pack.json';
+import rustPack from '../../resources/nido/language-packs/rust/pack.json';
+import denoPack from '../../resources/nido/language-packs/deno/pack.json';
 import ExplorerCommands from '../../src/renderer/src/components/ExplorerCommands';
 import FolderPicker from '../../src/renderer/src/components/FolderPicker';
 import GitBrowser from '../../src/renderer/src/components/GitBrowser';
@@ -68,6 +71,15 @@ const defaults: Record<string, unknown> = {
     files: [],
     findFiles: [],
     searchText: { matches: [], truncated: false },
+    languagePacks: {
+        packs: [typescriptPack, rustPack, denoPack].map((pack) => ({
+            ...pack,
+            bundled: true,
+            enabled: true,
+            status: 'ready'
+        })),
+        errors: []
+    },
     markdownPreview: { token: '1:1', path: '/alpha/notes.md', text: '# Preview' },
     inputMode: 'n',
     gitStatus: {

@@ -7,7 +7,7 @@ import WorkspaceEditor from './components/WorkspaceEditor';
 import TerminalPanel from './components/TerminalPanel';
 import Notification from './components/Notification';
 import NavigationRail from './components/NavigationRail';
-import FeaturesPage from './components/FeaturesPage';
+import ExtensionsPage from './components/ExtensionsPage';
 import { useSessionSettings } from './hooks/useSessionSettings';
 import Sidebar from './Sidebar';
 import FileHeader from './components/FileHeader';
@@ -157,9 +157,9 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         setPanel(null);
         setLeader(false);
         setFocusTick((n) => n + 1);
-        if (panel === 'features' && !active) {
+        if (panel === 'extensions' && !active) {
             requestAnimationFrame(() =>
-                document.querySelector<HTMLElement>('[data-features-trigger]')?.focus()
+                document.querySelector<HTMLElement>('[data-extensions-trigger]')?.focus()
             );
         }
     }, [panel, active]);
@@ -416,8 +416,8 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                     <div className={styles.editorSplit}>
                         <div
                             className={styles.editorContent}
-                            inert={panel === 'features'}
-                            aria-hidden={panel === 'features' || undefined}
+                            inert={panel === 'extensions'}
+                            aria-hidden={panel === 'extensions' || undefined}
                         >
                             {workspace ? (
                                 <FileHeader
@@ -500,8 +500,8 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                                 />
                             )}
                     </div>
-                    {panel === 'features' && (
-                        <FeaturesPage onClose={focusEditor} workspaceId={active || undefined} />
+                    {panel === 'extensions' && (
+                        <ExtensionsPage onClose={focusEditor} workspaceId={active || undefined} />
                     )}
                 </main>
             </div>

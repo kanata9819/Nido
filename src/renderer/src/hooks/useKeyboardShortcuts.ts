@@ -256,10 +256,10 @@ export function useKeyboardShortcuts({
         ) {
             consume();
             if (!event.repeat) {
-                if (panel === 'features') {
+                if (panel === 'extensions') {
                     focusEditor();
                 } else {
-                    showPanel('features');
+                    showPanel('extensions');
                 }
             }
             return;

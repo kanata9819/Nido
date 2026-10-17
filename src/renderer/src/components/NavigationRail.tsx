@@ -29,7 +29,7 @@ export default function NavigationRail({
     return (
         <nav className={styles.rail} aria-label={t('Navigation')}>
             <button
-                className={sidebar && panel !== 'features' ? styles.railActive : ''}
+                className={sidebar && panel !== 'extensions' ? styles.railActive : ''}
                 aria-label={t('Explorer')}
                 title={t('Explorer (Space e)')}
                 onClick={showExplorer}
@@ -70,12 +70,12 @@ export default function NavigationRail({
                 <History size={21} />
             </button>
             <button
-                className={panel === 'features' ? styles.railActive : ''}
-                aria-label={t('Features')}
-                aria-pressed={panel === 'features'}
-                title={t('Features (Ctrl+Shift+X)')}
-                data-features-trigger
-                onClick={() => showPanel('features')}
+                className={panel === 'extensions' ? styles.railActive : ''}
+                aria-label={t('Extensions')}
+                aria-pressed={panel === 'extensions'}
+                title={t('Extensions (Ctrl+Shift+X)')}
+                data-extensions-trigger
+                onClick={() => showPanel('extensions')}
             >
                 <Blocks size={22} />
             </button>

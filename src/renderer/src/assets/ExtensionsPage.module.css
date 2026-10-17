@@ -179,25 +179,8 @@
 .search input:focus-visible {
     outline: none;
 }
-.count {
-    color: #85929b;
-    font-size: 11px;
-    white-space: nowrap;
-}
 .category {
     margin-bottom: 28px;
-}
-.category h3 {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 12px;
-    font-weight: 500;
-    margin: 0 0 12px;
-}
-.category h3 span {
-    color: #7e8b97;
-    font-size: 10px;
 }
 .categoryDescription {
     margin: -3px 0 15px;
@@ -243,47 +226,11 @@
     color: #a6b2bb;
     background: var(--surface-active, #202326);
 }
-.languageTitle {
-    display: flex;
-    align-items: center;
-    gap: 11px;
-    min-width: 0;
-}
-.languageMark {
-    display: grid;
-    place-items: center;
-    flex-shrink: 0;
-    width: 36px;
-    height: 36px;
-    border-radius: 7px;
-    background: var(--ui-accent-soft, #a3cc9410);
-    color: var(--ui-accent, #a3cc94);
-    font-family: monospace;
-    font-size: 14px;
-    font-weight: 600;
-}
-.languageTitle > div {
-    min-width: 0;
-}
 .extensions {
     display: block;
     font-size: 10px;
     color: #85929b;
     overflow-wrap: anywhere;
-}
-.setup {
-    margin-top: 14px;
-    padding-top: 12px;
-    border-top: 1px solid var(--ui-border, #282c30);
-}
-.setup h5 {
-    margin: 0;
-    color: #b6c1c9;
-    font-size: 10px;
-    font-weight: 500;
-}
-.setup p {
-    margin: 6px 0 0;
 }
 .installCommand {
     display: block;
@@ -298,10 +245,6 @@
 }
 .card p {
     margin: 9px 0 12px;
-}
-.card kbd {
-    font-size: 10px;
-    color: #9ca8b2;
 }
 .empty {
     padding: 30px 0;

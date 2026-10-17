@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LanguagePackSnapshot } from '../../../shared/languagePacks';
 import { useI18n } from '../i18n';
-import styles from '../assets/FeaturesPage.module.css';
+import styles from '../assets/ExtensionsPage.module.css';
 
 const statusLabels = {
     disabled: 'Disabled',
@@ -14,12 +14,10 @@ const statusLabels = {
 
 export default function LanguagePacksPanel({
     workspaceId,
-    query,
-    onChange
+    query
 }: {
     workspaceId?: string;
     query: string;
-    onChange: (snapshot: LanguagePackSnapshot) => void;
 }): React.JSX.Element {
     const t = useI18n();
     const [snapshot, setSnapshot] = useState<LanguagePackSnapshot>({ packs: [], errors: [] });
@@ -36,7 +34,6 @@ export default function LanguagePacksPanel({
             const next = await window.nido.languagePacks(workspaceId);
             if (alive.current && request === sequence.current.value && next) {
                 setSnapshot(next);
-                onChange(next);
                 setError('');
             }
         } catch (error) {
@@ -48,7 +45,7 @@ export default function LanguagePacksPanel({
                 setLoading(false);
             }
         }
-    }, [workspaceId, onChange]);
+    }, [workspaceId]);
     useEffect(() => {
         alive.current = true;
         const initial = setTimeout(() => void refresh(), 0);
@@ -89,9 +86,18 @@ export default function LanguagePacksPanel({
     };
     const needle = query.trim().toLocaleLowerCase();
     const packs = snapshot.packs.filter((pack) =>
-        [pack.title, pack.description, pack.id, ...pack.filetypes].some((value) =>
-            value.toLocaleLowerCase().includes(needle)
-        )
+        [
+            pack.title,
+            pack.description,
+            t(pack.description),
+            pack.id,
+            ...pack.filetypes,
+            ...(pack.languages ?? []).flatMap((language) => [
+                language.title,
+                language.extensions,
+                language.keywords ?? ''
+            ])
+        ].some((value) => value.toLocaleLowerCase().includes(needle))
     );
     return (
         <section className={styles.category} aria-label={t('Language packs')}>
@@ -182,7 +188,6 @@ export default function LanguagePacksPanel({
                                             )
                                         };
                                         setSnapshot(next);
-                                        onChange(next);
                                         void perform(() =>
                                             window.nido.setLanguagePackEnabled(pack.id, enabled)
                                         );

@@ -93,11 +93,14 @@ export const japanese: Record<string, string> = {
         '現在のNeovimコマンドを終えてから復元してください。',
     'Version restored into the editor. Save when ready.':
         '編集内容を復元しました。確認してから保存できます。',
-    Features: '機能一覧',
-    'Features (Ctrl+Shift+X)': '機能一覧（Ctrl+Shift+X）',
-    'Explore languages, runtimes and built-in features · Ctrl+Shift+X':
-        '対応言語・ランタイム・ビルトイン機能を確認 · Ctrl+Shift+X',
-    'Close features': '機能一覧を閉じる',
+    'Extensions (Ctrl+Shift+X)': '拡張機能（Ctrl+Shift+X）',
+    'Manage language packs and other extensions · Ctrl+Shift+X':
+        '言語パックやその他の拡張を管理 · Ctrl+Shift+X',
+    'Close extensions': '拡張機能を閉じる',
+    'Extension categories': '拡張機能の種類',
+    Languages: '言語',
+    'Other extensions': 'その他の拡張',
+    'No other extensions installed.': 'その他の拡張はまだ追加されていません。',
     'Language packs': '言語パック',
     'Manage language support for your workspaces.':
         'ワークスペースで使う言語サポートを管理します。',
@@ -121,14 +124,6 @@ export const japanese: Record<string, string> = {
     Installed: '追加済み',
     'No language packs match your search.': '検索に一致する言語パックはありません。',
     'Built-in': 'ビルトイン',
-    'Built-in features': 'ビルトイン機能',
-    'Feature catalog': '機能カタログ',
-    'Languages & runtimes': '対応言語・ランタイム',
-    'See supported languages, runtimes, available tools and setup requirements.':
-        '対応言語・ランタイムごとに、使える機能と導入に必要なツールを確認できます。',
-    'Search languages and runtimes': '対応言語・ランタイムを検索',
-    'Search languages, runtimes or file extensions': '言語名・ランタイム・拡張子で検索',
-    'No languages or runtimes match your search.': '検索に一致する言語・ランタイムはありません。',
     'Code intelligence': '補完・診断・コード操作',
     Runtimes: 'ランタイム',
     'TypeScript and JavaScript project support. Install the runtime separately to run your code in the terminal.':
@@ -156,12 +151,6 @@ export const japanese: Record<string, string> = {
     'Requires Node.js': 'Node.jsの導入が必要',
     'Requires Deno': 'Denoの導入が必要',
     Setup: '導入方法',
-    'Discover what Nido can do.': 'Nidoで、できること。',
-    'Explore the features included with Nido.': 'Nidoに組み込まれている機能を一覧で確認できます。',
-    'Search features': '機能を検索',
-    'Search built-in features': 'ビルトイン機能を検索',
-    'Showing {count} of {total}': '{total}件中{count}件を表示',
-    'No features match your search.': '検索に一致する機能はありません。',
     Editing: '編集',
     'Projects and files': 'プロジェクトとファイル',
     'Tools and appearance': 'ツールと表示',

@@ -2,7 +2,7 @@
 
 Nido loads Rust, TypeScript/JavaScript and Deno through the same language-pack registry used for additional languages. The built-in packs are enabled by default. Existing syntax highlighting remains available even when a language pack is disabled.
 
-Open **Features → Language packs** with `Ctrl+Shift+X`. You can install a pack, enable or disable it, reload packs, or open the pack folder. Changes apply to open workspaces without reopening files or discarding unsaved edits, and enabled/disabled choices survive a restart. Language-server status is shown for the current workspace. A server starts when a matching file in a matching project is opened.
+Open **Extensions → Languages** with `Ctrl+Shift+X`. The Extensions page separates language packs from other extensions; the latter list is currently empty. You can install a language pack, enable or disable it, reload packs, or open the pack folder. Changes apply to open workspaces without reopening files or discarding unsaved edits, and enabled/disabled choices survive a restart. Language-server status is shown for the current workspace. A server starts when a matching file in a matching project is opened.
 
 ## Add a language
 

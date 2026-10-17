@@ -73,7 +73,7 @@ export function Panel({
         // A fading panel is a visual snapshot, not the next opening's live state.
         setOpening({ panel, generation: opening.generation + Number(!!panel) });
     }
-    if (!panel || panel === 'features' || panel === 'markdown') {
+    if (!panel || panel === 'extensions' || panel === 'markdown') {
         return <OverlayPresence>{null}</OverlayPresence>;
     }
 
