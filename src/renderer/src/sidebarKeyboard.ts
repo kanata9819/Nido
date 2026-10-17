@@ -3,7 +3,7 @@ import { toggle } from './sidebarToggle';
 
 interface ExplorerKeyboardOptions {
     visible: (FileEntry & { depth: number })[];
-    selected: string;
+    selectedIndex: number;
     expanded: Set<string>;
     setSelected: (path: string) => void;
     setExpanded: (next: Set<string>) => void;
@@ -13,7 +13,7 @@ interface ExplorerKeyboardOptions {
 
 export function createExplorerKeyHandler({
     visible,
-    selected,
+    selectedIndex,
     expanded,
     setSelected,
     setExpanded,
@@ -38,7 +38,6 @@ export function createExplorerKeyHandler({
         if (event.ctrlKey && !isHalfPage && !isFullPage) {
             return;
         }
-        const selectedIndex = visible.findIndex((entry) => entry.path === selected);
         const selectedEntry = visible[Math.max(0, selectedIndex)];
         if (
             isHalfPage ||

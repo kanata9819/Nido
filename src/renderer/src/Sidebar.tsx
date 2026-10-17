@@ -57,6 +57,7 @@ function Sidebar({
         visible,
         expanded,
         selected,
+        selectedIndex,
         setSelected,
         setExpanded,
         load,
@@ -76,7 +77,6 @@ function Sidebar({
     const restored = useRef(false);
     const previousSelection = useRef(selected);
     const [height, setHeight] = useState(200);
-    const selectedIndex = visible.findIndex((entry) => entry.path === selected);
     const first = Math.max(
         0,
         Math.min(visible.length - 1, Math.floor(Math.max(0, top - 5) / rowHeight) - overscan)
@@ -299,7 +299,7 @@ function Sidebar({
                     }
                     createExplorerKeyHandler({
                         visible,
-                        selected,
+                        selectedIndex,
                         expanded,
                         setSelected,
                         setExpanded,

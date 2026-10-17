@@ -114,6 +114,7 @@ export default function ExtensionsPage({
                     </label>
                 </div>
                 <LanguagePacksPanel
+                    key={workspaceId ?? ''}
                     workspaceId={workspaceId}
                     query={query}
                     category={view === 'languages' ? 'language' : 'other'}

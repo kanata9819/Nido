@@ -31,6 +31,9 @@ export default function LanguagePacksPanel({
     const changing = useRef(false);
     const sequence = useRef({ value: 0 });
     const refresh = useCallback(async () => {
+        if (!alive.current) {
+            return;
+        }
         const request = ++sequence.current.value;
         try {
             const next = await window.nido.languagePacks(workspaceId);
@@ -50,25 +53,42 @@ export default function LanguagePacksPanel({
     }, [workspaceId]);
     useEffect(() => {
         alive.current = true;
-        const initial = setTimeout(() => void refresh(), 0);
-        const requests = sequence.current;
-        const timer = setInterval(() => {
-            if (!changing.current) {
-                void refresh();
+        let pending = false;
+        let cancelled = false;
+        const poll = async (): Promise<void> => {
+            if (cancelled || pending || changing.current || document.hidden) {
+                return;
             }
-        }, 2000);
+            pending = true;
+            try {
+                await refresh();
+            } finally {
+                pending = false;
+            }
+        };
+        const resume = (): void => {
+            void poll();
+        };
+        const initial = setTimeout(resume, 0);
+        const requests = sequence.current;
+        const timer = setInterval(resume, 2000);
+        document.addEventListener('visibilitychange', resume);
         return () => {
+            cancelled = true;
             alive.current = false;
             requests.value++;
             clearTimeout(initial);
             clearInterval(timer);
+            document.removeEventListener('visibilitychange', resume);
         };
     }, [refresh]);
     const perform = async (action: () => Promise<void>): Promise<void> => {
-        if (changing.current) {
+        if (changing.current || !alive.current) {
             return;
         }
         changing.current = true;
+        // A status read started before this mutation must not undo the optimistic toggle.
+        sequence.current.value++;
         setActionError('');
         setBusy(true);
         try {

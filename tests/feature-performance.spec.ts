@@ -3,6 +3,13 @@ import { createServer, type ViteDevServer } from 'vite';
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import type {} from './renderer/harness';
+import rustPack from '../resources/nido/language-packs/rust/pack.json';
+
+declare global {
+    interface Window {
+        explorerMetrics: { searches: number; writes: number; bytes: number };
+    }
+}
 
 let server: ViteDevServer;
 let origin: string;
@@ -28,6 +35,183 @@ async function open(page: Page, view: string, deferred: string): Promise<void> {
     await page.clock.install();
     await page.clock.pauseAt(new Date(Date.now() + 1000));
 }
+
+test('Explorer navigation reuses row indices and batches state writes while flushing on close', async ({
+    page
+}) => {
+    // Install before mounting so the initial native save timer cannot leak into the measurement.
+    await page.clock.install({ time: new Date(0) });
+    await page.clock.pauseAt(new Date(1000));
+    await page.addInitScript(() => {
+        localStorage.setItem('nido.language', 'en');
+        localStorage.setItem('nido.animations', 'false');
+    });
+    await page.goto(`${origin}?view=app&defer=files`);
+    await expect(page.getByRole('tree', { name: 'Project files' })).toBeVisible();
+    await page.evaluate(() =>
+        window.rendererTest.settle(
+            'files',
+            0,
+            Array.from({ length: 10000 }, (_, i) => ({
+                name: `file-${String(i).padStart(5, '0')}.txt`,
+                path: `file-${String(i).padStart(5, '0')}.txt`,
+                directory: false
+            }))
+        )
+    );
+    const tree = page.getByRole('tree', { name: 'Project files' });
+    await expect(tree).toHaveAttribute('data-row-count', '10000');
+    await tree.press('End');
+    await page.clock.runFor(200);
+    await page.evaluate(() => {
+        window.explorerMetrics = { searches: 0, writes: 0, bytes: 0 };
+        for (const method of ['find', 'findIndex'] as const) {
+            const original = Array.prototype[method];
+            Object.defineProperty(Array.prototype, method, {
+                configurable: true,
+                writable: true,
+                value: function (this: { path?: string }[], ...args: unknown[]) {
+                    if (this.length === 10000 && this[0]?.path === 'file-00000.txt') {
+                        window.explorerMetrics.searches++;
+                    }
+                    return Reflect.apply(original, this, args);
+                }
+            });
+        }
+        const write = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key: string, value: string): void {
+            if (key === 'nido.explorer./alpha') {
+                window.explorerMetrics.writes++;
+                window.explorerMetrics.bytes += new TextEncoder().encode(value).length;
+            }
+            write.call(this, key, value);
+        };
+    });
+    for (let i = 0; i < 20; i++) await tree.press('ArrowUp');
+    await expect(tree.locator('[aria-selected="true"]')).toHaveText('file-09979.txt');
+    const beforeFlush = await page.evaluate(() => ({ ...window.explorerMetrics }));
+    await page.clock.runFor(200);
+    const afterFlush = await page.evaluate(() => ({ ...window.explorerMetrics }));
+    console.log(
+        JSON.stringify({
+            explorerNavigation: { entries: 10000, moves: 20, beforeFlush, afterFlush }
+        })
+    );
+    expect(beforeFlush.searches).toBe(0);
+    expect(beforeFlush.writes).toBe(0);
+    expect(afterFlush.writes).toBe(1);
+    expect(
+        await page.evaluate(
+            () => JSON.parse(localStorage.getItem('nido.explorer./alpha')!).selected
+        )
+    ).toBe('file-09979.txt');
+    await tree.press('ArrowUp');
+    await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+    expect(
+        await page.evaluate(
+            () => JSON.parse(localStorage.getItem('nido.explorer./alpha')!).selected
+        )
+    ).toBe('file-09978.txt');
+    expect(await page.evaluate(() => window.explorerMetrics.writes)).toBe(2);
+    await page.clock.runFor(200);
+    expect(await page.evaluate(() => window.explorerMetrics.writes)).toBe(2);
+});
+
+test('Extensions bounds slow status polling, pauses while hidden and recovers from errors', async ({
+    page
+}) => {
+    await open(page, 'app', 'languagePacks');
+    await page.keyboard.press('Control+Shift+x');
+    await page.clock.runFor(1);
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.pending.filter(({ method }) => method === 'languagePacks')
+                        .length
+            )
+        )
+        .toBe(1);
+    await page.clock.runFor(10000);
+    const pending = await page.evaluate(
+        () => window.rendererTest.pending.filter(({ method }) => method === 'languagePacks').length
+    );
+    console.log(JSON.stringify({ extensionStatus: { elapsedMs: 10000, pending } }));
+    expect(pending).toBe(1);
+    const snapshot = {
+        packs: [{ ...rustPack, bundled: true, enabled: true, status: 'running' }],
+        errors: []
+    };
+    await page.evaluate((value) => window.rendererTest.settle('languagePacks', 0, value), snapshot);
+    await expect(page.locator('[data-pack="rust"] [data-status]')).toHaveAttribute(
+        'data-status',
+        'running'
+    );
+    await page.evaluate(() => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.clock.runFor(10000);
+    expect(
+        await page.evaluate(
+            () =>
+                window.rendererTest.pending.filter(({ method }) => method === 'languagePacks')
+                    .length
+        )
+    ).toBe(0);
+    await page.evaluate(() => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+        document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.pending.filter(({ method }) => method === 'languagePacks')
+                        .length
+            )
+        )
+        .toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('languagePacks', 0, 'temporary status error', true)
+    );
+    await expect(page.getByRole('alert')).toContainText('temporary status error');
+    await page.clock.runFor(2000);
+    await page.evaluate((value) => window.rendererTest.settle('languagePacks', 0, value), snapshot);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('Extensions ignores status read before a toggle and stops refreshing after close', async ({
+    page
+}) => {
+    await open(page, 'app', 'languagePacks,setLanguagePackEnabled');
+    await page.keyboard.press('Control+Shift+x');
+    await page.clock.runFor(1);
+    const enabled = {
+        packs: [{ ...rustPack, bundled: true, enabled: true, status: 'running' }],
+        errors: []
+    };
+    await page.evaluate((value) => window.rendererTest.settle('languagePacks', 0, value), enabled);
+    const checkbox = page.getByRole('checkbox', { name: 'Enable Rust', exact: true });
+    await expect(checkbox).toBeChecked();
+    await page.clock.runFor(2000);
+    await checkbox.uncheck();
+    await expect(checkbox).toBeDisabled();
+    await page.evaluate((value) => window.rendererTest.settle('languagePacks', 0, value), enabled);
+    await expect(checkbox).not.toBeChecked();
+    await page.keyboard.press('Escape');
+    const requests = await page.evaluate(
+        () => window.rendererTest.calls.filter(({ method }) => method === 'languagePacks').length
+    );
+    await page.evaluate(() => window.rendererTest.settle('setLanguagePackEnabled', 0, undefined));
+    await page.clock.runFor(6000);
+    expect(
+        await page.evaluate(
+            () =>
+                window.rendererTest.calls.filter(({ method }) => method === 'languagePacks').length
+        )
+    ).toBe(requests);
+});
 
 test('Explorer waits for restored folders before restoring scroll and skips deleted folders', async ({
     page

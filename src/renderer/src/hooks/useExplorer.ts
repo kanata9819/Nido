@@ -17,6 +17,7 @@ interface ExplorerState {
     visible: ReturnType<typeof getVisibleEntries>;
     expanded: Set<string>;
     selected: string;
+    selectedIndex: number;
     setSelected: Dispatch<SetStateAction<string>>;
     setExpanded: Dispatch<SetStateAction<Set<string>>>;
     load: (path: string) => Promise<void>;
@@ -51,7 +52,7 @@ export function useExplorer({
     const [selected, setSelected] = useState(saved.selected);
     const [ready, setReady] = useState(false);
     const latest = useRef(saved);
-    const scrollTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const [revision, setRevision] = useState(0);
     const loadedRevision = useRef(-1);
     const requests = useRef(new Map<string, DirectoryRequest>());
@@ -59,26 +60,31 @@ export function useExplorer({
     const tree = useRef<HTMLDivElement>(null);
     const [operation, setOperation] = useState<{ request?: FileRequest }>();
     const [clipboard, setClipboard] = useState<{ path: string; name: string; cut: boolean }>();
+    const save = useCallback((): void => {
+        if (saveTimer.current !== undefined) {
+            clearTimeout(saveTimer.current);
+            saveTimer.current = undefined;
+            writeExplorerState(workspace.root, latest.current);
+        }
+    }, [workspace.root]);
+    const scheduleSave = useCallback((): void => {
+        // Share one bounded write across selection, expansion and scroll bursts.
+        if (saveTimer.current === undefined) {
+            saveTimer.current = setTimeout(save, 150);
+        }
+    }, [save]);
     useEffect(() => {
         latest.current = { ...latest.current, expanded: [...expanded], selected };
-        writeExplorerState(workspace.root, latest.current);
-    }, [workspace.root, expanded, selected]);
+        scheduleSave();
+    }, [expanded, selected, scheduleSave]);
     const rememberScroll = useCallback(
         (scrollTop: number): void => {
             latest.current = { ...latest.current, scrollTop };
-            clearTimeout(scrollTimer.current);
-            scrollTimer.current = setTimeout(
-                () => writeExplorerState(workspace.root, latest.current),
-                150
-            );
+            scheduleSave();
         },
-        [workspace.root]
+        [scheduleSave]
     );
     useEffect(() => {
-        const save = (): void => {
-            clearTimeout(scrollTimer.current);
-            writeExplorerState(workspace.root, latest.current);
-        };
         window.addEventListener('pagehide', save);
         window.addEventListener('beforeunload', save);
         return () => {
@@ -86,7 +92,7 @@ export function useExplorer({
             window.removeEventListener('beforeunload', save);
             save();
         };
-    }, [workspace.root]);
+    }, [save]);
     useEffect(
         () =>
             window.nido.onEvent((event) => {
@@ -198,7 +204,12 @@ export function useExplorer({
         () => getVisibleEntries(entriesByDirectory, expanded),
         [entriesByDirectory, expanded]
     );
-    const selectedEntry = visible.find((entry) => entry.path === selected);
+    const indexByPath = useMemo(
+        () => new Map(visible.map((entry, index) => [entry.path, index])),
+        [visible]
+    );
+    const selectedIndex = indexByPath.get(selected) ?? -1;
+    const selectedEntry = visible[selectedIndex];
     let targetDirectory = '';
     if (selectedEntry?.directory) {
         targetDirectory = selectedEntry.path;
@@ -309,6 +320,7 @@ export function useExplorer({
         visible,
         expanded,
         selected,
+        selectedIndex,
         setSelected,
         setExpanded,
         load,
