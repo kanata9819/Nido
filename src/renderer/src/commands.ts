@@ -10,6 +10,7 @@ interface CommandsCallbacks {
     focusEditor: () => void;
     closeWorkspace: (id: string) => void;
     create: () => Promise<void>;
+    createTerminal: () => Promise<void>;
     showExplorer: () => void;
     openDebugger: () => void;
     openFile: (path: string) => void;
@@ -65,6 +66,12 @@ export function buildItems(
             title: 'Open workspace',
             detail: 'Choose a project folder · Ctrl+Shift+N',
             run: () => void create()
+        },
+        {
+            key: '',
+            title: 'New terminal session',
+            detail: 'Start a terminal-only session',
+            run: () => void callbacks.createTerminal()
         },
         ...(active
             ? [

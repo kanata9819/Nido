@@ -308,15 +308,11 @@ export function registerWorkspaceHandlers({
         if (kind !== 'editor' && kind !== 'terminal') {
             throw new Error('Invalid session type.');
         }
-        if (!isAbsolute(text(path))) {
+        const root = kind === 'terminal' && path === '' ? app.getPath('home') : text(path);
+        if (!isAbsolute(root)) {
             throw new Error('Enter an absolute folder path.');
         }
-        const s = await Session.create(
-            text(path),
-            send,
-            neovimResources,
-            await languagePacks.load()
-        );
+        const s = await Session.create(root, send, neovimResources, await languagePacks.load());
         try {
             if (kind === 'terminal') {
                 await s.startTerminal(selectedShell);

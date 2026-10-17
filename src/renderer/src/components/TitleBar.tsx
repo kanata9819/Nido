@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n';
-import { Leaf, Minus, Plus, Square, Star, X } from 'lucide-react';
+import { Leaf, Minus, Plus, Square, SquareTerminal, Star, X } from 'lucide-react';
 import type { FavoriteWorkspace, Workspace } from '../../../shared/types';
 import styles from '../assets/Nido.module.css';
 import UpdateButton from './UpdateButton';
@@ -14,6 +14,7 @@ interface TitleBarProps {
     activate: (id: string) => void;
     closeWorkspace: (id: string) => void;
     create: () => Promise<void>;
+    createTerminal: () => Promise<void>;
     run: (promise: Promise<unknown>) => void;
 }
 
@@ -27,6 +28,7 @@ export default function TitleBar({
     activate,
     closeWorkspace,
     create,
+    createTerminal,
     run
 }: TitleBarProps): React.JSX.Element {
     const t = useI18n();
@@ -86,6 +88,15 @@ export default function TitleBar({
                     onClick={() => void create()}
                 >
                     <Plus size={19} />
+                </button>
+                <button
+                    className={styles.addWorkspace}
+                    title={t('New terminal session')}
+                    aria-label={t('New terminal session')}
+                    disabled={creating}
+                    onClick={() => void createTerminal()}
+                >
+                    <SquareTerminal size={19} />
                 </button>
             </div>
             <div className={styles.dragArea} />

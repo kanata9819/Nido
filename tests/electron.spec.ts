@@ -2208,6 +2208,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
         await expect(browser).toHaveAttribute('aria-busy', 'false');
         await expect(page.getByRole('listbox', { name: 'Commit history' })).toBeFocused();
         await expect(page.getByRole('option', { name: /First commit/ })).toBeVisible();
+        await expect(browser.getByText('Commits: 1', { exact: true })).toBeVisible();
         const details = page.getByRole('region', { name: 'Commit details' });
         await expect(details.getByRole('heading', { name: 'First commit' })).toBeVisible();
         await expect(details.locator('code')).toHaveText(git('rev-parse', 'HEAD').trim());

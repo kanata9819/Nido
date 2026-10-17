@@ -302,6 +302,8 @@ export const japanese: Record<string, string> = {
     'The Neovim you know. A little more room to think.': '使い慣れたNeovimに、考えるための余白を。',
     'Starting Neovim…': 'Neovimを起動中…',
     'Open workspace': 'ワークスペースを開く',
+    'New terminal session': '新しいターミナルセッション',
+    'Start a terminal-only session': 'ターミナル専用のセッションを開始',
     'Every workspace runs its own Neovim session.':
         'ワークスペースごとに独立したNeovimセッションを実行します。',
     'Workspace {name}': 'ワークスペース {name}',
@@ -577,6 +579,7 @@ export const japanese: Record<string, string> = {
     '{hash} · {subject} · Compared with first parent':
         '{hash} · {subject} · 最初の親コミットと比較',
     'History of the current branch': '現在のブランチの履歴',
+    'Commits: {count}': 'コミット数: {count}',
     'Local and remote-tracking branches': 'ローカルブランチとリモート追跡ブランチ',
     'Back (Esc)': '戻る（Esc）',
     Refresh: '更新',

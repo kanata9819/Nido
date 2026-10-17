@@ -91,7 +91,7 @@ const defaults: Record<string, unknown> = {
         ]
     },
     gitDiff: '',
-    gitHistory: [],
+    gitHistory: { commits: [], total: 0 },
     gitBranches: [],
     highlightSources: [[], []],
     previewReference: { first: 1, line: 1, lines: [[{ text: 'preview', color: '#fff' }]] },

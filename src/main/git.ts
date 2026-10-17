@@ -10,7 +10,10 @@ export async function gitRoot(cwd: string): Promise<string> {
     return (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
 }
 
-export async function gitHistory(cwd: string, skip: number): Promise<GitCommitEntry[]> {
+export async function gitHistory(
+    cwd: string,
+    skip: number
+): Promise<{ commits: GitCommitEntry[]; total: number }> {
     if (!Number.isSafeInteger(skip) || skip < 0) {
         throw new Error('Invalid history offset.');
     }
@@ -19,22 +22,25 @@ export async function gitHistory(cwd: string, skip: number): Promise<GitCommitEn
     if (refs.trim() !== 'true') {
         throw new Error('Open a Git working tree.');
     }
+    let head: string;
     try {
-        await git(cwd, ['rev-parse', '--verify', 'HEAD']);
+        head = (await git(cwd, ['rev-parse', '--verify', 'HEAD'])).trim();
     } catch {
-        return [];
+        return { commits: [], total: 0 };
     }
-    const fields = (
-        await git(cwd, [
+    const [output, count] = await Promise.all([
+        git(cwd, [
             'log',
             '-z',
             '--max-count=100',
             `--skip=${skip}`,
             '--format=%H%x00%an%x00%aI%x00%s',
-            'HEAD',
+            head,
             '--'
-        ])
-    ).split('\0');
+        ]),
+        git(cwd, ['rev-list', '--count', head, '--'])
+    ]);
+    const fields = output.split('\0');
     const commits: GitCommitEntry[] = [];
     for (let i = 0; i + 3 < fields.length; i += 4) {
         commits.push({
@@ -44,7 +50,7 @@ export async function gitHistory(cwd: string, skip: number): Promise<GitCommitEn
             subject: fields[i + 3]
         });
     }
-    return commits;
+    return { commits, total: Number(count.trim()) };
 }
 
 function commitHash(hash: string): string {

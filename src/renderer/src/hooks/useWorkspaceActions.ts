@@ -20,6 +20,7 @@ interface Options {
 interface WorkspaceActions {
     creating: boolean;
     create: () => Promise<void>;
+    createTerminal: () => Promise<void>;
     activate: (id: string) => void;
     openWorkspace: (path: string, kind: 'editor' | 'terminal') => Promise<void>;
     openFavorite: (favorite: FavoriteWorkspace) => Promise<void>;
@@ -117,6 +118,8 @@ export function useWorkspaceActions({
     return {
         creating,
         create,
+        createTerminal: () =>
+            openWorkspace(workspaces.find((w) => w.id === active)?.root || '', 'terminal'),
         activate,
         openWorkspace,
         openFavorite,

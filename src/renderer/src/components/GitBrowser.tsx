@@ -21,6 +21,7 @@ export default function GitBrowser({
     const [message, setMessage] = useState('');
     const [revision, setRevision] = useState(0);
     const [history, setHistory] = useState<GitCommitEntry[]>([]);
+    const [commitCount, setCommitCount] = useState<number>();
     const [branches, setBranches] = useState<GitBranchEntry[]>([]);
     const [commit, setCommit] = useState<GitCommitEntry>();
     const [files, setFiles] = useState<string[]>([]);
@@ -65,9 +66,13 @@ export default function GitBrowser({
     }
 
     async function loadHistory(append = false): Promise<void> {
-        const entries = await window.nido.gitHistory(workspaceId, append ? history.length : 0);
+        const { commits: entries, total } = await window.nido.gitHistory(
+            workspaceId,
+            append ? history.length : 0
+        );
         setHistory(append ? [...history, ...entries] : entries);
-        setHasMoreHistory(entries.length === 100);
+        setCommitCount(total);
+        setHasMoreHistory((append ? history.length : 0) + entries.length < total);
     }
 
     useEffect(() => {
@@ -85,10 +90,14 @@ export default function GitBrowser({
             try {
                 const status = await window.nido.gitStatus(workspaceId);
                 if (view === 'history') {
-                    const entries = await window.nido.gitHistory(workspaceId, 0);
+                    const { commits: entries, total } = await window.nido.gitHistory(
+                        workspaceId,
+                        0
+                    );
                     if (!cancelled) {
                         setHistory(entries);
-                        setHasMoreHistory(entries.length === 100);
+                        setCommitCount(total);
+                        setHasMoreHistory(entries.length < total);
                     }
                 } else {
                     const entries = await window.nido.gitBranches(workspaceId);
@@ -101,6 +110,7 @@ export default function GitBrowser({
                 }
             } catch (failure) {
                 if (!cancelled) {
+                    setCommitCount(undefined);
                     setError(
                         String(failure).replace(
                             /^Error: Error invoking remote method '[^']+': Error: /,
@@ -269,6 +279,9 @@ export default function GitBrowser({
                 <section aria-label={t('Git browser')} aria-busy={busy}>
                     <div className={styles.toolbar}>
                         <strong>{branchName}</strong>
+                        {view === 'history' && !busy && commitCount !== undefined && (
+                            <small>{t('Commits: {count}', { count: commitCount })}</small>
+                        )}
                         <span>
                             {commit
                                 ? t('{hash} · {subject} · Compared with first parent', {

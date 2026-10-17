@@ -194,6 +194,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     const {
         creating,
         create,
+        createTerminal,
         activate,
         openWorkspace,
         openFavorite,
@@ -314,6 +315,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
             focusEditor,
             closeWorkspace,
             create,
+            createTerminal,
             showExplorer,
             openDebugger,
             openFile,
@@ -379,10 +381,11 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                 favoriteBusy={!favoritesReady || savingFavorite}
                 toggleFavorite={toggleFavorite}
                 active={active}
-                creating={creating}
+                creating={creating || restoring}
                 activate={activate}
                 closeWorkspace={closeWorkspace}
                 create={create}
+                createTerminal={createTerminal}
                 run={run}
             />
             <div className={styles.body}>

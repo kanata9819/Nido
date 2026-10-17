@@ -1506,32 +1506,71 @@ test('Git diff ignores an older response after selecting another file', async ({
     await expect(page.locator('[data-git-scroll="after"]')).not.toContainText('STALE_CONTENT');
 });
 
-test('Git history pagination does not reload the first page', async ({ page }) => {
+test('Git history counts all commits and supports paging without reloading the first page', async ({
+    page
+}) => {
     await page.goto(`${origin}?view=git&defer=gitHistory`);
+    await page.addStyleTag({ content: '#root { display: flex; flex-direction: column; }' });
     await page.getByRole('button', { name: '2 History', exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
     await page.evaluate(() =>
-        window.rendererTest.settle(
-            'gitHistory',
-            0,
-            Array.from({ length: 100 }, (_, index) => ({
+        window.rendererTest.settle('gitHistory', 0, {
+            total: 101,
+            commits: Array.from({ length: 100 }, (_, index) => ({
                 hash: index.toString(16).padStart(40, '0'),
                 subject: `Commit ${index}`,
                 author: 'Ada',
                 date: '2026-01-01'
             }))
-        )
+        })
     );
+    await expect(page.getByText('Commits: 101', { exact: true })).toBeVisible();
+    const list = page.getByRole('listbox', { name: 'Commit history' });
+    const steps = await list.evaluate((node) => {
+        const row = node.querySelector('[role="option"]')!;
+        const rows = node.clientHeight / row.getBoundingClientRect().height;
+        return { half: Math.max(1, Math.floor(rows / 2)), full: Math.max(1, Math.floor(rows)) };
+    });
+    await list.focus();
+    for (const [key, index] of [
+        ['Control+d', steps.half],
+        ['Control+u', 0],
+        ['Control+f', steps.full],
+        ['Control+b', 0],
+        ['PageDown', steps.full],
+        ['PageUp', 0],
+        ['G', 99],
+        ['Control+d', 99],
+        ['g', 0],
+        ['Control+u', 0]
+    ] as const) {
+        await list.press(key);
+        await expect(list).toHaveAttribute('aria-activedescendant', `git-entry-${index}`);
+        await expect(list.getByRole('option', { selected: true })).toBeInViewport();
+        await expect(
+            page.getByRole('heading', { name: `Commit ${index}`, exact: true })
+        ).toBeVisible();
+    }
+    await page.screenshot({ path: 'test-results/git-history-keyboard.png' });
     await page.getByRole('button', { name: 'Load older commits' }).click();
     await expect.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.args[1])).toBe(100);
+    await list.press('Control+d');
+    await expect(list).toHaveAttribute('aria-activedescendant', 'git-entry-0');
     await page.evaluate(() =>
-        window.rendererTest.settle('gitHistory', 0, [
-            { hash: 'f'.repeat(40), subject: 'Older commit', author: 'Ada', date: '2025-01-01' }
-        ])
+        window.rendererTest.settle('gitHistory', 0, {
+            total: 101,
+            commits: [
+                { hash: 'f'.repeat(40), subject: 'Older commit', author: 'Ada', date: '2025-01-01' }
+            ]
+        })
     );
     await expect(
         page.getByRole('listbox', { name: 'Commit history' }).getByRole('option')
     ).toHaveCount(101);
+    await expect(page.getByRole('button', { name: 'Load older commits' })).toHaveCount(0);
+    await expect(page.getByText('Commits: 101', { exact: true })).toBeVisible();
+    await list.press('G');
+    await expect(list).toHaveAttribute('aria-activedescendant', 'git-entry-100');
     expect(
         await page.evaluate(
             () => window.rendererTest.calls.filter((call) => call.method === 'gitHistory').length
@@ -1542,8 +1581,13 @@ test('Git history pagination does not reload the first page', async ({ page }) =
     await page.getByRole('button', { name: '2 History', exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.args[1])).toBe(0);
     await expect(page.getByRole('button', { name: '2 History', exact: true })).toBeDisabled();
-    await page.evaluate(() => window.rendererTest.settle('gitHistory', 0, []));
+    await page.evaluate(() =>
+        window.rendererTest.settle('gitHistory', 0, { commits: [], total: 0 })
+    );
     await expect(page.getByRole('button', { name: '2 History', exact: true })).toBeEnabled();
+    await expect(page.getByText('Commits: 0', { exact: true })).toBeVisible();
+    await list.press('Control+d');
+    await expect(list).not.toHaveAttribute('aria-activedescendant');
 });
 
 test('A new diff clears the previous highlighting failure', async ({ page }) => {

@@ -43,20 +43,45 @@ export default function GitBrowserList({
             onKeyDown={(event) => {
                 if (
                     busy ||
-                    event.ctrlKey ||
                     event.altKey ||
                     event.metaKey ||
-                    event.nativeEvent.isComposing
+                    event.nativeEvent.isComposing ||
+                    event.keyCode === 229
                 ) {
                     return;
                 }
-                if (['j', 'k', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+                const key = event.key.toLowerCase();
+                const halfPage = event.ctrlKey && !event.shiftKey && ['d', 'u'].includes(key);
+                const fullPage =
+                    (event.ctrlKey && !event.shiftKey && ['f', 'b'].includes(key)) ||
+                    (!event.ctrlKey && ['PageDown', 'PageUp'].includes(event.key));
+                if (halfPage || fullPage) {
+                    event.preventDefault();
+                    const row = event.currentTarget.querySelector<HTMLElement>('[role="option"]');
+                    const step = Math.max(
+                        1,
+                        Math.floor(
+                            event.currentTarget.clientHeight /
+                                (row?.getBoundingClientRect().height || 1) /
+                                (halfPage ? 2 : 1)
+                        )
+                    );
+                    const direction = ['d', 'f', 'pagedown'].includes(key) ? 1 : -1;
+                    setIndex(Math.max(0, Math.min(labels.length - 1, index + direction * step)));
+                    return;
+                }
+                if (event.ctrlKey) {
+                    return;
+                }
+                if (
+                    ['j', 'k', 'ArrowDown', 'ArrowUp', 'Home', 'End', 'g', 'G'].includes(event.key)
+                ) {
                     event.preventDefault();
                     let next = index + (['j', 'ArrowDown'].includes(event.key) ? 1 : -1);
-                    if (event.key === 'Home') {
+                    if (event.key === 'Home' || event.key === 'g') {
                         next = 0;
                     }
-                    if (event.key === 'End') {
+                    if (event.key === 'End' || event.key === 'G') {
                         next = labels.length - 1;
                     }
                     setIndex(Math.max(0, Math.min(labels.length - 1, next)));
