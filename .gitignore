@@ -1,13 +1,29 @@
 node_modules
 dist
 out
+*.tsbuildinfo
+
+# Local environment and authentication settings
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.sample
+!.env.template
+/.npmrc
+
+# Local editor and diagnostic output
 .DS_Store
 .eslintcache
 *.log*
+.nvimlog
+/logs/
 
 /test-results/
 /playwright-report/
+/coverage/
+/.nyc_output/
 /.downloads/
 /resources/nvim-win64/
 /resources/debug/
-.nvimlog
+/resources/.nvim-*/
