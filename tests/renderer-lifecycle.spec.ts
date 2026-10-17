@@ -1140,12 +1140,11 @@ test('Extensions opens without a workspace, searches language packs and restores
     const search = extensions.getByRole('textbox', { name: 'Search language packs' });
     await expect(search).toBeFocused();
     await expect(trigger).toHaveAttribute('aria-pressed', 'true');
-    await expect(extensions.locator('[data-pack]')).toHaveCount(3);
+    await expect(extensions.locator('[data-pack]')).toHaveCount(2);
     await expect(extensions.getByRole('tab')).toHaveText(['Languages', 'Other extensions']);
     await expect(extensions.locator('[data-feature], [data-language]')).toHaveCount(0);
     await search.fill('Deno');
-    await expect(extensions.locator('[data-pack]')).toHaveCount(1);
-    await expect(extensions.locator('[data-pack="deno"]')).toBeVisible();
+    await expect(extensions.locator('[data-pack]')).toHaveCount(0);
     await search.fill('.rs');
     await expect(extensions.locator('[data-pack]')).toHaveCount(1);
     await expect(extensions.locator('[data-pack="rust"]')).toBeVisible();
@@ -1174,10 +1173,13 @@ test('Extensions shortcut preserves the editor and supports Japanese and command
     const search = extensions.getByRole('textbox', { name: '言語パックを検索' });
     await expect(search).toBeFocused();
     await search.fill('診断');
-    await expect(extensions.locator('[data-pack]')).toHaveCount(3);
-    await expect(extensions.locator('[data-pack="deno"]')).toContainText('Denoの導入が必要');
+    await expect(extensions.locator('[data-pack]')).toHaveCount(2);
     await extensions.getByRole('tab', { name: 'その他の拡張', exact: true }).click();
-    await expect(extensions.getByText('その他の拡張はまだ追加されていません。')).toBeVisible();
+    await expect(extensions.locator('[data-pack="deno"]')).toContainText('Denoの導入が必要');
+    await expect(extensions.getByRole('textbox', { name: 'その他の拡張を検索' })).toHaveValue('');
+    await expect(
+        extensions.getByRole('button', { name: '拡張機能を追加', exact: true })
+    ).toBeVisible();
     await expect(extensions.locator('[data-feature]')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(editor).toBeFocused();
@@ -1211,7 +1213,7 @@ test('Extensions separates language packs from other extensions and supports key
     const extensions = page.getByRole('region', { name: 'Extensions', exact: true });
     const languagesTab = extensions.getByRole('tab', { name: 'Languages', exact: true });
     await expect(languagesTab).toHaveAttribute('aria-selected', 'true');
-    await expect(extensions.locator('[data-pack]')).toHaveCount(3);
+    await expect(extensions.locator('[data-pack]')).toHaveCount(2);
     const search = extensions.getByRole('textbox', { name: 'Search language packs' });
     await search.fill('Rust');
     await expect(extensions.locator('[data-pack]')).toHaveCount(1);
@@ -1221,13 +1223,19 @@ test('Extensions separates language packs from other extensions and supports key
     await expect(otherTab).toBeFocused();
     await expect(otherTab).toHaveAttribute('aria-selected', 'true');
     await expect(extensions.getByRole('tabpanel', { name: 'Other extensions' })).toBeVisible();
-    await expect(extensions.getByText('No other extensions installed.')).toBeVisible();
-    await expect(extensions.getByRole('textbox')).toHaveCount(0);
-    await expect(extensions.locator('[data-pack], [data-feature]')).toHaveCount(0);
+    await expect(extensions.locator('[data-pack]')).toHaveCount(1);
+    await expect(extensions.locator('[data-pack="deno"]')).toBeVisible();
+    const otherSearch = extensions.getByRole('textbox', { name: 'Search other extensions' });
+    await expect(otherSearch).toHaveValue('');
+    await otherSearch.fill('Rust');
+    await expect(extensions.getByText('No extensions match your search.')).toBeVisible();
+    await otherSearch.fill('Deno');
+    await expect(extensions.locator('[data-pack="deno"]')).toBeVisible();
+    await otherTab.focus();
     await page.keyboard.press('ArrowRight');
     await expect(languagesTab).toBeFocused();
     await expect(search).toHaveValue('');
-    await expect(extensions.locator('[data-pack]')).toHaveCount(3);
+    await expect(extensions.locator('[data-pack]')).toHaveCount(2);
     await page.keyboard.press('ArrowLeft');
     await expect(otherTab).toBeFocused();
     await page.keyboard.press('Home');

@@ -3,6 +3,7 @@
     "id": "deno",
     "version": "1.0.0",
     "title": "Deno",
+    "category": "other",
     "description": "Completion, diagnostics, hover, definitions, references, rename, formatting and code actions.",
     "filetypes": ["typescript", "typescriptreact", "javascript", "javascriptreact"],
     "serverName": "denols",

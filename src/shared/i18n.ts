@@ -105,6 +105,14 @@ export const japanese: Record<string, string> = {
     'Manage language support for your workspaces.':
         'ワークスペースで使う言語サポートを管理します。',
     'Search language packs': '言語パックを検索',
+    'Search other extensions': 'その他の拡張を検索',
+    'Install extension': '拡張機能を追加',
+    'Reload extensions': '拡張機能を再読み込み',
+    'Extension status for the current workspace.': '現在のワークスペースでの拡張機能の状態です。',
+    'Open a workspace to check extension status.':
+        'ワークスペースを開くと拡張機能の状態を確認できます。',
+    'Loading extensions…': '拡張機能を読み込み中…',
+    'No extensions match your search.': '検索に一致する拡張機能はありません。',
     'Install language pack': '言語パックを追加',
     'Reload language packs': '言語パックを再読み込み',
     'Open pack folder': 'パックのフォルダーを開く',

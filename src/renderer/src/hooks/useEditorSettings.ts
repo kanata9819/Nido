@@ -60,7 +60,10 @@ export function useEditorSettings(): EditorSettings {
     useEffect(() => {
         localStorage.setItem('nido.relativeLineNumbers', String(relativeLineNumbers));
     }, [relativeLineNumbers]);
-    const [sidebar, setSidebar] = useState(true);
+    const [sidebar, setSidebar] = useState(() => localStorage.getItem('nido.sidebar') !== 'false');
+    useEffect(() => {
+        localStorage.setItem('nido.sidebar', String(sidebar));
+    }, [sidebar]);
     const [animations, setAnimations] = useState(
         () => localStorage.getItem('nido.animations') !== 'false'
     );

@@ -29,6 +29,101 @@ async function open(page: Page, view: string, deferred: string): Promise<void> {
     await page.clock.pauseAt(new Date(Date.now() + 1000));
 }
 
+test('Explorer waits for restored folders before restoring scroll and skips deleted folders', async ({
+    page
+}) => {
+    await page.addInitScript(() => {
+        localStorage.setItem(
+            'nido.explorer./alpha',
+            JSON.stringify({
+                version: 1,
+                expanded: ['src', 'removed'],
+                selected: 'src',
+                scrollTop: 780
+            })
+        );
+    });
+    await open(page, 'app', 'files');
+    const tree = page.getByRole('tree', { name: 'Project files' });
+    await expect(tree).toHaveAttribute('aria-busy', 'true');
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+            )
+        )
+        .toBe(3);
+    await page.evaluate(() => {
+        window.rendererTest.settle('files', 0, [
+            { name: 'src', path: 'src', directory: true },
+            ...Array.from({ length: 100 }, (_, i) => ({
+                name: `file-${i}.txt`,
+                path: `file-${i}.txt`,
+                directory: false
+            }))
+        ]);
+    });
+    await expect(tree).toHaveAttribute('aria-busy', 'true');
+    expect(
+        await page.evaluate(
+            () => JSON.parse(localStorage.getItem('nido.explorer./alpha')!).scrollTop
+        )
+    ).toBe(780);
+    await page.evaluate(() => {
+        window.rendererTest.settle('files', 0, [
+            { name: 'nested.txt', path: 'src/nested.txt', directory: false }
+        ]);
+        window.rendererTest.settle('files', 0, 'ENOENT: removed folder', true);
+    });
+    await expect(tree).toHaveAttribute('aria-busy', 'false');
+    await expect(tree).toHaveAttribute('data-row-count', '102');
+    await expect(tree.locator('[aria-selected="true"]')).toHaveText('src');
+    await expect.poll(() => tree.evaluate((node) => node.scrollTop)).toBe(780);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await page.clock.runFor(200);
+    expect(
+        await page.evaluate(
+            () => JSON.parse(localStorage.getItem('nido.explorer./alpha')!).scrollTop
+        )
+    ).toBe(780);
+});
+
+for (const saved of [
+    '{',
+    JSON.stringify({
+        version: 1,
+        expanded: ['../outside', '/absolute', 'C:\\outside', 42],
+        selected: {},
+        scrollTop: -30
+    })
+]) {
+    test(`Explorer ignores invalid saved state: ${saved}`, async ({ page }) => {
+        await page.addInitScript(
+            (value) => localStorage.setItem('nido.explorer./alpha', value),
+            saved
+        );
+        await open(page, 'app', 'files');
+        expect(
+            await page.evaluate(() =>
+                window.rendererTest.pending
+                    .filter(({ method }) => method === 'files')
+                    .map(({ args }) => args[1])
+            )
+        ).toEqual(['']);
+        await page.evaluate(() =>
+            window.rendererTest.settle('files', 0, [{ name: 'src', path: 'src', directory: true }])
+        );
+        const tree = page.getByRole('tree', { name: 'Project files' });
+        await expect(tree).toHaveAttribute('aria-busy', 'false');
+        await expect(tree.getByRole('treeitem', { name: 'src', exact: true })).toHaveAttribute(
+            'aria-expanded',
+            'false'
+        );
+        await expect(tree.locator('[aria-selected="true"]')).toHaveCount(0);
+        expect(await tree.evaluate((node) => node.scrollTop)).toBe(0);
+    });
+}
+
 test('Explorer refresh bounds directory requests and stops obsolete queued work', async ({
     page
 }) => {

@@ -11,6 +11,7 @@ import {
 import type { FileEntry, Workspace } from '../../../shared/types';
 import type { FileRequest } from '../components/ExplorerCommands';
 import { getVisibleEntries } from '../sidebarTree';
+import { readExplorerState, writeExplorerState } from '../explorerState';
 
 interface ExplorerState {
     visible: ReturnType<typeof getVisibleEntries>;
@@ -20,6 +21,9 @@ interface ExplorerState {
     setExpanded: Dispatch<SetStateAction<Set<string>>>;
     load: (path: string) => Promise<void>;
     tree: RefObject<HTMLDivElement | null>;
+    ready: boolean;
+    initialScrollTop: number;
+    rememberScroll: (top: number) => void;
     operation: { request?: FileRequest } | undefined;
     setOperation: Dispatch<SetStateAction<{ request?: FileRequest } | undefined>>;
     clipboard: { path: string; name: string; cut: boolean } | undefined;
@@ -42,8 +46,12 @@ export function useExplorer({
     onError: (message: string) => void;
 }): ExplorerState {
     const [entriesByDirectory, setEntries] = useState<Record<string, FileEntry[]>>({});
-    const [expanded, setExpanded] = useState<Set<string>>(new Set());
-    const [selected, setSelected] = useState('');
+    const [saved] = useState(() => readExplorerState(workspace.root));
+    const [expanded, setExpanded] = useState(() => new Set(saved.expanded));
+    const [selected, setSelected] = useState(saved.selected);
+    const [ready, setReady] = useState(false);
+    const latest = useRef(saved);
+    const scrollTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const [revision, setRevision] = useState(0);
     const loadedRevision = useRef(-1);
     const requests = useRef(new Map<string, DirectoryRequest>());
@@ -51,6 +59,34 @@ export function useExplorer({
     const tree = useRef<HTMLDivElement>(null);
     const [operation, setOperation] = useState<{ request?: FileRequest }>();
     const [clipboard, setClipboard] = useState<{ path: string; name: string; cut: boolean }>();
+    useEffect(() => {
+        latest.current = { ...latest.current, expanded: [...expanded], selected };
+        writeExplorerState(workspace.root, latest.current);
+    }, [workspace.root, expanded, selected]);
+    const rememberScroll = useCallback(
+        (scrollTop: number): void => {
+            latest.current = { ...latest.current, scrollTop };
+            clearTimeout(scrollTimer.current);
+            scrollTimer.current = setTimeout(
+                () => writeExplorerState(workspace.root, latest.current),
+                150
+            );
+        },
+        [workspace.root]
+    );
+    useEffect(() => {
+        const save = (): void => {
+            clearTimeout(scrollTimer.current);
+            writeExplorerState(workspace.root, latest.current);
+        };
+        window.addEventListener('pagehide', save);
+        window.addEventListener('beforeunload', save);
+        return () => {
+            window.removeEventListener('pagehide', save);
+            window.removeEventListener('beforeunload', save);
+            save();
+        };
+    }, [workspace.root]);
     useEffect(
         () =>
             window.nido.onEvent((event) => {
@@ -144,6 +180,7 @@ export function useExplorer({
                             ])
                         )
                     );
+                    setReady(true);
                 }
             })
             .catch((error) => {
@@ -276,6 +313,9 @@ export function useExplorer({
         setExpanded,
         load,
         tree,
+        ready,
+        initialScrollTop: saved.scrollTop,
+        rememberScroll,
         operation,
         setOperation,
         clipboard,

@@ -52,18 +52,18 @@ test('language packs install from the manager, run, toggle without losing edits 
             page.getByRole('tablist', { name: 'Extension categories' }).getByRole('tab')
         ).toHaveText(['Languages', 'Other extensions']);
         await page.getByRole('tab', { name: 'Languages', exact: true }).click();
-        await expect(page.locator('[data-pack]')).toHaveCount(3);
+        await expect(page.locator('[data-pack]')).toHaveCount(2);
         await running.evaluate(({ dialog }, path) => {
             dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
         }, invalidSource);
         await page.getByRole('button', { name: 'Install language pack', exact: true }).click();
         await expect(page.getByRole('alert')).toContainText('Invalid language pack');
-        await expect(page.locator('[data-pack]')).toHaveCount(3);
+        await expect(page.locator('[data-pack]')).toHaveCount(2);
         await running.evaluate(({ dialog }, path) => {
             dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
         }, source);
         await page.getByRole('button', { name: 'Install language pack', exact: true }).click();
-        await expect(page.locator('[data-pack]')).toHaveCount(4);
+        await expect(page.locator('[data-pack]')).toHaveCount(3);
         await expect(page.getByRole('alert')).toHaveCount(0);
         await expect(page.locator('[data-pack="python-ui"]')).toContainText('Installed');
         await page.keyboard.press('Escape');
@@ -80,8 +80,13 @@ test('language packs install from the manager, run, toggle without losing edits 
         await page.setViewportSize({ width: 960, height: 720 });
         await page.screenshot({ path: 'test-results/language-packs-en.png' });
         await page.getByRole('tab', { name: 'Other extensions', exact: true }).click();
-        await expect(page.getByText('No other extensions installed.')).toBeVisible();
-        await expect(page.locator('[data-pack], [data-feature]')).toHaveCount(0);
+        await expect(page.locator('[data-pack]')).toHaveCount(1);
+        await expect(page.locator('[data-pack="deno"]')).toBeVisible();
+        await page.getByRole('checkbox', { name: 'Enable Deno', exact: true }).uncheck();
+        await expect(page.locator('[data-pack="deno"] [data-status]')).toHaveAttribute(
+            'data-status',
+            'disabled'
+        );
         await page.screenshot({ path: 'test-results/other-extensions-en.png' });
         await page.getByRole('tab', { name: 'Languages', exact: true }).click();
         await expect(page.locator('[data-pack="python-ui"] [data-status]')).toHaveAttribute(
@@ -111,7 +116,7 @@ test('language packs install from the manager, run, toggle without losing edits 
         ).toBeVisible();
         await page.keyboard.press('Control+Shift+x');
         await page.getByRole('tab', { name: 'Languages', exact: true }).click();
-        await expect(page.locator('[data-pack]')).toHaveCount(4);
+        await expect(page.locator('[data-pack]')).toHaveCount(3);
         await expect(
             page.getByRole('checkbox', { name: 'Enable Python UI', exact: true })
         ).not.toBeChecked();
@@ -120,6 +125,14 @@ test('language packs install from the manager, run, toggle without losing edits 
             'data-status',
             'running'
         );
+        await page.getByRole('tab', { name: 'Other extensions', exact: true }).click();
+        await expect(
+            page.getByRole('checkbox', { name: 'Enable Deno', exact: true })
+        ).not.toBeChecked();
+        await page.getByRole('checkbox', { name: 'Enable Deno', exact: true }).check();
+        await expect(
+            page.getByRole('checkbox', { name: 'Enable Deno', exact: true })
+        ).toBeEnabled();
         await page.keyboard.press('Escape');
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('ja');
@@ -136,7 +149,10 @@ test('language packs install from the manager, run, toggle without losing edits 
                 .evaluate((element) => element.scrollWidth <= element.clientWidth)
         ).toBe(true);
         await page.getByRole('tab', { name: 'その他の拡張', exact: true }).click();
-        await expect(page.getByText('その他の拡張はまだ追加されていません。')).toBeVisible();
+        await expect(page.locator('[data-pack="deno"]')).toBeVisible();
+        await expect(
+            page.getByRole('button', { name: '拡張機能を追加', exact: true })
+        ).toBeVisible();
         await page.screenshot({ path: 'test-results/other-extensions-ja.png' });
     } finally {
         await running?.close();

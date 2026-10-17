@@ -39,6 +39,11 @@ test('packs validate before installation, isolate broken files and persist concu
             'rust',
             'typescript'
         ]);
+        assert.equal(initial.packs.find((pack) => pack.id === 'deno')?.category, 'other');
+        assert.deepEqual(validateLanguagePack({ ...manifest, category: 'other' }), {
+            ...manifest,
+            category: 'other'
+        });
         const source = join(root, 'python.json');
         await writeFile(source, JSON.stringify(manifest));
         await manager.install(source);
@@ -65,6 +70,7 @@ test('packs validate before installation, isolate broken files and persist concu
         for (const change of [
             { id: '../escape' },
             { schemaVersion: 2 },
+            { category: 'unknown' },
             { command: 'tool --stdio' },
             { adapter: 'typescript' },
             { filetypes: ['../python'] },

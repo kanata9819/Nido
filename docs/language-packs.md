@@ -2,7 +2,7 @@
 
 Nido loads Rust, TypeScript/JavaScript and Deno through the same language-pack registry used for additional languages. The built-in packs are enabled by default. Existing syntax highlighting remains available even when a language pack is disabled.
 
-Open **Extensions → Languages** with `Ctrl+Shift+X`. The Extensions page separates language packs from other extensions; the latter list is currently empty. You can install a language pack, enable or disable it, reload packs, or open the pack folder. Changes apply to open workspaces without reopening files or discarding unsaved edits, and enabled/disabled choices survive a restart. Language-server status is shown for the current workspace. A server starts when a matching file in a matching project is opened.
+Open **Extensions** with `Ctrl+Shift+X`. **Languages** lists language packs such as Rust and TypeScript/JavaScript; **Other extensions** lists runtime integrations such as Deno. Both categories support search, installation, enable/disable, reload and opening the pack folder. Changes apply to open workspaces without reopening files or discarding unsaved edits, and enabled/disabled choices survive a restart. Language-server status is shown for the current workspace. A server starts when a matching file in a matching project is opened.
 
 ## Add a language
 
@@ -31,6 +31,7 @@ The pack describes a connection to an LSP server. Nido and Neovim provide the co
 
 - `schemaVersion`: currently `1`.
 - `id`, `version`, `title`, `description`: identity and display information. Version is a three-part version such as `1.0.0`.
+- `category`: optional `language` (default) or `other`, controlling which Extensions tab lists the pack. This does not change server behavior.
 - `filetypes`: Neovim filetype names, rather than filename extensions. Existing Neovim file detection and syntax highlighting are reused.
 - `serverName`: unique name for the LSP client.
 - `command`: executable and separate arguments; no shell command string. `${node}` expands to Nido's Node runtime.

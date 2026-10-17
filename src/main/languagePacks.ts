@@ -42,6 +42,13 @@ export function validateLanguagePack(value: unknown, bundled = false): LanguageP
         return fail();
     }
     if (
+        value.category !== undefined &&
+        value.category !== 'language' &&
+        value.category !== 'other'
+    ) {
+        return fail();
+    }
+    if (
         value.adapter !== undefined &&
         (!bundled || !['typescript', 'deno', 'rust'].includes(String(value.adapter)))
     ) {
@@ -102,6 +109,7 @@ export function validateLanguagePack(value: unknown, bundled = false): LanguageP
         'version',
         'title',
         'description',
+        'category',
         'filetypes',
         'serverName',
         'command',

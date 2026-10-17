@@ -61,6 +61,9 @@ function Sidebar({
         setExpanded,
         load,
         tree,
+        ready,
+        initialScrollTop,
+        rememberScroll,
         operation,
         setOperation,
         clipboard,
@@ -68,7 +71,10 @@ function Sidebar({
         closeOperation,
         onDone
     } = useExplorer({ workspace, active, onError });
-    const [top, setTop] = useState(0);
+    const [top, setTop] = useState(initialScrollTop);
+    const viewport = useRef(initialScrollTop);
+    const restored = useRef(false);
+    const previousSelection = useRef(selected);
     const [height, setHeight] = useState(200);
     const selectedIndex = visible.findIndex((entry) => entry.path === selected);
     const first = Math.max(
@@ -84,11 +90,19 @@ function Sidebar({
     }
     useLayoutEffect(() => {
         const node = tree.current;
-        if (!node || !active) {
+        if (!active) {
+            restored.current = false;
+        }
+        if (!node || !active || !ready) {
             return;
         }
         setHeight(node.clientHeight);
-        if (selectedIndex >= 0) {
+        if (!restored.current) {
+            node.scrollTo({ top: viewport.current });
+            restored.current = true;
+            previousSelection.current = selected;
+            rememberScroll(node.scrollTop);
+        } else if (selected !== previousSelection.current && selectedIndex >= 0) {
             const rowTop = selectedIndex * rowHeight + 5;
             if (rowTop < node.scrollTop) {
                 node.scrollTo({ top: rowTop });
@@ -96,8 +110,12 @@ function Sidebar({
                 node.scrollTo({ top: rowTop + rowHeight - node.clientHeight });
             }
         }
+        if (selectedIndex >= 0 || !selected) {
+            previousSelection.current = selected;
+        }
+        viewport.current = node.scrollTop;
         setTop(node.scrollTop);
-    }, [selectedIndex, visible, active, tree]);
+    }, [selected, selectedIndex, visible, active, ready, tree, rememberScroll]);
     useEffect(() => {
         const node = tree.current;
         if (!node) {
@@ -214,7 +232,15 @@ function Sidebar({
                 aria-activedescendant={
                     selectedIndex >= 0 ? `file-${workspace.id}-${selected}` : undefined
                 }
-                onScroll={(event) => setTop(event.currentTarget.scrollTop)}
+                aria-busy={!ready}
+                onScroll={(event) => {
+                    const top = event.currentTarget.scrollTop;
+                    setTop(top);
+                    if (active && restored.current) {
+                        viewport.current = top;
+                        rememberScroll(top);
+                    }
+                }}
                 onBlur={() => {
                     centerPrefix.current = false;
                 }}

@@ -17,6 +17,7 @@ export interface LanguagePackManifest {
     version: string;
     title: string;
     description: string;
+    category?: 'language' | 'other';
     filetypes: string[];
     serverName: string;
     command?: string[];

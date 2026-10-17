@@ -93,27 +93,31 @@ export default function ExtensionsPage({
                         <p>{t('Manage language support for your workspaces.')}</p>
                     )}
                 </div>
-                {view === 'languages' ? (
-                    <>
-                        <div className={styles.toolbar}>
-                            <label className={styles.search}>
-                                <Search size={17} />
-                                <input
-                                    ref={search}
-                                    aria-label={t('Search language packs')}
-                                    placeholder={t('Search language packs')}
-                                    value={query}
-                                    onChange={(event) => setQuery(event.target.value)}
-                                />
-                            </label>
-                        </div>
-                        <LanguagePacksPanel workspaceId={workspaceId} query={query} />
-                    </>
-                ) : (
-                    <p className={styles.empty} role="status">
-                        {t('No other extensions installed.')}
-                    </p>
-                )}
+                <div className={styles.toolbar}>
+                    <label className={styles.search}>
+                        <Search size={17} />
+                        <input
+                            ref={search}
+                            aria-label={t(
+                                view === 'languages'
+                                    ? 'Search language packs'
+                                    : 'Search other extensions'
+                            )}
+                            placeholder={t(
+                                view === 'languages'
+                                    ? 'Search language packs'
+                                    : 'Search other extensions'
+                            )}
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                        />
+                    </label>
+                </div>
+                <LanguagePacksPanel
+                    workspaceId={workspaceId}
+                    query={query}
+                    category={view === 'languages' ? 'language' : 'other'}
+                />
             </div>
         </section>
     );
