@@ -245,11 +245,14 @@ return {interleaved=interleaved, longestCallbackMs=longest, callbacks=callbacks,
 
 test('unchanged bracket scopes avoid duplicate cursor notifications and buffer rescans', async (context) => {
     let guides = 0;
+    let redrawGuides = 0;
     let measuring = false;
-    const session = await Session.create(process.cwd(), (event) => {
-        if (measuring && event.type === 'redraw') {
-            guides += event.events.filter(([name]) => name === 'nido_bracket_guides').length;
-        }
+    const session = await Session.create(process.cwd(), () => {});
+    session.client.on('notification', (method: string, args: unknown[]) => {
+        if (!measuring || method !== 'nido:bracket_guides') return;
+        // Full redraws replay the snapshot; only cursor-only notifications are deduplicated.
+        if (args[1] === true) guides++;
+        else redrawGuides++;
     });
     const lua = (code: string): ReturnType<Session['client']['request']> =>
         session.client.request('nvim_exec_lua', [code, []]);
@@ -275,7 +278,12 @@ test('unchanged bracket scopes avoid duplicate cursor notifications and buffer r
         for (let i = 0; i < 20; i++) {
             await session.input('l');
             await session.client.request('nvim_eval', ['1']);
+            if (i === 9) {
+                // Sticky scopes can finish refreshing while cursor movement is measured.
+                await lua('vim.cmd.redraw({bang=true})');
+            }
         }
+        await lua("vim.api.nvim_exec_autocmds('CursorMoved', {buffer=0})");
         measuring = false;
         await lua(`
             local original = vim.api.nvim_buf_set_extmark
@@ -292,8 +300,13 @@ test('unchanged bracket scopes avoid duplicate cursor notifications and buffer r
         `);
         const writes = Number(await lua('return vim.g.bracket_writes'));
         context.diagnostic(
-            JSON.stringify({ cursorGuideNotifications: guides, unchangedBracketWrites: writes })
+            JSON.stringify({
+                cursorGuideNotifications: guides,
+                redrawGuideSnapshots: redrawGuides,
+                unchangedBracketWrites: writes
+            })
         );
+        assert.ok(redrawGuides > 0, 'The measurement must include a full-redraw snapshot');
         if (!process.env.NIDO_PERFORMANCE_BASELINE) {
             assert.equal(guides, 0);
             assert.equal(writes, 0);

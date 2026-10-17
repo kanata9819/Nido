@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { once } from 'node:events';
 import { test } from 'node:test';
 import {
     mkdtemp,
@@ -13,13 +14,14 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { Session } from '../src/main/session';
 import { Grid } from '../src/renderer/src/grid';
 import { vimKey } from '../src/renderer/src/keyboard';
 import { accumulateScroll, scrollOffset } from '../src/renderer/src/scroll';
 import { readFavorites, readLayout, writeFavorites, writeLayout } from '../src/main/persistence';
 import { fileDecorations, gitFileKey } from '../src/renderer/src/fileDecorations';
-import type { NidoEvent, Redraw } from '../src/shared/types';
+import type { NidoEvent, Redraw, SessionState } from '../src/shared/types';
 import { emptyNeovimUI } from '../src/shared/neovimUI';
 
 test('workspace grep finds saved text beyond filename limits, respects ignores and opens byte positions', async () => {
@@ -1585,14 +1587,26 @@ test('word searches publish counts, distinguish current matches and clear on Esc
         await session.openFile('words.txt');
         const lua = (code: string): ReturnType<Session['client']['request']> =>
             session!.client.request('nvim_exec_lua', [code, []]);
+        const waitForSearch = async (expected: SessionState['search']): Promise<void> => {
+            const signal = AbortSignal.timeout(5000);
+            try {
+                // An RPC response can precede the scheduled search-state notification.
+                while (!isDeepStrictEqual(session!.state.search, expected)) {
+                    await once(session!.client, 'notification', { signal });
+                }
+            } catch (error) {
+                if (!signal.aborted) throw error;
+                assert.deepEqual(session!.state.search, expected, 'Search state was not published');
+            }
+        };
         await session.input('gg0*');
-        await lua('return 1');
-        assert.deepEqual(session.state.search, {
+        const search = {
             pattern: '\\<alpha\\>',
             current: 2,
             total: 3,
             incomplete: 0
-        });
+        };
+        await waitForSearch(search);
         await lua('vim.cmd.redraw()');
         await lua('return 1');
         const row = grid.cells.find((cells) =>
@@ -1611,14 +1625,11 @@ test('word searches publish counts, distinguish current matches and clear on Esc
             0xa8cf9e
         );
         await session.input('#');
-        await lua('return 1');
-        assert.equal(session.state.search && session.state.search.current, 1);
+        await waitForSearch({ ...search, current: 1 });
         await session.input('<Esc>');
-        await lua('return 1');
-        assert.equal(session.state.search, false);
+        await waitForSearch(false);
         await session.input('n');
-        await lua('return 1');
-        assert.equal(session.state.search && session.state.search.total, 3);
+        await waitForSearch({ ...search, current: 3 });
     } finally {
         await session?.stop();
         await rm(root, { recursive: true, force: true });
