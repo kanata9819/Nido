@@ -2479,10 +2479,6 @@ async function chooseWorkspace(page: Page, path: string, navigate = false): Prom
     const canonicalPath = await realpath(path);
     const folders = page.getByRole('listbox', { name: 'Folders' });
     await expect(folders).toHaveAttribute('aria-busy', 'false');
-    // Finish the initial queued focus before directing keys to the address input.
-    await page.evaluate(
-        () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-    );
     const address = page.getByRole('textbox', { name: 'Folder path' });
     await address.fill(path);
     await address.press('Enter');
@@ -2628,10 +2624,13 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
             'false'
         );
         await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
-        await page.getByRole('combobox', { name: 'Session type' }).focus();
+        await page.keyboard.press('Control+l');
+        await page.keyboard.press('Tab');
+        await expect(page.getByRole('combobox', { name: 'Session type' })).toBeFocused();
         await page.keyboard.press('End');
         await expect(page.getByRole('combobox', { name: 'Session type' })).toHaveValue('terminal');
-        await chooseWorkspace(page, root);
+        await page.screenshot({ path: 'test-results/nido-session-keyboard.png' });
+        await page.keyboard.press('Control+Enter');
         const input = page.getByRole('textbox', { name: 'Terminal input' });
         await expect(input).toHaveCount(1);
         await expect(input).toBeFocused();

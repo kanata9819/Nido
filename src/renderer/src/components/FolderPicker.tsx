@@ -74,6 +74,7 @@ export default function FolderPicker({
             return;
         }
         const id = ++request.current.id;
+        const focused = document.activeElement;
         setLoading(true);
         setError('');
         try {
@@ -83,7 +84,10 @@ export default function FolderPicker({
             }
             applyFolders(result);
             requestAnimationFrame(() => {
-                if (id === request.current.id) {
+                if (
+                    id === request.current.id &&
+                    (document.activeElement === focused || document.activeElement === document.body)
+                ) {
                     list.current?.focus();
                 }
             });
@@ -97,6 +101,9 @@ export default function FolderPicker({
             }
         }
     }
+    useEffect(() => {
+        list.current?.focus();
+    }, []);
     useEffect(() => {
         let cancelled = false;
         void window.nido.wslDistributions().then(
@@ -126,11 +133,6 @@ export default function FolderPicker({
                         return;
                     }
                     applyFolders(result);
-                    requestAnimationFrame(() => {
-                        if (id === counter.id) {
-                            list.current?.focus();
-                        }
-                    });
                 },
                 (error) => {
                     if (id === counter.id) {
@@ -403,7 +405,7 @@ export default function FolderPicker({
             </div>
             <p className={styles.folderActions}>
                 {t(
-                    'j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Esc Cancel'
+                    'Tab / Shift+Tab Move focus · j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Esc Cancel'
                 )}
             </p>
         </div>

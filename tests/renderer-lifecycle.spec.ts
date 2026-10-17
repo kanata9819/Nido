@@ -1604,6 +1604,85 @@ test('A new diff clears the previous highlighting failure', async ({ page }) => 
     await expect(page.locator('[data-git-scroll="after"]')).toContainText('after');
 });
 
+test('workspace picker reaches both comboboxes using only the keyboard', async ({ page }) => {
+    await page.goto(`${origin}?view=app`);
+    await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+    await page.keyboard.press('Control+Shift+n');
+    await expect(page.getByRole('listbox', { name: 'Folders', exact: true })).toBeFocused();
+    await page.keyboard.press('Control+l');
+    await expect(page.getByRole('textbox', { name: 'Folder path', exact: true })).toBeFocused();
+    await page.keyboard.press('Tab');
+    const type = page.getByRole('combobox', { name: 'Session type', exact: true });
+    await expect(type).toBeFocused();
+    await page.keyboard.press('End');
+    await expect(type).toHaveValue('terminal');
+    await page.keyboard.press('Home');
+    await expect(type).toHaveValue('editor');
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.getByRole('combobox', { name: 'Connection', exact: true })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await expect(type).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+});
+
+test('folder loading preserves keyboard focus on the session type', async ({ page }) => {
+    await page.goto(`${origin}?view=folders&defer=browseFolders`);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.keyboard.press('Control+l');
+    await page.keyboard.press('Tab');
+    const type = page.getByRole('combobox', { name: 'Session type', exact: true });
+    await expect(type).toBeFocused();
+    await page.evaluate(() =>
+        window.rendererTest.settle('browseFolders', 0, { path: '/alpha', parent: '/', folders: [] })
+    );
+    await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
+        'aria-busy',
+        'false'
+    );
+    await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    );
+    await expect(type).toBeFocused();
+});
+
+test('browsing folders moves focus to the list only if the user has not moved it', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=folders&defer=browseFolders`);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('browseFolders', 0, { path: '/alpha', parent: '/', folders: [] })
+    );
+    const list = page.getByRole('listbox', { name: 'Folders' });
+    await expect(list).toHaveAttribute('aria-busy', 'false');
+    await page.keyboard.press('Control+l');
+    await page.keyboard.type('/beta');
+    await page.keyboard.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('browseFolders', 0, { path: '/beta', parent: '/', folders: [] })
+    );
+    await expect(list).toBeFocused();
+    await page.keyboard.press('Control+l');
+    await page.keyboard.type('/gamma');
+    await page.keyboard.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.keyboard.press('Tab');
+    const type = page.getByRole('combobox', { name: 'Session type', exact: true });
+    await expect(type).toBeFocused();
+    await page.evaluate(() =>
+        window.rendererTest.settle('browseFolders', 0, { path: '/gamma', parent: '/', folders: [] })
+    );
+    await expect(list).toHaveAttribute('aria-busy', 'false');
+    await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    );
+    await expect(type).toBeFocused();
+});
+
 test('Folder browsing cancels old results and clamps selection after favorites change', async ({
     page
 }) => {
@@ -1666,7 +1745,11 @@ test('Switching WSL connections ignores stale listings and displays Linux paths'
         window.rendererTest.settle('wslDistributions', 0, ['Fedora', 'Ubuntu'])
     );
     const connection = page.getByRole('combobox', { name: 'Connection', exact: true });
-    await connection.selectOption('Fedora');
+    await page.keyboard.press('Control+l');
+    await page.keyboard.press('Shift+Tab');
+    await expect(connection).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(connection).toHaveValue('Fedora');
     await expect
         .poll(() =>
             page.evaluate(
@@ -1676,7 +1759,8 @@ test('Switching WSL connections ignores stale listings and displays Linux paths'
             )
         )
         .toBe(2);
-    await connection.selectOption('Ubuntu');
+    await page.keyboard.press('ArrowDown');
+    await expect(connection).toHaveValue('Ubuntu');
     await expect
         .poll(() =>
             page.evaluate(
@@ -1709,6 +1793,10 @@ test('Switching WSL connections ignores stale listings and displays Linux paths'
     );
     const address = page.getByRole('textbox', { name: 'Folder path' });
     await expect(address).toHaveValue('/home/me');
+    await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    );
+    await expect(connection).toBeFocused();
     await expect(page.getByText('STALE_WSL_FOLDER')).toHaveCount(0);
     await address.fill('/home/me/project with spaces');
     await address.press('Enter');

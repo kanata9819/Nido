@@ -340,8 +340,8 @@ export const japanese: Record<string, string> = {
     'Loading folders…': 'フォルダーを読み込み中…',
     'No subfolders. Open this folder with Ctrl+Enter.':
         'サブフォルダーがありません。Ctrl+Enterでこのフォルダーを開けます。',
-    'j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Esc Cancel':
-        'j/k：選択 · h/l：参照 · Enter：選択した項目を開く · Ctrl+Enter：現在のフォルダーを開く · Ctrl+L：パス · Esc：キャンセル',
+    'Tab / Shift+Tab Move focus · j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Esc Cancel':
+        'Tab / Shift+Tab：項目移動 · j/k：選択 · h/l：参照 · Enter：選択した項目を開く · Ctrl+Enter：現在のフォルダーを開く · Ctrl+L：パス · Esc：キャンセル',
     'File explorer': 'ファイルエクスプローラー',
     'Explorer width': 'エクスプローラーの幅',
     'Drag to resize · Shift+H / L': 'ドラッグで幅を調整 · Shift+H / L',
