@@ -21,7 +21,7 @@ export default function FolderPicker({
     onOpenFavorite: (favorite: FavoriteWorkspace) => void;
     onRemoveFavorite: (favorite: FavoriteWorkspace) => void;
     busy: boolean;
-    onOpen: (path: string, kind: 'editor' | 'terminal') => void;
+    onOpen: (path: string) => void;
 }): React.JSX.Element {
     const t = useI18n();
     const [location, setLocation] = useState(() => ({
@@ -32,7 +32,6 @@ export default function FolderPicker({
     const [distributions, setDistributions] = useState<string[]>([]);
     const [wslError, setWslError] = useState('');
     const [path, setPath] = useState(parseWslPath(initialPath)?.path || initialPath);
-    const [kind, setKind] = useState<'editor' | 'terminal'>('editor');
     const [directory, setDirectory] = useState('');
     const [parent, setParent] = useState('');
     const [folders, setFolders] = useState<FileEntry[]>([]);
@@ -168,10 +167,7 @@ export default function FolderPicker({
                         return;
                     }
                     onOpen(
-                        distribution && !parseWslPath(path)
-                            ? wslHostPath(distribution, path)
-                            : path,
-                        kind
+                        distribution && !parseWslPath(path) ? wslHostPath(distribution, path) : path
                     );
                 }
             }}
@@ -223,28 +219,13 @@ export default function FolderPicker({
                 }}
             />
             <div className={styles.folderActions}>
-                <label>
-                    {t('Session type')}{' '}
-                    <select
-                        aria-label={t('Session type')}
-                        value={kind}
-                        disabled={busy}
-                        onChange={(event) => setKind(event.target.value as 'editor' | 'terminal')}
-                    >
-                        <option value="editor">{t('Editor')}</option>
-                        <option value="terminal">{t('Terminal')}</option>
-                    </select>
-                </label>
                 <button
                     disabled={loading || busy || parent === directory}
                     onClick={() => void browse(parent)}
                 >
                     {t('↑ Parent')}
                 </button>
-                <button
-                    disabled={loading || busy || !directory}
-                    onClick={() => onOpen(directory, kind)}
-                >
+                <button disabled={loading || busy || !directory} onClick={() => onOpen(directory)}>
                     {busy ? t('Opening…') : t('Open current folder')}
                 </button>
             </div>
@@ -323,7 +304,7 @@ export default function FolderPicker({
                                 onOpenFavorite(favorite);
                             } else if (!loading && folder) {
                                 if (key === 'Enter') {
-                                    onOpen(folder.path, kind);
+                                    onOpen(folder.path);
                                 } else {
                                     void browse(folder.path);
                                 }

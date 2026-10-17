@@ -64,6 +64,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     const t = useI18n();
     const pointerHidden = usePointerVisibility();
     const [panel, setPanel] = useState<Panel>(null);
+    const [folderKind, setFolderKind] = useState<'editor' | 'terminal'>('editor');
     const [markdownVisible, setMarkdownVisible] = useState(false);
     const [leader, setLeader] = useState(false);
     const [query, setQuery] = useState('');
@@ -211,7 +212,10 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         focusEditor,
         requestEditorFocus: () => setFocusTick((value) => value + 1),
         dismissLeader: () => setLeader(false),
-        showFolders: () => setPanel('folders'),
+        showFolders: (kind) => {
+            setFolderKind(kind);
+            setPanel('folders');
+        },
         closeOverlay: () => setPanel(null),
         report,
         run
@@ -559,6 +563,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                 settings={settings}
                 workspaceId={active}
                 initialFolder={workspace?.root || ''}
+                folderKind={folderKind}
                 favorites={favorites}
                 favoriteBusy={!favoritesReady || savingFavorite}
                 openFavorite={openFavorite}

@@ -16,6 +16,7 @@ interface PanelProps {
     settings: SettingsPanelProps;
     workspaceId: string;
     initialFolder: string;
+    folderKind: 'editor' | 'terminal';
     favorites: FavoriteWorkspace[];
     favoriteBusy: boolean;
     openFavorite: (favorite: FavoriteWorkspace) => Promise<void>;
@@ -51,6 +52,7 @@ export function Panel({
     settings,
     workspaceId,
     initialFolder,
+    folderKind,
     favorites,
     favoriteBusy,
     openFavorite,
@@ -102,12 +104,12 @@ export function Panel({
             content = (
                 <FolderPicker
                     initialPath={initialFolder}
-                    favorites={favorites}
+                    favorites={favorites.filter((favorite) => favorite.kind === folderKind)}
                     favoriteBusy={favoriteBusy}
                     onOpenFavorite={(favorite) => void openFavorite(favorite)}
                     onRemoveFavorite={removeFavorite}
                     busy={creating}
-                    onOpen={(path, kind) => void openWorkspace(path, kind)}
+                    onOpen={(path) => void openWorkspace(path, folderKind)}
                 />
             );
             break;
@@ -149,7 +151,13 @@ export function Panel({
                 >
                     <div className={styles.paletteHeading}>
                         <Command size={17} />
-                        <span>{t(panelTitles[panel])}</span>
+                        <span>
+                            {t(
+                                panel === 'folders' && folderKind === 'terminal'
+                                    ? 'New terminal session'
+                                    : panelTitles[panel]
+                            )}
+                        </span>
                         <button aria-label={t('Close palette')} onClick={focusEditor}>
                             <X size={17} />
                         </button>

@@ -1,21 +1,23 @@
 import { expect, test } from '@playwright/test';
-import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { electron } from './helpers/electron';
 
 for (const existing of [false, true]) {
-    test(`new terminal session starts in ${existing ? 'the active workspace' : 'home'} and restores`, async () => {
+    test(`new terminal session selects ${existing ? 'another folder from an active workspace' : 'home'} and restores`, async () => {
         const profile = await mkdtemp(join(tmpdir(), 'nido-terminal-session-'));
         const layoutPath = join(profile, 'workspaces.json');
-        const root = await realpath(existing ? profile : homedir());
+        const initial = await realpath(existing ? profile : homedir());
+        const root = existing ? join(initial, 'terminal with spaces') : initial;
         if (existing) {
+            await mkdir(root);
             await writeFile(
                 layoutPath,
                 JSON.stringify({
                     version: 1,
                     active: 0,
-                    workspaces: [{ root, current: '', files: [] }]
+                    workspaces: [{ root: initial, current: '', files: [] }]
                 })
             );
         }
@@ -52,6 +54,19 @@ for (const existing of [false, true]) {
                     .getByRole('button', { name: 'New terminal session', exact: true })
                     .click();
             }
+            const picker = page.getByRole('dialog', { name: 'folders palette' });
+            await expect(picker).toContainText('New terminal session');
+            await expect(picker.getByRole('combobox', { name: 'Session type' })).toHaveCount(0);
+            await expect(picker.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
+                'aria-busy',
+                'false'
+            );
+            await expect(picker.getByRole('textbox', { name: 'Folder path' })).toHaveValue(initial);
+            if (existing) {
+                await page.keyboard.press('Control+l');
+                await page.keyboard.type(root);
+            }
+            await page.keyboard.press('Control+Enter');
             const terminalName = `Workspace Terminal · ${basename(root)}`;
             await expect(
                 page.getByRole('tab', { name: terminalName, exact: true })
@@ -88,6 +103,12 @@ for (const existing of [false, true]) {
             ).toBeFocused();
             // A second click must create a separate session, even in the same folder.
             await page.getByRole('button', { name: 'New terminal session', exact: true }).click();
+            await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
+                'aria-busy',
+                'false'
+            );
+            await expect(page.getByRole('textbox', { name: 'Folder path' })).toHaveValue(root);
+            await page.keyboard.press('Control+Enter');
             await expect(page.getByRole('tab', { name: terminalName, exact: true })).toHaveCount(2);
             await expect(
                 page.getByRole('textbox', { name: 'Terminal input', exact: true })

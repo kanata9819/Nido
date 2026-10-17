@@ -2617,18 +2617,18 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
                 throw error;
             });
         await page.screenshot({ path: 'test-results/nido-terminal.png' });
-        await page.keyboard.press('Control+Shift+n');
-        await expect(page.getByRole('combobox', { name: 'Session type' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+p');
+        await page.keyboard.type('New terminal session');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('dialog', { name: 'folders palette' })).toContainText(
+            'New terminal session'
+        );
+        await expect(page.getByRole('combobox', { name: 'Session type' })).toHaveCount(0);
         await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
             'aria-busy',
             'false'
         );
         await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
-        await page.keyboard.press('Control+l');
-        await page.keyboard.press('Tab');
-        await expect(page.getByRole('combobox', { name: 'Session type' })).toBeFocused();
-        await page.keyboard.press('End');
-        await expect(page.getByRole('combobox', { name: 'Session type' })).toHaveValue('terminal');
         await page.screenshot({ path: 'test-results/nido-session-keyboard.png' });
         await page.keyboard.press('Control+Enter');
         const input = page.getByRole('textbox', { name: 'Terminal input' });

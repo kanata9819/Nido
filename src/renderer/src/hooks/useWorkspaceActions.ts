@@ -11,7 +11,7 @@ interface Options {
     focusEditor: () => void;
     requestEditorFocus: () => void;
     dismissLeader: () => void;
-    showFolders: () => void;
+    showFolders: (kind: 'editor' | 'terminal') => void;
     closeOverlay: () => void;
     report: (message: string) => void;
     run: (promise: Promise<unknown>) => void;
@@ -50,12 +50,12 @@ export function useWorkspaceActions({
         setActive(id);
         focusEditor();
     };
-    const create = async (): Promise<void> => {
+    const create = async (kind: 'editor' | 'terminal' = 'editor'): Promise<void> => {
         if (creating) {
             return;
         }
         dismissLeader();
-        showFolders();
+        showFolders(kind);
     };
     const openWorkspace = async (path: string, kind: 'editor' | 'terminal'): Promise<void> => {
         if (creating || restoring) {
@@ -118,8 +118,7 @@ export function useWorkspaceActions({
     return {
         creating,
         create,
-        createTerminal: () =>
-            openWorkspace(workspaces.find((w) => w.id === active)?.root || '', 'terminal'),
+        createTerminal: () => create('terminal'),
         activate,
         openWorkspace,
         openFavorite,

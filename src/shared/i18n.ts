@@ -324,7 +324,6 @@ export const japanese: Record<string, string> = {
     'Restart shell': 'シェルを再起動',
     'SPACE for commands': 'Spaceでコマンドを表示',
     'Folder path': 'フォルダーのパス',
-    'Session type': 'セッションの種類',
     Editor: 'エディター',
     editor: 'エディター',
     terminal: 'ターミナル',

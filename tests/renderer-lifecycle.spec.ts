@@ -1604,7 +1604,9 @@ test('A new diff clears the previous highlighting failure', async ({ page }) => 
     await expect(page.locator('[data-git-scroll="after"]')).toContainText('after');
 });
 
-test('workspace picker reaches both comboboxes using only the keyboard', async ({ page }) => {
+test('workspace picker reaches connection and folder actions without a session type selector', async ({
+    page
+}) => {
     await page.goto(`${origin}?view=app`);
     await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
     await page.keyboard.press('Control+Shift+n');
@@ -1612,29 +1614,26 @@ test('workspace picker reaches both comboboxes using only the keyboard', async (
     await page.keyboard.press('Control+l');
     await expect(page.getByRole('textbox', { name: 'Folder path', exact: true })).toBeFocused();
     await page.keyboard.press('Tab');
-    const type = page.getByRole('combobox', { name: 'Session type', exact: true });
-    await expect(type).toBeFocused();
-    await page.keyboard.press('End');
-    await expect(type).toHaveValue('terminal');
-    await page.keyboard.press('Home');
-    await expect(type).toHaveValue('editor');
+    const parent = page.getByRole('button', { name: '↑ Parent', exact: true });
+    await expect(parent).toBeFocused();
+    await expect(page.getByRole('combobox', { name: 'Session type', exact: true })).toHaveCount(0);
     await page.keyboard.press('Shift+Tab');
     await page.keyboard.press('Shift+Tab');
     await expect(page.getByRole('combobox', { name: 'Connection', exact: true })).toBeFocused();
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
-    await expect(type).toBeFocused();
+    await expect(parent).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
 });
 
-test('folder loading preserves keyboard focus on the session type', async ({ page }) => {
+test('folder loading preserves keyboard focus on the connection', async ({ page }) => {
     await page.goto(`${origin}?view=folders&defer=browseFolders`);
     await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
     await page.keyboard.press('Control+l');
-    await page.keyboard.press('Tab');
-    const type = page.getByRole('combobox', { name: 'Session type', exact: true });
-    await expect(type).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    const connection = page.getByRole('combobox', { name: 'Connection', exact: true });
+    await expect(connection).toBeFocused();
     await page.evaluate(() =>
         window.rendererTest.settle('browseFolders', 0, { path: '/alpha', parent: '/', folders: [] })
     );
@@ -1645,7 +1644,7 @@ test('folder loading preserves keyboard focus on the session type', async ({ pag
     await page.evaluate(
         () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     );
-    await expect(type).toBeFocused();
+    await expect(connection).toBeFocused();
 });
 
 test('browsing folders moves focus to the list only if the user has not moved it', async ({
@@ -1670,9 +1669,9 @@ test('browsing folders moves focus to the list only if the user has not moved it
     await page.keyboard.type('/gamma');
     await page.keyboard.press('Enter');
     await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
-    await page.keyboard.press('Tab');
-    const type = page.getByRole('combobox', { name: 'Session type', exact: true });
-    await expect(type).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    const connection = page.getByRole('combobox', { name: 'Connection', exact: true });
+    await expect(connection).toBeFocused();
     await page.evaluate(() =>
         window.rendererTest.settle('browseFolders', 0, { path: '/gamma', parent: '/', folders: [] })
     );
@@ -1680,7 +1679,72 @@ test('browsing folders moves focus to the list only if the user has not moved it
     await page.evaluate(
         () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     );
-    await expect(type).toBeFocused();
+    await expect(connection).toBeFocused();
+});
+
+test('creation entry chooses the session kind and cancelling resets the next editor request', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=favoriteWorkspaces`);
+    await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('favoriteWorkspaces', 0, [
+            { root: '/editor', name: 'Editor project', kind: 'editor' },
+            { root: '/terminal', name: 'Terminal project', kind: 'terminal' }
+        ])
+    );
+    await page.keyboard.press('Control+Shift+p');
+    await page.keyboard.type('New terminal session');
+    await page.keyboard.press('Enter');
+    const picker = page.getByRole('dialog', { name: 'folders palette' });
+    await expect(picker).toContainText('New terminal session');
+    await expect(
+        picker.getByRole('option', { name: 'Favorite Terminal project (terminal)' })
+    ).toHaveCount(1);
+    await expect(
+        picker.getByRole('option', { name: 'Favorite Editor project (editor)' })
+    ).toHaveCount(0);
+    await expect(picker.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
+        'aria-busy',
+        'false'
+    );
+    await page.keyboard.press('Control+l');
+    await page.keyboard.type('/different/project');
+    await page.keyboard.press('Control+Enter');
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .find((call) => call.method === 'createWorkspace')
+                    ?.args.slice(0, 2)
+            )
+        )
+        .toEqual(['/different/project', 'terminal']);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+Shift+n');
+    await expect(picker).toContainText('Open a workspace');
+    await expect(
+        picker.getByRole('option', { name: 'Favorite Editor project (editor)' })
+    ).toHaveCount(1);
+    await expect(
+        picker.getByRole('option', { name: 'Favorite Terminal project (terminal)' })
+    ).toHaveCount(0);
+    await expect(picker.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
+        'aria-busy',
+        'false'
+    );
+    await page.keyboard.press('Control+Enter');
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'createWorkspace')
+                    .at(-1)
+                    ?.args.slice(0, 2)
+            )
+        )
+        .toEqual(['/alpha', 'editor']);
 });
 
 test('Folder browsing cancels old results and clamps selection after favorites change', async ({
