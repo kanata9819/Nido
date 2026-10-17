@@ -1,0 +1,24 @@
+{
+    "schemaVersion": 1,
+    "id": "rust",
+    "version": "1.0.0",
+    "title": "Rust",
+    "description": "Completion, diagnostics, hover, definitions, references, rename, formatting and code actions.",
+    "filetypes": ["rust"],
+    "serverName": "rust_analyzer",
+    "adapter": "rust",
+    "setup": "rustup component add rust-analyzer rust-src rustfmt",
+    "languages": [
+        {
+            "id": "rust",
+            "title": "Rust",
+            "mark": "Rs",
+            "category": "tools",
+            "extensions": ".rs",
+            "description": "Completion, diagnostics, hover, definitions, references, rename, formatting and code actions.",
+            "requirement": "Requires Rust",
+            "setup": "Uses your Rust toolchain. Install Rust, then add these components. Run and debug are also supported.",
+            "command": "rustup component add rust-analyzer rust-src rustfmt"
+        }
+    ]
+}

@@ -292,33 +292,4 @@ vim.api.nvim_create_autocmd('LspAttach', {
   end,
 })
 
--- Prefer independently updated project/external language servers, with a bundled fallback.
-require('nido_deno').setup()
-if vim.env.NIDO_NODE and vim.env.NIDO_LANGUAGES then
-  local ok, err = pcall(function() require('nido_typescript').setup() end)
-  if not ok then
-    vim.schedule(function() vim.notify(tostring(err), vim.log.levels.ERROR) end)
-  end
-end
-
--- Rust uses the installed toolchain matching the workspace.
-local cargo_home = vim.env.CARGO_HOME or vim.fs.joinpath(vim.fn.expand('~'), '.cargo')
-local cargo_bin = vim.fs.joinpath(cargo_home, 'bin')
-if vim.fn.executable('rust-analyzer') == 0 and vim.fn.isdirectory(cargo_bin) == 1 then
-  vim.env.PATH = cargo_bin .. (vim.fn.has('win32') == 1 and ';' or ':') .. (vim.env.PATH or '')
-end
-if vim.fn.executable('rust-analyzer') == 1 then
-  vim.lsp.config('rust_analyzer', {
-    cmd = { 'rust-analyzer' },
-    filetypes = { 'rust' },
-    -- Each Nido session owns one workspace, including navigation into dependencies.
-    -- Discovering a root per buffer would start another server for Rust's sysroot.
-    root_dir = vim.fn.getcwd(),
-    settings = { ['rust-analyzer'] = { check = { command = 'check' } } },
-  })
-  vim.lsp.enable('rust_analyzer')
-else
-  vim.api.nvim_create_autocmd('FileType', { pattern = 'rust', once = true, callback = function()
-    vim.notify('Rust language support needs rust-analyzer. Run: rustup component add rust-analyzer', vim.log.levels.WARN)
-  end })
-end
+require('nido_language_packs').setup()

@@ -2,6 +2,12 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { NidoAPI, NidoEvent } from '../shared/types';
 
 const api: NidoAPI = {
+    languagePacks: (id) => ipcRenderer.invoke('nido:languagePacks', id),
+    setLanguagePackEnabled: (id, enabled) =>
+        ipcRenderer.invoke('nido:setLanguagePackEnabled', id, enabled),
+    installLanguagePack: () => ipcRenderer.invoke('nido:installLanguagePack'),
+    reloadLanguagePacks: () => ipcRenderer.invoke('nido:reloadLanguagePacks'),
+    openLanguagePackFolder: () => ipcRenderer.invoke('nido:openLanguagePackFolder'),
     wslDistributions: () => ipcRenderer.invoke('nido:wslDistributions'),
     setHistoryEnabled: (enabled) => ipcRenderer.invoke('nido:historyEnabled', enabled),
     history: (id) => ipcRenderer.invoke('nido:history', id),

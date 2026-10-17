@@ -1,4 +1,4 @@
-import { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } from 'electron';
 import { release } from 'node:os';
 import { isAbsolute, sep } from 'node:path';
 import { workspaceRelative as relative } from './workspacePaths';
@@ -10,6 +10,8 @@ import { terminalShells, uiThemes, type TerminalShell, type UITheme } from '../s
 import type { DebugAction, FileAction, NidoEvent, Workspace } from '../shared/types';
 import type { Updates } from './updater';
 import { translate, type Language } from '../shared/i18n';
+import { LanguagePacks } from './languagePacks';
+import type { LanguagePackSnapshot } from '../shared/languagePacks';
 
 export interface AppState {
     language?: Language;
@@ -83,6 +85,75 @@ export function registerHandlers({
         });
     };
 
+    const languagePacks = new LanguagePacks(neovimResources, app.getPath('userData'));
+    let packUpdate: Promise<unknown> = Promise.resolve();
+    const updatePacks = (action: () => Promise<void>): Promise<void> => {
+        const update = packUpdate.then(async () => {
+            await action();
+            const config = await languagePacks.load();
+            const results = await Promise.allSettled(
+                [...sessions.values()].map((s) => s.reloadLanguagePacks(config))
+            );
+            for (const result of results) {
+                if (result.status === 'rejected') {
+                    send({
+                        type: 'notification',
+                        id: state.active,
+                        title: 'Language packs',
+                        message: String(result.reason),
+                        severity: 'error'
+                    });
+                }
+            }
+        });
+        packUpdate = update.catch(() => {});
+        return update;
+    };
+    handle('languagePacks', async (id): Promise<LanguagePackSnapshot> => {
+        await packUpdate;
+        const config = await languagePacks.load();
+        const current = typeof id === 'string' ? sessions.get(id) : undefined;
+        const runtime = current ? await current.languagePacks() : [];
+        return {
+            packs: config.packs.map((pack) => {
+                const enabled = !config.disabled.includes(pack.id);
+                const status = runtime.find((item) => item.id === pack.id);
+                return {
+                    ...pack,
+                    enabled,
+                    status: enabled ? (status?.status ?? 'ready') : 'disabled',
+                    message: status?.message
+                };
+            }),
+            errors: config.errors
+        };
+    });
+    handle('setLanguagePackEnabled', (id, enabled) => {
+        if (typeof id !== 'string' || typeof enabled !== 'boolean') {
+            throw new Error('Invalid language pack selection.');
+        }
+        return updatePacks(() => languagePacks.setEnabled(id, enabled));
+    });
+    handle('reloadLanguagePacks', () => updatePacks(async () => {}));
+    handle('installLanguagePack', async () => {
+        const result = await dialog.showOpenDialog(window, {
+            properties: ['openFile'],
+            filters: [{ name: 'Nido language pack', extensions: ['json'] }]
+        });
+        if (result.canceled || !result.filePaths[0]) {
+            return;
+        }
+        await updatePacks(() => languagePacks.install(result.filePaths[0]));
+    });
+    handle('openLanguagePackFolder', async () => {
+        const { mkdir } = await import('node:fs/promises');
+        await mkdir(languagePacks.directory, { recursive: true });
+        const error = await shell.openPath(languagePacks.directory);
+        if (error) {
+            throw new Error(error);
+        }
+    });
+
     handle('updateState', () => updates.snapshot());
     handle('language', (value) => {
         if (value !== 'en' && value !== 'ja') {
@@ -118,6 +189,7 @@ export function registerHandlers({
         sessions,
         state,
         neovimResources,
+        languagePacks,
         send,
         handle,
         session,

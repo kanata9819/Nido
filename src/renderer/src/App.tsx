@@ -500,7 +500,9 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                                 />
                             )}
                     </div>
-                    {panel === 'features' && <FeaturesPage onClose={focusEditor} />}
+                    {panel === 'features' && (
+                        <FeaturesPage onClose={focusEditor} workspaceId={active || undefined} />
+                    )}
                 </main>
             </div>
             <WorkspacePanels

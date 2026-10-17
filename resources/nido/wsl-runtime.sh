@@ -20,8 +20,10 @@ case "$(uname -m)" in
 esac
 
 nvim_bin="$(command -v nvim || true)"
+# Nido's external highlight-state UI is validated against 0.11.x. System 0.12
+# can crash during UI attachment; use the private pinned runtime in that case.
 if [ -n "$nvim_bin" ] && ! "$nvim_bin" --clean --headless -u NONE -i NONE \
-    -c "lua if vim.fn.has('nvim-0.11.5') == 0 then vim.cmd('cquit') end" -c qa >/dev/null 2>&1; then
+    -c "lua if vim.fn.has('nvim-0.11.5') == 0 or vim.fn.has('nvim-0.12') == 1 then vim.cmd('cquit') end" -c qa >/dev/null 2>&1; then
     nvim_bin=
 fi
 node_bin="$(command -v node || true)"

@@ -1,0 +1,32 @@
+{
+    "schemaVersion": 1,
+    "id": "typescript",
+    "version": "1.0.0",
+    "title": "TypeScript / JavaScript",
+    "description": "Completion, diagnostics, hover, definitions, references, rename, formatting and code actions.",
+    "filetypes": ["typescript", "typescriptreact", "javascript", "javascriptreact"],
+    "serverName": "typescript",
+    "adapter": "typescript",
+    "languages": [
+        {
+            "id": "typescript",
+            "title": "TypeScript",
+            "mark": "TS",
+            "category": "tools",
+            "extensions": ".ts · .tsx",
+            "keywords": "React TSX",
+            "description": "Completion, diagnostics, hover, definitions, references, rename, formatting and code actions.",
+            "setup": "Language server included. Uses project TypeScript when available, with a bundled fallback."
+        },
+        {
+            "id": "javascript",
+            "title": "JavaScript",
+            "mark": "JS",
+            "category": "tools",
+            "extensions": ".js · .jsx · .mjs · .cjs",
+            "keywords": "React JSX",
+            "description": "Completion, diagnostics, hover, definitions, references, rename, formatting and code actions.",
+            "setup": "Language server included. JSX is supported without an extra plugin."
+        }
+    ]
+}

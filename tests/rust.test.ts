@@ -96,7 +96,11 @@ test(
                 if (Array.isArray(definition) && definition.length) break;
                 await new Promise((done) => setTimeout(done, 200));
             }
-            assert.match(JSON.stringify(definition), /lib\.rs/);
+            assert.match(
+                JSON.stringify(definition),
+                /lib\.rs/,
+                JSON.stringify({ packs: await session.languagePacks(), messages })
+            );
             await lua('vim.api.nvim_win_set_cursor(0, {3, 18}); require("nido_references").find()');
             for (
                 let attempt = 0;

@@ -26,7 +26,7 @@
         "build:win": "npm run build && electron-builder --win --publish never",
         "build:mac": "electron-vite build && electron-builder --mac",
         "build:linux": "electron-vite build && electron-builder --linux",
-        "test": "tsx --test --test-concurrency=1 tests/i18n.test.ts tests/wsl.test.ts tests/session.test.ts tests/session-lifecycle.test.ts tests/terminal-exit.test.ts tests/session-performance.test.ts tests/feature-performance.test.ts tests/bracket-performance.test.ts tests/editor-highlights.test.ts tests/grid-performance.test.ts tests/persistence.test.ts tests/local-history.test.ts tests/neovim-ui.test.ts tests/git.test.ts tests/keyboard.test.ts tests/prepare-neovim.test.ts tests/scroll.test.ts tests/click.test.ts tests/updater.test.ts tests/sticky-scroll.test.ts",
+        "test": "tsx --test --test-concurrency=1 tests/i18n.test.ts tests/language-packs.test.ts tests/wsl.test.ts tests/session.test.ts tests/session-lifecycle.test.ts tests/terminal-exit.test.ts tests/session-performance.test.ts tests/feature-performance.test.ts tests/bracket-performance.test.ts tests/editor-highlights.test.ts tests/grid-performance.test.ts tests/persistence.test.ts tests/local-history.test.ts tests/neovim-ui.test.ts tests/git.test.ts tests/keyboard.test.ts tests/prepare-neovim.test.ts tests/scroll.test.ts tests/click.test.ts tests/updater.test.ts tests/sticky-scroll.test.ts",
         "test:wsl": "tsx --test tests/wsl.test.ts",
         "test:e2e": "playwright test",
         "test:renderer": "playwright test --config playwright.renderer.config.ts",
@@ -39,7 +39,8 @@
         "test:rust": "tsx --test tests/rust.test.ts",
         "test:typescript": "tsx --test tests/typescript.test.ts",
         "test:deno": "tsx --test tests/deno.test.ts",
-        "test:debug": "tsx --test tests/debug.test.ts"
+        "test:debug": "tsx --test tests/debug.test.ts",
+        "test:language-packs": "tsx --test --test-concurrency=1 tests/language-packs.test.ts tests/language-packs-wsl.test.ts"
     },
     "dependencies": {
         "@electron-toolkit/preload": "^3.0.2",

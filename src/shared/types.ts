@@ -1,6 +1,7 @@
 import type { Language } from './i18n';
 import type { NeovimUIState } from './neovimUI';
 import type { HistoryList, HistoryPreview } from './history';
+import type { LanguagePackSnapshot } from './languagePacks';
 
 export const terminalShells = ['auto', 'pwsh', 'powershell.exe', 'cmd.exe', 'wsl.exe'] as const;
 export type TerminalShell = (typeof terminalShells)[number];
@@ -205,6 +206,11 @@ export interface GitStatus {
 }
 
 export interface NidoAPI {
+    languagePacks(id?: string): Promise<LanguagePackSnapshot>;
+    setLanguagePackEnabled(id: string, enabled: boolean): Promise<void>;
+    installLanguagePack(): Promise<void>;
+    reloadLanguagePacks(): Promise<void>;
+    openLanguagePackFolder(): Promise<void>;
     wslDistributions(): Promise<string[]>;
     setHistoryEnabled(enabled: boolean): Promise<void>;
     history(id: string): Promise<HistoryList>;

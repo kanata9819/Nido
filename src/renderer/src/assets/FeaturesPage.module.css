@@ -81,6 +81,51 @@
     margin-right: auto;
     margin-left: auto;
 }
+.packActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+.packActions button {
+    padding: 8px 12px;
+    border: 1px solid var(--ui-border, #282c30);
+    border-radius: 5px;
+    color: #d5dce1;
+    background: var(--surface-panel, #17191b);
+    font-size: 12px;
+}
+.packActions button:hover {
+    border-color: var(--ui-accent, #a3cc94);
+}
+.packActions button:disabled {
+    opacity: 0.5;
+}
+.packControls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+.packControls label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+}
+.packControls input {
+    accent-color: var(--ui-accent, #a3cc94);
+}
+.packError {
+    color: #e4a0a0;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+.packControls [data-status='missing'],
+.packControls [data-status='error'] {
+    color: #e4b381;
+}
 .eyebrow {
     color: var(--ui-accent, #a3cc94);
     font-size: 10px;

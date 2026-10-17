@@ -1,3 +1,7 @@
+import typescriptPack from '../../../resources/nido/language-packs/typescript/pack.json';
+import rustPack from '../../../resources/nido/language-packs/rust/pack.json';
+import denoPack from '../../../resources/nido/language-packs/deno/pack.json';
+
 export type LanguageCategory = 'tools' | 'runtimes' | 'preview' | 'syntax';
 
 export interface SupportedLanguage {
@@ -30,9 +34,6 @@ export const languageCategories: { id: LanguageCategory; title: string; descript
     }
 ];
 
-const codeIntelligence =
-    'Completion, diagnostics, hover, definitions, references, rename, formatting and code actions.';
-
 const syntaxLanguages: Pick<SupportedLanguage, 'id' | 'title' | 'mark' | 'extensions'>[] = [
     { id: 'python', title: 'Python', mark: 'Py', extensions: '.py' },
     { id: 'go', title: 'Go', mark: 'Go', extensions: '.go' },
@@ -45,37 +46,8 @@ const syntaxLanguages: Pick<SupportedLanguage, 'id' | 'title' | 'mark' | 'extens
 
 // Match the language servers configured in resources/nido and the bundled runtime.
 export const supportedLanguages: SupportedLanguage[] = [
-    {
-        id: 'typescript',
-        title: 'TypeScript',
-        mark: 'TS',
-        category: 'tools',
-        extensions: '.ts · .tsx',
-        keywords: 'React TSX',
-        description: codeIntelligence,
-        setup: 'Language server included. Uses project TypeScript when available, with a bundled fallback.'
-    },
-    {
-        id: 'javascript',
-        title: 'JavaScript',
-        mark: 'JS',
-        category: 'tools',
-        extensions: '.js · .jsx · .mjs · .cjs',
-        keywords: 'React JSX',
-        description: codeIntelligence,
-        setup: 'Language server included. JSX is supported without an extra plugin.'
-    },
-    {
-        id: 'rust',
-        title: 'Rust',
-        mark: 'Rs',
-        category: 'tools',
-        extensions: '.rs',
-        description: codeIntelligence,
-        requirement: 'Requires Rust',
-        setup: 'Uses your Rust toolchain. Install Rust, then add these components. Run and debug are also supported.',
-        command: 'rustup component add rust-analyzer rust-src rustfmt'
-    },
+    ...(typescriptPack.languages as SupportedLanguage[]),
+    ...(rustPack.languages as SupportedLanguage[]),
     {
         id: 'node',
         title: 'Node.js',
@@ -88,18 +60,7 @@ export const supportedLanguages: SupportedLanguage[] = [
         requirement: 'Requires Node.js',
         setup: 'Language tools work out of the box. Running your project requires Node.js on PATH.'
     },
-    {
-        id: 'deno',
-        title: 'Deno',
-        mark: 'D',
-        category: 'runtimes',
-        extensions: 'TypeScript · JavaScript',
-        keywords: 'deno.json deno.jsonc deno.lock .ts .tsx .js .jsx .mts .mjs',
-        description: codeIntelligence,
-        requirement: 'Requires Deno',
-        setup: 'Uses your installed Deno. Projects with deno.json, deno.jsonc or deno.lock are detected automatically.',
-        command: 'winget install --id DenoLand.Deno -e'
-    },
+    ...(denoPack.languages as SupportedLanguage[]),
     {
         id: 'markdown',
         title: 'Markdown',

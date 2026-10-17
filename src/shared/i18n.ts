@@ -98,6 +98,28 @@ export const japanese: Record<string, string> = {
     'Explore languages, runtimes and built-in features · Ctrl+Shift+X':
         '対応言語・ランタイム・ビルトイン機能を確認 · Ctrl+Shift+X',
     'Close features': '機能一覧を閉じる',
+    'Language packs': '言語パック',
+    'Manage language support for your workspaces.':
+        'ワークスペースで使う言語サポートを管理します。',
+    'Search language packs': '言語パックを検索',
+    'Install language pack': '言語パックを追加',
+    'Reload language packs': '言語パックを再読み込み',
+    'Open pack folder': 'パックのフォルダーを開く',
+    'Language tool status for the current workspace.':
+        '現在のワークスペースでの言語ツールの状態です。',
+    'Open a workspace to check language tools.':
+        'ワークスペースを開くと言語ツールの状態を確認できます。',
+    'Loading language packs…': '言語パックを読み込み中…',
+    'Enable {name}': '{name}を有効にする',
+    Enabled: '有効',
+    Disabled: '無効',
+    Available: '利用可能',
+    Starting: '起動中',
+    Running: '実行中',
+    'Setup required': 'セットアップが必要',
+    'Failed to start': '起動に失敗',
+    Installed: '追加済み',
+    'No language packs match your search.': '検索に一致する言語パックはありません。',
     'Built-in': 'ビルトイン',
     'Built-in features': 'ビルトイン機能',
     'Feature catalog': '機能カタログ',

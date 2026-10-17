@@ -21,6 +21,8 @@ import { SessionInteraction } from './sessionInteraction';
 import type { HistoryContent, HistorySnapshot, HistoryToken } from '../shared/history';
 import { editorPath, hostPath, parseWslPath } from '../shared/wsl';
 import { prepareWsl, resolveWslFolder, trashWslFile, wslArguments } from './wsl';
+import { discoverLanguagePacks } from './languagePacks';
+import type { LanguagePackConfiguration, LanguagePackRuntime } from '../shared/languagePacks';
 
 export class Session {
     terminal?: Session;
@@ -168,7 +170,8 @@ export class Session {
     static async create(
         root: string,
         emit: (event: NidoEvent) => void,
-        resources = resolve(__dirname, '../../resources')
+        resources = resolve(__dirname, '../../resources'),
+        languagePacks?: LanguagePackConfiguration
     ): Promise<Session> {
         const remote = parseWslPath(root);
         const actual = remote
@@ -211,6 +214,9 @@ export class Session {
                         'assert(vim.wait(10000, function() return vim.v.vim_did_enter == 1 end), "Neovim startup timed out")',
                         []
                     ]);
+                    await session.reloadLanguagePacks(
+                        languagePacks ?? (await discoverLanguagePacks(resources))
+                    );
                 })(),
                 new Promise<never>((_, reject) => {
                     session.process.once('error', reject);
@@ -234,6 +240,20 @@ export class Session {
         } finally {
             clearTimeout(timer);
         }
+    }
+
+    async reloadLanguagePacks(config: LanguagePackConfiguration): Promise<void> {
+        await this.client.request('nvim_exec_lua', [
+            "require('nido_language_packs').apply(vim.json.decode(...))",
+            [JSON.stringify(config)]
+        ]);
+    }
+
+    async languagePacks(): Promise<LanguagePackRuntime[]> {
+        return this.client.request('nvim_exec_lua', [
+            "return require('nido_language_packs').snapshot()",
+            []
+        ]) as Promise<LanguagePackRuntime[]>;
     }
 
     async attach(columns: number, rows: number): Promise<void> {

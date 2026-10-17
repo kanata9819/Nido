@@ -1,19 +1,47 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Blocks, Search, X } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { builtinFeatures, featureCategories } from '../features';
 import { languageCategories, supportedLanguages } from '../languages';
 import styles from '../assets/FeaturesPage.module.css';
+import LanguagePacksPanel from './LanguagePacksPanel';
+import type { LanguagePackSnapshot } from '../../../shared/languagePacks';
 
-export default function FeaturesPage({ onClose }: { onClose: () => void }): React.JSX.Element {
+export default function FeaturesPage({
+    onClose,
+    workspaceId
+}: {
+    onClose: () => void;
+    workspaceId?: string;
+}): React.JSX.Element {
     const t = useI18n();
-    const [view, setView] = useState<'languages' | 'features'>('languages');
+    const [view, setView] = useState<'languages' | 'features' | 'packs'>('languages');
+    const [snapshot, setSnapshot] = useState<LanguagePackSnapshot>();
+    useEffect(() => {
+        let active = true;
+        void window.nido
+            .languagePacks(workspaceId)
+            .then((next) => {
+                if (active) {
+                    setSnapshot(next);
+                }
+            })
+            .catch(() => {});
+        return () => {
+            active = false;
+        };
+    }, [workspaceId]);
     const [query, setQuery] = useState('');
     const search = useRef<HTMLInputElement>(null);
     const content = useRef<HTMLDivElement>(null);
     const tabs = useRef<(HTMLButtonElement | null)[]>([]);
     useLayoutEffect(() => search.current?.focus(), []);
-    const views = ['languages', 'features'] as const;
+    const views = ['languages', 'features', 'packs'] as const;
+    const viewTitles = {
+        languages: 'Languages & runtimes',
+        features: 'Built-in features',
+        packs: 'Language packs'
+    } as const;
     const selectView = (next: typeof view): void => {
         setView(next);
         setQuery('');
@@ -25,7 +53,14 @@ export default function FeaturesPage({ onClose }: { onClose: () => void }): Reac
             (value) => value.toLocaleLowerCase().includes(needle)
         )
     );
-    const languages = supportedLanguages.filter((language) =>
+    const additions = snapshot?.packs.flatMap((pack) => pack.languages ?? []) ?? [];
+    const catalog = [
+        ...supportedLanguages.filter(
+            (language) => !additions.some((item) => item.id === language.id)
+        ),
+        ...additions
+    ];
+    const languages = catalog.filter((language) =>
         [
             language.title,
             language.keywords ?? '',
@@ -74,7 +109,9 @@ export default function FeaturesPage({ onClose }: { onClose: () => void }): Reac
                         onKeyDown={(event) => {
                             let next: number;
                             if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-                                next = (index + 1) % views.length;
+                                next =
+                                    (index + (event.key === 'ArrowRight' ? 1 : views.length - 1)) %
+                                    views.length;
                             } else if (event.key === 'Home') {
                                 next = 0;
                             } else if (event.key === 'End') {
@@ -87,7 +124,7 @@ export default function FeaturesPage({ onClose }: { onClose: () => void }): Reac
                             tabs.current[next]?.focus();
                         }}
                     >
-                        {t(tab === 'languages' ? 'Languages & runtimes' : 'Built-in features')}
+                        {t(viewTitles[tab])}
                     </button>
                 ))}
             </div>
@@ -100,17 +137,23 @@ export default function FeaturesPage({ onClose }: { onClose: () => void }): Reac
                 tabIndex={0}
             >
                 <div className={styles.intro}>
-                    <span className={styles.eyebrow}>
-                        NIDO / {t(isLanguages ? 'Languages & runtimes' : 'Built-in')}
-                    </span>
+                    <span className={styles.eyebrow}>NIDO / {t(viewTitles[view])}</span>
                     <h2>
-                        {t(isLanguages ? 'Languages & runtimes' : 'Discover what Nido can do.')}
+                        {t(
+                            view === 'packs'
+                                ? 'Language packs'
+                                : isLanguages
+                                  ? 'Languages & runtimes'
+                                  : 'Discover what Nido can do.'
+                        )}
                     </h2>
                     <p>
                         {t(
-                            isLanguages
-                                ? 'See supported languages, runtimes, available tools and setup requirements.'
-                                : 'Explore the features included with Nido.'
+                            view === 'packs'
+                                ? 'Manage language support for your workspaces.'
+                                : isLanguages
+                                  ? 'See supported languages, runtimes, available tools and setup requirements.'
+                                  : 'Explore the features included with Nido.'
                         )}
                     </p>
                 </div>
@@ -120,23 +163,31 @@ export default function FeaturesPage({ onClose }: { onClose: () => void }): Reac
                         <input
                             ref={search}
                             aria-label={t(
-                                isLanguages ? 'Search languages and runtimes' : 'Search features'
+                                view === 'packs'
+                                    ? 'Search language packs'
+                                    : isLanguages
+                                      ? 'Search languages and runtimes'
+                                      : 'Search features'
                             )}
                             placeholder={t(
-                                isLanguages
-                                    ? 'Search languages, runtimes or file extensions'
-                                    : 'Search built-in features'
+                                view === 'packs'
+                                    ? 'Search language packs'
+                                    : isLanguages
+                                      ? 'Search languages, runtimes or file extensions'
+                                      : 'Search built-in features'
                             )}
                             value={query}
                             onChange={(event) => setQuery(event.target.value)}
                         />
                     </label>
-                    <span className={styles.count} role="status">
-                        {t('Showing {count} of {total}', {
-                            count: isLanguages ? languages.length : features.length,
-                            total: isLanguages ? supportedLanguages.length : builtinFeatures.length
-                        })}
-                    </span>
+                    {view !== 'packs' && (
+                        <span className={styles.count} role="status">
+                            {t('Showing {count} of {total}', {
+                                count: isLanguages ? languages.length : features.length,
+                                total: isLanguages ? catalog.length : builtinFeatures.length
+                            })}
+                        </span>
+                    )}
                 </div>
                 {isLanguages && (
                     <>
@@ -218,7 +269,14 @@ export default function FeaturesPage({ onClose }: { onClose: () => void }): Reac
                         )}
                     </>
                 )}
-                {!isLanguages &&
+                {view === 'packs' && (
+                    <LanguagePacksPanel
+                        workspaceId={workspaceId}
+                        query={query}
+                        onChange={setSnapshot}
+                    />
+                )}
+                {view === 'features' &&
                     featureCategories.map((category) => {
                         const items = features.filter(
                             (feature) => feature.category === category.id
@@ -256,7 +314,7 @@ export default function FeaturesPage({ onClose }: { onClose: () => void }): Reac
                             </section>
                         );
                     })}
-                {!isLanguages && !features.length && (
+                {view === 'features' && !features.length && (
                     <p className={styles.empty}>{t('No features match your search.')}</p>
                 )}
             </div>

@@ -74,6 +74,8 @@ Rustの`main`・テスト・テストモジュールにはRun / Debugの案内�
 
 ## 言語サポート
 
+`Ctrl+Shift+X` → **Language packs / 言語パック** から、言語パックの追加・有効化・無効化・再読み込みができます。Rust・TypeScript/JavaScript・Denoは公式パックとして同梱され、設定は再起動後も維持されます。追加パックの形式とWSLでの動作は [言語パックの説明](docs/language-packs.md) を参照してください。
+
 - Rust：`rustup component add rust-analyzer rust-src rustfmt`
 - TypeScript / JavaScript：プロジェクトのTypeScriptを優先し、なければ外部または同梱サーバーを使用。
 - Deno：インストール済みの`deno lsp`を使用。`deno.json`・`deno.jsonc`・`deno.lock`を自動検出し、補完・診断・定義・参照・リネーム・整形・コードアクション・単語ハイライトに対応。Denoの型定義やキャッシュ済み依存も読み取り専用で開けます。

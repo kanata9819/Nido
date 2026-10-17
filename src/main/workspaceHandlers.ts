@@ -9,12 +9,14 @@ import type { HandlerDeps } from './handlers';
 import { createTranslator } from '../shared/i18n';
 import { parseWslPath } from '../shared/wsl';
 import { resolveWslFolder, wslDistributions } from './wsl';
+import type { LanguagePacks } from './languagePacks';
 
 export function registerWorkspaceHandlers({
     window,
     sessions,
     state,
     neovimResources,
+    languagePacks,
     send,
     handle,
     session,
@@ -22,6 +24,7 @@ export function registerWorkspaceHandlers({
     shellChoice,
     captureHistory
 }: HandlerDeps & {
+    languagePacks: LanguagePacks;
     handle: (name: string, action: (...args: unknown[]) => unknown) => void;
     session: (id: unknown) => Session;
     text: (value: unknown) => string;
@@ -216,7 +219,12 @@ export function registerWorkspaceHandlers({
                     saved.workspaces.map(async (workspace, index) => {
                         let s: Session | undefined;
                         try {
-                            s = await Session.create(workspace.root, send, neovimResources);
+                            s = await Session.create(
+                                workspace.root,
+                                send,
+                                neovimResources,
+                                await languagePacks.load()
+                            );
                             errors.push(...(await s.restore(workspace, selectedShell)));
                             if (index === saved.active) {
                                 state.active = s.workspace.id;
@@ -234,6 +242,10 @@ export function registerWorkspaceHandlers({
                         sessions.set(s.workspace.id, s);
                     }
                 }
+                // A preference may change while independent sessions are starting.
+                // Register first so subsequent updates also include these sessions.
+                const currentPacks = await languagePacks.load();
+                await Promise.all(restored.map((s) => s?.reloadLanguagePacks(currentPacks)));
                 checkpointReady = true;
             } catch (error) {
                 errors.push(`Workspace restore failed: ${String(error)}`);
@@ -299,7 +311,12 @@ export function registerWorkspaceHandlers({
         if (!isAbsolute(text(path))) {
             throw new Error('Enter an absolute folder path.');
         }
-        const s = await Session.create(text(path), send, neovimResources);
+        const s = await Session.create(
+            text(path),
+            send,
+            neovimResources,
+            await languagePacks.load()
+        );
         try {
             if (kind === 'terminal') {
                 await s.startTerminal(selectedShell);
@@ -312,6 +329,13 @@ export function registerWorkspaceHandlers({
             throw error;
         }
         sessions.set(s.workspace.id, s);
+        try {
+            await s.reloadLanguagePacks(await languagePacks.load());
+        } catch (error) {
+            sessions.delete(s.workspace.id);
+            await s.stop();
+            throw error;
+        }
         checkpointReady = true;
         return s.workspace;
     });
