@@ -214,6 +214,10 @@ export class Grid {
                 // Only actual viewport movement contributes to the preview history.
                 if (name === 'nido_scroll') {
                     const [grid, top, bottom, left, right, rows, columns] = args as number[];
+                    if (typeof args[7] === 'boolean') {
+                        // Virtual-line changes can move the grid at BOF without a wheel reply.
+                        atStart = args[7];
+                    }
                     if (
                         grid === 1 &&
                         top === 0 &&

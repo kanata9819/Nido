@@ -6,6 +6,24 @@ local fraction = 0
 local centered_view
 local mouse_scrolloff
 
+-- Buffer positions start below their virtual lines. topfill counts the extra
+-- screen rows still visible above that position, including CodeLens annotations.
+function M.view_distance(window, before, after)
+  local rows = 0
+  if before.topline ~= after.topline or before.skipcol ~= after.skipcol then
+    local forward = after.topline > before.topline
+      or (after.topline == before.topline and after.skipcol > before.skipcol)
+    local first, last = before, after
+    if not forward then first, last = after, before end
+    rows = api.nvim_win_text_height(window, {
+      start_row=first.topline - 1, end_row=last.topline - 1,
+      start_vcol=first.skipcol, end_vcol=last.skipcol,
+    }).all
+    if not forward then rows = -rows end
+  end
+  return rows + before.topfill - after.topfill
+end
+
 local function view_at_start(view)
   return view.topline <= 1 and view.skipcol == 0
 end
@@ -162,7 +180,8 @@ function M.prefetch(down)
       remaining = remaining - count
       local after = vim.fn.winsaveview()
       if (not down and view_at_start(after)) or
-        (after.topline == before.topline and after.skipcol == before.skipcol) then
+        (after.topline == before.topline and after.skipcol == before.skipcol
+          and after.topfill == before.topfill) then
         at_edge = true
         break
       end
@@ -213,14 +232,7 @@ function M.scroll(lines, follow, pixel)
   if lines ~= 0 then
     vim.cmd.normal({args={math.abs(lines) .. string.char(lines > 0 and 5 or 25)}, bang=true})
     local after = vim.fn.winsaveview()
-    local first, last = before, after
-    if lines < 0 then
-      first, last = after, before
-    end
-    local moved = api.nvim_win_text_height(0, {
-      start_row=first.topline - 1, end_row=last.topline - 1,
-      start_vcol=first.skipcol, end_vcol=last.skipcol,
-    }).all
+    local moved = math.abs(M.view_distance(0, before, after))
     if moved < math.abs(lines) then
       fraction = 0
     end
@@ -245,7 +257,8 @@ api.nvim_create_autocmd('WinScrolled', {callback=function()
     return
   end
   local view = vim.fn.winsaveview()
-  if view.topline ~= centered_view.topline or view.skipcol ~= centered_view.skipcol then
+  if view.topline ~= centered_view.topline or view.skipcol ~= centered_view.skipcol
+      or view.topfill ~= centered_view.topfill then
     fraction = 0
     centered_view = nil
     publish_offset()

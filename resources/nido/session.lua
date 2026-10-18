@@ -27,7 +27,7 @@ vim.api.nvim_set_decoration_provider(vim.api.nvim_create_namespace('nido_viewpor
     local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
     local previous = views[win]
     views[win] = {buffer=buffer, height=info.height, width=info.width,
-      topline=view.topline, skipcol=view.skipcol, leftcol=view.leftcol}
+      topline=view.topline, skipcol=view.skipcol, leftcol=view.leftcol, topfill=view.topfill}
     if not previous or previous.buffer ~= buffer or previous.height ~= info.height
         or previous.width ~= info.width
         -- Deleting lines can remove the old viewport; it has no valid scroll distance.
@@ -36,30 +36,15 @@ vim.api.nvim_set_decoration_provider(vim.api.nvim_create_namespace('nido_viewpor
     end
     local columns = view.leftcol - previous.leftcol
     if view.topline == previous.topline and view.skipcol == previous.skipcol
-        and columns == 0 then
+        and view.topfill == previous.topfill and columns == 0 then
       return false
     end
-    local forward = view.topline > previous.topline
-      or (view.topline == previous.topline and view.skipcol > previous.skipcol)
-    local first, last = previous, view
-    if not forward then
-      first, last = view, previous
-    end
-    local rows = 0
-    if view.topline ~= previous.topline or view.skipcol ~= previous.skipcol then
-      rows = vim.api.nvim_win_text_height(win, {
-        start_row=first.topline - 1, end_row=last.topline - 1,
-        start_vcol=first.skipcol, end_vcol=last.skipcol,
-      }).all
-      if not forward then
-        rows = -rows
-      end
-    end
+    local rows = require('nido_scroll').view_distance(win, previous, view)
     local top, left = info.winrow - 1, info.wincol - 1
     -- Horizontal scrolling leaves line numbers and signs fixed in place.
     vim.rpcnotify(channel, 'nido:scroll', {
       1, top, top + info.height, rows == 0 and left + info.textoff or left,
-      left + info.width, rows, columns,
+      left + info.width, rows, columns, view.topline <= 1 and view.skipcol == 0,
     })
     return false
   end,

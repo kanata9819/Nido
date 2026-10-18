@@ -14,7 +14,8 @@ export default defineConfig({
         'theme.spec.ts',
         'scroll-boundary.spec.ts',
         'fast-wheel.spec.ts',
-        'canvas-sharpness.spec.ts'
+        'canvas-sharpness.spec.ts',
+        'codelens-scroll.spec.ts'
     ],
     grep: new RegExp(
         windowsBaselineCases

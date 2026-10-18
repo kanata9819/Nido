@@ -798,6 +798,88 @@ test('pixel scrolling publishes the grid, offset and anchored cursor in a single
     }
 });
 
+test('pixel scroll previews agree with native movement through CodeLens rows', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-codelens-scroll-'));
+    let session: Session | undefined;
+    const grid = new Grid();
+    grid.pixelScrollEnabled = true;
+    const height = 20;
+    const lensHeight = 14;
+    const prepare = (): void => grid.prepareLayout(500, 8, height);
+    const position = (): number => {
+        const row = grid.cells.findIndex((cells) =>
+            cells
+                .map((cell) => cell.text)
+                .join('')
+                .includes('ROW_')
+        );
+        const line = Number(
+            grid.cells[row]
+                .map((cell) => cell.text)
+                .join('')
+                .match(/ROW_(\d+)/)![1]
+        );
+        return (line - 1) * height + Math.ceil(line / 4) * lensHeight - grid.rowY(row);
+    };
+    const reports: object[] = [];
+    try {
+        await writeFile(
+            join(root, 'rows.txt'),
+            Array.from({ length: 200 }, (_, i) => `ROW_${i + 1} example(argument)`).join('\n')
+        );
+        session = await Session.create(root, (event) => {
+            if (event.type !== 'redraw') return;
+            for (const [name, ...calls] of event.events) {
+                if (name === 'nido_pixel_scroll') {
+                    grid.scrollFraction = Number(calls.at(-1)![0]);
+                    grid.scrollPreview = 0;
+                }
+            }
+            grid.apply(event.events);
+            prepare();
+        });
+        await session.attach(80, 25);
+        await session.openFile('rows.txt');
+        await session.client.request('nvim_exec_lua', [
+            `local ns = vim.api.nvim_create_namespace('scroll-lens-test')
+            for row = 0, 199, 4 do
+              vim.api.nvim_buf_set_extmark(0, ns, row, 0, {
+                virt_lines={{{'  Run Tests', 'NidoCodeLens'}, {' (gR) | Debug (gD)', 'NidoCodeLensHint'}}},
+                virt_lines_above=true,
+              })
+            end
+            vim.cmd('normal! 30Gzt'); vim.cmd.redraw()`,
+            []
+        ]);
+        await session.client.request('nvim_eval', ['1']);
+        await session.prefetchScroll(true);
+        await session.prefetchScroll(false);
+        for (const delta of [...Array<number>(80).fill(0.2), ...Array<number>(80).fill(-0.2)]) {
+            grid.scrollPreview = delta;
+            prepare();
+            const preview = position();
+            await session.scroll(delta, false, true);
+            const actual = position();
+            if (Math.abs(actual - preview) > 0.001) {
+                reports.push({
+                    delta,
+                    preview,
+                    actual,
+                    fraction: grid.scrollFraction,
+                    view: await session.client.request('nvim_exec_lua', [
+                        'return vim.fn.winsaveview()',
+                        []
+                    ])
+                });
+            }
+        }
+        assert.deepEqual(reports, [], 'acknowledging a gesture must not jump at a CodeLens row');
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('upward pixel scrolling at the beginning never exposes cached rows or a fractional offset', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-scroll-start-'));
     let session: Session | undefined;

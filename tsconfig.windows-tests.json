@@ -9,6 +9,7 @@
         "src/preload/*.d.ts",
         "tests/helpers/*.ts",
         "tests/fast-wheel.spec.ts",
+        "tests/codelens-scroll.spec.ts",
         "tests/neovim-ui.spec.ts",
         "tests/workspace-search.spec.ts",
         "tests/update.spec.ts",
