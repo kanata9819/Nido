@@ -2847,6 +2847,15 @@ test('CodeLens rows compact while clicks, fractional scrolling and the command l
     ]);
     const context = {
         measureText: () => ({ width: 8 }),
+        // This geometry-only canvas has no ink to correct during fractional movement.
+        getImageData: (_x: number, _y: number, width: number, height: number) => ({
+            data: new Uint8ClampedArray(width * height * 4).map((_, channel) =>
+                channel % 4 === 3
+                    ? 255
+                    : (Number.parseInt(grid.background.slice(1), 16) >> (8 * (2 - (channel % 4)))) &
+                      255
+            )
+        }),
         ...Object.fromEntries(
             [
                 'setTransform',

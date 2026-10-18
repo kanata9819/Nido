@@ -66,6 +66,7 @@ for (const scale of [1, 1.25, 1.5]) {
                 node.dataset.mismatches = '0';
                 node.dataset.fractional = '0';
                 node.dataset.filteredCopies = '0';
+                node.dataset.correctedCopies = '0';
                 const reference = document.createElement('canvas');
                 const referenceContext = reference.getContext('2d', { alpha: false })!;
                 ctx.drawImage = ((...args: Parameters<typeof draw>) => {
@@ -80,17 +81,31 @@ for (const scale of [1, 1.25, 1.5]) {
                         );
                     }
                     const y = Number(args[2]) * dpr;
+                    const left = Math.round(Number(args[1]) * dpr);
                     const top = Math.round(y);
+                    if (source.height === Math.ceil(19 * dpr) && Math.abs(y - top) > 0.001) {
+                        // This native underlay is intentionally replaced with corrected light.
+                        // Outside a partial paint's clip, the prior corrected image remains.
+                        node.dataset.copied = String(Number(node.dataset.copied) + 1);
+                        node.dataset.fractional = String(Number(node.dataset.fractional) + 1);
+                        return;
+                    }
+                    if (source.height < Math.ceil(19 * dpr)) {
+                        node.dataset.correctedCopies = String(
+                            Number(node.dataset.correctedCopies) + 1
+                        );
+                    }
                     // Bottom buffer rows are intentionally clipped above the command line.
                     if (top < 0 || top + 3 * source.height >= node.height) return;
                     const width = Math.min(360, source.width - 180);
+                    if (width <= 0) return;
                     const height = source.height - 2;
-                    // Reference the single final translation, without a prefiltered row image.
+                    // Native rows move fractionally; corrected interiors copy at physical pixels.
                     reference.width = width;
                     reference.height = source.height + 2;
                     referenceContext.drawImage(source, -180, y - top);
                     const expected = referenceContext.getImageData(0, 1, width, height).data;
-                    const actual = ctx.getImageData(180, top + 1, width, height).data;
+                    const actual = ctx.getImageData(left + 180, top + 1, width, height).data;
                     let mismatches = 0;
                     // GPU and software interpolation can round an 8-bit channel by one.
                     // Integer translations must still preserve every native channel exactly.
@@ -146,6 +161,9 @@ for (const scale of [1, 1.25, 1.5]) {
                 .toBeGreaterThan(0);
             await expect(canvas).toHaveAttribute('data-mismatches', '0');
             await expect(canvas).toHaveAttribute('data-filtered-rows', '0');
+            await expect
+                .poll(async () => Number(await canvas.getAttribute('data-corrected-copies')))
+                .toBeGreaterThan(0);
             // Tiny touchpad deltas reuse native glyphs with one continuous translation,
             // including direction changes and pauses.
             await canvas.evaluate(async (node) => {

@@ -68,7 +68,6 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
             };
             ctx.drawImage = ((...args: Parameters<typeof draw>) => {
                 if (first && args.length === 5 && Number(args[2]) + Number(args[4]) > 0) {
-                    first = false;
                     const source = args[0] as HTMLCanvasElement;
                     const row = source.dataset?.rowText?.match(/ROW_(\d+)/);
                     if (row) {
@@ -77,6 +76,18 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                         const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
                         // Each scenario anchors line 1000 at a native pixel origin.
                         const origin = (Number(row[1]) - 1000) * rowHeight;
+                        // Partial cursor paints can start on another row. At fractional
+                        // DPI, compare rows sharing a physical-pixel phase so alternating
+                        // rounded line spacing is not mistaken for viewport movement.
+                        if (
+                            Math.abs(
+                                origin * devicePixelRatio - Math.round(origin * devicePixelRatio)
+                            ) > 0.001
+                        ) {
+                            draw(...args);
+                            return;
+                        }
+                        first = false;
                         const top =
                             999 * rowHeight +
                             Math.round(origin * devicePixelRatio) / devicePixelRatio -
