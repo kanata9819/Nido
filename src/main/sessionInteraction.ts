@@ -6,6 +6,9 @@ import type { SessionEvents } from './sessionEvents';
 export class SessionInteraction {
     private inputQueue: Promise<void> = Promise.resolve();
     private scrollDetached = false;
+    private prefetchGeneration = 0;
+    private prefetchCaches: unknown[] = [];
+    private prefetchingStrip = false;
 
     constructor(
         private readonly client: SessionClient,
@@ -193,29 +196,76 @@ export class SessionInteraction {
         this.scrollDetached = false;
     }
 
+    cancelPrefetch(): void {
+        this.prefetchGeneration++;
+        this.prefetchCaches = [];
+    }
+
+    observeScroll(args: unknown[]): void {
+        if (this.prefetchingStrip) {
+            return;
+        }
+        const [, top, bottom, left, , rows, columns] = args as number[];
+        if (top !== 0 || left !== 0 || columns !== 0 || Math.abs(rows) >= bottom - top) {
+            this.prefetchCaches = [];
+        } else if (rows) {
+            // The growing side may trim its far edge at the renderer's cache limit.
+            // The consumed side stays a valid, conservative continuation hint.
+            this.prefetchCaches[rows < 0 ? 1 : 0] = undefined;
+        }
+    }
+
     async prefetchScroll(down = false): Promise<void> {
-        const next = this.inputQueue.then(async () => {
-            // This fast RPC remains available while Neovim waits for the rest of a command.
-            const mode = (await this.client.request('nvim_get_mode', [])) as {
-                mode: string;
-                blocking: boolean;
-            };
-            if ((mode.mode !== 'n' && mode.mode !== 'i') || mode.blocking) {
-                return;
-            }
-            this.events.beginScrollBatch();
-            try {
-                await this.client.request('nvim_exec_lua', [
-                    "require('nido_scroll').prefetch(...)",
-                    [down]
-                ]);
-                await this.client.request('nvim_eval', ['1']);
-            } finally {
-                this.events.endScrollBatch();
-            }
-        });
-        this.inputQueue = next.catch(() => {});
-        return next;
+        const generation = this.prefetchGeneration;
+        const side = down ? 1 : 0;
+        let continuation: unknown;
+        let first = true;
+        do {
+            // Each strip restores Neovim's viewport. Let queued input and IPC run
+            // before reserving the queue for more speculative rows.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            continuation = await this.enqueue(async () => {
+                if (this.stopped || generation !== this.prefetchGeneration) {
+                    return;
+                }
+                // This fast RPC remains available while Neovim waits for the rest of a command.
+                const mode = (await this.client.request('nvim_get_mode', [])) as {
+                    mode: string;
+                    blocking: boolean;
+                };
+                if ((mode.mode !== 'n' && mode.mode !== 'i') || mode.blocking) {
+                    return;
+                }
+                if (first) {
+                    // Flush preceding keyboard movement before trusting a cached extent.
+                    // nvim_get_mode is fast and can precede its viewport notification.
+                    if (this.prefetchCaches[side]) {
+                        await this.client.request('nvim_exec_lua', ['vim.cmd.redraw()', []]);
+                    }
+                    continuation = this.prefetchCaches[side];
+                    first = false;
+                    if (generation !== this.prefetchGeneration) {
+                        return;
+                    }
+                }
+                this.prefetchingStrip = true;
+                this.events.beginScrollBatch();
+                try {
+                    const next = await this.client.request('nvim_exec_lua', [
+                        "return require('nido_scroll').prefetch(...)",
+                        continuation ? [down, continuation] : [down]
+                    ]);
+                    await this.client.request('nvim_eval', ['1']);
+                    if (next && generation === this.prefetchGeneration) {
+                        this.prefetchCaches[side] = next;
+                    }
+                    return next;
+                } finally {
+                    this.events.endScrollBatch();
+                    this.prefetchingStrip = false;
+                }
+            });
+        } while (continuation && generation === this.prefetchGeneration);
     }
 
     async scroll(lines: number, follow = true, pixel = false): Promise<void> {

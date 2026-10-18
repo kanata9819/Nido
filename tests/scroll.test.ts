@@ -69,6 +69,52 @@ test('cold gestures send movement first and refill the final direction after rev
     }
 });
 
+test('late replies from a previous buffer cannot complete a new scroll or refill', async () => {
+    const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    const replies: (() => void)[] = [];
+    const completions: Promise<void>[] = [];
+    const deferred = (): Promise<void> => new Promise((resolve) => replies.push(resolve));
+    Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: { nido: { scroll: deferred, prefetchScroll: deferred } }
+    });
+    const grid = new Grid();
+    const scrolling = new EditorScroll({
+        id: 'alpha',
+        grid,
+        enabled: () => true,
+        schedule: () => {},
+        onError: (error) => {
+            throw error;
+        },
+        onCompletion: (promise) => completions.push(promise)
+    });
+    try {
+        scrolling.request(-7, true);
+        assert.equal(replies.length, 2);
+        scrolling.reset();
+        scrolling.request(7, true);
+        assert.equal(replies.length, 4);
+        replies[0]();
+        replies[1]();
+        await Promise.all(completions.slice(0, 2));
+        assert.equal(scrolling.pending, true);
+        assert.equal(scrolling.prefetchPending, true);
+        assert.equal(grid.scrollPreview, 7);
+        scrolling.acknowledge(true);
+        replies[2]();
+        replies[3]();
+        await Promise.all(completions);
+        assert.equal(scrolling.pending, false);
+        assert.equal(scrolling.prefetchPending, false);
+    } finally {
+        replies.forEach((reply) => reply());
+        scrolling.dispose();
+        if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+        else Reflect.deleteProperty(globalThis, 'window');
+    }
+});
+
 for (const first of ['reply', 'redraw'] as const) {
     test(`wheel input waits for both reply and redraw when ${first} arrives first`, () => {
         const queue = new ScrollQueue();

@@ -139,6 +139,25 @@ export class Grid {
     }
 
     apply(events: Redraw): boolean {
+        if (
+            events.some(([name]) =>
+                ['nido_buffer', 'nido_edit', 'grid_clear', 'grid_resize'].includes(name)
+            )
+        ) {
+            this.scrollOrigin = 0;
+            this.upperRows = [];
+            this.upperRowsAtStart = false;
+            this.lowerRows = [];
+            this.lowerRowsAtEnd = false;
+        }
+        if (events.some(([name]) => name === 'nido_buffer')) {
+            this.scrollFraction = 0;
+            this.scrollPreview = 0;
+            this.scrollCursor = undefined;
+            this.scrolling = false;
+            this.layoutDirty = true;
+            this.canvas.invalidatePaint();
+        }
         // Neovim can repaint wrapped rows instead of emitting grid_scroll. Keep
         // rasterized rows at their new positions when the returned cells still match.
         const viewportMoves = events.flatMap(([name, ...calls]) =>
@@ -152,6 +171,42 @@ export class Grid {
         const retainedView = retainedRows ? this.cells.slice() : undefined;
         const retainedUpper = retainedRows ? this.upperRows.slice() : [];
         const retainedLower = retainedRows ? this.lowerRows.slice() : [];
+        // A refill visits only its uncached strip. Retain the intervening rows
+        // while Neovim jumps to that strip and back to the real viewport.
+        const cacheRows =
+            prefetched &&
+            viewportMoves.every(
+                (args) =>
+                    args[0] === 1 &&
+                    args[1] === 0 &&
+                    args[3] === 0 &&
+                    args[4] === this.columns &&
+                    args[6] === 0
+            )
+                ? new Map<number, Cell[]>()
+                : undefined;
+        let cacheOffset = 0;
+        let cacheBottom = this.rows - 1;
+        let cacheAtStart = this.upperRowsAtStart;
+        let cacheAtEnd = this.lowerRowsAtEnd;
+        if (cacheRows) {
+            this.upperRows.forEach((row, i) => cacheRows.set(i - this.upperRows.length, row));
+            this.lowerRows.forEach((row, i) => cacheRows.set(cacheBottom + i, row));
+        }
+        const rememberCacheRows = (): void => {
+            if (cacheRows) {
+                for (let row = 0; row < cacheBottom; row++) {
+                    const cells = this.cells[row];
+                    if (cells) {
+                        // Prepare newly fetched row geometry in the redraw handler,
+                        // so animation frames only read the cached counts.
+                        this.rowLayout.compact(cells);
+                        cacheRows.set(cacheOffset + row, cells);
+                        retainedRows?.add(cells);
+                    }
+                }
+            }
+        };
         const shift =
             !prefetched &&
             viewportMoves.every(
@@ -171,17 +226,6 @@ export class Grid {
         const outgoingHeight = shift > 0 ? this.scrollHeight(shift) : 0;
         if (viewportMoves.length && !prefetched && !pixelScroll) {
             this.scrollOrigin = 0;
-        }
-        if (
-            events.some(
-                ([name]) => name === 'nido_edit' || name === 'grid_clear' || name === 'grid_resize'
-            )
-        ) {
-            this.scrollOrigin = 0;
-            this.upperRows = [];
-            this.upperRowsAtStart = false;
-            this.lowerRows = [];
-            this.lowerRowsAtEnd = false;
         }
         let flush = false;
         let atStart: boolean | undefined;
@@ -225,6 +269,9 @@ export class Grid {
                         right === this.columns &&
                         columns === 0
                     ) {
+                        cacheBottom = bottom;
+                        rememberCacheRows();
+                        cacheOffset += rows;
                         if (
                             rows > 0 &&
                             (rows >= bottom - top ||
@@ -270,8 +317,12 @@ export class Grid {
                 }
                 switch (name) {
                     case 'nido_scroll_cache': {
-                        this.upperRowsAtStart = args[0] === true;
-                        this.lowerRowsAtEnd = args[2] === true;
+                        if (typeof args[0] === 'boolean') {
+                            cacheAtStart = this.upperRowsAtStart = args[0];
+                        }
+                        if (typeof args[2] === 'boolean') {
+                            cacheAtEnd = this.lowerRowsAtEnd = args[2];
+                        }
                         if (typeof args[1] === 'boolean') {
                             atStart = args[1];
                         }
@@ -471,6 +522,24 @@ export class Grid {
                     }
                 }
             }
+        }
+        if (cacheRows && cacheOffset === 0) {
+            rememberCacheRows();
+            this.upperRows = [];
+            this.lowerRows = [];
+            for (let i = -1; i >= -Grid.cacheRowLimit && cacheRows.has(i); i--) {
+                this.upperRows.push(cacheRows.get(i)!);
+            }
+            this.upperRows.reverse();
+            for (
+                let i = cacheBottom;
+                i < cacheBottom + Grid.cacheRowLimit && cacheRows.has(i);
+                i++
+            ) {
+                this.lowerRows.push(cacheRows.get(i)!);
+            }
+            this.upperRowsAtStart = cacheAtStart;
+            this.lowerRowsAtEnd = cacheAtEnd;
         }
         if (atStart) {
             // Decoration redraws can emit grid_scroll without moving the viewport.

@@ -205,7 +205,7 @@ test('search counts reuse unchanged views and refresh for cursor, edits, pattern
     }
 });
 
-test('directional prefetch keeps the viewport and cached rows without duplicate grid traffic', async () => {
+test('incremental prefetch preserves every visible frame and bounds each batch of grid traffic', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-prefetch-traffic-'));
     const frames: Redraw[] = [];
     const visibleFrames: Grid['cells'][] = [];
@@ -264,15 +264,18 @@ return ready`,
             // Standalone highlighting repaints can contain grid_line without moving the view.
             frame.some(([name]) => name === 'nido_scroll' || name === 'nido_scroll_cache')
         );
-        assert.equal(
-            viewportFrames.length,
-            1,
+        assert.ok(
+            viewportFrames.length > 1,
             `temporary views must never become separate visible frames: ${JSON.stringify(
                 frames.map((frame) => frame.map(([name]) => name))
             )}`
         );
         const bytes = Buffer.byteLength(JSON.stringify(viewportFrames));
-        assert.ok(bytes < 200_000, `one refill must transfer only its return traversal: ${bytes}`);
+        assert.ok(bytes < 400_000, `incremental refill traffic must remain bounded: ${bytes}`);
+        assert.ok(
+            viewportFrames.every((frame) => Buffer.byteLength(JSON.stringify(frame)) < 80_000),
+            'each strip must publish a bounded batch'
+        );
         for (const rendered of visibleFrames) {
             for (let row = 0; row < visible.length; row++) {
                 assert.equal(
@@ -302,10 +305,12 @@ return ready`,
             downView
         );
         assert.equal(
-            frames.filter((frame) => frame.some(([name]) => name === 'nido_scroll_cache')).length,
+            frames.filter((frame) =>
+                frame.some(([name, args]) => name === 'nido_scroll_cache' && args[3] === true)
+            ).length,
             1
         );
-        assert.ok(Buffer.byteLength(JSON.stringify(frames)) < 200_000);
+        assert.ok(Buffer.byteLength(JSON.stringify(frames)) < 400_000);
         for (const rendered of visibleFrames) assert.deepEqual(rendered, downRows);
         assert.equal(grid.needsLowerRows, false);
         assert.equal(grid.futureRows.length, 256);
@@ -347,6 +352,149 @@ return ready`,
         assert.equal(grid.futureRows.length, 0);
         assert.equal(grid.needsLowerRows, false, 'EOF must not repeatedly refill an empty cache');
     } finally {
+        await session.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test('scroll input runs between prefetch strips without losing the viewport or cached rows', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-prefetch-priority-'));
+    const grid = new Grid();
+    const session = await Session.create(root, (event) => {
+        if (event.type === 'redraw') grid.apply(event.events);
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    try {
+        await writeFile(
+            join(root, 'rows.txt'),
+            Array.from({ length: 2000 }, (_, i) => `ROW_${i + 1}`).join('\n')
+        );
+        await session.attach(80, 40);
+        await session.openFile('rows.txt');
+        await session.client.request('nvim_exec_lua', ['vim.wo.wrap=false; vim.cmd.redraw()', []]);
+        const request = session.client.request.bind(session.client);
+        let strips = 0;
+        session.client.request = async (method, args = []) => {
+            if (method === 'nvim_exec_lua' && String(args[0]).includes('.prefetch(')) {
+                if (++strips === 1) {
+                    entered();
+                    await gate;
+                }
+            }
+            return request(method, args);
+        };
+        let complete = false;
+        const prefetch = session.prefetchScroll(true).then(() => {
+            complete = true;
+        });
+        await started;
+        const scroll = session.scroll(3, true, true);
+        release();
+        await scroll;
+        assert.equal(complete, false, 'input must finish before speculative cache work completes');
+        assert.equal(strips, 1, 'queued input must run before the next strip');
+        await prefetch;
+        assert.ok(strips > 1);
+        assert.equal(await request('nvim_eval', ["line('w0')"]), 4);
+        assert.equal(grid.futureRows.length, 256);
+        assert.match(grid.futureRows[0].map((cell) => cell.text).join(''), /ROW_43\b/);
+        for (let i = 0; i < 4; i++) await session.scroll(16, true, true);
+        const before = strips;
+        await session.prefetchScroll(true);
+        assert.ok(
+            strips - before < 8,
+            'warm refills must reuse known rows instead of fetching all 256 again'
+        );
+        assert.equal(grid.futureRows.length, 256);
+        assert.deepEqual(
+            grid.futureRows.map((row) =>
+                Number(
+                    row
+                        .map((cell) => cell.text)
+                        .join('')
+                        .match(/ROW_(\d+)/)?.[1]
+                )
+            ),
+            Array.from({ length: 256 }, (_, i) => 107 + i),
+            'reused and newly fetched strips must remain contiguous after movement'
+        );
+    } finally {
+        release();
+        await session.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test('buffer switches discard cached rows and cancel an unfinished prefetch', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-prefetch-buffer-'));
+    const grid = new Grid();
+    const session = await Session.create(root, (event) => {
+        if (event.type === 'redraw') grid.apply(event.events);
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    try {
+        for (const name of ['old', 'new', 'third']) {
+            await writeFile(
+                join(root, `${name}.txt`),
+                Array.from({ length: 2000 }, (_, i) => `${name}_ROW_${i + 1}`).join('\n')
+            );
+        }
+        await session.attach(80, 40);
+        await session.openFile('old.txt');
+        await session.input('400Gzt');
+        await session.prefetchScroll(true);
+        assert.equal(grid.futureRows.length, 256);
+        assert.match(grid.futureRows[0].map((cell) => cell.text).join(''), /old_ROW_/);
+        await session.openFile('new.txt');
+        await session.client.request('nvim_exec_lua', ['vim.cmd.redraw()', []]);
+        assert.match(grid.description, /new_ROW_1\b/);
+        assert.equal(grid.historyRows.length, 0);
+        assert.equal(grid.futureRows.length, 0, 'old file rows must never preview in the new file');
+        const request = session.client.request.bind(session.client);
+        let strips = 0;
+        session.client.request = async (method, args = []) => {
+            if (method === 'nvim_exec_lua' && String(args[0]).includes('.prefetch(')) {
+                if (++strips === 1) {
+                    entered();
+                    await gate;
+                }
+            }
+            return request(method, args);
+        };
+        const prefetch = session.prefetchScroll(true);
+        await started;
+        const opening = session.openFile('third.txt');
+        release();
+        await Promise.all([prefetch, opening]);
+        await request('nvim_exec_lua', ['vim.cmd.redraw()', []]);
+        assert.equal(strips, 1, 'a buffer switch cancels the remaining strips');
+        assert.match(grid.description, /third_ROW_1\b/);
+        assert.equal(grid.futureRows.length, 0);
+        await session.prefetchScroll(true);
+        assert.equal(grid.futureRows.length, 256);
+        assert.ok(
+            grid.futureRows.every((row) => /third_ROW_/.test(row.map((cell) => cell.text).join('')))
+        );
+        await session.input('<Esc>:buffer old.txt<CR>');
+        await request('nvim_eval', ['1']);
+        assert.match(grid.description, /old_ROW_400\b/);
+        assert.equal(grid.futureRows.length, 0, 'native :buffer switches also invalidate previews');
+    } finally {
+        release();
         await session.stop();
         await rm(root, { recursive: true, force: true });
     }

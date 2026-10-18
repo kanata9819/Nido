@@ -102,7 +102,7 @@ test('an old scroll failure cannot reset the preview after changing editor setti
         ).toBeFocused();
         await expect
             .poll(() => canvas.evaluate((node: HTMLCanvasElement) => node.getContext('2d')!.font))
-            .toMatch(/^16px /);
+            .toMatch(/^(?:\d+ )?16px /);
         // Let the setting's resize redraw settle before starting the next gesture.
         await canvas.evaluate(async () => {
             for (let frame = 0; frame < 2; frame++) {

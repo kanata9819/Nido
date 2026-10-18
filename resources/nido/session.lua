@@ -28,6 +28,9 @@ vim.api.nvim_set_decoration_provider(vim.api.nvim_create_namespace('nido_viewpor
     local previous = views[win]
     views[win] = {buffer=buffer, height=info.height, width=info.width,
       topline=view.topline, skipcol=view.skipcol, leftcol=view.leftcol, topfill=view.topfill}
+    if not previous or previous.buffer ~= buffer then
+      vim.rpcnotify(channel, 'nido:buffer', win, buffer)
+    end
     if not previous or previous.buffer ~= buffer or previous.height ~= info.height
         or previous.width ~= info.width
         -- Deleting lines can remove the old viewport; it has no valid scroll distance.

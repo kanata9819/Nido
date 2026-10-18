@@ -270,6 +270,13 @@ export function useEditorRendering({
             if (event.type === 'redraw' && event.id === id) {
                 // Editing can shift grid rows without scrolling the viewport.
                 const edited = event.events.some(([name]) => name === 'nido_edit');
+                const bufferChanged = event.events.some(([name]) => name === 'nido_buffer');
+                if (bufferChanged) {
+                    motion = undefined;
+                    directScroll = false;
+                    scrolling.reset();
+                    cursor.resetPosition();
+                }
                 if (edited) {
                     stopMotion();
                 }
@@ -305,6 +312,7 @@ export function useEditorRendering({
                 const now = performance.now();
                 if (
                     scroll &&
+                    !bufferChanged &&
                     (!edited || (scroll[5] > 0 && scroll[6] === 0)) &&
                     !directScroll &&
                     animationsRef.current &&
@@ -387,7 +395,8 @@ export function useEditorRendering({
                             name === 'grid_line' ||
                             name === 'grid_scroll' ||
                             name === 'grid_resize' ||
-                            name === 'grid_clear'
+                            name === 'grid_clear' ||
+                            name === 'nido_buffer'
                     );
                     schedule();
                 }

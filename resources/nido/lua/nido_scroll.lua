@@ -35,10 +35,10 @@ local function publish_offset(pixel)
   end
 end
 
-local function publish_cache(at_start, at_end)
+local function publish_cache(at_start, at_end, complete)
   local view_start = view_at_start(vim.fn.winsaveview())
   for _, ui in ipairs(api.nvim_list_uis()) do
-    vim.rpcnotify(ui.chan, 'nido:scroll_cache', at_start, view_start, at_end)
+    vim.rpcnotify(ui.chan, 'nido:scroll_cache', at_start, view_start, at_end, complete)
   end
 end
 
@@ -151,7 +151,7 @@ function M.page(key, count)
   end
 end
 
-function M.prefetch(down)
+function M.prefetch(down, previous)
   if vim.bo.buftype ~= '' or api.nvim_win_get_config(0).relative ~= '' then
     return
   end
@@ -161,13 +161,29 @@ function M.prefetch(down)
     return
   end
   local view = vim.fn.winsaveview()
+  local buffer, window = api.nvim_get_current_buf(), api.nvim_get_current_win()
+  local height, width = api.nvim_win_get_height(0), api.nvim_win_get_width(0)
+  local tick = api.nvim_buf_get_changedtick(buffer)
+  if previous and (previous.buffer ~= buffer or previous.window ~= window
+      or previous.tick ~= tick or previous.height ~= height or previous.width ~= width) then
+    return
+  end
+  local cached = previous and math.max(0, previous.depth
+    - M.view_distance(0, previous.view, view) * (down and 1 or -1)) or 0
+  if cached >= 256 then
+    return
+  end
   local scrolloff = vim.wo.scrolloff
-  local step = math.max(1, api.nvim_win_get_height(0) - 1)
-  -- Cache the requested side in one hidden batch, using steps smaller than the viewport.
+  local step = math.max(1, height - 1)
+  -- Visit only the next strip, then restore the real view before yielding to input.
   local views = {}
-  local remaining = 256
+  local remaining = math.min(32, 256 - cached)
+  local depth = cached
   local at_edge = false
   local ok, err = pcall(function()
+    if cached > 0 then
+      vim.cmd.normal({args={cached .. string.char(down and 5 or 25)}, bang=true})
+    end
     while remaining > 0 do
       local before = vim.fn.winsaveview()
       if not down and view_at_start(before) then
@@ -179,6 +195,7 @@ function M.prefetch(down)
       vim.cmd.normal({args={count .. string.char(down and 5 or 25)}, bang=true})
       remaining = remaining - count
       local after = vim.fn.winsaveview()
+      depth = math.abs(M.view_distance(0, view, after))
       if (not down and view_at_start(after)) or
         (after.topline == before.topline and after.skipcol == before.skipcol
           and after.topfill == before.topfill) then
@@ -201,7 +218,14 @@ function M.prefetch(down)
   if not ok then
     error(err)
   end
-  publish_cache(not down and at_edge, down and at_edge)
+  local complete = at_edge or depth >= 256
+  local upper_edge, lower_edge
+  if down then lower_edge = at_edge else upper_edge = at_edge end
+  publish_cache(upper_edge, lower_edge, complete)
+  if not complete then
+    return {buffer=buffer, window=window, tick=tick, height=height, width=width,
+      view=view, depth=depth}
+  end
 end
 
 function M.scroll(lines, follow, pixel)

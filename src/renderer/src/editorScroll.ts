@@ -17,6 +17,7 @@ export class EditorScroll {
     private down = false;
     private fetching = false;
     private disposed = false;
+    private generation = 0;
     private settleTimer?: ReturnType<typeof setTimeout>;
 
     constructor(private readonly options: Options) {}
@@ -44,6 +45,14 @@ export class EditorScroll {
 
     invalidatePrefetch(): void {
         this.prefetchNeeded = true;
+    }
+
+    reset(): void {
+        this.generation++;
+        this.queue.reset();
+        this.fetching = false;
+        this.prefetchNeeded = true;
+        this.stop();
     }
 
     pauseIfDisabled(): void {
@@ -124,11 +133,12 @@ export class EditorScroll {
             return;
         }
         const { id, grid, onError, onCompletion, schedule } = this.options;
+        const generation = this.generation;
         onCompletion(
             window.nido
                 .scroll(id, command.lines, command.follow, true)
                 .catch((error) => {
-                    if (this.disposed) {
+                    if (this.disposed || generation !== this.generation) {
                         return;
                     }
                     this.queue.fail();
@@ -137,7 +147,7 @@ export class EditorScroll {
                     schedule();
                 })
                 .finally(() => {
-                    if (this.disposed) {
+                    if (this.disposed || generation !== this.generation) {
                         return;
                     }
                     this.queue.complete();
@@ -148,18 +158,19 @@ export class EditorScroll {
 
     prefetch(): void {
         const down = this.down;
+        const generation = this.generation;
         this.prefetchNeeded = false;
         this.fetching = true;
         this.options.onCompletion(
             window.nido
                 .prefetchScroll(this.options.id, down)
                 .catch((error) => {
-                    if (!this.disposed) {
+                    if (!this.disposed && generation === this.generation) {
                         this.options.onError(error);
                     }
                 })
                 .finally(() => {
-                    if (this.disposed) {
+                    if (this.disposed || generation !== this.generation) {
                         return;
                     }
                     this.fetching = false;

@@ -1012,10 +1012,10 @@ test('scroll prefetch caches upper rows without changing the view, cursor or buf
                 false,
                 'history reaches BOF without repeated refills'
             );
-            assert.equal(
-                frames.length,
-                1,
-                'intermediate view must remain inside one atomic redraw'
+            assert.ok(frames.length <= 8, 'refills must use bounded strips and reuse known rows');
+            assert.ok(
+                frames.every((frame) => frame.at(-1)?.[0] === 'flush'),
+                'each strip must remain inside one atomic redraw'
             );
             assert.equal(
                 grid.hasUpperRows,

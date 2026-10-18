@@ -174,6 +174,10 @@ export class SessionEvents {
                 this.pendingRedraw.push(['nido_edit', []]);
                 break;
             }
+            case 'nido:buffer': {
+                this.pendingRedraw.push(['nido_buffer', args]);
+                break;
+            }
             case 'nido:completion_refresh': {
                 this.sendToRenderer({
                     type: 'redraw',

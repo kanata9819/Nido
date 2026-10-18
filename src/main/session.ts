@@ -144,6 +144,19 @@ export class Session {
                 void this.stop();
                 return;
             }
+            if (
+                method === 'nido:buffer' ||
+                method === 'nido:edit' ||
+                (method === 'redraw' &&
+                    (args as [string, ...unknown[][]][]).some(
+                        ([name]) => name === 'grid_clear' || name === 'grid_resize'
+                    ))
+            ) {
+                this.interaction.cancelPrefetch();
+            }
+            if (method === 'nido:scroll') {
+                this.interaction.observeScroll(args[0] as unknown[]);
+            }
             this.events.receiveNotification(method, args);
         });
         let stderr = '';
@@ -608,7 +621,8 @@ return false`,
         if (this.workspace.kind === 'terminal') {
             throw new Error('Open an Editor session to edit files.');
         }
-        await this.fileService.openFile(relativePath, line, column);
+        this.interaction.cancelPrefetch();
+        await this.interaction.enqueue(() => this.fileService.openFile(relativePath, line, column));
     }
 
     async fileAction(

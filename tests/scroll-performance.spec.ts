@@ -154,7 +154,9 @@ test('wrapped upward scrolling reuses text and avoids continuous cache refills',
             const unsubscribe = window.nido.onEvent((event) => {
                 if (
                     event.type === 'redraw' &&
-                    event.events.some(([name]) => name === 'nido_scroll_cache')
+                    event.events.some(
+                        ([name, args]) => name === 'nido_scroll_cache' && args[3] === true
+                    )
                 ) {
                     work.refills++;
                 }

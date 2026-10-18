@@ -66,6 +66,11 @@ export class ScrollQueue {
         this.queued = 0;
     }
 
+    reset(): void {
+        this.queued = 0;
+        this.inFlight = undefined;
+    }
+
     start(): ScrollCommand | undefined {
         if (this.pending || !this.hasQueued) {
             return undefined;
