@@ -146,6 +146,38 @@ test('compact row counts follow edits, highlight changes and rectangular scrolli
     assert.equal(height(), 28);
 });
 
+test('native pixel scrolling preserves raster origins through compact rows and cache refills', () => {
+    const grid = new Grid();
+    grid.apply([
+        ['grid_resize', [1, 8, 5]],
+        ['hl_attr_define', [1, {}, {}, [{ hi_name: 'NidoCodeLens' }]]],
+        ['grid_line', [1, 0, 0, [['Run', 1]]], [1, 1, 0, [['A', 0]]]],
+        ['flush']
+    ]);
+    grid.prepareLayout(100, 8, 20);
+    grid.apply([
+        ['nido_scroll', [1, 0, 4, 0, 8, 1, 0]],
+        ['grid_scroll', [1, 0, 4, 0, 8, 1, 0]],
+        ['nido_pixel_scroll', [0.1, true]],
+        ['flush']
+    ]);
+    assert.equal(grid.scrollOrigin, 14, 'outgoing CodeLens height contributes to the origin');
+    grid.apply([
+        ['nido_scroll', [1, 0, 4, 0, 8, 1, 0], [1, 0, 4, 0, 8, -1, 0]],
+        ['nido_scroll_cache', [false, false, false]],
+        ['flush']
+    ]);
+    assert.equal(grid.scrollOrigin, 14, 'hidden cache traversal does not move the origin');
+    grid.apply([
+        ['nido_scroll', [1, 0, 4, 0, 8, -1, 0]],
+        ['grid_scroll', [1, 0, 4, 0, 8, -1, 0]],
+        ['grid_line', [1, 0, 0, [['Run', 1]]]],
+        ['nido_pixel_scroll', [0.9, true]],
+        ['flush']
+    ]);
+    assert.equal(grid.scrollOrigin, 0, 'incoming CodeLens restores the same origin');
+});
+
 test('downward preview uses cached lower rows and leaves the command line fixed', () => {
     const grid = new Grid();
     grid.pixelScrollEnabled = true;

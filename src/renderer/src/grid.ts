@@ -26,6 +26,8 @@ export class Grid {
     scrolling = false;
     scrollFraction = 0;
     scrollPreview = 0;
+    // Preserve the document's raster phase when Neovim rebases the viewport.
+    scrollOrigin = 0;
     cellWidth = 0;
     cellHeight = 0;
     surfaceLeft = 0;
@@ -162,11 +164,20 @@ export class Grid {
             )
                 ? viewportMoves.reduce((total, args) => total + Number(args[5]), 0)
                 : 0;
+        const pixelScroll = events.some(
+            ([name, ...calls]) =>
+                name === 'nido_pixel_scroll' && calls.some((args) => args[1] === true)
+        );
+        const outgoingHeight = shift > 0 ? this.scrollHeight(shift) : 0;
+        if (viewportMoves.length && !prefetched && !pixelScroll) {
+            this.scrollOrigin = 0;
+        }
         if (
             events.some(
                 ([name]) => name === 'nido_edit' || name === 'grid_clear' || name === 'grid_resize'
             )
         ) {
+            this.scrollOrigin = 0;
             this.upperRows = [];
             this.upperRowsAtStart = false;
             this.lowerRows = [];
@@ -487,7 +498,20 @@ export class Grid {
                 }
             }
         }
+        if (pixelScroll && shift) {
+            this.scrollOrigin += shift > 0 ? outgoingHeight : -this.scrollHeight(-shift);
+        }
         return flush;
+    }
+
+    private scrollHeight(rows: number): number {
+        let height = rows * this.cellHeight;
+        for (let row = 0; row < Math.min(rows, this.rows - 1); row++) {
+            if (this.rowLayout.compact(this.cells[row])) {
+                height -= this.cellHeight - Math.ceil(this.cellHeight * 0.7);
+            }
+        }
+        return height;
     }
 
     paintBackground(

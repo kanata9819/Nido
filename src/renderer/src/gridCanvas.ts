@@ -107,8 +107,8 @@ export class GridCanvas {
             canvas.height = Math.round(height * dpr);
         }
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        // Cached glyphs are already antialiased; compositing must not blur them again.
-        ctx.imageSmoothingEnabled = false;
+        // Keep the native glyph raster; interpolate its final translation only once.
+        ctx.imageSmoothingEnabled = true;
         const family = fontFamily;
         ctx.font = `${fontSize}px ${family}`;
         const cellWidth = ctx.measureText('M').width;
@@ -194,9 +194,13 @@ export class GridCanvas {
             if (!commandLine && (rowY + rowHeight <= 0 || rowY >= this.grid.contentHeight)) {
                 continue;
             }
-            // Move the native raster by physical pixels. Filtering it between pixels
-            // changes stroke weights during tiny touchpad movements and causes shimmer.
-            const top = Math.round(rowY * dpr);
+            // Snap document origins, not scroll movement. All rows share the same
+            // fractional translation, including across native viewport rebases.
+            const origin = this.grid.scrollOrigin;
+            const top = commandLine
+                ? Math.round(rowY * dpr)
+                : Math.round((this.grid.rowTop(layoutRow) + origin) * dpr) -
+                  (this.grid.scrollOffset + origin) * dpr;
             ctx.save();
             if (!commandLine) {
                 ctx.beginPath();

@@ -857,7 +857,7 @@ for (const scale of [1, 1.25, 1.5]) {
         }
     });
 
-    test(`resting editor text has no color fringes or resampling at ${scale * 100}% scale`, async ({
+    test(`editor text reuses native rasters without color fringes at ${scale * 100}% scale`, async ({
         browser
     }) => {
         const context = await browser.newContext({ deviceScaleFactor: scale });
@@ -911,7 +911,11 @@ for (const scale of [1, 1.25, 1.5]) {
                         }
                         copies++;
                         paintedRows.push(source);
-                        const top = Math.round(Number(args[2]) * devicePixelRatio);
+                        const y = Number(args[2]) * devicePixelRatio;
+                        const top = Math.round(y);
+                        // Fractional movement is composited once on the destination.
+                        // At integer positions it must still be an exact native copy.
+                        if (Math.abs(y - top) > 0.001) return;
                         // The command row can extend one physical pixel beyond the canvas.
                         const height = Math.min(source.height, canvas.height - top);
                         const expected = source
@@ -973,22 +977,19 @@ for (const scale of [1, 1.25, 1.5]) {
             expect(samples.copies).toBe(12);
             expect(
                 samples.nativeRows,
-                'settled fractional scrolling must reuse the unfiltered glyphs'
+                'settled fractional scrolling must reuse the native glyph images'
             ).toBe(true);
             expect(samples.colored, 'white text on gray must not gain red or blue edges').toBe(0);
-            expect(samples.resampled, 'stationary rows must not interpolate a cached bitmap').toBe(
+            expect(samples.resampled, 'rows must not use an interpolated intermediate bitmap').toBe(
                 0
             );
-            expect(
-                samples.mismatches,
-                'cached glyphs must reach the screen without changed pixels'
-            ).toBe(0);
+            expect(samples.mismatches, 'integer destinations must preserve native pixels').toBe(0);
         } finally {
             await context.close();
         }
     });
 
-    test(`slow pixel scrolling moves native glyphs by at most one physical pixel at ${scale * 100}% scale`, async ({
+    test(`slow pixel scrolling moves cached glyphs continuously at ${scale * 100}% scale`, async ({
         browser
     }) => {
         const context = await browser.newContext({ deviceScaleFactor: scale });
@@ -1107,8 +1108,8 @@ for (const scale of [1, 1.25, 1.5]) {
             expect(steps.every((step) => step >= -0.02)).toBe(true);
             expect(
                 Math.max(...steps),
-                'tiny gestures must move by at most one physical pixel without resampling'
-            ).toBeLessThanOrEqual(1.01);
+                'eighth-pixel input must not stall and jump a whole physical pixel'
+            ).toBeLessThanOrEqual(0.16);
             expect(samples.positions[0] - samples.positions.at(-1)!).toBeCloseTo(2, 1);
             expect(samples.nativeMismatches, 'resting text must preserve its native pixels').toBe(
                 0
@@ -1121,7 +1122,7 @@ for (const scale of [1, 1.25, 1.5]) {
         }
     });
 
-    test(`slow touchpad scrolling preserves glyph shapes and does not jump on settling at ${scale * 100}% scale`, async ({
+    test(`slow touchpad scrolling keeps continuous coverage through rebases and pauses at ${scale * 100}% scale`, async ({
         browser
     }) => {
         const context = await browser.newContext({ deviceScaleFactor: scale });
@@ -1135,70 +1136,100 @@ for (const scale of [1, 1.25, 1.5]) {
                 async (moduleUrl) => {
                     const { Grid } = await import(moduleUrl);
                     const dpr = devicePixelRatio;
-                    const grid = new Grid();
-                    grid.busy = true;
-                    grid.background = '#121212';
-                    grid.foreground = '#ffffff';
-                    grid.pixelScrollEnabled = true;
-                    grid.apply([
-                        ['grid_resize', [1, 40, 8]],
-                        ['grid_line', [1, 2, 0, Array.from('Il1|[](){}MWmw', (text) => [text, 0])]],
-                        ['flush']
-                    ]);
-                    const canvas = document.createElement('canvas');
-                    const paint = (): void => {
-                        grid.invalidatePaint();
-                        grid.draw(canvas, 400, 152, 15, 'monospace', false, undefined, 19);
-                    };
-                    const pixels = (): Uint8ClampedArray =>
-                        canvas
-                            .getContext('2d')!
-                            .getImageData(
-                                0,
-                                Math.round(grid.rowY(2) * dpr) + 1,
-                                Math.floor(120 * dpr),
-                                Math.ceil(19 * dpr) - 2
-                            ).data;
                     const differences = (a: Uint8ClampedArray, b: Uint8ClampedArray): number =>
                         a.reduce((count, value, index) => count + Number(value !== b[index]), 0);
-                    paint();
-                    const native = pixels();
-                    let changedGlyphPixels = 0;
+                    let inkVariation = 0;
                     let settlingPixels = 0;
                     let settlingDistance = 0;
-                    const positions: number[] = [];
-                    for (let step = 1; step <= 40; step++) {
-                        grid.scrolling = true;
-                        grid.scrollFraction = step / 8 / (19 * dpr);
+                    const steps: number[] = [];
+                    const origins: number[] = [];
+                    for (const direction of [1, -1]) {
+                        const grid = new Grid();
+                        grid.busy = true;
+                        grid.background = '#121212';
+                        grid.foreground = '#ffffff';
+                        grid.pixelScrollEnabled = true;
+                        grid.apply([
+                            ['grid_resize', [1, 40, 8]],
+                            [
+                                'grid_line',
+                                [1, 2, 0, Array.from('Il1|[](){}MWmw', (text) => [text, 0])]
+                            ],
+                            ['flush']
+                        ]);
+                        const canvas = document.createElement('canvas');
+                        const paint = (): void => {
+                            grid.invalidatePaint();
+                            grid.draw(canvas, 400, 152, 15, 'monospace', false, undefined, 19);
+                        };
+                        let nativeRows = 0;
+                        const coverage = (): { ink: number; center: number } => {
+                            const top = Math.floor(grid.rowY(2 - nativeRows) * dpr) - 2;
+                            const width = Math.floor(120 * dpr);
+                            const data = canvas
+                                .getContext('2d')!
+                                .getImageData(0, top, width, Math.ceil(19 * dpr) + 4).data;
+                            let ink = 0;
+                            let moment = 0;
+                            for (let i = 0; i < data.length; i += 4) {
+                                const weight = Math.max(0, data[i] - 18);
+                                ink += weight;
+                                moment += weight * (top + Math.floor(i / 4 / width));
+                            }
+                            return { ink, center: moment / ink };
+                        };
+                        const start = direction > 0 ? 0.9 : 0.1;
+                        grid.scrollFraction = start;
                         paint();
-                        const before = canvas
-                            .getContext('2d')!
-                            .getImageData(0, 0, canvas.width, canvas.height).data;
-                        const offset = grid.scrollOffset;
-                        positions.push(Math.round(grid.rowY(2) * dpr));
-                        changedGlyphPixels = Math.max(
-                            changedGlyphPixels,
-                            differences(native, pixels())
-                        );
-                        grid.scrolling = false;
-                        paint();
-                        settlingDistance = Math.max(
-                            settlingDistance,
-                            Math.abs(grid.scrollOffset - offset)
-                        );
-                        const after = canvas
-                            .getContext('2d')!
-                            .getImageData(0, 0, canvas.width, canvas.height).data;
-                        settlingPixels = Math.max(settlingPixels, differences(before, after));
+                        const initial = coverage();
+                        let previous = initial.center;
+                        for (let step = 1; step <= 40; step++) {
+                            const distance = start + (direction * step) / 10 / (19 * dpr);
+                            const rows = Math.floor(distance);
+                            if (rows !== nativeRows) {
+                                const shift = rows - nativeRows;
+                                grid.apply([
+                                    ['nido_scroll', [1, 0, 7, 0, 40, shift, 0]],
+                                    ['grid_scroll', [1, 0, 7, 0, 40, shift, 0]],
+                                    ['nido_pixel_scroll', [distance - rows, true]],
+                                    ['flush']
+                                ]);
+                                nativeRows = rows;
+                            }
+                            grid.scrolling = true;
+                            grid.scrollFraction = distance - rows;
+                            paint();
+                            const measured = coverage();
+                            steps.push(direction * (previous - measured.center));
+                            previous = measured.center;
+                            inkVariation = Math.max(
+                                inkVariation,
+                                Math.abs(measured.ink / initial.ink - 1)
+                            );
+                            const before = canvas
+                                .getContext('2d')!
+                                .getImageData(0, 0, canvas.width, canvas.height).data;
+                            const offset = grid.scrollOffset;
+                            grid.scrolling = false;
+                            paint();
+                            settlingDistance = Math.max(
+                                settlingDistance,
+                                Math.abs(grid.scrollOffset - offset)
+                            );
+                            const after = canvas
+                                .getContext('2d')!
+                                .getImageData(0, 0, canvas.width, canvas.height).data;
+                            settlingPixels = Math.max(settlingPixels, differences(before, after));
+                        }
+                        origins.push(grid.scrollOrigin);
                     }
-                    return { changedGlyphPixels, settlingPixels, settlingDistance, positions };
+                    return { inkVariation, settlingPixels, settlingDistance, steps, origins };
                 },
                 `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
             );
-            expect(
-                samples.changedGlyphPixels,
-                'moving glyphs retain their native stroke pixels'
-            ).toBe(0);
+            expect(samples.inkVariation, 'moving glyphs keep their total coverage').toBeLessThan(
+                0.01
+            );
             expect(samples.settlingPixels, 'pausing input must not sharpen or move the text').toBe(
                 0
             );
@@ -1207,10 +1238,14 @@ for (const scale of [1, 1.25, 1.5]) {
                 'pausing input must not change the viewport offset'
             ).toBe(0);
             expect(
-                samples.positions.every(
-                    (position, index) => index === 0 || position <= samples.positions[index - 1]
-                )
-            ).toBe(true);
+                Math.min(...samples.steps),
+                'rebasing must not reverse the movement'
+            ).toBeGreaterThan(0.05);
+            expect(
+                Math.max(...samples.steps),
+                'rebasing must not jump a physical pixel'
+            ).toBeLessThan(0.15);
+            expect(samples.origins).toEqual([19, -19]);
         } finally {
             await context.close();
         }

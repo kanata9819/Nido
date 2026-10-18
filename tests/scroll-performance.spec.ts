@@ -210,8 +210,8 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         const canvas = page.locator('canvas:visible');
         await expect(canvas).toHaveAttribute('aria-description', /line 1/);
         const dpr = await page.evaluate(() => window.devicePixelRatio);
-        const snapped = (pixels: number): number => Math.round(pixels * dpr) / dpr;
-        const settled = (pixels: number): number => Math.round(pixels * dpr) / dpr;
+        const translated = (origin: number, offset: number): number =>
+            Math.round(origin * dpr) / dpr - offset;
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.waitForTimeout(300);
@@ -319,12 +319,12 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         await burst(40, 0.04);
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-first-y')))
-            .toBeCloseTo(snapped(-1.6), 5);
+            .toBeCloseTo(-1.6, 5);
         expect(await canvas.getAttribute('data-offsets')).toBe('0');
         await burst(15, -0.01);
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-first-y')))
-            .toBeCloseTo(snapped(-1.45), 5);
+            .toBeCloseTo(-1.45, 5);
         await expect
             .poll(() =>
                 running.evaluate(
@@ -337,7 +337,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         await expect(canvas).toHaveAttribute('data-offsets', '2');
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-first-y')))
-            .toBeCloseTo(settled(-1.45), 5);
+            .toBeCloseTo(-1.45, 5);
         expect(await canvas.getAttribute('data-states')).toBe('0');
         const work = await page.evaluate(
             () =>
@@ -398,7 +398,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         await burst(1, -2);
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-up-preview')))
-            .toBeCloseTo(snapped(2), 5);
+            .toBeCloseTo(2, 5);
         expect(await canvas.getAttribute('data-offsets')).toBe(offsetsBeforeUp);
         await expect
             .poll(() =>
@@ -416,7 +416,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         await burst(1, -rowHeight);
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-up-preview')))
-            .toBeCloseTo(snapped(2), 5);
+            .toBeCloseTo(translated(-rowHeight, -rowHeight - 2), 5);
         expect(await canvas.getAttribute('data-offsets')).toBe(offsetsBeforeSecondUp);
         await expect
             .poll(() =>
@@ -430,7 +430,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         // A faster upward gesture must use several cached rows, not stop after one.
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-first-y')))
-            .toBeCloseTo(snapped(2 - rowHeight), 5);
+            .toBeCloseTo(translated(-2 * rowHeight, -rowHeight - 2), 5);
         await canvas.evaluate((node: HTMLCanvasElement) => {
             const ctx = node.getContext('2d')!;
             const draw = ctx.drawImage.bind(ctx);
@@ -453,12 +453,12 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         });
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-large-up-preview')))
-            .toBeCloseTo(snapped(2 - rowHeight), 5);
+            .toBeCloseTo(translated(-2 * rowHeight, -rowHeight - 2), 5);
         const offsetsBeforeFastUp = await canvas.getAttribute('data-offsets');
         await burst(1, -3 * rowHeight);
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-large-up-preview')))
-            .toBeCloseTo(snapped(2 + 2 * rowHeight), 5);
+            .toBeCloseTo(translated(-2 * rowHeight, -4 * rowHeight - 2), 5);
         expect(await canvas.getAttribute('data-offsets')).toBe(offsetsBeforeFastUp);
         await expect
             .poll(() =>
@@ -480,7 +480,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         await burst(1, -2);
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-up-preview')))
-            .toBeCloseTo(snapped(2), 5);
+            .toBeCloseTo(2, 5);
         expect(await canvas.getAttribute('data-offsets')).toBe(offsetsAfterEdit);
         await expect
             .poll(() =>

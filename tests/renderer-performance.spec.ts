@@ -468,6 +468,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                                 'scrollCursor',
                                 'scrollFraction',
                                 'scrollPreview',
+                                'scrollOrigin',
                                 'backgroundOpacity',
                                 'pixelScrollEnabled',
                                 'scrolling',

@@ -113,9 +113,7 @@ test('an old scroll failure cannot reset the preview after changing editor setti
             node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 8 }))
         );
         await expect.poll(calls).toBe(2);
-        const expectedY = await page.evaluate(
-            () => Math.round(-4 * window.devicePixelRatio) / window.devicePixelRatio
-        );
+        const expectedY = -4;
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-first-y')))
             .toBe(expectedY);
@@ -161,9 +159,7 @@ test('an old scroll failure cannot reset the preview after changing editor setti
             node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 2 }))
         );
         await expect.poll(completed).toBe(3);
-        const finalY = await page.evaluate(
-            () => Math.round(-5 * window.devicePixelRatio) / window.devicePixelRatio
-        );
+        const finalY = -5;
         await expect(canvas).toHaveAttribute('data-first-y', String(finalY));
         await expect(page.getByText('Old scroll failed', { exact: false })).toHaveCount(0);
     } finally {

@@ -75,7 +75,13 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                         const rowHeight = Number(localStorage.getItem('nido.lineHeight'));
                         const baseline = Number(source.dataset.rowBaseline);
                         const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
-                        const top = (Number(row[1]) - 1) * rowHeight - Number(args[2]) - phase;
+                        // Each scenario anchors line 1000 at a native pixel origin.
+                        const origin = (Number(row[1]) - 1000) * rowHeight;
+                        const top =
+                            999 * rowHeight +
+                            Math.round(origin * devicePixelRatio) / devicePixelRatio -
+                            Number(args[2]) -
+                            phase;
                         cadence.samples.push({ top, at: performance.now(), input: cadence.input });
                         node.dataset.documentTop = String(top);
                     }
@@ -99,7 +105,7 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
         });
         const reports: object[] = [];
         for (const mode of ['normal', 'insert']) {
-            for (const delta of [5, -5, 40, -40, 120, -120]) {
+            for (const delta of [0.2, -0.2, 5, -5, 40, -40, 120, -120]) {
                 await page.evaluate(async (id) => {
                     await window.nido.input(id, '<Esc>1000Gzt');
                 }, restored.workspaces[0].id);
@@ -164,14 +170,7 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                     .slice(1)
                     .map((sample, i) => sample.at - samples[i].at)
                     .sort((a, b) => a - b);
-                const reversals = steps.filter((step, index) => {
-                    // After input stops, sharpening snaps glyphs by at most one physical pixel.
-                    // Keep the continuous-motion assertion strict while the wheel is active.
-                    const idleSnap =
-                        samples[index + 1].at - samples[index].at > 100 &&
-                        Math.abs(step) <= pixel + 0.01;
-                    return step < -0.1 && !idleSnap;
-                });
+                const reversals = steps.filter((step) => step < -0.01);
                 reports.push({
                     direction: delta > 0 ? 'down' : 'up',
                     delta,
