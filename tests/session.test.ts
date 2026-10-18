@@ -3119,6 +3119,49 @@ test('pasting preserves the order of preceding and following keyboard input', as
     }
 });
 
+test('clipboard reads serialize paste, following typing and saves and recover after failure', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-clipboard-input-order-'));
+    const file = join(root, 'file.txt');
+    let session: Session | undefined;
+    let release!: (text: string) => void;
+    const contents = new Promise<string>((resolve) => {
+        release = resolve;
+    });
+    let entered!: () => void;
+    const reading = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    try {
+        await writeFile(file, 'original\n');
+        session = await Session.create(root, () => {});
+        await session.openFile('file.txt');
+        const inserting = session.input('i');
+        const pasted = session.paste(() => {
+            entered();
+            return contents;
+        });
+        await reading;
+        const following = session.input('XYZ<Esc>');
+        const saving = session.save();
+        release('日本語<clip>');
+        await Promise.all([inserting, pasted, following, saving]);
+        assert.equal(await readFile(file, 'utf8'), '日本語<clip>XYZoriginal\n');
+        await assert.rejects(
+            session.paste(async () => {
+                throw new Error('Clipboard unavailable');
+            }),
+            /Clipboard unavailable/
+        );
+        await session.input('A!<Esc>');
+        await session.save();
+        assert.equal(await readFile(file, 'utf8'), '日本語<clip>XYZoriginal!\n');
+    } finally {
+        release('');
+        await session?.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('save and save all wait for pending committed input', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-save-input-order-'));
     try {

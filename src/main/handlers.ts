@@ -264,7 +264,7 @@ export function registerHandlers({
         return session(id).click(integer(row + 1, 500) - 1, integer(column + 1, 1000) - 1);
     });
     handle('paste', (id, value) => session(id).paste(text(value)));
-    handle('pasteClipboard', async (id) => session(id).paste(await clipboard.readText()));
+    handle('pasteClipboard', (id) => session(id).paste(() => clipboard.readText()));
     handle('files', (id, path) => session(id).files(text(path)));
     handle('highlightSources', (id, path, before, after) =>
         session(id).highlightSources(text(path), text(before), text(after))

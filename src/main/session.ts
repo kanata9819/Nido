@@ -460,7 +460,7 @@ end`,
         return this.interaction.jumpSticky(window, buffer, line);
     }
 
-    paste(text: string): Promise<void> {
+    paste(text: string | (() => Promise<string>)): Promise<void> {
         return this.interaction.paste(text);
     }
 

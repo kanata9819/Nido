@@ -1869,6 +1869,224 @@ test('an invalid saved language safely opens the English interface', async ({ pa
     await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveValue('en');
 });
 
+test('IME transition keys stay with composition before its start and after its commit', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app`);
+    const input = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(input).toBeFocused();
+    const prevented = await input.evaluate((node: HTMLTextAreaElement) => {
+        const imeKey = (key: string): boolean =>
+            !node.dispatchEvent(
+                new KeyboardEvent('keydown', {
+                    key,
+                    keyCode: 229,
+                    bubbles: true,
+                    cancelable: true
+                })
+            );
+        const before = imeKey('a');
+        node.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+        node.value = '日本語<入力>';
+        node.dispatchEvent(
+            new InputEvent('input', {
+                data: node.value,
+                inputType: 'insertCompositionText',
+                isComposing: true,
+                bubbles: true
+            })
+        );
+        node.dispatchEvent(
+            new CompositionEvent('compositionend', { data: node.value, bubbles: true })
+        );
+        return [before, imeKey('Enter')];
+    });
+    expect(prevented, 'the browser must keep control of IME-owned key events').toEqual([
+        false,
+        false
+    ]);
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'input')
+                    .map((call) => call.args[1])
+            )
+        )
+        .toEqual(['日本語<LT>入力>']);
+    await expect(input).toHaveValue('');
+});
+
+test('interrupted IME input recovers on focus return and ignores an obsolete commit', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app`);
+    const input = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(input).toBeFocused();
+    for (const boundary of ['element', 'window']) {
+        await input.evaluate((node: HTMLTextAreaElement, boundary) => {
+            node.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+            node.value = '未確定';
+            if (boundary === 'element') node.blur();
+            else window.dispatchEvent(new Event('blur'));
+        }, boundary);
+        await input.focus();
+        await page.keyboard.type('az');
+        const expected = boundary === 'element' ? ['a', 'z'] : ['a', 'z', 'a', 'z'];
+        await expect
+            .poll(() =>
+                page.evaluate(() =>
+                    window.rendererTest.calls
+                        .filter((call) => call.method === 'input')
+                        .map((call) => call.args[1])
+                )
+            )
+            .toEqual(expected);
+        await input.evaluate((node: HTMLTextAreaElement) =>
+            node.dispatchEvent(
+                new CompositionEvent('compositionend', { data: '未確定', bubbles: true })
+            )
+        );
+        expect(
+            await page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'input')
+                    .map((call) => call.args[1])
+            )
+        ).toEqual(expected);
+        await expect(input).toHaveValue('');
+    }
+});
+
+test('native IME commits remain intact when editor focus moves', async ({ page }) => {
+    await page.goto(`${origin}?view=app`);
+    const input = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(input).toBeFocused();
+    const ime = await page.context().newCDPSession(page);
+    try {
+        await ime.send('Input.imeSetComposition', {
+            text: '日本語<入力>',
+            selectionStart: 7,
+            selectionEnd: 7
+        });
+        await ime.send('Input.insertText', { text: '日本語<入力>' });
+        await expect
+            .poll(() =>
+                page.evaluate(() =>
+                    window.rendererTest.calls
+                        .filter((call) => call.method === 'input')
+                        .map((call) => call.args[1])
+                )
+            )
+            .toEqual(['日本語<LT>入力>']);
+        await ime.send('Input.imeSetComposition', {
+            text: '次の入力',
+            selectionStart: 4,
+            selectionEnd: 4
+        });
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await expect
+            .poll(() =>
+                page.evaluate(() =>
+                    window.rendererTest.calls
+                        .filter((call) => call.method === 'input')
+                        .map((call) => call.args[1])
+                )
+            )
+            .toEqual(['日本語<LT>入力>', '次の入力']);
+    } finally {
+        await ime.detach();
+    }
+});
+
+test('blocked editors ignore late text, composition commits and paste events', async ({ page }) => {
+    await page.goto(`${origin}?view=app`);
+    const input = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(input).toBeFocused();
+    await input.dispatchEvent('compositionstart');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
+    await input.evaluate((node: HTMLTextAreaElement) => {
+        node.dispatchEvent(
+            new CompositionEvent('compositionend', { data: '遅れて確定', bubbles: true })
+        );
+        node.value = 'late text';
+        node.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        const clipboard = new DataTransfer();
+        clipboard.setData('text/plain', 'late paste');
+        node.dispatchEvent(
+            new ClipboardEvent('paste', {
+                clipboardData: clipboard,
+                bubbles: true,
+                cancelable: true
+            })
+        );
+    });
+    expect(
+        await page.evaluate(() =>
+            window.rendererTest.calls.filter((call) => ['input', 'paste'].includes(call.method))
+        )
+    ).toEqual([]);
+    await expect(input).toHaveValue('');
+    await page.keyboard.press('Escape');
+    await expect(input).toBeFocused();
+    await page.keyboard.type('az');
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'input')
+                    .map((call) => call.args[1])
+            )
+        )
+        .toEqual(['a', 'z']);
+});
+
+test('hidden editors discard late IME input while another workspace accepts typing', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+    await page.evaluate(() =>
+        window.rendererTest.settle('restoreWorkspaces', 0, {
+            workspaces: [
+                { id: 'alpha', root: '/alpha', name: 'Alpha' },
+                { id: 'beta', root: '/beta', name: 'Beta' }
+            ],
+            active: 'alpha',
+            errors: []
+        })
+    );
+    const alpha = page.locator('[data-editor-input="editor"]').first();
+    await expect(alpha).toBeFocused();
+    await alpha.dispatchEvent('compositionstart');
+    await page.keyboard.press('Alt+2');
+    const beta = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(beta).toBeFocused();
+    await alpha.evaluate((node: HTMLTextAreaElement) => {
+        node.dispatchEvent(
+            new CompositionEvent('compositionend', { data: '前の作業', bubbles: true })
+        );
+        node.value = 'obsolete';
+        node.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    });
+    await page.keyboard.type('az');
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'input')
+                    .map((call) => call.args)
+            )
+        )
+        .toEqual([
+            ['beta', 'a'],
+            ['beta', 'z']
+        ]);
+    await page.keyboard.press('Alt+1');
+    await expect(alpha).toBeFocused();
+    await expect(alpha).toHaveValue('');
+});
+
 test('Rapid insert text keeps spaces and following keys while a mode check is pending', async ({
     page
 }) => {

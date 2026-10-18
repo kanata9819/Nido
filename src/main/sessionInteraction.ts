@@ -173,16 +173,18 @@ export class SessionInteraction {
         return next;
     }
 
-    paste(text: string): Promise<void> {
+    paste(text: string | (() => Promise<string>)): Promise<void> {
         const next = this.inputQueue.then(async () => {
             if (this.stopped) {
                 throw new Error('Neovim session is closed.');
             }
+            // Reserve this position in the input queue before an asynchronous OS clipboard read.
+            const content = typeof text === 'function' ? await text() : text;
             await this.restoreScroll();
             if (this.workspace.kind === 'terminal') {
                 await this.client.request('nvim_command', ['startinsert']);
             }
-            await this.client.request('nvim_paste', [text, true, -1]);
+            await this.client.request('nvim_paste', [content, true, -1]);
         });
         this.inputQueue = next.catch(() => {});
         return next;

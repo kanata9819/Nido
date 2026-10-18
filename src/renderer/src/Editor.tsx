@@ -78,6 +78,30 @@ function Editor({
     }, [active, blocked, lineHeight]);
 
     useEffect(() => {
+        const resetComposition = (): void => {
+            composing.current = false;
+            if (input.current) {
+                input.current.value = '';
+            }
+        };
+        if (!active || blocked) {
+            resetComposition();
+            return;
+        }
+        const visibilityChanged = (): void => {
+            if (document.hidden) {
+                resetComposition();
+            }
+        };
+        window.addEventListener('blur', resetComposition);
+        document.addEventListener('visibilitychange', visibilityChanged);
+        return () => {
+            window.removeEventListener('blur', resetComposition);
+            document.removeEventListener('visibilitychange', visibilityChanged);
+        };
+    }, [active, blocked]);
+
+    useEffect(() => {
         error.current = onError;
     }, [onError]);
 
@@ -111,7 +135,7 @@ function Editor({
 
     const inputHandlers = useEditorInput({
         id,
-        blocked,
+        blocked: blocked || !active,
         composingRef: composing,
         paintRef: paint,
         onError

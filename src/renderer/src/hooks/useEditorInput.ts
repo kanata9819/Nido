@@ -16,8 +16,8 @@ export function useEditorInput({
     paintRef,
     onError
 }: UseEditorInputOptions): {
-    onFocus: () => void;
-    onBlur: () => void;
+    onFocus: (event: React.FocusEvent<HTMLTextAreaElement>) => void;
+    onBlur: (event: React.FocusEvent<HTMLTextAreaElement>) => void;
     onCompositionStart: () => void;
     onCompositionEnd: (event: React.CompositionEvent<HTMLTextAreaElement>) => void;
     onInput: (event: React.FormEvent<HTMLTextAreaElement>) => void;
@@ -29,23 +29,32 @@ export function useEditorInput({
     };
 
     return {
-        onFocus(): void {
+        onFocus(event: React.FocusEvent<HTMLTextAreaElement>): void {
+            composingRef.current = false;
+            event.currentTarget.value = '';
             paintRef.current();
         },
-        onBlur(): void {
+        onBlur(event: React.FocusEvent<HTMLTextAreaElement>): void {
+            composingRef.current = false;
+            event.currentTarget.value = '';
             paintRef.current();
         },
         onCompositionStart(): void {
-            composingRef.current = true;
+            composingRef.current = !blocked;
         },
         onCompositionEnd(event: React.CompositionEvent<HTMLTextAreaElement>): void {
+            const committed = composingRef.current && !blocked;
             composingRef.current = false;
-            if (event.data) {
+            if (committed && event.data) {
                 send(window.nido.input(id, event.data.replaceAll('<', '<LT>')));
             }
             event.currentTarget.value = '';
         },
         onInput(event: React.FormEvent<HTMLTextAreaElement>): void {
+            if (blocked) {
+                event.currentTarget.value = '';
+                return;
+            }
             if (composingRef.current || (event.nativeEvent as InputEvent).isComposing) {
                 return;
             }
@@ -57,10 +66,18 @@ export function useEditorInput({
         },
         onPaste(event: React.ClipboardEvent<HTMLTextAreaElement>): void {
             event.preventDefault();
+            if (blocked) {
+                return;
+            }
             send(window.nido.paste(id, event.clipboardData.getData('text/plain')));
         },
         onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
-            if (blocked || composingRef.current || event.nativeEvent.isComposing) {
+            if (
+                blocked ||
+                composingRef.current ||
+                event.nativeEvent.isComposing ||
+                event.nativeEvent.keyCode === 229
+            ) {
                 return;
             }
 
