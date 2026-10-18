@@ -114,7 +114,7 @@ test('an old scroll failure cannot reset the preview after changing editor setti
         );
         await expect.poll(calls).toBe(2);
         const expectedY = await page.evaluate(
-            () => Math.round(-4 * window.devicePixelRatio * 4) / (window.devicePixelRatio * 4)
+            () => Math.round(-4 * window.devicePixelRatio) / window.devicePixelRatio
         );
         await expect
             .poll(async () => Number(await canvas.getAttribute('data-first-y')))
@@ -162,7 +162,7 @@ test('an old scroll failure cannot reset the preview after changing editor setti
         );
         await expect.poll(completed).toBe(3);
         const finalY = await page.evaluate(
-            () => Math.round(-5 * window.devicePixelRatio * 4) / (window.devicePixelRatio * 4)
+            () => Math.round(-5 * window.devicePixelRatio) / window.devicePixelRatio
         );
         await expect(canvas).toHaveAttribute('data-first-y', String(finalY));
         await expect(page.getByText('Old scroll failed', { exact: false })).toHaveCount(0);

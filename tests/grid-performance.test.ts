@@ -109,13 +109,13 @@ test('gutter updates reuse row geometry without scanning unchanged cells', () =>
             });
         }
     }
-    grid.prepareLayout(1260, 8, 28, 1);
+    grid.prepareLayout(1260, 8, 28);
     reads = 0;
     grid.apply([
         ...Array.from({ length: 45 }, (_, row) => ['grid_line', [1, row, 0, [['8', 0]]]]),
         ['flush']
     ]);
-    grid.prepareLayout(1260, 8, 28, 1);
+    grid.prepareLayout(1260, 8, 28);
     assert.ok(reads <= 45 * 3, `gutter update scanned ${reads} unchanged cells`);
     assert.equal(grid.rowTop(40), 40 * 28);
 });
@@ -129,7 +129,7 @@ test('compact row counts follow edits, highlight changes and rectangular scrolli
         ['flush']
     ]);
     const height = (): number => {
-        grid.prepareLayout(120, 8, 28, 1);
+        grid.prepareLayout(120, 8, 28);
         return grid.rowTop(1);
     };
     assert.equal(height(), 20);
@@ -165,7 +165,7 @@ test('downward preview uses cached lower rows and leaves the command line fixed'
     assert.equal(grid.futureRows[0], future);
     grid.scrollFraction = 0.8;
     grid.scrollPreview = 0.7;
-    grid.prepareLayout(60, 8, 20, 1);
+    grid.prepareLayout(60, 8, 20);
     assert.equal(grid.scrollOffset, 30, 'preview must continue beyond the old one-row limit');
     assert.equal(grid.rowY(3), 40, 'command line stays below the code viewport');
     assert.equal(grid.rowTop(4) - grid.rowTop(3), 14, 'future CodeLens rows stay compact');
@@ -197,7 +197,7 @@ test('lower preview cache is bounded, cleared on edits and stops at EOF', () => 
     assert.equal(grid.futureRows.length, 0);
     grid.scrollPreview = 1.5;
     grid.apply([['nido_scroll_cache', [false, false, true]], ['flush']]);
-    grid.prepareLayout(800, 8, 20, 1);
+    grid.prepareLayout(800, 8, 20);
     assert.equal(grid.scrollOffset, 0, 'EOF must not expose empty preview rows');
     assert.equal(grid.needsLowerRows, false);
     grid.apply([['grid_resize', [1, 8, 40]], ['flush']]);

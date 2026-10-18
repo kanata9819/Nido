@@ -2905,9 +2905,13 @@ test('CodeLens rows compact while clicks, fractional scrolling and the command l
         assert.equal(grid.rowY(grid.rows - 1), 240);
         grid.scrolling = false;
         grid.draw(canvas, 160, 264, 14, 'monospace', false);
-        assert.equal(grid.rowY(1), 12, 'settled scrolling snaps to a physical pixel');
-        assert.equal(grid.rowAt(11.99), 0);
-        assert.equal(grid.rowAt(12), 1);
+        assert.equal(
+            grid.rowY(1),
+            11.9,
+            'settling keeps fractional geometry and click targets stable'
+        );
+        assert.equal(grid.rowAt(11.89), 0);
+        assert.equal(grid.rowAt(11.9), 1);
         assert.equal(grid.rowY(grid.rows - 1), 240);
         assert.equal(glyphs, originalGlyphs, 'settling reuses the native row images');
         grid.apply([['grid_line', [1, 0, 0, [['x', 0]]]], ['flush']]);

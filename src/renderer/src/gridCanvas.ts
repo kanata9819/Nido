@@ -38,8 +38,7 @@ function cellForeground(h: Highlight, background: string, foreground: string): s
 
 /** Paint grid snapshots, reusing rasterized row images until their content changes. */
 export class GridCanvas {
-    private static readonly rasterPhases = 4;
-    private rowImages = new WeakMap<Cell[], HTMLCanvasElement[]>();
+    private rowImages = new WeakMap<Cell[], HTMLCanvasElement>();
     private imageStyle = '';
     private paintDirty = true;
     private surface?: HTMLCanvasElement;
@@ -132,7 +131,7 @@ export class GridCanvas {
         }
         const previousOffset = this.grid.scrollOffset;
         const previousHeight = this.grid.contentHeight;
-        this.grid.prepareLayout(height, cellWidth, cellHeight, dpr);
+        this.grid.prepareLayout(height, cellWidth, cellHeight);
         if (
             previousOffset !== this.grid.scrollOffset ||
             previousHeight !== this.grid.contentHeight ||
@@ -195,29 +194,22 @@ export class GridCanvas {
             if (!commandLine && (rowY + rowHeight <= 0 || rowY >= this.grid.contentHeight)) {
                 continue;
             }
-            // Resting rows at fractional DPI must not inherit scroll interpolation.
-            const physicalY =
-                this.grid.scrolling && this.grid.scrollOffset !== 0 && !commandLine
-                    ? Math.round(rowY * dpr * GridCanvas.rasterPhases) / GridCanvas.rasterPhases
-                    : Math.round(rowY * dpr);
-            const top = Math.floor(physicalY);
-            const phase = Math.round((physicalY - top) * GridCanvas.rasterPhases);
+            // Move the native raster by physical pixels. Filtering it between pixels
+            // changes stroke weights during tiny touchpad movements and causes shimmer.
+            const top = Math.round(rowY * dpr);
             ctx.save();
             if (!commandLine) {
                 ctx.beginPath();
                 ctx.rect(0, 0, width, this.grid.contentHeight);
                 ctx.clip();
             }
-            let images = this.rowImages.get(cells) ?? [];
-            let image = images[0];
+            let image = this.rowImages.get(cells);
             const imageHeight = Math.ceil(rowHeight * dpr);
             if (!image || image.height !== imageHeight) {
-                images = [];
-                this.rowImages.set(cells, images);
                 image = canvas.ownerDocument.createElement('canvas');
                 image.width = canvas.width;
                 image.height = imageHeight;
-                images[0] = image;
+                this.rowImages.set(cells, image);
                 // Alpha surfaces use grayscale antialiasing, avoiding colored LCD fringes.
                 // Opaque themes still fill the row background before drawing text.
                 const ctx = image.getContext('2d', { alpha: true })!;
@@ -335,25 +327,6 @@ export class GridCanvas {
                         );
                     }
                 }
-            }
-            if (phase) {
-                let shifted = images[phase];
-                if (!shifted) {
-                    shifted = canvas.ownerDocument.createElement('canvas');
-                    shifted.width = image.width;
-                    shifted.height = image.height + 1;
-                    const shiftedContext = shifted.getContext('2d', { alpha: translucent })!;
-                    if (!translucent) {
-                        shiftedContext.fillStyle = this.grid.background;
-                        shiftedContext.fillRect(0, 0, shifted.width, shifted.height);
-                    }
-                    // Interpolate the native bitmap once per phase, then reuse its physical pixels.
-                    shiftedContext.imageSmoothingEnabled = true;
-                    shiftedContext.imageSmoothingQuality = 'low';
-                    shiftedContext.drawImage(image, 0, phase / GridCanvas.rasterPhases);
-                    images[phase] = shifted;
-                }
-                image = shifted;
             }
             // Reuse rasterized text; scroll and cursor animation only composite row images.
             ctx.drawImage(image, 0, top / dpr, image.width / dpr, image.height / dpr);

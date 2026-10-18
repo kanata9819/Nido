@@ -988,7 +988,7 @@ for (const scale of [1, 1.25, 1.5]) {
         }
     });
 
-    test(`slow pixel scrolling moves glyphs without whole-pixel jumps at ${scale * 100}% scale`, async ({
+    test(`slow pixel scrolling moves native glyphs by at most one physical pixel at ${scale * 100}% scale`, async ({
         browser
     }) => {
         const context = await browser.newContext({ deviceScaleFactor: scale });
@@ -1107,8 +1107,8 @@ for (const scale of [1, 1.25, 1.5]) {
             expect(steps.every((step) => step >= -0.02)).toBe(true);
             expect(
                 Math.max(...steps),
-                'slow gestures must not jump a whole physical pixel'
-            ).toBeLessThan(0.6);
+                'tiny gestures must move by at most one physical pixel without resampling'
+            ).toBeLessThanOrEqual(1.01);
             expect(samples.positions[0] - samples.positions.at(-1)!).toBeCloseTo(2, 1);
             expect(samples.nativeMismatches, 'resting text must preserve its native pixels').toBe(
                 0
@@ -1116,6 +1116,101 @@ for (const scale of [1, 1.25, 1.5]) {
             expect(samples.glyphs, 'fractional positions must reuse the native glyph raster').toBe(
                 samples.initialGlyphs
             );
+        } finally {
+            await context.close();
+        }
+    });
+
+    test(`slow touchpad scrolling preserves glyph shapes and does not jump on settling at ${scale * 100}% scale`, async ({
+        browser
+    }) => {
+        const context = await browser.newContext({ deviceScaleFactor: scale });
+        try {
+            const page = await context.newPage();
+            await page.route('**/scroll-raster-probe', (route) =>
+                route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+            );
+            await page.goto(`${origin}scroll-raster-probe`);
+            const samples = await page.evaluate(
+                async (moduleUrl) => {
+                    const { Grid } = await import(moduleUrl);
+                    const dpr = devicePixelRatio;
+                    const grid = new Grid();
+                    grid.busy = true;
+                    grid.background = '#121212';
+                    grid.foreground = '#ffffff';
+                    grid.pixelScrollEnabled = true;
+                    grid.apply([
+                        ['grid_resize', [1, 40, 8]],
+                        ['grid_line', [1, 2, 0, Array.from('Il1|[](){}MWmw', (text) => [text, 0])]],
+                        ['flush']
+                    ]);
+                    const canvas = document.createElement('canvas');
+                    const paint = (): void => {
+                        grid.invalidatePaint();
+                        grid.draw(canvas, 400, 152, 15, 'monospace', false, undefined, 19);
+                    };
+                    const pixels = (): Uint8ClampedArray =>
+                        canvas
+                            .getContext('2d')!
+                            .getImageData(
+                                0,
+                                Math.round(grid.rowY(2) * dpr) + 1,
+                                Math.floor(120 * dpr),
+                                Math.ceil(19 * dpr) - 2
+                            ).data;
+                    const differences = (a: Uint8ClampedArray, b: Uint8ClampedArray): number =>
+                        a.reduce((count, value, index) => count + Number(value !== b[index]), 0);
+                    paint();
+                    const native = pixels();
+                    let changedGlyphPixels = 0;
+                    let settlingPixels = 0;
+                    let settlingDistance = 0;
+                    const positions: number[] = [];
+                    for (let step = 1; step <= 40; step++) {
+                        grid.scrolling = true;
+                        grid.scrollFraction = step / 8 / (19 * dpr);
+                        paint();
+                        const before = canvas
+                            .getContext('2d')!
+                            .getImageData(0, 0, canvas.width, canvas.height).data;
+                        const offset = grid.scrollOffset;
+                        positions.push(Math.round(grid.rowY(2) * dpr));
+                        changedGlyphPixels = Math.max(
+                            changedGlyphPixels,
+                            differences(native, pixels())
+                        );
+                        grid.scrolling = false;
+                        paint();
+                        settlingDistance = Math.max(
+                            settlingDistance,
+                            Math.abs(grid.scrollOffset - offset)
+                        );
+                        const after = canvas
+                            .getContext('2d')!
+                            .getImageData(0, 0, canvas.width, canvas.height).data;
+                        settlingPixels = Math.max(settlingPixels, differences(before, after));
+                    }
+                    return { changedGlyphPixels, settlingPixels, settlingDistance, positions };
+                },
+                `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+            );
+            expect(
+                samples.changedGlyphPixels,
+                'moving glyphs retain their native stroke pixels'
+            ).toBe(0);
+            expect(samples.settlingPixels, 'pausing input must not sharpen or move the text').toBe(
+                0
+            );
+            expect(
+                samples.settlingDistance,
+                'pausing input must not change the viewport offset'
+            ).toBe(0);
+            expect(
+                samples.positions.every(
+                    (position, index) => index === 0 || position <= samples.positions[index - 1]
+                )
+            ).toBe(true);
         } finally {
             await context.close();
         }

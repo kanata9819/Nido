@@ -65,6 +65,7 @@ for (const scale of [1, 1.25, 1.5]) {
                 node.dataset.copied = '0';
                 node.dataset.mismatches = '0';
                 node.dataset.fractional = '0';
+                node.dataset.filteredCopies = '0';
                 ctx.drawImage = ((...args: Parameters<typeof draw>) => {
                     draw(...args);
                     if (args.length !== 5 || !(args[0] instanceof HTMLCanvasElement)) return;
@@ -72,6 +73,9 @@ for (const scale of [1, 1.25, 1.5]) {
                     const dpr = window.devicePixelRatio;
                     if (source.height > Math.ceil(19 * dpr)) {
                         node.dataset.filteredRows = String(Number(node.dataset.filteredRows) + 1);
+                        node.dataset.filteredCopies = String(
+                            Number(node.dataset.filteredCopies) + 1
+                        );
                     }
                     const y = Number(args[2]) * dpr;
                     const top = Math.round(y);
@@ -133,6 +137,26 @@ for (const scale of [1, 1.25, 1.5]) {
             await expect(canvas).toHaveAttribute('data-fractional', '0');
             await expect(canvas).toHaveAttribute('data-mismatches', '0');
             await expect(canvas).toHaveAttribute('data-filtered-rows', '0');
+            // Tiny touchpad deltas must keep native glyphs during every active frame,
+            // including direction changes, rather than only sharpening after settling.
+            await canvas.evaluate(async (node) => {
+                for (const direction of [1, -1]) {
+                    for (let frame = 0; frame < 32; frame++) {
+                        node.dispatchEvent(
+                            new WheelEvent('wheel', {
+                                bubbles: true,
+                                deltaY: (direction * 0.2) / devicePixelRatio
+                            })
+                        );
+                        await new Promise<void>((resolve) =>
+                            requestAnimationFrame(() => resolve())
+                        );
+                    }
+                }
+            });
+            await expect(canvas).toHaveAttribute('data-filtered-copies', '0');
+            await expect(canvas).toHaveAttribute('data-fractional', '0');
+            await expect(canvas).toHaveAttribute('data-mismatches', '0');
             // Changing zoom must rebuild backing pixels even without another editor command.
             const nextScale = scale + 0.25;
             await running.evaluate(({ BrowserWindow }, zoom) => {

@@ -528,7 +528,7 @@ export class Grid {
     }
 
     /** Compute shared row geometry before painting or hit-testing. */
-    prepareLayout(height: number, cellWidth: number, cellHeight: number, dpr: number): void {
+    prepareLayout(height: number, cellWidth: number, cellHeight: number): void {
         this.cellWidth = cellWidth;
         if (this.layoutDirty || this.cellHeight !== cellHeight) {
             const previousTops = this.rowTops;
@@ -587,10 +587,8 @@ export class Grid {
                   )
               )
             : 0;
-        // A wheel gesture can stop between pixels; do not leave filtered text on screen.
-        if (!this.scrolling) {
-            this.scrollPixels = Math.round(this.scrollPixels * dpr) / dpr;
-        }
+        // Keep the accumulated fraction through pauses and native viewport rebases.
+        // The painter snaps each destination once, without changing scroll geometry.
     }
 
     get historyRows(): readonly Cell[][] {

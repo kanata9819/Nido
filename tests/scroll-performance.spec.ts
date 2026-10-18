@@ -210,7 +210,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         const canvas = page.locator('canvas:visible');
         await expect(canvas).toHaveAttribute('aria-description', /line 1/);
         const dpr = await page.evaluate(() => window.devicePixelRatio);
-        const snapped = (pixels: number): number => Math.round(pixels * dpr * 4) / (dpr * 4);
+        const snapped = (pixels: number): number => Math.round(pixels * dpr) / dpr;
         const settled = (pixels: number): number => Math.round(pixels * dpr) / dpr;
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
@@ -240,11 +240,13 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
         });
         await canvas.evaluate(installRowImageProbe);
         await canvas.evaluate((node: HTMLCanvasElement) => {
-            const work = { trims: 0, descriptions: 0, paints: 0, cpuMs: 0 };
+            const work = { trims: 0, paintTrims: 0, descriptions: 0, paints: 0, cpuMs: 0 };
             Object.assign(window, { scrollWork: work });
+            let painting = false;
             const trim = String.prototype.trim;
             String.prototype.trim = function () {
                 work.trims++;
+                if (painting) work.paintTrims++;
                 return trim.call(this);
             };
             const attribute = node.setAttribute.bind(node);
@@ -256,9 +258,14 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
             window.requestAnimationFrame = (callback) =>
                 raf((time) => {
                     const start = performance.now();
-                    callback(time);
-                    work.cpuMs += performance.now() - start;
-                    work.paints++;
+                    painting = true;
+                    try {
+                        callback(time);
+                    } finally {
+                        painting = false;
+                        work.cpuMs += performance.now() - start;
+                        work.paints++;
+                    }
                 });
             node.dataset.offsets = '0';
             node.dataset.states = '0';
@@ -279,12 +286,15 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
             };
             const draw = context.drawImage.bind(context);
             context.drawImage = ((...args: Parameters<typeof draw>) => {
-                if (first && args.length === 5) {
+                // Cursor-only repaints may start several rows down. Track the
+                // actual viewport edge, rather than the first draw in any frame.
+                if (first && args.length === 5 && Number(args[2]) <= 0) {
                     const baseline = Number(
                         (args[0] as HTMLCanvasElement).dataset.rowBaseline ?? 0
                     );
                     const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
                     node.dataset.firstY = String(Number(args[2]) + phase);
+                    node.dataset.firstRowText = (args[0] as HTMLCanvasElement).dataset.rowText;
                     first = false;
                 }
                 draw(...args);
@@ -335,6 +345,7 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
                     window as unknown as {
                         scrollWork: {
                             trims: number;
+                            paintTrims: number;
                             descriptions: number;
                             paints: number;
                             cpuMs: number;
@@ -343,7 +354,9 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
                 ).scrollWork
         );
         console.log('fractional-scroll-work', work);
-        expect(work.trims).toBe(0);
+        // Native grid updates maintain row counts outside animation frames. Painting
+        // must reuse those counts, including when a cold preview fills its cache.
+        expect(work.paintTrims).toBe(0);
         expect(work.descriptions).toBe(0);
         const probe = await running.evaluate(
             () =>
@@ -415,14 +428,17 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
             )
             .toBe(4);
         // A faster upward gesture must use several cached rows, not stop after one.
+        await expect
+            .poll(async () => Number(await canvas.getAttribute('data-first-y')))
+            .toBeCloseTo(snapped(2 - rowHeight), 5);
         await canvas.evaluate((node: HTMLCanvasElement) => {
             const ctx = node.getContext('2d')!;
             const draw = ctx.drawImage.bind(ctx);
-            let rowText: string | undefined;
+            const rowText = node.dataset.firstRowText;
+            node.dataset.largeUpPreview = node.dataset.firstY;
             ctx.drawImage = ((...args: Parameters<typeof draw>) => {
                 if (args.length === 5) {
                     const source = args[0] as HTMLCanvasElement;
-                    rowText ??= source.dataset.rowText;
                     if (source.dataset.rowText === rowText) {
                         const baseline = Number(
                             (args[0] as HTMLCanvasElement).dataset.rowBaseline ?? 0
