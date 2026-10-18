@@ -8,6 +8,7 @@ files:
     - '!scripts/**'
     - '!patches/**'
     - '!tests/**'
+    - '!prototypes/**'
     - '!test-results/**'
     - '!playwright-report/**'
     - '!reports/**'
