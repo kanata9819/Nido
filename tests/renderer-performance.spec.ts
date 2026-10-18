@@ -5,6 +5,8 @@ import react from '@vitejs/plugin-react';
 import type { Grid as EditorGrid } from '../src/renderer/src/grid';
 import type {} from './renderer/harness';
 
+test.use({ launchOptions: { args: ['--enable-gpu'] } });
+
 let server: ViteDevServer;
 let origin: string;
 
@@ -65,12 +67,17 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                     const read = prototype.getImageData;
                     const write = prototype.putImageData;
                     const text = prototype.fillText;
+                    const gpu = WebGL2RenderingContext.prototype;
+                    const upload = gpu.texImage2D;
                     const work = {
                         reads: 0,
                         writes: 0,
                         glyphs: 0,
                         cachedGlyphs: 0,
-                        editedGlyphs: 0
+                        editedGlyphs: 0,
+                        uploads: 0,
+                        cachedUploads: 0,
+                        editedUploads: 0
                     };
                     prototype.getImageData = function (...args) {
                         work.reads++;
@@ -83,6 +90,10 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                     prototype.fillText = function (...args) {
                         work.glyphs++;
                         return text.apply(this, args);
+                    };
+                    gpu.texImage2D = function (...args) {
+                        work.uploads++;
+                        return Reflect.apply(upload, this, args);
                     };
                     const durations: number[] = [];
                     let coldMs = 0;
@@ -100,20 +111,27 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                             }
                             grid.scrollFraction = ((frame + 1) * 0.25) / (19 * devicePixelRatio);
                             const glyphs = work.glyphs;
+                            const uploads = work.uploads;
                             const start = performance.now();
                             grid.draw(canvas, 1500, 950, 15, 'monospace', false, undefined, 19);
                             const duration = performance.now() - start;
                             if (frame === 0) coldMs = duration;
                             else {
                                 durations.push(duration);
-                                if (edited) work.editedGlyphs += work.glyphs - glyphs;
-                                else work.cachedGlyphs += work.glyphs - glyphs;
+                                if (edited) {
+                                    work.editedGlyphs += work.glyphs - glyphs;
+                                    work.editedUploads += work.uploads - uploads;
+                                } else {
+                                    work.cachedGlyphs += work.glyphs - glyphs;
+                                    work.cachedUploads += work.uploads - uploads;
+                                }
                             }
                         }
                     } finally {
                         prototype.getImageData = read;
                         prototype.putImageData = write;
                         prototype.fillText = text;
+                        gpu.texImage2D = upload;
                     }
                     durations.sort((a, b) => a - b);
                     return {
@@ -130,6 +148,11 @@ for (const scale of [1, 1.25, 1.5, 2]) {
             expect(work.cachedGlyphs, 'fractional motion must reuse cached text').toBe(0);
             expect(work.reads, 'cold and changed rows must avoid CPU pixel readback').toBe(0);
             expect(work.writes, 'fractional motion must avoid per-frame CPU pixel uploads').toBe(0);
+            expect(work.cachedUploads, 'cached motion must reuse GPU textures').toBe(0);
+            expect(work.editedUploads, 'edits upload only changed rows').toBeLessThanOrEqual(4);
+            expect(work.p95Ms, 'warm scrolling must stay within half a 60 Hz frame').toBeLessThan(
+                8
+            );
         } finally {
             await context.close();
         }

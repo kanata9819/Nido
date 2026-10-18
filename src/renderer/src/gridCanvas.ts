@@ -1,6 +1,7 @@
 import type { Grid } from './grid';
 import type { Cell, Highlight } from './gridTypes';
 import { color } from './gridColors';
+import { LinearRowImages } from './linearRowImage';
 
 function cellBackground(h: Highlight, background: string, foreground: string): string {
     if (h.reverse) {
@@ -39,6 +40,7 @@ function cellForeground(h: Highlight, background: string, foreground: string): s
 /** Paint grid snapshots, reusing rasterized row images until their content changes. */
 export class GridCanvas {
     private rowImages = new WeakMap<Cell[], HTMLCanvasElement>();
+    private linearRows?: LinearRowImages;
     private imageStyle = '';
     private paintDirty = true;
     private surface?: HTMLCanvasElement;
@@ -168,6 +170,13 @@ export class GridCanvas {
         ctx.clip();
         this.paintBackground(ctx, 0, 0, width, height);
         ctx.textBaseline = 'alphabetic';
+        if (!translucent && this.grid.pixelScrollEnabled) {
+            this.linearRows ??= LinearRowImages.forDocument(canvas.ownerDocument);
+        }
+        const correctLight =
+            !translucent &&
+            this.grid.pixelScrollEnabled &&
+            this.linearRows?.begin(canvas.width, canvas.height);
         for (
             let row = this.grid.scrollOffset < 0 ? -this.grid.historyRows.length : 0;
             row < this.grid.rows + (this.grid.scrollOffset > 0 ? this.grid.futureRows.length : 0);
@@ -334,7 +343,13 @@ export class GridCanvas {
             }
             // Reuse rasterized text; scroll and cursor animation only composite row images.
             ctx.drawImage(image, 0, top / dpr, image.width / dpr, image.height / dpr);
+            if (correctLight && !commandLine) {
+                this.linearRows!.paint(image, top);
+            }
             ctx.restore();
+        }
+        if (correctLight) {
+            this.linearRows!.finish(ctx, dpr, this.grid.contentHeight);
         }
         ctx.save();
         ctx.beginPath();

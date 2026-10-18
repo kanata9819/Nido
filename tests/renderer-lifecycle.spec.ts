@@ -5,6 +5,9 @@ import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type {} from './renderer/harness';
 import { applyNeovimUI, emptyNeovimUI } from '../src/shared/neovimUI';
+import { supportsHardwareWebGL } from './helpers/row-image-probe';
+
+test.use({ launchOptions: { args: ['--enable-gpu'] } });
 
 let server: ViteDevServer;
 let origin: string;
@@ -909,6 +912,9 @@ for (const scale of [1, 1.25, 1.5]) {
                             resampled++;
                             return;
                         }
+                        if (!source.getContext('2d')) {
+                            return;
+                        }
                         copies++;
                         paintedRows.push(source);
                         const y = Number(args[2]) * devicePixelRatio;
@@ -1077,11 +1083,17 @@ for (const scale of [1, 1.25, 1.5]) {
                                 width,
                                 Math.ceil(48 * dpr)
                             ).data;
-                            const background = pixels[0];
+                            const light = (value: number): number => {
+                                const encoded = value / 255;
+                                return encoded <= 0.04045
+                                    ? encoded / 12.92
+                                    : ((encoded + 0.055) / 1.055) ** 2.4;
+                            };
+                            const background = light(pixels[0]);
                             let mass = 0;
                             let moment = 0;
                             for (let offset = 0; offset < pixels.length; offset += 4) {
-                                const coverage = Math.max(0, pixels[offset] - background);
+                                const coverage = Math.max(0, light(pixels[offset]) - background);
                                 mass += coverage;
                                 moment += coverage * (top + Math.floor(offset / 4 / width));
                             }
@@ -1136,6 +1148,12 @@ for (const scale of [1, 1.25, 1.5]) {
                 async (moduleUrl) => {
                     const { Grid } = await import(moduleUrl);
                     const dpr = devicePixelRatio;
+                    const light = (value: number): number => {
+                        const encoded = value / 255;
+                        return encoded <= 0.04045
+                            ? encoded / 12.92
+                            : ((encoded + 0.055) / 1.055) ** 2.4;
+                    };
                     const differences = (a: Uint8ClampedArray, b: Uint8ClampedArray): number =>
                         a.reduce((count, value, index) => count + Number(value !== b[index]), 0);
                     let inkVariation = 0;
@@ -1172,7 +1190,7 @@ for (const scale of [1, 1.25, 1.5]) {
                             let ink = 0;
                             let moment = 0;
                             for (let i = 0; i < data.length; i += 4) {
-                                const weight = Math.max(0, data[i] - 18);
+                                const weight = Math.max(0, light(data[i]) - light(18));
                                 ink += weight;
                                 moment += weight * (top + Math.floor(i / 4 / width));
                             }
@@ -1248,6 +1266,254 @@ for (const scale of [1, 1.25, 1.5]) {
             expect(samples.origins).toEqual([19, -19]);
         } finally {
             await context.close();
+        }
+    });
+    test(`fractional text preserves light and motion across themes at ${scale * 100}% scale`, async ({
+        browser
+    }) => {
+        const context = await browser.newContext({ deviceScaleFactor: scale });
+        try {
+            const page = await context.newPage();
+            await page.route('**/light-probe', (route) =>
+                route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+            );
+            await page.goto(`${origin}light-probe`);
+            test.skip(!(await page.evaluate(supportsHardwareWebGL)), 'Hardware WebGL unavailable');
+            const results = await page.evaluate(
+                async (moduleUrl) => {
+                    const { Grid } = await import(moduleUrl);
+                    const light = Array.from({ length: 256 }, (_, value) => {
+                        const encoded = value / 255;
+                        return encoded <= 0.04045
+                            ? encoded / 12.92
+                            : ((encoded + 0.055) / 1.055) ** 2.4;
+                    });
+                    const luminance = (red: number, green: number, blue: number): number =>
+                        0.2126 * light[red] + 0.7152 * light[green] + 0.0722 * light[blue];
+                    const results: {
+                        variation: number;
+                        minStep: number;
+                        maxStep: number;
+                        paused: number;
+                        repeatWork: number;
+                    }[] = [];
+                    for (const [foreground, background] of [
+                        ['#d4d4d4', '#121212'],
+                        ['#4ec9b0', '#121212'],
+                        ['#ce9178', '#121212'],
+                        ['#202020', '#f5f5f5']
+                    ]) {
+                        const grid = new Grid();
+                        grid.busy = true;
+                        grid.background = background;
+                        grid.foreground = foreground;
+                        grid.pixelScrollEnabled = true;
+                        grid.apply([
+                            ['grid_resize', [1, 40, 8]],
+                            [
+                                'grid_line',
+                                [1, 2, 0, Array.from('Il1|[](){}MWmw __ fn(value)', (c) => [c, 0])]
+                            ],
+                            ['flush']
+                        ]);
+                        const canvas = document.createElement('canvas');
+                        const paint = (): void => {
+                            grid.invalidatePaint();
+                            grid.draw(canvas, 400, 152, 15, 'monospace', false, undefined, 19);
+                        };
+                        const top = Math.round(38 * devicePixelRatio) - 3;
+                        const width = Math.round(300 * devicePixelRatio);
+                        const height = Math.ceil(19 * devicePixelRatio) + 6;
+                        const pixels = (): Uint8ClampedArray =>
+                            canvas.getContext('2d')!.getImageData(0, top, width, height).data;
+                        const rgb = Number.parseInt(background.slice(1), 16);
+                        const base = luminance((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255);
+                        const samples: { light: number; center: number }[] = [];
+                        let paused = 0;
+                        let repeatWork = 0;
+                        let work = 0;
+                        const read = CanvasRenderingContext2D.prototype.getImageData;
+                        const write = CanvasRenderingContext2D.prototype.putImageData;
+                        CanvasRenderingContext2D.prototype.getImageData = function (...args) {
+                            if (this.canvas !== canvas) work++;
+                            return Reflect.apply(read, this, args);
+                        };
+                        CanvasRenderingContext2D.prototype.putImageData = function (...args) {
+                            work++;
+                            return Reflect.apply(write, this, args);
+                        };
+                        try {
+                            for (let step = 0; step <= 32; step++) {
+                                grid.scrollFraction = step / 32 / (19 * devicePixelRatio);
+                                grid.scrolling = true;
+                                paint();
+                                const data = pixels();
+                                let total = 0;
+                                let moment = 0;
+                                for (let i = 0; i < data.length; i += 4) {
+                                    const weight = Math.abs(
+                                        luminance(data[i], data[i + 1], data[i + 2]) - base
+                                    );
+                                    total += weight;
+                                    moment += weight * (top + Math.floor(i / 4 / width));
+                                }
+                                samples.push({ light: total, center: moment / total });
+                                const before = work;
+                                grid.scrolling = false;
+                                paint();
+                                repeatWork += work - before;
+                                const repeated = pixels();
+                                paused += data.reduce(
+                                    (n, value, i) => n + Number(value !== repeated[i]),
+                                    0
+                                );
+                            }
+                        } finally {
+                            CanvasRenderingContext2D.prototype.getImageData = read;
+                            CanvasRenderingContext2D.prototype.putImageData = write;
+                        }
+                        const levels = samples.map((sample) => sample.light);
+                        const steps = samples
+                            .slice(1)
+                            .map((sample, i) => samples[i].center - sample.center);
+                        results.push({
+                            variation:
+                                (Math.max(...levels) - Math.min(...levels)) / Math.max(...levels),
+                            minStep: Math.min(...steps),
+                            maxStep: Math.max(...steps),
+                            paused,
+                            repeatWork
+                        });
+                    }
+                    return results;
+                },
+                `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+            );
+            console.log('fractional-text-light', JSON.stringify({ scale, results }));
+            for (const result of results) {
+                expect(
+                    result.variation,
+                    'subpixel translation must retain text brightness'
+                ).toBeLessThan(0.01);
+                expect(result.minStep, 'each input must visibly advance the glyph').toBeGreaterThan(
+                    0.015
+                );
+                expect(
+                    result.maxStep,
+                    'brightness correction must not introduce positional jumps'
+                ).toBeLessThan(0.05);
+                expect(result.paused, 'pausing must not change the raster').toBe(0);
+                expect(result.repeatWork, 'pausing must reuse the corrected image').toBe(0);
+            }
+        } finally {
+            await context.close();
+        }
+    });
+}
+
+for (const failure of ['unavailable', 'lost'] as const) {
+    test(`scrolling retains native text when WebGL is ${failure}`, async ({ page }) => {
+        await page.route('**/gpu-fallback-probe', (route) =>
+            route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+        );
+        await page.goto(`${origin}gpu-fallback-probe`);
+        if (failure === 'lost') {
+            test.skip(!(await page.evaluate(supportsHardwareWebGL)), 'Hardware WebGL unavailable');
+        }
+        const result = await page.evaluate(
+            async ({ moduleUrl, failure }) => {
+                const { Grid } = await import(moduleUrl);
+                const getContext = HTMLCanvasElement.prototype.getContext;
+                let gpu: WebGL2RenderingContext | undefined;
+                HTMLCanvasElement.prototype.getContext = function (...args) {
+                    if (args[0] === 'webgl2' && failure === 'unavailable') return null;
+                    const context = Reflect.apply(getContext, this, args);
+                    if (args[0] === 'webgl2' && context) gpu = context;
+                    return context;
+                } as typeof getContext;
+                const grid = new Grid();
+                grid.busy = true;
+                grid.pixelScrollEnabled = true;
+                grid.scrollFraction = 0.375 / 19;
+                grid.apply([
+                    ['grid_resize', [1, 30, 5]],
+                    [
+                        'grid_line',
+                        [1, 2, 0, Array.from('Native text Il1|[]()', (text) => [text, 0])]
+                    ],
+                    ['flush']
+                ]);
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d', { alpha: false })!;
+                const pixels = (): Uint8ClampedArray =>
+                    context.getImageData(0, 0, canvas.width, canvas.height).data;
+                const draw = context.drawImage;
+                let native: Uint8ClampedArray;
+                context.drawImage = function (...args) {
+                    Reflect.apply(draw, this, args);
+                    if ((args[0] as HTMLCanvasElement).getContext('2d')) native = pixels();
+                };
+                const paint = (): void => {
+                    grid.invalidatePaint();
+                    grid.draw(canvas, 300, 95, 15, 'monospace', false, undefined, 19);
+                };
+                const differences = (a: Uint8ClampedArray, b: Uint8ClampedArray): number =>
+                    a.reduce((count, value, index) => count + Number(value !== b[index]), 0);
+                let fallback = 0;
+                let restored = 0;
+                let corrected = 0;
+                try {
+                    paint();
+                    const initial = pixels();
+                    const baseline = native!;
+                    corrected = differences(initial, baseline);
+                    if (failure === 'lost') {
+                        const gl = gpu!;
+                        const extension = gl.getExtension('WEBGL_lose_context')!;
+                        await new Promise<void>((resolve) => {
+                            gl.canvas.addEventListener('webglcontextlost', () => resolve(), {
+                                once: true
+                            });
+                            extension.loseContext();
+                        });
+                        paint();
+                        fallback = differences(pixels(), baseline);
+                        // Finish dispatching the canceled loss event before requesting recovery.
+                        await new Promise(requestAnimationFrame);
+                        await new Promise<void>((resolve) => {
+                            gl.canvas.addEventListener('webglcontextrestored', () => resolve(), {
+                                once: true
+                            });
+                            extension.restoreContext();
+                        });
+                        paint();
+                        restored = differences(pixels(), initial);
+                    } else {
+                        fallback = differences(initial, baseline);
+                    }
+                    const rgb = Number.parseInt(grid.background.slice(1), 16);
+                    let ink = 0;
+                    for (let i = 0; i < baseline.length; i += 4) {
+                        if (baseline[i] !== rgb >> 16) ink++;
+                    }
+                    return { fallback, restored, corrected, ink };
+                } finally {
+                    HTMLCanvasElement.prototype.getContext = getContext;
+                }
+            },
+            {
+                moduleUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+                failure
+            }
+        );
+        expect(result.ink, 'fallback keeps visible text').toBeGreaterThan(100);
+        expect(result.fallback, 'GPU failure must retain native scrolling pixels').toBe(0);
+        if (failure === 'lost') {
+            expect(
+                result.corrected,
+                'the initial viewport receives light correction'
+            ).toBeGreaterThan(0);
+            expect(result.restored, 'restored GPU rebuilds the same corrected image').toBe(0);
         }
     });
 }

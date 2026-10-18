@@ -3,6 +3,7 @@ import { electron } from './helpers/electron';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { supportsHardwareWebGL } from './helpers/row-image-probe';
 
 for (const scale of [1, 1.25, 1.5]) {
     test(`cached editor text preserves its pixels at ${scale * 100}% scale`, async () => {
@@ -23,6 +24,7 @@ for (const scale of [1, 1.25, 1.5]) {
         });
         try {
             const page = await running.firstWindow();
+            const hasHardware = await page.evaluate(supportsHardwareWebGL);
             await expect(
                 page.getByRole('heading', { name: 'Make yourself at home.' })
             ).toBeVisible();
@@ -51,7 +53,7 @@ for (const scale of [1, 1.25, 1.5]) {
             await expect(canvas).toHaveAttribute('aria-description', /ScreenCells/);
             await page.getByRole('button', { name: 'Settings', exact: true }).click();
             await page.getByRole('checkbox', { name: 'UI animations' }).uncheck();
-            await canvas.evaluate((node: HTMLCanvasElement) => {
+            await canvas.evaluate((node: HTMLCanvasElement, hasHardware) => {
                 // Force fractional layout edges, as sidebars and Windows scaling can produce.
                 node.parentElement!.style.marginLeft = '12.3px';
                 node.parentElement!.style.marginTop = '0.3px';
@@ -66,12 +68,19 @@ for (const scale of [1, 1.25, 1.5]) {
                 node.dataset.mismatches = '0';
                 node.dataset.fractional = '0';
                 node.dataset.filteredCopies = '0';
+                node.dataset.correctedCopies = '0';
                 const reference = document.createElement('canvas');
                 const referenceContext = reference.getContext('2d', { alpha: false })!;
                 ctx.drawImage = ((...args: Parameters<typeof draw>) => {
                     draw(...args);
                     if (args.length !== 5 || !(args[0] instanceof HTMLCanvasElement)) return;
                     const source = args[0];
+                    if (!source.getContext('2d')) {
+                        node.dataset.correctedCopies = String(
+                            Number(node.dataset.correctedCopies) + 1
+                        );
+                        return;
+                    }
                     const dpr = window.devicePixelRatio;
                     if (source.height > Math.ceil(19 * dpr)) {
                         node.dataset.filteredRows = String(Number(node.dataset.filteredRows) + 1);
@@ -81,6 +90,13 @@ for (const scale of [1, 1.25, 1.5]) {
                     }
                     const y = Number(args[2]) * dpr;
                     const top = Math.round(y);
+                    if (hasHardware && Math.abs(y - top) > 0.001) {
+                        // This underlay is replaced by the GPU light correction. Outside
+                        // a partial paint's clip, the preceding corrected pixels remain.
+                        node.dataset.copied = String(Number(node.dataset.copied) + 1);
+                        node.dataset.fractional = String(Number(node.dataset.fractional) + 1);
+                        return;
+                    }
                     // Bottom buffer rows are intentionally clipped above the command line.
                     if (top < 0 || top + 3 * source.height >= node.height) return;
                     const width = Math.min(360, source.width - 180);
@@ -104,7 +120,7 @@ for (const scale of [1, 1.25, 1.5]) {
                         node.dataset.fractional = String(Number(node.dataset.fractional) + 1);
                     }
                 }) as typeof draw;
-            });
+            }, hasHardware);
             await page.getByRole('spinbutton', { name: 'Editor line height' }).fill('19');
             await expect
                 .poll(async () => Number(await canvas.getAttribute('data-copied')))
@@ -146,6 +162,11 @@ for (const scale of [1, 1.25, 1.5]) {
                 .toBeGreaterThan(0);
             await expect(canvas).toHaveAttribute('data-mismatches', '0');
             await expect(canvas).toHaveAttribute('data-filtered-rows', '0');
+            if (hasHardware) {
+                await expect
+                    .poll(async () => Number(await canvas.getAttribute('data-corrected-copies')))
+                    .toBeGreaterThan(0);
+            }
             // Tiny touchpad deltas reuse native glyphs with one continuous translation,
             // including direction changes and pauses.
             await canvas.evaluate(async (node) => {

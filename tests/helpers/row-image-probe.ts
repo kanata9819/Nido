@@ -1,3 +1,13 @@
+/** Check the hardware-only path without leaving a spare GPU context alive. */
+export function supportsHardwareWebGL(): boolean {
+    const context = document
+        .createElement('canvas')
+        .getContext('webgl2', { failIfMajorPerformanceCaveat: true });
+    if (!context) return false;
+    context.getExtension('WEBGL_lose_context')?.loseContext();
+    return true;
+}
+
 // Follow glyphs through offscreen rasterization so scroll probes measure their
 // position, including coverage changes within a physical pixel.
 export function installRowImageProbe(): void {

@@ -2966,7 +2966,14 @@ test('CodeLens rows compact while clicks, fractional scrolling and the command l
         width: 0,
         height: 0,
         getContext: () => context,
-        ownerDocument: { createElement: () => ({ width: 0, height: 0, getContext: () => context }) }
+        ownerDocument: {
+            createElement: () => ({
+                width: 0,
+                height: 0,
+                getContext: (type: string) => (type === '2d' ? context : null),
+                addEventListener: () => {}
+            })
+        }
     } as unknown as HTMLCanvasElement;
     const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
     Object.defineProperty(globalThis, 'window', {
