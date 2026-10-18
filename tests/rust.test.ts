@@ -23,7 +23,7 @@ test(
             await writeFile(join(root, 'src/lib.rs'), 'pub fn greet() -> u32 { 42 }\n');
             await writeFile(
                 join(root, 'src/main.rs'),
-                'use nido_rust_fixture::greet;\nfn main() {\n    let answer = greet();\n    println!("{}", answer);\n}\ntype AppTabs = Vec<u32>;\nconst CURSOR_BLINK_INTERVAL: u32 = 500;\n#[derive(Debug, Clone, PartialEq)]\nstruct Example { value: u32 }\n#[allow(dead_code)]\nfn macro_colors() { let v = vec![1, 2]; dbg!(v); assert!(true); }\n'
+                'use nido_rust_fixture::greet;\nfn main() {\n    let answer = greet() as u32;\n    println!("{}", answer);\n}\ntype AppTabs = Vec<u32>;\nconst CURSOR_BLINK_INTERVAL: u32 = 500;\n#[derive(Debug, Clone, PartialEq)]\nstruct Example { value: u32 }\n#[allow(dead_code)]\nfn macro_colors() { let v = vec![1, 2]; dbg!(v); assert!(true); }\n'
             );
             let sawProgress = false;
             const messages: string[] = [];
@@ -178,6 +178,7 @@ end, 100), 'derive tokens must resolve after Cargo loads')
 vim.cmd('redraw!')`);
             await session.client.request('nvim_eval', ['1']);
             for (const [word, foreground] of [
+                ['as', 0x569cd6],
                 ['println!', 0x569cd6],
                 ['vec!', 0x569cd6],
                 ['dbg!', 0x569cd6],

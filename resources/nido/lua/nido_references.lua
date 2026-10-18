@@ -166,7 +166,7 @@ function M.highlight(buffer, first, lines, syntax_only)
       local groups = syntax_only and {
         syntax = {{hl_group = vim.fn.synIDattr(vim.fn.synID(first + offset - 1, column + 1, true), 'name')}},
         treesitter = {}, semantic_tokens = {},
-      } or vim.inspect_pos(buffer, first + offset - 2, column, { extmarks = false })
+      } or vim.inspect_pos(buffer, first + offset - 2, column)
       local foreground = color('Normal') or '#d4d4d4'
       local priority = -1
       local function apply(group, rank)
@@ -195,6 +195,13 @@ function M.highlight(buffer, first, lines, syntax_only)
             apply('@lsp.mod.' .. modifier .. '.' .. filetype, vim.hl.priorities.semantic_tokens + 1)
             apply('@lsp.typemod.' .. token.type .. '.' .. modifier .. '.' .. filetype,
               vim.hl.priorities.semantic_tokens + 2)
+          end
+        end
+        -- Bracket colors are persistent extmarks, including on offscreen sticky headers.
+        -- Keep transient cursor, search and diagnostic decorations out of previews.
+        for _, mark in ipairs(groups.extmarks) do
+          if mark.ns == 'nido_brackets' then
+            apply(mark.opts.hl_group, mark.opts.priority)
           end
         end
       end

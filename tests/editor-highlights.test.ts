@@ -8,6 +8,40 @@ import { Grid } from '../src/renderer/src/grid';
 import { EditorCursor } from '../src/renderer/src/editorCursor';
 import { setTimeout as delay } from 'node:timers/promises';
 
+test('Rust cast and import aliases use keyword colors without recoloring operators or strings', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.attach(80, 24);
+        await session.client.request('nvim_exec_lua', [
+            `
+vim.lsp.enable('rust_analyzer', false)
+vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+  'let value = count as i16;',
+  'use std::io as input;',
+  'let sum = left + right;',
+  'let text = "as"; // as',
+})
+vim.bo.filetype = 'rust'
+local function color(row, column)
+  return vim.fn.synIDattr(vim.fn.synIDtrans(vim.fn.synID(row, column, true)), 'fg#')
+end
+assert(color(1, 19) == '#569cd6', 'cast as must be blue: ' .. color(1, 19))
+assert(color(2, 13) == '#569cd6', 'alias as must be blue')
+assert(color(3, 16) == '#d4d4d4', 'symbolic operators keep their color')
+assert(color(4, 13) == '#ce9178', 'as inside a string keeps its color')
+assert(color(4, 20) == '#6a9955', 'as inside a comment keeps its color')
+local preview = require('nido_references').highlight_text({'let value = count as i16;'}, 'rust')
+assert(vim.iter(preview[1]):any(function(span)
+  return span.text == 'as' and span.color == '#569cd6'
+end), 'syntax-only previews use the same keyword color')
+`,
+            []
+        ]);
+    } finally {
+        await session.stop();
+    }
+});
+
 test('matching brackets follow the innermost pair, syntax, edits and visual mode', async () => {
     const session = await Session.create(process.cwd(), () => {});
     try {

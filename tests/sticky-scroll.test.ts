@@ -91,6 +91,19 @@ test('Rust sticky headers pick up delayed semantic colors even when their source
         const syntaxColor = headerColor();
         assert.ok(syntaxColor);
         assert.notEqual(syntaxColor, '#4ec9b0');
+        const bracketColors = (): string[][] =>
+            grid
+                .stickyScroll!.scopes.slice(0, 2)
+                .map((scope) =>
+                    scope.text.flatMap((span) =>
+                        [...span.text]
+                            .filter((character) => /[(){}]/.test(character))
+                            .map(() => span.color)
+                    )
+                );
+        assert.deepEqual(bracketColors(), [['#ffd700'], ['#da70d6', '#da70d6', '#da70d6']]);
+        assert.equal(grid.stickyScroll!.scopes[0].endText.at(-1)?.color, '#ffd700');
+        assert.equal(grid.stickyScroll!.scopes[1].endText.at(-1)?.color, '#da70d6');
         await lua(`
             _G.sticky_semantic_requests = {}
             -- A real Neovim LSP client with a controlled in-process transport.
@@ -145,6 +158,7 @@ test('Rust sticky headers pick up delayed semantic colors even when their source
             '#4ec9b0',
             'late Rust type colors replace the cached plain header'
         );
+        assert.deepEqual(bracketColors(), [['#ffd700'], ['#da70d6', '#da70d6', '#da70d6']]);
         await lua(`
             vim.api.nvim_set_hl(0, '@lsp.typemod.struct.declaration.rust', {fg='#4fc1ff'})
             vim.lsp.semantic_tokens.force_refresh(0)

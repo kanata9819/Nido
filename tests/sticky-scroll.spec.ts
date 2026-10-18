@@ -63,6 +63,18 @@ test('Sticky Scroll pins nested headers, jumps by mouse and keyboard, and saves 
         await expect(sticky.getByRole('button')).toHaveCount(3);
         await expect(sticky.locator('[data-source-line="1"]')).toContainText('class Panel');
         await expect(sticky.locator('[data-source-line="2"]')).toContainText('render()');
+        const brackets = (line: number): Promise<string[]> =>
+            sticky
+                .locator(`[data-source-line="${line}"] span[style*="color"]`)
+                .evaluateAll((spans) =>
+                    spans.flatMap((span) =>
+                        [...span.textContent!]
+                            .filter((character) => /[(){}]/.test(character))
+                            .map(() => getComputedStyle(span).color)
+                    )
+                );
+        await expect.poll(() => brackets(1)).toEqual(['rgb(255, 215, 0)']);
+        await expect.poll(() => brackets(2)).toEqual(Array(3).fill('rgb(218, 112, 214)'));
         await page.screenshot({
             path: test.info().outputPath('sticky-scroll.png')
         });
@@ -81,6 +93,7 @@ test('Sticky Scroll pins nested headers, jumps by mouse and keyboard, and saves 
         await condition.hover();
         await page.keyboard.down('Shift');
         await expect(condition).toHaveAttribute('aria-label', 'Go to line 44');
+        await expect.poll(() => brackets(3)).toEqual(['rgb(23, 159, 255)']);
         await page.keyboard.up('Shift');
         await expect(condition).toHaveAttribute('aria-label', 'Go to line 3');
         await page.keyboard.down('Shift');
@@ -91,6 +104,7 @@ test('Sticky Scroll pins nested headers, jumps by mouse and keyboard, and saves 
         await expect(sticky.getByRole('button')).toHaveCount(3);
         await page.reload();
         await expect(sticky.getByRole('button')).toHaveCount(3);
+        await expect.poll(() => brackets(1)).toEqual(['rgb(255, 215, 0)']);
         await page.keyboard.type(' ,');
         await page.getByRole('spinbutton', { name: 'Sticky Scroll maximum lines' }).fill('1');
         await page.keyboard.press('Escape');
