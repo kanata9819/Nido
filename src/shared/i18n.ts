@@ -215,6 +215,9 @@ export const japanese: Record<string, string> = {
         'ダークモダンの配色に、すりガラス効果を追加できます。選択は保存されます。',
     'Editor font size': 'エディターの文字サイズ',
     'Editor line height': 'エディターの行の高さ',
+    'Editor font weight': 'エディターの文字の太さ',
+    '350 is lighter; 400 is standard. Supported weights depend on the font.':
+        '350はやや細め、400は標準です。対応する太さはフォントによって異なります。',
     'Font family': 'フォント',
     'Default editor font': '標準のエディターフォント',
     'Show file explorer': 'ファイルエクスプローラーを表示',

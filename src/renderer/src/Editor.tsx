@@ -11,6 +11,7 @@ import CompletionMenu from './components/CompletionMenu';
 import StickyScroll from './components/StickyScroll';
 import NeovimUI from './components/NeovimUI';
 import type { UITheme } from '../../shared/types';
+import { defaultFontWeight } from './hooks/useEditorSettings';
 
 interface Props {
     theme: UITheme;
@@ -22,6 +23,7 @@ interface Props {
     id: string;
     active: boolean;
     fontSize: number;
+    fontWeight?: number;
     lineHeight: number;
     animations: boolean;
     smoothCursor: boolean;
@@ -45,6 +47,7 @@ function Editor({
     id,
     active,
     fontSize,
+    fontWeight = defaultFontWeight,
     lineHeight,
     animations,
     smoothCursor,
@@ -85,6 +88,7 @@ function Editor({
         smoothBlink,
         id,
         fontSize,
+        fontWeight,
         lineHeight,
         blocked,
         active,
@@ -263,6 +267,7 @@ function Editor({
                     scrollCompletion={scrollCompletion}
                     maxLines={stickyScrollMaxLines}
                     fontSize={fontSize}
+                    fontWeight={fontWeight}
                     fontFamily={fontFamily}
                     onError={onError}
                 />

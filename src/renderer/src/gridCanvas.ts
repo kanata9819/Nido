@@ -95,7 +95,8 @@ export class GridCanvas {
         fontFamily: string,
         focused: boolean,
         cursorPosition?: { row: number; column: number; width?: number },
-        lineHeight = Math.ceil(fontSize * 1.65)
+        lineHeight = Math.ceil(fontSize * 1.65),
+        fontWeight = 400
     ): { cellWidth: number; cellHeight: number } {
         const translucent = this.grid.backgroundOpacity < 1;
         const ctx = canvas.getContext('2d', { alpha: translucent })!;
@@ -112,7 +113,7 @@ export class GridCanvas {
         // Keep the native glyph raster; interpolate its final translation only once.
         ctx.imageSmoothingEnabled = true;
         const family = fontFamily;
-        ctx.font = `${fontSize}px ${family}`;
+        ctx.font = `${fontWeight} ${fontSize}px ${family}`;
         const cellWidth = ctx.measureText('M').width;
         const cellHeight = lineHeight;
         const imageStyle = JSON.stringify([
@@ -120,6 +121,7 @@ export class GridCanvas {
             dpr,
             fontSize,
             fontFamily,
+            fontWeight,
             cellWidth,
             lineHeight,
             this.grid.foreground,
@@ -279,7 +281,7 @@ export class GridCanvas {
                         ) {
                             text += cells[++col].text;
                         }
-                        ctx.font = `${fontSize * 0.8}px ${family}`;
+                        ctx.font = `${fontWeight} ${fontSize * 0.8}px ${family}`;
                         ctx.fillStyle = cellForeground(
                             h,
                             this.grid.background,
@@ -292,7 +294,7 @@ export class GridCanvas {
                         );
                         continue;
                     }
-                    ctx.font = `${h.italic ? 'italic ' : ''}${h.bold ? 'bold ' : ''}${fontSize}px ${family}`;
+                    ctx.font = `${h.italic ? 'italic ' : ''}${h.bold ? Math.max(700, fontWeight) : fontWeight} ${fontSize}px ${family}`;
                     ctx.fillStyle = cellForeground(h, this.grid.background, this.grid.foreground);
 
                     const x = col * cellWidth;

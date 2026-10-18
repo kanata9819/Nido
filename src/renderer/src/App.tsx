@@ -125,6 +125,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         scrollFollowCursor,
         formatOnSave,
         fontFamily,
+        fontWeight,
         fontSize,
         lineHeight,
         sidebarWidth,
@@ -447,6 +448,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                                     terminal={w.kind === 'terminal'}
                                     active={w.id === active}
                                     fontSize={fontSize}
+                                    fontWeight={fontWeight}
                                     lineHeight={lineHeight}
                                     animations={animations}
                                     smoothCursor={smoothCursor}

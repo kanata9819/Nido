@@ -14,6 +14,7 @@ interface UseEditorRenderingOptions {
     pixelScroll: boolean;
     id: string;
     fontSize: number;
+    fontWeight: number;
     lineHeight: number;
     blocked: boolean;
     active: boolean;
@@ -41,6 +42,7 @@ export function useEditorRendering({
     pixelScroll,
     id,
     fontSize,
+    fontWeight,
     lineHeight,
     blocked,
     active,
@@ -166,7 +168,8 @@ export function useEditorRendering({
                 fontFamily,
                 focused,
                 cursorPosition,
-                lineHeight
+                lineHeight,
+                fontWeight
             );
             cellWidth = metrics.cellWidth;
 
@@ -442,6 +445,7 @@ export function useEditorRendering({
         onReady,
         id,
         fontSize,
+        fontWeight,
         lineHeight,
         fontFamily,
         smoothBlink,

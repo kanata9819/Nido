@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } 
 import { parseLanguage, type Language } from '../../../shared/i18n';
 
 export const defaultFontFamily = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
+export const defaultFontWeight = 350;
 
 export function useEditorSettings(): EditorSettings {
     const [language, setLanguage] = useState<Language>(() =>
@@ -99,6 +100,15 @@ export function useEditorSettings(): EditorSettings {
         localStorage.setItem('nido.fontFamily', fontFamily);
     }, [fontFamily]);
 
+    const [fontWeight, setFontWeight] = useState(() => {
+        const value = Number(localStorage.getItem('nido.fontWeight'));
+        return Number.isInteger(value) && value >= 100 && value <= 900 ? value : defaultFontWeight;
+    });
+
+    useEffect(() => {
+        localStorage.setItem('nido.fontWeight', String(fontWeight));
+    }, [fontWeight]);
+
     useEffect(() => {
         localStorage.setItem('nido.scrollFollowCursor', String(scrollFollowCursor));
     }, [scrollFollowCursor]);
@@ -177,6 +187,8 @@ export function useEditorSettings(): EditorSettings {
         setClipboardSharing,
         fontFamily,
         setFontFamily,
+        fontWeight,
+        setFontWeight,
         fontSize,
         setFontSize,
         lineHeight,
@@ -221,6 +233,8 @@ export interface EditorSettings {
     setClipboardSharing: Dispatch<SetStateAction<boolean>>;
     fontFamily: string;
     setFontFamily: Dispatch<SetStateAction<string>>;
+    fontWeight: number;
+    setFontWeight: Dispatch<SetStateAction<number>>;
     fontSize: number;
     setFontSize: Dispatch<SetStateAction<number>>;
     lineHeight: number;

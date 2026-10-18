@@ -41,6 +41,8 @@ export default function SettingsPanel({
     setEditorConfig,
     fontFamily,
     setFontFamily,
+    fontWeight,
+    setFontWeight,
     fontSize,
     setFontSize,
     lineHeight,
@@ -159,6 +161,27 @@ export default function SettingsPanel({
                     onChange={(event) => setFontFamily(event.target.value)}
                 />
             </label>
+            <label>
+                {t('Editor font weight')}{' '}
+                <input
+                    type="number"
+                    min="100"
+                    max="900"
+                    step="50"
+                    defaultValue={fontWeight}
+                    onChange={(event) => {
+                        if (event.target.value && event.target.validity.valid) {
+                            setFontWeight(event.target.valueAsNumber);
+                        }
+                    }}
+                    onBlur={(event) => {
+                        event.target.value = String(fontWeight);
+                    }}
+                />
+            </label>
+            <small>
+                {t('350 is lighter; 400 is standard. Supported weights depend on the font.')}
+            </small>
             <label>
                 {t('Show file explorer')}{' '}
                 <input

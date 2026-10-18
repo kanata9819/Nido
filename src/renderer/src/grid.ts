@@ -541,7 +541,8 @@ export class Grid {
         fontFamily: string,
         focused: boolean,
         cursorPosition?: { row: number; column: number; width?: number },
-        lineHeight = Math.ceil(fontSize * 1.65)
+        lineHeight = Math.ceil(fontSize * 1.65),
+        fontWeight = 400
     ): { cellWidth: number; cellHeight: number } {
         return this.canvas.draw(
             canvas,
@@ -551,7 +552,8 @@ export class Grid {
             fontFamily,
             focused,
             cursorPosition,
-            lineHeight
+            lineHeight,
+            fontWeight
         );
     }
 

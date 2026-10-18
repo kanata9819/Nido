@@ -113,7 +113,17 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                             const glyphs = work.glyphs;
                             const uploads = work.uploads;
                             const start = performance.now();
-                            grid.draw(canvas, 1500, 950, 15, 'monospace', false, undefined, 19);
+                            grid.draw(
+                                canvas,
+                                1500,
+                                950,
+                                15,
+                                '"Cascadia Code", monospace',
+                                false,
+                                undefined,
+                                19,
+                                350
+                            );
                             const duration = performance.now() - start;
                             if (frame === 0) coldMs = duration;
                             else {

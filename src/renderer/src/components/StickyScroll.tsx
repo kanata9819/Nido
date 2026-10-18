@@ -24,6 +24,7 @@ export default function StickyScroll({
     scrollCompletion,
     maxLines,
     fontSize,
+    fontWeight = 400,
     fontFamily,
     onError
 }: {
@@ -34,6 +35,7 @@ export default function StickyScroll({
     scrollCompletion: RefObject<Promise<void>>;
     maxLines: number;
     fontSize: number;
+    fontWeight?: number;
     fontFamily: string;
     onError: (message: string) => void;
 }): React.JSX.Element | null {
@@ -152,6 +154,7 @@ export default function StickyScroll({
                 height: model.rows.length * model.lineHeight + lastOffset,
                 background: model.background,
                 fontSize,
+                fontWeight,
                 fontFamily,
                 lineHeight: `${model.lineHeight}px`,
                 tabSize: model.state.tabstop

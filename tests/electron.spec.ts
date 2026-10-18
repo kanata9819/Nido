@@ -1122,6 +1122,16 @@ test('font family and line height update the canvas and survive restarting', asy
     const root = await mkdtemp(join(tmpdir(), 'nido-font-'));
     const workspace = join(root, 'workspace');
     await mkdir(workspace);
+    await writeFile(
+        join(workspace, 'sample.rs'),
+        [
+            '/// 構築されたCell(apply_text)から、描画処理に渡す文字列を取得する',
+            'pub fn get_text(&mut self) -> &str {',
+            '    let cells = self.cells.get_cells().iter().enumerate();',
+            '}',
+            ''
+        ].join('\n')
+    );
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
     const executablePath = process.env.NIDO_PACKAGED_EXE;
@@ -1138,6 +1148,12 @@ test('font family and line height update the canvas and survive restarting', asy
         await page.keyboard.press('Control+Shift+n');
         await chooseWorkspace(page, workspace);
         await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        await page.keyboard.type(':edit sample.rs');
+        await page.keyboard.press('Enter');
+        await expect(page.locator('canvas:visible')).toHaveAttribute(
+            'aria-description',
+            /get_text/
+        );
         const canvasFont = (): Promise<string> =>
             page
                 .locator('canvas:visible')
@@ -1169,6 +1185,21 @@ test('font family and line height update the canvas and survive restarting', asy
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         const heightInput = page.getByRole('spinbutton', { name: 'Editor line height' });
         await expect(heightInput).toHaveValue('18');
+        const weightInput = page.getByRole('spinbutton', { name: 'Editor font weight' });
+        await expect(weightInput).toHaveValue('350');
+        await page.keyboard.press('Escape');
+        await page
+            .locator('canvas:visible')
+            .screenshot({ path: 'test-results/nido-font-weight-350.png' });
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await weightInput.fill('400');
+        await expect.poll(canvasFont).not.toContain('350 ');
+        await page.keyboard.press('Escape');
+        await page
+            .locator('canvas:visible')
+            .screenshot({ path: 'test-results/nido-font-weight-400.png' });
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await weightInput.fill('350');
         // Row images snap to physical pixels, so fractional DPI can round their spacing.
         const physicalPixel = await page.evaluate(() => 1 / window.devicePixelRatio);
         const heightError = (height: number): Promise<number> =>
@@ -1183,11 +1214,21 @@ test('font family and line height update the canvas and survive restarting', asy
         const defaultFamily = await input.inputValue();
         expect(defaultFamily).toContain('Cascadia Code');
         await input.fill('monospace');
+        await expect.poll(canvasFont).toBe('350 15px monospace');
+        await weightInput.fill('400');
         await expect.poll(canvasFont).toBe('15px monospace');
+        await weightInput.fill('450');
+        await expect.poll(canvasFont).toBe('450 15px monospace');
+        await weightInput.fill('');
+        await weightInput.blur();
+        await expect(weightInput).toHaveValue('450');
+        await weightInput.fill('950');
+        await weightInput.blur();
+        await expect(weightInput).toHaveValue('450');
         await input.fill('   ');
         await expect.poll(canvasFont).toContain('Cascadia Code');
         await input.fill('Consolas');
-        await expect.poll(canvasFont).toBe('15px Consolas');
+        await expect.poll(canvasFont).toBe('450 15px Consolas');
         await page.keyboard.press('Escape');
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await expect(input).toHaveValue('Consolas');
@@ -1203,7 +1244,10 @@ test('font family and line height update the canvas and survive restarting', asy
         await expect(page.getByRole('spinbutton', { name: 'Editor line height' })).toHaveValue(
             '28'
         );
-        await expect.poll(canvasFont).toBe('15px Consolas');
+        await expect(page.getByRole('spinbutton', { name: 'Editor font weight' })).toHaveValue(
+            '450'
+        );
+        await expect.poll(canvasFont).toBe('450 15px Consolas');
         await expect(input).toHaveCSS('background-color', 'rgb(18, 20, 22)');
         await input.focus();
         await page.screenshot({ path: 'test-results/nido-font-settings.png' });

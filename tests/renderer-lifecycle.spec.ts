@@ -860,6 +860,104 @@ for (const scale of [1, 1.25, 1.5]) {
         }
     });
 
+    test(`font weight refreshes cached glyphs and preserves emphasis at ${scale * 100}% scale`, async ({
+        browser
+    }) => {
+        const context = await browser.newContext({ deviceScaleFactor: scale });
+        try {
+            const page = await context.newPage();
+            await page.goto(origin);
+            const result = await page.evaluate(
+                async (moduleUrl) => {
+                    const { Grid } = await import(moduleUrl);
+                    const grid = new Grid();
+                    grid.busy = true;
+                    grid.background = '#121212';
+                    grid.foreground = '#ffffff';
+                    grid.pixelScrollEnabled = true;
+                    grid.apply([
+                        ['grid_resize', [1, 40, 6]],
+                        [
+                            'hl_attr_define',
+                            [1, { bold: true }, {}, []],
+                            [2, { italic: true }, {}, []]
+                        ],
+                        [
+                            'grid_line',
+                            [
+                                1,
+                                0,
+                                0,
+                                [
+                                    ['n', 0],
+                                    ['日', 0],
+                                    ['', 0],
+                                    ['本', 0],
+                                    ['', 0]
+                                ]
+                            ],
+                            [1, 1, 0, [['b', 1]]],
+                            [1, 2, 0, [['i', 2]]]
+                        ],
+                        ['flush']
+                    ]);
+                    const canvas = document.createElement('canvas');
+                    const family = '"Cascadia Code", monospace';
+                    const fillText = CanvasRenderingContext2D.prototype.fillText;
+                    const calls: { text: string; font: string; x: number; y: number }[] = [];
+                    CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
+                        calls.push({ text, font: this.font, x, y });
+                        return Reflect.apply(fillText, this, [text, x, y, ...rest]);
+                    };
+                    try {
+                        const paint = (weight: number): { cellWidth: number; cellHeight: number } =>
+                            grid.draw(canvas, 400, 152, 15, family, false, undefined, 19, weight);
+                        const pixels = (): Uint8ClampedArray =>
+                            canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height)
+                                .data;
+                        const initial = paint(400);
+                        const before = pixels();
+                        const initialCalls = calls.splice(0);
+                        const lighter = paint(350);
+                        const lighterCalls = calls.splice(0);
+                        paint(350);
+                        const repeatedGlyphs = calls.splice(0).length;
+                        paint(400);
+                        const restored = pixels();
+                        return {
+                            initial,
+                            lighter,
+                            initialCalls,
+                            lighterCalls,
+                            repeatedGlyphs,
+                            restoredPixels: before.reduce(
+                                (count, value, i) => count + Number(value !== restored[i]),
+                                0
+                            )
+                        };
+                    } finally {
+                        CanvasRenderingContext2D.prototype.fillText = fillText;
+                    }
+                },
+                `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+            );
+            expect(result.lighter).toEqual(result.initial);
+            expect(result.lighterCalls.map(({ text, x, y }) => ({ text, x, y }))).toEqual(
+                result.initialCalls.map(({ text, x, y }) => ({ text, x, y }))
+            );
+            expect(result.lighterCalls.find(({ text }) => text === 'n')?.font).toContain('350 ');
+            expect(result.lighterCalls.find(({ text }) => text === '日')?.font).toContain('350 ');
+            expect(result.lighterCalls.find(({ text }) => text === 'b')?.font).toContain('bold ');
+            expect(result.lighterCalls.find(({ text }) => text === 'i')?.font).toContain(
+                'italic 350 '
+            );
+            expect(result.repeatedGlyphs).toBe(0);
+            expect(result.restoredPixels).toBe(0);
+        } finally {
+            await context.close();
+        }
+    });
+
     test(`editor text reuses native rasters without color fringes at ${scale * 100}% scale`, async ({
         browser
     }) => {
@@ -1297,12 +1395,15 @@ for (const scale of [1, 1.25, 1.5]) {
                         paused: number;
                         repeatWork: number;
                     }[] = [];
-                    for (const [foreground, background] of [
-                        ['#d4d4d4', '#121212'],
-                        ['#4ec9b0', '#121212'],
-                        ['#ce9178', '#121212'],
-                        ['#202020', '#f5f5f5']
-                    ]) {
+                    for (const [foreground, background, fontWeight] of [350, 400].flatMap(
+                        (weight) =>
+                            [
+                                ['#d4d4d4', '#121212', weight],
+                                ['#4ec9b0', '#121212', weight],
+                                ['#ce9178', '#121212', weight],
+                                ['#202020', '#f5f5f5', weight]
+                            ] as const
+                    )) {
                         const grid = new Grid();
                         grid.busy = true;
                         grid.background = background;
@@ -1319,7 +1420,17 @@ for (const scale of [1, 1.25, 1.5]) {
                         const canvas = document.createElement('canvas');
                         const paint = (): void => {
                             grid.invalidatePaint();
-                            grid.draw(canvas, 400, 152, 15, 'monospace', false, undefined, 19);
+                            grid.draw(
+                                canvas,
+                                400,
+                                152,
+                                15,
+                                '"Cascadia Code", monospace',
+                                false,
+                                undefined,
+                                19,
+                                fontWeight
+                            );
                         };
                         const top = Math.round(38 * devicePixelRatio) - 3;
                         const width = Math.round(300 * devicePixelRatio);
