@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { Session } from '../src/main/session';
 
 test(
-    'Rust runnable lenses execute main, individual tests and modules using keyboard bindings',
+    'Rust runnables execute main, individual tests and modules without CodeLens rows',
     { timeout: 90000 },
     async () => {
         const root = await mkdtemp(join(tmpdir(), 'nido-runnables-'));
@@ -57,9 +57,21 @@ test(
                 async () =>
                     Number(
                         await lua(
-                            "return #vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_create_namespace('nido_runnables'), 0, -1, {})"
+                            `local client = vim.lsp.get_clients({bufnr=0, name='rust_analyzer'})[1]
+if not client or not client.initialized then return 0 end
+local response = client:request_sync('experimental/runnables',
+  {textDocument={uri=vim.uri_from_bufnr(0)}, position=vim.NIL}, 1000, 0)
+return response and response.result and #vim.tbl_filter(function(item)
+  return item.kind == 'cargo' and item.location and item.location.targetRange
+end, response.result) or 0`
                         )
                     ) >= 4
+            );
+            assert.deepEqual(
+                await lua(
+                    "return vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_create_namespace('nido_runnables'), 0, -1, {})"
+                ),
+                []
             );
             const run = async (line: number): Promise<void> => {
                 const previous = session!.state.debug;

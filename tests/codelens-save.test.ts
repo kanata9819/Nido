@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { Session } from '../src/main/session';
 import { Grid } from '../src/renderer/src/grid';
 
-test('formatted Rust saves keep CodeLens rows visible', { timeout: 90000 }, async () => {
+test('Rust saves keep source rows stable without CodeLens', { timeout: 90000 }, async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-lens-save-'));
     let session: Session | undefined;
     const grid = new Grid();
@@ -47,8 +47,14 @@ test('formatted Rust saves keep CodeLens rows visible', { timeout: 90000 }, asyn
         const lua = (code: string): ReturnType<Session['client']['request']> =>
             session!.client.request('nvim_exec_lua', [code, []]);
         await lua(`assert(vim.wait(30000, function()
-          return #vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_get_namespaces().nido_runnables, 0, -1, {}) == 3
-        end, 50), 'CodeLens did not load')`);
+          local client = vim.lsp.get_clients({bufnr=0, name='rust_analyzer'})[1]
+          if not client or not client.initialized then return false end
+          local response = client:request_sync('experimental/runnables',
+            {textDocument={uri=vim.uri_from_bufnr(0)}, position=vim.NIL}, 1000, 0)
+          return response and response.result and #vim.tbl_filter(function(item)
+            return item.kind == 'cargo' and item.location and item.location.targetRange
+          end, response.result) >= 3
+        end, 50), 'Rust runnables did not load')`);
         measuring = true;
         for (let i = 0; i < 3; i++) {
             await lua(`local line = vim.api.nvim_buf_get_lines(0, 6, 7, false)[1]
@@ -71,11 +77,11 @@ end`);
         await lua('vim.lsp.buf.format = _G.original_format; vim.wait(1500)');
         assert.ok(frames.length > 0);
         assert.ok(
-            mainRows.every((row) => row === 1),
+            mainRows.every((row) => row === 0),
             `main moved between rows: ${mainRows}`
         );
         assert.ok(
-            frames.every((frame) => frame.length === 3),
+            frames.every((frame) => frame.length === 0),
             JSON.stringify(frames)
         );
     } finally {
@@ -139,57 +145,59 @@ end
     }
 });
 
-test('transient missing CodeLens after edits does not collapse the layout', async () => {
+test('Rust target requests never add rows or move the viewport', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-lens-reload-'));
     let session: Session | undefined;
     try {
         session = await Session.create(root, () => {});
+        await session.attach(80, 20);
         await session.client.request('nvim_exec_lua', [
             `
 local api = vim.api
 local buffer = api.nvim_get_current_buf()
-api.nvim_buf_set_lines(buffer, 0, -1, false, {'fn main() {}', '#[test] fn example() {}'})
+local lines = {'fn main() {}'}
+for row = 2, 100 do lines[row] = '#[test] fn example_' .. row .. '() {}' end
+api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
 vim.bo.filetype = 'rust'
 local module = require('nido_runnables')
-local namespace = api.nvim_get_namespaces().nido_runnables
+local debugger = require('nido_debug')
+local namespace = api.nvim_create_namespace('nido_runnables')
 local function item(row)
   return {kind='cargo', args={cargoArgs={'test'}}, location={
-    targetSelectionRange={start={line=row}}, targetRange={start={line=row}, ['end']={line=row}},
+    targetSelectionRange={start={line=row}}, targetRange={start={line=row}, ['end']={line=row+10}},
   }}
 end
-local items = {item(0), item(1)}
-local get_clients, defer = vim.lsp.get_clients, vim.defer_fn
-local retry
+local items = {}
+local get_clients, runnable = vim.lsp.get_clients, debugger.runnable
 vim.lsp.get_clients = function(options)
   if options and options.name == 'rust_analyzer' then
     return {{request=function(_, _, _, callback) callback(nil, items) end}}
   end
   return get_clients(options)
 end
-vim.defer_fn = function(callback) retry = callback end
+debugger.runnable = function() end
 local ok, err = pcall(function()
-  local function marks() return api.nvim_buf_get_extmarks(buffer, namespace, 0, -1, {details=true}) end
-  module.refresh(buffer)
-  api.nvim_buf_set_text(buffer, 0, 10, 0, 10, {' '})
-  local before = marks()
-  for _, result in ipairs({{item(0)}, {}}) do
-    items = result
-    module.refresh(buffer)
-    assert(vim.deep_equal(marks(), before), 'temporary missing results must keep the layout')
-    items = {item(0), item(1)}
-    retry()
-    assert(vim.deep_equal(marks(), before), 'recovered results must preserve IDs')
+  for _, topline in ipairs({1, 42}) do
+    api.nvim_buf_set_text(buffer, 0, 10, 0, 10, {' '})
+    api.nvim_win_set_cursor(0, {topline + 5, 0})
+    vim.fn.winrestview({topline=topline, topfill=0})
+    vim.cmd.redraw()
+    local before = vim.fn.winsaveview()
+    for _, result in ipairs({{item(0), item(42), item(99)}, {item(0)}, {}, {item(0), item(42)}}) do
+      items = result
+      module.execute(false)
+      vim.cmd('doautocmd CursorMoved')
+      assert(#api.nvim_buf_get_extmarks(buffer, namespace, 0, -1, {}) == 0,
+        'analysis must not create CodeLens rows')
+      assert(api.nvim_win_text_height(0, {start_row=0, end_row=99}).all == 100,
+        'every source line must keep its normal height')
+      local view = vim.fn.winsaveview()
+      assert(view.topline == before.topline and view.topfill == before.topfill,
+        'analysis must not reposition the viewport: ' .. vim.inspect({before, view}))
+    end
   end
-  items = {item(0)}
-  module.refresh(buffer)
-  retry()
-  assert(#marks() == 1, 'confirmed removals must remove stale lenses')
-  items = {}
-  module.refresh(buffer)
-  retry()
-  assert(#marks() == 0, 'confirmed empty results must clear the last lens')
 end)
-vim.lsp.get_clients, vim.defer_fn = get_clients, defer
+vim.lsp.get_clients, debugger.runnable = get_clients, runnable
 assert(ok, err)
 `,
             []

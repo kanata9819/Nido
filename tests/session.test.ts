@@ -2456,7 +2456,7 @@ assert(ok, err)
     }
 });
 
-test('CodeLens keeps unchanged and edit-shifted marks and updates only changed labels', async () => {
+test('Rust runnable commands request current targets and reject edits during analysis', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-stable-lenses-'));
     let session: Session | undefined;
     try {
@@ -2464,46 +2464,60 @@ test('CodeLens keeps unchanged and edit-shifted marks and updates only changed l
         await session.client.request('nvim_exec_lua', [
             `
 local api = vim.api
+local buffer = api.nvim_get_current_buf()
 api.nvim_buf_set_lines(0, 0, -1, false, {'fn main() {}', '', '#[test] fn sample() {}'})
 vim.bo.filetype = 'rust'
 local module = require('nido_runnables')
-local namespace = api.nvim_get_namespaces().nido_runnables
+local debugger = require('nido_debug')
+local namespace = api.nvim_create_namespace('nido_runnables')
 local items = {}
 local function item(row, command)
   return {kind='cargo', args={cargoArgs={command}}, location={
     targetSelectionRange={start={line=row}}, targetRange={start={line=row}, ['end']={line=row}},
   }}
 end
-local original = vim.lsp.get_clients
+local original, runnable, notify = vim.lsp.get_clients, debugger.runnable, vim.notify
+local requests, calls, notices, pending = 0, {}, {}, nil
 vim.lsp.get_clients = function(options)
   if options and options.name == 'rust_analyzer' then
-    return {{request=function(_, _, _, callback) callback(nil, items) end}}
+    return {{request=function(_, _, _, callback)
+      requests = requests + 1
+      if pending then table.insert(pending, callback) else callback(nil, items) end
+    end}}
   end
   return original(options)
 end
+debugger.runnable = function(target, debug) table.insert(calls, {target, debug}) end
+vim.notify = function(message) table.insert(notices, message) end
 local ok, err = pcall(function()
-  local function marks() return api.nvim_buf_get_extmarks(0, namespace, 0, -1, {details=true}) end
   items = {item(0, 'run'), item(2, 'test')}
-  module.refresh(0)
-  local before = marks()
-  assert(#before == 2)
-  module.refresh(0)
-  assert(vim.deep_equal(marks(), before), 'identical results must preserve extmark IDs')
+  api.nvim_win_set_cursor(0, {1, 0})
+  module.execute(false)
+  api.nvim_win_set_cursor(0, {3, 0})
+  module.execute(true)
+  assert(requests == 2, 'each command must request the current targets')
+  assert(calls[1][1] == items[1] and calls[1][2] == false, 'run main')
+  assert(calls[2][1] == items[2] and calls[2][2] == true, 'debug the test')
   api.nvim_buf_set_lines(0, 0, 0, false, {'// inserted'})
   items = {item(1, 'run'), item(3, 'test')}
-  local shifted = marks()
-  module.refresh(0)
-  assert(vim.deep_equal(marks(), shifted), 'reuse marks that moved with editing')
-  items = {item(1, 'test')}
-  module.refresh(0)
-  assert(#marks() == 2, 'keep layout while removal is being confirmed')
-  assert(vim.wait(1000, function() return #marks() == 1 end, 10), 'confirm removed lens')
-  local changed = marks()
-  assert(#changed == 1 and changed[1][2] == 1)
-  assert(changed[1][4].virt_lines[1][1][1] == '  ▶ Run Tests')
-  assert(changed[1][1] ~= before[1][1], 'changed label must be replaced')
+  api.nvim_win_set_cursor(0, {4, 0})
+  module.execute(false)
+  assert(requests == 3 and calls[3][1] == items[2], 'edits must request fresh ranges')
+  pending = {}
+  module.execute(false)
+  api.nvim_buf_set_lines(0, 0, 0, false, {'// another edit'})
+  pending[1](nil, items)
+  assert(#calls == 3 and notices[1] == 'Code changed; try running again.',
+    'edits during a request must not execute a stale target')
+  pending = nil
+  items = {item(2, 'run'), item(4, 'test')}
+  api.nvim_win_set_cursor(0, {5, 0})
+  module.execute(true)
+  assert(requests == 5 and calls[4][1] == items[2], 'a new command must use the updated target')
+  assert(#api.nvim_buf_get_extmarks(buffer, namespace, 0, -1, {}) == 0,
+    'runnables must not add CodeLens rows')
 end)
-vim.lsp.get_clients = original
+vim.lsp.get_clients, debugger.runnable, vim.notify = original, runnable, notify
 assert(ok, err)
 `,
             []

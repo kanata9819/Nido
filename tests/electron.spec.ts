@@ -125,9 +125,10 @@ test('favorite workspaces support keyboard access, existing tabs, restart and mi
     }
 });
 
-test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
+test('Rust Run and Debug work from shortcuts and the command menu without CodeLens rows', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-runnable-ui-'));
     const workspace = join(root, 'workspace');
+    const runMarker = join(workspace, 'main-ran');
     await mkdir(join(workspace, 'src'), { recursive: true });
     await writeFile(
         join(workspace, 'Cargo.toml'),
@@ -135,7 +136,7 @@ test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
     );
     await writeFile(
         join(workspace, 'src/main.rs'),
-        'fn main() {\n    println!("keyboard-run");\n}\n#[test]\nfn keyboard_test() { println!("keyboard-test"); }\n' +
+        'fn main() {\n    println!("keyboard-run"); std::fs::write("main-ran", "yes").unwrap();\n}\n#[test]\nfn keyboard_test() { println!("keyboard-test"); }\n' +
             Array.from({ length: 4 }, (_, index) => `#[test]\nfn extra_${index}() {}\n`).join('')
     );
     const env = { ...process.env };
@@ -146,6 +147,7 @@ test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
     });
     try {
         const page = await running.firstWindow();
+        await recordEditorDiagnostics(page);
         await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
         await page.keyboard.press('Control+Shift+n');
         await chooseWorkspace(page, workspace);
@@ -154,13 +156,30 @@ test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
         await page.keyboard.type(':edit src/main.rs');
         await page.keyboard.press('Enter');
         const canvas = page.locator('canvas:visible');
-        await expect(canvas).toHaveAttribute('aria-description', /Run \(gR\) \| Debug \(gD\)/, {
-            timeout: 25000
-        });
-        await expect(canvas).toHaveAttribute(
-            'aria-description',
-            /Run Tests \(gR\) \| Debug \(gD\)/
+        await expect(canvas).toHaveAttribute('aria-description', /fn main/);
+        const readyFile = join(root, 'runnables-ready');
+        const id = await page.evaluate(
+            () => (window as Window & { editorDiagnostics: { id: string } }).editorDiagnostics.id
         );
+        await page.evaluate(({ id, keys }) => window.nido.input(id, keys), {
+            id,
+            keys: `<Cmd>lua local buffer = vim.api.nvim_get_current_buf(); local function ready()
+local client = vim.lsp.get_clients({bufnr=buffer, name='rust_analyzer'})[1]
+if not client or not client.initialized then vim.defer_fn(ready, 100); return end
+client:request('experimental/runnables',
+  {textDocument={uri=vim.uri_from_bufnr(buffer)}, position=vim.NIL}, function(err, items)
+if not err and items and #vim.tbl_filter(function(item)
+  return item.kind == 'cargo' and item.location and item.location.targetRange
+end, items) >= 6 then
+vim.fn.writefile({'ready'}, ${JSON.stringify(readyFile.replaceAll('\\', '/'))})
+else vim.defer_fn(ready, 100) end
+end, buffer)
+end; ready()<CR>`.replaceAll('\n', ' ')
+        });
+        await expect
+            .poll(() => readFile(readyFile, 'utf8').catch(() => ''), { timeout: 30000 })
+            .toContain('ready');
+        await expect(canvas).not.toHaveAttribute('aria-description', /Run \(gR\)|Run Tests/);
         await expect(canvas).toHaveAttribute('aria-description', /extra_3/);
         await canvas.evaluate((node: HTMLCanvasElement) => {
             const ctx = node.getContext('2d')!;
@@ -168,7 +187,6 @@ test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
             ctx.fillRect = (x, y, width, height) => {
                 if (x === 0 && y === 0 && height === node.clientHeight) {
                     node.setAttribute('data-code-points', '[]');
-                    node.removeAttribute('data-lens-point');
                 }
                 clear(x, y, width, height);
             };
@@ -195,51 +213,43 @@ test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
                         const points = JSON.parse(node.getAttribute('data-code-points') || '[]');
                         points.push({ value, x, y, font });
                         node.setAttribute('data-code-points', JSON.stringify(points));
-                    } else if (
-                        value.includes('Run Tests') &&
-                        !node.hasAttribute('data-lens-point')
-                    ) {
-                        node.setAttribute('data-lens-point', JSON.stringify({ y, font }));
                     }
                 }
             }) as typeof draw;
         });
         const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
         await page.setViewportSize({ ...viewport, width: viewport.width + 1 });
-        await expect(canvas).toHaveAttribute('data-lens-point', /y/);
+        await expect
+            .poll(async () => {
+                const points = JSON.parse((await canvas.getAttribute('data-code-points')) || '[]');
+                return points.filter((point: { value: string }) => point.value === 'f').length;
+            })
+            .toBeGreaterThanOrEqual(2);
         const points = JSON.parse((await canvas.getAttribute('data-code-points'))!) as {
             value: string;
             x: number;
             y: number;
             font: number;
         }[];
-        const [main, testFunction] = points.filter((point) => point.value === 'f');
+        const main = points.find((point) => point.value === 'f')!;
+        const testFunction = points.find(
+            (point) => point.value === 'f' && point.y > main.y && point.x === main.x
+        )!;
         const body = points.find((point) => point.value === 'p')!;
         const lineHeight = await page.evaluate(() =>
             Number(localStorage.getItem('nido.lineHeight'))
         );
-        const lens = JSON.parse((await canvas.getAttribute('data-lens-point'))!);
-        const lensHeight = 2 * (testFunction.y - lens.y) - lineHeight - (main.font - lens.font);
         expect(body.y - main.y).toBeCloseTo(lineHeight, 0);
-        expect(lensHeight / lineHeight).toBeGreaterThan(0.65);
-        expect(lensHeight / lineHeight).toBeLessThan(0.75);
-        await expect
-            .poll(async () => (await canvas.getAttribute('aria-description'))!.split('\n').length)
-            .toBeGreaterThan(Math.floor((await canvas.boundingBox())!.height / lineHeight) + 1);
+        expect(testFunction.y - main.y).toBeCloseTo(4 * lineHeight, 0);
         await canvas.click({ position: { x: testFunction.x + 2, y: testFunction.y - 4 } });
         await expect(page.getByText('Ln 5, Col 1', { exact: true })).toBeVisible();
         await expect
             .poll(() => input.evaluate((node) => node.offsetTop))
             .toBeCloseTo(testFunction.y - (lineHeight + main.font) / 2 + 3, 0);
-        await page.keyboard.type(':');
-        await expect
-            .poll(() => input.evaluate((node) => node.offsetTop))
-            .toBe(
-                Math.floor((await canvas.boundingBox())!.height / lineHeight) * lineHeight -
-                    lineHeight
-            );
-        await page.keyboard.press('Escape');
-        await page.keyboard.type('gggR');
+        await expect(input).toBeFocused();
+        await page.keyboard.type('gg');
+        await expect(page.getByText('Ln 1, Col 1', { exact: true })).toBeVisible();
+        await page.keyboard.type('gR');
         const output = page.getByLabel('Debug output');
         await expect(output).toContainText('keyboard-run', { timeout: 15000 });
         await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toContainText(
@@ -249,14 +259,33 @@ test('Rust Run and Debug lenses work entirely from the keyboard', async () => {
         await page.keyboard.type('5GgR');
         await expect(output).toContainText('keyboard-test', { timeout: 15000 });
         await expect(output).toContainText('Process exited: 0');
+        await rm(runMarker, { force: true });
         await page.keyboard.type('gggD');
         await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toContainText(
             'Debug · finished',
             { timeout: 15000 }
         );
-        await expect(output).toContainText('keyboard-run');
+        await expect.poll(() => readFile(runMarker, 'utf8').catch(() => '')).toBe('yes');
         await expect(input).toBeFocused();
-        await page.screenshot({ path: 'test-results/rust-runnable-lenses.png' });
+        for (const action of ['Run', 'Debug']) {
+            await rm(runMarker, { force: true });
+            await page.keyboard.press('Control+Shift+p');
+            await page
+                .getByRole('textbox', { name: 'Filter items' })
+                .fill(`${action} Rust at cursor`);
+            await page.keyboard.press('Enter');
+            await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toContainText(
+                `${action} · finished`,
+                { timeout: 15000 }
+            );
+            await expect.poll(() => readFile(runMarker, 'utf8').catch(() => '')).toBe('yes');
+            await expect(input).toBeFocused();
+        }
+        await expect(canvas).not.toHaveAttribute('aria-description', /Run \(gR\)|Run Tests/);
+        await page.screenshot({ path: 'test-results/rust-runnables-without-codelens.png' });
+    } catch (error) {
+        await attachEditorDiagnostics(await running.firstWindow(), test.info());
+        throw error;
     } finally {
         await running.evaluate(({ app }) => app.exit(0));
         await running.close();

@@ -15,8 +15,8 @@ For multiple binaries, choose the target in the Debug panel. F10 steps over,
 F11 steps into, Shift+F11 steps out, and Shift+F5 stops. The panel also has Pause.
 Breakpoints are session-local; restart Nido to clear them.
 
-Rust runnable lenses appear above main functions, tests and test modules. Place
-the cursor inside the target and press gR to run or gD to debug in Normal mode.
+Rust main functions, tests and test modules support Run and Debug without adding
+CodeLens rows. Place the cursor inside the target and press gR to run or gD to debug in Normal mode.
 The command menu also exposes Run Rust at cursor and Debug Rust at cursor.
 Rust-analyzer supplies the Cargo target, test filter, arguments and environment.
 Runs stream output to the same panel and Shift+F5 stops them.
