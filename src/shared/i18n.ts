@@ -150,6 +150,8 @@ export const japanese: Record<string, string> = {
         '言語サーバーを同梱。プロジェクトのTypeScriptを優先し、なければ同梱版を使用します。',
     'Language server included. JSX is supported without an extra plugin.':
         '言語サーバーを同梱。追加プラグインなしでJSXにも対応します。',
+    'Supports editing Node.js and Bun projects. Install the corresponding runtime to run your code.':
+        'Node.js・Bun のプロジェクトも編集できます。実行には、それぞれのランタイムのインストールが必要です。',
     'Uses your Rust toolchain. Install Rust, then add these components. Run and debug are also supported.':
         'Rustのツールチェーンが必要です。Rustの導入後、下記のコンポーネントを追加してください。実行・デバッグにも対応します。',
     'Syntax highlighting and a live preview of unsaved edits. Open the preview with Ctrl+Shift+V.':
