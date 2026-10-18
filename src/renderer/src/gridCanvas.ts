@@ -53,7 +53,12 @@ export class GridCanvas {
 
     invalidate(row?: number): void {
         if (row !== undefined) {
-            this.rowImages.delete(this.grid.cells[row]);
+            const cells = this.grid.cells[row];
+            const image = this.rowImages.get(cells);
+            if (image) {
+                this.linearRows?.invalidate(image);
+            }
+            this.rowImages.delete(cells);
             this.firstDirtyRow = Math.min(this.firstDirtyRow, row);
             this.lastDirtyRow = Math.max(this.lastDirtyRow, row);
         } else {
@@ -221,6 +226,9 @@ export class GridCanvas {
             let image = this.rowImages.get(cells);
             const imageHeight = Math.ceil(rowHeight * dpr);
             if (!image || image.height !== imageHeight) {
+                if (image) {
+                    this.linearRows?.invalidate(image);
+                }
                 image = canvas.ownerDocument.createElement('canvas');
                 image.width = canvas.width;
                 image.height = imageHeight;

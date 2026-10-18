@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import type { Grid as EditorGrid } from '../src/renderer/src/grid';
 import type {} from './renderer/harness';
+import { supportsHardwareWebGL } from './helpers/row-image-probe';
 
 test.use({ launchOptions: { args: ['--enable-gpu'] } });
 
@@ -163,6 +164,151 @@ for (const scale of [1, 1.25, 1.5, 2]) {
             expect(work.p95Ms, 'warm scrolling must stay within half a 60 Hz frame').toBeLessThan(
                 8
             );
+        } finally {
+            await context.close();
+        }
+    });
+}
+
+for (const scale of [1, 1.25, 1.5, 2]) {
+    test(`stationary editor avoids correction passes and keeps scroll textures warm at ${scale * 100}% scale`, async ({
+        browser
+    }) => {
+        const context = await browser.newContext({ deviceScaleFactor: scale });
+        try {
+            const page = await context.newPage();
+            await page.route('**/stationary-work-probe', (route) =>
+                route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+            );
+            await page.goto(`${origin}stationary-work-probe`);
+            test.skip(!(await page.evaluate(supportsHardwareWebGL)), 'Hardware WebGL unavailable');
+            const work = await page.evaluate(
+                async (moduleUrl) => {
+                    const { Grid } = await import(moduleUrl);
+                    const grid = new Grid();
+                    grid.pixelScrollEnabled = true;
+                    grid.cursor = { row: 17, column: 10 };
+                    grid.apply([
+                        ['grid_resize', [1, 140, 40]],
+                        ...Array.from({ length: 39 }, (_, row) => [
+                            'grid_line',
+                            [
+                                1,
+                                row,
+                                0,
+                                Array.from(`ROW_${row} 日本語 const value = example();`, (text) => [
+                                    text,
+                                    0
+                                ])
+                            ]
+                        ]),
+                        ['flush']
+                    ]);
+                    const canvas = document.createElement('canvas');
+                    const paint = (): void => {
+                        grid.draw(canvas, 1120, 760, 15, 'monospace', true, undefined, 19, 350);
+                    };
+                    const gpu = WebGL2RenderingContext.prototype;
+                    const clear = gpu.clear;
+                    const program = gpu.useProgram;
+                    const upload = gpu.texImage2D;
+                    const remove = gpu.deleteTexture;
+                    const calls = { clears: 0, programs: 0, uploads: 0, liveTextures: 0 };
+                    gpu.clear = function (...args) {
+                        calls.clears++;
+                        return clear.apply(this, args);
+                    };
+                    gpu.useProgram = function (...args) {
+                        calls.programs++;
+                        return program.apply(this, args);
+                    };
+                    gpu.texImage2D = function (...args) {
+                        calls.uploads++;
+                        calls.liveTextures++;
+                        return Reflect.apply(upload, this, args);
+                    };
+                    gpu.deleteTexture = function (...args) {
+                        calls.liveTextures--;
+                        return remove.apply(this, args);
+                    };
+                    try {
+                        paint();
+                        const initialTextures = calls.liveTextures;
+                        calls.clears = calls.programs = calls.uploads = 0;
+                        const cursorTimes: number[] = [];
+                        for (let frame = 0; frame < 160; frame++) {
+                            grid.cursorOpacity = frame % 2;
+                            grid.cursor.column = 10 + (frame % 10);
+                            const start = performance.now();
+                            paint();
+                            cursorTimes.push(performance.now() - start);
+                        }
+                        const editTimes: number[] = [];
+                        for (let frame = 0; frame < 160; frame++) {
+                            const start = performance.now();
+                            grid.apply([
+                                ['grid_line', [1, 17, 10, [[String(frame % 10), 0]]]],
+                                ['flush']
+                            ]);
+                            paint();
+                            editTimes.push(performance.now() - start);
+                        }
+                        const native = { ...calls };
+                        grid.scrollFraction = 0.25 / (19 * devicePixelRatio);
+                        const uploads = calls.uploads;
+                        paint();
+                        const scrollUploads = calls.uploads - uploads;
+                        const fractionalClears = calls.clears - native.clears;
+                        cursorTimes.sort((a, b) => a - b);
+                        editTimes.sort((a, b) => a - b);
+                        return {
+                            initialTextures,
+                            native,
+                            scrollUploads,
+                            fractionalClears,
+                            cursorP50: cursorTimes[80],
+                            cursorP95: cursorTimes[152],
+                            editP50: editTimes[80],
+                            editP95: editTimes[152]
+                        };
+                    } finally {
+                        gpu.clear = clear;
+                        gpu.useProgram = program;
+                        gpu.texImage2D = upload;
+                        gpu.deleteTexture = remove;
+                    }
+                },
+                `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+            );
+            console.log('stationary-editor-work', JSON.stringify({ scale, ...work }));
+            await test.info().attach('stationary-editor-work', {
+                body: JSON.stringify({ scale, ...work }, null, 2),
+                contentType: 'application/json'
+            });
+            expect(
+                work.initialTextures,
+                'the first scroll must start with prepared textures'
+            ).toBeGreaterThan(30);
+            expect(work.native.clears, 'integer-position text needs no GPU correction pass').toBe(
+                0
+            );
+            expect(work.native.programs).toBe(0);
+            expect(
+                work.native.uploads,
+                'changed rows must stay ready for the next scroll'
+            ).toBeGreaterThan(100);
+            expect(
+                work.native.liveTextures,
+                'obsolete versions must not evict unchanged visible rows'
+            ).toBeLessThanOrEqual(work.initialTextures);
+            expect(
+                work.scrollUploads,
+                'the first fractional scroll must reuse the prepared viewport'
+            ).toBe(0);
+            expect(
+                work.fractionalClears,
+                'fractional motion still needs brightness correction'
+            ).toBe(1);
         } finally {
             await context.close();
         }

@@ -93,15 +93,19 @@ export class LinearRowImages {
             this.canvas.width = width;
             this.canvas.height = height;
         }
-        gl.viewport(0, 0, width, height);
-        gl.disable(gl.DITHER);
-        gl.useProgram(this.program.image);
-        gl.uniform2f(this.program.viewport, width, height);
-        gl.clear(gl.COLOR_BUFFER_BIT);
         this.maxPixels = width * height * 2;
         this.painted = false;
         this.pending = [];
         return true;
+    }
+
+    invalidate(source: HTMLCanvasElement): void {
+        const texture = this.textures.get(source);
+        if (texture) {
+            this.gl!.deleteTexture(texture.image);
+            this.textures.delete(source);
+            this.cachedPixels -= texture.pixels;
+        }
     }
 
     private prepare(source: HTMLCanvasElement): WebGLTexture | undefined {
@@ -139,6 +143,15 @@ export class LinearRowImages {
             return;
         }
         const gl = this.gl!;
+        if (!this.painted) {
+            // Keep native-position rows warm without clearing the GPU viewport
+            // on every blink or edit. Only fractional translation needs a pass.
+            gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+            gl.disable(gl.DITHER);
+            gl.useProgram(this.program!.image);
+            gl.uniform2f(this.program!.viewport, this.canvas.width, this.canvas.height);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+        }
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.uniform3f(this.program!.row, origin, source.width, source.height);
         gl.uniform1f(this.program!.phase, phase);
