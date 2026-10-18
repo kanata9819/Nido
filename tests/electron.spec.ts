@@ -1829,6 +1829,15 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await page.keyboard.type('jk monospace');
         await expect(family).toHaveValue('jk monospace');
         await page.keyboard.press('Control+j');
+        const weight = page.getByRole('spinbutton', { name: 'Editor font weight' });
+        await expect(weight).toBeFocused();
+        await expect(weight).toHaveValue('350');
+        await page.keyboard.press('ArrowUp');
+        await expect(weight).toHaveValue('400');
+        await expect
+            .poll(() => page.evaluate(() => localStorage.getItem('nido.fontWeight')))
+            .toBe('400');
+        await page.keyboard.press('j');
         const explorer = page.getByRole('checkbox', { name: 'Show file explorer' });
         await expect(explorer).toBeFocused();
         await page.keyboard.press('Space');
@@ -1849,6 +1858,8 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await expect(history).toBeFocused();
         await page.keyboard.press('k');
         await expect(explorer).toBeFocused();
+        await page.keyboard.press('Shift+Tab');
+        await expect(weight).toBeFocused();
         await page.keyboard.press('Shift+Tab');
         await expect(family).toBeFocused();
         await page.keyboard.press('Shift+Tab');

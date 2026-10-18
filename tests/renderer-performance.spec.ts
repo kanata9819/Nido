@@ -4,9 +4,7 @@ import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import type { Grid as EditorGrid } from '../src/renderer/src/grid';
 import type {} from './renderer/harness';
-import { supportsHardwareWebGL } from './helpers/row-image-probe';
-
-test.use({ launchOptions: { args: ['--enable-gpu'] } });
+import { requireWebGLCorrection } from './helpers/row-image-probe';
 
 let server: ViteDevServer;
 let origin: string;
@@ -181,7 +179,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                 route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
             );
             await page.goto(`${origin}stationary-work-probe`);
-            test.skip(!(await page.evaluate(supportsHardwareWebGL)), 'Hardware WebGL unavailable');
+            await requireWebGLCorrection(page);
             const work = await page.evaluate(
                 async (moduleUrl) => {
                     const { Grid } = await import(moduleUrl);

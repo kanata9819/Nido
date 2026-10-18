@@ -105,13 +105,16 @@ test('Explorer navigation reuses row indices and batches state writes while flus
             () => JSON.parse(localStorage.getItem('nido.explorer./alpha')!).selected
         )
     ).toBe('file-09979.txt');
-    await tree.press('ArrowUp');
+    // Stay inside the visible rows: a late native scroll event after the synthetic
+    // pagehide would legitimately schedule another save on this still-open page.
+    await tree.press('ArrowDown');
+    await expect(tree.locator('[aria-selected="true"]')).toHaveText('file-09980.txt');
     await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
     expect(
         await page.evaluate(
             () => JSON.parse(localStorage.getItem('nido.explorer./alpha')!).selected
         )
-    ).toBe('file-09978.txt');
+    ).toBe('file-09980.txt');
     expect(await page.evaluate(() => window.explorerMetrics.writes)).toBe(2);
     await page.clock.runFor(200);
     expect(await page.evaluate(() => window.explorerMetrics.writes)).toBe(2);

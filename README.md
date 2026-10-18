@@ -118,6 +118,20 @@ pnpm test:prefetch # 先読みの画面保持を5回反復検証
 
 型チェックはTypeScript 7を使います。Lintが利用するTypeScript APIは、公式の互換パッケージでTypeScript 6を併用しています。
 
+CIは通常のレンダラーテストに加え、専用ChromiumをSwiftShaderで起動し、物理GPUがない環境でも文字の明るさ補正とGPU画像キャッシュを検証します。この専用ステップでWebGL描画を使えなければテストは失敗します。GPUが使えない場合・失われた場合の代替描画も検証します。ソフトウェアGPUの指定は専用テストのブラウザーに適用し、通常のCanvas2Dの画素比較と製品側の描画設定は維持します。
+
+手元でCIのWebGL検証を再現する場合は、次を実行します。通常の `pnpm test:renderer` はブラウザーの標準描画環境で実行します。
+
+```powershell
+$rendererPreviousGPU = $env:NIDO_TEST_SOFTWARE_GPU
+try {
+    $env:NIDO_TEST_SOFTWARE_GPU = '1'
+    pnpm test:renderer --grep 'slow touchpad scrolling|fractional text preserves|stationary editor|WebGL is'
+} finally {
+    $env:NIDO_TEST_SOFTWARE_GPU = $rendererPreviousGPU
+}
+```
+
 ### Windows版の基本動作確認
 
 Windows x64で次を実行すると、警告ゼロのLint・型チェック・配布用ビルド・単体テスト・レンダラーのテスト・実アプリの操作テストをまとめて確認できます。GitとRustのMSVCツールチェーン（C++ Build Toolsを含む）、`rust-analyzer`・`rust-src`・`rustfmt`が必要です。

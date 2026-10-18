@@ -1,4 +1,6 @@
-/** Check the hardware-only path without leaving a spare GPU context alive. */
+import { expect, test, type Page } from '@playwright/test';
+
+/** Probe the app's guarded WebGL path without retaining a spare context. */
 export function supportsHardwareWebGL(): boolean {
     const context = document
         .createElement('canvas')
@@ -6,6 +8,14 @@ export function supportsHardwareWebGL(): boolean {
     if (!context) return false;
     context.getExtension('WEBGL_lose_context')?.loseContext();
     return true;
+}
+
+export async function requireWebGLCorrection(page: Page): Promise<void> {
+    const available = await page.evaluate(supportsHardwareWebGL);
+    if (process.env.NIDO_TEST_SOFTWARE_GPU === '1') {
+        expect(available, 'CI must execute the WebGL correction tests with SwiftShader').toBe(true);
+    }
+    test.skip(!available, 'WebGL correction unavailable');
 }
 
 // Follow glyphs through offscreen rasterization so scroll probes measure their

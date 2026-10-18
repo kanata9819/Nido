@@ -5,9 +5,7 @@ import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type {} from './renderer/harness';
 import { applyNeovimUI, emptyNeovimUI } from '../src/shared/neovimUI';
-import { supportsHardwareWebGL } from './helpers/row-image-probe';
-
-test.use({ launchOptions: { args: ['--enable-gpu'] } });
+import { requireWebGLCorrection } from './helpers/row-image-probe';
 
 let server: ViteDevServer;
 let origin: string;
@@ -1237,6 +1235,7 @@ for (const scale of [1, 1.25, 1.5]) {
                 route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
             );
             await page.goto(`${origin}scroll-raster-probe`);
+            await requireWebGLCorrection(page);
             const samples = await page.evaluate(
                 async (moduleUrl) => {
                     const { Grid } = await import(moduleUrl);
@@ -1371,7 +1370,7 @@ for (const scale of [1, 1.25, 1.5]) {
                 route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
             );
             await page.goto(`${origin}light-probe`);
-            test.skip(!(await page.evaluate(supportsHardwareWebGL)), 'Hardware WebGL unavailable');
+            await requireWebGLCorrection(page);
             const results = await page.evaluate(
                 async (moduleUrl) => {
                     const { Grid } = await import(moduleUrl);
@@ -1524,7 +1523,7 @@ for (const failure of ['unavailable', 'lost'] as const) {
         );
         await page.goto(`${origin}gpu-fallback-probe`);
         if (failure === 'lost') {
-            test.skip(!(await page.evaluate(supportsHardwareWebGL)), 'Hardware WebGL unavailable');
+            await requireWebGLCorrection(page);
         }
         const result = await page.evaluate(
             async ({ moduleUrl, failure }) => {
