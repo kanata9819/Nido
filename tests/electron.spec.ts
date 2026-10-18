@@ -1681,7 +1681,6 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
                                 requestAnimationFrame(() => resolve())
                             );
                             if (node.getAttribute('data-pending-scrolls') !== '0') return false;
-                            if (node.getAttribute('data-filtered-rows') !== '0') return false;
                         }
                         return before === node.getAttribute(pointAttribute);
                     }, attribute)
@@ -1707,7 +1706,6 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
             ctx.fillRect = (x, y, width, height) => {
                 if (x === 0 && y === 0 && height > 100) {
                     row = 0;
-                    node.dataset.filteredRows = '0';
                 }
                 fill(x, y, width, height);
             };
@@ -1719,7 +1717,8 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
                     (args[0] as HTMLCanvasElement).height >
                     Math.ceil(Number(localStorage.getItem('nido.lineHeight')) * devicePixelRatio)
                 ) {
-                    node.dataset.filteredRows = String(Number(node.dataset.filteredRows) + 1);
+                    // The GPU light-correction pass composites a viewport, not another row.
+                    return;
                 }
                 const index = row++;
                 const y = Number(args[2]) + Number(args[4]) / 2;

@@ -958,7 +958,7 @@ for (const scale of [1, 1.25, 1.5]) {
         }
     });
 
-    test(`editor text reuses native rasters without color fringes at ${scale * 100}% scale`, async ({
+    test(`editor text reuses native opaque rasters at ${scale * 100}% scale`, async ({
         browser
     }) => {
         const context = await browser.newContext({ deviceScaleFactor: scale });
@@ -999,7 +999,6 @@ for (const scale of [1, 1.25, 1.5]) {
                     let paintedRows: HTMLCanvasElement[] = [];
                     let copies = 0;
                     let resampled = 0;
-                    let colored = 0;
                     let mismatches = 0;
                     const drawImage = CanvasRenderingContext2D.prototype.drawImage;
                     CanvasRenderingContext2D.prototype.drawImage = function (...args) {
@@ -1028,14 +1027,6 @@ for (const scale of [1, 1.25, 1.5]) {
                         const actual = this.getImageData(0, top, 220, height).data;
                         for (let i = 0; i < expected.length; i++) {
                             if (expected[i] !== actual[i]) mismatches++;
-                        }
-                        for (let i = 0; i < actual.length; i += 4) {
-                            if (
-                                Math.max(actual[i], actual[i + 1], actual[i + 2]) -
-                                    Math.min(actual[i], actual[i + 1], actual[i + 2]) >
-                                1
-                            )
-                                colored++;
                         }
                     };
                     try {
@@ -1070,7 +1061,9 @@ for (const scale of [1, 1.25, 1.5]) {
                     }
                     return {
                         copies,
-                        colored,
+                        opaqueRows: originalRows.every(
+                            (row) => !row.getContext('2d')!.getContextAttributes().alpha
+                        ),
                         resampled,
                         mismatches,
                         nativeRows: paintedRows.every((row, index) => row === originalRows[index])
@@ -1083,7 +1076,9 @@ for (const scale of [1, 1.25, 1.5]) {
                 samples.nativeRows,
                 'settled fractional scrolling must reuse the native glyph images'
             ).toBe(true);
-            expect(samples.colored, 'white text on gray must not gain red or blue edges').toBe(0);
+            expect(samples.opaqueRows, 'opaque themes must allow the native LCD text raster').toBe(
+                true
+            );
             expect(samples.resampled, 'rows must not use an interpolated intermediate bitmap').toBe(
                 0
             );
@@ -1141,7 +1136,7 @@ for (const scale of [1, 1.25, 1.5]) {
                                 const reference = document.createElement('canvas');
                                 reference.width = Math.floor(120 * dpr);
                                 reference.height = 28 * dpr;
-                                const native = reference.getContext('2d', { alpha: true })!;
+                                const native = reference.getContext('2d', { alpha: false })!;
                                 native.setTransform(dpr, 0, 0, dpr, 0, 0);
                                 native.fillStyle = '#191e23';
                                 native.fillRect(0, 0, 400, 28);

@@ -225,9 +225,9 @@ export class GridCanvas {
                 image.width = canvas.width;
                 image.height = imageHeight;
                 this.rowImages.set(cells, image);
-                // Alpha surfaces use grayscale antialiasing, avoiding colored LCD fringes.
-                // Opaque themes still fill the row background before drawing text.
-                const ctx = image.getContext('2d', { alpha: true })!;
+                // Opaque rows allow native LCD text, matching normal DOM rendering.
+                // Translucent themes need alpha surfaces and grayscale antialiasing.
+                const ctx = image.getContext('2d', { alpha: translucent })!;
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 ctx.textBaseline = 'alphabetic';
                 const y = 0;

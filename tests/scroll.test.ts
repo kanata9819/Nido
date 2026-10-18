@@ -25,13 +25,19 @@ test('cold gestures send movement first and refill the final direction after rev
         for (const [first, second] of [
             [-7, -7],
             [7, 7],
-            [-7, 7]
+            [-7, 7],
+            [-0.25, -0.25],
+            [0.25, 0.25],
+            [-0.25, 0.25]
         ]) {
             calls.length = 0;
             completions.length = 0;
+            const grid = new Grid();
+            // A sub-line gesture can exhaust the preview at a fractional boundary too.
+            if (Math.abs(first) < 1 && first > 0) grid.scrollFraction = 0.99;
             const scrolling = new EditorScroll({
                 id: 'alpha',
-                grid: new Grid(),
+                grid,
                 enabled: () => true,
                 schedule: () => {},
                 onError: (error) => {

@@ -32,10 +32,9 @@ export class EditorScroll {
     get needsPrefetch(): boolean {
         return (
             this.prefetchNeeded &&
-            ((this.queue.preview < 0 &&
-                (this.options.grid.canPreviewUpwardScroll || this.queue.preview > -1)) ||
-                (this.queue.preview > 0 &&
-                    (this.options.grid.canPreviewDownwardScroll || this.queue.preview < 1)))
+            // An exhausted preview must send native movement immediately, even below one line.
+            ((this.queue.preview < 0 && this.options.grid.canPreviewUpwardScroll) ||
+                (this.queue.preview > 0 && this.options.grid.canPreviewDownwardScroll))
         );
     }
 
