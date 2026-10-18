@@ -11,7 +11,10 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
     await mkdir(profile);
     await writeFile(
         file,
-        Array.from({ length: 4000 }, (_, i) => `ROW_${i + 1} text text text`).join('\n')
+        Array.from(
+            { length: 4000 },
+            (_, i) => `ROW_${i + 1} const result = example(argument); return result + 1;`
+        ).join('\n')
     );
     await writeFile(
         join(profile, 'workspaces.json'),

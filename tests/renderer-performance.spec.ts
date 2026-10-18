@@ -23,6 +23,119 @@ test.afterAll(async () => {
     await server?.close();
 });
 
+for (const scale of [1, 1.25, 1.5, 2]) {
+    test(`dense touchpad scrolling avoids CPU pixel transfers at ${scale * 100}% scale`, async ({
+        browser
+    }) => {
+        const context = await browser.newContext({ deviceScaleFactor: scale });
+        try {
+            const page = await context.newPage();
+            await page.route('**/scroll-work-probe', (route) =>
+                route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+            );
+            await page.goto(`${origin}scroll-work-probe`);
+            const work = await page.evaluate(
+                async (moduleUrl) => {
+                    const { Grid } = await import(moduleUrl);
+                    const grid = new Grid();
+                    grid.busy = true;
+                    grid.pixelScrollEnabled = true;
+                    grid.scrolling = true;
+                    const line = (row: number, revision: number): [string, number][] =>
+                        Array.from(
+                            `ROW_${row}_${revision} ${'const result = example(argument); '.repeat(4)}`,
+                            (text, column) => [text, 1 + (column % 2)]
+                        );
+                    grid.apply([
+                        ['grid_resize', [1, 160, 50]],
+                        [
+                            'hl_attr_define',
+                            [1, { foreground: 0xd4d4d4 }, {}, []],
+                            [2, { foreground: 0x4ec9b0 }, {}, []]
+                        ],
+                        ...Array.from({ length: 49 }, (_, row) => [
+                            'grid_line',
+                            [1, row, 0, line(row, 0)]
+                        ]),
+                        ['flush']
+                    ]);
+                    const canvas = document.createElement('canvas');
+                    document.body.append(canvas);
+                    const prototype = CanvasRenderingContext2D.prototype;
+                    const read = prototype.getImageData;
+                    const write = prototype.putImageData;
+                    const text = prototype.fillText;
+                    const work = {
+                        reads: 0,
+                        writes: 0,
+                        glyphs: 0,
+                        cachedGlyphs: 0,
+                        editedGlyphs: 0
+                    };
+                    prototype.getImageData = function (...args) {
+                        work.reads++;
+                        return read.apply(this, args);
+                    };
+                    prototype.putImageData = function (...args) {
+                        work.writes++;
+                        return Reflect.apply(write, this, args);
+                    };
+                    prototype.fillText = function (...args) {
+                        work.glyphs++;
+                        return text.apply(this, args);
+                    };
+                    const durations: number[] = [];
+                    let coldMs = 0;
+                    try {
+                        for (let frame = 0; frame < 33; frame++) {
+                            // Include a cold viewport, cached motion and newly changed rows.
+                            // A warmed static viewport alone misses expensive row preparation.
+                            if (frame) await new Promise(requestAnimationFrame);
+                            const edited = frame > 0 && frame % 8 === 0;
+                            if (edited) {
+                                grid.apply([
+                                    ['grid_line', [1, frame, 0, line(frame, frame)]],
+                                    ['flush']
+                                ]);
+                            }
+                            grid.scrollFraction = ((frame + 1) * 0.25) / (19 * devicePixelRatio);
+                            const glyphs = work.glyphs;
+                            const start = performance.now();
+                            grid.draw(canvas, 1500, 950, 15, 'monospace', false, undefined, 19);
+                            const duration = performance.now() - start;
+                            if (frame === 0) coldMs = duration;
+                            else {
+                                durations.push(duration);
+                                if (edited) work.editedGlyphs += work.glyphs - glyphs;
+                                else work.cachedGlyphs += work.glyphs - glyphs;
+                            }
+                        }
+                    } finally {
+                        prototype.getImageData = read;
+                        prototype.putImageData = write;
+                        prototype.fillText = text;
+                    }
+                    durations.sort((a, b) => a - b);
+                    return {
+                        ...work,
+                        coldMs,
+                        p95Ms: durations[Math.floor(durations.length * 0.95)]
+                    };
+                },
+                `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+            );
+            console.log('dense-scroll-work', { scale, ...work });
+            expect(work.glyphs).toBeGreaterThan(1000);
+            expect(work.editedGlyphs).toBeGreaterThan(0);
+            expect(work.cachedGlyphs, 'fractional motion must reuse cached text').toBe(0);
+            expect(work.reads, 'cold and changed rows must avoid CPU pixel readback').toBe(0);
+            expect(work.writes, 'fractional motion must avoid per-frame CPU pixel uploads').toBe(0);
+        } finally {
+            await context.close();
+        }
+    });
+}
+
 test('editor descriptions stay current through Unicode edits and scrolling without rewriting unchanged text', async ({
     page
 }) => {

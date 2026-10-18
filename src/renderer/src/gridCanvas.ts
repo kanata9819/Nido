@@ -1,7 +1,6 @@
 import type { Grid } from './grid';
 import type { Cell, Highlight } from './gridTypes';
 import { color } from './gridColors';
-import { LinearRowImages } from './linearRowImage';
 
 function cellBackground(h: Highlight, background: string, foreground: string): string {
     if (h.reverse) {
@@ -40,7 +39,6 @@ function cellForeground(h: Highlight, background: string, foreground: string): s
 /** Paint grid snapshots, reusing rasterized row images until their content changes. */
 export class GridCanvas {
     private rowImages = new WeakMap<Cell[], HTMLCanvasElement>();
-    private linearRows = new LinearRowImages();
     private imageStyle = '';
     private paintDirty = true;
     private surface?: HTMLCanvasElement;
@@ -109,7 +107,7 @@ export class GridCanvas {
             canvas.height = Math.round(height * dpr);
         }
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        // Keep the native glyph raster; correct fractional opaque text in linear light.
+        // Keep the native glyph raster; interpolate its final translation only once.
         ctx.imageSmoothingEnabled = true;
         const family = fontFamily;
         ctx.font = `${fontSize}px ${family}`;
@@ -218,12 +216,7 @@ export class GridCanvas {
                 this.rowImages.set(cells, image);
                 // Alpha surfaces use grayscale antialiasing, avoiding colored LCD fringes.
                 // Opaque themes still fill the row background before drawing text.
-                // Opaque rows are sampled once for light correction. Keep those pixels
-                // on the CPU so newly exposed rows do not stall on GPU readback.
-                const ctx = image.getContext('2d', {
-                    alpha: true,
-                    willReadFrequently: !translucent
-                })!;
+                const ctx = image.getContext('2d', { alpha: true })!;
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 ctx.textBaseline = 'alphabetic';
                 const y = 0;
@@ -338,16 +331,9 @@ export class GridCanvas {
                         );
                     }
                 }
-                if (this.grid.pixelScrollEnabled && !translucent && !commandLine) {
-                    // Prepare alongside a changed raster, keeping the first gesture cheap.
-                    this.linearRows.prepare(image, this.grid.background);
-                }
             }
             // Reuse rasterized text; scroll and cursor animation only composite row images.
             ctx.drawImage(image, 0, top / dpr, image.width / dpr, image.height / dpr);
-            if (!translucent && !commandLine) {
-                this.linearRows.paint(ctx, image, top, dpr, this.grid.background);
-            }
             ctx.restore();
         }
         ctx.save();
