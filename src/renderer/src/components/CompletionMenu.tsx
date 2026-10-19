@@ -33,6 +33,9 @@ interface Menu {
     pending?: boolean;
 }
 
+const rowHeight = 28;
+const overscan = 8;
+
 const kindIcons: Record<string, LucideIcon> = {
     Text,
     Method: Box,
@@ -78,6 +81,7 @@ export default function CompletionMenu({
 }): React.JSX.Element | null {
     const t = useI18n();
     const [menu, setMenu] = useState<Menu>();
+    const [viewport, setViewport] = useState({ top: 0, height: 280 });
     const card = useRef<HTMLDivElement>(null);
     const refreshing = useRef(false);
     const currentMenu = useRef(menu);
@@ -88,6 +92,17 @@ export default function CompletionMenu({
         { element: HTMLDivElement; above: boolean; height: number } | undefined
     >(undefined);
     const listId = `completion-${id}`;
+    const count = menu?.items.length ?? 0;
+    const first = Math.min(count, Math.max(0, Math.floor(viewport.top / rowHeight) - overscan));
+    const last = Math.min(
+        count,
+        Math.ceil((viewport.top + viewport.height) / rowHeight) + overscan
+    );
+    const indices = Array.from({ length: Math.max(0, last - first) }, (_, index) => first + index);
+    if (menu && menu.selected >= 0 && menu.selected < count && !indices.includes(menu.selected)) {
+        indices.push(menu.selected);
+        indices.sort((a, b) => a - b);
+    }
     useEffect(
         () =>
             window.nido.onEvent((event) => {
@@ -189,6 +204,13 @@ export default function CompletionMenu({
         }
         const host = element.parentElement!;
         const list = element.querySelector<HTMLElement>('[role="listbox"]')!;
+        const updateViewport = (): void => {
+            const top = list.scrollTop;
+            const height = list.clientHeight;
+            setViewport((previous) =>
+                previous.top === top && previous.height === height ? previous : { top, height }
+            );
+        };
         const position = (): void => {
             const { cellWidth, cellHeight } = grid.current;
             const top = anchor.offsetTop + cellHeight + 6;
@@ -209,9 +231,11 @@ export default function CompletionMenu({
                     host.clientHeight - element.offsetHeight - 6
                 )
             )}px`;
+            updateViewport();
         };
         position();
         element.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+        updateViewport();
         anchor.setAttribute('aria-autocomplete', 'list');
         anchor.setAttribute('aria-controls', listId);
         if (menu.selected >= 0) {
@@ -254,43 +278,54 @@ export default function CompletionMenu({
                     role="listbox"
                     aria-label={t('Code completion')}
                     aria-busy={menu.pending ?? false}
+                    data-row-count={menu.items.length}
+                    onScroll={(event) => {
+                        const node = event.currentTarget;
+                        setViewport({ top: node.scrollTop, height: node.clientHeight });
+                    }}
                 >
-                    {menu.items.map(([word, kind, detail], index) => {
-                        const Icon = Object.hasOwn(kindIcons, kind) ? kindIcons[kind] : Text;
-                        return (
-                            <div
-                                key={index}
-                                id={`${listId}-${index}`}
-                                className={styles.item}
-                                role="option"
-                                aria-selected={menu.selected === index}
-                                aria-disabled={menu.pending ?? false}
-                                title={detail || word}
-                                onClick={() => {
-                                    if (menu.pending) {
-                                        return;
-                                    }
-                                    const keys = `<Cmd>lua vim.api.nvim_select_popupmenu_item(${index}, false, false, {})<CR>`;
-                                    void window.nido
-                                        .input(id, keys)
-                                        .catch((error) => onError(String(error)));
-                                    input.current?.focus();
-                                }}
-                            >
-                                <span
-                                    className={styles.kind}
-                                    data-kind={kind}
-                                    role="img"
-                                    aria-label={t(kind || 'Text')}
-                                    title={t(kind || 'Text')}
+                    <div className={styles.items} style={{ height: menu.items.length * rowHeight }}>
+                        {indices.map((index) => {
+                            const [word, kind, detail] = menu.items[index];
+                            const Icon = Object.hasOwn(kindIcons, kind) ? kindIcons[kind] : Text;
+                            return (
+                                <div
+                                    key={index}
+                                    id={`${listId}-${index}`}
+                                    className={styles.item}
+                                    role="option"
+                                    aria-posinset={index + 1}
+                                    aria-setsize={menu.items.length}
+                                    style={{ top: index * rowHeight }}
+                                    aria-selected={menu.selected === index}
+                                    aria-disabled={menu.pending ?? false}
+                                    title={detail || word}
+                                    onClick={() => {
+                                        if (menu.pending) {
+                                            return;
+                                        }
+                                        const keys = `<Cmd>lua vim.api.nvim_select_popupmenu_item(${index}, false, false, {})<CR>`;
+                                        void window.nido
+                                            .input(id, keys)
+                                            .catch((error) => onError(String(error)));
+                                        input.current?.focus();
+                                    }}
                                 >
-                                    <Icon size={16} aria-hidden="true" />
-                                </span>
-                                <span className={styles.word}>{word}</span>
-                                <span className={styles.detail}>{detail}</span>
-                            </div>
-                        );
-                    })}
+                                    <span
+                                        className={styles.kind}
+                                        data-kind={kind}
+                                        role="img"
+                                        aria-label={t(kind || 'Text')}
+                                        title={t(kind || 'Text')}
+                                    >
+                                        <Icon size={16} aria-hidden="true" />
+                                    </span>
+                                    <span className={styles.word}>{word}</span>
+                                    <span className={styles.detail}>{detail}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
                 <div className={styles.footer}>
                     <span>

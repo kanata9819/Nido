@@ -238,6 +238,21 @@ export class GridCanvas {
                 const ctx = image.getContext('2d', { alpha: translucent })!;
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 ctx.textBaseline = 'alphabetic';
+                // This row owns its context and never saves/restores text state.
+                let currentFont = '';
+                let currentColor = '';
+                const font = (value: string): void => {
+                    if (value !== currentFont) {
+                        ctx.font = value;
+                        currentFont = value;
+                    }
+                };
+                const foreground = (value: string): void => {
+                    if (value !== currentColor) {
+                        ctx.fillStyle = value;
+                        currentColor = value;
+                    }
+                };
                 const y = 0;
                 const highlightTop = Math.max(
                     0,
@@ -248,7 +263,7 @@ export class GridCanvas {
                     Math.round((fontSize + 2) * dpr)
                 );
                 if (!translucent) {
-                    ctx.fillStyle = this.grid.background;
+                    foreground(this.grid.background);
                     ctx.fillRect(0, 0, width, image.height / dpr);
                 }
                 // Paint all cell backgrounds first so a wide glyph is not erased by its continuation cell.
@@ -264,7 +279,7 @@ export class GridCanvas {
                     if (background === this.grid.background) {
                         continue;
                     }
-                    ctx.fillStyle = background;
+                    foreground(background);
                     ctx.fillRect(
                         col * cellWidth,
                         h.wordHighlight ? highlightTop / dpr : y,
@@ -289,12 +304,8 @@ export class GridCanvas {
                         ) {
                             text += cells[++col].text;
                         }
-                        ctx.font = `${fontWeight} ${fontSize * 0.8}px ${family}`;
-                        ctx.fillStyle = cellForeground(
-                            h,
-                            this.grid.background,
-                            this.grid.foreground
-                        );
+                        font(`${fontWeight} ${fontSize * 0.8}px ${family}`);
+                        foreground(cellForeground(h, this.grid.background, this.grid.foreground));
                         ctx.fillText(
                             text,
                             Math.round(start * cellWidth * dpr) / dpr,
@@ -302,8 +313,10 @@ export class GridCanvas {
                         );
                         continue;
                     }
-                    ctx.font = `${h.italic ? 'italic ' : ''}${h.bold ? Math.max(700, fontWeight) : fontWeight} ${fontSize}px ${family}`;
-                    ctx.fillStyle = cellForeground(h, this.grid.background, this.grid.foreground);
+                    font(
+                        `${h.italic ? 'italic ' : ''}${h.bold ? Math.max(700, fontWeight) : fontWeight} ${fontSize}px ${family}`
+                    );
+                    foreground(cellForeground(h, this.grid.background, this.grid.foreground));
 
                     const x = col * cellWidth;
 
@@ -340,7 +353,7 @@ export class GridCanvas {
                     }
                     if ((!h.bracketMatch && h.underline) || h.undercurl || h.strikethrough) {
                         if (h.special !== undefined) {
-                            ctx.fillStyle = color(h.special);
+                            foreground(color(h.special));
                         }
                         ctx.fillRect(
                             x,

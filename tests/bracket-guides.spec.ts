@@ -144,7 +144,8 @@ test('bracket pair guides connect scopes and track the active scope and virtual 
             .poll(async () => (await active()).map(({ top, bottom }) => [top, bottom]))
             .toEqual([[2, 4]]);
         await canvas.hover();
-        await page.mouse.wheel(0, 500);
+        // Wheel deltas are halved by the editor; move past the outer scope and its virtual row.
+        await page.mouse.wheel(0, 1200);
         await expect
             .poll(async () => JSON.parse((await canvas.getAttribute('data-guides')) || '[]').length)
             .toBe(0);

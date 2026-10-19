@@ -32,13 +32,19 @@
     padding: 5px;
 }
 .item {
+    position: absolute;
+    left: 0;
+    right: 0;
     display: flex;
     align-items: center;
     gap: 10px;
-    min-height: 28px;
+    height: 28px;
     padding: 3px 8px;
     border-radius: 5px;
     cursor: pointer;
+}
+.items {
+    position: relative;
 }
 .item:hover {
     background: #2a343b;

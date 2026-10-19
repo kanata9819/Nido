@@ -1,6 +1,13 @@
 local M = {}
 local api = vim.api
 local entries, pending, published, color_pending = {}, {}, {}, {}
+local outlines = {}
+
+local function cancel_outline(buffer)
+  local request = outlines[buffer]
+  outlines[buffer] = nil
+  if request and request.id then request.client:cancel_request(request.id) end
+end
 
 local function redraw()
   -- Outline changes do not dirty buffer rows, so force decoration providers to run again.
@@ -56,6 +63,7 @@ local function sort(scopes)
 end
 
 local function refresh(buffer)
+  cancel_outline(buffer)
   if not api.nvim_buf_is_valid(buffer) or not api.nvim_buf_is_loaded(buffer)
       or vim.bo[buffer].buftype ~= '' then
     entries[buffer] = nil
@@ -76,7 +84,11 @@ local function refresh(buffer)
   redraw()
   for _, client in ipairs(vim.lsp.get_clients({bufnr=buffer, method='textDocument/documentSymbol'})) do
     if client.initialized then
-      client:request('textDocument/documentSymbol', {textDocument={uri=vim.uri_from_bufnr(buffer)}}, function(err, result)
+      local request = {client=client}
+      outlines[buffer] = request
+      local ok, id = client:request('textDocument/documentSymbol', {textDocument={uri=vim.uri_from_bufnr(buffer)}}, function(err, result)
+        if outlines[buffer] ~= request then return end
+        outlines[buffer] = nil
         if err or not result or entries[buffer] ~= entry or not api.nvim_buf_is_valid(buffer)
             or api.nvim_buf_get_changedtick(buffer) ~= tick then return end
         local outline = {}
@@ -96,12 +108,15 @@ local function refresh(buffer)
         visit(result)
         if #outline > 0 then entry.scopes = sort(outline); entry.highlights = {}; redraw() end
       end, buffer)
+      request.id = id
+      if not ok and outlines[buffer] == request then outlines[buffer] = nil end
       break
     end
   end
 end
 
 local function schedule(buffer)
+  cancel_outline(buffer)
   local ticket = {}
   pending[buffer] = ticket
   -- Structure is cached between edits; wheel frames only read it and their screen positions.
@@ -145,9 +160,10 @@ function M.publish(window, buffer)
       and vim.bo[buffer].buftype == '' and api.nvim_win_get_config(window).relative == '' then
     api.nvim_win_call(window, function()
       local view = vim.fn.winsaveview()
+      local last_line = vim.fn.line('w$')
       state.leftcol = view.leftcol
       for _, scope in ipairs(entry.scopes) do
-        if scope.line <= vim.fn.line('w$') and scope.ending >= view.topline
+        if scope.line <= last_line and scope.ending >= view.topline
             and not (vim.fn.foldclosed(scope.line) >= 0 and vim.fn.foldclosedend(scope.line) >= scope.ending) then
           local first = vim.fn.screenpos(window, scope.line, 1)
           local last = vim.fn.screenpos(window, scope.ending, 1)
@@ -201,7 +217,8 @@ end})
 api.nvim_create_autocmd('ColorScheme', {callback=function()
   for buffer in pairs(entries) do schedule(buffer) end
 end})
-api.nvim_create_autocmd('BufWipeout', {callback=function(event)
+api.nvim_create_autocmd({'BufUnload', 'BufWipeout'}, {callback=function(event)
+  cancel_outline(event.buf)
   entries[event.buf], pending[event.buf], color_pending[event.buf] = nil, nil, nil
 end})
 api.nvim_create_autocmd('WinClosed', {callback=function(event) published[tonumber(event.match)] = nil end})

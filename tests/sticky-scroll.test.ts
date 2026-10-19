@@ -9,6 +9,156 @@ import { stickyRows } from '../src/renderer/src/stickyScroll';
 import type { StickyScrollState } from '../src/shared/types';
 
 const span = [{ text: 'scope {', color: '#d4d4d4' }];
+
+test('sticky publication reads viewport bounds once per call and follows viewport changes', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        const result = await session.client.request('nvim_exec_lua', [
+            `
+local api, sticky, brackets = vim.api, require('nido_sticky'), require('nido_brackets')
+local buffer, window = api.nvim_get_current_buf(), api.nvim_get_current_win()
+local lines = {}
+for i=1,1000 do
+  lines[#lines+1]='scope ' .. i .. ' {'
+  lines[#lines+1]='  content();'
+  lines[#lines+1]='}'
+end
+api.nvim_buf_set_lines(buffer,0,-1,false,lines)
+api.nvim_exec_autocmds('TextChanged',{buffer=buffer})
+assert(vim.wait(10000,function() return brackets.ready(buffer) end,2))
+vim.wait(400)
+local original_line, original_notify = vim.fn.line, vim.rpcnotify
+local latest, queries = nil, 0
+vim.fn.line=function(expr,...)
+  if expr=='w$' then queries=queries+1 end
+  return original_line(expr,...)
+end
+vim.rpcnotify=function(channel,name,state,...)
+  if name=='nido:sticky_scroll' then latest=state end
+  return original_notify(channel,name,state,...)
+end
+local ok,err=pcall(function()
+  for _,line in ipairs({1001,2000,501}) do
+    api.nvim_win_set_cursor(window,{line,0})
+    vim.cmd('normal! zt')
+    local before=queries
+    sticky.publish(window,buffer)
+    assert(queries-before==1,'Viewport bounds were fetched for every scope')
+    assert(latest and #latest.scopes>0,'Visible scopes were lost')
+    for _,scope in ipairs(latest.scopes) do
+      assert(scope.line<=original_line('w$') and scope.ending>=original_line('w0'),
+        'Sticky state retained scopes from the old viewport')
+    end
+  end
+end)
+vim.fn.line,vim.rpcnotify=original_line,original_notify
+assert(ok,err)
+return true
+`,
+            []
+        ]);
+        assert.equal(result, true);
+    } finally {
+        await session.stop();
+    }
+});
+
+test('sticky outlines cancel obsolete requests and reject late replies through failure and unload', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.client.request('nvim_exec_lua', [
+            `
+local api, brackets, sticky = vim.api, require('nido_brackets'), require('nido_sticky')
+local buffer = api.nvim_get_current_buf()
+api.nvim_buf_set_lines(buffer,0,-1,false,{'scope {','  content();','  other();','}'})
+api.nvim_exec_autocmds('TextChanged',{buffer=buffer})
+assert(vim.wait(5000,function() return brackets.ready(buffer) end,2))
+vim.wait(400)
+local held, cancelled, mode = {}, {}, 'hold'
+local function symbols(line)
+  return {{name='scope',kind=12,range={start={line=0,character=0},['end']={line=3,character=1}},
+    selectionRange={start={line=line,character=0},['end']={line=line,character=1}}}}
+end
+local client_id=vim.lsp.start({name='sticky-outline-lifecycle',cmd=function(dispatchers)
+  local closed,next_id=false,0
+  return {
+    request=function(method,_,callback,notify_reply)
+      next_id=next_id+1
+      local id=next_id
+      local function reply(value)
+        if notify_reply then notify_reply(id) end
+        callback(nil,value)
+      end
+      if method=='initialize' then
+        vim.schedule(function() reply({capabilities={textDocumentSync=1,documentSymbolProvider=true}}) end)
+      elseif method=='textDocument/documentSymbol' then
+        if mode=='fail' then return false end
+        if mode=='sync' then reply(symbols(1))
+        else held[#held+1]={id=id,reply=reply} end
+      else vim.schedule(function() reply(nil) end) end
+      return true,id
+    end,
+    notify=function(method,params)
+      if method=='$/cancelRequest' then cancelled[params.id]=true end
+      if method=='exit' then closed=true;dispatchers.on_exit(0,0) end
+      return true
+    end,
+    is_closing=function() return closed end,
+    terminate=function() closed=true;dispatchers.on_exit(0,0) end,
+  }
+end})
+assert(vim.wait(5000,function() return #held>0 end,5))
+local client=vim.lsp.get_client_by_id(client_id)
+local function edit(value)
+  api.nvim_buf_set_lines(buffer,1,2,false,{'  content(' .. value .. ');'})
+  api.nvim_exec_autocmds('TextChanged',{buffer=buffer})
+  vim.wait(270)
+end
+local function pending()
+  local count=0
+  for _,request in pairs(client.requests) do
+    if request.method=='textDocument/documentSymbol' and request.type=='pending' then count=count+1 end
+  end
+  return count
+end
+for i=1,4 do edit(i);assert(pending()==1,'Obsolete outline requests remain pending') end
+for i=1,#held-1 do assert(cancelled[held[i].id],'Old request was not cancelled') end
+local original_notify,latest=vim.rpcnotify,nil
+vim.rpcnotify=function(channel,name,state,...)
+  if name=='nido:sticky_scroll' then latest=state end
+  return original_notify(channel,name,state,...)
+end
+local ok,err=pcall(function()
+  held[#held].reply(symbols(1))
+  for i=1,#held-1 do held[i].reply(symbols(0)) end
+  sticky.publish(api.nvim_get_current_win(),buffer)
+  assert(latest and latest.scopes[1].line==2,'A late reply replaced the current outline')
+  mode='sync';edit(5)
+  sticky.publish(api.nvim_get_current_win(),buffer)
+  assert(pending()==0 and latest.scopes[1].line==2,'Synchronous outline response was lost')
+  mode='fail';edit(6)
+  assert(pending()==0,'A failed send left a pending request')
+  mode='hold';edit(7)
+  held[#held].reply(symbols(1))
+  sticky.publish(api.nvim_get_current_win(),buffer)
+  assert(latest.scopes[1].line==2,'Outline requests did not recover after send failure')
+  edit(8)
+  local last=held[#held]
+  api.nvim_buf_delete(buffer,{force=true})
+  assert(cancelled[last.id],'Wiping the buffer did not cancel its outline request')
+  last.reply(symbols(0))
+end)
+vim.rpcnotify=original_notify
+client:stop(true)
+assert(ok,err)
+`,
+            []
+        ]);
+    } finally {
+        await session.stop();
+    }
+});
+
 function state(scopes: StickyScrollState['scopes']): StickyScrollState {
     return {
         window: 1,
@@ -311,7 +461,8 @@ test('sticky headers follow wrapped lines, virtual rows and folds, and ignore ou
               if filter and filter.method == 'textDocument/documentSymbol' then
                 return {{initialized=true, request=function(_, _, _, callback)
                   table.insert(_G.sticky_callbacks, callback)
-                end}}
+                  return true, #_G.sticky_callbacks
+                end, cancel_request=function() return true end}}
               end
               return original(filter)
             end

@@ -24,6 +24,211 @@ test.afterAll(async () => {
     await server?.close();
 });
 
+test('large completion lists bound DOM work while preserving distant selection, scrolling and refresh', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=completion`);
+    const input = page.getByRole('textbox', { name: 'Neovim input' });
+    await input.focus();
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [
+                [
+                    'popupmenu_show',
+                    [
+                        Array.from({ length: 5000 }, (_, i) => [
+                            `candidate_${i}`,
+                            'Function',
+                            `detail_${i}`,
+                            ''
+                        ]),
+                        0,
+                        1,
+                        1
+                    ]
+                ]
+            ]
+        })
+    );
+    const list = page.getByRole('listbox', { name: 'Code completion' });
+    await expect(list).toHaveAttribute('data-row-count', '5000');
+    await expect(list.getByRole('option').first()).toHaveAttribute('aria-setsize', '5000');
+    await expect.poll(() => list.getByRole('option').count()).toBeLessThan(40);
+    const select = async (index: number): Promise<void> => {
+        await page.evaluate(
+            (index) =>
+                window.rendererTest.emit({
+                    type: 'redraw',
+                    id: 'alpha',
+                    events: [['popupmenu_select', [index]]]
+                }),
+            index
+        );
+    };
+    await select(4999);
+    await expect(input).toHaveAttribute('aria-activedescendant', 'completion-alpha-4999');
+    await expect(page.locator('#completion-alpha-4999')).toBeInViewport();
+    await expect(page.locator('#completion-alpha-4999')).toHaveAttribute('aria-posinset', '5000');
+    await select(0);
+    await expect(page.locator('#completion-alpha-0')).toBeInViewport();
+    await list.evaluate((node) => {
+        node.scrollTop = 2500 * 28;
+    });
+    await expect(page.locator('#completion-alpha-2500')).toBeInViewport();
+    await expect(page.locator('#completion-alpha-0')).toHaveCount(1);
+    await expect(input).toHaveAttribute('aria-activedescendant', 'completion-alpha-0');
+    await expect.poll(() => list.getByRole('option').count()).toBeLessThan(40);
+    await page.locator('#completion-alpha-2500').click();
+    await expect(input).toBeFocused();
+    expect(
+        await page.evaluate(() =>
+            window.rendererTest.calls.some(
+                (call) =>
+                    call.method === 'input' &&
+                    String(call.args[1]).includes('nvim_select_popupmenu_item(2500,')
+            )
+        )
+    ).toBe(true);
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [
+                [
+                    'popupmenu_show',
+                    [
+                        [
+                            ['日本語', 'Text', '説明', ''],
+                            ['emoji_🙂', 'Variable', '', '']
+                        ],
+                        -1,
+                        1,
+                        1
+                    ]
+                ]
+            ]
+        })
+    );
+    await expect(list.getByRole('option')).toHaveCount(2);
+    await expect(page.locator('#completion-alpha-0')).toBeInViewport();
+    await expect(input).not.toHaveAttribute('aria-activedescendant');
+    await select(1);
+    await expect(input).toHaveAttribute('aria-activedescendant', 'completion-alpha-1');
+    await expect(page.locator('#completion-alpha-1')).toContainText('emoji_🙂');
+});
+
+test('row text reuses styles without leaking CodeLens, bold, italic or underline colors', async ({
+    page
+}) => {
+    await page.route('**/row-style-probe', (route) =>
+        route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+    );
+    await page.goto(`${origin}row-style-probe`);
+    const result = await page.evaluate(
+        async (moduleUrl) => {
+            const { Grid } = await import(moduleUrl);
+            const grid = new Grid();
+            grid.busy = true;
+            grid.apply([
+                ['grid_resize', [1, 80, 5]],
+                [
+                    'hl_attr_define',
+                    [1, { foreground: 0xd4d4d4 }, {}, []],
+                    [2, { foreground: 0xff0000, bold: true }, {}, []],
+                    [
+                        3,
+                        { foreground: 0x00ff00, italic: true, underline: true, special: 0x0000ff },
+                        {},
+                        []
+                    ],
+                    [4, { foreground: 0xeedd00 }, {}, [{ hi_name: 'NidoCodeLens' }]],
+                    [5, { foreground: 0xffffff, background: 0x303030, reverse: true }, {}, []]
+                ],
+                [
+                    'grid_line',
+                    [1, 0, 0, [['a', 1, 70]]],
+                    [
+                        1,
+                        1,
+                        0,
+                        [
+                            ['L', 4],
+                            ['b', 2],
+                            ['i', 3],
+                            ['n', 1],
+                            ['日', 1],
+                            ['', 1],
+                            ['e\u0301', 1],
+                            ['🙂', 1],
+                            ['', 1],
+                            ['r', 5]
+                        ]
+                    ]
+                ],
+                ['flush']
+            ]);
+            const canvas = document.createElement('canvas');
+            const proto = CanvasRenderingContext2D.prototype;
+            const font = Object.getOwnPropertyDescriptor(proto, 'font')!;
+            const fill = Object.getOwnPropertyDescriptor(proto, 'fillStyle')!;
+            const text = proto.fillText;
+            const styles: Record<string, { font: string; color: string }> = {};
+            let fonts = 0,
+                colors = 0;
+            Object.defineProperty(proto, 'font', {
+                ...font,
+                set(value) {
+                    fonts++;
+                    font.set!.call(this, value);
+                }
+            });
+            Object.defineProperty(proto, 'fillStyle', {
+                ...fill,
+                set(value) {
+                    colors++;
+                    fill.set!.call(this, value);
+                }
+            });
+            proto.fillText = function (value, ...args): void {
+                styles[value] = { font: this.font, color: String(this.fillStyle) };
+                return Reflect.apply(text, this, [value, ...args]);
+            };
+            try {
+                const draw = (): void =>
+                    grid.draw(canvas, 720, 100, 15, 'monospace', false, undefined, 19, 400);
+                draw();
+                const initialStyles = { ...styles };
+                fonts = colors = 0;
+                for (let i = 0; i < 20; i++) {
+                    grid.apply([['grid_line', [1, 0, 10, [[String(i % 10), 1]]]], ['flush']]);
+                    draw();
+                }
+                return { styles: initialStyles, fonts, colors };
+            } finally {
+                Object.defineProperty(proto, 'font', font);
+                Object.defineProperty(proto, 'fillStyle', fill);
+                proto.fillText = text;
+            }
+        },
+        `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+    );
+    expect(result.styles.L.font).toContain('12px');
+    expect(result.styles.b.font).toMatch(/bold|700/);
+    expect(result.styles.b.color).toBe('#ff0000');
+    expect(result.styles.i.font).toContain('italic');
+    expect(result.styles.i.color).toBe('#00ff00');
+    for (const text of ['n', '日', 'e\u0301', '🙂']) {
+        expect(result.styles[text].font).not.toContain('italic');
+        expect(result.styles[text].font).toContain('15px');
+        expect(result.styles[text].color).toBe('#d4d4d4');
+    }
+    expect(result.styles.r.color).toBe('#303030');
+    expect(result.fonts).toBeLessThanOrEqual(40);
+    expect(result.colors).toBeLessThanOrEqual(80);
+});
+
 for (const scale of [1, 1.25, 1.5, 2]) {
     test(`dense touchpad scrolling avoids CPU pixel transfers at ${scale * 100}% scale`, async ({
         browser
