@@ -40,6 +40,7 @@ function cellForeground(h: Highlight, background: string, foreground: string): s
 /** Paint grid snapshots, reusing rasterized row images until their content changes. */
 export class GridCanvas {
     private rowImages = new WeakMap<Cell[], HTMLCanvasElement>();
+    private dirtyImages = new WeakSet<HTMLCanvasElement>();
     private linearRows?: LinearRowImages;
     private imageStyle = '';
     private paintDirty = true;
@@ -57,13 +58,23 @@ export class GridCanvas {
             const image = this.rowImages.get(cells);
             if (image) {
                 this.linearRows?.invalidate(image);
+                this.dirtyImages.add(image);
             }
-            this.rowImages.delete(cells);
             this.firstDirtyRow = Math.min(this.firstDirtyRow, row);
             this.lastDirtyRow = Math.max(this.lastDirtyRow, row);
         } else {
             this.invalidatePaint();
             this.rowImages = new WeakMap();
+        }
+    }
+
+    /** Reuse the visible bitmap when retained scroll cells need copy-on-write. */
+    moveRowImage(before: Cell[], after: Cell[]): void {
+        const image = this.rowImages.get(before);
+        if (image) {
+            // Retained cells stay unchanged and can rasterize again if revisited.
+            this.rowImages.delete(before);
+            this.rowImages.set(after, image);
         }
     }
 
@@ -233,9 +244,17 @@ export class GridCanvas {
                 image.width = canvas.width;
                 image.height = imageHeight;
                 this.rowImages.set(cells, image);
+                this.dirtyImages.add(image);
+            }
+            if (this.dirtyImages.has(image)) {
+                this.dirtyImages.delete(image);
                 // Opaque rows allow native LCD text, matching normal DOM rendering.
                 // Translucent themes need alpha surfaces and grayscale antialiasing.
                 const ctx = image.getContext('2d', { alpha: translucent })!;
+                if (translucent) {
+                    ctx.setTransform(1, 0, 0, 1, 0, 0);
+                    ctx.clearRect(0, 0, image.width, image.height);
+                }
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 ctx.textBaseline = 'alphabetic';
                 // This row owns its context and never saves/restores text state.

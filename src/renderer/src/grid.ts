@@ -406,6 +406,7 @@ export class Grid {
                                             ) {
                                                 const previous = row;
                                                 row = this.cells[Number(args[1])] = row.slice();
+                                                this.canvas.moveRowImage(previous, row);
                                                 this.rowLayout.clone(previous, row);
                                                 const text = this.rowText.get(previous);
                                                 if (text !== undefined) {

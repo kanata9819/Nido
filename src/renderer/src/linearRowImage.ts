@@ -136,16 +136,19 @@ export class LinearRowImages {
     }
 
     private paintRow(source: HTMLCanvasElement, top: number): void {
-        const texture = this.prepare(source);
         const origin = Math.floor(top);
         const phase = top - origin;
-        if (!texture || phase < 0.000001 || phase > 0.999999) {
+        if (phase < 0.000001 || phase > 0.999999) {
+            return;
+        }
+        const texture = this.prepare(source);
+        if (!texture) {
             return;
         }
         const gl = this.gl!;
         if (!this.painted) {
-            // Keep native-position rows warm without clearing the GPU viewport
-            // on every blink or edit. Only fractional translation needs a pass.
+            // Native-position rows already use Canvas2D. Upload only rows that
+            // actually need fractional correction, including after gutter edits.
             gl.viewport(0, 0, this.canvas.width, this.canvas.height);
             gl.disable(gl.DITHER);
             gl.useProgram(this.program!.image);

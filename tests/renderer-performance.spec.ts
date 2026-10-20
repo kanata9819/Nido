@@ -615,7 +615,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 }
 
 for (const scale of [1, 1.25, 1.5, 2]) {
-    test(`stationary editor avoids correction passes and keeps scroll textures warm at ${scale * 100}% scale`, async ({
+    test(`relative line numbers reuse canvases and defer GPU uploads at ${scale * 100}% scale`, async ({
         browser
     }) => {
         const context = await browser.newContext({ deviceScaleFactor: scale });
@@ -657,6 +657,12 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                     const program = gpu.useProgram;
                     const upload = gpu.texImage2D;
                     const remove = gpu.deleteTexture;
+                    const context = HTMLCanvasElement.prototype.getContext;
+                    const rowCanvases = new Set<HTMLCanvasElement>();
+                    HTMLCanvasElement.prototype.getContext = function (...args) {
+                        if (args[0] === '2d' && this !== canvas) rowCanvases.add(this);
+                        return Reflect.apply(context, this, args);
+                    };
                     const calls = { clears: 0, programs: 0, uploads: 0, liveTextures: 0 };
                     gpu.clear = function (...args) {
                         calls.clears++;
@@ -698,17 +704,60 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                             editTimes.push(performance.now() - start);
                         }
                         const native = { ...calls };
+                        const initialImages = rowCanvases.size;
+                        for (let frame = 0; frame < 80; frame++) {
+                            const rows = frame < 40 ? 1 : -1;
+                            grid.apply([
+                                ['nido_scroll', [1, 0, 39, 0, 140, rows, 0]],
+                                ['grid_scroll', [1, 0, 39, 0, 140, rows, 0]],
+                                [
+                                    'grid_line',
+                                    [
+                                        1,
+                                        rows > 0 ? 38 : 0,
+                                        5,
+                                        Array.from(`fn value_${frame}() { 日本語 }`, (text) => [
+                                            text,
+                                            0
+                                        ])
+                                    ]
+                                ],
+                                ...Array.from({ length: 39 }, (_, row) => [
+                                    'grid_line',
+                                    [
+                                        1,
+                                        row,
+                                        0,
+                                        Array.from(
+                                            String(Math.abs(row - (frame % 39))).padStart(4) + ' ',
+                                            (text) => [text, 0]
+                                        )
+                                    ]
+                                ]),
+                                ['flush']
+                            ]);
+                            paint();
+                        }
+                        const relativeUploads = calls.uploads - native.uploads;
+                        const createdImages = rowCanvases.size - initialImages;
                         grid.scrollFraction = 0.25 / (19 * devicePixelRatio);
                         const uploads = calls.uploads;
                         paint();
                         const scrollUploads = calls.uploads - uploads;
                         const fractionalClears = calls.clears - native.clears;
+                        const warmUploads = calls.uploads;
+                        grid.scrollFraction = 0.75 / (19 * devicePixelRatio);
+                        paint();
+                        const cachedUploads = calls.uploads - warmUploads;
                         cursorTimes.sort((a, b) => a - b);
                         editTimes.sort((a, b) => a - b);
                         return {
                             initialTextures,
                             native,
+                            createdImages,
+                            relativeUploads,
                             scrollUploads,
+                            cachedUploads,
                             fractionalClears,
                             cursorP50: cursorTimes[80],
                             cursorP95: cursorTimes[152],
@@ -720,6 +769,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                         gpu.useProgram = program;
                         gpu.texImage2D = upload;
                         gpu.deleteTexture = remove;
+                        HTMLCanvasElement.prototype.getContext = context;
                     }
                 },
                 `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
@@ -731,24 +781,26 @@ for (const scale of [1, 1.25, 1.5, 2]) {
             });
             expect(
                 work.initialTextures,
-                'the first scroll must start with prepared textures'
-            ).toBeGreaterThan(30);
+                'integer-position text must not allocate unused GPU textures'
+            ).toBe(0);
             expect(work.native.clears, 'integer-position text needs no GPU correction pass').toBe(
                 0
             );
             expect(work.native.programs).toBe(0);
-            expect(
-                work.native.uploads,
-                'changed rows must stay ready for the next scroll'
-            ).toBeGreaterThan(100);
+            expect(work.native.uploads, 'integer-position edits need no texture uploads').toBe(0);
             expect(
                 work.native.liveTextures,
                 'obsolete versions must not evict unchanged visible rows'
             ).toBeLessThanOrEqual(work.initialTextures);
+            expect(work.relativeUploads, 'relative line numbers need no GPU uploads').toBe(0);
+            expect(work.createdImages, 'only incoming rows need new canvases').toBeLessThanOrEqual(
+                80
+            );
             expect(
                 work.scrollUploads,
-                'the first fractional scroll must reuse the prepared viewport'
-            ).toBe(0);
+                'fractional scrolling prepares the visible rows when needed'
+            ).toBeGreaterThan(30);
+            expect(work.cachedUploads, 'later fractional frames reuse the prepared rows').toBe(0);
             expect(
                 work.fractionalClears,
                 'fractional motion still needs brightness correction'
@@ -1356,6 +1408,32 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                         for (const preview of [1.5, 2.5, 0]) {
                             grid.scrollPreview = preview;
                             compare();
+                        }
+                        grid.scrollFraction = 0;
+                        // Relative numbers change every retained visible row on each move.
+                        // Compare copied, reused bitmaps with freshly rasterized cells.
+                        for (const direction of [1, 1, -1, -1]) {
+                            grid.apply([
+                                ['nido_scroll', [1, 0, 39, 0, 140, direction, 0]],
+                                ['grid_scroll', [1, 0, 39, 0, 140, direction, 0]],
+                                ...Array.from({ length: 39 }, (_, row) => [
+                                    'grid_line',
+                                    [
+                                        1,
+                                        row,
+                                        0,
+                                        Array.from(
+                                            `${String(row + direction + 2).padStart(3)} `,
+                                            (text) => [text, 0]
+                                        )
+                                    ]
+                                ]),
+                                ['flush']
+                            ]);
+                            for (const preview of [-0.25, 0, 0.25]) {
+                                grid.scrollPreview = preview;
+                                compare();
+                            }
                         }
                         grid.apply([['grid_clear', [1]], ['flush']]);
                         compare();
