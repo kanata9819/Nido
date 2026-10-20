@@ -6,10 +6,13 @@ interface Position {
     width: number;
 }
 
+const movementDuration = 100;
+
 /** Own cursor interpolation, blink timing and their focus listeners. */
 export class EditorCursor {
     private position?: Position;
-    private motion?: { from: Position; to: Position; start: number };
+    private motion?: { from: Position; to: Position; start: number; duration: number };
+    private lastTargetTime?: number;
     private fade?: { from: number; to: number; start: number };
     private timer?: ReturnType<typeof setTimeout>;
 
@@ -29,6 +32,7 @@ export class EditorCursor {
     resetPosition(): void {
         this.position = undefined;
         this.motion = undefined;
+        this.lastTargetTime = undefined;
     }
 
     update(now: number, smooth: boolean, interrupted: boolean, focused: boolean): Position {
@@ -56,17 +60,12 @@ export class EditorCursor {
         ) {
             this.position = { ...target };
             this.motion = undefined;
+            this.lastTargetTime = undefined;
         } else {
             const previousTarget = this.motion?.to ?? this.position;
-            if (
-                target.row !== previousTarget.row ||
-                target.column !== previousTarget.column ||
-                target.width !== previousTarget.width
-            ) {
-                this.motion = { from: { ...this.position }, to: { ...target }, start: now };
-            }
+            // Retarget from this frame's position, preserving progress even if every frame moves.
             if (this.motion) {
-                const progress = Math.min(1, (now - this.motion.start) / 100);
+                const progress = Math.min(1, (now - this.motion.start) / this.motion.duration);
                 const eased = 1 - (1 - progress) ** 3;
                 this.position = {
                     row: this.motion.from.row + (this.motion.to.row - this.motion.from.row) * eased,
@@ -80,6 +79,24 @@ export class EditorCursor {
                 if (progress === 1) {
                     this.motion = undefined;
                 }
+            }
+            if (
+                target.row !== previousTarget.row ||
+                target.column !== previousTarget.column ||
+                target.width !== previousTarget.width
+            ) {
+                // Keep single moves smooth; repeated moves must catch up within their cadence.
+                const duration =
+                    this.lastTargetTime === undefined
+                        ? movementDuration
+                        : Math.max(1, Math.min(movementDuration, now - this.lastTargetTime));
+                this.motion = {
+                    from: { ...this.position },
+                    to: { ...target },
+                    start: now,
+                    duration
+                };
+                this.lastTargetTime = now;
             }
         }
         return this.position;

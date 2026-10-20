@@ -651,8 +651,9 @@ test('workspace grep keeps its result list while navigating and receives fresh r
         (window as unknown as { searchMaps: number }).searchMaps = 0;
     });
     for (let index = 0; index < 20; index++) await query.press('ArrowDown');
-    await expect(search.getByRole('button', { name: /file-20.txt:21:11/ })).toHaveClass(
-        /selectedItem/
+    await expect(search.getByRole('option', { name: /file-20.txt:21:11/ })).toHaveAttribute(
+        'aria-selected',
+        'true'
     );
     const maps = await page.evaluate(
         () => (window as unknown as { searchMaps: number }).searchMaps

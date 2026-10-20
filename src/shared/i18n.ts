@@ -26,6 +26,49 @@ export const japanese: Record<string, string> = {
     'Deno language support needs Deno. Install it, then reopen this workspace.':
         'Denoの言語サポートにはDenoが必要です。インストール後、ワークスペースを開き直してください。',
     'Search in files': 'ファイル内を検索',
+    'Search folder': '検索フォルダー',
+    'Entire workspace (for example: src)': 'ワークスペース全体（例: src）',
+    'Match case': '大小文字を区別',
+    'Whole word': '単語単位',
+    'Regular expression': '正規表現',
+    Replace: '置換',
+    'Replace with': '置換後の文字列',
+    'Search results': '検索結果',
+    'Replacement files': '置換対象ファイル',
+    'Replacement diff': '置換の差分',
+    'Before replacement': '置換前',
+    'After replacement': '置換後',
+    'Preview replacement': '置換をプレビュー',
+    'Apply replacement': '置換を反映',
+    Included: '対象',
+    Excluded: '対象外',
+    '{count} replacements': '置換 {count} 件',
+    '{count} replacements in {files} files · Review before applying':
+        '{files} ファイル・置換 {count} 件 · 確認してから反映',
+    'Replaced {count} occurrences in {files} files. Unsaved edits · :wall to save all · u to undo in each file.':
+        '{files} ファイルの {count} 箇所を置換しました。未保存の編集 · :wall ですべて保存 · 各ファイルの u で取り消し',
+    'Replacement would not change any files.': '置換による変更はありません。',
+    'j/k Files · Enter/l Diff · h Back · Ctrl+Enter Focus apply · Esc Back':
+        'j/k ファイル選択 · Enter/l 差分へ · h 戻る · Ctrl+Enter 反映ボタンへ · Esc 戻る',
+    'Esc Results/close · j/k Move · / Search · r Replace · f Folder · Space Include · a All · Ctrl+Enter Preview':
+        'Esc 結果へ／閉じる · j/k 移動 · / 検索 · r 置換 · f フォルダー · Space 対象切替 · a 全選択切替 · Ctrl+Enter 確認',
+    'Saved UTF-8 files up to 1 MiB · Git ignores respected · Replacements stay unsaved':
+        '保存済みUTF-8・1 MiB以内 · Gitの除外設定を反映 · 置換は未保存の編集',
+    'Invalid regular expression.': '正規表現が正しくありません。',
+    'Invalid search options.': '検索条件が正しくありません。',
+    'Search expression took too long. Simplify it.':
+        '検索に時間がかかりすぎました。条件を簡単にしてください。',
+    'Search results changed. Search again.': '検索対象が変わりました。もう一度検索してください。',
+    'Save unsaved target files before replacing.':
+        '置換対象ファイルの未保存の編集を先に保存してください。',
+    'Target file is read-only.': '対象ファイルは読み取り専用です。',
+    'Choose matching lines to replace.': '置換する行を選んでください。',
+    'Choose a search folder inside this workspace, outside .git.':
+        'ワークスペース内の .git 以外の検索フォルダーを選んでください。',
+    'Enter a single-line replacement up to 1,000 characters.':
+        '置換後の文字列を1行・1,000文字以内で入力してください。',
+    'Replacement preview is too large. Narrow the search.':
+        '置換プレビューが大きすぎます。検索範囲を絞ってください。',
     'search palette': 'ファイル内を検索',
     'Search project text · Ctrl+Shift+F': 'プロジェクトの本文を検索 · Ctrl+Shift+F',
     'Type text to grep…': '検索する文字列を入力…',

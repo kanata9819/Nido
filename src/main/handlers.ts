@@ -12,6 +12,7 @@ import type { Updates } from './updater';
 import { translate, type Language } from '../shared/i18n';
 import { LanguagePacks } from './languagePacks';
 import type { LanguagePackSnapshot } from '../shared/languagePacks';
+import type { SearchOptions } from '../shared/search';
 
 export interface AppState {
     language?: Language;
@@ -274,7 +275,22 @@ export function registerHandlers({
         session(id).findFiles(query === undefined ? '' : text(query))
     );
     handle('cancelFindFiles', (id) => session(id).cancelFindFiles());
-    handle('searchText', (id, query) => session(id).searchText(text(query)));
+    handle('searchText', (id, query, options) => {
+        if (
+            options !== undefined &&
+            (!options || typeof options !== 'object' || Array.isArray(options))
+        ) {
+            throw new Error('Invalid search options.');
+        }
+        return session(id).searchText(text(query), options as SearchOptions | undefined);
+    });
+    handle('previewReplacement', (id, token, replacement, selected) => {
+        if (!Array.isArray(selected)) {
+            throw new Error('Choose matching lines to replace.');
+        }
+        return session(id).previewReplacement(text(token), text(replacement), selected);
+    });
+    handle('applyReplacement', (id, token) => session(id).applyReplacement(text(token)));
     handle('openFile', (id, path, line, column) =>
         session(id).openFile(
             text(path),

@@ -62,7 +62,10 @@ const api: NidoAPI = {
     fileAction: (id, action, path, target) =>
         ipcRenderer.invoke('nido:fileAction', id, action, path, target),
     findFiles: (id, query) => ipcRenderer.invoke('nido:findFiles', id, query),
-    searchText: (id, query) => ipcRenderer.invoke('nido:searchText', id, query),
+    searchText: (id, query, options) => ipcRenderer.invoke('nido:searchText', id, query, options),
+    previewReplacement: (id, token, replacement, selected) =>
+        ipcRenderer.invoke('nido:previewReplacement', id, token, replacement, selected),
+    applyReplacement: (id, token) => ipcRenderer.invoke('nido:applyReplacement', id, token),
     cancelFindFiles: (id) => ipcRenderer.invoke('nido:cancelFindFiles', id),
     openFile: (id, path, line, column) =>
         ipcRenderer.invoke('nido:openFile', id, path, line, column),

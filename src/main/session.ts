@@ -23,6 +23,7 @@ import { editorPath, hostPath, parseWslPath } from '../shared/wsl';
 import { prepareWsl, resolveWslFolder, trashWslFile, wslArguments } from './wsl';
 import { discoverLanguagePacks } from './languagePacks';
 import type { LanguagePackConfiguration, LanguagePackRuntime } from '../shared/languagePacks';
+import type { SearchOptions, ReplacementPreview, ReplacementResult } from '../shared/search';
 
 export class Session {
     terminal?: Session;
@@ -763,8 +764,23 @@ return {highlight(before), highlight(after)}`,
         return this.fileService.findFiles(query);
     }
 
-    searchText(query: string): Promise<SearchResults> {
-        return this.fileService.searchText(query);
+    searchText(query: string, options?: SearchOptions): Promise<SearchResults> {
+        return this.fileService.searchText(query, options);
+    }
+
+    previewReplacement(
+        token: string,
+        replacement: string,
+        selected: number[]
+    ): Promise<ReplacementPreview> {
+        return this.interaction.enqueue(() =>
+            this.fileService.replacements.prepare(token, replacement, selected)
+        );
+    }
+
+    applyReplacement(token: string): Promise<ReplacementResult> {
+        this.interaction.cancelPrefetch();
+        return this.interaction.enqueue(() => this.fileService.replacements.apply(token));
     }
 
     cancelFindFiles(): void {

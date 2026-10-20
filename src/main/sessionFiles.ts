@@ -16,8 +16,13 @@ import { editorPath, hostPath } from '../shared/wsl';
 import { type NeovimClient } from 'neovim';
 import { gitIgnored, gitRoot } from './git';
 import type { FileAction, FileEntry, SearchResults } from '../shared/types';
+import { defaultSearchOptions, type SearchOptions } from '../shared/search';
+import { SearchMatcher } from './searchMatcher';
+import { WorkspaceReplacement } from './workspaceReplacement';
 
 export class SessionFiles {
+    readonly replacements: WorkspaceReplacement;
+    private searchMatcher?: SearchMatcher;
     private mutations: Promise<void> = Promise.resolve();
     private searchGeneration = 0;
     private searchDirectories = new Map<
@@ -27,7 +32,9 @@ export class SessionFiles {
     constructor(
         private readonly root: string,
         private readonly client: NeovimClient
-    ) {}
+    ) {
+        this.replacements = new WorkspaceReplacement(root, client, (path) => this.path(path));
+    }
 
     async path(relativePath: string): Promise<string> {
         if (isAbsolute(relativePath)) {
@@ -245,10 +252,89 @@ return false`,
 
     cancelFindFiles(): void {
         this.searchGeneration++;
+        this.searchMatcher?.close();
+        this.replacements.clear();
     }
 
-    async searchText(query: string): Promise<SearchResults> {
+    async searchText(query: string, options?: SearchOptions): Promise<SearchResults> {
         const generation = ++this.searchGeneration;
+        this.searchMatcher?.close();
+        this.replacements.clear();
+        if (query.length > 1000 || /[\r\n]/.test(query)) {
+            throw new Error('Enter a single-line search up to 1,000 characters.');
+        }
+        const settings = { ...defaultSearchOptions, ...options };
+        if (
+            (['caseSensitive', 'regex', 'wholeWord'] as const).some(
+                (key) => typeof settings[key] !== 'boolean'
+            ) ||
+            typeof settings.folder !== 'string' ||
+            settings.folder.length > 1000
+        ) {
+            throw new Error('Invalid search options.');
+        }
+        settings.folder = settings.folder
+            .trim()
+            .replaceAll('\\', '/')
+            .replace(/^\.\//, '')
+            .replace(/\/$/, '');
+        if (
+            settings.folder &&
+            (isAbsolute(settings.folder) ||
+                settings.folder
+                    .split('/')
+                    .some((part) => part === '..' || part.toLowerCase() === '.git'))
+        ) {
+            throw new Error('Choose a search folder inside this workspace, outside .git.');
+        }
+        if (settings.folder) {
+            const folder = await this.path(settings.folder);
+            const canonical = relative(this.root, folder).replaceAll('\\', '/');
+            if (
+                !(await stat(folder)).isDirectory() ||
+                canonical.split('/').some((part) => part.toLowerCase() === '.git')
+            ) {
+                throw new Error('Choose a search folder inside this workspace, outside .git.');
+            }
+            settings.folder = canonical;
+        }
+        if (generation !== this.searchGeneration) {
+            return { matches: [], truncated: false };
+        }
+        const matcher = options ? new SearchMatcher(query, settings) : undefined;
+        this.searchMatcher = matcher;
+        const hashes = new Map<string, string>();
+        try {
+            const result = await this.searchTextFiles(query, settings, matcher, hashes, generation);
+            if (generation !== this.searchGeneration) {
+                return { matches: [], truncated: false };
+            }
+            return options && query
+                ? {
+                      ...result,
+                      token: this.replacements.complete(query, settings, result.matches, hashes)
+                  }
+                : result;
+        } catch (error) {
+            if (generation !== this.searchGeneration) {
+                return { matches: [], truncated: false };
+            }
+            throw error;
+        } finally {
+            matcher?.close();
+            if (this.searchMatcher === matcher) {
+                this.searchMatcher = undefined;
+            }
+        }
+    }
+
+    private async searchTextFiles(
+        query: string,
+        options: SearchOptions,
+        matcher: SearchMatcher | undefined,
+        hashes: Map<string, string>,
+        generation: number
+    ): Promise<SearchResults> {
         const result: SearchResults = { matches: [], truncated: false };
         if (!query) {
             return result;
@@ -258,11 +344,18 @@ return false`,
         }
         // shortcut: search saved UTF-8 files up to 1 MiB and return 200 lines; use a search index for larger projects.
         const buffers = Array.from({ length: 8 }, () => Buffer.alloc(1024 * 1024 + 1));
-        const directories = [''];
+        const directories = [options.folder];
         const checkIgnored = await gitRoot(this.root).then(
             () => true,
             () => false
         );
+        if (
+            checkIgnored &&
+            options.folder &&
+            (await gitIgnored(this.root, [options.folder])).has(options.folder)
+        ) {
+            return result;
+        }
         while (directories.length) {
             if (generation !== this.searchGeneration) {
                 return { matches: [], truncated: false };
@@ -378,7 +471,29 @@ return false`,
                             }
                             throw error;
                         }
-                        if (generation !== this.searchGeneration || !text.includes(query)) {
+                        if (generation !== this.searchGeneration) {
+                            return [];
+                        }
+                        if (matcher) {
+                            if (!options.regex && options.caseSensitive && !text.includes(query)) {
+                                return [];
+                            }
+                            const found = await matcher.find(text);
+                            if (found.length) {
+                                hashes.set(entry.path, WorkspaceReplacement.hash(text));
+                            }
+                            // Columns are UTF-8 byte offsets for Neovim, including wide characters.
+                            const lines = found.length ? text.split(/\r\n|\n|\r/) : [];
+                            return found.map((match) => ({
+                                path: entry.path,
+                                line: match.line,
+                                column:
+                                    Buffer.byteLength(lines[match.line - 1].slice(0, match.index)) +
+                                    1,
+                                text: match.text
+                            }));
+                        }
+                        if (!text.includes(query)) {
                             return [];
                         }
                         const found: SearchResults['matches'] = [];

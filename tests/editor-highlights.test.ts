@@ -332,7 +332,7 @@ test('cursor width follows wide cells and interpolates in both directions and du
         assert.equal(update(120), 2, 'Emoji uses its continuation cell');
         grid.cursor.column = 5;
         update(130);
-        assert.ok(update(180) > 1 && update(180) < 2);
+        assert.ok(update(135) > 1 && update(135) < 2);
         assert.equal(update(230), 1, 'Combining marks stay in one cell');
         grid.cells[0][5] = { text: '本', highlight: 0 };
         grid.cells[0][6] = { text: '', highlight: 0 };
@@ -348,4 +348,123 @@ test('cursor width follows wide cells and interpolates in both directions and du
         if (original) Object.defineProperty(globalThis, 'document', original);
         else Reflect.deleteProperty(globalThis, 'document');
     }
+});
+
+function withCursor(
+    run: (grid: Grid, cursor: EditorCursor, media: { matches: boolean }) => void
+): void {
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    Object.defineProperty(globalThis, 'document', {
+        configurable: true,
+        value: { hasFocus: () => true }
+    });
+    try {
+        const grid = new Grid();
+        const media = { matches: false };
+        const cursor = new EditorCursor(
+            grid,
+            {} as HTMLElement,
+            {} as HTMLTextAreaElement,
+            media as MediaQueryList,
+            false,
+            () => {}
+        );
+        run(grid, cursor, media);
+    } finally {
+        if (original) Object.defineProperty(globalThis, 'document', original);
+        else Reflect.deleteProperty(globalThis, 'document');
+    }
+}
+
+test('cursor keeps moving when repeat targets change on every animation frame', () => {
+    withCursor((grid, cursor) => {
+        cursor.update(0, true, false, true);
+        for (let step = 1; step <= 120; step++) {
+            grid.cursor.row = step;
+            const position = cursor.update(step * (1000 / 60), true, false, true);
+            if (step >= 4) {
+                assert.ok(
+                    step - position.row < 1.01,
+                    `Cursor must follow rather than freeze: target ${step}, painted ${position.row}`
+                );
+            }
+        }
+    });
+});
+
+for (const fps of [60, 120, 165]) {
+    for (const interval of [33, 16]) {
+        test(`cursor follows held movement and reversals at ${fps} Hz / ${interval} ms repeats`, () => {
+            for (const axis of ['row', 'column'] as const) {
+                withCursor((grid, cursor) => {
+                    grid.cursor = { row: 200, column: 200 };
+                    cursor.update(0, true, false, true);
+                    const frameTime = 1000 / fps;
+                    let now = 0;
+                    for (const direction of [1, -1]) {
+                        const start = now + frameTime;
+                        const from = grid.cursor[axis];
+                        let lastTargetFrame = 0;
+                        for (let frame = 0; frame < fps * 2; frame++) {
+                            now = start + frame * frameTime;
+                            const count = Math.floor((now - start) / interval) + 1;
+                            const target = from + count * direction;
+                            if (grid.cursor[axis] !== target) lastTargetFrame = now;
+                            grid.cursor[axis] = target;
+                            const position = cursor.update(now, true, false, true);
+                            if (now > start + 200) {
+                                assert.ok(
+                                    Math.abs(target - position[axis]) <
+                                        Math.ceil(frameTime / interval) + 0.4,
+                                    `${axis}: target ${target}, painted ${position[axis]}`
+                                );
+                            }
+                        }
+                        const deadline = lastTargetFrame + interval + frameTime * 2;
+                        const position = cursor.update(deadline, true, false, true);
+                        assert.equal(
+                            position[axis],
+                            grid.cursor[axis],
+                            'Releasing settles promptly'
+                        );
+                        assert.equal(cursor.animating, false);
+                        now = deadline + 200;
+                    }
+                });
+            }
+        });
+    }
+}
+
+test('cursor preserves single-step easing and resets repeat timing on interruptions', () => {
+    withCursor((grid, cursor, media) => {
+        cursor.update(0, true, false, true);
+        grid.cursor.row = 1;
+        assert.equal(cursor.update(10, true, false, true).row, 0);
+        const halfway = cursor.update(60, true, false, true).row;
+        assert.ok(halfway > 0 && halfway < 1, 'Single steps still animate');
+        assert.equal(cursor.update(110, true, false, true).row, 1);
+
+        let now = 120;
+        for (const bypass of ['disabled', 'scroll', 'unfocused', 'reduced', 'reset'] as const) {
+            grid.cursor.row++;
+            if (bypass === 'reset') cursor.resetPosition();
+            media.matches = bypass === 'reduced';
+            const position = cursor.update(
+                now,
+                bypass !== 'disabled',
+                bypass === 'scroll',
+                bypass !== 'unfocused'
+            );
+            assert.equal(position.row, grid.cursor.row, `${bypass} snaps to the real position`);
+            assert.equal(cursor.animating, false);
+            media.matches = false;
+            grid.cursor.row++;
+            cursor.update(now + 1, true, false, true);
+            const next = cursor.update(now + 51, true, false, true).row;
+            assert.ok(next > grid.cursor.row - 1 && next < grid.cursor.row);
+            assert.equal(cursor.update(now + 101, true, false, true).row, grid.cursor.row);
+            now += 110;
+        }
+    });
 });

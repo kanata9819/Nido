@@ -4,6 +4,84 @@ import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+test('Vim-key replacement previews two files, saves with :wall and supports undo in the real app', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-keyboard-replace-'));
+    const profile = await mkdtemp(join(tmpdir(), 'nido-keyboard-replace-profile-'));
+    const first = join(root, 'a.txt');
+    const second = join(root, 'b.txt');
+    const original = '\uFEFF日本語 needle needle\r\n';
+    await writeFile(first, original);
+    await writeFile(second, 'needle without final newline');
+    await writeFile(
+        join(profile, 'workspaces.json'),
+        JSON.stringify({
+            version: 1,
+            active: 0,
+            workspaces: [{ root, current: first, files: [{ path: first, line: 1, column: 1 }] }]
+        })
+    );
+    const env = Object.fromEntries(
+        Object.entries(process.env).filter(
+            (entry): entry is [string, string] => entry[1] !== undefined
+        )
+    );
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
+    try {
+        const page = await running.firstWindow();
+        const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+        await expect(input).toBeFocused();
+        await page.keyboard.press('Control+Shift+f');
+        await page.keyboard.type('needle');
+        const search = page.getByRole('dialog', { name: 'search palette', exact: true });
+        await expect(search.getByRole('status')).toHaveText('2 matching lines');
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('r');
+        await expect(
+            search.getByRole('textbox', { name: 'Replace with', exact: true })
+        ).toBeFocused();
+        await page.keyboard.type('交換');
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Control+Enter');
+        await expect(
+            search.getByRole('listbox', { name: 'Replacement files', exact: true })
+        ).toBeFocused();
+        await expect(search.getByRole('status')).toHaveText(
+            '3 replacements in 2 files · Review before applying'
+        );
+        await page.keyboard.press('j');
+        await page.keyboard.press('Enter');
+        await expect(
+            search.getByRole('region', { name: 'Replacement diff', exact: true })
+        ).toBeFocused();
+        await expect(search.getByLabel('After replacement', { exact: true })).toContainText(
+            '交換 without final newline'
+        );
+        await page.screenshot({ path: test.info().outputPath('keyboard-replacement.png') });
+        expect(await readFile(first, 'utf8')).toBe(original);
+        expect(await readFile(second, 'utf8')).toBe('needle without final newline');
+        await page.keyboard.press('Control+Enter');
+        await expect(search.getByRole('button', { name: /Apply replacement/ })).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(search.getByRole('status')).toContainText(
+            'Replaced 3 occurrences in 2 files. Unsaved edits'
+        );
+        await page.keyboard.press('Escape');
+        await expect(input).toBeFocused();
+        await page.keyboard.type(':wall');
+        await page.keyboard.press('Enter');
+        await expect.poll(() => readFile(first, 'utf8')).toBe('\uFEFF日本語 交換 交換\r\n');
+        await expect.poll(() => readFile(second, 'utf8')).toBe('交換 without final newline');
+        await page.keyboard.press('u');
+        await page.keyboard.press('Control+s');
+        await expect.poll(() => readFile(first, 'utf8')).toBe(original);
+    } finally {
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+        await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('Ctrl+Shift+F searches and jumps; F2 renames related symbols from Insert mode', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-search-rename-ui-'));
     const profile = await mkdtemp(join(tmpdir(), 'nido-search-rename-profile-'));
@@ -67,14 +145,17 @@ test('Ctrl+Shift+F searches and jumps; F2 renames related symbols from Insert mo
         await query.dispatchEvent('keydown', { key: 'Enter', isComposing: true });
         await expect(query).toBeFocused();
         await page.keyboard.press('Control+j');
-        await expect(search.getByRole('button', { name: /z-other.txt:1:/ })).toHaveClass(
-            /selectedItem/
+        await expect(search.getByRole('option', { name: /z-other.txt:1:/ })).toHaveAttribute(
+            'aria-selected',
+            'true'
         );
         await page.keyboard.press('Control+k');
-        await expect(search.getByRole('button', { name: /notes.txt:2:/ })).toHaveClass(
-            /selectedItem/
+        await expect(search.getByRole('option', { name: /notes.txt:2:/ })).toHaveAttribute(
+            'aria-selected',
+            'true'
         );
         await page.screenshot({ path: test.info().outputPath('workspace-search.png') });
+        await page.keyboard.press('Escape');
         await page.keyboard.press('Escape');
         await expect(input).toBeFocused();
 

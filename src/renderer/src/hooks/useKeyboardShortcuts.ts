@@ -73,6 +73,9 @@ export function useKeyboardShortcuts({
     }, [active, panel, leader, mode]);
 
     const keydown = (event: KeyboardEvent): void => {
+        if (event.key === 'Escape' && document.activeElement?.closest('[data-workspace-search]')) {
+            return;
+        }
         if (
             document.activeElement?.closest('[data-markdown-preview]') &&
             (event.key === 'Escape' || (event.ctrlKey && event.key.toLowerCase() === 'j'))

@@ -2,6 +2,7 @@ import type { Language } from './i18n';
 import type { NeovimUIState } from './neovimUI';
 import type { HistoryList, HistoryPreview } from './history';
 import type { LanguagePackSnapshot } from './languagePacks';
+import type { SearchOptions, ReplacementPreview, ReplacementResult } from './search';
 
 export const terminalShells = ['auto', 'pwsh', 'powershell.exe', 'cmd.exe', 'wsl.exe'] as const;
 export type TerminalShell = (typeof terminalShells)[number];
@@ -151,6 +152,7 @@ export interface SearchMatch {
 export interface SearchResults {
     matches: SearchMatch[];
     truncated: boolean;
+    token?: string;
 }
 export interface MarkdownSnapshot {
     token: string;
@@ -274,7 +276,14 @@ export interface NidoAPI {
     files(id: string, relative: string): Promise<FileEntry[]>;
     fileAction(id: string, action: FileAction, path: string, target?: string): Promise<void>;
     findFiles(id: string, query?: string): Promise<FileEntry[]>;
-    searchText(id: string, query: string): Promise<SearchResults>;
+    searchText(id: string, query: string, options?: SearchOptions): Promise<SearchResults>;
+    previewReplacement(
+        id: string,
+        token: string,
+        replacement: string,
+        selected: number[]
+    ): Promise<ReplacementPreview>;
+    applyReplacement(id: string, token: string): Promise<ReplacementResult>;
     cancelFindFiles(id: string): Promise<void>;
     openFile(id: string, relative: string, line?: number, column?: number): Promise<void>;
     openReference(id: string, index: number, version: number): Promise<void>;
