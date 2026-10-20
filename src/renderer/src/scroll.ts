@@ -1,5 +1,5 @@
-export function scrollOffset(distance: number, elapsed: number): number {
-    const progress = Math.min(1, Math.max(0, elapsed / 120));
+export function scrollOffset(distance: number, elapsed: number, duration = 120): number {
+    const progress = Math.min(1, Math.max(0, elapsed / duration));
     return distance * (1 - progress) ** 3;
 }
 

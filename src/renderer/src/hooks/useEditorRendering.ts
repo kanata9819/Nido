@@ -116,10 +116,34 @@ export function useEditorRendering({
         const previousFrame = document.createElement('canvas');
         const targetFrame = document.createElement('canvas');
         let motion: FrameMotion | undefined;
+        let lastScrollTime: number | undefined;
+        let metrics = { cellWidth: 0, cellHeight: 0 };
+        let paintedFocus = false;
+        let paintedCursorVisible = true;
+        let paintedCursorOpacity = 1;
 
         const stopMotion = (): void => {
             motion = undefined;
+            lastScrollTime = undefined;
             scrolling.stop();
+        };
+
+        const keyDown = (event: KeyboardEvent): void => {
+            if (
+                event.repeat &&
+                !event.ctrlKey &&
+                !event.altKey &&
+                !event.metaKey &&
+                !event.shiftKey &&
+                !event.isComposing &&
+                ['j', 'k'].includes(event.key) &&
+                ['normal', 'visual', 'visual_line', 'visual_block'].includes(grid.mode)
+            ) {
+                // Repeating navigation retargets the visible scroll instead of snapping it first.
+                scrolling.stop();
+            } else {
+                stopMotion();
+            }
         };
 
         scrollRef.current = (lines, follow): void => {
@@ -160,17 +184,33 @@ export function useEditorRendering({
             const bounds = alignCanvasSurface(surface, element, dpr);
             grid.surfaceLeft = bounds.left;
             grid.surfaceTop = bounds.top;
-            const metrics = grid.draw(
-                surface,
-                bounds.width,
-                bounds.height,
-                fontSize,
-                fontFamily,
-                focused,
-                cursorPosition,
-                lineHeight,
-                fontWeight
+            const reuseTarget = !!(
+                motion?.targetReady &&
+                metrics.cellWidth &&
+                animationsRef.current &&
+                !reducedMotion.matches &&
+                targetFrame.width === Math.round(bounds.width * dpr) &&
+                targetFrame.height === Math.round(bounds.height * dpr) &&
+                paintedFocus === focused &&
+                paintedCursorVisible === grid.cursorVisible &&
+                paintedCursorOpacity === grid.cursorOpacity
             );
+            if (!reuseTarget) {
+                metrics = grid.draw(
+                    surface,
+                    bounds.width,
+                    bounds.height,
+                    fontSize,
+                    fontFamily,
+                    focused,
+                    cursorPosition,
+                    lineHeight,
+                    fontWeight
+                );
+                paintedFocus = focused;
+                paintedCursorVisible = grid.cursorVisible;
+                paintedCursorOpacity = grid.cursorOpacity;
+            }
             cellWidth = metrics.cellWidth;
 
             const painted = paintEditorMotion({
@@ -182,7 +222,8 @@ export function useEditorRendering({
                 cellWidth: metrics.cellWidth,
                 dpr,
                 animate: animationsRef.current && !reducedMotion.matches,
-                backgroundOpacity
+                backgroundOpacity,
+                reuseTarget
             });
             motion = painted.motion;
             const overlayOffset = painted.overlayOffset;
@@ -262,7 +303,7 @@ export function useEditorRendering({
 
         cursor.listen();
         reducedMotion.addEventListener('change', stopMotion);
-        input.addEventListener('keydown', stopMotion);
+        input.addEventListener('keydown', keyDown);
         input.addEventListener('input', stopMotion);
         input.addEventListener('compositionstart', stopMotion);
         input.addEventListener('blur', stopMotion);
@@ -273,6 +314,7 @@ export function useEditorRendering({
                 const bufferChanged = event.events.some(([name]) => name === 'nido_buffer');
                 if (bufferChanged) {
                     motion = undefined;
+                    lastScrollTime = undefined;
                     directScroll = false;
                     scrolling.reset();
                     cursor.resetPosition();
@@ -324,10 +366,10 @@ export function useEditorRendering({
                     (scroll[5] !== 0 || scroll[6] !== 0)
                 ) {
                     const remaining = motion
-                        ? scrollOffset(motion.distance, now - motion.start)
+                        ? scrollOffset(motion.distance, now - motion.start, motion.duration)
                         : 0;
                     const remainingX = motion
-                        ? scrollOffset(motion.distanceX, now - motion.start)
+                        ? scrollOffset(motion.distanceX, now - motion.start, motion.duration)
                         : 0;
                     cancelAnimationFrame(frame);
                     preparingMotion = true;
@@ -365,8 +407,12 @@ export function useEditorRendering({
                                   )
                                 : 0,
                         start: now,
-                        edit: edited
+                        edit: edited,
+                        duration: edited
+                            ? 90
+                            : Math.max(1, Math.min(120, now - (lastScrollTime ?? now - 120)))
                     };
+                    lastScrollTime = now;
                 } else if (scrolls.length || directScroll) {
                     motion = undefined;
                 }
@@ -374,6 +420,9 @@ export function useEditorRendering({
                 const { row, column } = grid.cursor;
                 const mode = grid.mode;
                 if (grid.apply(event.events)) {
+                    if (motion) {
+                        motion.targetReady = false;
+                    }
                     hasFrame = grid.rows > 0 && grid.columns > 0;
                     descriptionDirty ||= !ready;
                     if (
@@ -439,7 +488,7 @@ export function useEditorRendering({
             scrolling.dispose();
             surface.removeEventListener('pointerdown', pointerDown);
             reducedMotion.removeEventListener('change', stopMotion);
-            input.removeEventListener('keydown', stopMotion);
+            input.removeEventListener('keydown', keyDown);
             input.removeEventListener('input', stopMotion);
             input.removeEventListener('compositionstart', stopMotion);
             input.removeEventListener('blur', stopMotion);

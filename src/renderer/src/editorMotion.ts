@@ -11,6 +11,8 @@ export interface FrameMotion {
     incomingRows: number;
     start: number;
     edit: boolean;
+    duration: number;
+    targetReady?: boolean;
 }
 
 interface Options {
@@ -23,6 +25,7 @@ interface Options {
     dpr: number;
     animate: boolean;
     backgroundOpacity: number;
+    reuseTarget?: boolean;
 }
 
 /** Composite old and incoming frame regions for scroll and deletion transitions. */
@@ -35,7 +38,8 @@ export function paintEditorMotion({
     cellWidth,
     dpr,
     animate,
-    backgroundOpacity
+    backgroundOpacity,
+    reuseTarget = false
 }: Options): { motion?: FrameMotion; overlayOffset: number } {
     let overlayOffset = 0;
 
@@ -47,15 +51,23 @@ export function paintEditorMotion({
             motion.distance = Math.max(-height, Math.min(height, distance + motion.distance));
             motion.incomingRows = 0;
         }
-        const elapsed = (performance.now() - motion.start) * (motion.edit ? 120 / 90 : 1);
-        const offset = scrollOffset(motion.distance, elapsed);
-        const offsetX = scrollOffset(motion.distanceX, elapsed);
+        const elapsed = performance.now() - motion.start;
+        const offset = scrollOffset(motion.distance, elapsed, motion.duration);
+        const offsetX = scrollOffset(motion.distanceX, elapsed, motion.duration);
         if (
             (Math.abs(offset) < 0.25 && Math.abs(offsetX) < 0.25) ||
             !animate ||
             previousFrame.width !== surface.width ||
             previousFrame.height !== surface.height
         ) {
+            if (reuseTarget) {
+                const context = surface.getContext('2d')!;
+                context.save();
+                context.setTransform(1, 0, 0, 1, 0, 0);
+                context.globalCompositeOperation = 'copy';
+                context.drawImage(targetFrame, 0, 0);
+                context.restore();
+            }
             motion = undefined;
         } else {
             const snap = (value: number): number => Math.round(value * dpr) / dpr;
@@ -64,9 +76,12 @@ export function paintEditorMotion({
                 targetFrame.width = surface.width;
                 targetFrame.height = surface.height;
             }
-            const targetContext = targetFrame.getContext('2d')!;
-            targetContext.globalCompositeOperation = 'copy';
-            targetContext.drawImage(surface, 0, 0);
+            if (!reuseTarget) {
+                const targetContext = targetFrame.getContext('2d')!;
+                targetContext.globalCompositeOperation = 'copy';
+                targetContext.drawImage(surface, 0, 0);
+                motion.targetReady = true;
+            }
             const ctx = surface.getContext('2d')!;
             const top = snap(grid.rowY(motion.top));
             const bottom = snap(

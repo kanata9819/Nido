@@ -3,11 +3,252 @@ import { createServer, type ViteDevServer } from 'vite';
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import type { Grid as EditorGrid } from '../src/renderer/src/grid';
+import type { FrameMotion } from '../src/renderer/src/editorMotion';
 import type {} from './renderer/harness';
 import { requireWebGLCorrection } from './helpers/row-image-probe';
 
 let server: ViteDevServer;
 let origin: string;
+
+for (const scale of [1, 1.25, 1.5, 2]) {
+    for (const opacity of [1, 0.5]) {
+        test(`cached viewport animations preserve pixels at ${scale * 100}% scale and ${opacity} opacity`, async ({
+            browser
+        }) => {
+            const context = await browser.newContext({ deviceScaleFactor: scale });
+            try {
+                const page = await context.newPage();
+                await page.route('**/motion-probe', (route) =>
+                    route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+                );
+                await page.goto(`${origin}motion-probe`);
+                const result = await page.evaluate(
+                    async ({ gridUrl, motionUrl, opacity }) => {
+                        const { Grid } = await import(gridUrl);
+                        const { paintEditorMotion } = await import(motionUrl);
+                        const originalNow = performance.now.bind(performance);
+                        let now = 0;
+                        performance.now = () => now;
+                        let mismatches = 0;
+                        let cachedPaints = 0;
+                        let referencePaints = 0;
+                        try {
+                            for (const kind of ['down', 'up', 'horizontal', 'edit']) {
+                                const pair = [false, true].map((cached) => {
+                                    const grid = new Grid();
+                                    grid.backgroundOpacity = opacity;
+                                    grid.cursor = { row: 2, column: 5 };
+                                    grid.apply([
+                                        ['grid_resize', [1, 32, 8]],
+                                        ...Array.from({ length: 7 }, (_, row) => [
+                                            'grid_line',
+                                            [
+                                                1,
+                                                row,
+                                                0,
+                                                Array.from(`row ${row} 日本語 text`, (text) => [
+                                                    text,
+                                                    0
+                                                ])
+                                            ]
+                                        ]),
+                                        ['flush']
+                                    ]);
+                                    const surface = document.createElement('canvas');
+                                    const previousFrame = document.createElement('canvas');
+                                    const targetFrame = document.createElement('canvas');
+                                    const draw = (): void => {
+                                        grid.draw(
+                                            surface,
+                                            320,
+                                            160,
+                                            15,
+                                            'monospace',
+                                            true,
+                                            undefined,
+                                            20
+                                        );
+                                        if (cached) cachedPaints++;
+                                        else referencePaints++;
+                                    };
+                                    draw();
+                                    previousFrame.width = surface.width;
+                                    previousFrame.height = surface.height;
+                                    previousFrame.getContext('2d')!.drawImage(surface, 0, 0);
+                                    grid.apply([
+                                        [
+                                            'grid_line',
+                                            [
+                                                1,
+                                                3,
+                                                0,
+                                                Array.from('new target 日本語', (text) => [text, 0])
+                                            ]
+                                        ],
+                                        ['flush']
+                                    ]);
+                                    return {
+                                        grid,
+                                        surface,
+                                        previousFrame,
+                                        targetFrame,
+                                        draw,
+                                        cached,
+                                        motion: {
+                                            top: 0,
+                                            bottom: 7,
+                                            left: 0,
+                                            right: 32,
+                                            distance:
+                                                kind === 'horizontal'
+                                                    ? 0
+                                                    : kind === 'up'
+                                                      ? -20
+                                                      : 20,
+                                            distanceX: kind === 'horizontal' ? 15 : 0,
+                                            incomingRows: 0,
+                                            start: 0,
+                                            duration: kind === 'edit' ? 90 : 33,
+                                            edit: kind === 'edit'
+                                        } as FrameMotion | undefined
+                                    };
+                                });
+                                for (now = 0; now <= 120; now += 6) {
+                                    for (const state of pair) {
+                                        // Backend redraws and cursor blinking must refresh the cached target.
+                                        if (now === 12 || now === 24) {
+                                            state.grid.cursorOpacity = now === 12 ? 0.4 : 1;
+                                            state.grid.apply([
+                                                [
+                                                    'grid_line',
+                                                    [1, 4, 0, [[now === 12 ? 'X' : 'Y', 0]]]
+                                                ],
+                                                ['flush']
+                                            ]);
+                                            if (state.motion) state.motion.targetReady = false;
+                                        }
+                                        const reuseTarget = !!(
+                                            state.cached && state.motion?.targetReady
+                                        );
+                                        if (!reuseTarget) state.draw();
+                                        state.motion = paintEditorMotion({
+                                            ...state,
+                                            reuseTarget,
+                                            cellWidth: 9,
+                                            dpr: devicePixelRatio,
+                                            animate: kind !== 'horizontal' || now < 18,
+                                            backgroundOpacity: opacity
+                                        }).motion;
+                                    }
+                                    const pixels = pair.map(
+                                        ({ surface }) =>
+                                            surface
+                                                .getContext('2d')!
+                                                .getImageData(0, 0, surface.width, surface.height)
+                                                .data
+                                    );
+                                    for (let i = 0; i < pixels[0].length; i++) {
+                                        if (pixels[0][i] !== pixels[1][i]) mismatches++;
+                                    }
+                                }
+                            }
+                        } finally {
+                            performance.now = originalNow;
+                        }
+                        return { mismatches, cachedPaints, referencePaints };
+                    },
+                    {
+                        gridUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+                        motionUrl: `/@fs/${resolve('src/renderer/src/editorMotion.ts').replaceAll('\\', '/')}`,
+                        opacity
+                    }
+                );
+                expect(result.mismatches).toBe(0);
+                expect(result.cachedPaints).toBeLessThan(result.referencePaints);
+            } finally {
+                await context.close();
+            }
+        });
+    }
+}
+
+test('held j/k viewport scrolling reuses frames until a redraw, while editing interrupts it', async ({
+    page
+}) => {
+    await page.clock.install({ time: new Date(0) });
+    await page.clock.pauseAt(new Date(1000));
+    await page.addInitScript(() => localStorage.setItem('nido.animations', 'true'));
+    await page.goto(`${origin}?view=app`);
+    const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+    await expect(input).toBeFocused();
+    await page.clock.runFor(32);
+    await page.evaluate(
+        async (url) => {
+            const { Grid } = await import(url);
+            const original = Grid.prototype.draw;
+            const probe = { draws: 0, grid: undefined as EditorGrid | undefined };
+            Object.assign(window, { viewportProbe: probe });
+            Grid.prototype.draw = function (...args) {
+                probe.draws++;
+                probe.grid = this;
+                return original.apply(this, args);
+            };
+        },
+        `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+    );
+    await input.press('j');
+    await page.clock.runFor(32);
+    const scroll = async (): Promise<void> => {
+        await page.evaluate(() => {
+            const { grid } = (window as unknown as { viewportProbe: { grid: EditorGrid } })
+                .viewportProbe;
+            const args = [1, 0, grid.rows - 1, 0, grid.columns, 1, 0];
+            window.rendererTest.emit({
+                type: 'redraw',
+                id: 'alpha',
+                events: [
+                    ['nido_scroll', args],
+                    ['grid_scroll', args],
+                    ['grid_line', [1, grid.rows - 2, 0, [['new row', 0]]]],
+                    ['flush']
+                ]
+            });
+        });
+    };
+    const count = (): Promise<number> =>
+        page.evaluate(
+            () => (window as unknown as { viewportProbe: { draws: number } }).viewportProbe.draws
+        );
+    await scroll();
+    await page.clock.runFor(16);
+    const firstTarget = await count();
+    await page.clock.runFor(32);
+    expect(await count(), 'animation frames reuse the rendered target').toBe(firstTarget);
+    await input.dispatchEvent('keydown', { key: 'j', repeat: true, bubbles: true });
+    await page.clock.runFor(16);
+    expect(await count(), 'repeating j preserves the current visible animation').toBe(firstTarget);
+    await scroll();
+    await page.clock.runFor(16);
+    const nextTarget = await count();
+    expect(nextTarget, 'native redraws refresh the target').toBeGreaterThan(firstTarget);
+    await input.dispatchEvent('keydown', { key: 'k', repeat: true, bubbles: true });
+    await page.clock.runFor(16);
+    expect(await count(), 'repeating k can reverse without snapping first').toBe(nextTarget);
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [['mode_change', ['insert', 0]], ['flush']]
+        })
+    );
+    await page.clock.runFor(16);
+    const beforeEdit = await count();
+    await input.dispatchEvent('keydown', { key: 'j', repeat: true, bubbles: true });
+    await page.clock.runFor(16);
+    expect(await count(), 'Insert-mode text interrupts the viewport animation').toBeGreaterThan(
+        beforeEdit
+    );
+});
 
 test.beforeAll(async () => {
     server = await createServer({
