@@ -98,6 +98,16 @@ local function completion_refresh(pending)
     vim.rpcnotify(vim.g.nido_channel, 'nido:completion_refresh', pending, vim.fn.pumvisible() == 1)
   end
 end
+vim.api.nvim_create_autocmd('CompleteDone', {
+  callback = function()
+    if vim.v.event.reason == 'accept' then
+      -- Accepting changes the text too, but must not start another automatic completion.
+      completion_scheduled = nil
+      completion_context = {vim.api.nvim_get_current_buf(), vim.fn.line('.'), vim.fn.col('.'), vim.api.nvim_get_current_line()}
+      completion_refresh(false)
+    end
+  end,
+})
 vim.api.nvim_create_autocmd({ 'TextChangedI', 'TextChangedP' }, {
   callback = function(event)
     local buffer = event.buf
@@ -119,7 +129,8 @@ vim.api.nvim_create_autocmd({ 'TextChangedI', 'TextChangedP' }, {
     completion_scheduled = scheduled
     -- Backspace ends native complete() before this new request; keep the GUI card mounted.
     completion_refresh(true)
-    vim.defer_fn(function()
+    -- Coalesce queued edits on the next turn without adding a typing debounce.
+    vim.schedule(function()
       if completion_scheduled ~= scheduled then
         return
       end
@@ -128,14 +139,13 @@ vim.api.nvim_create_autocmd({ 'TextChangedI', 'TextChangedP' }, {
           and vim.api.nvim_buf_get_changedtick(buffer) == tick and vim.fn.mode() == 'i'
           and #vim.lsp.get_clients({bufnr=buffer, method='textDocument/completion'}) > 0 then
         -- Native completion otherwise filters the old response while typing, but re-requests on BS.
-        -- Cancel without accepting so get() can replace the list for the current prefix.
-        local cancel = vim.fn.pumvisible() == 1 and '<C-e>' or ''
-        local keys = vim.api.nvim_replace_termcodes(cancel .. '<Cmd>lua vim.lsp.completion.get()<CR>', true, false, true)
+        -- Empty native completion first: get() otherwise merges cached items even when the menu hid.
+        local keys = vim.api.nvim_replace_termcodes('<Cmd>lua vim.fn.complete(vim.fn.col("."), {}); vim.lsp.completion.get()<CR>', true, false, true)
         vim.api.nvim_feedkeys(keys, 'n', false)
       else
         completion_refresh(false)
       end
-    end, 30)
+    end)
   end,
 })
 vim.api.nvim_create_autocmd('LspRequest', {
@@ -143,6 +153,11 @@ vim.api.nvim_create_autocmd('LspRequest', {
     if event.buf ~= vim.api.nvim_get_current_buf()
         or event.data.request.method ~= 'textDocument/completion' then
       return
+    end
+    if event.data.request.type == 'cancel' then
+      local client = vim.lsp.get_client_by_id(event.data.client_id)
+      local request = client and client.nido_completion_request
+      if request and request.id == event.data.request_id then client.nido_completion_request = nil end
     end
     if event.data.request.type == 'pending' then
       completion_refresh(true)
@@ -265,13 +280,24 @@ vim.api.nvim_create_autocmd('LspAttach', {
           if method ~= 'textDocument/completion' then
             return request(method, params, callback, ...)
           end
-          return request(method, params, function(err, result)
+          local buffer = vim.api.nvim_get_current_buf()
+          local cursor, line = vim.api.nvim_win_get_cursor(0), vim.api.nvim_get_current_line()
+          local interactive = vim.fn.mode():match('^i') ~= nil
+          local current = {}
+          if interactive then client.nido_completion_request = current end
+          local ok, id = request(method, params, function(err, result)
+            -- Servers can reply after cancellation. Only the latest unchanged context may complete().
+            if interactive and (client.nido_completion_request ~= current or vim.api.nvim_get_current_buf() ~= buffer
+                or not vim.fn.mode():match('^i') or vim.api.nvim_get_current_line() ~= line
+                or not vim.deep_equal(vim.api.nvim_win_get_cursor(0), cursor)) then return end
             -- Neovim otherwise assumes textEdit candidates were already filtered by the server.
             for _, item in ipairs(result and (result.items or result) or {}) do
               item.filterText = item.filterText or item.label
             end
             callback(err, result)
           end, ...)
+          current.id = id
+          return ok, id
         end
       end
       vim.lsp.completion.enable(true, client.id, event.buf, {
@@ -287,7 +313,10 @@ vim.api.nvim_create_autocmd('LspAttach', {
           return {}
         end,
       })
-      vim.keymap.set('i', '<C-Space>', vim.lsp.completion.get, opts)
+      vim.keymap.set('i', '<C-Space>', function()
+        vim.fn.complete(vim.fn.col('.'), {})
+        vim.lsp.completion.get()
+      end, opts)
     end
   end,
 })

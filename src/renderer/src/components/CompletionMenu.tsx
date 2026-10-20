@@ -123,10 +123,24 @@ export default function CompletionMenu({
                 for (const [name, ...calls] of event.events) {
                     for (const args of calls) {
                         if (name === 'nido_completion_refresh') {
-                            refreshing.current = args[0] === true;
-                            if (!refreshing.current && args[1] !== true) {
-                                setMenu((current) => (current?.pending ? undefined : current));
-                            }
+                            const pending = args[0] === true;
+                            refreshing.current = pending;
+                            setMenu((current) => {
+                                if (!current) {
+                                    return current;
+                                }
+                                if (pending) {
+                                    return current.pending
+                                        ? current
+                                        : { ...current, pending: true };
+                                }
+                                if (!current.pending) {
+                                    return current;
+                                }
+                                return args[1] === true
+                                    ? { ...current, pending: false }
+                                    : undefined;
+                            });
                         }
                         if (name === 'popupmenu_show') {
                             if (Number(args[4]) === -1) {
@@ -137,7 +151,8 @@ export default function CompletionMenu({
                                 items: args[0] as Menu['items'],
                                 selected: Number(args[1]),
                                 row: Number(args[2]),
-                                column: Number(args[3])
+                                column: Number(args[3]),
+                                pending: refreshing.current
                             });
                         }
                         if (name === 'popupmenu_select') {
@@ -146,8 +161,9 @@ export default function CompletionMenu({
                             );
                         }
                         if (name === 'popupmenu_hide') {
+                            const pending = refreshing.current;
                             setMenu((current) =>
-                                refreshing.current && current
+                                pending && current
                                     ? { ...current, pending: true, selected: -1 }
                                     : undefined
                             );

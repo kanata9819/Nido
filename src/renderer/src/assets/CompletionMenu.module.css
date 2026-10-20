@@ -12,6 +12,14 @@
     box-shadow: 0 12px 36px #0009;
     font-size: 12px;
 }
+/* Completion should be readable on its first frame; only dismissal fades. */
+.card[data-overlay-phase='open'] {
+    opacity: 1;
+    transition: none;
+    @starting-style {
+        opacity: 1;
+    }
+}
 .heading,
 .footer {
     display: flex;
@@ -50,7 +58,6 @@
     background: #2a343b;
 }
 .item[aria-disabled='true'] {
-    opacity: 0.5;
     cursor: wait;
 }
 .item[aria-selected='true'] {

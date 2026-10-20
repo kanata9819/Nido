@@ -73,14 +73,14 @@ async function expectOpening(card: Locator): Promise<void> {
     await card.evaluate((node) => node.getAnimations().forEach((animation) => animation.finish()));
 }
 
-async function expectClosing(page: Page, card: Locator): Promise<void> {
+async function expectClosing(page: Page, card: Locator, transitions = 2): Promise<void> {
     await expect(card).toHaveAttribute('data-overlay-phase', 'closing');
     await expect(card).toHaveAttribute('inert', '');
     await expect(card).toHaveAttribute('aria-hidden', 'true');
     await expect(card).toHaveCSS('pointer-events', 'none');
     await expect
         .poll(async () => Number(await card.getAttribute('data-test-opacity-runs')))
-        .toBeGreaterThanOrEqual(2);
+        .toBeGreaterThanOrEqual(transitions);
     expect(
         await card.evaluate((node) =>
             node
@@ -382,20 +382,11 @@ test('file palettes and the keyboard guide fade away while restoring editor focu
     await expectClosing(page, guide);
 });
 
-test('completion, hover, diagnostics, messages and manually dismissed notifications share open and close motion', async ({
+test('hover, diagnostics, messages and manually dismissed notifications share open and close motion', async ({
     page
 }) => {
     await openApp(page);
     const scenarios: { open: NidoEvent; close: NidoEvent; selector: string }[] = [
-        {
-            open: {
-                type: 'redraw',
-                id: 'alpha',
-                events: [['popupmenu_show', [[['value', 'Variable', '', '']], 0, 0, 0, 1]]]
-            },
-            close: { type: 'redraw', id: 'alpha', events: [['popupmenu_hide', []]] },
-            selector: '[data-overlay-motion]:has(> [role="listbox"][aria-label="Code completion"])'
-        },
         {
             open: { type: 'hover', id: 'alpha', markdown: 'A helpful type', codeBlocks: [] },
             close: { type: 'hover', id: 'alpha', markdown: '', codeBlocks: [] },
@@ -451,6 +442,76 @@ test('completion, hover, diagnostics, messages and manually dismissed notificati
     await expectOpening(notice);
     await notice.getByRole('button', { name: 'Dismiss notification' }).click();
     await expectClosing(page, notice);
+});
+
+test('completion opens immediately and keeps its brightness, placement and pending guard through refresh', async ({
+    page
+}) => {
+    await openApp(page);
+    const redraw = async (
+        events: Extract<NidoEvent, { type: 'redraw' }>['events']
+    ): Promise<void> => emit(page, { type: 'redraw', id: 'alpha', events });
+    const show = (): Promise<void> =>
+        redraw([
+            [
+                'popupmenu_show',
+                [
+                    [
+                        ['printLine', 'Function', 'detail', ''],
+                        ['println', 'Function', '', '']
+                    ],
+                    0,
+                    0,
+                    0,
+                    1
+                ]
+            ]
+        ]);
+    await show();
+    const list = page.getByRole('listbox', { name: 'Code completion' });
+    const card = page.locator(
+        '[data-overlay-motion]:has(> [role="listbox"][aria-label="Code completion"])'
+    );
+    const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+    await expect(card).toHaveCSS('opacity', '1');
+    expect(await card.evaluate((node) => node.getAnimations().length)).toBe(0);
+    const bounds = await card.boundingBox();
+    await card.evaluate((node) => node.setAttribute('data-test-continuity', 'kept'));
+    for (let update = 0; update < 3; update++) {
+        await redraw([['nido_completion_refresh', [true, true]]]);
+        await expect(list).toHaveAttribute('aria-busy', 'true');
+        // Native filtering can publish the previous response before the new request finishes.
+        await show();
+        await expect(list).toHaveAttribute('aria-busy', 'true');
+        await expect(list.getByRole('option').first()).toHaveAttribute('aria-disabled', 'true');
+        const before = await page.evaluate(
+            () => window.rendererTest.calls.filter((call) => call.method === 'input').length
+        );
+        await input.press('Tab');
+        await input.press('Control+n');
+        expect(
+            await page.evaluate(
+                () => window.rendererTest.calls.filter((call) => call.method === 'input').length
+            )
+        ).toBe(before);
+        await redraw([['popupmenu_hide', []]]);
+        await expect(card).toHaveAttribute('data-overlay-phase', 'open');
+        await expect(card).not.toHaveAttribute('inert');
+        await expect(card).toHaveCSS('opacity', '1');
+        await expect(list.getByRole('option').first()).toHaveCSS('opacity', '1');
+        await expect(card).toHaveAttribute('data-test-continuity', 'kept');
+        expect(await card.boundingBox()).toEqual(bounds);
+        await show();
+        await redraw([['nido_completion_refresh', [false, true]]]);
+        await expect(list).toHaveAttribute('aria-busy', 'false');
+        await expect(list.getByRole('option').first()).toHaveAttribute('aria-disabled', 'false');
+    }
+    await redraw([
+        ['nido_completion_refresh', [true, true]],
+        ['popupmenu_hide', []]
+    ]);
+    await redraw([['nido_completion_refresh', [false, false]]]);
+    await expectClosing(page, card, 1);
 });
 
 test('explorer closing releases the native modal immediately and keeps its fading position', async ({

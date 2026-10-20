@@ -2085,6 +2085,67 @@ end, 10))`);
     }
 });
 
+test('completion ignores obsolete replies and closes when the latest prefix has no candidates', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-completion-stale-'));
+    const session = await Session.create(root, () => {});
+    const lua = (code: string): ReturnType<Session['client']['request']> =>
+        session.client.request('nvim_exec_lua', [code, []]);
+    const labels = async (): Promise<string[]> =>
+        (await lua(
+            "return vim.tbl_map(function(item) return item.abbr end, vim.fn.complete_info({'items'}).items)"
+        )) as string[];
+    const replied = async (prefix: string): Promise<void> => {
+        for (let attempt = 0; attempt < 200; attempt++) {
+            const replies = (await lua('return vim.g.nido_completion_test_replies')) as string[];
+            if (replies.includes(prefix)) return;
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        assert.fail(`Completion response for ${prefix} did not arrive`);
+    };
+    try {
+        await lua(
+            await readFile(join(process.cwd(), 'tests/fixtures/completion-server.lua'), 'utf8')
+        );
+        await lua(
+            "vim.g.nido_completion_test_labels = {p={'printOld'},pr={'printRecent'},prx={}}; vim.g.nido_completion_test_delay=180"
+        );
+        await session.input('ip');
+        for (let attempt = 0; attempt < 100; attempt++) {
+            if ((await lua('return #vim.g.nido_completion_test_requests')) === 1) break;
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        assert.equal(await lua('return #vim.g.nido_completion_test_requests'), 1);
+        await lua('vim.g.nido_completion_test_delay=10');
+        await session.input('r');
+        for (let attempt = 0; attempt < 100; attempt++) {
+            if ((await labels()).includes('printRecent')) break;
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        assert.deepEqual(await labels(), ['printRecent']);
+        await replied('p');
+        assert.deepEqual(
+            await labels(),
+            ['printRecent'],
+            'An old response replaced the current candidates'
+        );
+        await session.input('x');
+        await replied('prx');
+        assert.equal(
+            await lua('return vim.fn.pumvisible()'),
+            0,
+            JSON.stringify(
+                await lua(
+                    'return {vim.g.nido_completion_test_requests,vim.fn.complete_info(),vim.api.nvim_get_current_line()}'
+                )
+            )
+        );
+        assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'prx');
+    } finally {
+        await session.stop();
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('bracket pairs share depth colors, ignore strings and comments, and refresh after edits', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-brackets-'));
     let session: Session | undefined;
