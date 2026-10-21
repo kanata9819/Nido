@@ -69,7 +69,7 @@ function Editor({
     const wheel = useRef({ remainder: 0, time: 0 });
     const paint = useRef<() => void>(() => {});
     const stickyPaint = useRef<(motionOffset: number) => void>(() => {});
-    const scroll = useRef<(lines: number, follow: boolean) => void>(() => {});
+    const scroll = useRef<(lines: number, follow: boolean, discrete: boolean) => void>(() => {});
     const scrollCompletion = useRef<Promise<void>>(Promise.resolve());
     const error = useRef(onError);
 
@@ -240,7 +240,12 @@ function Editor({
                               ? event.currentTarget.clientHeight
                               : 1);
                     if (Number.isFinite(pixels) && pixels) {
-                        scroll.current(pixels / height, scrollFollowCursor);
+                        scroll.current(
+                            pixels / height,
+                            scrollFollowCursor,
+                            // Fine pixel deltas already describe smooth touchpad motion.
+                            event.deltaMode !== 0 || Math.abs(pixels) >= height
+                        );
                     }
                     return;
                 }

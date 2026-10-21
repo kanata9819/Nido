@@ -293,6 +293,32 @@ export class GridCanvas {
                         this.grid.background,
                         this.grid.foreground
                     );
+                    if (h.diagnostic && !h.reverse) {
+                        const start = col;
+                        while (
+                            col + 1 < this.grid.columns &&
+                            cells[col + 1]?.highlight === cells[start]?.highlight
+                        ) {
+                            col++;
+                        }
+                        const left = Math.round(start * cellWidth * dpr) / dpr;
+                        const right = Math.round((col + 1) * cellWidth * dpr) / dpr;
+                        const inset = Math.min(2, rowHeight / 4);
+                        const badgeHeight = rowHeight - inset * 2;
+                        foreground(background);
+                        ctx.beginPath();
+                        ctx.roundRect(left, inset, right - left, badgeHeight, 4);
+                        ctx.fill();
+                        const accent = color(h.special ?? h.foreground ?? 0xcccccc);
+                        ctx.strokeStyle = accent + '30';
+                        ctx.lineWidth = 1 / dpr;
+                        ctx.stroke();
+                        foreground(accent);
+                        ctx.beginPath();
+                        ctx.roundRect(left + 4, inset + 4, 2, Math.max(1, badgeHeight - 8), 1);
+                        ctx.fill();
+                        continue;
+                    }
                     // The default background is already filled (or transparent for acrylic).
                     // Repainting fractional cell edges can darken their native pixels.
                     if (background === this.grid.background) {
@@ -332,12 +358,14 @@ export class GridCanvas {
                         );
                         continue;
                     }
+                    const textSize = h.diagnostic ? fontSize * 0.9 : fontSize;
                     font(
-                        `${h.italic ? 'italic ' : ''}${h.bold ? Math.max(700, fontWeight) : fontWeight} ${fontSize}px ${family}`
+                        `${h.italic ? 'italic ' : ''}${h.bold ? Math.max(700, fontWeight) : fontWeight} ${textSize}px ${family}`
                     );
                     foreground(cellForeground(h, this.grid.background, this.grid.foreground));
 
                     const x = col * cellWidth;
+                    const baseline = Math.round((y + (rowHeight + textSize) / 2 - 3) * dpr) / dpr;
 
                     if (h.indentGuide) {
                         // Use the same physical-pixel boundary as bracket pair guides.
@@ -352,11 +380,7 @@ export class GridCanvas {
                         ctx.fillRect(Math.round(x + cellWidth / 2), y, 1, rowHeight);
                     } else {
                         // Keep glyph origins on physical pixels, including fractional Windows scaling.
-                        ctx.fillText(
-                            cell.text,
-                            Math.round(x * dpr) / dpr,
-                            Math.round((y + (rowHeight + fontSize) / 2 - 3) * dpr) / dpr
-                        );
+                        ctx.fillText(cell.text, Math.round(x * dpr) / dpr, baseline);
                     }
                     if (h.bracketMatch) {
                         const left = Math.round(x * dpr);
@@ -376,7 +400,11 @@ export class GridCanvas {
                         }
                         ctx.fillRect(
                             x,
-                            y + (h.strikethrough ? rowHeight / 2 : rowHeight - 3),
+                            h.strikethrough
+                                ? y + rowHeight / 2
+                                : h.underline && !h.undercurl
+                                  ? Math.min(rowHeight - 1, baseline + 2)
+                                  : y + rowHeight - 3,
                             cellWidth,
                             1
                         );

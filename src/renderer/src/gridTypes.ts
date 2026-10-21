@@ -8,6 +8,7 @@ export interface Highlight {
     indentGuide?: boolean;
     bracketMatch?: boolean;
     wordHighlight?: boolean;
+    diagnostic?: boolean;
     blend?: number;
     foreground?: number;
     background?: number;

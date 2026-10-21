@@ -250,6 +250,75 @@ test('held j/k viewport scrolling reuses frames until a redraw, while editing in
     );
 });
 
+for (const setting of ['on', 'off', 'reduced'] as const) {
+    test(`wheel detents interpolate only with animations enabled (${setting}), while fine pixel input stays direct`, async ({
+        page
+    }) => {
+        await page.clock.install({ time: new Date(0) });
+        await page.clock.pauseAt(new Date(1000));
+        await page.emulateMedia({
+            reducedMotion: setting === 'reduced' ? 'reduce' : 'no-preference'
+        });
+        await page.addInitScript((enabled) => {
+            localStorage.setItem('nido.animations', String(enabled));
+            localStorage.setItem('nido.lineHeight', '18');
+        }, setting !== 'off');
+        await page.goto(`${origin}?view=app`);
+        const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+        await expect(input).toBeFocused();
+        await page.clock.runFor(32);
+        await page.evaluate(() => {
+            const api = window.nido;
+            let fraction = 0;
+            // Model native replies in both the input handler and animation frames.
+            window.nido = new Proxy(api, {
+                get(target, method) {
+                    if (method !== 'scroll') return Reflect.get(target, method);
+                    return async (...args: Parameters<typeof api.scroll>) => {
+                        await api.scroll(...args);
+                        fraction += args[1];
+                        window.rendererTest.emit({
+                            type: 'redraw',
+                            id: args[0],
+                            events: [['nido_pixel_scroll', [fraction, true]], ['flush']]
+                        });
+                    };
+                }
+            });
+        });
+        const canvas = page.locator('canvas:visible');
+        const distance = (): Promise<number> =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'scroll')
+                    .reduce((sum, call) => sum + Number(call.args[1]), 0)
+            );
+        await canvas.dispatchEvent('wheel', { deltaY: 36, deltaMode: 0 });
+        await page.clock.runFor(16);
+        if (setting === 'on') {
+            expect(await distance()).toBeGreaterThan(0);
+            expect(await distance()).toBeLessThan(1);
+        } else {
+            expect(await distance()).toBe(1);
+        }
+        await page.clock.runFor(160);
+        expect(await distance()).toBeCloseTo(1, 10);
+        const beforeFineInput = await distance();
+        await canvas.dispatchEvent('wheel', { deltaY: 2, deltaMode: 0 });
+        expect(await distance()).toBeCloseTo(beforeFineInput + 1 / 18, 10);
+        if (setting === 'on') {
+            await canvas.dispatchEvent('wheel', { deltaY: 3, deltaMode: 1 });
+            await page.clock.runFor(16);
+            const interrupted = await distance();
+            await input.press('i');
+            await page.clock.runFor(160);
+            expect(await distance(), 'Typing stops the remaining wheel animation').toBe(
+                interrupted
+            );
+        }
+    });
+}
+
 test.beforeAll(async () => {
     server = await createServer({
         configFile: false,

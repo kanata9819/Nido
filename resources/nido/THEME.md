@@ -14,5 +14,8 @@ names use Dark Modern's semantic macro blue; builtin derive names such as
 `Debug` and `Clone` keep its type green.
 Rust's mutable bindings, mutable references and methods with `&mut self` are
 underlined using rust-analyzer's semantic tokens, preserving their text colors.
+Underlines follow the glyph baseline even when the editor's line spacing changes.
+Inline diagnostics use muted text on subtle severity-tinted capsules. Long compiler
+messages show a short first-line preview; `gl` opens the original full message.
 `init.lua` maps native Rust keywords and LSP namespace/type groups to Azami's
 existing groups. Nido's mode badges and cursor-row borders remain GUI settings.

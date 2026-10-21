@@ -191,7 +191,24 @@ vim.api.nvim_create_autocmd('LspDetach', {
   end,
 })
 vim.diagnostic.config({
-  virtual_text = { spacing = 2, prefix = '●' },
+  virtual_text = {
+    spacing = 3,
+    prefix = function(diagnostic, index, total)
+      if index ~= total then return '' end
+      local labels = {'ERROR', 'WARN', 'INFO', 'HINT'}
+      local extra = total > 1 and (' +' .. (total - 1)) or ''
+      return '  ' .. labels[diagnostic.severity] .. extra .. ' ·'
+    end,
+    format = function(diagnostic)
+      -- Keep compiler output intact for gl / Problems; only abbreviate the inline annotation.
+      local message = (diagnostic.message:match('[^\r\n]+') or ''):gsub('%s+', ' ')
+      if vim.fn.strchars(message) > 68 then
+        message = vim.fn.strcharpart(message, 0, 67) .. '…'
+      end
+      return message
+    end,
+    suffix = '  ',
+  },
   signs = { text = { [1] = 'E', [2] = 'W', [3] = 'I', [4] = 'H' } },
   underline = true,
   severity_sort = true,

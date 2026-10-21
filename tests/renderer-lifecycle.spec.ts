@@ -193,6 +193,206 @@ test.afterAll(async () => {
     await server?.close();
 });
 
+for (const scale of [1, 1.25, 1.5]) {
+    test(`text underlines stay close to glyphs independently of line spacing at ${scale * 100}% scale`, async ({
+        browser
+    }) => {
+        const context = await browser.newContext({ deviceScaleFactor: scale });
+        try {
+            const page = await context.newPage();
+            await page.route('**/underline-probe', (route) =>
+                route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+            );
+            await page.goto(`${origin}underline-probe`);
+            const results = await page.evaluate(
+                async (url) => {
+                    const { Grid } = await import(url);
+                    return [
+                        [11, 18],
+                        [14, 24],
+                        [14, 36]
+                    ].map(([fontSize, lineHeight]) => {
+                        const grid = new Grid();
+                        grid.busy = true;
+                        grid.apply([
+                            ['grid_resize', [1, 40, 4]],
+                            ['hl_attr_define', [1, { underline: true, special: 0xff00ff }, {}, []]],
+                            [
+                                'grid_line',
+                                [1, 0, 0, Array.from('mutable_name', (text) => [text, 1])]
+                            ],
+                            ['flush']
+                        ]);
+                        let baseline = 0;
+                        let underline = 0;
+                        const prototype = CanvasRenderingContext2D.prototype;
+                        const text = prototype.fillText;
+                        const fill = prototype.fillRect;
+                        prototype.fillText = function (...args) {
+                            if (args[0] === 'm') baseline = args[2];
+                            text.apply(this, args);
+                        };
+                        prototype.fillRect = function (...args) {
+                            if (this.fillStyle === '#ff00ff') underline = args[1];
+                            fill.apply(this, args);
+                        };
+                        const canvas = document.createElement('canvas');
+                        document.body.append(canvas);
+                        try {
+                            const { cellWidth } = grid.draw(
+                                canvas,
+                                400,
+                                lineHeight * 4,
+                                fontSize,
+                                'monospace',
+                                true,
+                                undefined,
+                                lineHeight
+                            );
+                            const pixel = Array.from(
+                                canvas
+                                    .getContext('2d')!
+                                    .getImageData(
+                                        Math.floor(cellWidth * 0.5 * devicePixelRatio),
+                                        Math.floor((underline + 0.5) * devicePixelRatio),
+                                        1,
+                                        1
+                                    ).data
+                            );
+                            return { gap: underline - baseline, pixel };
+                        } finally {
+                            prototype.fillText = text;
+                            prototype.fillRect = fill;
+                        }
+                    });
+                },
+                `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+            );
+            for (const result of results) {
+                expect(result.gap).toBeGreaterThanOrEqual(1);
+                expect(result.gap).toBeLessThanOrEqual(2);
+                expect(result.pixel[0] - result.pixel[1]).toBeGreaterThan(100);
+                expect(result.pixel[2] - result.pixel[1]).toBeGreaterThan(100);
+            }
+        } finally {
+            await context.close();
+        }
+    });
+}
+
+for (const scale of [1, 1.25, 1.5]) {
+    for (const opacity of [1, 0.5]) {
+        test(`inline diagnostic capsules retain rounded corners, accents and cached rows at ${scale * 100}% scale, opacity ${opacity}`, async ({
+            browser
+        }) => {
+            const context = await browser.newContext({ deviceScaleFactor: scale });
+            try {
+                const page = await context.newPage();
+                await page.route('**/diagnostic-probe', (route) =>
+                    route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+                );
+                await page.goto(`${origin}diagnostic-probe`);
+                const result = await page.evaluate(
+                    async ({ moduleUrl, opacity }) => {
+                        const { Grid } = await import(moduleUrl);
+                        const grid = new Grid();
+                        grid.background = '#121212';
+                        grid.backgroundOpacity = opacity;
+                        grid.busy = true;
+                        const code = 'fn main() {}   ';
+                        const annotation = '  ERROR · expected `;`  ';
+                        grid.apply([
+                            ['grid_resize', [1, 60, 4]],
+                            [
+                                'hl_attr_define',
+                                [
+                                    1,
+                                    {
+                                        foreground: 0xcbb9be,
+                                        background: 0x261c20,
+                                        special: 0xe58c98
+                                    },
+                                    {},
+                                    [{ hi_name: 'DiagnosticVirtualTextError' }]
+                                ]
+                            ],
+                            [
+                                'grid_line',
+                                [
+                                    1,
+                                    0,
+                                    0,
+                                    [
+                                        ...Array.from(code, (text) => [text, 0]),
+                                        ...Array.from(annotation, (text) => [text, 1])
+                                    ]
+                                ]
+                            ],
+                            ['flush']
+                        ]);
+                        let roundedShapes = 0;
+                        const roundRect = CanvasRenderingContext2D.prototype.roundRect;
+                        CanvasRenderingContext2D.prototype.roundRect = function (...args) {
+                            roundedShapes++;
+                            roundRect.apply(this, args);
+                        };
+                        const canvas = document.createElement('canvas');
+                        document.body.append(canvas);
+                        const draw = (): { cellWidth: number } =>
+                            grid.draw(canvas, 600, 96, 14, 'monospace', true, undefined, 24);
+                        const { cellWidth } = draw();
+                        const left =
+                            Math.round(code.length * cellWidth * devicePixelRatio) /
+                            devicePixelRatio;
+                        const pixel = (x: number, y: number): number[] =>
+                            Array.from(
+                                canvas
+                                    .getContext('2d')!
+                                    .getImageData(
+                                        Math.round(x * devicePixelRatio),
+                                        Math.round(y * devicePixelRatio),
+                                        1,
+                                        1
+                                    ).data
+                            ).slice(0, 3);
+                        const corner = pixel(left, 2);
+                        const background = pixel(left + 11, 12);
+                        const accent = pixel(left + 5, 12);
+                        const firstShapes = roundedShapes;
+                        draw();
+                        grid.scrolling = true;
+                        grid.scrollOffset = 0.25;
+                        draw();
+                        const cachedShapes = roundedShapes;
+                        grid.scrolling = false;
+                        grid.scrollOffset = 0;
+                        grid.apply([
+                            ['grid_line', [1, 0, code.length, [[' ', 0, annotation.length]]]],
+                            ['flush']
+                        ]);
+                        draw();
+                        const erased = pixel(left + 5, 12);
+                        return { corner, background, accent, firstShapes, cachedShapes, erased };
+                    },
+                    {
+                        moduleUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+                        opacity
+                    }
+                );
+                // Edge pixels include the faint outline's antialiasing at 100% DPI.
+                expect(result.corner[0]).toBeLessThan(result.background[0] - 5);
+                expect(result.background).toEqual([38, 28, 32]);
+                expect(result.accent).toEqual([229, 140, 152]);
+                expect(result.firstShapes).toBe(2);
+                expect(result.cachedShapes).toBe(result.firstShapes);
+                expect(result.erased).toEqual([18, 18, 18]);
+            } finally {
+                await context.close();
+            }
+        });
+    }
+}
+
 test('external command cards preserve native input focus, UTF-8 cursor, nested prompts and completion', async ({
     page
 }) => {

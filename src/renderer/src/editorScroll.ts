@@ -1,5 +1,5 @@
 import type { Grid } from './grid';
-import { ScrollQueue } from './scroll';
+import { ScrollQueue, scrollOffset } from './scroll';
 
 interface Options {
     id: string;
@@ -19,6 +19,7 @@ export class EditorScroll {
     private disposed = false;
     private generation = 0;
     private settleTimer?: ReturnType<typeof setTimeout>;
+    private wheelMotion?: { distance: number; remaining: number; start: number; follow: boolean };
 
     constructor(private readonly options: Options) {}
 
@@ -28,6 +29,10 @@ export class EditorScroll {
 
     get prefetchPending(): boolean {
         return this.fetching;
+    }
+
+    get animating(): boolean {
+        return this.wheelMotion !== undefined;
     }
 
     get needsPrefetch(): boolean {
@@ -57,12 +62,14 @@ export class EditorScroll {
 
     pauseIfDisabled(): void {
         if (!this.options.enabled()) {
+            this.wheelMotion = undefined;
             this.queue.cancelQueued();
             this.options.grid.scrollPreview = 0;
         }
     }
 
     stop(): void {
+        this.wheelMotion = undefined;
         this.queue.cancelQueued();
         this.options.grid.scrollPreview = 0;
         this.options.grid.scrolling = false;
@@ -71,7 +78,7 @@ export class EditorScroll {
     }
 
     private settle = (): void => {
-        if (this.pending || this.queue.hasQueued || this.fetching) {
+        if (this.animating || this.pending || this.queue.hasQueued || this.fetching) {
             this.settleTimer = setTimeout(this.settle, 40);
             return;
         }
@@ -79,7 +86,41 @@ export class EditorScroll {
         this.options.schedule();
     };
 
-    request(lines: number, follow: boolean): void {
+    request(lines: number, follow: boolean, animate = false, now = performance.now()): void {
+        // Retarget from the current position, preserving unconsumed distance through wheel bursts.
+        if (animate) {
+            const motion = this.wheelMotion;
+            const offset = motion ? scrollOffset(motion.distance, now - motion.start) : 0;
+            const distance = this.options.grid.limitScroll(offset + lines);
+            const remaining = this.options.grid.limitScroll((motion?.remaining ?? 0) + lines);
+            // Native requests are dispatched by paints, even if several inputs arrive per frame.
+            this.wheelMotion = remaining ? { distance, remaining, start: now, follow } : undefined;
+            this.options.schedule();
+        } else {
+            this.advance(now, false);
+            this.move(lines, follow);
+        }
+    }
+
+    advance(now: number, animate: boolean): void {
+        const motion = this.wheelMotion;
+        if (!motion) {
+            return;
+        }
+        const offset = animate ? scrollOffset(motion.distance, now - motion.start) : 0;
+        const remaining = Math.abs(offset) < 0.001 ? 0 : offset;
+        const delta = motion.remaining - remaining;
+        const lines = this.options.grid.limitScroll(delta);
+        motion.remaining = remaining;
+        if (!remaining || lines !== delta) {
+            this.wheelMotion = undefined;
+        }
+        if (lines) {
+            this.move(lines, motion.follow);
+        }
+    }
+
+    private move(lines: number, follow: boolean): void {
         const { grid, schedule } = this.options;
         grid.scrolling = true;
         clearTimeout(this.settleTimer);
@@ -142,6 +183,7 @@ export class EditorScroll {
                         return;
                     }
                     this.queue.fail();
+                    this.wheelMotion = undefined;
                     grid.scrollPreview = 0;
                     onError(error);
                     schedule();
@@ -193,6 +235,7 @@ export class EditorScroll {
 
     dispose(): void {
         this.disposed = true;
+        this.wheelMotion = undefined;
         clearTimeout(this.settleTimer);
         this.options.grid.scrollPreview = 0;
         this.options.grid.scrolling = false;

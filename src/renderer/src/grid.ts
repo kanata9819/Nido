@@ -100,6 +100,14 @@ export class Grid {
         return !this.lowerRowsAtEnd && remaining <= Grid.cacheRowLimit * 0.75;
     }
 
+    /** Clamp animation targets only when the cache includes the actual file boundary. */
+    limitScroll(lines: number): number {
+        const position = this.scrollFraction + this.scrollPreview;
+        const minimum = this.upperRowsAtStart ? -this.upperRows.length - position : -Infinity;
+        const maximum = this.lowerRowsAtEnd ? this.lowerRows.length - position : Infinity;
+        return Math.max(minimum, Math.min(maximum, lines));
+    }
+
     rowTop(row: number): number {
         if (row < 0) {
             const index = Math.max(0, this.upperRows.length + Math.floor(row));
@@ -496,6 +504,11 @@ export class Grid {
                             bracketMatch: info?.some((item) => item.hi_name === 'NidoBracketMatch'),
                             wordHighlight: info?.some((item) =>
                                 /^LspReference(Text|Read|Write)$/.test(item.hi_name || '')
+                            ),
+                            diagnostic: info?.some((item) =>
+                                /^DiagnosticVirtualText(Error|Warn|Info|Hint)$/.test(
+                                    item.hi_name || ''
+                                )
                             )
                         });
                         break;

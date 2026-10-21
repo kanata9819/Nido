@@ -29,7 +29,7 @@ interface UseEditorRenderingOptions {
     attachedRef: RefObject<boolean>;
     paintRef: RefObject<() => void>;
     afterPaintRef: RefObject<(motionOffset: number) => void>;
-    scrollRef: RefObject<(lines: number, follow: boolean) => void>;
+    scrollRef: RefObject<(lines: number, follow: boolean, discrete: boolean) => void>;
     scrollCompletionRef: RefObject<Promise<void>>;
     fontFamily: string;
 }
@@ -146,10 +146,14 @@ export function useEditorRendering({
             }
         };
 
-        scrollRef.current = (lines, follow): void => {
+        scrollRef.current = (lines, follow, discrete): void => {
             directScroll = true;
             motion = undefined;
-            scrolling.request(lines, follow);
+            scrolling.request(
+                lines,
+                follow,
+                (discrete || scrolling.animating) && animationsRef.current && !reducedMotion.matches
+            );
         };
 
         const render = (): void => {
@@ -161,6 +165,8 @@ export function useEditorRendering({
             if (!element.clientWidth || !element.clientHeight) {
                 return;
             }
+            const now = performance.now();
+            scrolling.advance(now, animationsRef.current && !reducedMotion.matches);
             const focused = document.activeElement === input;
             if (
                 pixelScroll &&
@@ -173,7 +179,6 @@ export function useEditorRendering({
                 scrolling.prefetch();
             }
             scrolling.flush();
-            const now = performance.now();
             const cursorPosition = cursor.update(
                 now,
                 smoothCursorRef.current,
@@ -277,7 +282,12 @@ export function useEditorRendering({
                     }
                 });
             }
-            if (cursor.animating || motion || (pixelScroll && scrolling.canPrefetch)) {
+            if (
+                cursor.animating ||
+                motion ||
+                scrolling.animating ||
+                (pixelScroll && scrolling.canPrefetch)
+            ) {
                 cancelAnimationFrame(frame);
                 frame = requestAnimationFrame(render);
             }

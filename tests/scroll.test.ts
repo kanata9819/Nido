@@ -4,6 +4,112 @@ import { ScrollQueue } from '../src/renderer/src/scroll';
 import { EditorScroll } from '../src/renderer/src/editorScroll';
 import { Grid } from '../src/renderer/src/grid';
 
+test('animated wheel steps interpolate distance, coalesce reversals and finish immediately when disabled', async () => {
+    const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    const sent: number[] = [];
+    const completions: Promise<void>[] = [];
+    Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: {
+            nido: {
+                scroll: async (_id: string, lines: number): Promise<void> => {
+                    sent.push(lines);
+                },
+                prefetchScroll: async (): Promise<void> => {}
+            }
+        }
+    });
+    const grid = new Grid();
+    const scrolling = new EditorScroll({
+        id: 'alpha',
+        grid,
+        enabled: () => true,
+        schedule: () => {},
+        onError: (error) => {
+            throw error;
+        },
+        onCompletion: (promise) => {
+            completions.push(promise);
+        }
+    });
+    const step = async (now: number, animate = true): Promise<void> => {
+        scrolling.advance(now, animate);
+        scrolling.flush();
+        scrolling.acknowledge(true);
+        await Promise.all(completions);
+    };
+    const distance = (): number => sent.reduce((sum, lines) => sum + lines, 0);
+    try {
+        scrolling.request(1, true, true, 0);
+        assert.equal(sent.length, 0, 'A wheel detent must not jump a whole line during input');
+        await step(16);
+        assert.ok(
+            distance() > 0 && distance() < 1,
+            'The first paint advances a fraction of a line'
+        );
+        const first = distance();
+        await step(32);
+        assert.ok(distance() > first && distance() < 1);
+        await step(120);
+        assert.equal(distance(), 1, 'Easing preserves the exact wheel distance');
+        assert.equal(scrolling.animating, false);
+
+        scrolling.request(3, true, true, 200);
+        await step(224);
+        const beforeReversal = distance();
+        scrolling.request(-3, true, true, 224);
+        await step(240);
+        assert.ok(distance() < beforeReversal, 'An opposite detent reverses the remaining motion');
+        await step(344);
+        assert.ok(Math.abs(distance() - 1) < 1e-10, 'Retargeting never loses queued distance');
+
+        scrolling.request(2, false, true, 400);
+        await step(416);
+        await step(432, false);
+        assert.ok(
+            Math.abs(distance() - 3) < 1e-10,
+            'Disabling animation commits the remaining distance'
+        );
+        assert.equal(scrolling.animating, false);
+
+        scrolling.request(2, true, true, 500);
+        await step(516);
+        scrolling.stop();
+        const stopped = distance();
+        await step(700);
+        assert.equal(distance(), stopped, 'Editing or clicking cancels unpainted wheel movement');
+
+        grid.apply([['nido_pixel_scroll', [0, true, undefined, true]], ['flush']]);
+        scrolling.request(-20, true, true, 800);
+        scrolling.request(1, true, true, 801);
+        await step(817);
+        assert.ok(
+            distance() > stopped,
+            'At BOF, an outward detent must not swallow the reverse gesture'
+        );
+        await step(921);
+        assert.ok(Math.abs(distance() - stopped - 1) < 1e-10);
+
+        scrolling.stop();
+        grid.apply([
+            ['grid_resize', [1, 20, 4]],
+            ['nido_scroll_cache', [undefined, false, true, true]],
+            ['flush']
+        ]);
+        const atEnd = distance();
+        scrolling.request(20, true, true, 1000);
+        scrolling.request(-1, true, true, 1001);
+        await step(1017);
+        assert.ok(distance() < atEnd, 'At EOF, reverse input also responds immediately');
+        await step(1121);
+        assert.ok(Math.abs(distance() - atEnd + 1) < 1e-10);
+    } finally {
+        scrolling.dispose();
+        if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+        else Reflect.deleteProperty(globalThis, 'window');
+    }
+});
+
 test('cold gestures send movement first and refill the final direction after reversing', async () => {
     const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
     const calls: (string | boolean | undefined)[][] = [];

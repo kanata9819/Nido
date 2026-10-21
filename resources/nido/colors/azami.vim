@@ -104,6 +104,15 @@ hl(0, '@string.escape', { fg = c.vscYellowOrange, bg = 'NONE' })
 hl(0, '@lsp.mod.deprecated', { strikethrough = true })
 -- Match rust-analyzer's VS Code styling without replacing semantic token colors.
 hl(0, '@lsp.mod.mutable.rust', { underline = true })
+-- Inline diagnostics are quiet annotations; the accent carries their severity.
+for severity, colors in pairs({
+  Error = {'#cbb9be', '#261c20', '#e58c98'},
+  Warn = {'#cbc3ad', '#25221a', '#d8b66d'},
+  Info = {'#b4c2d0', '#1b222a', '#83add6'},
+  Hint = {'#b7c7bd', '#1c2420', '#91b7a0'},
+}) do
+  hl(0, 'DiagnosticVirtualText' .. severity, {fg=colors[1], bg=colors[2], sp=colors[3]})
+end
 -- Dark Modern token categories, including Vim's legacy syntax group names.
 for color, groups in pairs({
   [c.vscPink] = {

@@ -1,12 +1,89 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Session } from '../src/main/session';
 import { Grid } from '../src/renderer/src/grid';
 import { EditorCursor } from '../src/renderer/src/editorCursor';
 import { setTimeout as delay } from 'node:timers/promises';
+
+test('inline diagnostics abbreviate annotations while retaining full keyboard details and clearing old badges', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-inline-diagnostics-'));
+    const grid = new Grid();
+    const cards: string[] = [];
+    let session: Session | undefined;
+    try {
+        await writeFile(join(root, 'sample.txt'), 'first line\nsecond line\nthird line\n');
+        session = await Session.create(root, (event) => {
+            if (event.type === 'redraw') grid.apply(event.events);
+            if (event.type === 'diagnostics' && event.items.length) {
+                cards.push(event.items[0].message);
+            }
+        });
+        await session.attach(240, 24);
+        await session.openFile('sample.txt');
+        const message = '型が一致しません。'.repeat(12) + '\nCompiler explanation stays available.';
+        await session.client.request('nvim_exec_lua', [
+            `local message = ...
+local ns = vim.api.nvim_create_namespace('inline-diagnostic-test')
+vim.diagnostic.set(ns, 0, {
+  {lnum=0, col=0, severity=3, message=message},
+  {lnum=1, col=0, severity=2, message='Another warning'},
+  {lnum=1, col=1, severity=1, message='Expected a semicolon'},
+  {lnum=2, col=0, severity=4, message='Try a clearer name'},
+})
+vim.cmd('redraw!')`,
+            [message]
+        ]);
+        await session.client.request('nvim_eval', ['1']);
+        const rows = grid.cells.map((cells) => cells.map((cell) => cell.text).join(''));
+        assert.match(
+            rows.find((text) => text.includes('first line'))!,
+            /INFO · 型が一致.*…/u
+        );
+        assert.ok(!rows.some((text) => text.includes('Compiler explanation')));
+        assert.match(
+            rows.find((text) => text.includes('second line'))!,
+            /ERROR \+1 · Expected a semicolon/
+        );
+        assert.match(
+            rows.find((text) => text.includes('third line'))!,
+            /HINT · Try a clearer name/
+        );
+        const annotations = grid.cells
+            .flat()
+            .filter((cell) => grid.highlights.get(cell.highlight)?.diagnostic);
+        assert.ok(annotations.length, 'Native virtual text reaches the GUI as diagnostic badges');
+        for (const cell of annotations) {
+            const highlight = grid.highlights.get(cell.highlight)!;
+            assert.notEqual(highlight.background, undefined);
+            assert.notEqual(
+                highlight.foreground,
+                highlight.special,
+                'Only the accent uses severity color'
+            );
+        }
+        await session.input('gg0gl');
+        await session.client.request('nvim_eval', ['1']);
+        assert.equal(cards.at(-1), message, 'gl retains the full Unicode compiler message');
+        await session.client.request('nvim_exec_lua', [
+            "vim.diagnostic.reset(vim.api.nvim_create_namespace('inline-diagnostic-test'), 0); vim.cmd('redraw!')",
+            []
+        ]);
+        await session.client.request('nvim_eval', ['1']);
+        assert.ok(
+            !grid.cells.flat().some((cell) => grid.highlights.get(cell.highlight)?.diagnostic)
+        );
+        assert.equal(
+            await readFile(join(root, 'sample.txt'), 'utf8'),
+            'first line\nsecond line\nthird line\n'
+        );
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
 
 test('Rust cast and import aliases use keyword colors without recoloring operators or strings', async () => {
     const session = await Session.create(process.cwd(), () => {});
