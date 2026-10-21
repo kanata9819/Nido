@@ -20,7 +20,24 @@ test(
                 join(root, 'Cargo.toml'),
                 '[package]\nname = "nido_rust_fixture"\nversion = "0.1.0"\nedition = "2021"\n'
             );
-            await writeFile(join(root, 'src/lib.rs'), 'pub fn greet() -> u32 { 42 }\n');
+            const mutabilityLines = [
+                'pub fn greet() -> u32 { 42 }',
+                'pub struct Counter { value: u32 }',
+                'impl Counter {',
+                '    pub fn increment(&mut self) { self.value += 1; }',
+                '    pub fn get(&self) -> u32 { self.value }',
+                '}',
+                'pub fn mutability() {',
+                '    let mut count = Counter { value: 0 };',
+                '    count.increment();',
+                '    let shared = &count;',
+                '    let frozen = shared.get();',
+                '    let mutable_ref = &mut count;',
+                '    mutable_ref.increment();',
+                '    println!("{}", frozen);',
+                '}'
+            ];
+            await writeFile(join(root, 'src/lib.rs'), mutabilityLines.join('\n') + '\n');
             await writeFile(
                 join(root, 'src/main.rs'),
                 'use nido_rust_fixture::greet;\nfn main() {\n    let answer = greet() as u32;\n    println!("{}", answer);\n}\ntype AppTabs = Vec<u32>;\nconst CURSOR_BLINK_INTERVAL: u32 = 500;\n#[derive(Debug, Clone, PartialEq)]\nstruct Example { value: u32 }\n#[allow(dead_code)]\nfn macro_colors() { let v = vec![1, 2]; dbg!(v); assert!(true); }\n'
@@ -222,6 +239,67 @@ vim.cmd('redraw!')`);
                 ),
                 [0x4ec9b0, 0x4fc1ff]
             );
+            await session.openFile('src/lib.rs');
+            const mutabilitySamples = [
+                [3, 'increment', true],
+                [3, 'self', true],
+                [4, 'get', false],
+                [4, 'self', false],
+                [7, 'count', true],
+                [8, 'count', true],
+                [8, 'increment', true],
+                [9, 'shared', false],
+                [10, 'frozen', false],
+                [10, 'get', false],
+                [11, 'mutable_ref', true],
+                [12, 'mutable_ref', true],
+                [12, 'increment', true]
+            ] as const;
+            const positions = mutabilitySamples.map(([line, word]) => [
+                line,
+                mutabilityLines[line].indexOf(word)
+            ]);
+            const mutableTokens = await lua(
+                `local positions = ...
+vim.lsp.semantic_tokens.force_refresh(0)
+assert(vim.wait(15000, function()
+  for _, pos in ipairs(positions) do
+    if #(vim.lsp.semantic_tokens.get_at_pos(0, pos[1], pos[2]) or {}) == 0 then return false end
+  end
+  return true
+end, 100), 'mutability tokens must resolve after Cargo loads')
+vim.cmd('redraw!')
+return vim.tbl_map(function(pos)
+  return vim.lsp.semantic_tokens.get_at_pos(0, pos[1], pos[2])[1].modifiers.mutable == true
+end, positions)`,
+                [positions]
+            );
+            assert.deepEqual(
+                mutableTokens,
+                mutabilitySamples.map(([, , mutable]) => mutable),
+                'real rust-analyzer distinguishes mutable bindings, references and methods'
+            );
+            await session.client.request('nvim_eval', ['1']);
+            for (const [line, word, mutable] of mutabilitySamples) {
+                const source = mutabilityLines[line].trim();
+                const row = grid.cells.find((cells) =>
+                    cells
+                        .map((cell) => cell.text)
+                        .join('')
+                        .includes(source)
+                );
+                assert.ok(row, `The visible grid contains ${source}`);
+                const text = row.map((cell) => cell.text).join('');
+                const start = text.indexOf(source) + source.indexOf(word);
+                assert.deepEqual(
+                    row
+                        .slice(start, start + word.length)
+                        .map((cell) => !!grid.highlights.get(cell.highlight)?.underline),
+                    Array(word.length).fill(mutable),
+                    `${word} on line ${line + 1} uses its mutability underline in the actual redraw`
+                );
+            }
+            await session.openFile('src/main.rs');
             assert.ok(sawProgress, 'real rust-analyzer startup publishes progress');
             const progress = async (token: string, value: object): Promise<void> => {
                 await lua(

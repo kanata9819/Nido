@@ -102,6 +102,8 @@ hl(0, '@label', { fg = '#C8C8C8', bg = 'NONE' })
 hl(0, '@string.regexp', { fg = c.vscLightRed, bg = 'NONE' })
 hl(0, '@string.escape', { fg = c.vscYellowOrange, bg = 'NONE' })
 hl(0, '@lsp.mod.deprecated', { strikethrough = true })
+-- Match rust-analyzer's VS Code styling without replacing semantic token colors.
+hl(0, '@lsp.mod.mutable.rust', { underline = true })
 -- Dark Modern token categories, including Vim's legacy syntax group names.
 for color, groups in pairs({
   [c.vscPink] = {

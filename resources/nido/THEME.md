@@ -12,5 +12,7 @@ Nido loads this bundled copy, not the user's personal configuration.
 Nido adds compatibility mappings for native syntax and LSP tokens. Rust macro
 names use Dark Modern's semantic macro blue; builtin derive names such as
 `Debug` and `Clone` keep its type green.
+Rust's mutable bindings, mutable references and methods with `&mut self` are
+underlined using rust-analyzer's semantic tokens, preserving their text colors.
 `init.lua` maps native Rust keywords and LSP namespace/type groups to Azami's
 existing groups. Nido's mode badges and cursor-row borders remain GUI settings.
