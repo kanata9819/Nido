@@ -15,6 +15,8 @@ export default function SettingsPanel({
     setTheme,
     wordWrap,
     setWordWrap,
+    methodSeparators,
+    setMethodSeparators,
     stickyScroll,
     setStickyScroll,
     stickyScrollMaxLines,
@@ -220,6 +222,17 @@ export default function SettingsPanel({
                 />
             </label>
             <small>{t('Wrap long lines at the editor width. The selection is saved.')}</small>
+            <label>
+                {t('Method separators')}{' '}
+                <input
+                    type="checkbox"
+                    checked={methodSeparators}
+                    onChange={(event) => setMethodSeparators(event.target.checked)}
+                />
+            </label>
+            <small>
+                {t('Show horizontal lines above functions and methods. The selection is saved.')}
+            </small>
             <label>
                 {t('Sticky Scroll')}{' '}
                 <input

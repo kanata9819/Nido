@@ -106,6 +106,7 @@ export interface StickyScrollState {
     gutter: number;
     tabstop: number;
     leftcol: number;
+    separators?: { line: number; row: number }[];
     scopes: {
         line: number;
         ending: number;
@@ -270,6 +271,7 @@ export interface NidoAPI {
     setClipboardSharing(id: string, enabled: boolean): Promise<void>;
     setRelativeLineNumbers(id: string, enabled: boolean): Promise<void>;
     setWordWrap(id: string, enabled: boolean): Promise<void>;
+    setMethodSeparators(id: string, enabled: boolean): Promise<void>;
     setEditorConfig(id: string, enabled: boolean): Promise<void>;
     openDocumentation(url: string): Promise<void>;
     click(id: string, row: number, column: number): Promise<void>;

@@ -10,6 +10,61 @@ import type { StickyScrollState } from '../src/shared/types';
 
 const span = [{ text: 'scope {', color: '#d4d4d4' }];
 
+test('method separators follow cached functions, virtual rows, folds and edits, and clear when disabled', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.client.request('nvim_exec_lua', [
+            `
+local api, sticky, brackets = vim.api, require('nido_sticky'), require('nido_brackets')
+local buffer, window = api.nvim_get_current_buf(), api.nvim_get_current_win()
+api.nvim_buf_set_lines(buffer,0,-1,false,{
+  'impl Screen {','  fn first(&self) {','    if ready() {','      work();','    }','  }',
+  '','  fn second(&self) {}','}'})
+vim.cmd('setlocal syntax=rust')
+api.nvim_exec_autocmds('TextChanged',{buffer=buffer})
+assert(vim.wait(5000,function() return brackets.ready(buffer) end,5))
+vim.wait(400)
+local notify, latest = vim.rpcnotify, nil
+vim.rpcnotify=function(channel,name,state,...)
+  if name=='nido:sticky_scroll' then latest=vim.deepcopy(state) end
+  return notify(channel,name,state,...)
+end
+local function rows()
+  sticky.publish(window,api.nvim_get_current_buf())
+  return vim.tbl_map(function(item) return item.line end, latest.separators)
+end
+local ok,err=pcall(function()
+  api.nvim_exec_autocmds('UIEnter',{})
+  vim.cmd('redraw!')
+  assert(#rows()==0,'Separators must default to off')
+  sticky.set_method_separators(true);vim.cmd('redraw!')
+  assert(vim.deep_equal(rows(),{2,8}),'Only functions, not conditionals or the impl, need separators: '..vim.inspect(latest.separators))
+  local before=latest.separators[2].row
+  api.nvim_buf_set_extmark(buffer,api.nvim_create_namespace('method-separator-test'),7,0,
+    {virt_lines={{{'CodeLens','Comment'}}},virt_lines_above=true})
+  vim.cmd('redraw!');rows()
+  assert(latest.separators[2].row==before+1,'Virtual lines must move the separator with the function')
+  vim.cmd('setlocal foldmethod=manual');vim.cmd('1,9fold');vim.cmd('redraw!')
+  assert(#rows()==0,'Functions hidden inside a fold must not draw separators')
+  vim.cmd('normal! zR')
+  api.nvim_buf_set_lines(buffer,7,8,false,{'  const VALUE: i32 = 1;'})
+  api.nvim_exec_autocmds('TextChanged',{buffer=buffer})
+  assert(vim.wait(5000,function() return brackets.ready(buffer) end,5))
+  vim.wait(400);vim.cmd('redraw!')
+  assert(vim.deep_equal(rows(),{2}),'An edited-away method must lose its separator')
+  sticky.set_method_separators(false);vim.cmd('redraw!')
+  assert(#rows()==0,'Disabling must remove existing lines immediately')
+end)
+vim.rpcnotify=notify
+assert(ok,err)
+`,
+            []
+        ]);
+    } finally {
+        await session.stop();
+    }
+});
+
 test('sticky publication reads viewport bounds once per call and follows viewport changes', async () => {
     const session = await Session.create(process.cwd(), () => {});
     try {
@@ -129,10 +184,13 @@ vim.rpcnotify=function(channel,name,state,...)
   return original_notify(channel,name,state,...)
 end
 local ok,err=pcall(function()
+  sticky.set_method_separators(true)
   held[#held].reply(symbols(1))
   for i=1,#held-1 do held[i].reply(symbols(0)) end
   sticky.publish(api.nvim_get_current_win(),buffer)
   assert(latest and latest.scopes[1].line==2,'A late reply replaced the current outline')
+  assert(vim.deep_equal(vim.tbl_map(function(item) return item.line end,latest.separators),{2}),
+    'Separators must use the current LSP selection range and reject obsolete replies')
   mode='sync';edit(5)
   sticky.publish(api.nvim_get_current_win(),buffer)
   assert(pending()==0 and latest.scopes[1].line==2,'Synchronous outline response was lost')

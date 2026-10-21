@@ -266,6 +266,9 @@ export const japanese: Record<string, string> = {
     'Show file explorer': 'ファイルエクスプローラーを表示',
     'Format on save': '保存時に整形',
     'Word wrap': '行の折り返し',
+    'Method separators': 'メソッドセパレータ',
+    'Show horizontal lines above functions and methods. The selection is saved.':
+        '関数・メソッドの上に区切り線を表示します。選択は保存されます。',
     'Wrap long lines at the editor width. The selection is saved.':
         '長い行をエディターの幅で折り返します。選択は保存されます。',
     'Sticky Scroll': 'スティッキースクロール',

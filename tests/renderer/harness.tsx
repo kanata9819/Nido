@@ -148,6 +148,7 @@ let props: HarnessProps = {
         clipboardSharing: true,
         relativeLineNumbers: true,
         editorConfig: true,
+        methodSeparators: false,
         wordWrap: false
     },
     workspaceId: 'alpha',

@@ -256,8 +256,25 @@ export class Grid {
             for (const args of calls) {
                 if (name === 'nido_sticky_scroll') {
                     const state = args[0] as StickyScrollState;
+                    const separators = Array.isArray(state.separators) ? state.separators : [];
+                    const previous = this.stickyScroll;
+                    const before = previous?.separators ?? [];
+                    if (
+                        (separators.length || before.length) &&
+                        (separators.length !== before.length ||
+                            separators.some(
+                                (item, i) =>
+                                    item.row !== before[i]?.row || item.line !== before[i]?.line
+                            ) ||
+                            state.left !== previous?.left ||
+                            state.gutter !== previous?.gutter ||
+                            state.width !== previous?.width)
+                    ) {
+                        this.canvas.invalidatePaint();
+                    }
                     this.stickyScroll = {
                         ...state,
+                        separators,
                         scopes: Array.isArray(state.scopes) ? state.scopes : []
                     };
                     continue;

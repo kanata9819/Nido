@@ -251,6 +251,12 @@ export function registerHandlers({
         }
         return session(id).setWordWrap(enabled);
     });
+    handle('methodSeparators', (id, enabled) => {
+        if (typeof enabled !== 'boolean') {
+            throw new Error('Invalid method separator setting.');
+        }
+        return session(id).setMethodSeparators(enabled);
+    });
     handle('openDocumentation', (value) => {
         const url = new URL(text(value));
         if (!['https:', 'http:'].includes(url.protocol)) {

@@ -4,12 +4,18 @@ import type { EditorSettings } from './useEditorSettings';
 
 export type SessionSettings = Pick<
     EditorSettings,
-    'clipboardSharing' | 'relativeLineNumbers' | 'editorConfig' | 'wordWrap'
+    'clipboardSharing' | 'relativeLineNumbers' | 'editorConfig' | 'wordWrap' | 'methodSeparators'
 >;
 
 export function useSessionSettings(
     workspaces: Workspace[],
-    { clipboardSharing, relativeLineNumbers, editorConfig, wordWrap }: SessionSettings,
+    {
+        clipboardSharing,
+        relativeLineNumbers,
+        editorConfig,
+        wordWrap,
+        methodSeparators
+    }: SessionSettings,
     setError: (message: string) => void
 ): void {
     const applied = useRef(
@@ -59,6 +65,12 @@ export function useSessionSettings(
                 apply(workspace.id, 'wordWrap', wordWrap, window.nido.setWordWrap);
                 apply(
                     workspace.id,
+                    'methodSeparators',
+                    methodSeparators,
+                    window.nido.setMethodSeparators
+                );
+                apply(
+                    workspace.id,
                     'relativeLineNumbers',
                     relativeLineNumbers,
                     window.nido.setRelativeLineNumbers
@@ -71,5 +83,13 @@ export function useSessionSettings(
                 applied.current.delete(id);
             }
         }
-    }, [clipboardSharing, relativeLineNumbers, editorConfig, wordWrap, workspaces, setError]);
+    }, [
+        clipboardSharing,
+        relativeLineNumbers,
+        editorConfig,
+        wordWrap,
+        methodSeparators,
+        workspaces,
+        setError
+    ]);
 }

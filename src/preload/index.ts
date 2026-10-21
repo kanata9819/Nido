@@ -47,6 +47,7 @@ const api: NidoAPI = {
     setClipboardSharing: (id, enabled) => ipcRenderer.invoke('nido:clipboardSharing', id, enabled),
     setEditorConfig: (id, enabled) => ipcRenderer.invoke('nido:editorConfig', id, enabled),
     setWordWrap: (id, enabled) => ipcRenderer.invoke('nido:wordWrap', id, enabled),
+    setMethodSeparators: (id, enabled) => ipcRenderer.invoke('nido:methodSeparators', id, enabled),
     setRelativeLineNumbers: (id, enabled) =>
         ipcRenderer.invoke('nido:relativeLineNumbers', id, enabled),
     openDocumentation: (url) => ipcRenderer.invoke('nido:openDocumentation', url),

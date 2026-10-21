@@ -2926,7 +2926,7 @@ test('state patches coalesce without dropping diagnostics, other sessions or opt
 
 test('workspace changes apply only missing settings and changed values', async ({ page }) => {
     await page.goto(`${origin}?view=settings`);
-    await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(4);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(5);
     const alpha = { id: 'alpha', name: 'Renamed Alpha', root: '/alpha' };
     const beta = { id: 'beta', name: 'Beta', root: '/beta' };
     await page.evaluate((alpha) => window.rendererTest.render({ workspaces: [alpha] }), alpha);
@@ -2935,10 +2935,10 @@ test('workspace changes apply only missing settings and changed values', async (
         ([alpha, beta]) => window.rendererTest.render({ workspaces: [beta, alpha] }),
         [alpha, beta]
     );
-    await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(8);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(10);
     expect(
-        await page.evaluate(() => window.rendererTest.calls.slice(4).map((call) => call.args[0]))
-    ).toEqual(['beta', 'beta', 'beta', 'beta']);
+        await page.evaluate(() => window.rendererTest.calls.slice(5).map((call) => call.args[0]))
+    ).toEqual(['beta', 'beta', 'beta', 'beta', 'beta']);
     await page.evaluate(
         ([alpha, beta]) =>
             window.rendererTest.render({
@@ -2947,13 +2947,14 @@ test('workspace changes apply only missing settings and changed values', async (
                     clipboardSharing: true,
                     relativeLineNumbers: true,
                     editorConfig: true,
+                    methodSeparators: false,
                     wordWrap: true
                 }
             }),
         [alpha, beta]
     );
-    await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(10);
-    expect(await page.evaluate(() => window.rendererTest.calls.slice(8))).toEqual([
+    await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(12);
+    expect(await page.evaluate(() => window.rendererTest.calls.slice(10))).toEqual([
         { method: 'setWordWrap', args: ['alpha', true] },
         { method: 'setWordWrap', args: ['beta', true] }
     ]);
@@ -2968,8 +2969,8 @@ test('workspace changes apply only missing settings and changed values', async (
             }),
         [alpha, beta]
     );
-    await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(12);
-    expect(await page.evaluate(() => window.rendererTest.calls.slice(10))).toEqual([
+    await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(14);
+    expect(await page.evaluate(() => window.rendererTest.calls.slice(12))).toEqual([
         { method: 'setClipboardSharing', args: ['shell', true] },
         { method: 'setClipboardSharing', args: ['terminal', true] }
     ]);
@@ -3091,6 +3092,7 @@ test('settings ignore obsolete failures after a newer request for the same value
                 clipboardSharing: true,
                 relativeLineNumbers: true,
                 editorConfig: true,
+                methodSeparators: false,
                 wordWrap: true
             }
         })
@@ -3102,6 +3104,7 @@ test('settings ignore obsolete failures after a newer request for the same value
                 clipboardSharing: true,
                 relativeLineNumbers: true,
                 editorConfig: true,
+                methodSeparators: false,
                 wordWrap: false
             }
         })

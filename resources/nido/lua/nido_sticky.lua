@@ -2,6 +2,7 @@ local M = {}
 local api = vim.api
 local entries, pending, published, color_pending = {}, {}, {}, {}
 local outlines = {}
+local method_separators = false
 
 local function cancel_outline(buffer)
   local request = outlines[buffer]
@@ -62,6 +63,28 @@ local function sort(scopes)
   return scopes
 end
 
+local function fallback_methods(lines)
+  local methods = {}
+  local control = {['if']=true, ['else']=true, ['elseif']=true, ['for']=true, ['while']=true,
+    ['switch']=true, ['catch']=true, ['with']=true, ['match']=true, ['return']=true}
+  for line, text in ipairs(lines) do
+    local first = text:match('^%s*([%w_$]+)')
+    local name = text:match('([%w_$]+)%s*%b()%s*[^;]*{%s*$')
+    if text:match('%f[%w]fn%s+[%a_]')
+        or text:match('%f[%w]def%s+[%a_]') or text:match('%f[%w]function%s*[%w_$.:%(]')
+        or (name and first and not control[name] and not control[first]
+          and not text:find('=', 1, true)) then
+      local ignored = false
+      for _, id in ipairs(vim.fn.synstack(line, text:find('%S') or 1)) do
+        local name = vim.fn.synIDattr(id, 'name'):lower()
+        if name:find('comment') or name:find('string') then ignored = true; break end
+      end
+      if not ignored then methods[#methods + 1] = line end
+    end
+  end
+  return methods
+end
+
 local function refresh(buffer)
   cancel_outline(buffer)
   if not api.nvim_buf_is_valid(buffer) or not api.nvim_buf_is_loaded(buffer)
@@ -72,14 +95,16 @@ local function refresh(buffer)
   end
   local tick = api.nvim_buf_get_changedtick(buffer)
   if api.nvim_buf_get_offset(buffer, api.nvim_buf_line_count(buffer)) > 1024 * 1024 then
-    entries[buffer] = {tick=tick, lines={}, scopes={}, highlights={}}
+    entries[buffer] = {tick=tick, lines={}, scopes={}, methods={}, highlights={}}
     redraw()
     return
   end
   local lines = api.nvim_buf_get_lines(buffer, 0, -1, false)
   -- Match the existing bracket scanner's bound; never scan a huge file during scrolling.
   local scopes = api.nvim_buf_call(buffer, function() return fallback(buffer, lines) end)
-  local entry = {tick=tick, lines=lines, scopes=sort(scopes), highlights={}}
+  local entry = {tick=tick, lines=lines, scopes=sort(scopes),
+    methods=method_separators and api.nvim_buf_call(buffer, function() return fallback_methods(lines) end) or nil,
+    highlights={}}
   entries[buffer] = entry
   redraw()
   for _, client in ipairs(vim.lsp.get_clients({bufnr=buffer, method='textDocument/documentSymbol'})) do
@@ -91,13 +116,18 @@ local function refresh(buffer)
         outlines[buffer] = nil
         if err or not result or entries[buffer] ~= entry or not api.nvim_buf_is_valid(buffer)
             or api.nvim_buf_get_changedtick(buffer) ~= tick then return end
-        local outline = {}
+        local outline, methods, seen = {}, {}, {}
         local function visit(items)
           for _, item in ipairs(items) do
             local range = item.range or (item.location and item.location.range)
             if range and (not item.location or item.location.uri == vim.uri_from_bufnr(buffer)) then
               local first = (item.selectionRange or range).start.line + 1
               local last = range['end'].line + (range['end'].character > 0 and 1 or 0)
+              if (item.kind == 6 or item.kind == 9 or item.kind == 12)
+                  and first <= #lines and not seen[first] then
+                seen[first] = true
+                methods[#methods + 1] = first
+              end
               if last > first and first <= #lines then
                 outline[#outline + 1] = {line=first, ending=math.min(last, #lines)}
               end
@@ -106,7 +136,12 @@ local function refresh(buffer)
           end
         end
         visit(result)
-        if #outline > 0 then entry.scopes = sort(outline); entry.highlights = {}; redraw() end
+        if #outline > 0 or #methods > 0 then
+          entry.scopes = sort(outline)
+          table.sort(methods)
+          entry.methods, entry.highlights = methods, {}
+          redraw()
+        end
       end, buffer)
       request.id = id
       if not ok and outlines[buffer] == request then outlines[buffer] = nil end
@@ -154,7 +189,7 @@ function M.publish(window, buffer)
   if not info then return false end
   local state = {window=window, buffer=buffer, top=info.winrow - 1, left=info.wincol - 1,
     width=info.width, height=info.height, gutter=info.textoff, tabstop=vim.bo[buffer].tabstop,
-    leftcol=0, scopes={}}
+    leftcol=0, scopes={}, separators={}}
   local entry = entries[buffer]
   if entry and entry.tick == api.nvim_buf_get_changedtick(buffer)
       and vim.bo[buffer].buftype == '' and api.nvim_win_get_config(window).relative == '' then
@@ -175,6 +210,20 @@ function M.publish(window, buffer)
           end
         end
       end
+      -- Reuse the cached outline; disabled separators do no screen-position work.
+      if method_separators then
+        for _, line in ipairs(entry.methods or {}) do
+          if line >= view.topline and line <= last_line then
+            local folded = vim.fn.foldclosed(line)
+            if folded == -1 or folded == line then
+              local position = vim.fn.screenpos(window, line, 1)
+              if position.row > 0 then
+                state.separators[#state.separators + 1] = {line=line, row=position.row - 1}
+              end
+            end
+          end
+        end
+      end
     end)
   elseif vim.bo[buffer].buftype == '' and not pending[buffer] then
     schedule(buffer)
@@ -184,6 +233,19 @@ function M.publish(window, buffer)
     vim.rpcnotify(vim.g.nido_channel, 'nido:sticky_scroll', state)
   end
   return false
+end
+
+function M.set_method_separators(enabled)
+  if method_separators == enabled then return end
+  method_separators = enabled
+  if enabled then
+    for buffer, entry in pairs(entries) do
+      if not entry.methods and api.nvim_buf_is_valid(buffer) then
+        entry.methods = api.nvim_buf_call(buffer, function() return fallback_methods(entry.lines) end)
+      end
+    end
+  end
+  redraw()
 end
 
 function M.jump(window, buffer, line)

@@ -425,6 +425,17 @@ export class GridCanvas {
         ctx.beginPath();
         ctx.rect(0, 0, width, this.grid.contentHeight);
         ctx.clip();
+        const outline = this.grid.stickyScroll;
+        if (outline?.separators?.length) {
+            const left = Math.round((outline.left + outline.gutter) * cellWidth * dpr) / dpr;
+            const right = Math.min(width, (outline.left + outline.width) * cellWidth);
+            ctx.fillStyle = this.grid.foreground;
+            ctx.globalAlpha = 0.22;
+            for (const separator of outline.separators) {
+                const y = Math.round(this.grid.rowY(separator.row) * dpr) / dpr;
+                ctx.fillRect(left, y, Math.max(0, right - left), 1 / dpr);
+            }
+        }
         for (const guide of this.grid.bracketGuides) {
             const snap = (value: number): number => Math.round(value * dpr) / dpr;
             // Keep the vertical stroke outside the bracket's cell, including at fractional DPI.

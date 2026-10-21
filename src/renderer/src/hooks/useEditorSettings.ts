@@ -31,6 +31,12 @@ export function useEditorSettings(): EditorSettings {
     useEffect(() => {
         localStorage.setItem('nido.wordWrap', String(wordWrap));
     }, [wordWrap]);
+    const [methodSeparators, setMethodSeparators] = useState(
+        () => localStorage.getItem('nido.methodSeparators') === 'true'
+    );
+    useEffect(() => {
+        localStorage.setItem('nido.methodSeparators', String(methodSeparators));
+    }, [methodSeparators]);
     const [stickyScroll, setStickyScroll] = useState(
         () => localStorage.getItem('nido.stickyScroll') !== 'false'
     );
@@ -161,6 +167,8 @@ export function useEditorSettings(): EditorSettings {
         setTheme,
         wordWrap,
         setWordWrap,
+        methodSeparators,
+        setMethodSeparators,
         stickyScroll,
         setStickyScroll,
         stickyScrollMaxLines,
@@ -207,6 +215,8 @@ export interface EditorSettings {
     setTheme: Dispatch<SetStateAction<UITheme>>;
     wordWrap: boolean;
     setWordWrap: Dispatch<SetStateAction<boolean>>;
+    methodSeparators: boolean;
+    setMethodSeparators: Dispatch<SetStateAction<boolean>>;
     stickyScroll: boolean;
     setStickyScroll: Dispatch<SetStateAction<boolean>>;
     stickyScrollMaxLines: number;

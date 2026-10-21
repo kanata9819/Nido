@@ -413,6 +413,16 @@ end`,
         ]);
     }
 
+    async setMethodSeparators(enabled: boolean): Promise<void> {
+        if (this.workspace.kind === 'terminal') {
+            return;
+        }
+        await this.client.request('nvim_exec_lua', [
+            "require('nido_sticky').set_method_separators(...)",
+            [enabled]
+        ]);
+    }
+
     async setWordWrap(enabled: boolean): Promise<void> {
         if (this.workspace.kind === 'terminal') {
             return;
