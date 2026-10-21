@@ -435,6 +435,7 @@ export function registerHandlers({
         window.setBackgroundColor(acrylic ? '#00000000' : '#141414');
     });
 
+    handle('windowState', () => ({ maximized: window.isMaximized() }));
     handle('window', (action) => {
         switch (action) {
             case 'minimize': {

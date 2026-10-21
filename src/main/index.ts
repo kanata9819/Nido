@@ -66,6 +66,10 @@ app.whenReady().then(async () => {
     window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) =>
         callback(false)
     );
+    const publishWindowState = (): void =>
+        send({ type: 'windowState', state: { maximized: window.isMaximized() } });
+    window.on('maximize', publishWindowState);
+    window.on('unmaximize', publishWindowState);
     window.once('ready-to-show', () => {
         window.show();
         // Compensate for Windows DPI rounding so saved sizes do not grow on each restart.

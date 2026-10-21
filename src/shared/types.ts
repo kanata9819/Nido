@@ -10,6 +10,10 @@ export type TerminalShell = (typeof terminalShells)[number];
 export const uiThemes = ['dark', 'acrylic'] as const;
 export type UITheme = (typeof uiThemes)[number];
 
+export interface WindowState {
+    maximized: boolean;
+}
+
 export interface UpdateState {
     status:
         | 'disabled'
@@ -172,6 +176,7 @@ export interface DiagnosticDetails {
 }
 export type NidoEvent =
     | { type: 'update'; id?: never; state: UpdateState }
+    | { type: 'windowState'; id?: never; state: WindowState }
     | {
           type: 'notification';
           id: string;
@@ -298,6 +303,7 @@ export interface NidoAPI {
     setLanguage(language: Language): Promise<void>;
     updateState(): Promise<UpdateState>;
     updateAction(action: UpdateAction): Promise<UpdateState>;
+    windowState(): Promise<WindowState>;
     windowAction(action: 'minimize' | 'maximize' | 'close'): Promise<void>;
     onEvent(callback: (event: NidoEvent) => void): () => void;
 }

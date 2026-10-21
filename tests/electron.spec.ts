@@ -2084,6 +2084,11 @@ test('window size and maximized state survive restart', async () => {
     try {
         running = await electron.launch(options);
         await waitForStartup();
+        await expect(
+            (await running.firstWindow())
+                .getByRole('button', { name: 'Maximize', exact: true })
+                .locator('svg')
+        ).toHaveClass(/lucide-square/);
         await running.evaluate(({ BrowserWindow, screen }) => {
             const area = screen.getPrimaryDisplay().workAreaSize;
             BrowserWindow.getAllWindows()[0].setSize(
@@ -2110,6 +2115,11 @@ test('window size and maximized state survive restart', async () => {
                 )
             )
             .toBe(true);
+        await expect(
+            (await running.firstWindow())
+                .getByRole('button', { name: 'Restore window', exact: true })
+                .locator('svg')
+        ).toHaveClass(/lucide-copy/);
         await running.close();
         running = await electron.launch(options);
         await waitForStartup();
@@ -2120,14 +2130,30 @@ test('window size and maximized state survive restart', async () => {
                 )
             )
             .toBe(true);
-        await running.evaluate(({ BrowserWindow }) =>
-            BrowserWindow.getAllWindows()[0].unmaximize()
-        );
+        const page = await running.firstWindow();
+        const restore = page.getByRole('button', { name: 'Restore window', exact: true });
+        await expect(restore.locator('svg')).toHaveClass(/lucide-copy/);
+        await restore.click();
         await expect
             .poll(() =>
                 running!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getSize())
             )
             .toEqual(originalSize);
+        const maximize = page.getByRole('button', { name: 'Maximize', exact: true });
+        await expect(maximize.locator('svg')).toHaveClass(/lucide-square/);
+        await maximize.click();
+        await expect(restore.locator('svg')).toHaveClass(/lucide-copy/);
+        await expect
+            .poll(() =>
+                running!.evaluate(({ BrowserWindow }) =>
+                    BrowserWindow.getAllWindows()[0].isMaximized()
+                )
+            )
+            .toBe(true);
+        await running.evaluate(({ BrowserWindow }) =>
+            BrowserWindow.getAllWindows()[0].unmaximize()
+        );
+        await expect(maximize.locator('svg')).toHaveClass(/lucide-square/);
     } finally {
         await running?.close();
         await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

@@ -1,5 +1,6 @@
 import { useI18n } from '../i18n';
-import { Leaf, Minus, Plus, Square, SquareTerminal, Star, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Copy, Leaf, Minus, Plus, Square, SquareTerminal, Star, X } from 'lucide-react';
 import type { FavoriteWorkspace, Workspace } from '../../../shared/types';
 import styles from '../assets/Nido.module.css';
 import UpdateButton from './UpdateButton';
@@ -32,6 +33,28 @@ export default function TitleBar({
     run
 }: TitleBarProps): React.JSX.Element {
     const t = useI18n();
+    const [maximized, setMaximized] = useState(false);
+    useEffect(() => {
+        let active = true;
+        let received = false;
+        const unsubscribe = window.nido.onEvent((event) => {
+            if (event.type === 'windowState') {
+                received = true;
+                setMaximized(event.state.maximized);
+            }
+        });
+        run(
+            window.nido.windowState().then((state) => {
+                if (active && !received) {
+                    setMaximized(state.maximized);
+                }
+            })
+        );
+        return () => {
+            active = false;
+            unsubscribe();
+        };
+    }, [run]);
     return (
         <header className={styles.titlebar}>
             <div className={styles.brand}>
@@ -109,10 +132,11 @@ export default function TitleBar({
                     <Minus size={15} />
                 </button>
                 <button
-                    aria-label={t('Maximize or restore')}
+                    aria-label={t(maximized ? 'Restore window' : 'Maximize')}
+                    title={t(maximized ? 'Restore window' : 'Maximize')}
                     onClick={() => run(window.nido.windowAction('maximize'))}
                 >
-                    <Square size={12} />
+                    {maximized ? <Copy size={12} /> : <Square size={12} />}
                 </button>
                 <button
                     aria-label={t('Close Nido')}

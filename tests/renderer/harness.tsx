@@ -65,6 +65,7 @@ const pending: (Call & { resolve: (value: unknown) => void; reject: (value: unkn
     [];
 const workspace = { id: 'alpha', root: '/alpha', name: 'Alpha' };
 const defaults: Record<string, unknown> = {
+    windowState: { maximized: false },
     wslDistributions: [],
     favoriteWorkspaces: [],
     restoreWorkspaces: { workspaces: [workspace], active: 'alpha', errors: [] },

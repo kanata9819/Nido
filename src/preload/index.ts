@@ -83,6 +83,7 @@ const api: NidoAPI = {
     setLanguage: (language) => ipcRenderer.invoke('nido:language', language),
     updateState: () => ipcRenderer.invoke('nido:updateState'),
     updateAction: (action) => ipcRenderer.invoke('nido:updateAction', action),
+    windowState: () => ipcRenderer.invoke('nido:windowState'),
     windowAction: (action) => ipcRenderer.invoke('nido:window', action),
     onEvent: (callback) => {
         const listener = (_event: Electron.IpcRendererEvent, event: NidoEvent): void =>
