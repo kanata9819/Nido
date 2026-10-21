@@ -76,26 +76,59 @@ local diagnostics_version = 0
 local published_diagnostics_version = -1
 local buffers = {}
 local buffers_dirty = true
-local search_cache
-local function search_status()
+local publish
+local search_cache, search_pending
+local search_delay = 16
+local function search_context()
   local pattern = vim.fn.getreg('/')
   if vim.v.hlsearch ~= 1 or pattern == '' or vim.bo.buftype ~= '' then
-    search_cache = nil
-    return false
+    return nil
   end
   local cursor = vim.api.nvim_win_get_cursor(0)
-  local key = table.concat({vim.api.nvim_get_current_buf(), vim.api.nvim_buf_get_changedtick(0),
-    cursor[1], cursor[2], pattern, tostring(vim.o.ignorecase), tostring(vim.o.smartcase),
-    tostring(vim.o.magic), vim.bo.iskeyword}, '\0')
-  if search_cache and search_cache.key == key then
+  local context = table.concat({vim.api.nvim_get_current_buf(), vim.api.nvim_buf_get_changedtick(0),
+    pattern, tostring(vim.o.ignorecase), tostring(vim.o.smartcase),
+    tostring(vim.o.magic), vim.bo.iskeyword, vim.o.regexpengine}, '\0')
+  return {context=context, key=context .. '\0' .. cursor[1] .. ':' .. cursor[2], pattern=pattern}
+end
+local function search_status()
+  local request = search_context()
+  if not request then
+    search_cache = nil
+    search_pending = nil
+    search_delay = 16
+    return false
+  end
+  if search_cache and search_cache.key == request.key then
+    -- Moving back to the cached position also invalidates a different queued count.
+    search_pending = nil
     return search_cache.value
   end
-  local ok, count = pcall(vim.fn.searchcount, {recompute=1, maxcount=9999, timeout=10})
-  if not ok then return false end
-  local value = {pattern=pattern, current=count.current or 0, total=count.total or 0,
-    incomplete=count.incomplete or 0}
-  search_cache = {key=key, value=value}
-  return value
+  if not search_pending or search_pending.key ~= request.key then
+    request.started = search_pending and search_pending.started or vim.uv.hrtime()
+    search_pending = request
+    -- Keep full-buffer regex scans off the immediate cursor/input notification.
+    -- Slow counts wait for nearby inputs, but continuous movement still updates
+    -- at least every 120ms (plus the event loop's timer scheduling).
+    local delay = math.min(search_delay, math.max(0, 120 - (vim.uv.hrtime() - request.started) / 1e6))
+    vim.defer_fn(function()
+      if search_pending ~= request then return end
+      local current = search_context()
+      search_pending = nil
+      if not current or current.key ~= request.key then
+        publish()
+        return
+      end
+      local started = vim.uv.hrtime()
+      local ok, count = pcall(vim.fn.searchcount, {recompute=1, maxcount=9999, timeout=10})
+      search_delay = math.min(80, math.max(16, (vim.uv.hrtime() - started) / 1e6 * 8))
+      local value = ok and {pattern=request.pattern, current=count.current or 0,
+        total=count.total or 0, incomplete=count.incomplete or 0} or false
+      search_cache = {context=request.context, key=request.key, value=value}
+      publish()
+    end, delay)
+  end
+  if search_cache and search_cache.context == request.context then return search_cache.value end
+  return {pattern=request.pattern, current=0, total=0, incomplete=1}
 end
 local function refresh_diagnostics()
   if not diagnostics_dirty then
@@ -155,7 +188,7 @@ local function lsp_status()
   return table.concat(clients, ', '), table.concat(tasks, ' / ')
 end
 
-local function publish()
+publish = function()
   if pending then
     return
   end

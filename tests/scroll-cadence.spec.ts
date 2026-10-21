@@ -176,6 +176,18 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                             }
                         ).cadence.samples
                 );
+                const inputs = await page.evaluate(
+                    () =>
+                        (window as unknown as { cadence: { inputs: { at: number }[] } }).cadence
+                            .inputs
+                );
+                const inputIntervals = inputs
+                    .slice(1)
+                    .map((input, i) => input.at - inputs[i].at)
+                    .filter((interval) => interval > 0)
+                    .sort((a, b) => a - b);
+                expect(inputIntervals.length).toBeGreaterThan(20);
+                const inputInterval = inputIntervals[Math.floor(inputIntervals.length / 2)];
                 const steps = samples
                     .slice(1)
                     .map((sample, i) => Math.sign(delta) * (sample.top - samples[i].top));
@@ -195,13 +207,28 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                     maxStep: Math.max(...steps),
                     gapP95: gaps[Math.floor(gaps.length * 0.95)],
                     maxGap: gaps.at(-1),
+                    inputInterval,
                     distance: samples.at(-1)!.top - start
                 });
-                const maxStep = Math.abs(delta) * 0.5 * (Math.abs(delta) > 5 ? 3 : 2) + pixel;
-                const failed = reversals.length > 0 || Math.max(...steps) > maxStep;
+                const stepsPerPaint = Math.abs(delta) > 5 ? 3 : 2;
+                // The OS can delay a paint callback while the eased motion keeps advancing.
+                // Allow that elapsed time, while retaining the original bound for normal
+                // frames. A cache that paints stationary frames then jumps still fails.
+                const stepLimits = steps.map((_, i) => {
+                    const elapsed = samples[i + 1].at - samples[i].at;
+                    return (
+                        Math.abs(delta) *
+                            0.5 *
+                            Math.max(stepsPerPaint, Math.ceil(elapsed / inputInterval)) +
+                        pixel
+                    );
+                });
+                const excessiveSteps = steps.filter((step, i) => step > stepLimits[i]);
+                const failed = reversals.length > 0 || excessiveSteps.length > 0;
                 if (failed)
                     Object.assign(reports.at(-1)!, {
                         samples,
+                        stepLimits,
                         inputs: await page.evaluate(
                             () =>
                                 (window as unknown as { cadence: { inputs: unknown[] } }).cadence
@@ -229,10 +256,7 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
                     pixel + 0.01
                 );
                 expect(reversals).toEqual([]);
-                expect(
-                    Math.max(...steps),
-                    'cache refills must not stall then jump'
-                ).toBeLessThanOrEqual(maxStep);
+                expect(excessiveSteps, 'cache refills must not stall then jump').toEqual([]);
             }
         }
     } finally {

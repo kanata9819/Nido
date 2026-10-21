@@ -166,7 +166,7 @@ test('search counts reuse unchanged views and refresh for cursor, edits, pattern
         session.client.request('nvim_exec_lua', [code, []]);
     const publish = async (): Promise<void> => {
         await lua(
-            "vim.api.nvim_exec_autocmds('User', {pattern='NidoScroll'}); vim.wait(20,function() return false end,5)"
+            "vim.api.nvim_exec_autocmds('User', {pattern='NidoScroll'}); vim.wait(80,function() return false end,5)"
         );
     };
     try {
@@ -200,6 +200,140 @@ test('search counts reuse unchanged views and refresh for cursor, edits, pattern
         await lua('vim.v.hlsearch=0');
         await publish();
         assert.equal(session.state.search, false);
+    } finally {
+        await session.stop();
+    }
+});
+
+test('search counting coalesces rapid movement and rejects stale edits, buffers and cleared searches', async (context) => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        const result = await session.client.request('nvim_exec_lua', [
+            `
+local api = vim.api
+local original_count, original_defer, original_notify, original_hrtime = vim.fn.searchcount, vim.defer_fn, vim.rpcnotify, vim.uv.hrtime
+local scans, held, latest = 0, {}, nil
+local function publish()
+  api.nvim_exec_autocmds('User', {pattern='NidoSearch'})
+  vim.wait(5)
+end
+local function flush()
+  for _=1,5 do
+    local callbacks = held
+    held = {}
+    for _, callback in ipairs(callbacks) do callback() end
+    vim.wait(5)
+    if #held == 0 then return end
+  end
+  error('Search counting did not settle')
+end
+api.nvim_buf_set_lines(0,0,-1,false,vim.fn['repeat']({'alpha ALPHA'},1000))
+vim.fn.setreg('/', 'alpha'); vim.o.ignorecase=false; vim.o.smartcase=false; vim.v.hlsearch=1
+vim.wait(100)
+local now = original_hrtime()
+vim.uv.hrtime = function() return now end -- This entire burst is inside the counting window.
+vim.fn.searchcount = function(options) scans=scans+1; return original_count(options) end
+vim.defer_fn = function(callback, ms)
+  if ms >= 8 and ms <= 32 then held[#held+1]=callback; return end
+  return original_defer(callback, ms)
+end
+vim.rpcnotify = function(channel, method, state, ...)
+  if method == 'nido:state' then latest=vim.deepcopy(state) end
+  return original_notify(channel, method, state, ...)
+end
+local ok, err = pcall(function()
+  for row=101,140 do
+    api.nvim_win_set_cursor(0,{row,0})
+    publish()
+  end
+  assert(scans == 0 and latest.line == 140, 'Cursor state must arrive without a full-buffer scan')
+  flush()
+  assert(scans == 1 and latest.search.current == 140 and latest.search.total == 1000,
+    'A burst must count only its latest cursor position')
+  api.nvim_win_set_cursor(0,{150,0}); publish()
+  api.nvim_win_set_cursor(0,{140,0}); publish()
+  flush()
+  assert(scans == 1 and latest.search.current == 140, 'Returning to a cached position cancels an obsolete count')
+  api.nvim_win_set_cursor(0,{160,0}); publish()
+  api.nvim_buf_set_lines(0,0,-1,false,{'beta','beta'})
+  vim.fn.setreg('/','beta')
+  -- The queued callback must recheck text, pattern and position even before their next autocmd.
+  flush()
+  assert(latest.search.pattern == 'beta' and latest.search.total == 2,
+    'A queued count must not publish the old text or pattern')
+  api.nvim_win_set_cursor(0,{2,0}); publish()
+  local buffer = api.nvim_create_buf(true,false)
+  api.nvim_set_current_buf(buffer)
+  api.nvim_buf_set_lines(buffer,0,-1,false,{'beta beta beta'})
+  flush()
+  assert(latest.current == buffer and latest.search.total == 3, 'A count must follow the current buffer')
+  vim.fn.setreg('/','missing'); publish()
+  vim.v.hlsearch=0; publish()
+  local before = scans
+  flush()
+  assert(latest.search == false and scans == before, 'Clearing search cancels its queued work')
+end)
+vim.fn.searchcount, vim.defer_fn, vim.rpcnotify, vim.uv.hrtime = original_count, original_defer, original_notify, original_hrtime
+assert(ok, err)
+return {moves=40, burstScans=1, totalScans=scans}
+`,
+            []
+        ]);
+        context.diagnostic(JSON.stringify(result));
+    } finally {
+        await session.stop();
+    }
+});
+
+test('slow search counts have a bounded wait during continuous input', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.client.request('nvim_exec_lua', [
+            `
+local api = vim.api
+api.nvim_buf_set_lines(0,0,-1,false,{'alpha','alpha','alpha','alpha','alpha'})
+vim.fn.setreg('/','alpha'); vim.v.hlsearch=0
+api.nvim_exec_autocmds('User',{pattern='NidoSearch'}); vim.wait(5)
+local hrtime, defer, count, notify = vim.uv.hrtime, vim.defer_fn, vim.fn.searchcount, vim.rpcnotify
+local now, held, latest = 0, {}, nil
+vim.uv.hrtime = function() return now end
+vim.defer_fn = function(callback, ms)
+  if ms <= 80 then held[#held+1]={callback=callback,delay=ms}; return end
+  return defer(callback,ms)
+end
+vim.fn.searchcount = function(options)
+  local result = count(options)
+  now=now+10000000 -- Model a slow count without sleeping inside the test.
+  return result
+end
+vim.rpcnotify = function(channel, method, state, ...)
+  if method == 'nido:state' then latest=vim.deepcopy(state) end
+  return notify(channel,method,state,...)
+end
+local function publish()
+  api.nvim_exec_autocmds('User',{pattern='NidoSearch'}); vim.wait(5)
+end
+local ok, err = pcall(function()
+  vim.v.hlsearch=1; publish()
+  local initial=held; held={}
+  for _, item in ipairs(initial) do item.callback() end
+  vim.wait(5)
+  for row=2,5 do
+    now=now+40000000
+    api.nvim_win_set_cursor(0,{row,0}); publish()
+    assert(held[#held].delay <= 80, 'A slow count must not postpone a settled view beyond 80ms')
+  end
+  assert(held[#held].delay == 0, 'Continuous input must not postpone counting beyond 120ms')
+  local callbacks=held; held={}
+  for _, item in ipairs(callbacks) do item.callback() end
+  vim.wait(5)
+  assert(latest.search.current == 5 and latest.search.total == 5, 'The bounded update must count the latest position')
+end)
+vim.uv.hrtime, vim.defer_fn, vim.fn.searchcount, vim.rpcnotify = hrtime, defer, count, notify
+assert(ok,err)
+`,
+            []
+        ]);
     } finally {
         await session.stop();
     }

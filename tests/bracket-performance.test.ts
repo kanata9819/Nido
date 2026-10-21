@@ -121,6 +121,73 @@ return {scopeReads=reads, moves=20, scopes=3000}
     }
 });
 
+test('cursor-only bracket geometry is reused and scope, viewport and text changes still match a full redraw', async (context) => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        const result = await session.client.request('nvim_exec_lua', [
+            `
+local api, brackets = vim.api, require('nido_brackets')
+local lines = {'outer {','  outer content long enough to move the cursor','  nested {',
+  '    inner content long enough to move the cursor','  }','  outer content','}'}
+api.nvim_buf_set_lines(0,0,-1,false,lines)
+api.nvim_win_set_cursor(0,{2,3})
+api.nvim_exec_autocmds('TextChanged',{buffer=0})
+assert(vim.wait(5000,function() return brackets.ready(api.nvim_get_current_buf()) end,5))
+vim.wait(200)
+local indent, screenpos, notify = vim.fn.indent, vim.fn.screenpos, vim.rpcnotify
+local indents, positions, latest = 0, 0, nil
+vim.fn.indent = function(...) indents=indents+1; return indent(...) end
+vim.fn.screenpos = function(...) positions=positions+1; return screenpos(...) end
+vim.rpcnotify = function(channel, name, value, ...)
+  if name == 'nido:bracket_guides' then latest=vim.deepcopy(value) end
+  return notify(channel,name,value,...)
+end
+local function move(row, column)
+  api.nvim_win_set_cursor(0,{row,column})
+  api.nvim_exec_autocmds('CursorMoved',{buffer=0})
+end
+local function check_full()
+  local immediate = vim.deepcopy(latest)
+  vim.cmd('redraw!')
+  assert(vim.deep_equal(immediate,latest), 'Cached guides differ from a full redraw')
+end
+local ok, err = pcall(function()
+  vim.cmd('redraw!')
+  move(2,3)
+  indents, positions = 0, 0
+  for column=4,23 do move(2,column) end
+  assert(indents == 0 and positions == 0,
+    'Movement inside one scope must reuse its geometry: ' .. indents .. '/' .. positions)
+  check_full()
+  local outer = vim.deepcopy(latest)
+  move(4,8)
+  assert(not vim.deep_equal(outer,latest), 'Entering a nested scope must change the active guide')
+  check_full()
+  move(2,8)
+  check_full()
+  vim.cmd('setlocal nowrap')
+  vim.cmd('normal! 15zl')
+  move(2,30)
+  check_full()
+  vim.cmd('normal! 100zh')
+  api.nvim_buf_set_lines(0,1,2,false,{'      changed indentation'})
+  api.nvim_exec_autocmds('TextChanged',{buffer=0})
+  assert(vim.wait(5000,function() return brackets.ready(api.nvim_get_current_buf()) end,5))
+  move(2,9)
+  check_full()
+end)
+vim.fn.indent, vim.fn.screenpos, vim.rpcnotify = indent, screenpos, notify
+assert(ok,err)
+return {moves=20, unchangedGeometryReads=0, changedGeometryReads=indents+positions}
+`,
+            []
+        ]);
+        context.diagnostic(JSON.stringify(result));
+    } finally {
+        await session.stop();
+    }
+});
+
 test('sticky scopes refresh after bracket analysis completes in later chunks', async () => {
     const session = await Session.create(process.cwd(), () => {});
     try {

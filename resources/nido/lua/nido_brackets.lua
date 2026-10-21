@@ -10,6 +10,7 @@ local index = require('nido_bracket_index')
 local parsed_ticks = {}
 local marks_by_buffer = {}
 local published_guides
+local guide_context
 local matched
 local match_namespace = api.nvim_create_namespace('nido_bracket_match')
 
@@ -249,6 +250,7 @@ local function publish_guides(window, buffer, first, last, immediate)
       return false
     end
     local guides = {}
+    local unchanged = false
     if vim.bo[buffer].buftype == '' and api.nvim_win_get_config(window).relative == '' then
       api.nvim_win_call(window, function()
         local info = vim.fn.getwininfo(window)[1]
@@ -256,6 +258,16 @@ local function publish_guides(window, buffer, first, last, immediate)
         local cursor = require('nido_scroll').cursor() or api.nvim_win_get_cursor(window)
         local scopes = scope_indices[buffer]
         local active = scopes and scopes.innermost(cursor[1] - 1, cursor[2])
+        local key = table.concat({window, buffer, api.nvim_buf_get_changedtick(buffer), first, last,
+          info.winrow, info.wincol, info.width, info.height, info.textoff,
+          view.topline, view.topfill, view.leftcol, view.skipcol}, ':')
+        -- Only cursor-only updates reuse geometry; every native redraw refreshes it.
+        if immediate and guide_context and guide_context.key == key
+            and guide_context.scopes == scopes and guide_context.active == active then
+          unchanged = true
+          return
+        end
+        guide_context = {key=key, scopes=scopes, active=active}
         for _, pair in ipairs(scopes and scopes.overlapping(first, last) or {}) do
           local a, b = pair.first, pair.last
           -- Offscreen pairs cannot draw a guide; avoid querying Neovim for every pair in the file.
@@ -281,7 +293,10 @@ local function publish_guides(window, buffer, first, last, immediate)
           end
         end
       end)
+    else
+      guide_context = nil
     end
+    if unchanged then return false end
     -- Cursor movement inside the same scope leaves every guide unchanged.
     -- Full redraws still publish the snapshot for UI reattachment and scroll batches.
     if immediate and published_guides and vim.deep_equal(published_guides, guides) then
