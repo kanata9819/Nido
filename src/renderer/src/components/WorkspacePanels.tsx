@@ -5,6 +5,7 @@ import ReferencesPanel from './ReferencesPanel';
 
 interface Props {
     active: string;
+    blocked: boolean;
     workspace?: Workspace;
     state: SessionState;
     panels: BottomPanels;
@@ -13,6 +14,7 @@ interface Props {
 
 export default function WorkspacePanels({
     active,
+    blocked,
     workspace,
     state,
     panels,
@@ -23,6 +25,7 @@ export default function WorkspacePanels({
             {active && state.references && (
                 <ReferencesPanel
                     key={active}
+                    blocked={blocked}
                     workspaceId={active}
                     state={state.references}
                     root={workspace?.root || ''}
@@ -38,6 +41,7 @@ export default function WorkspacePanels({
                 panels.debugVisible &&
                 panels.bottomPanel === 'debug' && (
                     <DebugPanel
+                        blocked={blocked}
                         state={state.debug}
                         focusTick={panels.debugFocusTick}
                         onClose={panels.closeDebugger}

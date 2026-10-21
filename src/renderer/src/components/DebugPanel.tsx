@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import styles from '../assets/DebugPanel.module.css';
 
 export default function DebugPanel({
+    blocked = false,
     state,
     action,
     focusTick,
     onClose
 }: {
+    blocked?: boolean;
     state?: DebugState;
     focusTick: number;
     onClose: () => void;
@@ -59,6 +61,7 @@ export default function DebugPanel({
     return (
         <section
             ref={panel}
+            inert={blocked}
             tabIndex={-1}
             className={styles.debugPanel}
             data-debug-panel

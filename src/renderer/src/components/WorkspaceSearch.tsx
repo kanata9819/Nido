@@ -3,6 +3,7 @@ import type { SearchResults } from '../../../shared/types';
 import { defaultSearchOptions, type ReplacementPreview } from '../../../shared/search';
 import { useI18n } from '../i18n';
 import styles from '../assets/WorkspaceSearch.module.css';
+import { useFocusGuard } from '../hooks/useFocusGuard';
 
 export default function WorkspaceSearch({
     workspaceId,
@@ -12,6 +13,7 @@ export default function WorkspaceSearch({
     onClose: () => void;
 }): React.JSX.Element {
     const t = useI18n();
+    const captureFocus = useFocusGuard(workspaceId);
     const [query, setQuery] = useState('');
     const [replacement, setReplacement] = useState('');
     const [replace, setReplace] = useState(false);
@@ -68,9 +70,14 @@ export default function WorkspaceSearch({
         if (!match) {
             return;
         }
+        const canFocus = captureFocus();
         void window.nido
             .openFile(workspaceId, match.path, match.line, match.column)
-            .then(onClose)
+            .then(() => {
+                if (canFocus()) {
+                    onClose();
+                }
+            })
             .catch(failure);
     };
 

@@ -15,6 +15,7 @@ interface Options {
     terminalShell: TerminalShell;
     setWorkspaces: Dispatch<SetStateAction<Workspace[]>>;
     focusEditor: () => void;
+    captureFocus: () => () => boolean;
     dismissLeader: () => void;
     closeOverlay: () => void;
     run: (promise: Promise<unknown>) => void;
@@ -49,6 +50,7 @@ export function useBottomPanels({
     terminalShell,
     setWorkspaces,
     focusEditor,
+    captureFocus,
     dismissLeader,
     closeOverlay,
     run
@@ -60,6 +62,7 @@ export function useBottomPanels({
     const [bottomPanel, setBottomPanel] = useState<'debug' | 'references' | 'terminal'>('debug');
     const [terminalVisible, setTerminalVisible] = useState(false);
     const [terminalFocusTick, setTerminalFocusTick] = useState(0);
+    const startingTerminals = useRef(new Map<string, { show: boolean; canFocus: () => boolean }>());
     const terminalId = workspace?.terminalId;
     const previousTerminal = useRef({ active, terminalId });
     useEffect(() => {
@@ -120,6 +123,10 @@ export function useBottomPanels({
         focusEditor();
     };
     const closeTerminal = (): void => {
+        const starting = startingTerminals.current.get(active);
+        if (starting) {
+            starting.show = false;
+        }
         setTerminalVisible(false);
         focusEditor();
     };
@@ -139,18 +146,39 @@ export function useBottomPanels({
             return;
         }
         const owner = active;
+        const pending = startingTerminals.current.get(owner);
+        if (pending) {
+            pending.show = true;
+            pending.canFocus = captureFocus();
+            return;
+        }
+        const request = { show: true, canFocus: captureFocus() };
+        startingTerminals.current.set(owner, request);
         run(
-            window.nido.openTerminal(owner, terminalShell).then((terminal) => {
-                setWorkspaces((old) =>
-                    old.map((w) => (w.id === owner ? { ...w, terminalId: terminal.id } : w))
-                );
-                setBottomPanel('terminal');
-                setTerminalVisible(true);
-                setTerminalFocusTick((value) => value + 1);
-            })
+            window.nido
+                .openTerminal(owner, terminalShell)
+                .then((terminal) => {
+                    setWorkspaces((old) =>
+                        old.map((w) => (w.id === owner ? { ...w, terminalId: terminal.id } : w))
+                    );
+                    if (request.show && request.canFocus()) {
+                        setBottomPanel('terminal');
+                        setTerminalVisible(true);
+                        setTerminalFocusTick((value) => value + 1);
+                    }
+                })
+                .finally(() => {
+                    startingTerminals.current.delete(owner);
+                })
         );
     };
     const toggleTerminal = (): void => {
+        const starting = startingTerminals.current.get(active);
+        if (starting) {
+            starting.show = !starting.show;
+            starting.canFocus = captureFocus();
+            return;
+        }
         if (terminalVisible && bottomPanel === 'terminal' && workspace?.kind !== 'terminal') {
             closeTerminal();
         } else {
@@ -159,8 +187,12 @@ export function useBottomPanels({
     };
     const restartShell = useCallback(
         (id: string): void => {
+            const canFocus = captureFocus();
             run(
                 window.nido.restartTerminal(id, terminalShell).then(() => {
+                    if (!canFocus()) {
+                        return;
+                    }
                     if (id === active) {
                         focusEditor();
                     } else {
@@ -169,7 +201,7 @@ export function useBottomPanels({
                 })
             );
         },
-        [run, terminalShell, active, focusEditor]
+        [run, terminalShell, active, focusEditor, captureFocus]
     );
     const openDebugger = (): void => {
         closeOverlay();
@@ -202,7 +234,14 @@ export function useBottomPanels({
         setReferencesFocusTick((value) => value + 1);
     };
     const openReference = (index: number): void => {
-        run(window.nido.openReference(active, index, state.references!.version).then(focusEditor));
+        const canFocus = captureFocus();
+        run(
+            window.nido.openReference(active, index, state.references!.version).then(() => {
+                if (canFocus()) {
+                    focusEditor();
+                }
+            })
+        );
     };
     const debug = (action: DebugAction, target?: number): void => {
         run(window.nido.debug(active, action, target));

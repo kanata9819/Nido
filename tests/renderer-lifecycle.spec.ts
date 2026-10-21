@@ -3168,3 +3168,343 @@ test('App opens references and debugger on new events while respecting a closed 
     await expect(page.getByRole('region', { name: 'Debugger', exact: true })).toBeVisible();
     expect(errors).toEqual([]);
 });
+
+test('closing a terminal during startup keeps it closed and reuses the finished session', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=openTerminal`);
+    const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+    const terminal = page.getByRole('region', { name: 'Terminal', exact: true });
+    await expect(editor).toBeFocused();
+    await page.keyboard.press('Control+`');
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.keyboard.press('Control+`');
+    await page.evaluate(() =>
+        window.rendererTest.settle('openTerminal', 0, {
+            id: 'alpha-shell',
+            root: '/alpha',
+            name: 'Terminal Alpha',
+            kind: 'terminal'
+        })
+    );
+    // The session stays mounted but need not attach its hidden editor until it is opened.
+    await expect(page.locator('section[aria-label="Terminal"]')).toHaveCount(1);
+    await expect(terminal).toBeHidden();
+    await expect(editor).toBeFocused();
+    expect(
+        await page.evaluate(
+            () => window.rendererTest.calls.filter((call) => call.method === 'openTerminal').length
+        )
+    ).toBe(1);
+    await page.keyboard.press('Control+`');
+    await expect(terminal).toBeVisible();
+    await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+});
+
+test('terminal startup in another workspace cannot take focus from the current editor', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=restoreWorkspaces,openTerminal`);
+    await page.evaluate(() =>
+        window.rendererTest.settle('restoreWorkspaces', 0, {
+            workspaces: [
+                { id: 'alpha', root: '/alpha', name: 'Alpha' },
+                { id: 'beta', root: '/beta', name: 'Beta', terminalId: 'beta-shell' }
+            ],
+            active: 'alpha',
+            errors: []
+        })
+    );
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.press('Control+`');
+    await page.keyboard.press('Alt+2');
+    await page.keyboard.press('Control+`');
+    const betaTerminal = page.getByRole('region', { name: 'Terminal', exact: true });
+    await expect(betaTerminal).toBeVisible();
+    await page.keyboard.press('Control+k');
+    const editor = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(editor).toBeFocused();
+    await page.evaluate(() =>
+        window.rendererTest.settle('openTerminal', 0, {
+            id: 'alpha-shell',
+            root: '/alpha',
+            name: 'Terminal Alpha',
+            kind: 'terminal'
+        })
+    );
+    await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    );
+    await expect(editor).toBeFocused();
+    await expect(betaTerminal).toBeVisible();
+});
+
+test('opening a file cannot dismiss a newer command palette', async ({ page }) => {
+    await page.goto(`${origin}?view=app&defer=findFiles,openFile`);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.getByRole('button', { name: 'Find file', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('findFiles', 0, [
+            { name: 'main.rs', path: 'main.rs', directory: false }
+        ])
+    );
+    await page.keyboard.press('Enter');
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.pending.some((call) => call.method === 'openFile')
+            )
+        )
+        .toBe(true);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+Shift+p');
+    await expect(page.getByRole('dialog', { name: 'commands palette' })).toBeVisible();
+    const filter = page.getByRole('textbox', { name: 'Filter items' });
+    await filter.fill('Open debug');
+    await page.evaluate(() => window.rendererTest.settle('openFile', 0, undefined));
+    await expect(filter).toBeFocused();
+    await expect(filter).toHaveValue('Open debug');
+    await expect(page.getByRole('dialog', { name: 'commands palette' })).toBeVisible();
+});
+
+test('terminal startup honors the latest toggle and a failed startup can be retried', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=openTerminal`);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.press('Control+`');
+    await page.evaluate(() => window.rendererTest.settle('openTerminal', 0, 'Shell failed', true));
+    await expect(page.getByRole('alert')).toContainText('Shell failed');
+    await page.keyboard.press('Escape');
+    for (let index = 0; index < 3; index++) {
+        await page.keyboard.press('Control+`');
+    }
+    expect(
+        await page.evaluate(
+            () =>
+                window.rendererTest.pending.filter((call) => call.method === 'openTerminal').length
+        )
+    ).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('openTerminal', 0, {
+            id: 'shell',
+            root: '/alpha',
+            name: 'Terminal Alpha',
+            kind: 'terminal'
+        })
+    );
+    await expect(page.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+});
+
+test('a delayed shell restart cannot take focus after returning to the editor', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=restoreWorkspaces,restartTerminal`);
+    await page.evaluate(() =>
+        window.rendererTest.settle('restoreWorkspaces', 0, {
+            workspaces: [{ id: 'alpha', root: '/alpha', name: 'Alpha', terminalId: 'shell' }],
+            active: 'alpha',
+            errors: []
+        })
+    );
+    const editor = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(editor).toBeFocused();
+    await page.keyboard.press('Control+`');
+    await expect(page.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+    await page.keyboard.press('Control+Shift+r');
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.keyboard.press('Control+k');
+    await expect(editor).toBeFocused();
+    await page.evaluate(() => window.rendererTest.settle('restartTerminal', 0, undefined));
+    await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    );
+    await expect(editor).toBeFocused();
+});
+
+test('only the latest file opening returns focus, while normal file opening still closes the picker', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=findFiles,openFile`);
+    await page.getByRole('button', { name: 'Find file', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('findFiles', 0, [
+            { name: 'first.rs', path: 'first.rs', directory: false },
+            { name: 'second.rs', path: 'second.rs', directory: false }
+        ])
+    );
+    const filter = page.getByRole('textbox', { name: 'Filter items' });
+    await expect(filter).toBeFocused();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Control+j');
+    await page.keyboard.press('Enter');
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.pending
+                    .filter((call) => call.method === 'openFile')
+                    .map((call) => call.args)
+            )
+        )
+        .toEqual([
+            ['alpha', 'first.rs'],
+            ['alpha', 'second.rs']
+        ]);
+    await page.evaluate(() => window.rendererTest.settle('openFile', 0, undefined));
+    await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    );
+    await expect(filter).toBeFocused();
+    await page.evaluate(() => window.rendererTest.settle('openFile', 0, undefined));
+    await expect(page.getByRole('dialog', { name: 'files palette' })).toBeHidden();
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+});
+
+for (const navigation of ['reference', 'problem', 'search'] as const) {
+    test(`a delayed ${navigation} jump cannot dismiss a newer command palette`, async ({
+        page
+    }) => {
+        const method =
+            navigation === 'reference'
+                ? 'openReference'
+                : navigation === 'problem'
+                  ? 'openProblem'
+                  : 'openFile';
+        await page.goto(
+            `${origin}?view=app&defer=${method}${navigation === 'search' ? ',searchText' : ''}`
+        );
+        await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+        if (navigation === 'search') {
+            await page.keyboard.press('Control+Shift+f');
+            await page.getByRole('textbox', { name: 'Search in files', exact: true }).fill('match');
+            await expect
+                .poll(() =>
+                    page.evaluate(() =>
+                        window.rendererTest.pending.some(
+                            (call) => call.method === 'searchText' && call.args[1] === 'match'
+                        )
+                    )
+                )
+                .toBe(true);
+            await page.evaluate(() => {
+                const pending = window.rendererTest.pending.filter(
+                    (call) => call.method === 'searchText'
+                );
+                for (let index = 0; index < pending.length; index++) {
+                    window.rendererTest.settle('searchText', 0, {
+                        truncated: false,
+                        matches: [{ path: 'main.rs', line: 2, column: 1, text: 'match' }]
+                    });
+                }
+            });
+            await expect(
+                page.getByRole('listbox', { name: 'Search results' }).getByRole('option')
+            ).toHaveCount(1);
+        } else {
+            await page.evaluate(
+                (navigation) =>
+                    window.rendererTest.emit({
+                        type: 'statePatch',
+                        id: 'alpha',
+                        state:
+                            navigation === 'reference'
+                                ? {
+                                      references: {
+                                          version: 1,
+                                          loading: false,
+                                          error: '',
+                                          items: [
+                                              {
+                                                  path: '/alpha/main.rs',
+                                                  line: 2,
+                                                  column: 1,
+                                                  text: 'match'
+                                              }
+                                          ]
+                                      }
+                                  }
+                                : {
+                                      diagnosticsVersion: 1,
+                                      problems: [
+                                          {
+                                              path: '/alpha/main.rs',
+                                              line: 2,
+                                              column: 1,
+                                              severity: 1,
+                                              message: 'match',
+                                              source: 'rustc'
+                                          }
+                                      ]
+                                  }
+                    }),
+                navigation
+            );
+            if (navigation === 'problem') {
+                await expect(page.getByRole('contentinfo')).toContainText('1');
+                await page.keyboard.press('Control+Shift+m');
+                await expect(
+                    page.getByRole('dialog', { name: 'problems palette' }).getByRole('option')
+                ).toHaveCount(1);
+            } else {
+                await expect(
+                    page.getByRole('listbox', { name: 'Reference results' })
+                ).toBeFocused();
+            }
+        }
+        await page.keyboard.press('Enter');
+        await expect
+            .poll(() =>
+                page.evaluate(
+                    (method) => window.rendererTest.pending.some((call) => call.method === method),
+                    method
+                )
+            )
+            .toBe(true);
+        await page.keyboard.press('Escape');
+        if (navigation === 'search') {
+            await page.keyboard.press('Escape');
+        }
+        await page.keyboard.press('Control+Shift+p');
+        await expect(page.getByRole('dialog', { name: 'commands palette' })).toBeVisible();
+        const filter = page.getByRole('textbox', { name: 'Filter items' });
+        await filter.fill('Open debug');
+        await page.evaluate((method) => window.rendererTest.settle(method, 0, undefined), method);
+        await expect(filter).toBeFocused();
+        await expect(filter).toHaveValue('Open debug');
+        await expect(page.getByRole('dialog', { name: 'commands palette' })).toBeVisible();
+    });
+}
+
+test('late reference results keep command palette focus and remain reachable afterwards', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app`);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.press('Control+Shift+p');
+    const filter = page.getByRole('textbox', { name: 'Filter items' });
+    await filter.fill('Open');
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'statePatch',
+            id: 'alpha',
+            state: {
+                references: {
+                    version: 1,
+                    loading: false,
+                    error: '',
+                    items: [{ path: '/alpha/main.rs', line: 2, column: 1, text: 'match' }]
+                }
+            }
+        })
+    );
+    await expect(page.locator('[data-references-panel]')).toBeVisible();
+    await expect(filter).toBeFocused();
+    await page.keyboard.type(' debug');
+    await expect(filter).toHaveValue('Open debug');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.press('Control+j');
+    await expect(page.getByRole('listbox', { name: 'Reference results' })).toBeFocused();
+});

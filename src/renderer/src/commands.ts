@@ -8,6 +8,7 @@ interface CommandsCallbacks {
     moveWorkspace: (offset: number) => void;
     run: (promise: Promise<unknown>) => void;
     focusEditor: () => void;
+    captureFocus: () => () => boolean;
     closeWorkspace: (id: string) => void;
     create: () => Promise<void>;
     createTerminal: () => Promise<void>;
@@ -35,6 +36,7 @@ export function buildItems(
         moveWorkspace,
         run,
         focusEditor,
+        captureFocus,
         closeWorkspace,
         create,
         showExplorer,
@@ -289,12 +291,18 @@ export function buildItems(
                     severity: problem.severity,
                     title: problem.message,
                     detail: `${problem.path}:${problem.line}:${problem.column}${problem.source ? ' · ' + problem.source : ''}`,
-                    run: () =>
+                    run: () => {
+                        const canFocus = captureFocus();
                         run(
                             window.nido
                                 .openProblem(active, index + 1, state.diagnosticsVersion!)
-                                .then(focusEditor)
-                        )
+                                .then(() => {
+                                    if (canFocus()) {
+                                        focusEditor();
+                                    }
+                                })
+                        );
+                    }
                 }))
                 .sort((a, b) => a.severity - b.severity || a.detail.localeCompare(b.detail));
             break;

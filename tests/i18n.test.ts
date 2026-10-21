@@ -48,6 +48,7 @@ test('translated command searches keep shortcut keys and actions, and preserve p
         moveWorkspace: noop,
         run: noop,
         focusEditor: noop,
+        captureFocus: () => () => true,
         closeWorkspace: noop,
         create: async (): Promise<void> => {},
         createTerminal: async (): Promise<void> => {},

@@ -8,6 +8,7 @@ import OverlayPresence from './OverlayPresence';
 
 interface Props {
     workspaceId: string;
+    blocked?: boolean;
     state: ReferenceList;
     root: string;
     visible: boolean;
@@ -65,6 +66,7 @@ function ReferencePreviewContent({
 
 export default function ReferencesPanel({
     workspaceId,
+    blocked = false,
     state,
     root,
     visible,
@@ -191,6 +193,7 @@ export default function ReferencesPanel({
     return (
         <section
             className={styles.referencesPanel}
+            inert={blocked}
             data-references-panel
             aria-label={t('References')}
             hidden={!visible}
@@ -226,6 +229,7 @@ export default function ReferencesPanel({
                         {previewEnabled ? (
                             <section
                                 className={styles.referencePreview}
+                                inert={blocked}
                                 aria-label={t('Reference preview')}
                                 aria-busy={preview?.key !== previewKey}
                             >

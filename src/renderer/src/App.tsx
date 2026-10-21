@@ -33,6 +33,7 @@ import { useGitFileStatus } from './hooks/useGitFileStatus';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { usePointerVisibility } from './hooks/usePointerVisibility';
 import { useWorkspaceSessions } from './hooks/useWorkspaceSessions';
+import { useFocusGuard } from './hooks/useFocusGuard';
 import styles from './assets/Nido.module.css';
 import notificationStyles from './assets/Notification.module.css';
 import { useNotificationDismissal } from './hooks/useNotificationDismissal';
@@ -151,6 +152,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     const state = states[active] || defaultState;
     const gitFiles = useGitFileStatus(active, state.buffers);
     const workspace = workspaces.find((w) => w.id === active);
+    const captureFocus = useFocusGuard(active);
     const decorations = useMemo(
         () => fileDecorations(workspace?.root || '', gitFiles, state.diagnostics, state.problems),
         [workspace?.root, gitFiles, state.diagnostics, state.problems]
@@ -184,6 +186,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         terminalShell: settings.terminalShell,
         setWorkspaces,
         focusEditor,
+        captureFocus,
         dismissLeader: () => setLeader(false),
         closeOverlay: () => {
             setLeader(false);
@@ -267,9 +270,16 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 
     const openFile = useCallback(
         (path: string): void => {
-            run(window.nido.openFile(active, path).then(focusEditor));
+            const canFocus = captureFocus();
+            run(
+                window.nido.openFile(active, path).then(() => {
+                    if (canFocus()) {
+                        focusEditor();
+                    }
+                })
+            );
         },
-        [active, run, focusEditor]
+        [active, run, focusEditor, captureFocus]
     );
 
     const showPanel = useCallback((value: Panel): void => {
@@ -318,6 +328,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
             moveWorkspace,
             run,
             focusEditor,
+            captureFocus,
             closeWorkspace,
             create,
             createTerminal,
@@ -516,6 +527,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
             </div>
             <WorkspacePanels
                 active={active}
+                blocked={!!panel || leader}
                 workspace={workspace}
                 state={state}
                 panels={panels}
