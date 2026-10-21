@@ -3,6 +3,10 @@
 Neovimベースの、キーボードで操作できるWindows用エディタ。
 ワークスペース、ファイル検索、Git、ターミナル、Rust / TypeScriptのLSPに対応。
 
+![Rustコードを編集するNido（フォントサイズ10）](docs/images/nido-rust.png)
+
+Rustコードの編集画面（エディターのフォントサイズ：10）。
+
 ## 開発
 
 Windows x64・Node.js 22以降・pnpmが必要です。Neovimは初回起動時に取得します。
