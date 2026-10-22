@@ -103,15 +103,19 @@ export class LocalHistory {
         }
     }
 
-    async list(path: string): Promise<HistoryVersion[]> {
-        await this.pending;
-        return (await this.read(path)).revisions.map(({ id, timestamp, kind, bytes, lines }) => ({
+    private versions(revisions: Revision[]): HistoryVersion[] {
+        return revisions.map(({ id, timestamp, kind, bytes, lines }) => ({
             id,
             timestamp,
             kind,
             bytes,
             lines
         }));
+    }
+
+    async list(path: string): Promise<HistoryVersion[]> {
+        await this.pending;
+        return this.versions((await this.read(path)).revisions);
     }
 
     async has(path: string): Promise<boolean> {
@@ -134,6 +138,23 @@ export class LocalHistory {
         content: HistoryContent,
         kind: HistoryVersion['kind']
     ): Promise<HistoryVersion> {
+        return this.commit(path, content, kind, (revision) => revision);
+    }
+
+    recordAndList(
+        path: string,
+        content: HistoryContent,
+        kind: HistoryVersion['kind']
+    ): Promise<HistoryVersion[]> {
+        return this.commit(path, content, kind, (_revision, revisions) => this.versions(revisions));
+    }
+
+    private commit<T>(
+        path: string,
+        content: HistoryContent,
+        kind: HistoryVersion['kind'],
+        result: (revision: Revision, revisions: Revision[]) => T
+    ): Promise<T> {
         const writing = this.pending.then(async () => {
             const lines = content.text.split('\n').length;
             if (
@@ -151,7 +172,7 @@ export class LocalHistory {
                 previous.endOfLine === content.endOfLine &&
                 previous.fileformat === content.fileformat
             ) {
-                return previous;
+                return result(previous, data.revisions);
             }
             const revision: Revision = {
                 text: content.text,
@@ -185,6 +206,7 @@ export class LocalHistory {
                 revisions.push(encoded);
                 bytes = nextBytes;
             }
+            data.revisions.length = revisions.length;
             const serialized = prefix + revisions.join(',') + ']}';
             const name = `${this.key(path)}.json`;
             const destination = join(this.directory, name);
@@ -205,7 +227,7 @@ export class LocalHistory {
                 this.entries.delete(file);
                 total -= entry.bytes;
             }
-            return revision;
+            return result(revision, data.revisions);
         });
         this.pending = writing.catch(() => {});
         return writing;

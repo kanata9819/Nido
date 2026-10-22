@@ -983,6 +983,407 @@ test('Enter during file search opens the arriving result, while closing cancels 
     ).toBe(1);
 });
 
+test('Problems selection renders only the previous and next rows', async ({ page }) => {
+    await page.goto(`${origin}?view=palette`);
+    await page.evaluate(() => {
+        Object.assign(window, { paletteSeverityReads: 0 });
+        window.rendererTest.render({
+            paletteItems: Array.from({ length: 10000 }, (_, index) => ({
+                key: 'Error',
+                title: `Diagnostic ${index}`,
+                detail: `/alpha/file-${index}.rs:1:1`,
+                get severity() {
+                    Reflect.set(
+                        window,
+                        'paletteSeverityReads',
+                        Reflect.get(window, 'paletteSeverityReads') + 1
+                    );
+                    return 1;
+                },
+                run: () => {}
+            }))
+        });
+    });
+    const results = page.getByRole('listbox', { name: 'Problems', exact: true });
+    await expect(results.getByRole('option')).toHaveCount(10000);
+    expect(await page.evaluate(() => Reflect.get(window, 'paletteSeverityReads'))).toBe(20000);
+    await page.evaluate(() => Reflect.set(window, 'paletteSeverityReads', 0));
+    const started = performance.now();
+    for (let index = 0; index < 20; index++) {
+        await page.keyboard.press('j');
+        await expect(results).toHaveAttribute('aria-activedescendant', `problem-${index + 1}`);
+    }
+    const severityReads = await page.evaluate(() => Reflect.get(window, 'paletteSeverityReads'));
+    console.log('problem-row-render-work', {
+        rows: 10000,
+        selections: 20,
+        severityReads,
+        elapsedMs: Math.round(performance.now() - started)
+    });
+    expect(severityReads).toBe(80);
+});
+
+test('Problems selection reuses sorting and filtering while preserving all multiline results', async ({
+    page
+}) => {
+    test.setTimeout(60000);
+    await open(page, 'app', 'openProblem');
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'statePatch',
+            id: 'alpha',
+            state: {
+                diagnosticsVersion: 7,
+                problems: Array.from({ length: 10000 }, (_, index) => ({
+                    path: `/alpha/file-${String(index).padStart(5, '0')}.rs`,
+                    line: index + 1,
+                    column: 1,
+                    severity: 1,
+                    message: `Diagnostic ${String(index).padStart(5, '0')}${index % 250 === 0 ? '\nA second diagnostic line' : ''}`,
+                    source: 'rustc'
+                }))
+            }
+        })
+    );
+    await page.clock.runFor(32);
+    await page.keyboard.press('Control+Shift+m');
+    const results = page.getByRole('listbox', { name: 'Problems', exact: true });
+    const rows = results.getByRole('option');
+    await expect(rows).toHaveCount(10000);
+    const wrap = await rows.first().evaluate((node) => ({
+        height: node.getBoundingClientRect().height,
+        whiteSpace: getComputedStyle(node.querySelector('strong')!).whiteSpace
+    }));
+    expect(wrap.whiteSpace).toBe('pre-wrap');
+    expect(wrap.height).toBeGreaterThan(
+        await rows.nth(1).evaluate((node) => node.getBoundingClientRect().height)
+    );
+    await page.evaluate(() => {
+        const originalCompare = String.prototype.localeCompare;
+        const originalLower = String.prototype.toLowerCase;
+        Object.assign(window, { problemWork: { comparisons: 0, filters: 0 } });
+        String.prototype.localeCompare = function (...args) {
+            if (String(this).startsWith('/alpha/file-'))
+                Reflect.get(window, 'problemWork').comparisons++;
+            return Reflect.apply(originalCompare, this, args);
+        };
+        String.prototype.toLowerCase = function () {
+            if (String(this).startsWith('Diagnostic '))
+                Reflect.get(window, 'problemWork').filters++;
+            return originalLower.call(this);
+        };
+    });
+    await expect(results).toBeFocused();
+    for (let index = 0; index < 20; index++) await page.keyboard.press('j');
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'statePatch',
+            id: 'alpha',
+            state: { line: 123, column: 45 }
+        })
+    );
+    await page.clock.runFor(32);
+    const work = await page.evaluate(() => Reflect.get(window, 'problemWork'));
+    console.log('problem-selection-work', { rows: 10000, selections: 20, ...work });
+    expect(work).toEqual({ comparisons: 0, filters: 0 });
+    await page.keyboard.press('End');
+    await expect(results).toHaveAttribute('aria-activedescendant', 'problem-9999');
+    await expect(rows.last()).toHaveAttribute('aria-selected', 'true');
+    expect(await results.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    await page.setViewportSize({ width: 900, height: 650 });
+    await page.clock.runFor(32);
+    const visibleSelection = (): Promise<boolean> =>
+        results.evaluate((node) => {
+            const selected = node.querySelector('[aria-selected="true"]')!.getBoundingClientRect();
+            const bounds = node.getBoundingClientRect();
+            return selected.top >= bounds.top && selected.bottom <= bounds.bottom;
+        });
+    await expect.poll(visibleSelection).toBe(true);
+    await page.keyboard.press('Home');
+    await expect(rows.first()).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('/');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('Diagnostic 05000');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('A second diagnostic line');
+    await expect.poll(visibleSelection).toBe(true);
+    await page.keyboard.press('Enter');
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.calls.filter((call) => call.method === 'openProblem').at(-1)
+                        ?.args
+            )
+        )
+        .toEqual(['alpha', 5001, 7]);
+});
+
+test('Problems refresh data, versions, workspace targets and translated labels', async ({
+    page
+}) => {
+    await page.addInitScript(() => {
+        localStorage.setItem('nido.language', 'en');
+        localStorage.setItem('nido.animations', 'false');
+    });
+    await page.goto(`${origin}?view=app&defer=restoreWorkspaces,openProblem`);
+    await page.evaluate(() =>
+        window.rendererTest.settle('restoreWorkspaces', 0, {
+            workspaces: [
+                { id: 'alpha', name: 'Alpha', root: '/alpha' },
+                { id: 'beta', name: 'Beta', root: '/beta' }
+            ],
+            active: 'alpha',
+            errors: []
+        })
+    );
+    await expect(
+        page.getByRole('textbox', { name: 'Neovim input', exact: true }).first()
+    ).toBeFocused();
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'statePatch',
+            id: 'alpha',
+            state: {
+                diagnosticsVersion: 1,
+                problems: [
+                    {
+                        path: '/alpha/z.rs',
+                        line: 1,
+                        column: 1,
+                        severity: 2,
+                        message: 'Warning item'
+                    },
+                    { path: '/alpha/a.rs', line: 2, column: 1, severity: 1, message: 'Error item' }
+                ]
+            }
+        })
+    );
+    await page.keyboard.press('Control+Shift+m');
+    let results = page.getByRole('listbox', { name: 'Problems', exact: true });
+    await expect(results.getByRole('option').first()).toContainText('Error item');
+    await expect(results.getByRole('option').last()).toContainText('Warning item');
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'statePatch',
+            id: 'alpha',
+            state: { diagnosticsVersion: 2 }
+        })
+    );
+    await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    );
+    await results.press('Enter');
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.calls.filter((call) => call.method === 'openProblem').at(-1)
+                        ?.args
+            )
+        )
+        .toEqual(['alpha', 2, 2]);
+    await page.evaluate(() => window.rendererTest.settle('openProblem', 0, undefined));
+    await expect(results).toHaveCount(0);
+    await page.getByRole('banner').getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('ja');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+Shift+m');
+    results = page.getByRole('listbox', { name: '問題', exact: true });
+    await expect(results.getByRole('option').first()).toContainText('エラー');
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'statePatch',
+            id: 'alpha',
+            state: {
+                diagnosticsVersion: 3,
+                problems: [
+                    { path: '/alpha/new.rs', line: 3, column: 2, severity: 1, message: 'New data' }
+                ]
+            }
+        })
+    );
+    await expect(results.getByRole('option')).toHaveCount(1);
+    await expect(results.getByRole('option')).toContainText('New data');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Alt+2');
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'statePatch',
+            id: 'beta',
+            state: {
+                diagnosticsVersion: 9,
+                problems: [
+                    {
+                        path: '/beta/current.rs',
+                        line: 4,
+                        column: 3,
+                        severity: 1,
+                        message: 'Beta data'
+                    }
+                ]
+            }
+        })
+    );
+    await page.keyboard.press('Control+Shift+m');
+    results = page.getByRole('listbox', { name: '問題', exact: true });
+    await expect(results.getByRole('option')).toContainText('Beta data');
+    await results.press('Enter');
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.calls.filter((call) => call.method === 'openProblem').at(-1)
+                        ?.args
+            )
+        )
+        .toEqual(['beta', 1, 9]);
+});
+
+test('Markdown bounds slow refreshes, pauses hidden work and resumes only the latest snapshot', async ({
+    page
+}) => {
+    await open(page, 'app', 'markdownPreview');
+    await page.evaluate(() =>
+        window.rendererTest.emit({
+            type: 'statePatch',
+            id: 'alpha',
+            state: { filetype: 'markdown', current: 1 }
+        })
+    );
+    await page.clock.runFor(50);
+    await page.keyboard.press('Control+Shift+v');
+    const content = page.getByLabel('Markdown preview content', { exact: true });
+    await expect(content).toBeVisible();
+    const pending = (): Promise<number> =>
+        page.evaluate(
+            () =>
+                window.rendererTest.pending.filter((call) => call.method === 'markdownPreview')
+                    .length
+        );
+    const calls = (): Promise<unknown[]> =>
+        page.evaluate(() =>
+            window.rendererTest.calls
+                .filter((call) => call.method === 'markdownPreview')
+                .map((call) => call.args)
+        );
+    for (let edit = 0; edit < 10; edit++) {
+        await page.evaluate(() =>
+            window.rendererTest.emit({ type: 'redraw', id: 'alpha', events: [['nido_edit']] })
+        );
+        await page.clock.runFor(200);
+    }
+    expect(await pending()).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('markdownPreview', 0, {
+            token: '1:stale',
+            path: '/alpha/notes.md',
+            text: '# Stale'
+        })
+    );
+    await expect.poll(pending).toBe(1);
+    expect(await calls()).toHaveLength(2);
+    await expect(content.getByRole('heading', { name: 'Stale' })).toHaveCount(0);
+    await page.evaluate(() => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+    });
+    for (let edit = 0; edit < 5; edit++) {
+        await page.evaluate(() =>
+            window.rendererTest.emit({ type: 'redraw', id: 'alpha', events: [['nido_edit']] })
+        );
+        await page.clock.runFor(200);
+    }
+    await page.evaluate(() =>
+        window.rendererTest.settle('markdownPreview', 0, {
+            token: '1:hidden',
+            path: '/alpha/notes.md',
+            text: '# Hidden stale'
+        })
+    );
+    await page.clock.runFor(500);
+    expect(await pending()).toBe(0);
+    expect(await calls()).toHaveLength(2);
+    await expect(content.getByRole('heading')).toHaveCount(0);
+    await page.evaluate(() => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+        document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect.poll(pending).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('markdownPreview', 0, {
+            token: '1:latest',
+            path: '/alpha/notes.md',
+            text: '# Latest'
+        })
+    );
+    await expect(content.getByRole('heading', { name: 'Latest' })).toBeVisible();
+    await page.evaluate(() =>
+        window.rendererTest.emit({ type: 'redraw', id: 'alpha', events: [['nido_edit']] })
+    );
+    await page.clock.runFor(149);
+    expect(await calls()).toHaveLength(3);
+    await page.clock.runFor(1);
+    await expect.poll(pending).toBe(1);
+    expect((await calls()).at(-1)).toEqual(['alpha', '1:latest']);
+    await content.press('Escape');
+    await expect(content).toHaveCount(0);
+    await page.evaluate(() =>
+        window.rendererTest.settle('markdownPreview', 0, {
+            token: '1:closed',
+            path: '/alpha/notes.md',
+            text: '# Closed'
+        })
+    );
+    await page.clock.runFor(500);
+    expect(await calls()).toHaveLength(4);
+    await expect(page.getByRole('heading', { name: 'Closed' })).toHaveCount(0);
+});
+
+test('Markdown rejects old-workspace reads and retries a later edit after failure', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=markdown&defer=markdownPreview`);
+    const content = page.getByLabel('Markdown preview content', { exact: true });
+    await expect(content).toBeVisible();
+    await page.clock.install();
+    await page.clock.pauseAt(new Date(Date.now() + 1000));
+    await page.evaluate(() => window.rendererTest.render({ workspaceId: 'beta' }));
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.pending.filter((call) => call.method === 'markdownPreview')
+                        .length
+            )
+        )
+        .toBe(2);
+    await page.evaluate(() =>
+        window.rendererTest.settle('markdownPreview', 0, {
+            token: 'old:1',
+            path: '/alpha/old.md',
+            text: '# Old workspace'
+        })
+    );
+    await expect(content.getByRole('heading')).toHaveCount(0);
+    await page.evaluate(() =>
+        window.rendererTest.settle('markdownPreview', 0, 'read failed', true)
+    );
+    await expect(content.getByRole('alert')).toContainText('read failed');
+    await page.evaluate(() =>
+        window.rendererTest.emit({ type: 'redraw', id: 'beta', events: [['nido_edit']] })
+    );
+    await page.clock.runFor(150);
+    await page.evaluate(() =>
+        window.rendererTest.settle('markdownPreview', 0, {
+            token: '2:1',
+            path: '/beta/new.md',
+            text: '# New workspace'
+        })
+    );
+    await expect(content.getByRole('heading', { name: 'New workspace' })).toBeVisible();
+    await expect(content.getByRole('alert')).toHaveCount(0);
+});
+
 test('Markdown stays beside the editable canvas, coalesces edits, preserves scroll and stops on close or file switch', async ({
     page
 }) => {

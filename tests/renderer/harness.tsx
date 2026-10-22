@@ -20,6 +20,9 @@ import TimeMachine from '../../src/renderer/src/components/TimeMachine';
 import Notification from '../../src/renderer/src/components/Notification';
 import ReferencesPanel from '../../src/renderer/src/components/ReferencesPanel';
 import DebugPanel from '../../src/renderer/src/components/DebugPanel';
+import MarkdownPreview from '../../src/renderer/src/components/MarkdownPreview';
+import PaletteItems from '../../src/renderer/src/components/PaletteItems';
+import type { Item } from '../../src/renderer/src/types';
 import { Favorites, GitBadges, Completion, Settings, SessionUpdates } from './Probes';
 import type { SessionSettings } from '../../src/renderer/src/hooks/useSessionSettings';
 import '../../src/renderer/src/assets/global.css';
@@ -35,6 +38,8 @@ interface HarnessProps {
     references: ReferenceList;
     path: string;
     diff: string;
+    paletteItems: Item[];
+    paletteSelection: number;
     request?: ComponentProps<typeof ExplorerCommands>['request'];
 }
 
@@ -156,6 +161,8 @@ let props: HarnessProps = {
     favorites: [],
     path: 'first.ts',
     diff: '@@ -1 +1 @@\n-before\n+after',
+    paletteItems: [],
+    paletteSelection: 0,
     references: {
         version: 1,
         loading: false,
@@ -168,9 +175,36 @@ let props: HarnessProps = {
         }))
     }
 };
+function setPaletteSelection(update: number | ((index: number) => number)): void {
+    render({
+        paletteSelection: typeof update === 'function' ? update(props.paletteSelection) : update
+    });
+}
 function render(updates: Partial<HarnessProps>): void {
     props = { ...props, ...updates };
     switch (parameters.get('view')) {
+        case 'palette':
+            root.render(
+                <PaletteItems
+                    panel="problems"
+                    filtered={props.paletteItems}
+                    selection={props.paletteSelection}
+                    query=""
+                    loading={false}
+                    setQuery={noop}
+                    setSelection={setPaletteSelection}
+                />
+            );
+            break;
+        case 'markdown':
+            root.render(
+                <MarkdownPreview
+                    workspaceId={props.workspaceId}
+                    onClose={noop}
+                    focusEditor={noop}
+                />
+            );
+            break;
         case 'debug':
             root.render(
                 <>

@@ -7,6 +7,8 @@ local generations = {}
 local pending = {}
 local bases = {}
 local rendered = {}
+local active = {}
+local stopped = false
 local M = {}
 
 local function colors()
@@ -18,8 +20,8 @@ colors()
 api.nvim_create_autocmd('ColorScheme', { callback = colors })
 
 function M.refresh(buffer)
-  buffer = buffer or api.nvim_get_current_buf()
-  if not api.nvim_buf_is_valid(buffer) or vim.bo[buffer].buftype ~= '' then
+  if not buffer or buffer == 0 then buffer = api.nvim_get_current_buf() end
+  if stopped or not api.nvim_buf_is_loaded(buffer) or vim.bo[buffer].buftype ~= '' then
     return
   end
   local name = api.nvim_buf_get_name(buffer)
@@ -27,11 +29,23 @@ function M.refresh(buffer)
     return
   end
   generations[buffer] = (generations[buffer] or 0) + 1
+  if active[buffer] then
+    active[buffer].again = true
+    return
+  end
+  local current = {}
+  active[buffer] = current
   local generation = generations[buffer]
   local tick = api.nvim_buf_get_changedtick(buffer)
   local function valid()
-    return api.nvim_buf_is_valid(buffer) and generations[buffer] == generation
+    return not stopped and active[buffer] == current and api.nvim_buf_is_loaded(buffer)
+      and generations[buffer] == generation
       and api.nvim_buf_get_changedtick(buffer) == tick and api.nvim_buf_get_name(buffer) == name
+  end
+  local function finish()
+    if active[buffer] ~= current then return end
+    active[buffer] = nil
+    if current.again then M.refresh(buffer) end
   end
   local function render(base)
     if not valid() then
@@ -93,11 +107,23 @@ function M.refresh(buffer)
   local function git(directory, arguments, callback)
     local command = { 'git', '--no-pager', '--literal-pathspecs', '-C', directory }
     vim.list_extend(command, arguments)
-    vim.system(command, { text = true, timeout = 2000 }, vim.schedule_wrap(function(result)
-      if valid() then
-        callback(result)
-      end
+    local running = {}
+    current.process = running
+    local ok, process = pcall(vim.system, command, { text = true, timeout = 2000 }, vim.schedule_wrap(function(result)
+      if active[buffer] ~= current or current.process ~= running then return end
+      current.process = nil
+      if not valid() then finish(); return end
+      local completed, err = pcall(callback, result)
+      -- A callback can start the next command in this refresh's Git chain.
+      if not current.process then finish() end
+      if not completed then error(err) end
     end))
+    if ok then
+      running.handle = process
+    else
+      current.process = nil
+      finish()
+    end
   end
   git(vim.fs.dirname(name), {'rev-parse', '--show-toplevel', '--verify', 'HEAD'}, function(result)
     local root, head = (result.stdout or ''):match('^(.*)\n([%x]+)\n$')
@@ -164,15 +190,29 @@ api.nvim_create_autocmd({'BufEnter', 'BufWritePost', 'TextChanged', 'TextChanged
   end,
 })
 api.nvim_create_autocmd('FocusGained', { callback = function() M.refresh() end })
-api.nvim_create_autocmd({'BufUnload', 'BufWipeout'}, { callback = function(event)
-  generations[event.buf] = nil
-  pending[event.buf] = nil
-  bases[event.buf] = nil
-  rendered[event.buf] = nil
+local function forget(buffer)
+  local current = active[buffer]
+  active[buffer] = nil
+  if current and current.process and current.process.handle then
+    pcall(current.process.handle.kill, current.process.handle, 15)
+  end
+  generations[buffer] = nil
+  pending[buffer] = nil
+  bases[buffer] = nil
+  rendered[buffer] = nil
+end
+api.nvim_create_autocmd({'BufDelete', 'BufUnload', 'BufWipeout'}, { callback = function(event)
+  forget(event.buf)
 end })
 -- Refresh the visible buffer after external commits, checkouts and Git panel actions.
 local timer = vim.uv.new_timer()
 timer:start(2000, 2000, vim.schedule_wrap(function() M.refresh() end))
-api.nvim_create_autocmd('VimLeavePre', { callback = function() timer:stop(); timer:close() end })
+api.nvim_create_autocmd('VimLeavePre', { callback = function()
+  if stopped then return end
+  stopped = true
+  timer:stop()
+  timer:close()
+  for buffer in pairs(active) do forget(buffer) end
+end })
 
 return M

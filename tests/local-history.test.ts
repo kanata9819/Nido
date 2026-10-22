@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
-import { mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocalHistory } from '../src/main/localHistory';
@@ -42,6 +42,96 @@ test('local history serializes concurrent revisions, avoids duplicate writes and
     );
     assert.equal((await restarted.version(file, versions[0].id)).text, 'one\n');
     assert.equal('text' in (await restarted.list(file))[0], false);
+});
+
+test('recorded history lists contain only committed retained metadata in transaction order', async (context) => {
+    const root = await fixture(context);
+    const directory = join(root, 'history');
+    const file = join(root, 'notes.txt');
+    const store = new LocalHistory(directory, {
+        versions: 2,
+        historyBytes: 1800,
+        totalBytes: 10000,
+        files: 200
+    });
+    const lists = await Promise.all(
+        ['first\n', 'second\n', 'third\n'].map((text) =>
+            store.recordAndList(file, content(text), 'draft')
+        )
+    );
+    assert.deepEqual(
+        lists.map((list) => list.length),
+        [1, 2, 2]
+    );
+    assert.equal(lists[1][1].id, lists[0][0].id);
+    assert.equal(lists[2][1].id, lists[1][0].id);
+    assert.ok(lists.flat().every((version) => !('text' in version)));
+    assert.deepEqual(await new LocalHistory(directory).list(file), lists[2]);
+
+    // Escaped content exceeds the byte budget before the revision count limit.
+    const retained = await store.recordAndList(file, content('\u0001'.repeat(240)), 'draft');
+    assert.equal(retained.length, 1);
+    assert.deepEqual(await new LocalHistory(directory).list(file), retained);
+});
+
+test('history lists read existing revisions once and still detect external changes and corruption', async (context) => {
+    const root = await fixture(context);
+    const directory = join(root, 'history');
+    const file = join(root, 'notes.txt');
+    const store = new LocalHistory(directory);
+    const value = { ...content('current\n'), path: file, buffer: 1, tick: 1, modified: false };
+    await store.record(file, content('previous\n'), 'saved');
+    await store.record(file, value, 'saved');
+    const historyPath = join(directory, (await readdir(directory))[0]);
+    const before = await stat(historyPath);
+    const service = new HistoryService(store);
+    const session = { historyCurrent: async () => value } as unknown as Session;
+    let parsed = 0;
+    const parse = JSON.parse;
+    const mocked = context.mock.method(JSON, 'parse', (...args: Parameters<typeof JSON.parse>) => {
+        parsed++;
+        return parse(...args);
+    });
+    const listed = await service.list(session);
+    mocked.mock.restore();
+    assert.equal(parsed, 1, 'opening history must parse the existing history only once');
+    assert.equal(listed.versions.length, 2);
+    assert.equal((await stat(historyPath)).mtimeMs, before.mtimeMs);
+    assert.ok(listed.versions.every((version) => !('text' in version)));
+
+    const external = await new LocalHistory(directory).record(
+        file,
+        content('external revision\n'),
+        'saved'
+    );
+    assert.ok((await service.list(session)).versions.some((version) => version.id === external.id));
+    const valid = await readFile(historyPath, 'utf8');
+    await writeFile(historyPath, '{interrupted');
+    await assert.rejects(service.list(session), SyntaxError);
+    assert.equal(await readFile(historyPath, 'utf8'), '{interrupted');
+    await writeFile(historyPath, valid);
+    assert.equal((await service.list(session)).versions.length, 4);
+});
+
+test('a failed history list write preserves committed revisions and permits retry', async (context) => {
+    const root = await fixture(context);
+    const directory = join(root, 'history');
+    const file = join(root, 'notes.txt');
+    const store = new LocalHistory(directory);
+    const original = await store.record(file, content('original\n'), 'saved');
+    const historyPath = join(directory, (await readdir(directory))[0]);
+    const before = await readFile(historyPath, 'utf8');
+    const value = { ...content('edited\n'), path: file, buffer: 1, tick: 2, modified: true };
+    const service = new HistoryService(store);
+    const session = { historyCurrent: async () => value } as unknown as Session;
+    await mkdir(`${historyPath}.tmp`);
+    await assert.rejects(service.list(session));
+    assert.equal(await readFile(historyPath, 'utf8'), before);
+    await rm(`${historyPath}.tmp`, { recursive: true });
+    const retried = await service.list(session);
+    assert.equal(retried.versions.length, 2);
+    assert.equal(retried.versions[1].id, original.id);
+    assert.equal((await store.version(file, retried.versions[0].id)).text, value.text);
 });
 
 test('history retention bounds per-file revisions and total disk usage without touching unrelated files', async (context) => {

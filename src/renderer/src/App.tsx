@@ -21,7 +21,7 @@ import StatusBar from './components/StatusBar';
 import TitleBar from './components/TitleBar';
 import { Welcome } from './components/Welcome';
 import WorkspaceLoading from './components/WorkspaceLoading';
-import { buildItems } from './commands';
+import { buildItems, buildProblemItems, filterItems } from './commands';
 import { fileDecorations } from './fileDecorations';
 import {
     defaultFontFamily,
@@ -316,6 +316,24 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     };
 
     const save = (): void => run(window.nido.save(active, formatOnSave));
+    const openProblem = useCallback(
+        (index: number): void => {
+            const canFocus = captureFocus();
+            run(
+                window.nido.openProblem(active, index + 1, state.diagnosticsVersion!).then(() => {
+                    if (canFocus()) {
+                        focusEditor();
+                    }
+                })
+            );
+        },
+        [active, state.diagnosticsVersion, captureFocus, run, focusEditor]
+    );
+    const problemItems = useMemo(
+        () => (panel === 'problems' ? buildProblemItems(state.problems, openProblem, t) : []),
+        [panel, state.problems, openProblem, t]
+    );
+    const filteredProblems = useMemo(() => filterItems(problemItems, query), [problemItems, query]);
     const { commands, filtered } = buildItems(
         active,
         panel,
@@ -346,7 +364,8 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                 (f) => f.root === workspace?.root && f.kind === (workspace?.kind || 'editor')
             )
         },
-        t
+        t,
+        { items: problemItems, filtered: filteredProblems }
     );
 
     const keydown = useKeyboardShortcuts({

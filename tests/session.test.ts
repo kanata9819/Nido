@@ -2416,8 +2416,12 @@ vim.api.nvim_buf_get_lines = function(buf, first, last, strict)
   return get_lines(buf, first, last, strict)
 end
 local function refresh()
+  local started = metrics.git
   module.refresh(buffer)
-  assert(vim.wait(3000, function() return active == 0 end, 5), 'Git refresh completed')
+  -- The initial empty signs may precede a Git request that started before this
+  -- instrumentation. A queued refresh must actually start before zero means done.
+  assert(vim.wait(3000, function() return metrics.git > started and active == 0 end, 5),
+    'Git refresh started and completed: ' .. vim.inspect(metrics))
 end
 local ok, err = pcall(function()
   refresh()

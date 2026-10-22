@@ -24,10 +24,17 @@ function MarkdownPreview({
         let cancelled = false;
         let generation = 0;
         let token = '';
-        let timer: number;
+        let timer: number | undefined;
+        let pending = false;
+        let dirty = true;
         body.current?.focus();
         const refresh = (): void => {
-            const current = ++generation;
+            if (cancelled || document.hidden || pending || !dirty) {
+                return;
+            }
+            pending = true;
+            dirty = false;
+            const current = generation;
             window.nido
                 .markdownPreview(workspaceId, token)
                 .then((value) => {
@@ -43,12 +50,35 @@ function MarkdownPreview({
                     if (!cancelled && current === generation) {
                         setError(String(error));
                     }
+                })
+                .finally(() => {
+                    pending = false;
+                    // A slow read may span several edits. Fetch only their latest
+                    // state once the current read and the existing delay finish.
+                    if (!timer) {
+                        refresh();
+                    }
                 });
         };
         const schedule = (): void => {
             generation++;
+            dirty = true;
             window.clearTimeout(timer);
-            timer = window.setTimeout(refresh, 150);
+            timer = undefined;
+            if (document.hidden) {
+                return;
+            }
+            timer = window.setTimeout(() => {
+                timer = undefined;
+                refresh();
+            }, 150);
+        };
+        const visibilityChanged = (): void => {
+            generation++;
+            dirty = true;
+            window.clearTimeout(timer);
+            timer = undefined;
+            refresh();
         };
         const unsubscribe = window.nido.onEvent((event) => {
             if (event.id !== workspaceId) {
@@ -62,10 +92,12 @@ function MarkdownPreview({
                 schedule();
             }
         });
+        document.addEventListener('visibilitychange', visibilityChanged);
         refresh();
         return () => {
             cancelled = true;
             window.clearTimeout(timer);
+            document.removeEventListener('visibilitychange', visibilityChanged);
             unsubscribe();
         };
     }, [workspaceId]);

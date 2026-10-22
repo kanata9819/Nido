@@ -3,9 +3,13 @@ local generation = 0
 local cancel
 local highlighted_buffer
 local text_match
+local timer = vim.uv.new_timer()
+timer:unref()
+local stopped = false
 
 local function clear()
   generation = generation + 1
+  if not stopped then timer:stop() end
   if cancel then cancel(); cancel = nil end
   if highlighted_buffer and api.nvim_buf_is_valid(highlighted_buffer) then
     vim.lsp.util.buf_clear_references(highlighted_buffer)
@@ -18,6 +22,7 @@ local function clear()
 end
 
 local function refresh()
+  if stopped then return end
   clear()
   local buffer, window = api.nvim_get_current_buf(), api.nvim_get_current_win()
   if vim.bo[buffer].buftype ~= '' or not vim.fn.mode():match('^[niR]') then return end
@@ -30,7 +35,7 @@ local function refresh()
   if character == '' or vim.fn.match(character, [[\k]]) < 0 then return end
   local word = vim.fn.expand('<cword>')
   local tick, ticket = api.nvim_buf_get_changedtick(buffer), generation
-  vim.defer_fn(function()
+  timer:start(250, 0, vim.schedule_wrap(function()
     if ticket ~= generation or not api.nvim_buf_is_valid(buffer)
         or api.nvim_get_current_buf() ~= buffer or api.nvim_get_current_win() ~= window
         or api.nvim_buf_get_changedtick(buffer) ~= tick
@@ -55,7 +60,7 @@ local function refresh()
         end
       end
     end)
-  end, 250)
+  end))
 end
 
 local function set_colors()
@@ -70,3 +75,9 @@ api.nvim_create_autocmd({
   'ModeChanged', 'LspAttach', 'LspDetach', 'FocusGained',
 }, {callback=refresh})
 api.nvim_create_autocmd({'BufLeave', 'WinLeave', 'FocusLost'}, {callback=clear})
+api.nvim_create_autocmd('VimLeavePre', {callback=function()
+  if stopped then return end
+  clear()
+  stopped = true
+  timer:close()
+end})

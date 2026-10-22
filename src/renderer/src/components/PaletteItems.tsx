@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n';
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { Command, FolderOpen, FileCode2, CircleAlert, TriangleAlert, Info } from 'lucide-react';
 import type { Panel, Item } from '../types';
 import styles from '../assets/Palette.module.css';
@@ -36,6 +36,41 @@ function itemIcon(panel: Exclude<Panel, null>, severity: number | undefined): Re
     }
 }
 
+const PaletteItem = memo(function PaletteItem({
+    panel,
+    item,
+    index,
+    selected
+}: {
+    panel: Exclude<Panel, null>;
+    item: Item;
+    index: number;
+    selected: boolean;
+}): React.JSX.Element {
+    return (
+        <button
+            id={panel === 'problems' ? `problem-${index}` : undefined}
+            role={panel === 'problems' ? 'option' : undefined}
+            aria-selected={panel === 'problems' ? selected : undefined}
+            data-severity={item.severity}
+            className={selected ? styles.selectedItem : ''}
+            ref={(node) => {
+                if (node && selected) {
+                    node.scrollIntoView({ block: 'nearest' });
+                }
+            }}
+            onClick={item.run}
+        >
+            <span className={styles.itemIcon}>{itemIcon(panel, item.severity)}</span>
+            <span>
+                <strong>{item.title}</strong>
+                <small>{item.detail}</small>
+            </span>
+            {item.key && <kbd>{item.key}</kbd>}
+        </button>
+    );
+});
+
 export default function PaletteItems({
     panel,
     filtered,
@@ -67,6 +102,17 @@ export default function PaletteItems({
             setSelection((index) => Math.max(0, Math.min(index, filtered.length - 1)));
         }
     }, [panel, filtered.length, setSelection]);
+    useEffect(() => {
+        const node = results.current;
+        if (panel !== 'problems' || !node) {
+            return;
+        }
+        const observer = new ResizeObserver(() => {
+            node.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+        });
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [panel]);
     return (
         <>
             <input
@@ -152,27 +198,13 @@ export default function PaletteItems({
                 }}
             >
                 {filtered.map((item, i) => (
-                    <button
+                    <PaletteItem
                         key={`${item.title}-${i}`}
-                        id={panel === 'problems' ? `problem-${i}` : undefined}
-                        role={panel === 'problems' ? 'option' : undefined}
-                        aria-selected={panel === 'problems' ? i === selection : undefined}
-                        data-severity={item.severity}
-                        className={i === selection ? styles.selectedItem : ''}
-                        ref={(node) => {
-                            if (node && i === selection) {
-                                node.scrollIntoView({ block: 'nearest' });
-                            }
-                        }}
-                        onClick={item.run}
-                    >
-                        <span className={styles.itemIcon}>{itemIcon(panel, item.severity)}</span>
-                        <span>
-                            <strong>{item.title}</strong>
-                            <small>{item.detail}</small>
-                        </span>
-                        {item.key && <kbd>{item.key}</kbd>}
-                    </button>
+                        panel={panel}
+                        item={item}
+                        index={i}
+                        selected={i === selection}
+                    />
                 ))}
                 {!filtered.length && (
                     <p className={styles.noResults}>

@@ -8,6 +8,145 @@ import { SessionEvents } from '../src/main/sessionEvents';
 import { Grid } from '../src/renderer/src/grid';
 import type { NidoEvent, SessionState, Redraw } from '../src/shared/types';
 
+test('Git sign refreshes bound pending commands and apply the latest HEAD and unsaved text', async (context) => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        const result = await session.client.request('nvim_exec_lua', [
+            `
+local api, signs = vim.api, require('nido_git_signs')
+local buffer = api.nvim_get_current_buf()
+local root = vim.fn.getcwd()
+api.nvim_buf_set_name(buffer, root .. '/.downloads/first.txt')
+api.nvim_buf_set_lines(buffer, 0, -1, false, {'initial'})
+local original_system, original_diff = vim.system, vim.diff
+local calls, active, maximum, latest = {}, 0, 0, nil
+local fail_spawn = false
+vim.system = function(command, options, callback)
+  if command[1] ~= 'git' then return original_system(command, options, callback) end
+  if fail_spawn then error('simulated spawn failure') end
+  calls[#calls + 1] = {command=command, callback=callback}
+  active = active + 1
+  maximum = math.max(maximum, active)
+  return {kill=function() end}
+end
+vim.diff = function(base, text, options)
+  latest = {base=base, text=text}
+  return original_diff(base, text, options)
+end
+local function respond(index, stdout, code)
+  active = active - 1
+  calls[index].callback({stdout=stdout, stderr='', code=code or 0})
+  local settled = false
+  vim.schedule(function() settled=true end)
+  assert(vim.wait(1000, function() return settled end, 1))
+end
+local function revision(head) return root .. '\\n' .. head .. '\\n' end
+local ok, err = pcall(function()
+  signs.refresh(buffer)
+  for change=1,20 do
+    api.nvim_buf_set_lines(buffer, 0, -1, false, {'latest-' .. change})
+    signs.refresh(change % 2 == 0 and 0 or buffer)
+  end
+  assert(#calls == 1 and maximum == 1, 'same-buffer refreshes overlap: ' .. #calls)
+  respond(1, revision('aaa'))
+  assert(#calls == 2 and calls[2].command[6] == 'rev-parse', 'obsolete HEAD must not be loaded')
+  respond(2, revision('bbb'))
+  assert(#calls == 3 and calls[3].command[7] == 'bbb:.downloads/first.txt')
+  respond(3, 'committed\\n')
+  assert(active == 0 and maximum == 1)
+  assert(latest.base == 'committed\\n' and latest.text == 'latest-20\\n', vim.inspect(latest))
+  local marks = api.nvim_buf_get_extmarks(buffer, api.nvim_get_namespaces().nido_git_signs, 0, -1, {details=true})
+  assert(#marks == 1 and marks[1][4].sign_hl_group == 'NidoGitChanged')
+  fail_spawn = true
+  signs.refresh(buffer)
+  fail_spawn = false
+  signs.refresh(buffer)
+  assert(#calls == 4, 'spawn failure must release the buffer queue')
+  respond(4, revision('bbb'))
+  signs.refresh(buffer)
+  respond(5, '', 128)
+  signs.refresh(buffer)
+  respond(6, revision('ccc'))
+  respond(7, 'new commit\\n')
+  assert(latest.base == 'new commit\\n' and latest.text == 'latest-20\\n')
+  assert(active == 0 and maximum == 1, 'failed Git command must release the buffer queue')
+end)
+vim.system, vim.diff = original_system, original_diff
+assert(ok, err)
+return {refreshes=21, maximumConcurrentGit=maximum, initialPendingGit=1, latestText=latest.text}
+`,
+            []
+        ]);
+        context.diagnostic(JSON.stringify(result));
+    } finally {
+        await session.stop();
+    }
+});
+
+test('Git sign queues stay separate across buffers and discard renamed, unloaded, deleted and stopped work', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.client.request('nvim_exec_lua', [
+            `
+local api, signs = vim.api, require('nido_git_signs')
+local root = vim.fn.getcwd()
+local first = api.nvim_get_current_buf()
+local second = api.nvim_create_buf(true, false)
+api.nvim_buf_set_name(first, root .. '/.downloads/first.txt')
+api.nvim_buf_set_name(second, root .. '/.downloads/second.txt')
+api.nvim_buf_set_lines(first, 0, -1, false, {'first edit'})
+api.nvim_buf_set_lines(second, 0, -1, false, {'second edit'})
+local original, calls, killed = vim.system, {}, 0
+vim.system = function(command, options, callback)
+  if command[1] ~= 'git' then return original(command, options, callback) end
+  calls[#calls + 1] = {command=command, callback=callback}
+  return {kill=function() killed=killed+1 end}
+end
+local function respond(index, stdout)
+  calls[index].callback({stdout=stdout or '', stderr='', code=0})
+  local settled = false
+  vim.schedule(function() settled=true end)
+  assert(vim.wait(1000, function() return settled end, 1))
+end
+local revision = root .. '\\nabc\\n'
+local ok, err = pcall(function()
+  for refresh=1,20 do signs.refresh(first); signs.refresh(second) end
+  assert(#calls == 2, 'different buffers need independent single commands')
+  api.nvim_buf_delete(first, {unload=true, force=true})
+  assert(killed == 1, 'unloading must cancel its process')
+  respond(1, revision)
+  assert(#calls == 2, 'an unloaded buffer restarted obsolete work')
+  api.nvim_buf_set_name(second, root .. '/.downloads/renamed.txt')
+  signs.refresh(second)
+  respond(2, revision)
+  assert(#calls == 3, 'renaming must start one fresh lookup')
+  respond(3, revision)
+  assert(calls[4].command[7] == 'abc:.downloads/renamed.txt', 'the old file name survived')
+  respond(4, 'committed\\n')
+  local namespace = api.nvim_get_namespaces().nido_git_signs
+  assert(#api.nvim_buf_get_extmarks(second, namespace, 0, -1, {}) == 1)
+  signs.refresh(second)
+  api.nvim_exec_autocmds('BufDelete', {buffer=second})
+  assert(killed == 2)
+  respond(5, revision)
+  assert(#calls == 5, 'a deleted buffer restarted queued work')
+  signs.refresh(second)
+  api.nvim_exec_autocmds('VimLeavePre', {})
+  assert(killed == 3)
+  respond(6, revision)
+  signs.refresh(second)
+  assert(#calls == 6, 'stopping must discard callbacks and prevent refreshes')
+end)
+vim.system = original
+assert(ok, err)
+`,
+            []
+        ]);
+    } finally {
+        await session.stop();
+    }
+});
+
 test('indent redraws reuse neighboring lines across a continuous blank range', async (context) => {
     const grid = new Grid();
     const session = await Session.create(process.cwd(), (event) => {

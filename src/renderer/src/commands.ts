@@ -20,6 +20,27 @@ interface CommandsCallbacks {
     isFavorite: boolean;
 }
 
+export function buildProblemItems(
+    problems: SessionState['problems'],
+    open: (index: number) => void,
+    t: Translator
+): Item[] {
+    return (problems || [])
+        .map((problem, index) => ({
+            key: t(['Error', 'Warning', 'Info', 'Hint'][problem.severity - 1] || 'Info'),
+            severity: problem.severity,
+            title: problem.message,
+            detail: `${problem.path}:${problem.line}:${problem.column}${problem.source ? ' · ' + problem.source : ''}`,
+            run: () => open(index)
+        }))
+        .sort((a, b) => a.severity - b.severity || a.detail.localeCompare(b.detail));
+}
+
+export function filterItems(items: Item[], query: string): Item[] {
+    const needle = query.toLowerCase();
+    return items.filter((item) => `${item.title} ${item.detail}`.toLowerCase().includes(needle));
+}
+
 export function buildItems(
     active: string,
     panel: Panel,
@@ -28,7 +49,8 @@ export function buildItems(
     state: SessionState,
     query: string,
     callbacks: CommandsCallbacks,
-    t: Translator = createTranslator('en')
+    t: Translator = createTranslator('en'),
+    preparedProblems?: { items: Item[]; filtered: Item[] }
 ): { commands: Item[]; items: Item[]; filtered: Item[] } {
     const {
         save,
@@ -285,13 +307,11 @@ export function buildItems(
     let items: Item[];
     switch (panel) {
         case 'problems':
-            items = (state.problems || [])
-                .map((problem, index) => ({
-                    key: t(['Error', 'Warning', 'Info', 'Hint'][problem.severity - 1] || 'Info'),
-                    severity: problem.severity,
-                    title: problem.message,
-                    detail: `${problem.path}:${problem.line}:${problem.column}${problem.source ? ' · ' + problem.source : ''}`,
-                    run: () => {
+            items =
+                preparedProblems?.items ||
+                buildProblemItems(
+                    state.problems,
+                    (index) => {
                         const canFocus = captureFocus();
                         run(
                             window.nido
@@ -302,9 +322,9 @@ export function buildItems(
                                     }
                                 })
                         );
-                    }
-                }))
-                .sort((a, b) => a.severity - b.severity || a.detail.localeCompare(b.detail));
+                    },
+                    t
+                );
             break;
         case 'workspaces':
             items = [
@@ -345,11 +365,10 @@ export function buildItems(
             items = commands;
     }
 
-    const filtered = items
-        .filter((item) =>
-            `${item.title} ${item.detail}`.toLowerCase().includes(query.toLowerCase())
-        )
-        .slice(0, panel === 'problems' ? undefined : 100);
+    const filtered =
+        panel === 'problems' && preparedProblems
+            ? preparedProblems.filtered
+            : filterItems(items, query).slice(0, panel === 'problems' ? undefined : 100);
 
     return { commands, items, filtered };
 }

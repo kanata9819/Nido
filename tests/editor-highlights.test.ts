@@ -234,6 +234,71 @@ assert(#vim.fn.getmatches() == 0, 'Visual selection must clear word matches')
     }
 });
 
+test('word highlighting reuses one timer during cursor bursts and clears pending work on focus and window changes', async (context) => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.attach(80, 24);
+        const result = await session.client.request('nvim_exec_lua', [
+            String.raw`
+local api = vim.api
+api.nvim_buf_set_lines(0, 0, -1, false, {'alpha alpha beta beta'})
+vim.wait(300)
+local function timers()
+  local active, total = 0, 0
+  vim.uv.walk(function(handle)
+    if handle:get_type() == 'timer' and not handle:is_closing() then
+      total=total+1
+      if handle:is_active() then active=active+1 end
+    end
+  end)
+  return active, total
+end
+local baseline, before = timers()
+for move=1,40 do
+  api.nvim_win_set_cursor(0, {1, move % 2 == 0 and 12 or 0})
+  api.nvim_exec_autocmds('CursorMoved', {buffer=0})
+end
+local active, after = timers()
+assert(active-baseline == 1, 'cursor movement accumulated timers: ' .. active-baseline)
+assert(after == before, 'cursor movement allocated new timer handles')
+assert(#vim.fn.getmatches() == 0, 'highlight debounce must remain delayed')
+assert(vim.wait(3000, function() return #vim.fn.getmatches() == 1 end, 5))
+assert(vim.fn.getmatches()[1].pattern == [[\C\V\<beta\>]])
+api.nvim_win_set_cursor(0, {1, 0})
+api.nvim_exec_autocmds('CursorMoved', {buffer=0})
+api.nvim_exec_autocmds('FocusLost', {})
+vim.wait(300)
+assert(#vim.fn.getmatches() == 0 and timers() == baseline, 'focus loss retained pending work')
+api.nvim_exec_autocmds('FocusGained', {})
+assert(vim.wait(3000, function() return #vim.fn.getmatches() == 1 end, 5))
+assert(vim.fn.getmatches()[1].pattern == [[\C\V\<alpha\>]])
+api.nvim_win_set_cursor(0, {1, 12})
+api.nvim_exec_autocmds('CursorMoved', {buffer=0})
+vim.cmd('vsplit')
+api.nvim_buf_set_lines(0, 0, -1, false, {'    '})
+api.nvim_exec_autocmds('TextChanged', {buffer=0})
+vim.wait(300)
+assert(#vim.fn.getmatches() == 0, 'window changes retained an old pending highlight')
+api.nvim_buf_set_lines(0, 0, -1, false, {'final final'})
+api.nvim_win_set_cursor(0, {1, 0})
+api.nvim_exec_autocmds('CursorMoved', {buffer=0})
+vim.cmd('enew!')
+vim.wait(300)
+assert(#vim.fn.getmatches() == 0, 'buffer changes retained an old pending highlight')
+local _, open = timers()
+api.nvim_exec_autocmds('VimLeavePre', {})
+local _, closed = timers()
+assert(closed <= open-2, 'word and Git timers must close before shutdown')
+return {moves=40, maximumPendingWordTimers=active-baseline, timerAllocations=after-before, latestWord='beta'}
+`,
+            []
+        ]);
+        context.diagnostic(JSON.stringify(result));
+    } finally {
+        await session.stop();
+    }
+});
+
 test('document highlights reject late responses after moving, editing and leaving the buffer', async () => {
     const session = await Session.create(process.cwd(), () => {});
     try {

@@ -34,6 +34,11 @@ export class HistoryService {
         value: HistorySnapshot,
         kind = value.modified ? ('draft' as const) : ('saved' as const)
     ): Promise<void> {
+        await this.preserveOriginal(value);
+        await this.store.record(value.path, value, kind);
+    }
+
+    private async preserveOriginal(value: HistorySnapshot): Promise<void> {
         if (!(await this.store.has(value.path)) && value.modified) {
             try {
                 if ((await stat(value.path)).size <= historyLimits.fileBytes) {
@@ -43,7 +48,6 @@ export class HistoryService {
                         original = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
                     } catch {
                         // The editor can decode other encodings; never archive a lossy disk baseline.
-                        await this.store.record(value.path, value, kind);
                         return;
                     }
                     const fileformat = original.includes('\r\n')
@@ -80,7 +84,6 @@ export class HistoryService {
                 }
             }
         }
-        await this.store.record(value.path, value, kind);
     }
 
     capture(session: Session): Promise<void> {
@@ -117,8 +120,13 @@ export class HistoryService {
     list(session: Session): Promise<HistoryList> {
         return this.serial(session, async () => {
             const current = await session.historyCurrent();
-            await this.record(current);
-            return { path: current.path, versions: await this.store.list(current.path) };
+            await this.preserveOriginal(current);
+            const versions = await this.store.recordAndList(
+                current.path,
+                current,
+                current.modified ? 'draft' : 'saved'
+            );
+            return { path: current.path, versions };
         });
     }
 
