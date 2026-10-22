@@ -273,6 +273,15 @@ export function registerHandlers({
     handle('paste', (id, value) => session(id).paste(text(value)));
     handle('pasteClipboard', (id) => session(id).paste(() => clipboard.readText()));
     handle('files', (id, path) => session(id).files(text(path)));
+    handle('watchDirectories', (id, paths) => {
+        if (
+            !Array.isArray(paths) ||
+            paths.some((path) => typeof path !== 'string' || path.length > 4096)
+        ) {
+            throw new Error('Invalid directory selection.');
+        }
+        return session(id).watchDirectories(paths);
+    });
     handle('highlightSources', (id, path, before, after) =>
         session(id).highlightSources(text(path), text(before), text(after))
     );

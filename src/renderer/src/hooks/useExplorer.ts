@@ -35,6 +35,25 @@ interface ExplorerState {
 
 interface DirectoryRequest {
     files: Promise<FileEntry[]>;
+    pending: boolean;
+    dirty: boolean;
+}
+
+function sameEntries(previous: FileEntry[] | undefined, next: FileEntry[]): boolean {
+    return (
+        previous === next ||
+        (!!previous &&
+            previous.length === next.length &&
+            previous.every((entry, index) => {
+                const other = next[index];
+                return (
+                    entry.path === other.path &&
+                    entry.name === other.name &&
+                    entry.directory === other.directory &&
+                    entry.ignored === other.ignored
+                );
+            }))
+    );
 }
 
 export function useExplorer({
@@ -51,6 +70,7 @@ export function useExplorer({
     const [expanded, setExpanded] = useState(() => new Set(saved.expanded));
     const [selected, setSelected] = useState(saved.selected);
     const [ready, setReady] = useState(false);
+    const [pageVisible, setPageVisible] = useState(() => !document.hidden);
     const latest = useRef(saved);
     const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const [revision, setRevision] = useState(0);
@@ -60,6 +80,49 @@ export function useExplorer({
     const tree = useRef<HTMLDivElement>(null);
     const [operation, setOperation] = useState<{ request?: FileRequest }>();
     const [clipboard, setClipboard] = useState<{ path: string; name: string; cut: boolean }>();
+    const visible = useMemo(
+        () => getVisibleEntries(entriesByDirectory, expanded),
+        [entriesByDirectory, expanded]
+    );
+    const directories = useMemo(
+        () =>
+            ['', ...expanded].filter((path) => {
+                let parent = path.replace(/[\\/]?[^\\/]+$/, '');
+                while (parent) {
+                    if (!expanded.has(parent)) {
+                        return false;
+                    }
+                    parent = parent.replace(/[\\/]?[^\\/]+$/, '');
+                }
+                return true;
+            }),
+        [expanded]
+    );
+    const watchedDirectories = useMemo(
+        () =>
+            JSON.stringify(
+                ready
+                    ? [
+                          '',
+                          ...visible
+                              .filter((entry) => entry.directory && expanded.has(entry.path))
+                              .map(({ path }) => path)
+                      ]
+                    : directories
+            ),
+        [ready, visible, expanded, directories]
+    );
+    const invalidate = useCallback((paths?: string[]): void => {
+        requestGeneration.current++;
+        if (paths) {
+            for (const path of paths) {
+                requests.current.delete(path);
+            }
+        } else {
+            requests.current.clear();
+        }
+        setRevision((value) => value + 1);
+    }, []);
     const save = useCallback((): void => {
         if (saveTimer.current !== undefined) {
             clearTimeout(saveTimer.current);
@@ -100,32 +163,91 @@ export function useExplorer({
                     (event.type === 'filesChanged' || event.type === 'exit') &&
                     event.id === workspace.id
                 ) {
-                    requestGeneration.current++;
-                    requests.current.clear();
                     if (event.type === 'filesChanged') {
-                        setRevision((value) => value + 1);
+                        invalidate();
+                    } else {
+                        requestGeneration.current++;
+                        requests.current.clear();
+                    }
+                } else if (event.type === 'directoryChanged' && event.id === workspace.id) {
+                    const paths: string[] = [];
+                    for (const path of event.paths) {
+                        const request = requests.current.get(path);
+                        if (!request) {
+                            continue;
+                        }
+                        if (request.pending) {
+                            // Follow a slow read with one fresh read, even after many notifications.
+                            request.dirty = true;
+                        } else {
+                            paths.push(path);
+                        }
+                    }
+                    if (paths.length) {
+                        invalidate(paths);
                     }
                 }
             }),
-        [workspace.id]
+        [workspace.id, invalidate]
     );
     useEffect(
         () => () => {
             requestGeneration.current++;
             requests.current.clear();
+            void window.nido.watchDirectories(workspace.id, []).catch(() => {});
         },
         [workspace.id]
     );
+    useEffect(() => {
+        const visibility = (): void => setPageVisible(!document.hidden);
+        document.addEventListener('visibilitychange', visibility);
+        return () => document.removeEventListener('visibilitychange', visibility);
+    }, []);
+    useEffect(() => {
+        let cancelled = false;
+        const paths: string[] = active && pageVisible ? JSON.parse(watchedDirectories) : [];
+        void window.nido.watchDirectories(workspace.id, paths).catch((error) => {
+            if (!cancelled && paths.length) {
+                onError(String(error));
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [workspace.id, active, pageVisible, watchedDirectories, onError]);
+    useEffect(() => {
+        if (!active || !pageVisible) {
+            return;
+        }
+        // Catch changes made while this tree was hidden or native notifications were unavailable.
+        if (requests.current.size) {
+            invalidate();
+        }
+        const focus = (): void => invalidate();
+        window.addEventListener('focus', focus);
+        return () => window.removeEventListener('focus', focus);
+    }, [active, pageVisible, invalidate]);
     const requestDirectory = useCallback(
         (path: string, replace = false): DirectoryRequest => {
             let request = requests.current.get(path);
             if (!request || replace) {
-                request = { files: window.nido.files(workspace.id, path) };
+                const next: DirectoryRequest = {
+                    files: window.nido.files(workspace.id, path),
+                    pending: true,
+                    dirty: false
+                };
+                next.files = next.files.finally(() => {
+                    next.pending = false;
+                    if (next.dirty && requests.current.get(path) === next) {
+                        invalidate([path]);
+                    }
+                });
+                request = next;
                 requests.current.set(path, request);
             }
             return request;
         },
-        [workspace.id]
+        [workspace.id, invalidate]
     );
     const load = async (path: string): Promise<void> => {
         // Explicit refreshes supersede old reads; automatic reloads can reuse this request.
@@ -133,7 +255,9 @@ export function useExplorer({
         try {
             const files = await request.files;
             if (requests.current.get(path) === request) {
-                setEntries((old) => ({ ...old, [path]: files }));
+                setEntries((old) =>
+                    sameEntries(old[path], files) ? old : { ...old, [path]: files }
+                );
             }
         } catch (error) {
             if (requests.current.get(path) === request) {
@@ -145,13 +269,13 @@ export function useExplorer({
 
     useEffect(() => {
         // Keep each tree's state, but load hidden workspaces only when first activated or changed.
-        if (!active || loadedRevision.current === revision) {
+        if (!active || !pageVisible || loadedRevision.current === revision) {
             return;
         }
         let cancelled = false;
         const generation = requestGeneration.current;
         const current = (): boolean => !cancelled && generation === requestGeneration.current;
-        const paths = ['', ...expanded];
+        const paths = directories;
         const files: [string, FileEntry[], DirectoryRequest][] = [];
         let nextPath = 0;
         // Bound automatic reloads instead of launching one Git/filesystem request per open folder.
@@ -178,14 +302,24 @@ export function useExplorer({
             .then(() => {
                 if (current()) {
                     loadedRevision.current = revision;
-                    setEntries((old) =>
-                        Object.fromEntries(
-                            files.map(([path, entries, request]) => [
-                                path,
-                                requests.current.get(path) === request ? entries : old[path] || []
-                            ])
-                        )
-                    );
+                    setEntries((old) => {
+                        const next = Object.fromEntries(
+                            files.map(([path, entries, request]) => {
+                                const current =
+                                    requests.current.get(path) === request
+                                        ? entries
+                                        : old[path] || [];
+                                return [
+                                    path,
+                                    sameEntries(old[path], current) ? old[path] : current
+                                ];
+                            })
+                        );
+                        return Object.keys(old).length === files.length &&
+                            files.every(([path]) => old[path] === next[path])
+                            ? old
+                            : next;
+                    });
                     setReady(true);
                 }
             })
@@ -198,12 +332,7 @@ export function useExplorer({
         return () => {
             cancelled = true;
         };
-    }, [workspace.id, active, onError, revision, expanded, requestDirectory]);
-
-    const visible = useMemo(
-        () => getVisibleEntries(entriesByDirectory, expanded),
-        [entriesByDirectory, expanded]
-    );
+    }, [workspace.id, active, pageVisible, onError, revision, directories, requestDirectory]);
     const indexByPath = useMemo(
         () => new Map(visible.map((entry, index) => [entry.path, index])),
         [visible]

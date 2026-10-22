@@ -502,6 +502,227 @@ test('Explorer removes missing directories and retries failed reads without reus
     await expect(tree).not.toContainText('old.txt');
 });
 
+test('Explorer external changes reload only the affected folder and preserve selection and viewport', async ({
+    page
+}) => {
+    await page.addInitScript(() =>
+        localStorage.setItem(
+            'nido.explorer./alpha',
+            JSON.stringify({
+                version: 1,
+                expanded: ['src', 'other'],
+                selected: 'src',
+                scrollTop: 520
+            })
+        )
+    );
+    await open(page, 'app', 'files');
+    await page.evaluate(() => {
+        const root = [
+            { name: 'src', path: 'src', directory: true },
+            { name: 'other', path: 'other', directory: true },
+            ...Array.from({ length: 90 }, (_, index) => ({
+                name: `${index}.txt`,
+                path: `${index}.txt`,
+                directory: false
+            }))
+        ];
+        const src = Array.from({ length: 60 }, (_, index) => ({
+            name: `file-${index}.txt`,
+            path: `src/file-${index}.txt`,
+            directory: false
+        }));
+        for (const request of window.rendererTest.pending.filter(
+            ({ method }) => method === 'files'
+        )) {
+            window.rendererTest.settle(
+                'files',
+                0,
+                request.args[1] === '' ? root : request.args[1] === 'src' ? src : []
+            );
+        }
+    });
+    const tree = page.getByRole('tree', { name: 'Project files' });
+    await expect(tree).toHaveAttribute('aria-busy', 'false');
+    await expect(tree).toHaveAttribute('data-row-count', '152');
+    await expect.poll(() => tree.evaluate((node) => node.scrollTop)).toBe(520);
+    await page.evaluate(() => {
+        window.rendererTest.calls.length = 0;
+        window.rendererTest.emit({ type: 'directoryChanged', id: 'alpha', paths: ['src'] });
+    });
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.pending
+                    .filter(({ method }) => method === 'files')
+                    .map(({ args }) => args[1])
+            )
+        )
+        .toEqual(['src']);
+    await page.evaluate(() => window.rendererTest.settle('files', 0, []));
+    await expect(tree).toHaveAttribute('data-row-count', '92');
+    await expect(tree.locator('[aria-selected="true"]')).toHaveText('src');
+    expect(await tree.evaluate((node) => node.scrollTop)).toBe(520);
+    expect(
+        await page.evaluate(() =>
+            window.rendererTest.calls
+                .filter(({ method }) => method === 'files')
+                .map(({ args }) => args[1])
+        )
+    ).toEqual(['src']);
+});
+
+test('Explorer rejects a stale external directory read while reusing unaffected in-flight reads', async ({
+    page
+}) => {
+    await open(page, 'app', 'files');
+    const directories = ['src', 'other'].map((path) => ({ name: path, path, directory: true }));
+    await page.evaluate((value) => window.rendererTest.settle('files', 0, value), directories);
+    const tree = page.getByRole('tree', { name: 'Project files' });
+    for (const name of ['src', 'other']) {
+        await tree.getByRole('treeitem', { name, exact: true }).click();
+        await page.evaluate(() => window.rendererTest.settle('files', 0, []));
+    }
+    await page.evaluate(() => {
+        window.rendererTest.calls.length = 0;
+        window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
+    });
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+            )
+        )
+        .toBe(3);
+    await page.evaluate(() => {
+        for (let index = 0; index < 1000; index++) {
+            window.rendererTest.emit({ type: 'directoryChanged', id: 'alpha', paths: ['src'] });
+        }
+    });
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+            )
+        )
+        .toBe(3);
+    await page.evaluate((value) => {
+        window.rendererTest.settle('files', 0, value);
+        window.rendererTest.settle('files', 0, [
+            { name: 'stale.txt', path: 'src/stale.txt', directory: false }
+        ]);
+        window.rendererTest.settle('files', 0, [
+            { name: 'unaffected.txt', path: 'other/unaffected.txt', directory: false }
+        ]);
+    }, directories);
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.pending
+                    .filter(({ method }) => method === 'files')
+                    .map(({ args }) => args[1])
+            )
+        )
+        .toEqual(['src']);
+    await expect(tree).not.toContainText('stale.txt');
+    await page.evaluate(() => {
+        window.rendererTest.settle('files', 0, [
+            { name: 'fresh.txt', path: 'src/fresh.txt', directory: false }
+        ]);
+    });
+    await expect(tree).toContainText('fresh.txt');
+    await expect(tree).toContainText('unaffected.txt');
+    await expect(tree).not.toContainText('stale.txt');
+    expect(
+        await page.evaluate(() =>
+            window.rendererTest.calls
+                .filter(({ method }) => method === 'files')
+                .map(({ args }) => args[1])
+        )
+    ).toEqual(['', 'src', 'other', 'src']);
+});
+
+test('Explorer unsubscribes collapsed and hidden folders and reconciles visibility and focus returns', async ({
+    page
+}) => {
+    await page.addInitScript(() =>
+        localStorage.setItem(
+            'nido.explorer./alpha',
+            JSON.stringify({
+                version: 1,
+                expanded: ['src', 'src/nested'],
+                selected: 'src',
+                scrollTop: 0
+            })
+        )
+    );
+    await open(page, 'app', 'files');
+    await page.evaluate(() => {
+        window.rendererTest.settle('files', 0, [{ name: 'src', path: 'src', directory: true }]);
+        window.rendererTest.settle('files', 0, [
+            { name: 'nested', path: 'src/nested', directory: true }
+        ]);
+        window.rendererTest.settle('files', 0, []);
+    });
+    const subscriptions = (): Promise<unknown> =>
+        page.evaluate(
+            () =>
+                window.rendererTest.calls
+                    .filter(({ method }) => method === 'watchDirectories')
+                    .at(-1)?.args[1]
+        );
+    await expect.poll(subscriptions).toEqual(['', 'src', 'src/nested']);
+    const tree = page.getByRole('tree', { name: 'Project files' });
+    await tree.getByRole('treeitem', { name: 'src', exact: true }).click();
+    await expect.poll(subscriptions).toEqual(['']);
+    await page.evaluate(() => {
+        window.rendererTest.calls.length = 0;
+        Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect.poll(subscriptions).toEqual([]);
+    await page.evaluate(() =>
+        window.rendererTest.emit({ type: 'directoryChanged', id: 'alpha', paths: [''] })
+    );
+    expect(
+        await page.evaluate(
+            () => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+        )
+    ).toBe(0);
+    await page.evaluate(() => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+        document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect.poll(subscriptions).toEqual(['']);
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.pending
+                    .filter(({ method }) => method === 'files')
+                    .map(({ args }) => args[1])
+            )
+        )
+        .toEqual(['']);
+    await page.evaluate(() =>
+        window.rendererTest.settle('files', 0, [
+            { name: 'external.txt', path: 'external.txt', directory: false }
+        ])
+    );
+    await expect(tree.getByRole('treeitem', { name: 'external.txt', exact: true })).toBeVisible();
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.pending
+                    .filter(({ method }) => method === 'files')
+                    .map(({ args }) => args[1])
+            )
+        )
+        .toEqual(['']);
+    await page.evaluate(() => window.rendererTest.settle('files', 0, []));
+    await expect(tree.getByRole('treeitem')).toHaveCount(0);
+});
+
 test('ten thousand references keep bounded DOM and keyboard jumps, and rapid selection requests only the final preview', async ({
     page
 }) => {

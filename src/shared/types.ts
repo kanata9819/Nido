@@ -194,6 +194,7 @@ export type NidoEvent =
       }
     | { type: 'diagnostics'; id: string; items: DiagnosticDetails[]; focus: boolean }
     | { type: 'filesChanged'; id: string }
+    | { type: 'directoryChanged'; id: string; paths: string[] }
     | { type: 'redraw'; id: string; events: Redraw }
     | { type: 'neovimUI'; id: string; state: NeovimUIState }
     | { type: 'state'; id: string; state: SessionState }
@@ -281,6 +282,7 @@ export interface NidoAPI {
     paste(id: string, text: string): Promise<void>;
     pasteClipboard(id: string): Promise<void>;
     files(id: string, relative: string): Promise<FileEntry[]>;
+    watchDirectories(id: string, paths: string[]): Promise<void>;
     fileAction(id: string, action: FileAction, path: string, target?: string): Promise<void>;
     findFiles(id: string, query?: string): Promise<FileEntry[]>;
     searchText(id: string, query: string, options?: SearchOptions): Promise<SearchResults>;

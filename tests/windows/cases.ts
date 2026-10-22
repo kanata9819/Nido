@@ -5,6 +5,7 @@ export const windowsBaselineCases = [
     'favorite workspaces support keyboard access, existing tabs, restart and missing folders',
     'keyboard-only workspace switching, editing, saving and dirty-close guard',
     'explorer commands create, rename, copy, move and recycle files from the keyboard',
+    'Explorer synchronizes external file changes without losing expansion, selection or viewport',
     'completion opens on typing and Ctrl Space, accepts with Tab, and files show diagnostic counts',
     'Markdown preview renders unsaved edits and supports keyboard scrolling and dismissal',
     'relative line numbers update immediately and persist after restarting',

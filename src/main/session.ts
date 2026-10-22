@@ -15,6 +15,7 @@ import type {
     Workspace
 } from '../shared/types';
 import { SessionFiles } from './sessionFiles';
+import { DirectoryWatcher } from './directoryWatcher';
 import { SessionEvents } from './sessionEvents';
 import { SessionClient } from './sessionClient';
 import { SessionInteraction } from './sessionInteraction';
@@ -32,6 +33,7 @@ export class Session {
     readonly process: ChildProcessWithoutNullStreams;
     readonly client: SessionClient;
     private readonly fileService: SessionFiles;
+    private readonly directoryWatcher: DirectoryWatcher;
     private readonly events: SessionEvents;
     get state(): SessionState {
         return this.events.state;
@@ -140,6 +142,11 @@ export class Session {
             () => this.stopped
         );
         this.fileService = new SessionFiles(this.workspace.root, this.client);
+        this.directoryWatcher = new DirectoryWatcher(
+            (path) => this.fileService.path(path),
+            (paths) => this.emit({ type: 'directoryChanged', id: this.workspace.id, paths }),
+            this.workspace.root.startsWith('\\\\')
+        );
         this.client.on('notification', (method: string, args: unknown[]) => {
             if (method === 'nido:terminal_exit') {
                 void this.stop();
@@ -169,6 +176,7 @@ export class Session {
                 this.emit({ type: 'error', id: this.workspace.id, message: stderr.trim() });
             }
             this.stopped = true;
+            this.directoryWatcher.close();
             this.fileService.cancelFindFiles();
             void this.terminal?.stop();
             this.emit({ type: 'exit', id: this.workspace.id });
@@ -707,7 +715,12 @@ return {highlight(before), highlight(after)}`,
     }
 
     async files(relativePath: string): Promise<FileEntry[]> {
+        await this.directoryWatcher.ready();
         return this.fileService.files(relativePath);
+    }
+
+    watchDirectories(paths: string[]): Promise<void> {
+        return this.stopped ? Promise.resolve() : this.directoryWatcher.set(paths);
     }
 
     async historySnapshots(tokens: HistoryToken[]): Promise<HistorySnapshot[]> {
@@ -802,6 +815,7 @@ return {highlight(before), highlight(after)}`,
             return this.stopping;
         }
         this.stopped = true;
+        this.directoryWatcher.close();
         this.fileService.cancelFindFiles();
         this.client.cancelRequests();
         this.stopping = (async () => {

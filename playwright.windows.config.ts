@@ -9,6 +9,7 @@ export default defineConfig({
     testMatch: [
         'windows/*.spec.ts',
         'electron.spec.ts',
+        'explorer-sync.spec.ts',
         'neovim-ui.spec.ts',
         'workspace-search.spec.ts',
         'theme.spec.ts',
