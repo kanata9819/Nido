@@ -1954,7 +1954,20 @@ test('activity bar moves above the explorer, preserves navigation and persists i
     const navigation = page.getByRole('navigation', { name: 'Navigation', exact: true });
     const explorer = page.getByRole('complementary', { name: 'File explorer' });
     await expect(navigation).toHaveAttribute('data-position', 'left');
-    await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+    const titlebar = page.getByRole('banner');
+    for (const name of ['Command palette', 'Settings']) {
+        await expect(navigation.getByRole('button', { name, exact: true })).toHaveCount(0);
+        await expect(page.getByRole('button', { name, exact: true })).toHaveCount(1);
+        const button = (await titlebar.getByRole('button', { name, exact: true }).boundingBox())!;
+        const minimize = (await titlebar.getByRole('button', { name: 'Minimize' }).boundingBox())!;
+        expect(button.x + button.width).toBeLessThanOrEqual(minimize.x);
+        expect(button.y + button.height / 2).toBe(minimize.y + minimize.height / 2);
+    }
+    await titlebar.getByRole('button', { name: 'Command palette', exact: true }).click();
+    const commands = page.getByRole('dialog', { name: 'commands palette', exact: true });
+    await expect(commands).toBeVisible();
+    await commands.getByRole('button', { name: 'Close palette' }).click();
+    await page.getByRole('banner').getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('combobox', { name: 'Activity bar position' }).selectOption('top');
     await page.keyboard.press('Escape');
     await expect(navigation).toHaveAttribute('data-position', 'top');
@@ -1991,7 +2004,7 @@ test('activity bar moves above the explorer, preserves navigation and persists i
         .toBe(1);
     await page.reload();
     await expect(navigation).toHaveAttribute('data-position', 'top');
-    await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('banner').getByRole('button', { name: 'Settings', exact: true }).click();
     await expect(page.getByRole('combobox', { name: 'Activity bar position' })).toHaveValue('top');
     await page.getByRole('checkbox', { name: 'Show file explorer' }).uncheck();
     await page.keyboard.press('Escape');
@@ -1999,7 +2012,7 @@ test('activity bar moves above the explorer, preserves navigation and persists i
     await expect(navigation).toBeVisible();
     await navigation.getByRole('button', { name: 'Explorer', exact: true }).click();
     await expect(explorer).toBeVisible();
-    await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('banner').getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('ja');
     const position = page.getByRole('combobox', { name: 'アクティビティバーの位置' });
     await expect(position).toHaveValue('top');
@@ -2012,6 +2025,7 @@ test('activity bar moves above the explorer, preserves navigation and persists i
 });
 
 test('top activity bar keeps every action inside a narrow explorer', async ({ page }) => {
+    await page.setViewportSize({ width: 720, height: 720 });
     await page.goto(`${origin}?view=app`);
     await page.evaluate(() => {
         localStorage.setItem('nido.activityBarPosition', 'top');
@@ -2027,7 +2041,7 @@ test('top activity bar keeps every action inside a narrow explorer', async ({ pa
         expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
         expect(box.y + box.height).toBeLessThanOrEqual(bounds.y + bounds.height);
     }
-    await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('banner').getByRole('button', { name: 'Settings', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
     await page.getByRole('separator', { name: 'Explorer width' }).focus();
@@ -2067,7 +2081,10 @@ for (const view of ['welcome', 'terminal'] as const) {
                 return bar.width === main.width && bar.y + bar.height <= main.y;
             })
             .toBe(true);
-        await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page
+            .getByRole('banner')
+            .getByRole('button', { name: 'Settings', exact: true })
+            .click();
         await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
     });
 }

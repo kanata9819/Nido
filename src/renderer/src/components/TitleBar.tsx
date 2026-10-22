@@ -1,6 +1,17 @@
 import { useI18n } from '../i18n';
 import { useEffect, useState } from 'react';
-import { Copy, Leaf, Minus, Plus, Square, SquareTerminal, Star, X } from 'lucide-react';
+import {
+    Copy,
+    Keyboard,
+    Leaf,
+    Minus,
+    Plus,
+    Settings2,
+    Square,
+    SquareTerminal,
+    Star,
+    X
+} from 'lucide-react';
 import type { FavoriteWorkspace, Workspace } from '../../../shared/types';
 import styles from '../assets/Nido.module.css';
 import UpdateButton from './UpdateButton';
@@ -16,6 +27,7 @@ interface TitleBarProps {
     closeWorkspace: (id: string) => void;
     create: () => Promise<void>;
     createTerminal: () => Promise<void>;
+    showPanel: (panel: 'commands' | 'settings') => void;
     run: (promise: Promise<unknown>) => void;
 }
 
@@ -30,6 +42,7 @@ export default function TitleBar({
     closeWorkspace,
     create,
     createTerminal,
+    showPanel,
     run
 }: TitleBarProps): React.JSX.Element {
     const t = useI18n();
@@ -124,6 +137,22 @@ export default function TitleBar({
             </div>
             <div className={styles.dragArea} />
             <UpdateButton />
+            <div className={styles.titlebarActions}>
+                <button
+                    aria-label={t('Command palette')}
+                    title={t('Commands (Ctrl+Shift+P)')}
+                    onClick={() => showPanel('commands')}
+                >
+                    <Keyboard size={19} />
+                </button>
+                <button
+                    aria-label={t('Settings')}
+                    title={t('Settings (Space ,)')}
+                    onClick={() => showPanel('settings')}
+                >
+                    <Settings2 size={19} />
+                </button>
+            </div>
             <div className={styles.windowControls}>
                 <button
                     aria-label={t('Minimize')}

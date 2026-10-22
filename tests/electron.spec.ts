@@ -1802,7 +1802,17 @@ test('activity bar placement switches live and survives restart with editing and
     try {
         let page = await running.firstWindow();
         let navigation = page.getByRole('navigation', { name: 'Navigation', exact: true });
-        await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page
+            .getByRole('banner')
+            .getByRole('button', { name: 'Command palette', exact: true })
+            .click();
+        const commands = page.getByRole('dialog', { name: 'commands palette', exact: true });
+        await expect(commands).toBeVisible();
+        await commands.getByRole('button', { name: 'Close palette' }).click();
+        await page
+            .getByRole('banner')
+            .getByRole('button', { name: 'Settings', exact: true })
+            .click();
         await page.getByRole('combobox', { name: 'Activity bar position' }).selectOption('top');
         await page.keyboard.press('Escape');
         await expect(navigation).toHaveAttribute('data-position', 'top');
@@ -1818,7 +1828,10 @@ test('activity bar placement switches live and survives restart with editing and
         await expect(page.getByRole('tab', { name: 'notes.txt', exact: true })).toBeVisible();
         await page.keyboard.type('A unsaved');
         await page.keyboard.press('Escape');
-        await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page
+            .getByRole('banner')
+            .getByRole('button', { name: 'Settings', exact: true })
+            .click();
         const position = page.getByRole('combobox', { name: 'Activity bar position' });
         await position.selectOption('left');
         await expect(navigation).toHaveAttribute('data-position', 'left');
@@ -1842,7 +1855,10 @@ test('activity bar placement switches live and survives restart with editing and
         await expect(git).toBeVisible();
         await git.getByRole('button', { name: 'Close palette' }).click();
         await expect(git).not.toBeVisible();
-        await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page
+            .getByRole('banner')
+            .getByRole('button', { name: 'Settings', exact: true })
+            .click();
         await page.getByRole('checkbox', { name: 'Show file explorer' }).uncheck();
         await page.keyboard.press('Escape');
         await expect(explorer).toHaveCount(0);
@@ -1859,7 +1875,10 @@ test('activity bar placement switches live and survives restart with editing and
         navigation = page.getByRole('navigation', { name: 'Navigation', exact: true });
         await expect(navigation).toHaveAttribute('data-position', 'top');
         await expect(page.getByRole('tab', { name: 'notes.txt', exact: true })).toBeVisible();
-        await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page
+            .getByRole('banner')
+            .getByRole('button', { name: 'Settings', exact: true })
+            .click();
         await expect(page.getByRole('combobox', { name: 'Activity bar position' })).toHaveValue(
             'top'
         );

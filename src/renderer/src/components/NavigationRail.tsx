@@ -1,14 +1,5 @@
 import { useI18n } from '../i18n';
-import {
-    Blocks,
-    Files,
-    GitBranch,
-    History,
-    Keyboard,
-    Search,
-    Settings2,
-    Square
-} from 'lucide-react';
+import { Blocks, Files, GitBranch, History, Search, Square } from 'lucide-react';
 import type { Panel } from '../types';
 import type { ActivityBarPosition } from '../hooks/useEditorSettings';
 import styles from '../assets/Nido.module.css';
@@ -81,21 +72,6 @@ export default function NavigationRail({
                 onClick={() => showPanel('extensions')}
             >
                 <Blocks size={22} />
-            </button>
-            <div className={styles.railGap} />
-            <button
-                aria-label={t('Command palette')}
-                title={t('Commands (Ctrl+Shift+P)')}
-                onClick={() => showPanel('commands')}
-            >
-                <Keyboard size={21} />
-            </button>
-            <button
-                aria-label={t('Settings')}
-                title={t('Settings (Space ,)')}
-                onClick={() => showPanel('settings')}
-            >
-                <Settings2 size={21} />
             </button>
         </nav>
     );

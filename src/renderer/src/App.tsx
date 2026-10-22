@@ -403,6 +403,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
                 closeWorkspace={closeWorkspace}
                 create={create}
                 createTerminal={createTerminal}
+                showPanel={showPanel}
                 run={run}
             />
             <div

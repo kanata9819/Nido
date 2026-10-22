@@ -115,6 +115,21 @@
 .windowControls {
     display: flex;
 }
+.titlebarActions {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-right: 6px;
+    -webkit-app-region: no-drag;
+}
+.titlebarActions button {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 28px;
+    color: #7e8b97;
+    border-radius: 6px;
+}
 .windowControls button {
     width: 43px;
     display: grid;
@@ -161,9 +176,6 @@
     background: var(--ui-accent, #a3cc94);
     border-radius: 0 2px 2px 0;
 }
-.railGap {
-    flex: 1;
-}
 .body[data-navigation-position='top'] {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -204,9 +216,6 @@
 .rail[data-position='top'] svg {
     width: 19px;
     height: 19px;
-}
-.rail[data-position='top'] .railGap {
-    display: none;
 }
 .rail[data-position='top'] .railActive::before {
     width: 18px;
