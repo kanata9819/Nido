@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mkdir, mkdtemp, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { electron } from './helpers/electron';
@@ -77,12 +77,15 @@ test('Explorer synchronizes external file changes without losing expansion, sele
             });
         await page.keyboard.press('Control+Shift+n');
         const address = page.getByRole('textbox', { name: 'Folder path' });
+        const folders = page.getByRole('listbox', { name: 'Folders' });
+        // Initial browsing writes the home path into the input; finish it before fill().
+        await expect(folders).toHaveAttribute('aria-busy', 'false');
         await address.fill(project);
+        await expect(address).toHaveValue(project);
         await address.press('Enter');
-        await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
-            'aria-busy',
-            'false'
-        );
+        await expect(folders).toHaveAttribute('aria-busy', 'false');
+        await expect(address).toHaveValue(await realpath(project));
+        await expect(folders).toBeFocused();
         await page.keyboard.press('Control+Enter');
         let tree = page.getByRole('tree', { name: 'Project files' });
         await expect(tree).toHaveAttribute('aria-busy', 'false');

@@ -550,6 +550,8 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                 route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
             );
             await page.goto(`${origin}scroll-work-probe`);
+            const softwareGpu = process.env.NIDO_TEST_SOFTWARE_GPU === '1';
+            if (softwareGpu) await requireWebGLCorrection(page);
             const work = await page.evaluate(
                 async (moduleUrl) => {
                     const { Grid } = await import(moduleUrl);
@@ -666,7 +668,12 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                 },
                 `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
             );
-            console.log('dense-scroll-work', { scale, ...work });
+            const metrics = { scale, softwareGpu, ...work };
+            console.log('dense-scroll-work', metrics);
+            await test.info().attach('dense-scroll-work', {
+                body: JSON.stringify(metrics, null, 2),
+                contentType: 'application/json'
+            });
             expect(work.glyphs).toBeGreaterThan(1000);
             expect(work.editedGlyphs).toBeGreaterThan(0);
             expect(work.cachedGlyphs, 'fractional motion must reuse cached text').toBe(0);
@@ -674,9 +681,19 @@ for (const scale of [1, 1.25, 1.5, 2]) {
             expect(work.writes, 'fractional motion must avoid per-frame CPU pixel uploads').toBe(0);
             expect(work.cachedUploads, 'cached motion must reuse GPU textures').toBe(0);
             expect(work.editedUploads, 'edits upload only changed rows').toBeLessThanOrEqual(4);
-            expect(work.p95Ms, 'warm scrolling must stay within half a 60 Hz frame').toBeLessThan(
-                8
-            );
+            if (softwareGpu) {
+                // SwiftShader verifies GPU behavior on the CPU; its elapsed time
+                // cannot be compared with the normal rendering frame budget.
+                expect(
+                    work.uploads,
+                    'software GPU checks must exercise WebGL textures'
+                ).toBeGreaterThan(0);
+            } else {
+                expect(
+                    work.p95Ms,
+                    'warm scrolling must stay within half a 60 Hz frame'
+                ).toBeLessThan(8);
+            }
         } finally {
             await context.close();
         }
