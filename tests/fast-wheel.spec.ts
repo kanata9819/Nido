@@ -4,6 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { installRowImageProbe } from './helpers/row-image-probe';
 
+interface WheelProbe {
+    positions: { top: number; at: number }[];
+    inputs: { pixels: number; at: number }[];
+}
+
 const scenarios = [
     { delta: 120, history: 0, title: 'fast wheel down moves during input with a cold viewport' },
     { delta: -120, history: 0, title: 'fast wheel up moves during input with a cold viewport' },
@@ -80,12 +85,16 @@ for (const { delta, history, prefetchFirst, title } of scenarios) {
                 const gate = new Promise<void>((resolve) => {
                     release = resolve;
                 });
-                const probe = { calls: 0, release };
+                const probe = { calls: 0, completed: 0, release };
                 Object.assign(globalThis, { wheelPrefetch: probe });
                 handlers.set('nido:prefetchScroll', async (...args) => {
                     probe.calls++;
                     await gate;
-                    return prefetch(...args);
+                    try {
+                        return await prefetch(...args);
+                    } finally {
+                        probe.completed++;
+                    }
                 });
             });
             if (history) {
@@ -107,10 +116,11 @@ for (const { delta, history, prefetchFirst, title } of scenarios) {
                 );
             }
             await canvas.evaluate((node: HTMLCanvasElement) => {
-                const samples: { top: number; at: number }[] = [];
-                const wheels: number[] = [];
-                Object.assign(window, { fastWheelPositions: samples, fastWheelEvents: wheels });
-                node.addEventListener('wheel', () => wheels.push(performance.now()));
+                const probe: WheelProbe = { positions: [], inputs: [] };
+                Object.assign(window, { fastWheelProbe: probe });
+                node.addEventListener('wheel', (event) =>
+                    probe.inputs.push({ pixels: event.deltaY * 0.5, at: performance.now() })
+                );
                 const ctx = node.getContext('2d')!;
                 const fill = ctx.fillRect.bind(ctx);
                 const draw = ctx.drawImage.bind(ctx);
@@ -128,7 +138,7 @@ for (const { delta, history, prefetchFirst, title } of scenarios) {
                             const height = Number(localStorage.getItem('nido.lineHeight'));
                             const baseline = Number(source.dataset.rowBaseline);
                             const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
-                            samples.push({
+                            probe.positions.push({
                                 top: (Number(row[1]) - 1) * height - Number(args[2]) - phase,
                                 at: performance.now()
                             });
@@ -149,10 +159,8 @@ for (const { delta, history, prefetchFirst, title } of scenarios) {
                 page.evaluate(
                     () =>
                         (
-                            window as unknown as {
-                                fastWheelPositions: { top: number }[];
-                            }
-                        ).fastWheelPositions.at(-1)!.top
+                            window as unknown as { fastWheelProbe: WheelProbe }
+                        ).fastWheelProbe.positions.at(-1)!.top
                 );
             const start = await documentTop();
             if (prefetchFirst) {
@@ -170,6 +178,11 @@ for (const { delta, history, prefetchFirst, title } of scenarios) {
                     )
                     .toBe(1);
             }
+            const inputStart = await page.evaluate(
+                () =>
+                    (window as unknown as { fastWheelProbe: WheelProbe }).fastWheelProbe.inputs
+                        .length
+            );
             // Native wheel events exercise Chromium's coalescing and React's input path.
             const pending: Promise<void>[] = [];
             for (let i = 0; i < 60; i++) {
@@ -177,27 +190,57 @@ for (const { delta, history, prefetchFirst, title } of scenarios) {
                 await new Promise((resolve) => setTimeout(resolve, 4));
             }
             await Promise.all(pending);
-            const positions = await page.evaluate(() => {
-                const { fastWheelPositions: samples, fastWheelEvents: wheels } =
-                    window as unknown as {
-                        fastWheelPositions: { top: number; at: number }[];
-                        fastWheelEvents: number[];
-                    };
-                const halfway = (wheels[0] + wheels.at(-1)!) / 2;
-                return samples.filter(({ at }) => at >= halfway && at <= wheels.at(-1)!);
+            const measured = await page.evaluate((inputStart) => {
+                const probe = (window as unknown as { fastWheelProbe: WheelProbe }).fastWheelProbe;
+                const inputs = probe.inputs.slice(inputStart);
+                const halfway = (inputs[0].at + inputs.at(-1)!.at) / 2;
+                return {
+                    inputs,
+                    positions: probe.positions.filter(
+                        ({ at }) => at >= halfway && at <= inputs.at(-1)!.at
+                    )
+                };
+            }, inputStart);
+            await test.info().attach('wheel-motion-during-pending-refill', {
+                body: JSON.stringify(measured, null, 2),
+                contentType: 'application/json'
             });
+            const { positions } = measured;
             expect(new Set(positions.map(({ top }) => Math.round(top))).size).toBeGreaterThan(3);
             expect((positions.at(-1)!.top - positions[0].top) * Math.sign(delta)).toBeGreaterThan(
-                50
+                0
             );
+            // Coalescing and paint timing change the distance sampled in the latter half.
+            // Require the entire gesture to finish while the refill is still blocked instead.
+            const target = start + delta * 30 - (prefetchFirst ? 0.5 : 0);
+            const pixel = await page.evaluate(() => 1 / devicePixelRatio);
+            await expect
+                .poll(async () => Math.abs((await documentTop()) - target), {
+                    message: 'All wheel input must be painted before releasing the pending refill'
+                })
+                .toBeLessThanOrEqual(pixel + 0.01);
+            expect(
+                await running.evaluate(
+                    () =>
+                        (globalThis as unknown as { wheelPrefetch: { completed: number } })
+                            .wheelPrefetch.completed
+                )
+            ).toBe(0);
             await running.evaluate(() => {
                 (
                     globalThis as unknown as { wheelPrefetch: { release: () => void } }
                 ).wheelPrefetch.release();
             });
             // Finishing a late refill must preserve the full gesture, including its initial step.
-            const target = start + delta * 30 - (prefetchFirst ? 0.5 : 0);
-            const pixel = await page.evaluate(() => 1 / devicePixelRatio);
+            await expect
+                .poll(() =>
+                    running.evaluate(
+                        () =>
+                            (globalThis as unknown as { wheelPrefetch: { completed: number } })
+                                .wheelPrefetch.completed
+                    )
+                )
+                .toBeGreaterThan(0);
             await expect
                 .poll(async () => Math.abs((await documentTop()) - target))
                 .toBeLessThanOrEqual(pixel + 0.01);
