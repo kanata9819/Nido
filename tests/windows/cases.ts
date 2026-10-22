@@ -11,6 +11,7 @@ export const windowsBaselineCases = [
     'word wrap updates long lines immediately and persists after restarting',
     'font family and line height update the canvas and survive restarting',
     'settings can be navigated and changed entirely with the keyboard',
+    'activity bar placement switches live and survives restart with editing and navigation intact',
     'Git changes can be reviewed, staged and committed with the keyboard',
     'stage all keeps HEAD gutter marks until commit and preserves unsaved edits',
     'Problems can be selected, filtered, opened and cleared with the keyboard',

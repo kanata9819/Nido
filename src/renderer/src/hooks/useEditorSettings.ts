@@ -4,6 +4,7 @@ import { parseLanguage, type Language } from '../../../shared/i18n';
 
 export const defaultFontFamily = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
 export const defaultFontWeight = 350;
+export type ActivityBarPosition = 'left' | 'top';
 
 export function useEditorSettings(): EditorSettings {
     const [language, setLanguage] = useState<Language>(() =>
@@ -71,6 +72,12 @@ export function useEditorSettings(): EditorSettings {
     useEffect(() => {
         localStorage.setItem('nido.sidebar', String(sidebar));
     }, [sidebar]);
+    const [activityBarPosition, setActivityBarPosition] = useState<ActivityBarPosition>(() =>
+        localStorage.getItem('nido.activityBarPosition') === 'top' ? 'top' : 'left'
+    );
+    useEffect(() => {
+        localStorage.setItem('nido.activityBarPosition', activityBarPosition);
+    }, [activityBarPosition]);
     const [animations, setAnimations] = useState(
         () => localStorage.getItem('nido.animations') !== 'false'
     );
@@ -181,6 +188,8 @@ export function useEditorSettings(): EditorSettings {
         setRelativeLineNumbers,
         sidebar,
         setSidebar,
+        activityBarPosition,
+        setActivityBarPosition,
         animations,
         setAnimations,
         smoothCursor,
@@ -229,6 +238,8 @@ export interface EditorSettings {
     setRelativeLineNumbers: Dispatch<SetStateAction<boolean>>;
     sidebar: boolean;
     setSidebar: Dispatch<SetStateAction<boolean>>;
+    activityBarPosition: ActivityBarPosition;
+    setActivityBarPosition: Dispatch<SetStateAction<ActivityBarPosition>>;
     animations: boolean;
     setAnimations: Dispatch<SetStateAction<boolean>>;
     smoothCursor: boolean;

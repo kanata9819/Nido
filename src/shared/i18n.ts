@@ -264,6 +264,11 @@ export const japanese: Record<string, string> = {
     'Font family': 'フォント',
     'Default editor font': '標準のエディターフォント',
     'Show file explorer': 'ファイルエクスプローラーを表示',
+    'Activity bar position': 'アクティビティバーの位置',
+    'Left edge': '左端',
+    'Top of explorer': 'エクスプローラーの上部',
+    'Place navigation icons on the left edge or above the file explorer.':
+        'ナビゲーションアイコンを左端、またはファイルエクスプローラーの上部に配置します。',
     'Format on save': '保存時に整形',
     'Word wrap': '行の折り返し',
     'Method separators': 'メソッドセパレータ',

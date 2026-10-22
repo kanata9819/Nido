@@ -164,6 +164,57 @@
 .railGap {
     flex: 1;
 }
+.body[data-navigation-position='top'] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+}
+.body[data-navigation-position='top'] > .rail {
+    grid-column: 1;
+    grid-row: 1;
+}
+.body[data-navigation-position='top'] > .sidebar {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 0;
+}
+.body[data-navigation-position='top'] > .main {
+    grid-column: 1;
+    grid-row: 2;
+}
+.body[data-navigation-position='top'][data-explorer-visible='true'] > .main {
+    grid-column: 2;
+    grid-row: 1 / 3;
+}
+.rail[data-position='top'] {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 5px 6px;
+    border-right: 0;
+    border-bottom: 1px solid var(--ui-border, #25292d);
+    background: var(--surface-panel, #17191b);
+}
+.rail[data-position='top'] button {
+    width: 26px;
+    height: 28px;
+    flex-shrink: 0;
+}
+.rail[data-position='top'] svg {
+    width: 19px;
+    height: 19px;
+}
+.rail[data-position='top'] .railGap {
+    display: none;
+}
+.rail[data-position='top'] .railActive::before {
+    width: 18px;
+    height: 2px;
+    left: 4px;
+    bottom: -3px;
+    border-radius: 2px;
+}
 .sidebar {
     position: relative;
     width: 243px;

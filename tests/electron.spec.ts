@@ -1790,6 +1790,89 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
     }
 });
 
+test('activity bar placement switches live and survives restart with editing and navigation intact', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-activity-bar-'));
+    const workspace = join(root, 'Project');
+    await mkdir(workspace);
+    await writeFile(join(workspace, 'notes.txt'), 'hello\n');
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const options = { args: ['.', `--user-data-dir=${join(root, 'profile')}`], env };
+    let running = await electron.launch(options);
+    try {
+        let page = await running.firstWindow();
+        let navigation = page.getByRole('navigation', { name: 'Navigation', exact: true });
+        await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page.getByRole('combobox', { name: 'Activity bar position' }).selectOption('top');
+        await page.keyboard.press('Escape');
+        await expect(navigation).toHaveAttribute('data-position', 'top');
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, workspace);
+        await expect(
+            page.getByRole('textbox', { name: 'Neovim input', exact: true })
+        ).toBeFocused();
+        await page.keyboard.press('Control+p');
+        await page.getByRole('textbox', { name: 'Filter items' }).fill('notes.txt');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('tab', { name: 'notes.txt', exact: true })).toBeVisible();
+        await page.keyboard.type('A unsaved');
+        await page.keyboard.press('Escape');
+        await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+        const position = page.getByRole('combobox', { name: 'Activity bar position' });
+        await position.selectOption('left');
+        await expect(navigation).toHaveAttribute('data-position', 'left');
+        await position.selectOption('top');
+        await page.keyboard.press('Escape');
+        await expect(
+            page.getByRole('tab', { name: 'notes.txt Unsaved', exact: true })
+        ).toBeVisible();
+        await page.keyboard.press('Control+s');
+        await expect
+            .poll(() => readSavedFile(join(workspace, 'notes.txt')))
+            .toBe('hello unsaved\n');
+        const explorer = page.getByRole('complementary', { name: 'File explorer' });
+        const bar = (await navigation.boundingBox())!;
+        const side = (await explorer.boundingBox())!;
+        assert.equal(bar.x, side.x);
+        assert.equal(bar.width, side.width);
+        assert.ok(bar.y + bar.height <= side.y);
+        await navigation.getByRole('button', { name: 'Source control', exact: true }).click();
+        const git = page.getByRole('dialog', { name: 'git palette', exact: true });
+        await expect(git).toBeVisible();
+        await git.getByRole('button', { name: 'Close palette' }).click();
+        await expect(git).not.toBeVisible();
+        await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page.getByRole('checkbox', { name: 'Show file explorer' }).uncheck();
+        await page.keyboard.press('Escape');
+        await expect(explorer).toHaveCount(0);
+        await navigation.getByRole('button', { name: 'Explorer', exact: true }).click();
+        await expect(page.getByRole('tree', { name: 'Project files' })).toBeFocused();
+        await expect(page.getByRole('treeitem', { name: 'notes.txt', exact: true })).toBeVisible();
+        await page.screenshot({
+            path: 'test-results/activity-bar-top.png',
+            animations: 'disabled'
+        });
+        await running.close();
+        running = await electron.launch(options);
+        page = await running.firstWindow();
+        navigation = page.getByRole('navigation', { name: 'Navigation', exact: true });
+        await expect(navigation).toHaveAttribute('data-position', 'top');
+        await expect(page.getByRole('tab', { name: 'notes.txt', exact: true })).toBeVisible();
+        await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+        await expect(page.getByRole('combobox', { name: 'Activity bar position' })).toHaveValue(
+            'top'
+        );
+        await page.screenshot({
+            path: 'test-results/activity-bar-settings.png',
+            animations: 'disabled'
+        });
+    } finally {
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('settings can be navigated and changed entirely with the keyboard', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-settings-keys-'));
     const env = { ...process.env };
@@ -1845,6 +1928,11 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await page.keyboard.press('Enter');
         await expect(explorer).toBeChecked();
         await page.keyboard.press('ArrowDown');
+        const activityBarPosition = page.getByRole('combobox', { name: 'Activity bar position' });
+        await expect(activityBarPosition).toBeFocused();
+        await page.keyboard.press('ArrowDown');
+        await expect(activityBarPosition).toHaveValue('top');
+        await page.keyboard.press('Control+j');
         const history = page.getByRole('checkbox', { name: 'Automatic edit history' });
         await expect(history).toBeFocused();
         await expect(history).toBeChecked();
@@ -1857,6 +1945,8 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await page.keyboard.press('k');
         await expect(history).toBeFocused();
         await page.keyboard.press('k');
+        await expect(activityBarPosition).toBeFocused();
+        await page.keyboard.press('Control+k');
         await expect(explorer).toBeFocused();
         await page.keyboard.press('Shift+Tab');
         await expect(weight).toBeFocused();

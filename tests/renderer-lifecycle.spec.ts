@@ -1947,6 +1947,131 @@ test('Extensions separates language packs from other extensions and supports key
     await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
 });
 
+test('activity bar moves above the explorer, preserves navigation and persists its placement', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app`);
+    const navigation = page.getByRole('navigation', { name: 'Navigation', exact: true });
+    const explorer = page.getByRole('complementary', { name: 'File explorer' });
+    await expect(navigation).toHaveAttribute('data-position', 'left');
+    await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Activity bar position' }).selectOption('top');
+    await page.keyboard.press('Escape');
+    await expect(navigation).toHaveAttribute('data-position', 'top');
+    await expect
+        .poll(async () => {
+            const bar = (await navigation.boundingBox())!;
+            const side = (await explorer.boundingBox())!;
+            const editor = (await page.locator('main').boundingBox())!;
+            return {
+                sameLeft: bar.x === side.x,
+                sameWidth: bar.width === side.width,
+                above: bar.y + bar.height <= side.y,
+                editorBeside: editor.x >= side.x + side.width
+            };
+        })
+        .toEqual({ sameLeft: true, sameWidth: true, above: true, editorBeside: true });
+    await expect(page.getByRole('navigation')).toHaveCount(1);
+    await navigation.getByRole('button', { name: 'Source control', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'git palette', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await navigation.getByRole('button', { name: 'Extensions', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Extensions', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await navigation.getByRole('button', { name: 'Explorer', exact: true }).click();
+    await expect(page.getByRole('tree', { name: 'Project files' })).toBeFocused();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.calls.filter((call) => call.method === 'restoreWorkspaces')
+                        .length
+            )
+        )
+        .toBe(1);
+    await page.reload();
+    await expect(navigation).toHaveAttribute('data-position', 'top');
+    await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Activity bar position' })).toHaveValue('top');
+    await page.getByRole('checkbox', { name: 'Show file explorer' }).uncheck();
+    await page.keyboard.press('Escape');
+    await expect(explorer).toHaveCount(0);
+    await expect(navigation).toBeVisible();
+    await navigation.getByRole('button', { name: 'Explorer', exact: true }).click();
+    await expect(explorer).toBeVisible();
+    await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('ja');
+    const position = page.getByRole('combobox', { name: 'アクティビティバーの位置' });
+    await expect(position).toHaveValue('top');
+    await expect(position.getByRole('option', { name: 'エクスプローラーの上部' })).toBeAttached();
+    await position.selectOption('left');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('navigation')).toHaveAttribute('data-position', 'left');
+    await page.reload();
+    await expect(page.getByRole('navigation')).toHaveAttribute('data-position', 'left');
+});
+
+test('top activity bar keeps every action inside a narrow explorer', async ({ page }) => {
+    await page.goto(`${origin}?view=app`);
+    await page.evaluate(() => {
+        localStorage.setItem('nido.activityBarPosition', 'top');
+        localStorage.setItem('nido.sidebarWidth', '160');
+    });
+    await page.reload();
+    const navigation = page.getByRole('navigation', { name: 'Navigation', exact: true });
+    await expect(navigation).toHaveCSS('width', '160px');
+    const bounds = (await navigation.boundingBox())!;
+    for (const button of await navigation.getByRole('button').all()) {
+        const box = (await button.boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+        expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+        expect(box.y + box.height).toBeLessThanOrEqual(bounds.y + bounds.height);
+    }
+    await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.getByRole('separator', { name: 'Explorer width' }).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(navigation).toHaveCSS('width', '180px');
+});
+
+for (const view of ['welcome', 'terminal'] as const) {
+    test(`top activity bar remains accessible on the ${view} screen`, async ({ page }) => {
+        await page.addInitScript(() => localStorage.setItem('nido.activityBarPosition', 'top'));
+        await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+        await expect
+            .poll(() =>
+                page.evaluate(
+                    () =>
+                        window.rendererTest.pending.filter(
+                            (call) => call.method === 'restoreWorkspaces'
+                        ).length
+                )
+            )
+            .toBe(1);
+        await page.evaluate((view) => {
+            const terminal = { id: 'shell', root: '/alpha', name: 'Shell', kind: 'terminal' };
+            window.rendererTest.settle('restoreWorkspaces', 0, {
+                workspaces: view === 'terminal' ? [terminal] : [],
+                active: view === 'terminal' ? 'shell' : '',
+                errors: []
+            });
+        }, view);
+        await expect(page.getByRole('complementary', { name: 'File explorer' })).toHaveCount(0);
+        const navigation = page.getByRole('navigation', { name: 'Navigation', exact: true });
+        await expect(navigation).toHaveAttribute('data-position', 'top');
+        await expect
+            .poll(async () => {
+                const bar = (await navigation.boundingBox())!;
+                const main = (await page.locator('main').boundingBox())!;
+                return bar.width === main.width && bar.y + bar.height <= main.y;
+            })
+            .toBe(true);
+        await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+        await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
+    });
+}
+
 test('settings switch the UI language immediately, persist it and switch back to English', async ({
     page
 }) => {

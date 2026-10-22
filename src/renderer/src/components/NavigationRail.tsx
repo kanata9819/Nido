@@ -10,15 +10,18 @@ import {
     Square
 } from 'lucide-react';
 import type { Panel } from '../types';
+import type { ActivityBarPosition } from '../hooks/useEditorSettings';
 import styles from '../assets/Nido.module.css';
 
 export default function NavigationRail({
+    position,
     sidebar,
     active,
     panel,
     showExplorer,
     showPanel
 }: {
+    position: ActivityBarPosition;
     sidebar: boolean;
     active: string;
     panel: Panel;
@@ -27,7 +30,7 @@ export default function NavigationRail({
 }): React.JSX.Element {
     const t = useI18n();
     return (
-        <nav className={styles.rail} aria-label={t('Navigation')}>
+        <nav className={styles.rail} data-position={position} aria-label={t('Navigation')}>
             <button
                 className={sidebar && panel !== 'extensions' ? styles.railActive : ''}
                 aria-label={t('Explorer')}

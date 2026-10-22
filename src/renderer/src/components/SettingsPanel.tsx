@@ -1,6 +1,6 @@
 import { useI18n } from '../i18n';
 import type { TerminalShell, UITheme } from '../../../shared/types';
-import type { EditorSettings } from '../hooks/useEditorSettings';
+import type { ActivityBarPosition, EditorSettings } from '../hooks/useEditorSettings';
 import styles from '../assets/SettingsPanel.module.css';
 import type { Language } from '../../../shared/i18n';
 
@@ -25,6 +25,8 @@ export default function SettingsPanel({
     setTerminalShell,
     sidebar,
     setSidebar,
+    activityBarPosition,
+    setActivityBarPosition,
     animations,
     setAnimations,
     smoothCursor,
@@ -192,6 +194,21 @@ export default function SettingsPanel({
                     onChange={(e) => setSidebar(e.target.checked)}
                 />
             </label>
+            <label>
+                {t('Activity bar position')}
+                <select
+                    value={activityBarPosition}
+                    onChange={(event) =>
+                        setActivityBarPosition(event.target.value as ActivityBarPosition)
+                    }
+                >
+                    <option value="left">{t('Left edge')}</option>
+                    <option value="top">{t('Top of explorer')}</option>
+                </select>
+            </label>
+            <small>
+                {t('Place navigation icons on the left edge or above the file explorer.')}
+            </small>
             <label>
                 {t('Automatic edit history')}{' '}
                 <input
