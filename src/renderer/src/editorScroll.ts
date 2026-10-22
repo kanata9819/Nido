@@ -91,10 +91,14 @@ export class EditorScroll {
         if (animate) {
             const motion = this.wheelMotion;
             const offset = motion ? scrollOffset(motion.distance, now - motion.start) : 0;
-            const distance = this.options.grid.limitScroll(offset + lines);
-            const remaining = this.options.grid.limitScroll((motion?.remaining ?? 0) + lines);
+            // Keep the gesture's speed near file edges. Clamp each rendered step,
+            // rather than easing over the shorter distance left to the boundary.
+            const distance = offset + lines;
+            const remaining = (motion?.remaining ?? 0) + lines;
             // Native requests are dispatched by paints, even if several inputs arrive per frame.
-            this.wheelMotion = remaining ? { distance, remaining, start: now, follow } : undefined;
+            this.wheelMotion = this.options.grid.limitScroll(remaining)
+                ? { distance, remaining, start: now, follow }
+                : undefined;
             this.options.schedule();
         } else {
             this.advance(now, false);

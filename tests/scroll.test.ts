@@ -4,6 +4,70 @@ import { ScrollQueue } from '../src/renderer/src/scroll';
 import { EditorScroll } from '../src/renderer/src/editorScroll';
 import { Grid } from '../src/renderer/src/grid';
 
+test('fast gestures keep their speed until the actual file boundary in both directions', () => {
+    const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    const sent: number[] = [];
+    Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: {
+            nido: {
+                scroll: async (_id: string, lines: number): Promise<void> => {
+                    sent.push(lines);
+                },
+                prefetchScroll: async (): Promise<void> => {}
+            }
+        }
+    });
+    try {
+        for (const direction of [-1, 1]) {
+            sent.length = 0;
+            const grid = new Grid();
+            grid.apply([
+                ['grid_resize', [1, 20, 12]],
+                ['nido_scroll_cache', [direction < 0, false, direction > 0, true]],
+                ['flush']
+            ]);
+            grid.apply([
+                ['nido_scroll', [1, 0, 11, 0, 20, -direction * 8, 0, false]],
+                ['grid_scroll', [1, 0, 11, 0, 20, -direction * 8, 0]],
+                ['flush']
+            ]);
+            assert.equal(grid.limitScroll(direction * 60), direction * 8);
+            const scrolling = new EditorScroll({
+                id: 'alpha',
+                grid,
+                enabled: () => true,
+                schedule: () => {},
+                onError: (error) => {
+                    throw error;
+                },
+                onCompletion: () => {}
+            });
+            try {
+                scrolling.request(direction * 60, true, true, 0);
+                scrolling.request(direction * 60, true, true, 8);
+                scrolling.advance(24, true);
+                scrolling.flush();
+                assert.equal(
+                    sent.reduce((total, lines) => total + lines, 0),
+                    direction * 8,
+                    'A fast gesture must reach the edge without easing over the shorter distance'
+                );
+                assert.equal(
+                    scrolling.animating,
+                    false,
+                    'Motion stops as soon as it hits the edge'
+                );
+            } finally {
+                scrolling.dispose();
+            }
+        }
+    } finally {
+        if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+        else Reflect.deleteProperty(globalThis, 'window');
+    }
+});
+
 test('animated wheel steps interpolate distance, coalesce reversals and finish immediately when disabled', async () => {
     const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
     const sent: number[] = [];

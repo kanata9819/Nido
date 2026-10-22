@@ -5,6 +5,110 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { installRowImageProbe } from './helpers/row-image-probe';
 
+test('fast gestures reach both file edges without a slow final approach', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-fast-scroll-boundary-'));
+    const profile = join(root, 'profile');
+    const file = join(root, 'rows.txt');
+    await mkdir(profile);
+    await writeFile(file, Array.from({ length: 1000 }, (_, i) => `ROW_${i + 1}`).join('\n'));
+    await writeFile(
+        join(profile, 'workspaces.json'),
+        JSON.stringify({
+            version: 1,
+            active: 0,
+            window: { width: 1100, height: 850, maximized: false },
+            workspaces: [{ root, current: file, files: [{ path: file, line: 1, column: 0 }] }]
+        })
+    );
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
+    try {
+        const page = await running.firstWindow();
+        await page.addInitScript(installRowImageProbe);
+        await page.reload();
+        const canvas = page.locator('canvas:visible');
+        await expect(canvas).toHaveAttribute('aria-description', /ROW_1/);
+        await canvas.evaluate((node: HTMLCanvasElement) => {
+            const context = node.getContext('2d')!;
+            const draw = context.drawImage.bind(context);
+            context.drawImage = ((...args: Parameters<typeof draw>) => {
+                if (args.length === 5 && Number(args[2]) + Number(args[4]) > 0) {
+                    const source = args[0] as HTMLCanvasElement;
+                    const row = source.dataset.rowText?.match(/ROW_(\d+)/);
+                    if (row) {
+                        const height = Number(localStorage.getItem('nido.lineHeight'));
+                        const baseline = Number(source.dataset.rowBaseline);
+                        const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
+                        node.dataset.documentTop = String(
+                            (Number(row[1]) - 1) * height - Number(args[2]) - phase
+                        );
+                    }
+                }
+                draw(...args);
+            }) as typeof draw;
+        });
+        const restored = await page.evaluate(() => window.nido.restoreWorkspaces());
+        const id = restored.workspaces[0].id;
+        const top = async (): Promise<number> =>
+            Number(await canvas.getAttribute('data-document-top'));
+        const reports: object[] = [];
+        for (const direction of [-1, 1]) {
+            await page.evaluate(
+                async ({ id, direction }) => {
+                    await window.nido.input(id, direction < 0 ? 'gg' : 'Gzt');
+                    await window.nido.scroll(id, direction * 1000, true, true);
+                    await window.nido.prefetchScroll(id, direction > 0);
+                },
+                { id, direction }
+            );
+            await expect(canvas).toHaveAttribute(
+                'aria-description',
+                direction < 0 ? /ROW_1\s/ : /ROW_1000\s/
+            );
+            // Warm the exact edge, then move eight rows away without changing the buffer.
+            await canvas.evaluate(async () => {
+                for (let i = 0; i < 2; i++) {
+                    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+                }
+            });
+            const edge = await top();
+            const height = await page.evaluate(() =>
+                Number(localStorage.getItem('nido.lineHeight'))
+            );
+            await page.evaluate(
+                async ({ id, direction }) => {
+                    await window.nido.scroll(id, -direction * 8, true, true);
+                    await window.nido.prefetchScroll(id, direction > 0);
+                },
+                { id, direction }
+            );
+            await expect
+                .poll(async () => Math.abs((await top()) - edge + direction * 8 * height))
+                .toBeLessThan(1);
+            const approached = await canvas.evaluate(async (node, direction) => {
+                node.dispatchEvent(
+                    new WheelEvent('wheel', { bubbles: true, deltaY: direction * 2160 })
+                );
+                node.dispatchEvent(
+                    new WheelEvent('wheel', { bubbles: true, deltaY: direction * 2160 })
+                );
+                for (let i = 0; i < 4; i++) {
+                    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+                }
+                return Number((node as HTMLCanvasElement).dataset.documentTop);
+            }, direction);
+            reports.push({ direction, edge, approached });
+            expect(Math.abs(approached - edge), JSON.stringify(reports)).toBeLessThanOrEqual(1);
+        }
+        await writeFile('test-results/fast-scroll-boundary.json', JSON.stringify(reports, null, 2));
+    } finally {
+        await running.evaluate(({ app }) => app.exit(0));
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('upward touchpad gestures stop at the first row while replies are delayed', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-scroll-boundary-'));
     const profile = join(root, 'profile');
