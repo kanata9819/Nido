@@ -3748,12 +3748,19 @@ test('normal shutdown restores workspace order, active file and cursors', async 
         await expect(explorer).toHaveCSS('width', '263px');
         await page.keyboard.press('Shift+H');
         await expect(explorer).toHaveCSS('width', '243px');
-        const edge = await page.getByRole('separator', { name: 'Explorer width' }).boundingBox();
+        const resizeHandle = page.getByRole('separator', { name: 'Explorer width' });
+        // Wait for hit testing and layout to settle after the keyboard resize.
+        await resizeHandle.hover({ position: { x: 2, y: 100 } });
+        const edge = await resizeHandle.boundingBox();
         assert.ok(edge);
-        await page.mouse.move(edge.x + edge.width / 2, edge.y + 100);
         await page.mouse.down();
-        await page.mouse.move(edge.x + edge.width / 2 + 40, edge.y + 100);
-        await page.mouse.up();
+        try {
+            await expect(resizeHandle).toBeFocused();
+            await page.mouse.move(edge.x + 2 + 40, edge.y + 100, { steps: 5 });
+            await expect(explorer).toHaveCSS('width', '283px');
+        } finally {
+            await page.mouse.up();
+        }
         await expect(explorer).toHaveCSS('width', '283px');
         await page.keyboard.press('Control+l');
         await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
