@@ -82,6 +82,43 @@ export class GridCanvas {
         this.paintDirty = true;
     }
 
+    /** Locate document rows intersecting the paint band without visiting the scroll cache. */
+    private rowRange(top: number, bottom: number, dpr: number): [number, number] {
+        if (!this.grid.rows) {
+            return [0, 0];
+        }
+        const offset = this.grid.scrollOffset;
+        const command = this.grid.rows - 1;
+        const end = command + (offset > 0 ? this.grid.futureRows.length : 0);
+        let low = offset < 0 ? -this.grid.historyRows.length : 0;
+        let high = end;
+        // Match the painter's physical-pixel overscan at the top of the damage band.
+        while (low < high) {
+            const middle = Math.floor((low + high) / 2);
+            const rowTop = this.grid.rowTop(middle);
+            const rowHeight = this.grid.rowTop(middle + 1) - rowTop;
+            // Preserve the painter's operation order at fractional-pixel boundaries.
+            if (rowTop - offset + rowHeight + 1 / dpr < top) {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        const first = low;
+        high = end;
+        const maximum = Math.min(bottom, this.grid.contentHeight);
+        while (low < high) {
+            const middle = Math.floor((low + high) / 2);
+            if (this.grid.rowTop(middle) - offset <= maximum) {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        // Future document rows follow the fixed command-line slot in the cell arrays.
+        return [first >= command ? first + 1 : first, low > command ? low + 1 : low];
+    }
+
     paintBackground(
         context: CanvasRenderingContext2D,
         x: number,
@@ -195,11 +232,23 @@ export class GridCanvas {
             !translucent &&
             this.grid.pixelScrollEnabled &&
             this.linearRows?.begin(canvas.width, canvas.height);
+        const [firstRow, lastRow] = this.rowRange(paintTop, paintBottom, dpr);
+        const commandRow = this.grid.rows - 1;
         for (
-            let row = this.grid.scrollOffset < 0 ? -this.grid.historyRows.length : 0;
-            row < this.grid.rows + (this.grid.scrollOffset > 0 ? this.grid.futureRows.length : 0);
+            let row = Math.min(firstRow, Math.max(0, commandRow));
+            row < Math.max(lastRow, this.grid.rows);
             row++
         ) {
+            // Retain the original document / command / future paint order, skipping
+            // either gap around the fixed command line without inspecting its rows.
+            if (row < firstRow && row !== commandRow) {
+                row = firstRow - 1;
+                continue;
+            }
+            if (row >= lastRow && row < commandRow) {
+                row = commandRow - 1;
+                continue;
+            }
             const cells =
                 row < 0
                     ? this.grid.historyRows[this.grid.historyRows.length + row]

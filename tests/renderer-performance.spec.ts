@@ -1536,3 +1536,219 @@ for (const scale of [1, 1.25, 1.5, 2]) {
         });
     }
 }
+
+for (const scale of [1, 1.25, 1.5, 2]) {
+    for (const opacity of [1, 0.5]) {
+        test(`paint bands bound cached row geometry at ${scale * 100}% scale and ${opacity} opacity`, async ({
+            browser
+        }) => {
+            const context = await browser.newContext({ deviceScaleFactor: scale });
+            try {
+                const page = await context.newPage();
+                await page.route('**/row-band-probe', (route) =>
+                    route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+                );
+                await page.goto(`${origin}row-band-probe`);
+                const result = await page.evaluate(
+                    async ({ moduleUrl, referenceModuleUrl, baseline, opacity }) => {
+                        const { Grid } = (await import(
+                            baseline && referenceModuleUrl ? referenceModuleUrl : moduleUrl
+                        )) as {
+                            Grid: typeof EditorGrid;
+                        };
+                        const ReferenceGrid = referenceModuleUrl
+                            ? ((await import(referenceModuleUrl)) as { Grid: typeof EditorGrid })
+                                  .Grid
+                            : Grid;
+                        const createGrid = (Constructor: typeof EditorGrid): EditorGrid => {
+                            const value = new Constructor();
+                            value.backgroundOpacity = opacity;
+                            value.pixelScrollEnabled = true;
+                            value.apply([
+                                ['grid_resize', [1, 80, 40]],
+                                ['hl_attr_define', [1, { foreground: 0x7ab5ff }, {}, []]],
+                                [
+                                    'hl_attr_define',
+                                    [2, { foreground: 0x99aacc }, {}, [{ hi_name: 'NidoCodeLens' }]]
+                                ],
+                                ...Array.from({ length: 40 }, (_, row) => [
+                                    'grid_line',
+                                    [
+                                        1,
+                                        row,
+                                        0,
+                                        [[`${row} 日本語 😀 cached row `, row % 5 === 0 ? 2 : 1]]
+                                    ]
+                                ]),
+                                ['flush']
+                            ]);
+                            for (const [key, prefix] of [
+                                ['upperRows', 'U'],
+                                ['lowerRows', 'L']
+                            ]) {
+                                Reflect.set(
+                                    value,
+                                    key,
+                                    Array.from({ length: 256 }, (_, row) =>
+                                        Array.from({ length: 80 }, (_, column) => ({
+                                            text: column === 0 ? `${prefix}${row}` : 'x',
+                                            highlight: row % 5 === 0 ? 2 : 1
+                                        }))
+                                    )
+                                );
+                            }
+                            return value;
+                        };
+                        const grid = createGrid(Grid);
+                        const canvas = document.createElement('canvas');
+                        const reference = document.createElement('canvas');
+                        let lineHeight = 20;
+                        const paint = (target: HTMLCanvasElement, value = grid): void => {
+                            value.draw(
+                                target,
+                                800,
+                                800,
+                                15,
+                                'monospace',
+                                true,
+                                undefined,
+                                lineHeight
+                            );
+                        };
+                        const geometryReads: number[] = [];
+                        for (const fraction of [-0.25, 0.25]) {
+                            grid.scrollFraction = fraction;
+                            grid.cursor = { row: 17, column: 10 };
+                            paint(canvas);
+                            let reads = 0;
+                            const rowTop = grid.rowTop;
+                            grid.rowTop = function (row) {
+                                reads++;
+                                return rowTop.call(this, row);
+                            };
+                            for (let frame = 0; frame < 160; frame++) {
+                                grid.cursorOpacity = frame % 2;
+                                grid.cursor.column = 10 + (frame % 20);
+                                paint(canvas);
+                            }
+                            grid.rowTop = rowTop;
+                            geometryReads.push(reads);
+                        }
+                        let mismatches = 0;
+                        let comparisons = 0;
+                        const mismatchCases: unknown[] = [];
+                        const full = createGrid(ReferenceGrid);
+                        // Retain the exhaustive painter's row candidates and rendering
+                        // history. Its partial paints receive the same edits and motion.
+                        Reflect.set(Reflect.get(full, 'canvas'), 'rowRange', () => [
+                            full.scrollOffset < 0 ? -full.historyRows.length : 0,
+                            full.rows + (full.scrollOffset > 0 ? full.futureRows.length : 0)
+                        ]);
+                        const compare = (): void => {
+                            paint(canvas);
+                            for (const key of [
+                                'cursor',
+                                'scrollFraction',
+                                'scrollPreview',
+                                'scrollOrigin',
+                                'backgroundOpacity',
+                                'pixelScrollEnabled',
+                                'cursorVisible',
+                                'cursorOpacity',
+                                'mode'
+                            ] as const) {
+                                Reflect.set(full, key, grid[key]);
+                            }
+                            paint(reference, full);
+                            const expected = reference
+                                .getContext('2d')!
+                                .getImageData(0, 0, reference.width, reference.height).data;
+                            const actual = canvas
+                                .getContext('2d')!
+                                .getImageData(0, 0, canvas.width, canvas.height).data;
+                            const before = mismatches;
+                            for (let i = 0; i < expected.length; i++) {
+                                if (expected[i] !== actual[i]) mismatches++;
+                            }
+                            if (mismatches !== before) {
+                                mismatchCases.push({
+                                    comparison: comparisons,
+                                    fraction: grid.scrollFraction,
+                                    row: grid.cursor.row,
+                                    opacity: grid.cursorOpacity,
+                                    count: mismatches - before
+                                });
+                            }
+                            comparisons++;
+                        };
+                        for (const fraction of [
+                            -255.75, -100.25, -1, -0.25, 0, 0.25, 1, 100.25, 255.75
+                        ]) {
+                            grid.scrollFraction = fraction;
+                            for (const row of [0, 17, 38, 39]) {
+                                grid.cursor = { row, column: 10 };
+                                grid.cursorVisible = true;
+                                grid.cursorOpacity = 0.6;
+                                compare();
+                                grid.cursorOpacity = 0;
+                                compare();
+                            }
+                        }
+                        // A text change can damage a compact row away from the cursor.
+                        grid.scrollFraction = 0.25;
+                        grid.cursor.row = 39;
+                        grid.apply([['grid_line', [1, 5, 0, [['EDIT', 1]]]], ['flush']]);
+                        full.apply([['grid_line', [1, 5, 0, [['EDIT', 1]]]], ['flush']]);
+                        compare();
+                        grid.scrollFraction = -0.25;
+                        grid.apply([['grid_line', [1, 39, 0, [['COMMAND', 1]]]], ['flush']]);
+                        full.apply([['grid_line', [1, 39, 0, [['COMMAND', 1]]]], ['flush']]);
+                        compare();
+                        // Odd row heights and a non-zero origin put both compact and
+                        // regular row edges between physical pixels at fractional DPI.
+                        lineHeight = 19;
+                        grid.scrollOrigin = 3.75;
+                        for (const fraction of [-255.75, -0.25, 0, 0.25, 255.75]) {
+                            grid.scrollFraction = fraction;
+                            for (const row of [0, 39]) {
+                                grid.cursor = { row, column: 10 };
+                                grid.cursorOpacity = 0.6;
+                                compare();
+                                grid.cursorOpacity = 0;
+                                compare();
+                            }
+                        }
+                        grid.scrollFraction = 0;
+                        for (const rows of [40, 1, 0]) {
+                            for (const value of [grid, full]) {
+                                Reflect.set(value, 'upperRows', []);
+                                Reflect.set(value, 'lowerRows', []);
+                                value.apply([['grid_resize', [1, 80, rows]], ['flush']]);
+                            }
+                            grid.cursor = { row: 0, column: 0 };
+                            compare();
+                        }
+                        return { geometryReads, mismatches, comparisons, mismatchCases };
+                    },
+                    {
+                        moduleUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+                        referenceModuleUrl: process.env.NIDO_GRID_REFERENCE_MODULE
+                            ? `/@fs/${resolve(process.env.NIDO_GRID_REFERENCE_MODULE).replaceAll('\\', '/')}`
+                            : undefined,
+                        baseline: process.env.NIDO_PERFORMANCE_BASELINE === '1',
+                        opacity
+                    }
+                );
+                console.log(JSON.stringify({ scale, opacity, ...result }));
+                expect(result.mismatches).toBe(0);
+                if (!process.env.NIDO_PERFORMANCE_BASELINE) {
+                    for (const reads of result.geometryReads) {
+                        expect(reads).toBeLessThanOrEqual(160 * 50);
+                    }
+                }
+            } finally {
+                await context.close();
+            }
+        });
+    }
+}

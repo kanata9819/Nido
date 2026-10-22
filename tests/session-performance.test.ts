@@ -8,6 +8,145 @@ import { SessionEvents } from '../src/main/sessionEvents';
 import { Grid } from '../src/renderer/src/grid';
 import type { NidoEvent, SessionState, Redraw } from '../src/shared/types';
 
+test('indent redraws reuse neighboring lines across a continuous blank range', async (context) => {
+    const grid = new Grid();
+    const session = await Session.create(process.cwd(), (event) => {
+        if (event.type === 'redraw') grid.apply(event.events);
+    });
+    try {
+        await session.attach(80, 24);
+        const result = (await session.client.request('nvim_exec_lua', [
+            `
+local api = vim.api
+local lines = {'    before'}
+for row=1,10000 do lines[#lines + 1] = '' end
+lines[#lines + 1] = '      after'
+api.nvim_buf_set_lines(0, 0, -1, false, lines)
+vim.bo.shiftwidth, vim.bo.tabstop = 2, 4
+api.nvim_win_set_cursor(0, {5000, 0})
+vim.cmd('normal! zz')
+vim.cmd('redraw!')
+local before, after = vim.fn.prevnonblank, vim.fn.nextnonblank
+local previous, following = 0, 0
+vim.fn.prevnonblank = function(...) previous=previous+1; return before(...) end
+vim.fn.nextnonblank = function(...) following=following+1; return after(...) end
+local started = vim.uv.hrtime()
+for redraw=1,20 do vim.cmd('redraw!') end
+local elapsed = (vim.uv.hrtime() - started) / 1e6
+vim.fn.prevnonblank, vim.fn.nextnonblank = before, after
+return {redraws=20, previous=previous, following=following, elapsedMs=elapsed}
+`,
+            []
+        ])) as { redraws: number; previous: number; following: number; elapsedMs: number };
+        context.diagnostic(JSON.stringify(result));
+        assert.ok(result.previous > 0, 'Native redraws must exercise indentation guides');
+        assert.ok(result.previous <= result.redraws);
+        assert.equal(result.following, result.previous);
+        const guides = grid.cells.flatMap((row) =>
+            row.filter((cell) => grid.highlights.get(cell.highlight)?.foreground === 0x75633f)
+        );
+        assert.ok(guides.some((cell) => cell.text === '│'));
+    } finally {
+        await session.stop();
+    }
+});
+
+test('indent guides preserve blank boundaries, edits and window-local options', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.attach(100, 24);
+        await session.client.request('nvim_exec_lua', [
+            String.raw`
+local api = vim.api
+local namespace = api.nvim_get_namespaces().nido_indent
+local register, provider = api.nvim_set_decoration_provider
+-- Capture a separate instance of the real provider without changing native rendering.
+api.nvim_set_decoration_provider = function(id, value)
+  assert(id == namespace)
+  provider = value
+end
+local loaded, err = pcall(dofile, api.nvim_get_runtime_file('lua/nido_indent.lua', false)[1])
+api.nvim_set_decoration_provider = register
+assert(loaded, err)
+local original_mark = api.nvim_buf_set_extmark
+local function check(window, first, last)
+  local buffer = api.nvim_win_get_buf(window)
+  local expected = api.nvim_win_call(window, function()
+    local values = {}
+    local left = vim.fn.winsaveview().leftcol
+    local width = api.nvim_win_get_width(window) - vim.fn.getwininfo(window)[1].textoff
+    local step = vim.fn.shiftwidth()
+    for row=first,last do
+      local indent = vim.fn.indent(row + 1)
+      if vim.fn.getline(row + 1):match('^%s*$') then
+        indent = math.min(math.max(0, vim.fn.indent(vim.fn.prevnonblank(row + 1))),
+          math.max(0, vim.fn.indent(vim.fn.nextnonblank(row + 1))))
+      end
+      for column=0,indent-1,step do
+        if column >= left and column-left < width then
+          values[#values + 1] = {row, column-left, 'NidoIndent' .. ((column/step)%6 + 1)}
+        end
+      end
+    end
+    return values
+  end)
+  local actual = {}
+  api.nvim_buf_set_extmark = function(buf, ns, row, column, options)
+    assert(buf == buffer and ns == namespace and column == 0 and options.ephemeral)
+    assert(options.virt_text[1][1] == '│')
+    actual[#actual + 1] = {row, options.virt_text_win_col, options.virt_text[1][2]}
+    return 0
+  end
+  local ok, error = pcall(function()
+    provider.on_start()
+    provider.on_win(nil, window, buffer, first, last)
+    for row=first,last do provider.on_line(nil, window, buffer, row) end
+  end)
+  api.nvim_buf_set_extmark = original_mark
+  assert(ok, error)
+  assert(vim.deep_equal(actual, expected), vim.inspect({actual=actual, expected=expected}))
+end
+local first_window = api.nvim_get_current_win()
+local first_buffer = api.nvim_get_current_buf()
+local lines = {'', ' ', '\t', '      start', '', ' \t', '\tchild', '', '    tail', '', '\t', ''}
+api.nvim_buf_set_lines(first_buffer, 0, -1, false, lines)
+vim.bo[first_buffer].shiftwidth, vim.bo[first_buffer].tabstop = 2, 8
+check(first_window, 0, #lines-1)
+-- Start in the middle of a blank range and finish before its next nonblank line.
+check(first_window, 4, 5)
+vim.bo[first_buffer].tabstop, vim.bo[first_buffer].shiftwidth = 3, 0
+check(first_window, 0, #lines-1)
+vim.bo[first_buffer].vartabstop = '3,5'
+check(first_window, 0, #lines-1)
+api.nvim_buf_set_lines(first_buffer, 3, 4, false, {'  changed'})
+check(first_window, 0, #lines-1)
+api.nvim_buf_set_lines(first_buffer, 4, 5, false, {'        inserted'})
+check(first_window, 0, #lines-1)
+vim.cmd('vsplit')
+local second_window = api.nvim_get_current_win()
+local second_buffer = api.nvim_create_buf(true, false)
+api.nvim_win_set_buf(second_window, second_buffer)
+api.nvim_buf_set_lines(second_buffer, 0, -1, false, {'root', '  child', '\tchild', '', '    tail'})
+vim.bo[second_buffer].shiftwidth, vim.bo[second_buffer].tabstop = 4, 4
+check(second_window, 0, 4)
+check(first_window, 0, #lines-1)
+api.nvim_win_call(first_window, function()
+  vim.wo.wrap = false
+  api.nvim_win_set_cursor(0, {5, 8})
+  vim.fn.winrestview({leftcol=4})
+  assert(vim.fn.winsaveview().leftcol == 4)
+end)
+check(first_window, 0, #lines-1)
+api.nvim_buf_set_lines(second_buffer, 0, -1, false, {'', ' ', '\t'})
+check(second_window, 0, 2)
+`,
+            []
+        ]);
+    } finally {
+        await session.stop();
+    }
+});
+
 test('resize bursts skip obsolete queued sizes and keep the latest viewport', async (context) => {
     const session = await Session.create(process.cwd(), () => {});
     const request = session.client.request.bind(session.client);

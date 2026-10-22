@@ -31,14 +31,22 @@ api.nvim_set_decoration_provider(namespace, {
         width = api.nvim_win_get_width(window) - info.textoff,
         indents = {},
       }
+      local blank_until, blank_indent = 0, 0
       for row = first, math.min(last, api.nvim_buf_line_count(buffer) - 1) do
         local line = row + 1
-        local indent = vim.fn.indent(line)
-        if vim.fn.getline(line):match('^%s*$') then
+        local indent
+        if line <= blank_until then
+          indent = blank_indent
+        elseif vim.fn.getline(line):match('^%s*$') then
           -- Continue only the indentation shared by both sides of a blank line.
           local before = vim.fn.prevnonblank(line)
           local after = vim.fn.nextnonblank(line)
           indent = math.min(math.max(0, vim.fn.indent(before)), math.max(0, vim.fn.indent(after)))
+          -- Neighboring blank rows share those endpoints only during this redraw.
+          blank_until = after > 0 and after - 1 or last + 1
+          blank_indent = indent
+        else
+          indent = vim.fn.indent(line)
         end
         state.indents[row] = indent
       end
