@@ -1907,39 +1907,15 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         ).toBeFocused();
         await page.keyboard.press('Space');
         await page.keyboard.press(',');
-        const size = page.getByRole('spinbutton', { name: 'Editor font size' });
-        await expect(size).toBeFocused();
-        await size.fill('18');
-        await expect(size).toHaveValue('18');
-        await expect
-            .poll(() => page.evaluate(() => localStorage.getItem('nido.fontSize')))
-            .toBe('18');
-        await size.fill('100');
+        const language = page.getByRole('combobox', { name: 'Language', exact: true });
+        await expect(language).toBeFocused();
+        await page.screenshot({
+            path: 'test-results/settings-general.png',
+            animations: 'disabled'
+        });
         await page.keyboard.press('Tab');
-        await expect(size).toHaveValue('18');
-        await size.focus();
-        const initial = Number(await size.inputValue());
-        await page.keyboard.press('ArrowUp');
-        await expect(size).toHaveValue(String(initial + 1));
-        await page.keyboard.press('j');
-        const lineHeight = page.getByRole('spinbutton', { name: 'Editor line height' });
-        await expect(lineHeight).toBeFocused();
-        await page.keyboard.press('j');
-        const family = page.getByRole('textbox', { name: 'Font family' });
-        await expect(family).toBeFocused();
-        await page.keyboard.press('Control+a');
-        await page.keyboard.type('jk monospace');
-        await expect(family).toHaveValue('jk monospace');
+        await expect(page.getByRole('combobox', { name: 'Theme', exact: true })).toBeFocused();
         await page.keyboard.press('Control+j');
-        const weight = page.getByRole('spinbutton', { name: 'Editor font weight' });
-        await expect(weight).toBeFocused();
-        await expect(weight).toHaveValue('350');
-        await page.keyboard.press('ArrowUp');
-        await expect(weight).toHaveValue('400');
-        await expect
-            .poll(() => page.evaluate(() => localStorage.getItem('nido.fontWeight')))
-            .toBe('400');
-        await page.keyboard.press('j');
         const explorer = page.getByRole('checkbox', { name: 'Show file explorer' });
         await expect(explorer).toBeFocused();
         await page.keyboard.press('Space');
@@ -1952,6 +1928,69 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await page.keyboard.press('ArrowDown');
         await expect(activityBarPosition).toHaveValue('top');
         await page.keyboard.press('Control+j');
+        await expect(page.getByRole('checkbox', { name: 'UI animations' })).toBeFocused();
+        await page.keyboard.press('j');
+        const family = page.getByRole('textbox', { name: 'Font family' });
+        await expect(family).toBeFocused();
+        await page.keyboard.press('Control+a');
+        await page.keyboard.type('jk monospace');
+        await expect(family).toHaveValue('jk monospace');
+        await page.keyboard.press('Control+j');
+        const size = page.getByRole('spinbutton', { name: 'Editor font size' });
+        await expect(size).toBeFocused();
+        await size.fill('18');
+        await expect(size).toHaveValue('18');
+        await expect
+            .poll(() => page.evaluate(() => localStorage.getItem('nido.fontSize')))
+            .toBe('18');
+        await size.fill('100');
+        await page.keyboard.press('Tab');
+        await expect(size).toHaveValue('18');
+        await page.keyboard.press('Shift+Tab');
+        await expect(size).toBeFocused();
+        const initial = Number(await size.inputValue());
+        await page.keyboard.press('ArrowUp');
+        await expect(size).toHaveValue(String(initial + 1));
+        await page.keyboard.press('j');
+        const weight = page.getByRole('spinbutton', { name: 'Editor font weight' });
+        await expect(weight).toBeFocused();
+        await expect(weight).toHaveValue('350');
+        await page.keyboard.press('ArrowUp');
+        await expect(weight).toHaveValue('400');
+        await expect
+            .poll(() => page.evaluate(() => localStorage.getItem('nido.fontWeight')))
+            .toBe('400');
+        await page.keyboard.press('j');
+        await expect(page.getByRole('spinbutton', { name: 'Editor line height' })).toBeFocused();
+        for (const name of [
+            'Relative line numbers',
+            'Word wrap',
+            'Method separators',
+            'Sticky Scroll'
+        ]) {
+            await page.keyboard.press('j');
+            await expect(page.getByRole('checkbox', { name, exact: true })).toBeFocused();
+        }
+        await page.keyboard.press('j');
+        await expect(
+            page.getByRole('spinbutton', { name: 'Sticky Scroll maximum lines' })
+        ).toBeFocused();
+        await page.screenshot({
+            path: 'test-results/settings-editor-appearance.png',
+            animations: 'disabled'
+        });
+        for (const name of [
+            'Smooth cursor movement',
+            'Smooth cursor blink',
+            'Cursor follows scrolling',
+            'Share system clipboard',
+            'Format on save',
+            'Use EditorConfig'
+        ]) {
+            await page.keyboard.press('j');
+            await expect(page.getByRole('checkbox', { name })).toBeFocused();
+        }
+        await page.keyboard.press('j');
         const history = page.getByRole('checkbox', { name: 'Automatic edit history' });
         await expect(history).toBeFocused();
         await expect(history).toBeChecked();
@@ -1960,29 +1999,25 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await page.keyboard.press('Enter');
         await expect(history).toBeChecked();
         await page.keyboard.press('ArrowDown');
-        await expect(page.getByRole('checkbox', { name: 'Format on save' })).toBeFocused();
-        await page.keyboard.press('k');
+        const shell = page.getByRole('combobox', { name: 'Shell', exact: true });
+        await expect(shell).toBeFocused();
+        await page.keyboard.press('Control+k');
         await expect(history).toBeFocused();
         await page.keyboard.press('k');
-        await expect(activityBarPosition).toBeFocused();
-        await page.keyboard.press('Control+k');
-        await expect(explorer).toBeFocused();
-        await page.keyboard.press('Shift+Tab');
-        await expect(weight).toBeFocused();
-        await page.keyboard.press('Shift+Tab');
-        await expect(family).toBeFocused();
-        await page.keyboard.press('Shift+Tab');
-        await expect(lineHeight).toBeFocused();
-        await page.keyboard.press('Shift+Tab');
-        await expect(size).toBeFocused();
-        await page.keyboard.press('Shift+Tab');
-        await expect(page.getByRole('combobox', { name: 'Theme', exact: true })).toBeFocused();
-        await page.keyboard.press('Shift+Tab');
-        const language = page.getByRole('combobox', { name: 'Language', exact: true });
+        await expect(page.getByRole('checkbox', { name: 'Use EditorConfig' })).toBeFocused();
+        await page.keyboard.press('Tab');
+        await expect(history).toBeFocused();
+        await page.keyboard.press('Tab');
+        await expect(shell).toBeFocused();
+        await page.keyboard.press('Control+j');
         await expect(language).toBeFocused();
         await page.keyboard.press('ArrowDown');
         await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
         await expect(page.getByRole('combobox', { name: '言語', exact: true })).toBeFocused();
+        await page.screenshot({
+            path: 'test-results/settings-japanese.png',
+            animations: 'disabled'
+        });
         await page.keyboard.press('ArrowUp');
         await expect(page.locator('html')).toHaveAttribute('lang', 'en');
         await expect(language).toBeFocused();
@@ -1992,7 +2027,7 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await page.keyboard.press('Shift+Tab');
         await expect(page.getByRole('button', { name: 'Close palette' })).toBeFocused();
         await page.keyboard.press('Shift+Tab');
-        await expect(page.getByRole('checkbox', { name: 'Use EditorConfig' })).toBeFocused();
+        await expect(shell).toBeFocused();
         await page.screenshot({ path: 'test-results/settings-keyboard.png' });
         await page.keyboard.press('Escape');
         await expect(page.getByRole('dialog', { name: 'Settings' })).not.toBeVisible();

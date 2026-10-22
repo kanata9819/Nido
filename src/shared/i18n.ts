@@ -248,6 +248,10 @@ export const japanese: Record<string, string> = {
     'App updates': 'アプリの更新',
     'Check for releases, download updates and restart after saving. Available in the installed Windows app.':
         'リリースの確認・更新のダウンロード・保存後の再起動に対応します。インストール済みのWindowsアプリで利用できます。',
+    'General and layout': '全般・レイアウト',
+    'Editor appearance': 'エディター表示',
+    'Cursor and interaction': 'カーソル・操作',
+    'Saving and history': '保存・履歴',
     Language: '言語',
     'Choose English or Japanese. The selection is saved.':
         '英語または日本語を選択できます。選択は保存されます。',

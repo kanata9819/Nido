@@ -81,8 +81,8 @@ test('acrylic switches live without losing edits and persists across restarts', 
         ).rejects.toThrow('Invalid theme');
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         const theme = page.getByRole('combobox', { name: 'Theme', exact: true });
-        await expect(page.getByRole('spinbutton', { name: 'Editor font size' })).toBeFocused();
-        await page.keyboard.press('Shift+Tab');
+        await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toBeFocused();
+        await page.keyboard.press('Tab');
         await expect(theme).toBeFocused();
         await page.keyboard.press('ArrowDown');
         await expect(theme).toHaveValue('acrylic');
@@ -112,7 +112,7 @@ test('acrylic switches live without losing edits and persists across restarts', 
             'blur(24px)'
         );
         await page.keyboard.press('Control+j');
-        await expect(page.getByRole('spinbutton', { name: 'Editor font size' })).toBeFocused();
+        await expect(page.getByRole('checkbox', { name: 'Show file explorer' })).toBeFocused();
         if (process.env.NIDO_THEME_SCREENSHOT) {
             await page.getByRole('dialog', { name: 'Settings' }).evaluate(async (node) => {
                 await Promise.all(node.getAnimations().map((animation) => animation.finished));

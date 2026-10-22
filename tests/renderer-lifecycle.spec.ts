@@ -2096,6 +2096,9 @@ test('settings switch the UI language immediately, persist it and switch back to
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+    await expect(settings.getByRole('combobox', { name: 'Language', exact: true })).toBeFocused();
+    const saving = settings.getByRole('region', { name: 'Saving and history', exact: true });
+    await expect(saving.getByRole('checkbox', { name: 'Use EditorConfig' })).toBeChecked();
     await settings.getByRole('checkbox', { name: 'Word wrap', exact: true }).uncheck();
     await settings.getByRole('combobox', { name: 'Language', exact: true }).selectOption('ja');
     await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
@@ -2106,6 +2109,18 @@ test('settings switch the UI language immediately, persist it and switch back to
     await expect(japaneseSettings.getByRole('combobox', { name: '言語', exact: true })).toHaveValue(
         'ja'
     );
+    await expect(japaneseSettings.getByRole('heading', { level: 3 })).toHaveText([
+        '全般・レイアウト',
+        'エディター表示',
+        'カーソル・操作',
+        '保存・履歴',
+        'ターミナル'
+    ]);
+    await expect(
+        japaneseSettings
+            .getByRole('region', { name: '保存・履歴', exact: true })
+            .getByRole('checkbox', { name: 'EditorConfigを使用' })
+    ).toBeChecked();
     await expect(
         page.getByRole('button', { name: 'エクスプローラー', exact: true })
     ).toHaveAttribute('title', 'エクスプローラー（Space e）');
