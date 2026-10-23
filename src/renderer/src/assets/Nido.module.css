@@ -8,6 +8,12 @@
 .app[data-pointer-hidden='true'] * {
     cursor: none !important;
 }
+.titlebarFrame {
+    height: 38px;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 20;
+}
 .titlebar {
     height: 38px;
     flex-shrink: 0;
@@ -16,6 +22,47 @@
     background: var(--surface-title, #0e1012);
     border-bottom: 1px solid var(--ui-border, #282c30);
     user-select: none;
+}
+.autoHideTitlebar {
+    height: 24px;
+}
+.autoHideTitlebar .titlebar {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 24px;
+}
+.autoHideTitlebar:is(:hover, :focus-within) .titlebar {
+    height: 38px;
+}
+.workspaceToggle {
+    display: none;
+}
+.autoHideTitlebar:not(:hover):not(:focus-within) .workspaceTab:not(.activeWorkspace),
+.autoHideTitlebar:not(:hover):not(:focus-within) .tabClose,
+.autoHideTitlebar:not(:hover):not(:focus-within) .addWorkspace,
+.autoHideTitlebar:not(:hover):not(:focus-within) .workspaceTab kbd,
+.autoHideTitlebar:not(:hover):not(:focus-within) .brand span {
+    display: none;
+}
+.autoHideTitlebar:not(:hover):not(:focus-within) .brand {
+    width: 40px;
+}
+.autoHideTitlebar:not(:hover):not(:focus-within) .brand svg {
+    width: 16px;
+}
+.autoHideTitlebar:not(:hover):not(:focus-within) .workspaces {
+    padding-top: 0;
+}
+.autoHideTitlebar:not(:hover):not(:focus-within) .workspaceTab {
+    min-width: 0;
+    border-radius: 0;
+    font-size: 12px;
+}
+.autoHideTitlebar:not(:hover):not(:focus-within) .workspaceToggle {
+    display: block;
+}
+.autoHideTitlebar:not(:hover):not(:focus-within) .titlebarActions button {
+    height: 22px;
 }
 .brand {
     width: 115px;

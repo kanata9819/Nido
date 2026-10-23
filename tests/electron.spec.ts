@@ -1928,6 +1928,16 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await page.keyboard.press('ArrowDown');
         await expect(activityBarPosition).toHaveValue('top');
         await page.keyboard.press('Control+j');
+        const autoHideTabs = page.getByRole('checkbox', {
+            name: 'Automatically minimize session tabs'
+        });
+        await expect(autoHideTabs).toBeFocused();
+        await page.keyboard.press('Space');
+        await expect(autoHideTabs).toBeChecked();
+        await expect
+            .poll(() => page.evaluate(() => localStorage.getItem('nido.autoHideSessionTabs')))
+            .toBe('true');
+        await page.keyboard.press('Control+j');
         await expect(page.getByRole('checkbox', { name: 'UI animations' })).toBeFocused();
         await page.keyboard.press('j');
         const family = page.getByRole('textbox', { name: 'Font family' });

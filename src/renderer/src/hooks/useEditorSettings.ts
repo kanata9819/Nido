@@ -78,6 +78,12 @@ export function useEditorSettings(): EditorSettings {
     useEffect(() => {
         localStorage.setItem('nido.activityBarPosition', activityBarPosition);
     }, [activityBarPosition]);
+    const [autoHideSessionTabs, setAutoHideSessionTabs] = useState(
+        () => localStorage.getItem('nido.autoHideSessionTabs') === 'true'
+    );
+    useEffect(() => {
+        localStorage.setItem('nido.autoHideSessionTabs', String(autoHideSessionTabs));
+    }, [autoHideSessionTabs]);
     const [animations, setAnimations] = useState(
         () => localStorage.getItem('nido.animations') !== 'false'
     );
@@ -190,6 +196,8 @@ export function useEditorSettings(): EditorSettings {
         setSidebar,
         activityBarPosition,
         setActivityBarPosition,
+        autoHideSessionTabs,
+        setAutoHideSessionTabs,
         animations,
         setAnimations,
         smoothCursor,
@@ -240,6 +248,8 @@ export interface EditorSettings {
     setSidebar: Dispatch<SetStateAction<boolean>>;
     activityBarPosition: ActivityBarPosition;
     setActivityBarPosition: Dispatch<SetStateAction<ActivityBarPosition>>;
+    autoHideSessionTabs: boolean;
+    setAutoHideSessionTabs: Dispatch<SetStateAction<boolean>>;
     animations: boolean;
     setAnimations: Dispatch<SetStateAction<boolean>>;
     smoothCursor: boolean;

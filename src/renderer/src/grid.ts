@@ -677,10 +677,12 @@ export class Grid {
             this.layoutDirty = false;
         }
         this.cellHeight = cellHeight;
-        this.contentHeight = Math.max(0, (Math.floor(height / cellHeight) - 1) * cellHeight);
-        this.extraRows = Math.floor(
-            ((this.rows - 1) * cellHeight - this.rowTop(this.rows - 1)) / cellHeight
-        );
+        this.contentHeight = this.pixelScrollEnabled
+            ? height
+            : Math.max(0, (Math.floor(height / cellHeight) - 1) * cellHeight);
+        const compactRows =
+            ((this.rows - 1) * cellHeight - this.rowTop(this.rows - 1)) / cellHeight;
+        this.extraRows = this.pixelScrollEnabled ? Math.ceil(compactRows) : Math.floor(compactRows);
         if (this.upperRows !== this.upperLayout || this.upperFontHeight !== cellHeight) {
             this.upperTops = new Array(this.upperRows.length + 1);
             this.upperTops[this.upperRows.length] = 0;

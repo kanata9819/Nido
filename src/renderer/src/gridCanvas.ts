@@ -301,7 +301,7 @@ export class GridCanvas {
             const rowHeight = commandLine
                 ? cellHeight
                 : this.grid.rowTop(layoutRow + 1) - this.grid.rowTop(layoutRow);
-            if (rowY + rowHeight + 1 / dpr < paintTop || rowY > paintBottom) {
+            if (rowY + rowHeight + 1 / dpr < paintTop || rowY >= Math.min(paintBottom, height)) {
                 continue;
             }
             if (!commandLine && (rowY + rowHeight <= 0 || rowY >= this.grid.contentHeight)) {

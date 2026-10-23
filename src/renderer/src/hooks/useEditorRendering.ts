@@ -259,11 +259,16 @@ export function useEditorRendering({
             }
 
             const columns = Math.max(20, Math.floor(bounds.width / metrics.cellWidth));
-            // Compact lenses free space for code; keep one extra row for fractional scrolling.
+            // External command UI needs no visible slot; retain a document row for scroll overscan.
             const rows =
-                Math.max(4, Math.floor(bounds.height / metrics.cellHeight)) +
+                Math.max(
+                    4,
+                    pixelScroll
+                        ? Math.ceil(bounds.height / metrics.cellHeight)
+                        : Math.floor(bounds.height / metrics.cellHeight)
+                ) +
                 grid.extraRows +
-                (pixelScroll ? 1 : 0);
+                (pixelScroll ? 2 : 0);
             if (!attachedRef.current) {
                 attachedRef.current = true;
                 lastColumns = columns;

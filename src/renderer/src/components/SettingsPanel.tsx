@@ -27,6 +27,8 @@ export default function SettingsPanel({
     setSidebar,
     activityBarPosition,
     setActivityBarPosition,
+    autoHideSessionTabs,
+    setAutoHideSessionTabs,
     animations,
     setAnimations,
     smoothCursor,
@@ -145,6 +147,19 @@ export default function SettingsPanel({
                 </label>
                 <small>
                     {t('Place navigation icons on the left edge or above the file explorer.')}
+                </small>
+                <label>
+                    {t('Automatically minimize session tabs')}{' '}
+                    <input
+                        type="checkbox"
+                        checked={autoHideSessionTabs}
+                        onChange={(event) => setAutoHideSessionTabs(event.target.checked)}
+                    />
+                </label>
+                <small>
+                    {t(
+                        'Keep the active session in a compact bar. Hover or press Alt+Shift+W to expand; Esc returns to the editor.'
+                    )}
                 </small>
                 <label>
                     {t('UI animations')}{' '}

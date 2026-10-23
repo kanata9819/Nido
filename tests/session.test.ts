@@ -3170,13 +3170,13 @@ test('CodeLens rows compact while clicks, fractional scrolling and the command l
         );
         assert.equal(grid.rowTop(0.5), 8.5);
         assert.equal(grid.rowTop(1.5), 29);
-        assert.equal(grid.extraRows, 1);
+        assert.equal(grid.extraRows, 2);
         for (let row = 0; row < grid.rows - 1; row++) {
             const top = grid.rowY(row);
             assert.equal(grid.rowAt(top), row);
             assert.equal(grid.rowAt(top + (grid.rowTop(row + 1) - grid.rowTop(row)) / 2), row);
         }
-        assert.equal(grid.rowY(grid.rows - 1), 240);
+        assert.equal(grid.rowY(grid.rows - 1), 264);
         assert.equal(grid.rowAt(238), -1);
         assert.equal(grid.rowAt(240), -1);
         grid.scrolling = true;
@@ -3186,7 +3186,7 @@ test('CodeLens rows compact while clicks, fractional scrolling and the command l
         assert.equal(glyphs, originalGlyphs, 'fractional scrolling reuses the row images');
         assert.equal(grid.rowY(1), 11.9);
         assert.equal(grid.rowAt(grid.rowY(1) + 12), 1);
-        assert.equal(grid.rowY(grid.rows - 1), 240);
+        assert.equal(grid.rowY(grid.rows - 1), 264);
         grid.scrolling = false;
         grid.draw(canvas, 160, 264, 14, 'monospace', false);
         assert.equal(
@@ -3196,15 +3196,15 @@ test('CodeLens rows compact while clicks, fractional scrolling and the command l
         );
         assert.equal(grid.rowAt(11.89), 0);
         assert.equal(grid.rowAt(11.9), 1);
-        assert.equal(grid.rowY(grid.rows - 1), 240);
+        assert.equal(grid.rowY(grid.rows - 1), 264);
         assert.equal(glyphs, originalGlyphs, 'settling reuses the native row images');
         grid.apply([['grid_line', [1, 0, 0, [['x', 0]]]], ['flush']]);
         grid.scrollFraction = 0;
         grid.draw(canvas, 160, 264, 14, 'monospace', false);
         assert.ok(glyphs > originalGlyphs, 'edited rows invalidate the cached text');
         assert.equal(grid.rowTop(1), 24);
-        assert.equal(grid.extraRows, 0);
-        assert.equal(grid.rowY(grid.rows - 1), 240);
+        assert.equal(grid.extraRows, 1);
+        assert.equal(grid.rowY(grid.rows - 1), 264);
     } finally {
         if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
         else Reflect.deleteProperty(globalThis, 'window');

@@ -2,6 +2,40 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Grid } from '../src/renderer/src/grid';
 
+test('pixel-scrolled code uses the full viewport and keeps bottom clicks in document rows', () => {
+    for (const height of [72, 77, 77.6, 90]) {
+        const grid = new Grid();
+        grid.pixelScrollEnabled = true;
+        grid.apply([['grid_resize', [1, 20, Math.ceil(height / 18) + 2]], ['flush']]);
+        for (const fraction of [0, 0.25, 0.9]) {
+            grid.scrollFraction = fraction;
+            grid.prepareLayout(height, 8, 18);
+            assert.equal(grid.contentHeight, height);
+            assert.equal(grid.rowY(grid.rows - 1), height, 'external command row is offscreen');
+            assert.equal(grid.rowAt(height - 0.01), Math.floor((height - 0.01) / 18 + fraction));
+            assert.equal(grid.rowAt(height), -1);
+        }
+    }
+});
+
+test('compact CodeLens rows retain a full row of bottom scroll overscan', () => {
+    const grid = new Grid();
+    grid.pixelScrollEnabled = true;
+    grid.apply([
+        ['grid_resize', [1, 20, 12]],
+        ['hl_attr_define', [1, {}, {}, [{ hi_name: 'NidoCodeLens' }]]],
+        ['grid_line', [1, 3, 0, [['Run', 1]]]],
+        ['flush']
+    ]);
+    grid.prepareLayout(200, 8, 20);
+    assert.equal(grid.extraRows, 1);
+    grid.apply([['grid_resize', [1, 20, 12 + grid.extraRows]], ['flush']]);
+    grid.scrollFraction = 0.9;
+    grid.prepareLayout(200, 8, 20);
+    assert.ok(grid.rowAt(199.99) >= 0, 'bottom pixels remain clickable while scrolling');
+    assert.ok(grid.rowTop(grid.rows - 1) - grid.scrollOffset >= 200);
+});
+
 test('editor text snapshots read only changed rows during repeated typing', (context) => {
     const grid = new Grid();
     grid.apply([
@@ -199,7 +233,7 @@ test('downward preview uses cached lower rows and leaves the command line fixed'
     grid.scrollPreview = 0.7;
     grid.prepareLayout(60, 8, 20);
     assert.equal(grid.scrollOffset, 30, 'preview must continue beyond the old one-row limit');
-    assert.equal(grid.rowY(3), 40, 'command line stays below the code viewport');
+    assert.equal(grid.rowY(3), 60, 'command line stays below the code viewport');
     assert.equal(grid.rowTop(4) - grid.rowTop(3), 14, 'future CodeLens rows stay compact');
     assert.ok(Number.isFinite(grid.rowTop(100.5)));
 

@@ -1332,7 +1332,7 @@ for (const scale of [1, 1.25, 1.5]) {
                         // Fractional movement is composited once on the destination.
                         // At integer positions it must still be an exact native copy.
                         if (Math.abs(y - top) > 0.001) return;
-                        // The command row can extend one physical pixel beyond the canvas.
+                        // Only compare the visible portion of a row.
                         const height = Math.min(source.height, canvas.height - top);
                         const expected = source
                             .getContext('2d')!
@@ -1384,7 +1384,7 @@ for (const scale of [1, 1.25, 1.5]) {
                 },
                 `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
             );
-            expect(samples.copies).toBe(12);
+            expect(samples.copies).toBe(10);
             expect(
                 samples.nativeRows,
                 'settled fractional scrolling must reuse the native glyph images'
@@ -2060,6 +2060,105 @@ test('Extensions separates language packs from other extensions and supports key
     await expect(otherTab).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+});
+
+test('session tabs minimize automatically, expand over the editor and preserve keyboard and window controls', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('restoreWorkspaces', 0, {
+            workspaces: [
+                { id: 'alpha', root: '/alpha', name: 'Alpha' },
+                { id: 'beta', root: '/beta', name: 'Beta' }
+            ],
+            active: 'alpha',
+            errors: []
+        })
+    );
+    const header = page.getByRole('banner');
+    const alpha = header.getByRole('tab', { name: 'Workspace Alpha', exact: true });
+    const beta = header.getByRole('tab', { name: 'Workspace Beta', exact: true });
+    const editor = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(editor).toBeFocused();
+    expect((await header.boundingBox())!.height).toBe(38);
+    await expect(beta).toBeVisible();
+    const normalEditorTop = (await page.locator('main').boundingBox())!.y;
+    await header.getByRole('button', { name: 'Settings', exact: true }).click();
+    const option = page.getByRole('checkbox', { name: 'Automatically minimize session tabs' });
+    await expect(option).not.toBeChecked();
+    await option.check();
+    await page.keyboard.press('Escape');
+    await page.mouse.move(500, 300);
+    await expect(beta).toBeHidden();
+    await expect(alpha).toBeVisible();
+    expect((await header.boundingBox())!.height).toBe(24);
+    const compactEditor = (await page.locator('main').boundingBox())!;
+    expect(compactEditor.y).toBe(normalEditorTop - 14);
+    await alpha.hover();
+    await expect(beta).toBeVisible();
+    expect((await page.locator('main').boundingBox())!).toEqual(compactEditor);
+    await page.mouse.move(500, 300);
+    await expect(beta).toBeHidden();
+    await page.keyboard.press('Alt+Shift+w');
+    await expect(alpha).toBeFocused();
+    await expect(beta).toBeVisible();
+    await page.mouse.move(600, 300);
+    await expect(beta).toBeVisible();
+    await beta.focus();
+    await page.keyboard.press('Enter');
+    await expect(beta).toHaveAttribute('aria-selected', 'true');
+    await expect(editor).toBeFocused();
+    await expect(alpha).toBeHidden();
+    await page.keyboard.press('Alt+Shift+w');
+    await expect(beta).toBeFocused();
+    const minimize = header.getByRole('button', { name: 'Minimize', exact: true });
+    for (
+        let step = 0;
+        step < 16 && !(await minimize.evaluate((button) => button === document.activeElement));
+        step++
+    ) {
+        await page.keyboard.press('Tab');
+    }
+    for (const [index, name] of ['Minimize', 'Maximize', 'Close Nido'].entries()) {
+        if (index) {
+            await page.keyboard.press('Tab');
+        }
+        await expect(header.getByRole('button', { name, exact: true })).toBeFocused();
+        await page.keyboard.press('Enter');
+    }
+    expect(await recordedWindowActions(page)).toEqual([['minimize'], ['maximize'], ['close']]);
+    await page.keyboard.press('Escape');
+    await expect(editor).toBeFocused();
+    await expect(alpha).toBeHidden();
+    expect((await page.locator('main').boundingBox())!).toEqual(compactEditor);
+    await expect
+        .poll(() => page.evaluate(() => localStorage.getItem('nido.autoHideSessionTabs')))
+        .toBe('true');
+});
+
+test('minimized session tabs restore their setting and can return to the normal layout in Japanese', async ({
+    page
+}) => {
+    await page.addInitScript(() => {
+        localStorage.setItem('nido.autoHideSessionTabs', 'true');
+        localStorage.setItem('nido.language', 'ja');
+    });
+    await page.goto(`${origin}?view=app`);
+    const header = page.getByRole('banner');
+    await expect(page.getByRole('textbox', { name: 'Neovim入力' })).toBeFocused();
+    await page.mouse.move(500, 300);
+    expect((await header.boundingBox())!.height).toBe(24);
+    await header.getByRole('button', { name: '設定', exact: true }).click();
+    const option = page.getByRole('checkbox', { name: 'セッションタブを自動で最小化' });
+    await expect(option).toBeChecked();
+    await option.uncheck();
+    await page.keyboard.press('Escape');
+    expect((await header.boundingBox())!.height).toBe(38);
+    await expect
+        .poll(() => page.evaluate(() => localStorage.getItem('nido.autoHideSessionTabs')))
+        .toBe('false');
 });
 
 test('activity bar moves above the explorer, preserves navigation and persists its placement', async ({

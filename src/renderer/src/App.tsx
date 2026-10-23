@@ -413,6 +413,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
             data-pointer-hidden={pointerHidden}
         >
             <TitleBar
+                autoHide={settings.autoHideSessionTabs}
                 workspaces={workspaces}
                 favorites={favorites}
                 favoriteBusy={!favoritesReady || savingFavorite}

@@ -10,6 +10,113 @@ import { requireWebGLCorrection } from './helpers/row-image-probe';
 let server: ViteDevServer;
 let origin: string;
 
+for (const scale of [1, 1.25, 1.5]) {
+    test(`code paints and accepts clicks to the viewport bottom at ${scale * 100}% scale`, async ({
+        browser
+    }) => {
+        const context = await browser.newContext({ deviceScaleFactor: scale });
+        try {
+            const page = await context.newPage();
+            await page.route('**/bottom-probe', (route) =>
+                route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+            );
+            await page.goto(`${origin}bottom-probe`);
+            const results = await page.evaluate(
+                async (url) => {
+                    const { Grid } = await import(url);
+                    const results: {
+                        height: number;
+                        compact: boolean;
+                        fraction: number;
+                        bottom: number[];
+                        row: number;
+                    }[] = [];
+                    for (const availableHeight of [180, 187.2]) {
+                        const height =
+                            Math.floor(availableHeight * devicePixelRatio) / devicePixelRatio;
+                        for (const compact of [false, true]) {
+                            const grid = new Grid();
+                            grid.pixelScrollEnabled = true;
+                            grid.cursorVisible = false;
+                            const rows = Math.ceil(height / 18) + 2 + (compact ? 1 : 0);
+                            grid.apply([
+                                ['grid_resize', [1, 20, rows]],
+                                ['hl_attr_define', [1, { background: 0x204060 }, {}, []]],
+                                [
+                                    'hl_attr_define',
+                                    [2, { background: 0x204060 }, {}, [{ hi_name: 'NidoCodeLens' }]]
+                                ],
+                                ...Array.from({ length: rows - 1 }, (_, row) => [
+                                    'grid_line',
+                                    [1, row, 0, [[' ', 1, 20]]]
+                                ]),
+                                ...(compact ? [['grid_line', [1, 3, 0, [['Run', 2]]]]] : []),
+                                ['flush']
+                            ]);
+                            const canvas = document.createElement('canvas');
+                            for (const fraction of [0, 0.5, 0.9]) {
+                                grid.scrollFraction = fraction;
+                                grid.draw(
+                                    canvas,
+                                    160,
+                                    height,
+                                    14,
+                                    'monospace',
+                                    false,
+                                    undefined,
+                                    18
+                                );
+                                results.push({
+                                    height,
+                                    compact,
+                                    fraction,
+                                    bottom: Array.from(
+                                        canvas
+                                            .getContext('2d')!
+                                            .getImageData(100, canvas.height - 1, 1, 1).data
+                                    ),
+                                    row: grid.rowAt(height - 0.01)
+                                });
+                            }
+                        }
+                    }
+                    return results;
+                },
+                `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+            );
+            for (const result of results) {
+                expect(result.bottom, JSON.stringify(result)).toEqual([32, 64, 96, 255]);
+                expect(result.row, JSON.stringify(result)).toBeGreaterThanOrEqual(0);
+            }
+        } finally {
+            await context.close();
+        }
+    });
+}
+
+test('editor allocates full-height document rows plus command and scroll overscan rows', async ({
+    page
+}) => {
+    await page.addInitScript(() => {
+        localStorage.setItem('nido.lineHeight', '18');
+        localStorage.setItem('nido.animations', 'false');
+    });
+    await page.goto(`${origin}?view=app`);
+    const canvas = page.locator('canvas').first();
+    await expect(canvas).toBeVisible();
+    await expect
+        .poll(() =>
+            canvas.evaluate((element) => {
+                const height = element.height / devicePixelRatio;
+                const call = window.rendererTest.calls
+                    .filter(({ method }) => method === 'attach' || method === 'resize')
+                    .at(-1);
+                return call?.args[2] === Math.max(4, Math.ceil(height / 18)) + 2;
+            })
+        )
+        .toBe(true);
+});
+
 for (const scale of [1, 1.25, 1.5, 2]) {
     for (const opacity of [1, 0.5]) {
         test(`cached viewport animations preserve pixels at ${scale * 100}% scale and ${opacity} opacity`, async ({
