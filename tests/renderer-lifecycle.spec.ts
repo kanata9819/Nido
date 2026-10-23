@@ -3838,6 +3838,119 @@ test('Reference selection resets with a new result and old previews cannot repla
         .toEqual([1, 2]);
 });
 
+for (const dismiss of ['button', 'Escape', 'toggle'] as const) {
+    test(`closed reference searches stay closed across workspace switches after ${dismiss}`, async ({
+        page
+    }) => {
+        const errors: string[] = [];
+        page.on('pageerror', (error) => errors.push(error.message));
+        await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+        await page.evaluate(() =>
+            window.rendererTest.settle('restoreWorkspaces', 0, {
+                workspaces: [
+                    { id: 'alpha', root: '/alpha', name: 'Alpha' },
+                    { id: 'beta', root: '/beta', name: 'Beta' }
+                ],
+                active: 'alpha',
+                errors: []
+            })
+        );
+        const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+        const panel = page.locator('[data-references-panel]');
+        const list = page.getByRole('listbox', { name: 'Reference results' });
+        const toggle = page.getByRole('button', { name: 'Toggle references', exact: true });
+        const references = async (id: string, search: number, version: number): Promise<void> => {
+            await page.evaluate(
+                ({ id, search, version }) =>
+                    window.rendererTest.emit({
+                        type: 'statePatch',
+                        id,
+                        state: {
+                            references: {
+                                search,
+                                version,
+                                loading: false,
+                                error: '',
+                                items: [
+                                    {
+                                        path: `/${id}/result.ts`,
+                                        line: 1,
+                                        column: 1,
+                                        text: `${id}-${search}-${version}`
+                                    }
+                                ]
+                            }
+                        }
+                    }),
+                { id, search, version }
+            );
+            await page.evaluate(
+                () =>
+                    new Promise((resolve) =>
+                        requestAnimationFrame(() => requestAnimationFrame(resolve))
+                    )
+            );
+        };
+        const switchTo = async (name: 'Alpha' | 'Beta'): Promise<void> => {
+            await page.keyboard.press(name === 'Alpha' ? 'Alt+1' : 'Alt+2');
+            await expect(
+                page.getByRole('tab', { name: `Workspace ${name}`, exact: true })
+            ).toHaveAttribute('aria-selected', 'true');
+        };
+        await expect(editor).toBeFocused();
+        await references('alpha', 1, 1);
+        await expect(list).toBeFocused();
+        if (dismiss === 'button') {
+            await page.getByRole('button', { name: 'Hide references', exact: true }).click();
+        } else if (dismiss === 'toggle') {
+            await toggle.click();
+        } else {
+            await page.keyboard.press('Escape');
+        }
+        await expect(panel).toBeHidden();
+        await switchTo('Beta');
+        await references('beta', 1, 1);
+        await expect(panel).toBeVisible();
+        await expect(panel).toContainText('beta-1-1');
+        for (let index = 0; index < 3; index++) {
+            await switchTo('Alpha');
+            await expect(panel).toBeHidden();
+            await expect(editor).toBeFocused();
+            await switchTo('Beta');
+            await expect(panel).toBeVisible();
+        }
+        await switchTo('Alpha');
+        await references('alpha', 1, 2);
+        await expect(panel).toContainText('alpha-1-2');
+        await expect(panel).toBeHidden();
+        await expect(editor).toBeFocused();
+        await references('alpha', 2, 3);
+        await expect(panel).toBeVisible();
+        await expect(list).toBeFocused();
+        await page.keyboard.press('Escape');
+        await switchTo('Beta');
+        await references('alpha', 3, 4);
+        await expect(panel).toContainText('beta-1-1');
+        await switchTo('Alpha');
+        await expect(panel).toBeVisible();
+        await expect(panel).toContainText('alpha-3-4');
+        await page.keyboard.press('Escape');
+        for (const reopen of ['toggle', 'Control+j']) {
+            if (reopen === 'toggle') {
+                await toggle.click();
+            } else {
+                await page.keyboard.press(reopen);
+            }
+            await expect(list).toBeFocused();
+            await switchTo('Beta');
+            await switchTo('Alpha');
+            await expect(panel).toBeVisible();
+            await page.keyboard.press('Escape');
+        }
+        expect(errors).toEqual([]);
+    });
+}
+
 test('App opens references and debugger on new events while respecting a closed panel', async ({
     page
 }) => {

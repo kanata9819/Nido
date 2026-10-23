@@ -58,6 +58,7 @@ export function useBottomPanels({
     const [debugVisible, setDebugVisible] = useState(false);
     const [debugFocusTick, setDebugFocusTick] = useState(0);
     const [referencesVisible, setReferencesVisible] = useState(false);
+    const [dismissedReferences, setDismissedReferences] = useState<Record<string, number>>({});
     const [referencesFocusTick, setReferencesFocusTick] = useState(0);
     const [bottomPanel, setBottomPanel] = useState<'debug' | 'references' | 'terminal'>('debug');
     const [terminalVisible, setTerminalVisible] = useState(false);
@@ -96,9 +97,12 @@ export function useBottomPanels({
     if (referencesChanged || debuggerChanged || debugStatusChanged) {
         setPrevious({ active, referenceVersion, hasDebugger, debugStatus });
         if (referencesChanged && state.references) {
-            setBottomPanel('references');
-            setReferencesVisible(true);
-            setReferencesFocusTick((value) => value + 1);
+            const visible = dismissedReferences[active] !== referenceVersion;
+            setReferencesVisible(visible);
+            if (visible) {
+                setBottomPanel('references');
+                setReferencesFocusTick((value) => value + 1);
+            }
         }
         if (debuggerChanged && hasDebugger) {
             setDebugVisible(true);
@@ -114,8 +118,25 @@ export function useBottomPanels({
         }
     }
 
+    const setReferencesOpen = (visible: boolean): void => {
+        setReferencesVisible(visible);
+        setDismissedReferences((old) => {
+            if (visible) {
+                if (old[active] === undefined) {
+                    return old;
+                }
+                const next = { ...old };
+                delete next[active];
+                return next;
+            }
+            if (referenceVersion === undefined || old[active] === referenceVersion) {
+                return old;
+            }
+            return { ...old, [active]: referenceVersion };
+        });
+    };
     const closeReferences = (): void => {
-        setReferencesVisible(false);
+        setReferencesOpen(false);
         focusEditor();
     };
     const closeDebugger = (): void => {
@@ -218,7 +239,7 @@ export function useBottomPanels({
         ) {
             showTerminal();
         } else if (bottomPanel === 'references' && state.references) {
-            setReferencesVisible(true);
+            setReferencesOpen(true);
             setReferencesFocusTick((value) => value + 1);
         } else {
             openDebugger();
@@ -230,7 +251,7 @@ export function useBottomPanels({
     };
     const toggleReferences = (): void => {
         setBottomPanel('references');
-        setReferencesVisible(bottomPanel !== 'references' || !referencesVisible);
+        setReferencesOpen(bottomPanel !== 'references' || !referencesVisible);
         setReferencesFocusTick((value) => value + 1);
     };
     const openReference = (index: number): void => {
