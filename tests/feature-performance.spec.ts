@@ -13,6 +13,67 @@ declare global {
 
 let server: ViteDevServer;
 let origin: string;
+interface RuntimeDiagnostics {
+    pageErrors: string[];
+    consoleErrors: {
+        text: string;
+        location: { url: string; lineNumber: number; columnNumber: number };
+    }[];
+    requestFailures: { url: string; method: string; error?: string }[];
+    httpErrors: { url: string; status: number; statusText: string }[];
+}
+const runtimeDiagnostics = new WeakMap<Page, RuntimeDiagnostics>();
+test.beforeEach(({ page }) => {
+    const diagnostics: RuntimeDiagnostics = {
+        pageErrors: [],
+        consoleErrors: [],
+        requestFailures: [],
+        httpErrors: []
+    };
+    runtimeDiagnostics.set(page, diagnostics);
+    page.on('pageerror', (error) => diagnostics.pageErrors.push(error.stack || error.message));
+    page.on('console', (message) => {
+        if (message.type() === 'error') {
+            diagnostics.consoleErrors.push({ text: message.text(), location: message.location() });
+        }
+    });
+    page.on('requestfailed', (request) => {
+        diagnostics.requestFailures.push({
+            url: request.url(),
+            method: request.method(),
+            error: request.failure()?.errorText
+        });
+    });
+    page.on('response', (response) => {
+        if (response.status() >= 400) {
+            diagnostics.httpErrors.push({
+                url: response.url(),
+                status: response.status(),
+                statusText: response.statusText()
+            });
+        }
+    });
+});
+test.afterEach(async ({ page }, testInfo) => {
+    const diagnostics = runtimeDiagnostics.get(page)!;
+    if (testInfo.status !== testInfo.expectedStatus || diagnostics.pageErrors.length) {
+        const snapshot = await page
+            .evaluate(() => ({
+                url: location.href,
+                readyState: document.readyState,
+                rootHTML: document.getElementById('root')?.innerHTML.slice(0, 20000),
+                rendererTest: !!window.rendererTest,
+                calls: window.rendererTest?.calls.slice(-200),
+                canvasCount: document.querySelectorAll('canvas').length
+            }))
+            .catch((error: unknown) => ({ error: String(error) }));
+        await testInfo.attach('renderer-runtime-diagnostics', {
+            body: JSON.stringify({ ...diagnostics, snapshot }, null, 2),
+            contentType: 'application/json'
+        });
+    }
+    expect(diagnostics.pageErrors, 'Renderer must not report uncaught browser errors').toEqual([]);
+});
 test.beforeAll(async () => {
     server = await createServer({
         configFile: false,
@@ -31,7 +92,6 @@ async function open(page: Page, view: string, deferred: string): Promise<void> {
         localStorage.setItem('nido.animations', 'false');
     });
     await page.goto(`${origin}?view=${view}&defer=${deferred}`);
-    // CI may need extra mount time after the preceding 10,000-row case.
     await expect(page.locator('canvas').or(page.getByRole('listbox')).first()).toBeVisible({
         timeout: 15000
     });
