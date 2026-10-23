@@ -3,6 +3,16 @@ import type { Cell, Highlight } from './gridTypes';
 import { color } from './gridColors';
 import { LinearRowImages } from './linearRowImage';
 
+interface CellStyle {
+    highlight: Highlight;
+    background: string;
+    foreground: string;
+    font: string;
+    textSize: number;
+    special?: string;
+    accent?: string;
+}
+
 function cellBackground(h: Highlight, background: string, foreground: string): string {
     if (h.reverse) {
         if (h.foreground === undefined) {
@@ -166,6 +176,33 @@ export class GridCanvas {
         // Keep the native glyph raster; interpolate its final translation only once.
         ctx.imageSmoothingEnabled = true;
         const family = fontFamily;
+        // Resolve shared highlights once per paint; the next paint sees fresh
+        // definitions, theme colors and font settings without invalidation state.
+        const cellStyles = new Map<number, CellStyle>();
+        const cellStyle = (id: number): CellStyle => {
+            let style = cellStyles.get(id);
+            if (!style) {
+                const h = this.grid.highlights.get(id) || {};
+                const textSize = h.codeLens
+                    ? fontSize * 0.8
+                    : h.diagnostic
+                      ? fontSize * 0.9
+                      : fontSize;
+                style = {
+                    highlight: h,
+                    background: cellBackground(h, this.grid.background, this.grid.foreground),
+                    foreground: cellForeground(h, this.grid.background, this.grid.foreground),
+                    font: h.codeLens
+                        ? `${fontWeight} ${textSize}px ${family}`
+                        : `${h.italic ? 'italic ' : ''}${h.bold ? Math.max(700, fontWeight) : fontWeight} ${textSize}px ${family}`,
+                    textSize,
+                    special: h.special === undefined ? undefined : color(h.special),
+                    accent: h.diagnostic ? color(h.special ?? h.foreground ?? 0xcccccc) : undefined
+                };
+                cellStyles.set(id, style);
+            }
+            return style;
+        };
         ctx.font = `${fontWeight} ${fontSize}px ${family}`;
         const cellWidth = ctx.measureText('M').width;
         const cellHeight = lineHeight;
@@ -336,12 +373,9 @@ export class GridCanvas {
                 }
                 // Paint all cell backgrounds first so a wide glyph is not erased by its continuation cell.
                 for (let col = 0; col < this.grid.columns; col++) {
-                    const h = this.grid.highlights.get(cells[col]?.highlight || 0) || {};
-                    const background = cellBackground(
-                        h,
-                        this.grid.background,
-                        this.grid.foreground
-                    );
+                    const style = cellStyle(cells[col]?.highlight || 0);
+                    const h = style.highlight;
+                    const background = style.background;
                     if (h.diagnostic && !h.reverse) {
                         const start = col;
                         while (
@@ -358,7 +392,7 @@ export class GridCanvas {
                         ctx.beginPath();
                         ctx.roundRect(left, inset, right - left, badgeHeight, 4);
                         ctx.fill();
-                        const accent = color(h.special ?? h.foreground ?? 0xcccccc);
+                        const accent = style.accent!;
                         ctx.strokeStyle = accent + '30';
                         ctx.lineWidth = 1 / dpr;
                         ctx.stroke();
@@ -388,7 +422,8 @@ export class GridCanvas {
                         continue;
                     }
 
-                    const h = this.grid.highlights.get(cell.highlight) || {};
+                    const style = cellStyle(cell.highlight);
+                    const h = style.highlight;
                     if (h.codeLens) {
                         let text = cell.text;
                         const start = col;
@@ -398,8 +433,8 @@ export class GridCanvas {
                         ) {
                             text += cells[++col].text;
                         }
-                        font(`${fontWeight} ${fontSize * 0.8}px ${family}`);
-                        foreground(cellForeground(h, this.grid.background, this.grid.foreground));
+                        font(style.font);
+                        foreground(style.foreground);
                         ctx.fillText(
                             text,
                             Math.round(start * cellWidth * dpr) / dpr,
@@ -407,11 +442,9 @@ export class GridCanvas {
                         );
                         continue;
                     }
-                    const textSize = h.diagnostic ? fontSize * 0.9 : fontSize;
-                    font(
-                        `${h.italic ? 'italic ' : ''}${h.bold ? Math.max(700, fontWeight) : fontWeight} ${textSize}px ${family}`
-                    );
-                    foreground(cellForeground(h, this.grid.background, this.grid.foreground));
+                    const textSize = style.textSize;
+                    font(style.font);
+                    foreground(style.foreground);
 
                     const x = col * cellWidth;
                     const baseline = Math.round((y + (rowHeight + textSize) / 2 - 3) * dpr) / dpr;
@@ -444,8 +477,8 @@ export class GridCanvas {
                         );
                     }
                     if ((!h.bracketMatch && h.underline) || h.undercurl || h.strikethrough) {
-                        if (h.special !== undefined) {
-                            foreground(color(h.special));
+                        if (style.special !== undefined) {
+                            foreground(style.special);
                         }
                         ctx.fillRect(
                             x,

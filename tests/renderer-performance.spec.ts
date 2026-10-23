@@ -484,9 +484,15 @@ test('row text reuses styles without leaking CodeLens, bold, italic or underline
             const font = Object.getOwnPropertyDescriptor(proto, 'font')!;
             const fill = Object.getOwnPropertyDescriptor(proto, 'fillStyle')!;
             const text = proto.fillText;
+            const numberToString = Number.prototype.toString;
             const styles: Record<string, { font: string; color: string }> = {};
             let fonts = 0,
-                colors = 0;
+                colors = 0,
+                conversions = 0;
+            Number.prototype.toString = function (this: number, radix?: number): string {
+                if (radix === 16) conversions++;
+                return numberToString.call(this, radix);
+            };
             Object.defineProperty(proto, 'font', {
                 ...font,
                 set(value) {
@@ -510,16 +516,28 @@ test('row text reuses styles without leaking CodeLens, bold, italic or underline
                     grid.draw(canvas, 720, 100, 15, 'monospace', false, undefined, 19, 400);
                 draw();
                 const initialStyles = { ...styles };
-                fonts = colors = 0;
+                fonts = colors = conversions = 0;
                 for (let i = 0; i < 20; i++) {
                     grid.apply([['grid_line', [1, 0, 10, [[String(i % 10), 1]]]], ['flush']]);
                     draw();
                 }
-                return { styles: initialStyles, fonts, colors };
+                const work = { fonts, colors, conversions };
+                grid.apply([
+                    ['default_colors_set', [0xaabbcc, 0x112233]],
+                    [
+                        'hl_attr_define',
+                        [1, { foreground: 0x123456, italic: true }, {}, []],
+                        [5, { reverse: true }, {}, []]
+                    ],
+                    ['flush']
+                ]);
+                grid.draw(canvas, 720, 100, 18, 'serif', false, undefined, 23, 500);
+                return { styles: initialStyles, updated: { ...styles }, ...work };
             } finally {
                 Object.defineProperty(proto, 'font', font);
                 Object.defineProperty(proto, 'fillStyle', fill);
                 proto.fillText = text;
+                Number.prototype.toString = numberToString;
             }
         },
         `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
@@ -537,6 +555,12 @@ test('row text reuses styles without leaking CodeLens, bold, italic or underline
     expect(result.styles.r.color).toBe('#303030');
     expect(result.fonts).toBeLessThanOrEqual(40);
     expect(result.colors).toBeLessThanOrEqual(80);
+    expect(result.conversions).toBeLessThanOrEqual(40);
+    expect(result.updated.a.color).toBe('#123456');
+    expect(result.updated.a.font).toContain('italic');
+    expect(result.updated.a.font).toContain('18px serif');
+    expect(result.updated.L.font).toContain('14.4px');
+    expect(result.updated.r.color).toBe('#112233');
 });
 
 for (const scale of [1, 1.25, 1.5, 2]) {

@@ -422,6 +422,72 @@ test('TypeScript await uses the VS Code control-flow color without recoloring as
     }
 });
 
+test('TypeScript casts and satisfies use VS Code control-flow colors without recoloring properties or text', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        const source = [
+            'const value = input as Shape;',
+            'const config = input satisfies Shape;',
+            'const tuple = [1] as const;',
+            'const nested = (input as Shape);',
+            'import { value as alias } from "./lib";',
+            'export { value as alias };',
+            'const object = { as : input, satisfies: input };',
+            'object.as; object.satisfies;',
+            'const text = "as satisfies";',
+            '// as satisfies',
+            'const template = `as satisfies`;',
+            'const shorthand = { as, satisfies };',
+            'const multiline = (input',
+            '  as Shape) satisfies Shape;',
+            'const methods = { as() {}, satisfies() {} };',
+            'const callback = input as (() => void);',
+            'const typed = input as (Shape);',
+            'const nested = { value: input as Shape, config: input satisfies Shape };'
+        ];
+        for (const path of ['sample.ts', 'sample.tsx']) {
+            const [lines] = await session.highlightSources(path, source.join('\n'), '');
+            const ink = (row: number, word: string): string | undefined => {
+                const column = source[row].indexOf(word);
+                let end = 0;
+                return lines[row].find((span) => (end += span.text.length) > column)?.color;
+            };
+            for (const row of [0, 2, 3, 4, 5]) {
+                assert.equal(ink(row, 'as'), '#c586c0', `${path}:${row + 1}: as`);
+            }
+            assert.equal(ink(1, 'satisfies'), '#c586c0', `${path}: satisfies`);
+            for (const row of [0, 1, 3]) {
+                assert.equal(ink(row, 'Shape'), '#4ec9b0', `${path}: user-defined types`);
+            }
+            assert.equal(ink(2, 'const;'), '#569cd6', `${path}: const assertion`);
+            assert.equal(ink(13, 'as'), '#c586c0', `${path}: multiline assertion`);
+            assert.equal(ink(13, 'satisfies'), '#c586c0', `${path}: parenthesized constraint`);
+            for (const row of [15, 16, 17]) {
+                assert.equal(ink(row, 'as'), '#c586c0', `${path}: nested assertion`);
+            }
+            assert.equal(ink(17, 'satisfies'), '#c586c0', `${path}: nested constraint`);
+            assert.equal(ink(15, 'void'), '#4ec9b0', `${path}: function type`);
+            assert.equal(ink(16, 'Shape'), '#4ec9b0', `${path}: parenthesized type`);
+            for (const row of [6, 7, 11, 14]) {
+                for (const word of ['as', 'satisfies']) {
+                    assert.equal(ink(row, word), '#9cdcfe', `${path}: property ${word}`);
+                }
+            }
+            for (const [row, color] of [
+                [8, '#ce9178'],
+                [9, '#6a9955'],
+                [10, '#ce9178']
+            ] as const) {
+                for (const word of ['as', 'satisfies']) {
+                    assert.equal(ink(row, word), color, `${path}: text ${word}`);
+                }
+            }
+        }
+    } finally {
+        await session.stop();
+    }
+});
+
 test('Dark Modern syntax colors match the official palette in TypeScript, TSX and Rust previews', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-dark-modern-'));
     let session: Session | undefined;

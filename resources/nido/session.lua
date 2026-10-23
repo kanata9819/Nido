@@ -164,9 +164,15 @@ end
 local function lsp_status()
   local clients = {}
   local tasks = {}
+  local buffer = vim.api.nvim_get_current_buf()
+  -- get_clients({bufnr=0}) filters the same live list by attached_buffers.
+  -- Reuse this enumeration without caching initialization, progress or exits.
   for _, client in ipairs(vim.lsp.get_clients()) do
     if not client.initialized then
       table.insert(tasks, client.name .. ': 起動中…')
+    end
+    if client.initialized and client.attached_buffers[buffer] then
+      table.insert(clients, client.name)
     end
     for _, value in pairs(progress[client.id] or {}) do
       local message = client.name .. ': ' .. (value.title or '読み込み中')
@@ -180,11 +186,6 @@ local function lsp_status()
     end
   end
   table.sort(tasks)
-  for _, client in ipairs(vim.lsp.get_clients({ bufnr = 0 })) do
-    if client.initialized then
-      table.insert(clients, client.name)
-    end
-  end
   return table.concat(clients, ', '), table.concat(tasks, ' / ')
 end
 

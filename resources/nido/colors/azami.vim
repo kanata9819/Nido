@@ -118,14 +118,14 @@ for color, groups in pairs({
   [c.vscPink] = {
     'typescriptTry', 'typescriptExceptions', 'typescriptBranch', 'typescriptCase', 'typescriptDefault',
     'typescriptConditional', 'typescriptConditionalElse', 'typescriptRepeat', 'typescriptStatementKeyword',
-    'typescriptImport', 'typescriptExport', 'typescriptAsyncFunc', 'typescriptAwait',
+    'typescriptImport', 'typescriptExport', 'typescriptAsyncFunc', 'typescriptAwait', 'typescriptCastKeyword',
     '@keyword.conditional', '@keyword.repeat', '@keyword.exception', '@lsp.typemod.keyword.controlFlow',
   },
   [c.vscBlue] = {
     'typescriptVariable', 'typescriptFuncKeyword', 'typescriptAsyncFuncKeyword', 'typescriptObjectAsyncKeyword',
     'typescriptClassKeyword', 'typescriptInterfaceKeyword', 'typescriptAliasKeyword', 'typescriptEnumKeyword',
-    'typescriptAccessibilityModifier', 'typescriptReadonlyModifier',
-    'typescriptClassStatic', 'typescriptAbstract', 'typescriptAmbientDeclaration', 'typescriptCastKeyword',
+    'typescriptAccessibilityModifier', 'typescriptReadonlyModifier', 'typescriptConstAssertion',
+    'typescriptClassStatic', 'typescriptAbstract', 'typescriptAmbientDeclaration',
     'typescriptKeywordOp', 'typescriptImportType', 'javaScriptFunction', 'javaScriptNull', 'javaScriptIdentifier',
     '@lsp.type.macro.rust', '@lsp.type.procMacro.rust',
   },

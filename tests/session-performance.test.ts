@@ -8,6 +8,125 @@ import { SessionEvents } from '../src/main/sessionEvents';
 import { Grid } from '../src/renderer/src/grid';
 import type { NidoEvent, SessionState, Redraw } from '../src/shared/types';
 
+test('cursor state publications enumerate LSP clients once without caching their lifecycle', async (context) => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        const result = await session.client.request('nvim_exec_lua', [
+            `
+local original, notify = vim.lsp.get_clients, vim.rpcnotify
+local enumerations, publications = 0, 0
+vim.lsp.get_clients = function(filter)
+  if debug.getinfo(2, 'n').name == 'lsp_status' then enumerations = enumerations + 1 end
+  return original(filter)
+end
+vim.rpcnotify = function(channel, method, ...)
+  if method == 'nido:state' then publications = publications + 1 end
+  return notify(channel, method, ...)
+end
+local ok, err = pcall(function()
+  for event=1,40 do
+    local before = publications
+    vim.api.nvim_exec_autocmds('CursorMoved', {})
+    assert(vim.wait(1000, function() return publications > before end, 1))
+  end
+end)
+vim.lsp.get_clients, vim.rpcnotify = original, notify
+assert(ok, err)
+assert(enumerations == publications,
+  ('LSP client enumerations=%d for publications=%d'):format(enumerations, publications))
+return {cursorEvents=40, lspClientEnumerations=enumerations, publications=publications}
+`,
+            []
+        ]);
+        context.diagnostic(JSON.stringify(result));
+    } finally {
+        await session.stop();
+    }
+});
+
+test('LSP status keeps global progress and current-buffer names live through lifecycle changes', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.client.request('nvim_exec_lua', [
+            `
+local api = vim.api
+local first, second = api.nvim_get_current_buf(), api.nvim_create_buf(true, false)
+local original, notify = vim.lsp.get_clients, vim.rpcnotify
+local clients = {
+  {id=902, name='beta', initialized=true, attached_buffers={[first]=true}},
+  {id=901, name='alpha', initialized=true, attached_buffers={[second]=true}},
+  {id=903, name='starting', initialized=false, attached_buffers={[first]=true}},
+  {id=904, name='global', initialized=true, attached_buffers={}},
+}
+local state, publications = nil, 0
+vim.lsp.get_clients = function(filter)
+  -- Keep all other editor features on real clients. Match Neovim's public
+  -- get_clients filtering and ordering for the status publication alone.
+  if debug.getinfo(2, 'n').name ~= 'lsp_status' then return original(filter) end
+  local result = {}
+  for _, client in ipairs(clients) do
+    local buffer = filter and filter.bufnr
+    if client.initialized and (buffer == nil or client.attached_buffers[buffer == 0
+        and api.nvim_get_current_buf() or buffer]) then
+      result[#result+1] = client
+    end
+  end
+  return result
+end
+vim.rpcnotify = function(channel, method, ...)
+  if method == 'nido:state' then
+    state, publications = ..., publications + 1
+  end
+  return notify(channel, method, ...)
+end
+local function published(event, options)
+  local before = publications
+  api.nvim_exec_autocmds(event or 'CursorMoved', options or {})
+  assert(vim.wait(1000, function() return publications > before end, 1))
+  return state
+end
+local function progress(id, token, value)
+  return published('LspProgress', {data={client_id=id, params={token=token, value=value}}})
+end
+local ok, err = pcall(function()
+  assert(published().lsp == 'beta', 'only initialized clients attached to current buffer are shown')
+  progress(901, 'index', {kind='begin', title='Index', message='workspace', percentage=42})
+  progress(904, 'load', {kind='begin', title='Load'})
+  assert(state.lspProgress == 'alpha: Index — workspace (42%) / global: Load', vim.inspect(state))
+  progress(903, 'init', {kind='begin', title='Initialize'})
+  assert(not state.lspProgress:find('starting', 1, true), 'uninitialized clients keep get_clients semantics')
+  clients[3].initialized = true
+  published('LspAttach', {buffer=first, data={client_id=903}})
+  assert(state.lsp == 'beta, starting', 'client list retains enumeration order')
+  assert(state.lspProgress:find('starting: Initialize', 1, true), 'initialized clients become visible immediately')
+  clients[2].attached_buffers[first] = true
+  published('LspAttach', {buffer=first, data={client_id=901}})
+  assert(state.lsp == 'beta, alpha, starting', 'newly attached clients appear without a cache')
+  clients[1].attached_buffers[first] = nil
+  published('LspDetach', {buffer=first, data={client_id=902}})
+  assert(state.lsp == 'alpha, starting', 'detached clients disappear')
+  api.nvim_set_current_buf(second)
+  assert(published('BufEnter', {buffer=second}).lsp == 'alpha', 'buffer switches use the new attachment set')
+  progress(901, 'index', {kind='report', percentage=80})
+  assert(state.lspProgress:find('alpha: Index — workspace (80%)', 1, true), 'progress reports retain their title')
+  table.remove(clients, 2)
+  published('LspDetach', {buffer=second, data={client_id=901}})
+  assert(state.lsp == '' and not state.lspProgress:find('alpha', 1, true), 'exited clients and progress disappear')
+  progress(904, 'load', {kind='end'})
+  assert(state.lspProgress == 'starting: Initialize', 'finished progress disappears')
+  clients = {}
+  assert(published().lspProgress == '' and state.lsp == '', 'missing clients leave no stale status')
+end)
+vim.lsp.get_clients, vim.rpcnotify = original, notify
+assert(ok, err)
+`,
+            []
+        ]);
+    } finally {
+        await session.stop();
+    }
+});
+
 test('local LSP text edits avoid reading the full document and preserve UTF-16 ranges', async (context) => {
     const session = await Session.create(process.cwd(), () => {});
     try {

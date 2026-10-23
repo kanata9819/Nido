@@ -8,3 +8,11 @@ syntax match typescriptProp contained /\K\k*!\?/ contains=@props nextgroup=@afte
 " Native syntax groups await with async; VS Code treats only await as control flow.
 syntax keyword typescriptAwait await nextgroup=@typescriptValue,typescriptUsing skipwhite
 syntax cluster typescriptTopExpression add=typescriptAwait
+
+" Matches let object-key context take priority over these contextual keywords.
+syntax clear typescriptCastKeyword
+syntax match typescriptCastKeyword /\<as\>/ nextgroup=typescriptConstAssertion,@typescriptType skipwhite
+syntax match typescriptCastKeyword /\<satisfies\>/ nextgroup=@typescriptType skipwhite
+syntax match typescriptObjectLabel contained /\k\+\_s*/ nextgroup=typescriptObjectColon,@typescriptCallImpl skipwhite skipempty
+" A const assertion is a modifier, while named types after as retain type colors.
+syntax keyword typescriptConstAssertion const contained nextgroup=@typescriptTypeOperator skipwhite skipempty
