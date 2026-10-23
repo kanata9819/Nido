@@ -24,6 +24,7 @@ export const windowsBaselineCases = [
     'Rust debugger keyboard controls stop, inspect and step in the packaged app',
     'normal shutdown restores workspace order, active file and cursors',
     'window size and maximized state survive restart',
+    'window commands minimize, maximize, restore and close from the keyboard with unsaved protection',
     'clicking editor glyphs moves the cursor, including wide text and detached pixel scrolling',
     'acrylic switches live without losing edits and persists across restarts',
     'upward touchpad gestures stop at the first row while replies are delayed',

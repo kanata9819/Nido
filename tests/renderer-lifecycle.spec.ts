@@ -2225,6 +2225,277 @@ test('an invalid saved language safely opens the English interface', async ({ pa
     await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveValue('en');
 });
 
+const windowCommands = [
+    {
+        key: '-',
+        stroke: 'Minus',
+        action: 'minimize',
+        en: 'Minimize window',
+        ja: 'ウィンドウを最小化'
+    },
+    {
+        key: '+',
+        stroke: 'Shift+Equal',
+        action: 'maximize',
+        en: 'Maximize or restore window',
+        ja: 'ウィンドウを最大化・元に戻す'
+    },
+    { key: 'q', stroke: 'q', action: 'close', en: 'Quit Nido', ja: 'Nidoを終了' }
+] as const;
+
+async function recordedWindowActions(page: Page): Promise<unknown[][]> {
+    return page.evaluate(() =>
+        window.rendererTest.calls
+            .filter((call) => call.method === 'windowAction')
+            .map((call) => call.args)
+    );
+}
+
+for (const language of ['en', 'ja'] as const) {
+    test(`window commands show translated leader keys and return editor focus in ${language}`, async ({
+        page
+    }, testInfo) => {
+        await page.setViewportSize({ width: 850, height: 560 });
+        await page.addInitScript((language) => {
+            localStorage.setItem('nido.language', language);
+            localStorage.setItem('nido.animations', 'false');
+        }, language);
+        await page.goto(`${origin}?view=app`);
+        const input = page.getByRole('textbox', {
+            name: language === 'ja' ? 'Neovim入力' : 'Neovim input',
+            exact: true
+        });
+        const guide = page.getByRole('dialog', {
+            name: language === 'ja' ? 'キーボードコマンド' : 'Keyboard commands',
+            exact: true
+        });
+        const palette = page.getByRole('dialog', {
+            name: language === 'ja' ? 'すべてのコマンド' : 'commands palette',
+            exact: true
+        });
+        await expect(input).toBeFocused();
+        const expected: string[][] = [];
+        for (const command of windowCommands) {
+            await page.keyboard.press('Space');
+            await expect(guide).toBeVisible();
+            const layout = await guide.evaluate((node) => {
+                const bounds = node.getBoundingClientRect();
+                return {
+                    inViewport:
+                        bounds.x >= 0 &&
+                        bounds.y >= 0 &&
+                        bounds.right <= innerWidth &&
+                        bounds.bottom <= innerHeight,
+                    clipped: [...node.querySelectorAll('button')]
+                        .filter((button) => {
+                            const range = document.createRange();
+                            range.selectNodeContents(button);
+                            const content = range.getBoundingClientRect();
+                            const box = button.getBoundingClientRect();
+                            return (
+                                button.scrollWidth > button.clientWidth + 1 ||
+                                button.scrollHeight > button.clientHeight + 1 ||
+                                content.left < box.left - 1 ||
+                                content.right > box.right + 1 ||
+                                content.top < box.top - 1 ||
+                                content.bottom > box.bottom + 1
+                            );
+                        })
+                        .map((button) => button.textContent)
+                };
+            });
+            expect(layout).toEqual({ inViewport: true, clipped: [] });
+            if (command.key === '-') {
+                await page.screenshot({
+                    path: testInfo.outputPath(`window-guide-${language}.png`)
+                });
+            }
+            for (const entry of windowCommands) {
+                const button = guide.getByRole('button').filter({ hasText: entry[language] });
+                await expect(button).toHaveCount(1);
+                await expect(button.locator('kbd')).toHaveText(entry.key);
+            }
+            await page.keyboard.press(command.stroke);
+            expected.push([command.action]);
+            await expect.poll(() => recordedWindowActions(page)).toEqual(expected);
+            await expect(guide).toHaveCount(0);
+            await expect(palette).toHaveCount(0);
+            await expect(input).toBeFocused();
+        }
+        for (const command of windowCommands) {
+            await page.keyboard.press('Control+Shift+p');
+            await expect(palette).toBeVisible();
+            const filter = page.getByRole('textbox', {
+                name: language === 'ja' ? '項目を絞り込む' : 'Filter items',
+                exact: true
+            });
+            await filter.fill(command[language]);
+            await expect(
+                palette.getByRole('button').filter({ hasText: command[language] })
+            ).toHaveCount(1);
+            await filter.press('Enter');
+            expected.push([command.action]);
+            await expect.poll(() => recordedWindowActions(page)).toEqual(expected);
+            await expect(palette).toHaveCount(0);
+            await expect(guide).toHaveCount(0);
+            await expect(input).toBeFocused();
+        }
+    });
+}
+
+for (const view of ['welcome', 'terminal'] as const) {
+    test(`window commands remain available from the ${view} command palette`, async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('nido.language', 'en');
+            localStorage.setItem('nido.animations', 'false');
+        });
+        await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+        await page.evaluate((view) => {
+            window.rendererTest.settle('restoreWorkspaces', 0, {
+                workspaces:
+                    view === 'terminal'
+                        ? [{ id: 'shell', root: '/alpha', name: 'Shell', kind: 'terminal' }]
+                        : [],
+                active: view === 'terminal' ? 'shell' : '',
+                errors: []
+            });
+        }, view);
+        if (view === 'terminal') {
+            await expect(page.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+        } else {
+            await expect(
+                page.getByRole('heading', { name: 'Make yourself at home.' })
+            ).toBeVisible();
+        }
+        const expected: string[][] = [];
+        for (const command of windowCommands) {
+            await page.keyboard.press('Control+Shift+p');
+            const palette = page.getByRole('dialog', { name: 'commands palette', exact: true });
+            await expect(palette).toBeVisible();
+            const filter = page.getByRole('textbox', { name: 'Filter items', exact: true });
+            await filter.fill(command.en);
+            await expect(palette.getByRole('button').filter({ hasText: command.en })).toHaveCount(
+                1
+            );
+            await filter.press('Enter');
+            expected.push([command.action]);
+            await expect.poll(() => recordedWindowActions(page)).toEqual(expected);
+            await expect(palette).toHaveCount(0);
+            if (view === 'terminal') {
+                await expect(page.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+            }
+        }
+    });
+}
+
+test('window commands preserve Insert-mode spaces and punctuation during a pending mode check', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app&defer=inputMode`);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.type(' -+q');
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    window.rendererTest.pending.filter((call) => call.method === 'inputMode').length
+            )
+        )
+        .toBe(1);
+    await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'i'));
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'input')
+                    .map((call) => call.args[1])
+                    .join('')
+            )
+        )
+        .toBe(' -+q');
+    expect(await recordedWindowActions(page)).toEqual([]);
+    await expect(page.getByRole('dialog', { name: 'Keyboard commands' })).toHaveCount(0);
+});
+
+test('window commands leave IME-owned spaces and punctuation with composition', async ({
+    page
+}) => {
+    await page.goto(`${origin}?view=app`);
+    const input = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(input).toBeFocused();
+    const accepted = await input.evaluate((node: HTMLTextAreaElement) => {
+        node.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+        const accepted = [' ', '-', '+', 'q'].map((key) =>
+            node.dispatchEvent(
+                new KeyboardEvent('keydown', {
+                    key,
+                    keyCode: 229,
+                    isComposing: true,
+                    bubbles: true,
+                    cancelable: true
+                })
+            )
+        );
+        node.value = ' -+q 日本語';
+        node.dispatchEvent(
+            new InputEvent('input', {
+                data: node.value,
+                inputType: 'insertCompositionText',
+                isComposing: true,
+                bubbles: true
+            })
+        );
+        node.dispatchEvent(
+            new CompositionEvent('compositionend', { data: node.value, bubbles: true })
+        );
+        return accepted;
+    });
+    expect(accepted).toEqual([true, true, true, true]);
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'input')
+                    .map((call) => call.args[1])
+            )
+        )
+        .toEqual([' -+q 日本語']);
+    expect(await recordedWindowActions(page)).toEqual([]);
+    await expect(page.getByRole('dialog', { name: 'Keyboard commands' })).toHaveCount(0);
+});
+
+test('window commands preserve AltGr spaces and punctuation as editor input', async ({ page }) => {
+    await page.goto(`${origin}?view=app`);
+    const input = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(input).toBeFocused();
+    await input.evaluate((node) => {
+        for (const key of [' ', '-', '+', 'q']) {
+            node.dispatchEvent(
+                new KeyboardEvent('keydown', {
+                    key,
+                    ctrlKey: true,
+                    altKey: true,
+                    modifierAltGraph: true,
+                    bubbles: true,
+                    cancelable: true
+                })
+            );
+        }
+    });
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                window.rendererTest.calls
+                    .filter((call) => call.method === 'input')
+                    .map((call) => call.args[1])
+                    .join('')
+            )
+        )
+        .toBe(' -+q');
+    expect(await recordedWindowActions(page)).toEqual([]);
+    await expect(page.getByRole('dialog', { name: 'Keyboard commands' })).toHaveCount(0);
+});
+
 test('IME transition keys stay with composition before its start and after its commit', async ({
     page
 }) => {

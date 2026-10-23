@@ -156,19 +156,21 @@ export default function TitleBar({
             <div className={styles.windowControls}>
                 <button
                     aria-label={t('Minimize')}
+                    title={t('Minimize (Space -)')}
                     onClick={() => run(window.nido.windowAction('minimize'))}
                 >
                     <Minus size={15} />
                 </button>
                 <button
                     aria-label={t(maximized ? 'Restore window' : 'Maximize')}
-                    title={t(maximized ? 'Restore window' : 'Maximize')}
+                    title={t(maximized ? 'Restore window (Space +)' : 'Maximize (Space +)')}
                     onClick={() => run(window.nido.windowAction('maximize'))}
                 >
                     {maximized ? <Copy size={12} /> : <Square size={12} />}
                 </button>
                 <button
                     aria-label={t('Close Nido')}
+                    title={t('Close Nido (Space q)')}
                     onClick={() => run(window.nido.windowAction('close'))}
                 >
                     <X size={17} />

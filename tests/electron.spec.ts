@@ -2210,6 +2210,128 @@ test('smooth cursor movement and blink animate and persist their settings', asyn
     }
 });
 
+test('window commands minimize, maximize, restore and close from the keyboard with unsaved protection', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-window-keyboard-'));
+    const path = join(root, 'notes.txt');
+    await writeFile(path, 'original\n');
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const running = await electron.launch({
+        args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+        env
+    });
+    let closed = false;
+    try {
+        const page = await running.firstWindow();
+        const editor = page.getByRole('textbox', { name: 'Neovim input' });
+        const guide = page.getByRole('dialog', { name: 'Keyboard commands' });
+        const command = async (title: string): Promise<void> => {
+            await page.keyboard.press('Control+Shift+p');
+            await expect(page.getByRole('textbox', { name: 'Filter items' })).toBeFocused();
+            await page.keyboard.type(title);
+            await page.keyboard.press('Enter');
+        };
+        const isMaximized = (): Promise<boolean> =>
+            running.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized());
+        const minimizeAndReturn = async (): Promise<void> => {
+            await expect
+                .poll(() =>
+                    running.evaluate(({ BrowserWindow }) =>
+                        BrowserWindow.getAllWindows()[0].isMinimized()
+                    )
+                )
+                .toBe(true);
+            // Returning to a minimized app is handled by Windows (for example, Alt+Tab).
+            // Restore only the fixture window so the next keyboard action can reach it.
+            await running.evaluate(({ BrowserWindow }) => {
+                const window = BrowserWindow.getAllWindows()[0];
+                window.restore();
+                window.focus();
+            });
+            await page.bringToFront();
+            await expect(page.getByRole('dialog', { name: 'commands palette' })).toHaveCount(0);
+            await expect(guide).toHaveCount(0);
+        };
+        await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+        await command('Maximize or restore window');
+        await expect.poll(isMaximized).toBe(true);
+        await command('Maximize or restore window');
+        await expect.poll(isMaximized).toBe(false);
+        await command('Minimize window');
+        await minimizeAndReturn();
+
+        await page.keyboard.press('Control+Shift+n');
+        await chooseWorkspace(page, root);
+        await expect(editor).toBeFocused();
+        await page.keyboard.type(':edit notes.txt');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('tab', { name: 'notes.txt', exact: true })).toBeVisible();
+        const canvas = page.locator('canvas:visible');
+        await expect(canvas).toHaveAttribute('aria-description', /original/);
+
+        await page.keyboard.press('Space');
+        for (const title of ['Minimize window', 'Maximize or restore window', 'Quit Nido']) {
+            await expect(guide.getByRole('button', { name: title, exact: false })).toBeVisible();
+        }
+        await page.keyboard.press('+');
+        await expect.poll(isMaximized).toBe(true);
+        await expect(guide).toHaveCount(0);
+        await expect(editor).toBeFocused();
+        await page.keyboard.press('Space');
+        await page.keyboard.press('+');
+        await expect.poll(isMaximized).toBe(false);
+        await page.keyboard.press('Space');
+        await page.keyboard.press('-');
+        await minimizeAndReturn();
+        await expect(editor).toBeFocused();
+
+        await page.keyboard.type('gg0iunsaved ');
+        await page.keyboard.press('Escape');
+        await expect(canvas).toHaveAttribute('aria-description', /unsaved original/);
+        await running.evaluate(({ dialog }) => {
+            const probe = dialog as typeof dialog & { windowKeyboardPrompts: number };
+            probe.windowKeyboardPrompts = 0;
+            dialog.showMessageBox = async () => {
+                probe.windowKeyboardPrompts++;
+                return { response: 1, checkboxChecked: false };
+            };
+        });
+        await page.keyboard.press('Space');
+        await page.keyboard.press('q');
+        await expect
+            .poll(() =>
+                running.evaluate(
+                    ({ dialog }) =>
+                        (dialog as typeof dialog & { windowKeyboardPrompts: number })
+                            .windowKeyboardPrompts
+                )
+            )
+            .toBe(1);
+        await expect(editor).toBeFocused();
+        await expect(guide).toHaveCount(0);
+        await expect(canvas).toHaveAttribute('aria-description', /unsaved original/);
+        assert.equal(await readSavedFile(path), 'original\n');
+
+        await page.keyboard.type('A kept');
+        await page.keyboard.press('Escape');
+        await expect(canvas).toHaveAttribute('aria-description', /unsaved original kept/);
+        await running.evaluate(({ dialog }) => {
+            dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
+        });
+        const didClose = running.waitForEvent('close');
+        await command('Quit Nido');
+        await didClose;
+        closed = true;
+        assert.equal(await readSavedFile(path), 'unsaved original kept\n');
+    } finally {
+        if (!closed) {
+            await running.evaluate(({ app }) => app.exit(0));
+        }
+        await running.close();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});
+
 test('window size and maximized state survive restart', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-window-'));
     const env = { ...process.env };

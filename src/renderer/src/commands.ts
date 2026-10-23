@@ -293,10 +293,31 @@ export function buildItems(
             run: () => showPanel('settings')
         },
         {
+            key: '-',
+            title: 'Minimize window',
+            detail: 'Hide the window in the taskbar',
+            run: () => {
+                focusEditor();
+                run(window.nido.windowAction('minimize'));
+            }
+        },
+        {
+            key: '+',
+            title: 'Maximize or restore window',
+            detail: 'Toggle between maximized and normal size',
+            run: () => {
+                focusEditor();
+                run(window.nido.windowAction('maximize'));
+            }
+        },
+        {
             key: 'q',
             title: 'Quit Nido',
             detail: 'Prompts for unsaved changes',
-            run: () => run(window.nido.windowAction('close'))
+            run: () => {
+                focusEditor();
+                run(window.nido.windowAction('close'));
+            }
         }
     ].map((command) => ({
         ...command,

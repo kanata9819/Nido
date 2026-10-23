@@ -28,7 +28,21 @@ export default function KeyboardGuide({
                     <div className={styles.leaderGrid}>
                         {commands
                             .filter((c) =>
-                                ['w', 'f', 'b', 'e', 'n', ',', 's', 'x', 'g', 'D'].includes(c.key)
+                                [
+                                    'w',
+                                    'f',
+                                    'b',
+                                    'e',
+                                    'n',
+                                    ',',
+                                    's',
+                                    'x',
+                                    'g',
+                                    'D',
+                                    '-',
+                                    '+',
+                                    'q'
+                                ].includes(c.key)
                             )
                             .map((c) => (
                                 <button key={c.key} onClick={c.run}>
