@@ -2401,6 +2401,21 @@ for (const language of ['en', 'ja'] as const) {
                         bounds.y >= 0 &&
                         bounds.right <= innerWidth &&
                         bounds.bottom <= innerHeight,
+                    wrapped: [...node.querySelectorAll('button')]
+                        .filter((button) =>
+                            [...button.childNodes].some((child) => {
+                                if (
+                                    child.nodeType !== Node.TEXT_NODE ||
+                                    !child.textContent?.trim()
+                                ) {
+                                    return false;
+                                }
+                                const range = document.createRange();
+                                range.selectNodeContents(child);
+                                return range.getClientRects().length > 1;
+                            })
+                        )
+                        .map((button) => button.textContent),
                     clipped: [...node.querySelectorAll('button')]
                         .filter((button) => {
                             const range = document.createRange();
@@ -2419,7 +2434,7 @@ for (const language of ['en', 'ja'] as const) {
                         .map((button) => button.textContent)
                 };
             });
-            expect(layout).toEqual({ inViewport: true, clipped: [] });
+            expect(layout).toEqual({ inViewport: true, wrapped: [], clipped: [] });
             if (command.key === '-') {
                 await page.screenshot({
                     path: testInfo.outputPath(`window-guide-${language}.png`)
