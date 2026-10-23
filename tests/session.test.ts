@@ -372,6 +372,56 @@ test('TypeScript import bindings and type-only keywords use the reference theme 
     }
 });
 
+test('TypeScript await uses the VS Code control-flow color without recoloring async or text', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        const source = [
+            'async function load() {',
+            "  await client.request('ok');",
+            '  return await pending;',
+            '}',
+            'const loadMore = async () => await (pending);',
+            'for await (const item of items) {}',
+            'await using resource = open();',
+            'object.await;',
+            'const object = { await: pending };',
+            'const text = "await";',
+            '// await',
+            'const template = `await`;'
+        ];
+        const expected: [number, string, string][] = [
+            [0, 'async', '#569cd6'],
+            [1, 'await', '#c586c0'],
+            [2, 'await', '#c586c0'],
+            [4, 'async', '#569cd6'],
+            [4, 'await', '#c586c0'],
+            [5, 'await', '#c586c0'],
+            [6, 'await', '#c586c0'],
+            [9, 'await', '#ce9178'],
+            [10, 'await', '#6a9955'],
+            [11, 'await', '#ce9178']
+        ];
+        for (const path of ['sample.ts', 'sample.tsx']) {
+            const [lines] = await session.highlightSources(path, source.join('\n'), '');
+            for (const [row, word, color] of expected) {
+                const column = source[row].indexOf(word);
+                let end = 0;
+                const span = lines[row].find((span) => (end += span.text.length) > column);
+                assert.equal(span?.color, color, `${path}:${row + 1}: ${word}`);
+            }
+            for (const row of [7, 8]) {
+                assert.notEqual(
+                    lines[row].find((span) => span.text.includes('await'))?.color,
+                    '#c586c0',
+                    `${path}:${row + 1}: a property named await is not control flow`
+                );
+            }
+        }
+    } finally {
+        await session.stop();
+    }
+});
+
 test('Dark Modern syntax colors match the official palette in TypeScript, TSX and Rust previews', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-dark-modern-'));
     let session: Session | undefined;
