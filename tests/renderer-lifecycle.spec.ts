@@ -869,6 +869,121 @@ test('diagnostic cards scroll long messages, stay inside the editor and clear on
     await expect(editor).toBeFocused();
 });
 
+test('type information ignores documentation failures from replaced or closed cards', async ({
+    page
+}) => {
+    await page.addInitScript(() => localStorage.setItem('nido.animations', 'false'));
+    await page.goto(`${origin}?view=app&defer=openDocumentation`);
+    const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+    const card = page.getByRole('dialog', { name: 'Type information', exact: true });
+    await expect(editor).toBeFocused();
+    const show = async (markdown: string): Promise<void> => {
+        await page.evaluate(
+            (markdown) =>
+                window.rendererTest.emit({
+                    type: 'hover',
+                    id: 'alpha',
+                    markdown,
+                    filetype: 'rust',
+                    codeBlocks: []
+                }),
+            markdown
+        );
+        await expect(card).toContainText(markdown.match(/\[([^\]]+)\]/)?.[1] || markdown);
+    };
+    await show('[Old docs](https://example.com/old)');
+    await card.getByRole('link', { name: 'Old docs', exact: true }).click();
+    await show('[Current docs](https://example.com/current)');
+    await card.getByRole('link', { name: 'Current docs', exact: true }).click();
+    await page.evaluate(() =>
+        window.rendererTest.settle('openDocumentation', 0, 'Obsolete documentation failure', true)
+    );
+    await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    );
+    await expect(card.getByRole('alert')).toHaveCount(0);
+    await page.evaluate(() =>
+        window.rendererTest.settle('openDocumentation', 0, 'Current documentation failure', true)
+    );
+    await expect(card.getByRole('alert')).toHaveText('Current documentation failure');
+    await show('[Closing docs](https://example.com/closing)');
+    await card.getByRole('link', { name: 'Closing docs', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await expect(card).toHaveCount(0);
+    await expect(editor).toBeFocused();
+    await show('A newly opened type card');
+    await page.evaluate(() =>
+        window.rendererTest.settle('openDocumentation', 0, 'Closed documentation failure', true)
+    );
+    await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    );
+    await expect(card.getByRole('alert')).toHaveCount(0);
+    expect(
+        await page.evaluate(() =>
+            window.rendererTest.calls
+                .filter((call) => call.method === 'openDocumentation')
+                .map((call) => call.args)
+        )
+    ).toEqual([
+        ['https://example.com/old'],
+        ['https://example.com/current'],
+        ['https://example.com/closing']
+    ]);
+});
+
+test('passive diagnostics return focus from replaced type information without stealing outside focus', async ({
+    page
+}) => {
+    await page.addInitScript(() => localStorage.setItem('nido.animations', 'false'));
+    await page.goto(`${origin}?view=app`);
+    const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+    const card = page.getByRole('dialog', { name: 'Type information', exact: true });
+    const diagnostics = page.getByRole('dialog', { name: 'Diagnostic details', exact: true });
+    const showType = async (): Promise<void> => {
+        await page.evaluate(() =>
+            window.rendererTest.emit({
+                type: 'hover',
+                id: 'alpha',
+                markdown: 'Type details being read',
+                filetype: 'rust',
+                codeBlocks: []
+            })
+        );
+        await expect(page.getByLabel('Type information content', { exact: true })).toBeFocused();
+    };
+    const showPassiveDiagnostics = async (): Promise<void> => {
+        await page.evaluate(
+            (items) =>
+                window.rendererTest.emit({ type: 'diagnostics', id: 'alpha', items, focus: false }),
+            diagnosticItems
+        );
+        await expect(card).toHaveCount(0);
+        await expect(diagnostics).toBeVisible();
+    };
+    await expect(editor).toBeFocused();
+    await showType();
+    await showPassiveDiagnostics();
+    await expect(editor).toBeFocused();
+    await page.keyboard.type('a');
+    expect(
+        await page.evaluate(() =>
+            window.rendererTest.calls
+                .filter((call) => call.method === 'input')
+                .map((call) => call.args)
+        )
+    ).toEqual([['alpha', 'a']]);
+    await showType();
+    const settings = page.getByRole('button', { name: 'Settings', exact: true });
+    await settings.focus();
+    await showPassiveDiagnostics();
+    await expect(settings).toBeFocused();
+    await showType();
+    await showDiagnosticCard(page);
+    await expect(card).toHaveCount(0);
+    await expect(page.getByLabel('Diagnostic content', { exact: true })).toBeFocused();
+});
+
 test('Japanese diagnostics use translated labels and leave compiler text intact', async ({
     page
 }) => {

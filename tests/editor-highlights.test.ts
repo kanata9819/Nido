@@ -8,6 +8,114 @@ import { Grid } from '../src/renderer/src/grid';
 import { EditorCursor } from '../src/renderer/src/editorCursor';
 import { setTimeout as delay } from 'node:timers/promises';
 
+test('hover rejects edited text and cancels obsolete requests across cursor, window and buffer changes', async (context) => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        const result = await session.client.request('nvim_exec_lua', [
+            `
+local api, hover = vim.api, require('nido_hover')
+local buffer, win = api.nvim_get_current_buf(), api.nvim_get_current_win()
+api.nvim_buf_set_lines(buffer, 0, -1, false, {'alpha beta'})
+local original_clients, original_request, original_notify = vim.lsp.get_clients, vim.lsp.buf_request_all, vim.rpcnotify
+local requests, messages, cancelled, latest = {}, {}, 0, nil
+vim.lsp.get_clients = function(options)
+  if options and options.method == 'textDocument/hover' then return {{}} end
+  return original_clients(options)
+end
+vim.lsp.buf_request_all = function(_, method, params, callback)
+  assert(method == 'textDocument/hover' and type(params) == 'function')
+  local request = {callback=callback}
+  requests[#requests + 1] = request
+  return function()
+    assert(not request.cancelled, 'a request was cancelled twice')
+    request.cancelled = true
+    cancelled = cancelled + 1
+    callback({[1]={err={message='cancelled hover'}}})
+  end
+end
+vim.rpcnotify = function(channel, method, ...)
+  if method == 'nido:hover' then messages[#messages + 1] = select(1, ...) end
+  return original_notify(channel, method, ...)
+end
+local function reply(index, text)
+  requests[index].callback({[1]={result={contents={kind='markdown', value=text}}}})
+end
+local function absent(text)
+  assert(not vim.tbl_contains(messages, text), 'obsolete hover displayed: ' .. text)
+end
+local ok, err = pcall(function()
+  hover.show()
+  local cursor = api.nvim_win_get_cursor(win)
+  api.nvim_buf_set_text(buffer, 0, 0, 0, 5, {'omega'})
+  assert(vim.deep_equal(cursor, api.nvim_win_get_cursor(win)), 'edit leaves the cursor in place')
+  reply(1, 'before the edit')
+  absent('before the edit')
+
+  for _=1,20 do hover.show() end
+  assert(cancelled == 19, 'new hover requests must cancel their predecessors: ' .. cancelled)
+  absent('cancelled hover')
+  reply(2, 'superseded request')
+  absent('superseded request')
+  reply(21, 'latest description')
+  assert(messages[#messages] == 'latest description')
+
+  hover.show()
+  api.nvim_exec_autocmds('TextChanged', {buffer=buffer})
+  assert(requests[22].cancelled, 'editing must cancel pending hover work')
+  reply(22, 'after TextChanged')
+  absent('after TextChanged')
+
+  hover.show()
+  api.nvim_win_set_cursor(win, {1, 1})
+  api.nvim_exec_autocmds('CursorMoved', {buffer=buffer})
+  assert(requests[23].cancelled, 'cursor movement must cancel pending hover work')
+  reply(23, 'after moving')
+  absent('after moving')
+
+  hover.show()
+  vim.cmd('vsplit')
+  api.nvim_set_current_win(win)
+  assert(requests[24].cancelled, 'leaving a window must cancel even when returning to its cursor')
+  reply(24, 'after a window roundtrip')
+  absent('after a window roundtrip')
+
+  hover.show()
+  vim.cmd('enew')
+  assert(requests[25].cancelled, 'leaving a buffer must cancel pending hover work')
+  reply(25, 'after leaving the buffer')
+  absent('after leaving the buffer')
+  hover.show()
+  reply(26, 'recovered description')
+  assert(messages[#messages] == 'recovered description', 'fresh hover still works after cancellation')
+  hover.show()
+  requests[27].callback({[1]={err={message='hover failed'}}})
+  assert(messages[#messages] == 'hover failed')
+  hover.show()
+  reply(28, 'after a failed request')
+  assert(messages[#messages] == 'after a failed request')
+  latest = messages[#messages]
+  hover.clear()
+  local clears = #messages
+  for _=1,20 do api.nvim_exec_autocmds('TextChanged', {buffer=api.nvim_get_current_buf()}) end
+  assert(#messages == clears, 'editing without a hover must not send empty cards')
+  hover.show()
+  api.nvim_exec_autocmds('VimLeavePre', {})
+  assert(requests[29].cancelled, 'shutdown must cancel pending hover work')
+  reply(29, 'after stopping')
+  absent('after stopping')
+end)
+vim.lsp.get_clients, vim.lsp.buf_request_all, vim.rpcnotify = original_clients, original_request, original_notify
+assert(ok, err)
+return {requests=#requests, cancelled=cancelled, latest=latest}
+`,
+            []
+        ]);
+        context.diagnostic(JSON.stringify(result));
+    } finally {
+        await session.stop();
+    }
+});
+
 test('inline diagnostics abbreviate annotations while retaining full keyboard details and clearing old badges', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-inline-diagnostics-'));
     const grid = new Grid();

@@ -3,6 +3,7 @@ import type { SavedLayout } from './persistence';
 /** Coalesce background saves and let shutdown finish after any in-flight write. */
 export class WorkspaceCheckpoints {
     private pending?: Promise<void>;
+    private queued = false;
     private saved?: string;
     private disposed = false;
     private reportedError = false;
@@ -18,6 +19,7 @@ export class WorkspaceCheckpoints {
             return Promise.resolve();
         }
         if (this.pending) {
+            this.queued = true;
             return this.pending;
         }
         this.pending = (async () => {
@@ -41,6 +43,13 @@ export class WorkspaceCheckpoints {
             })
             .finally(() => {
                 this.pending = undefined;
+                if (this.queued && !this.disposed) {
+                    // Save requests received during I/O share one fresh snapshot. Returning
+                    // the follow-up also keeps idle() and the original callers waiting for it.
+                    this.queued = false;
+                    return this.save();
+                }
+                return undefined;
             });
         return this.pending;
     }

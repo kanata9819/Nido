@@ -216,6 +216,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         setActive,
         focusEditor,
         requestEditorFocus: () => setFocusTick((value) => value + 1),
+        captureFocus,
         dismissLeader: () => setLeader(false),
         showFolders: (kind) => {
             setFolderKind(kind);

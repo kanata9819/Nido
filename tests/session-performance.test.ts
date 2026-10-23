@@ -8,6 +8,52 @@ import { SessionEvents } from '../src/main/sessionEvents';
 import { Grid } from '../src/renderer/src/grid';
 import type { NidoEvent, SessionState, Redraw } from '../src/shared/types';
 
+test('local LSP text edits avoid reading the full document and preserve UTF-16 ranges', async (context) => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        const result = await session.client.request('nvim_exec_lua', [
+            `
+local api = vim.api
+local buffer = api.nvim_get_current_buf()
+local lines = {}
+for row=1,5000 do lines[row] = 'left 😀 right' end
+api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
+local original, full_reads = api.nvim_buf_get_lines, 0
+api.nvim_buf_get_lines = function(buf, first, last, strict)
+  if (buf == buffer or buf == 0) and first == 0 and last == -1 then full_reads=full_reads+1 end
+  return original(buf, first, last, strict)
+end
+local ok, err = pcall(function()
+  vim.lsp.util.apply_text_edits({{
+    range={start={line=2499, character=5}, ['end']={line=2499, character=7}}, newText='λ',
+  }}, buffer, 'utf-16')
+  assert(original(buffer, 2499, 2500, false)[1] == 'left λ right', 'UTF-16 edit retains surrounding text')
+  assert(api.nvim_buf_line_count(buffer) == 5000)
+  assert(full_reads == 0, 'a local edit read all 5000 lines: ' .. full_reads)
+  vim.lsp.util.apply_text_edits({{
+    range={start={line=0, character=0}, ['end']={line=0, character=4}}, newText='top',
+  }}, buffer, 'utf-16')
+  assert(original(buffer, 0, 1, false)[1] == 'top 😀 right')
+  assert(full_reads == 0, 'a leading local edit read the full buffer')
+  vim.lsp.util.apply_text_edits({{
+    range={start={line=4998, character=5}, ['end']={line=4999, character=7}}, newText='joined',
+  }}, buffer, 'utf-16')
+  assert(api.nvim_buf_line_count(buffer) == 4999)
+  assert(original(buffer, 4998, 4999, false)[1] == 'left joined right')
+  assert(full_reads == 0, 'a multiline local edit read the full buffer')
+end)
+api.nvim_buf_get_lines = original
+assert(ok, err)
+return {lines=5000, localEdits=3, fullDocumentReads=full_reads}
+`,
+            []
+        ]);
+        context.diagnostic(JSON.stringify(result));
+    } finally {
+        await session.stop();
+    }
+});
+
 test('Git sign refreshes bound pending commands and apply the latest HEAD and unsaved text', async (context) => {
     const session = await Session.create(process.cwd(), () => {});
     try {

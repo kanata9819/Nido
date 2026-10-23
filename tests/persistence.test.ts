@@ -107,6 +107,88 @@ test('failed checkpoint writes are retried without repeated error notifications'
     assert.equal(writes, 1);
 });
 
+test('checkpoints retain the latest save requested during a slow write without overlapping writes', async (context) => {
+    const root = await temporaryRoot(context);
+    let line = 1;
+    let snapshots = 0;
+    let release!: () => void;
+    let started!: () => void;
+    const writing = new Promise<void>((resolve) => {
+        started = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const writes: number[] = [];
+    let active = 0;
+    let maximum = 0;
+    const checkpoints = new WorkspaceCheckpoints(
+        async () => {
+            snapshots++;
+            return layoutFor(root, line);
+        },
+        async (layout) => {
+            maximum = Math.max(maximum, ++active);
+            writes.push(layout.workspaces[0].files[0].line);
+            if (writes.length === 1) {
+                started();
+                await blocked;
+            }
+            active--;
+        },
+        (error) => {
+            throw error;
+        }
+    );
+    const first = checkpoints.save();
+    await writing;
+    for (line = 2; line <= 21; line++) {
+        assert.equal(checkpoints.save(), first);
+    }
+    line = 21;
+    assert.deepEqual(writes, [1]);
+    release();
+    await checkpoints.idle();
+    assert.deepEqual(writes, [1, 21], 'idle includes the newest requested layout');
+    assert.equal(maximum, 1);
+    assert.equal(snapshots, 2, '20 intervening requests share one follow-up snapshot');
+    await checkpoints.save();
+    assert.deepEqual(writes, [1, 21], 'unchanged layouts still avoid disk writes');
+});
+
+test('disposing checkpoints suppresses a queued follow-up after an in-flight write', async (context) => {
+    const root = await temporaryRoot(context);
+    let snapshots = 0;
+    let started!: () => void;
+    let release!: () => void;
+    const writing = new Promise<void>((resolve) => {
+        started = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const checkpoints = new WorkspaceCheckpoints(
+        async () => {
+            snapshots++;
+            return layoutFor(root, snapshots);
+        },
+        async () => {
+            started();
+            await blocked;
+        },
+        (error) => {
+            throw error;
+        }
+    );
+    const first = checkpoints.save();
+    await writing;
+    checkpoints.save();
+    checkpoints.dispose();
+    release();
+    await first;
+    assert.equal(snapshots, 1);
+});
+
 test('disposed checkpoints cannot write a late snapshot after the window closes', async (context) => {
     const root = await temporaryRoot(context);
     let release!: (layout: SavedLayout) => void;

@@ -21,6 +21,7 @@ export default function TypeInformation({
     const t = useI18n();
     const [info, setInfo] = useState<Extract<NidoEvent, { type: 'hover' }>>();
     const [linkError, setLinkError] = useState('');
+    const linkRequest = useRef({ generation: 0 });
     const [previousHidden, setPreviousHidden] = useState(hidden);
     if (hidden !== previousHidden) {
         setPreviousHidden(hidden);
@@ -31,6 +32,7 @@ export default function TypeInformation({
     const card = useRef<HTMLDivElement>(null);
     const body = useRef<HTMLDivElement>(null);
     const close = (): void => {
+        linkRequest.current.generation++;
         setInfo(undefined);
         input.current?.focus();
     };
@@ -39,20 +41,30 @@ export default function TypeInformation({
         if (hidden) {
             return;
         }
-        return window.nido.onEvent((event) => {
+        const requests = linkRequest.current;
+        const unsubscribe = window.nido.onEvent((event) => {
             if (event.type === 'diagnostics' && event.id === id && event.items.length) {
+                requests.generation++;
+                if (!event.focus && card.current?.contains(document.activeElement)) {
+                    input.current?.focus();
+                }
                 setInfo(undefined);
                 return;
             }
             if (event.type !== 'hover' || event.id !== id) {
                 return;
             }
+            requests.generation++;
             setLinkError('');
             if (!event.markdown && card.current?.contains(document.activeElement)) {
                 input.current?.focus();
             }
             setInfo(event.markdown ? event : undefined);
         });
+        return () => {
+            requests.generation++;
+            unsubscribe();
+        };
     }, [id, input, hidden]);
 
     useLayoutEffect(() => {
@@ -83,6 +95,7 @@ export default function TypeInformation({
         observer.observe(element);
         const outside = (event: PointerEvent): void => {
             if (!element.contains(event.target as Node)) {
+                linkRequest.current.generation++;
                 setInfo(undefined);
             }
         };
@@ -210,9 +223,17 @@ export default function TypeInformation({
                                             href={href}
                                             onClick={(event) => {
                                                 event.preventDefault();
+                                                const request = ++linkRequest.current.generation;
                                                 void window.nido
                                                     .openDocumentation(href)
-                                                    .catch((error) => setLinkError(String(error)));
+                                                    .catch((error) => {
+                                                        if (
+                                                            request ===
+                                                            linkRequest.current.generation
+                                                        ) {
+                                                            setLinkError(String(error));
+                                                        }
+                                                    });
                                             }}
                                         >
                                             {children}

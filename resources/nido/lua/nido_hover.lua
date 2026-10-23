@@ -1,5 +1,14 @@
 local M = {}
 local generation = 0
+local pending
+local visible = false
+
+local function invalidate()
+  generation = generation + 1
+  local request = pending
+  pending = nil
+  if request and request.cancel then pcall(request.cancel) end
+end
 
 local function highlight_blocks(markdown)
   local blocks, lines, language = {}, nil, nil
@@ -26,31 +35,40 @@ end
 
 local function send(markdown)
   if vim.g.nido_channel then
+    visible = markdown ~= ''
     vim.rpcnotify(vim.g.nido_channel, 'nido:hover', markdown, vim.bo.filetype, highlight_blocks(markdown))
   end
 end
 
 function M.clear()
-  generation = generation + 1
-  send('')
+  invalidate()
+  if visible then send('') end
 end
 
-vim.api.nvim_create_autocmd({'CursorMoved', 'InsertEnter', 'BufLeave'}, {callback=M.clear})
+vim.api.nvim_create_autocmd({'CursorMoved', 'InsertEnter', 'BufLeave', 'WinLeave'}, {callback=M.clear})
+vim.api.nvim_create_autocmd({'TextChanged', 'TextChangedI', 'TextChangedP'}, {callback=function(event)
+  if event.buf == vim.api.nvim_get_current_buf() then M.clear() end
+end})
+vim.api.nvim_create_autocmd('VimLeavePre', {callback=invalidate})
 
 function M.show()
   require('nido_diagnostics').hide()
-  generation = generation + 1
-  local request = generation
+  invalidate()
+  local request = {generation=generation}
   local buf, win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
   local cursor = vim.api.nvim_win_get_cursor(win)
+  local tick = vim.api.nvim_buf_get_changedtick(buf)
   if #vim.lsp.get_clients({bufnr=buf, method='textDocument/hover'}) == 0 then
     send('Type information is unavailable: no language server is attached to this file.')
     return
   end
-  vim.lsp.buf_request_all(buf, 'textDocument/hover', function(client)
+  pending = request
+  request.cancel = vim.lsp.buf_request_all(buf, 'textDocument/hover', function(client)
     return vim.lsp.util.make_position_params(win, client.offset_encoding)
   end, function(results)
-    if request ~= generation or vim.api.nvim_get_current_buf() ~= buf
+    if pending ~= request or request.generation ~= generation then return end
+    pending = nil
+    if vim.api.nvim_get_current_buf() ~= buf or vim.api.nvim_buf_get_changedtick(buf) ~= tick
       or vim.api.nvim_get_current_win() ~= win
       or not vim.deep_equal(cursor, vim.api.nvim_win_get_cursor(win)) then
       return

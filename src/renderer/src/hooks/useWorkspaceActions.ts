@@ -10,6 +10,7 @@ interface Options {
     setActive: Dispatch<SetStateAction<string>>;
     focusEditor: () => void;
     requestEditorFocus: () => void;
+    captureFocus: () => () => boolean;
     dismissLeader: () => void;
     showFolders: (kind: 'editor' | 'terminal') => void;
     closeOverlay: () => void;
@@ -39,6 +40,7 @@ export function useWorkspaceActions({
     setActive,
     focusEditor,
     requestEditorFocus,
+    captureFocus,
     dismissLeader,
     showFolders,
     closeOverlay,
@@ -63,6 +65,7 @@ export function useWorkspaceActions({
         }
         setCreating(true);
         dismissLeader();
+        const canFocus = captureFocus();
         try {
             const added = await window.nido.createWorkspace(path, kind, terminalShell);
             if (added) {
@@ -74,7 +77,9 @@ export function useWorkspaceActions({
             report(String(error));
         } finally {
             setCreating(false);
-            requestEditorFocus();
+            if (canFocus()) {
+                requestEditorFocus();
+            }
         }
     };
     const openFavorite = async (favorite: FavoriteWorkspace): Promise<void> => {
@@ -112,7 +117,14 @@ export function useWorkspaceActions({
         focusEditor();
     };
     const closeWorkspace = (id: string): void => {
-        run(window.nido.closeWorkspace(id).then(requestEditorFocus));
+        const canFocus = captureFocus();
+        run(
+            window.nido.closeWorkspace(id).then(() => {
+                if (canFocus()) {
+                    requestEditorFocus();
+                }
+            })
+        );
     };
 
     return {

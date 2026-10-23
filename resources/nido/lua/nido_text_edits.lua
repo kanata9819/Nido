@@ -10,11 +10,11 @@ util.apply_text_edits = function(edits, buffer, encoding)
   end
   local edit = edits[1]
   local range = edit.range
-  local before = api.nvim_buf_get_lines(buffer, 0, -1, false)
   if range.start.line ~= 0 or range.start.character ~= 0
-    or range['end'].line < #before - 1 then
+    or range['end'].line < api.nvim_buf_line_count(buffer) - 1 then
     return apply(edits, buffer, encoding)
   end
+  local before = api.nvim_buf_get_lines(buffer, 0, -1, false)
   if range['end'].line == #before - 1
     and util._get_line_byte_from_position(buffer, range['end'], encoding) < #before[#before] then
     return apply(edits, buffer, encoding)
