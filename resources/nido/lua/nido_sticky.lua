@@ -3,6 +3,7 @@ local api = vim.api
 local entries, pending, published, color_pending = {}, {}, {}, {}
 local outlines = {}
 local method_separators = false
+local script_filetypes = {typescript=true, typescriptreact=true, javascript=true, javascriptreact=true}
 
 local function cancel_outline(buffer)
   local request = outlines[buffer]
@@ -63,17 +64,44 @@ local function sort(scopes)
   return scopes
 end
 
+local function previous_nonspace(text, column)
+  while column > 0 and text:sub(column, column):match('%s') do column = column - 1 end
+  return column
+end
+
+local function function_callback(text, from)
+  local start = text:find('%f[%w]function%s*%*?%s*[%w_$]*%s*%(', from or 1)
+  if not start then return false end
+  local before = previous_nonspace(text, start - 1)
+  if before >= 5 and text:sub(before - 4, before) == 'async'
+      and (before == 5 or not text:sub(before - 5, before - 5):match('[%w_$]')) then
+    before = previous_nonspace(text, before - 5)
+  end
+  local token = before > 0 and text:sub(before, before) or ''
+  return token == '(' or token == ','
+    or (before == 0 and text:sub(start):match('^function%s*%*?%s*%(')), start
+end
+
 local function fallback_methods(lines)
   local methods = {}
+  local script = script_filetypes[vim.bo.filetype]
   local control = {['if']=true, ['else']=true, ['elseif']=true, ['for']=true, ['while']=true,
     ['switch']=true, ['catch']=true, ['with']=true, ['match']=true, ['return']=true}
   for line, text in ipairs(lines) do
     local first = text:match('^%s*([%w_$]+)')
     local name = text:match('([%w_$]+)%s*%b()%s*[^;]*{%s*$')
-    if text:match('%f[%w]fn%s+[%a_]')
+    local callback, from = false, 0
+    if script then
+      repeat
+        local candidate, start = function_callback(text, from + 1)
+        if not start then break end
+        callback, from = candidate, start
+      until not callback
+    end
+    if not callback and (text:match('%f[%w]fn%s+[%a_]')
         or text:match('%f[%w]def%s+[%a_]') or text:match('%f[%w]function%s*[%w_$.:%(]')
         or (name and first and not control[name] and not control[first]
-          and not text:find('=', 1, true)) then
+          and not text:find('=', 1, true))) then
       local ignored = false
       for _, id in ipairs(vim.fn.synstack(line, text:find('%S') or 1)) do
         local name = vim.fn.synIDattr(id, 'name'):lower()
@@ -123,8 +151,19 @@ local function refresh(buffer)
             if range and (not item.location or item.location.uri == vim.uri_from_bufnr(buffer)) then
               local first = (item.selectionRange or range).start.line + 1
               local last = range['end'].line + (range['end'].character > 0 and 1 or 0)
+              -- TS servers expose inline callbacks as synthetic "... callback" functions.
+              -- Keep their sticky scopes without adding method separators.
+              local callback = false
+              if script_filetypes[vim.bo[buffer].filetype] and item.kind == 12 then
+                callback = (item.name or ''):match(' callback$')
+                if not callback then
+                  local text = lines[range.start.line + 1] or ''
+                  local column = vim.str_byteindex(text, client.offset_encoding or 'utf-16', range.start.character, false)
+                  callback = function_callback(text, column + 1)
+                end
+              end
               if (item.kind == 6 or item.kind == 9 or item.kind == 12)
-                  and first <= #lines and not seen[first] then
+                  and not callback and first <= #lines and not seen[first] then
                 seen[first] = true
                 methods[#methods + 1] = first
               end

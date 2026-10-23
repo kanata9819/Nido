@@ -2,13 +2,172 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { Session } from '../src/main/session';
 import { Grid } from '../src/renderer/src/grid';
 import { stickyRows } from '../src/renderer/src/stickyScroll';
 import type { StickyScrollState } from '../src/shared/types';
 
 const span = [{ text: 'scope {', color: '#d4d4d4' }];
+
+for (const server of ['legacy', 'native'] as const) {
+    test(`TypeScript ${server} method separators exclude callbacks and retain declarations and sticky scopes`, async () => {
+        const root = await mkdtemp(join(tmpdir(), 'nido-ts-separators-'));
+        let session: Session | undefined;
+        try {
+            const lines = [
+                'declare const backend: { on(name: string, callback: (...args: number[]) => void): void; };',
+                'export class Updates {',
+                '    constructor(',
+                '        private enabled = true',
+                '    ) {',
+                '        backend.on("available", (info) => console.log(info));',
+                '        backend.on("progress", (info) => {',
+                '            console.log(info);',
+                '        });',
+                '        backend.on("error", function (error) {',
+                '            console.log(error);',
+                '        });',
+                '        backend.on("named", function onReady(info) { console.log(info); });',
+                '        function helper() { return 1; }',
+                '        helper();',
+                '    }',
+                '    snapshot() { return this.enabled; }',
+                '}',
+                'export function topLevel() { return 1; }',
+                'export default function () { return 1; }',
+                'backend.on("日本語😀", function () {}); function next() { return 1; }'
+            ];
+            const config = join(root, 'lsp.json');
+            await writeFile(join(root, 'sample.ts'), lines.join('\n'));
+            await writeFile(join(root, 'tsconfig.json'), '{}');
+            await writeFile(
+                config,
+                JSON.stringify({
+                    typescript: {
+                        server,
+                        ...(server === 'native'
+                            ? {
+                                  command: [
+                                      process.execPath,
+                                      resolve('node_modules/@typescript/native/bin/tsc'),
+                                      '--lsp',
+                                      '--stdio'
+                                  ]
+                              }
+                            : {})
+                    }
+                })
+            );
+            session = await Session.create(root, () => {});
+            await session.client.request('nvim_exec_lua', [
+                "vim.env.NIDO_LSP_CONFIG = ...; require('nido_typescript').setup()",
+                [config]
+            ]);
+            await session.attach(110, 45);
+            await session.openFile('sample.ts');
+            await session.client.request('nvim_exec_lua', [
+                `
+local api, sticky = vim.api, require('nido_sticky')
+local buffer, window = api.nvim_get_current_buf(), api.nvim_get_current_win()
+local original, latest = vim.rpcnotify, nil
+vim.rpcnotify = function(channel, name, state, ...)
+  if name == 'nido:sticky_scroll' then latest = state end
+  return original(channel, name, state, ...)
+end
+local ok, err = pcall(function()
+  sticky.set_method_separators(true)
+  api.nvim_exec_autocmds('UIEnter', {})
+  -- The multiline constructor is absent from the fallback, so this waits for the real LSP outline.
+  assert(vim.wait(20000, function()
+    sticky.publish(window, buffer)
+    for _, separator in ipairs(latest and latest.separators or {}) do
+      if separator.line == 3 then return true end
+    end
+  end, 20), 'The TypeScript outline did not arrive')
+  local rows = vim.tbl_map(function(item) return item.line end, latest.separators)
+  assert(vim.deep_equal(rows, {3, 14, 17, 19, 20, 21}),
+    'Callbacks must not separate methods; named local and default functions must remain: ' .. vim.inspect(rows))
+  local callback_scope = false
+  for _, scope in ipairs(latest.scopes) do
+    if scope.line == 7 and scope.ending == 9 then callback_scope = true end
+  end
+  assert(callback_scope, 'Callback blocks must remain available to Sticky Scroll')
+end)
+vim.rpcnotify = original
+assert(ok, err)
+`,
+                []
+            ]);
+        } finally {
+            await session?.stop();
+            await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+        }
+    });
+}
+
+test('TypeScript fallback method separators exclude function callbacks while preserving declarations and bindings', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.attach(110, 45);
+        await session.client.request('nvim_exec_lua', [
+            `
+local api, sticky = vim.api, require('nido_sticky')
+vim.lsp.enable('typescript', false)
+local buffer, window = api.nvim_get_current_buf(), api.nvim_get_current_win()
+api.nvim_buf_set_lines(buffer, 0, -1, false, {
+  'function topLevel() {',
+  '  backend.on("ready", function () {',
+  '    work();',
+  '  });',
+  '  backend.on("named", function onReady() {',
+  '    work();',
+  '  });',
+  '  backend.on("async", async function () {',
+  '    work();',
+  '  });',
+  '  backend.on("multiline",',
+  '    function () {',
+  '      work();',
+  '    });',
+  '  function helper() {',
+  '    work();',
+  '  }',
+  '}',
+  'const bound = function () {',
+  '  work();',
+  '};',
+  'export default function () {',
+  '  work();',
+  '}',
+  'backend.on("日本語😀", function () {}); function next() {}'
+})
+local original, latest = vim.rpcnotify, nil
+vim.rpcnotify = function(channel, name, state, ...)
+  if name == 'nido:sticky_scroll' then latest = state end
+  return original(channel, name, state, ...)
+end
+local ok, err = pcall(function()
+  sticky.set_method_separators(true)
+  for _, filetype in ipairs({'typescript', 'typescriptreact', 'javascript', 'javascriptreact'}) do
+    vim.bo.filetype = filetype
+    api.nvim_exec_autocmds('TextChanged', {buffer=buffer})
+    vim.wait(400)
+    api.nvim_exec_autocmds('UIEnter', {})
+    sticky.publish(window, buffer)
+    local rows = vim.tbl_map(function(item) return item.line end, latest.separators)
+    assert(vim.deep_equal(rows, {1, 15, 19, 22, 25}), filetype .. ': ' .. vim.inspect(rows))
+  end
+end)
+vim.rpcnotify = original
+assert(ok, err)
+`,
+            []
+        ]);
+    } finally {
+        await session.stop();
+    }
+});
 
 test('method separators follow cached functions, virtual rows, folds and edits, and clear when disabled', async () => {
     const session = await Session.create(process.cwd(), () => {});
