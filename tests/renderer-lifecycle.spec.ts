@@ -2062,7 +2062,7 @@ test('Extensions separates language packs from other extensions and supports key
     await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
 });
 
-test('session tabs minimize automatically, expand over the editor and preserve keyboard and window controls', async ({
+test('compact mode keeps every session visible and fixes bar heights during hover and keyboard navigation', async ({
     page
 }) => {
     await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
@@ -2081,36 +2081,54 @@ test('session tabs minimize automatically, expand over the editor and preserve k
     const alpha = header.getByRole('tab', { name: 'Workspace Alpha', exact: true });
     const beta = header.getByRole('tab', { name: 'Workspace Beta', exact: true });
     const editor = page.getByRole('textbox', { name: 'Neovim input' });
+    const files = page.getByRole('tablist', { name: 'Files', exact: true });
+    const status = page.getByRole('contentinfo');
+    const layout = (): Promise<unknown[]> =>
+        Promise.all(
+            [header, files, status, page.locator('main')].map((element) => element.boundingBox())
+        );
     await expect(editor).toBeFocused();
-    expect((await header.boundingBox())!.height).toBe(38);
+    await expect(header).toHaveCSS('height', '38px');
+    await expect(files).toHaveCSS('height', '34px');
+    await expect(status).toHaveCSS('height', '32px');
     await expect(beta).toBeVisible();
     const normalEditorTop = (await page.locator('main').boundingBox())!.y;
     await header.getByRole('button', { name: 'Settings', exact: true }).click();
-    const option = page.getByRole('checkbox', { name: 'Automatically minimize session tabs' });
+    const option = page.getByRole('checkbox', { name: 'Compact mode' });
     await expect(option).not.toBeChecked();
     await option.check();
     await page.keyboard.press('Escape');
     await page.mouse.move(500, 300);
-    await expect(beta).toBeHidden();
+    await expect(beta).toBeVisible();
     await expect(alpha).toBeVisible();
-    expect((await header.boundingBox())!.height).toBe(24);
-    const compactEditor = (await page.locator('main').boundingBox())!;
-    expect(compactEditor.y).toBe(normalEditorTop - 14);
+    await expect(header).toHaveCSS('height', '24px');
+    await expect(files).toHaveCSS('height', '28px');
+    await expect(status).toHaveCSS('height', '26px');
+    expect((await page.locator('main').boundingBox())!.y).toBe(normalEditorTop - 14);
+    const compactLayout = await layout();
     await alpha.hover();
     await expect(beta).toBeVisible();
-    expect((await page.locator('main').boundingBox())!).toEqual(compactEditor);
+    expect(await layout()).toEqual(compactLayout);
+    await beta.hover();
+    expect(await layout()).toEqual(compactLayout);
     await page.mouse.move(500, 300);
-    await expect(beta).toBeHidden();
+    expect(await layout()).toEqual(compactLayout);
     await page.keyboard.press('Alt+Shift+w');
     await expect(alpha).toBeFocused();
     await expect(beta).toBeVisible();
-    await page.mouse.move(600, 300);
-    await expect(beta).toBeVisible();
-    await beta.focus();
+    expect(await layout()).toEqual(compactLayout);
+    for (
+        let step = 0;
+        step < 8 && !(await beta.evaluate((button) => button === document.activeElement));
+        step++
+    ) {
+        await page.keyboard.press('Tab');
+    }
+    await expect(beta).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(beta).toHaveAttribute('aria-selected', 'true');
     await expect(editor).toBeFocused();
-    await expect(alpha).toBeHidden();
+    await expect(alpha).toBeVisible();
     await page.keyboard.press('Alt+Shift+w');
     await expect(beta).toBeFocused();
     const minimize = header.getByRole('button', { name: 'Minimize', exact: true });
@@ -2131,14 +2149,14 @@ test('session tabs minimize automatically, expand over the editor and preserve k
     expect(await recordedWindowActions(page)).toEqual([['minimize'], ['maximize'], ['close']]);
     await page.keyboard.press('Escape');
     await expect(editor).toBeFocused();
-    await expect(alpha).toBeHidden();
-    expect((await page.locator('main').boundingBox())!).toEqual(compactEditor);
+    await expect(alpha).toBeVisible();
+    expect(await layout()).toEqual(compactLayout);
     await expect
-        .poll(() => page.evaluate(() => localStorage.getItem('nido.autoHideSessionTabs')))
+        .poll(() => page.evaluate(() => localStorage.getItem('nido.compactMode')))
         .toBe('true');
 });
 
-test('minimized session tabs restore their setting and can return to the normal layout in Japanese', async ({
+test('compact mode migrates the old setting and respects a saved disabled value after restarting in Japanese', async ({
     page
 }) => {
     await page.addInitScript(() => {
@@ -2151,14 +2169,65 @@ test('minimized session tabs restore their setting and can return to the normal 
     await page.mouse.move(500, 300);
     expect((await header.boundingBox())!.height).toBe(24);
     await header.getByRole('button', { name: '設定', exact: true }).click();
-    const option = page.getByRole('checkbox', { name: 'セッションタブを自動で最小化' });
+    const option = page.getByRole('checkbox', { name: 'コンパクトモード' });
     await expect(option).toBeChecked();
+    await expect
+        .poll(() => page.evaluate(() => localStorage.getItem('nido.compactMode')))
+        .toBe('true');
     await option.uncheck();
     await page.keyboard.press('Escape');
     expect((await header.boundingBox())!.height).toBe(38);
     await expect
-        .poll(() => page.evaluate(() => localStorage.getItem('nido.autoHideSessionTabs')))
+        .poll(() => page.evaluate(() => localStorage.getItem('nido.compactMode')))
         .toBe('false');
+    await page.reload();
+    await expect(page.getByRole('textbox', { name: 'Neovim入力' })).toBeFocused();
+    await expect(header).toHaveCSS('height', '38px');
+    await expect(page.getByRole('tablist', { name: 'ファイル', exact: true })).toHaveCSS(
+        'height',
+        '34px'
+    );
+    await expect(page.getByRole('contentinfo')).toHaveCSS('height', '32px');
+});
+
+test('compact mode scrolls the active session into view in a narrow window with many sessions', async ({
+    page
+}) => {
+    await page.setViewportSize({ width: 720, height: 600 });
+    await page.addInitScript(() => localStorage.setItem('nido.compactMode', 'true'));
+    await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+        window.rendererTest.settle('restoreWorkspaces', 0, {
+            workspaces: Array.from({ length: 12 }, (_, i) => ({
+                id: `session-${i}`,
+                root: `/session-${i}`,
+                name: `Session ${i + 1}`
+            })),
+            active: 'session-11',
+            errors: []
+        })
+    );
+    const tabs = page.getByRole('tablist', { name: 'Workspaces', exact: true });
+    await expect(tabs.getByRole('tab')).toHaveCount(12);
+    for (const index of [11, 0, 8]) {
+        if (index !== 11) await page.keyboard.press(`Alt+${index + 1}`);
+        const selected = tabs.getByRole('tab', {
+            name: `Workspace Session ${index + 1}`,
+            exact: true
+        });
+        await expect(selected).toHaveAttribute('aria-selected', 'true');
+        await expect
+            .poll(() =>
+                selected.evaluate((element) => {
+                    const tab = element.getBoundingClientRect();
+                    const list = element.closest('[role="tablist"]')!.getBoundingClientRect();
+                    return tab.left >= list.left - 1 && tab.right <= list.right + 1;
+                })
+            )
+            .toBe(true);
+    }
+    await expect(page.getByRole('banner')).toHaveCSS('height', '24px');
 });
 
 test('activity bar moves above the explorer, preserves navigation and persists its placement', async ({

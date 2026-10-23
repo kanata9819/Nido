@@ -411,9 +411,10 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
             className={styles.app}
             data-animations={animations}
             data-pointer-hidden={pointerHidden}
+            data-compact={settings.compactMode}
         >
             <TitleBar
-                autoHide={settings.autoHideSessionTabs}
+                compact={settings.compactMode}
                 workspaces={workspaces}
                 favorites={favorites}
                 favoriteBusy={!favoritesReady || savingFavorite}

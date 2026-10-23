@@ -78,12 +78,14 @@ export function useEditorSettings(): EditorSettings {
     useEffect(() => {
         localStorage.setItem('nido.activityBarPosition', activityBarPosition);
     }, [activityBarPosition]);
-    const [autoHideSessionTabs, setAutoHideSessionTabs] = useState(
-        () => localStorage.getItem('nido.autoHideSessionTabs') === 'true'
+    const [compactMode, setCompactMode] = useState(
+        () =>
+            (localStorage.getItem('nido.compactMode') ??
+                localStorage.getItem('nido.autoHideSessionTabs')) === 'true'
     );
     useEffect(() => {
-        localStorage.setItem('nido.autoHideSessionTabs', String(autoHideSessionTabs));
-    }, [autoHideSessionTabs]);
+        localStorage.setItem('nido.compactMode', String(compactMode));
+    }, [compactMode]);
     const [animations, setAnimations] = useState(
         () => localStorage.getItem('nido.animations') !== 'false'
     );
@@ -196,8 +198,8 @@ export function useEditorSettings(): EditorSettings {
         setSidebar,
         activityBarPosition,
         setActivityBarPosition,
-        autoHideSessionTabs,
-        setAutoHideSessionTabs,
+        compactMode,
+        setCompactMode,
         animations,
         setAnimations,
         smoothCursor,
@@ -248,8 +250,8 @@ export interface EditorSettings {
     setSidebar: Dispatch<SetStateAction<boolean>>;
     activityBarPosition: ActivityBarPosition;
     setActivityBarPosition: Dispatch<SetStateAction<ActivityBarPosition>>;
-    autoHideSessionTabs: boolean;
-    setAutoHideSessionTabs: Dispatch<SetStateAction<boolean>>;
+    compactMode: boolean;
+    setCompactMode: Dispatch<SetStateAction<boolean>>;
     animations: boolean;
     setAnimations: Dispatch<SetStateAction<boolean>>;
     smoothCursor: boolean;

@@ -268,9 +268,9 @@ export const japanese: Record<string, string> = {
     'Font family': 'フォント',
     'Default editor font': '標準のエディターフォント',
     'Show file explorer': 'ファイルエクスプローラーを表示',
-    'Automatically minimize session tabs': 'セッションタブを自動で最小化',
-    'Keep the active session in a compact bar. Hover or press Alt+Shift+W to expand; Esc returns to the editor.':
-        '現在のセッションを細いバーに表示します。マウスを重ねるかAlt+Shift+Wで展開し、Escでエディターに戻ります。',
+    'Compact mode': 'コンパクトモード',
+    'Reduce session tabs, file tabs and the status bar. All sessions stay visible; Alt+Shift+W focuses session tabs.':
+        'セッションタブ、ファイルタブ、ステータスバーを低く表示します。すべてのセッションを表示し、Alt+Shift+Wでセッションタブに移動できます。',
     'Session tabs (Alt+Shift+W)': 'セッションタブ（Alt+Shift+W）',
     'Activity bar position': 'アクティビティバーの位置',
     'Left edge': '左端',

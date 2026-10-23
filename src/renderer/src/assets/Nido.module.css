@@ -8,12 +8,6 @@
 .app[data-pointer-hidden='true'] * {
     cursor: none !important;
 }
-.titlebarFrame {
-    height: 38px;
-    flex-shrink: 0;
-    position: relative;
-    z-index: 20;
-}
 .titlebar {
     height: 38px;
     flex-shrink: 0;
@@ -23,46 +17,56 @@
     border-bottom: 1px solid var(--ui-border, #282c30);
     user-select: none;
 }
-.autoHideTitlebar {
+.app[data-compact='true'] .titlebar {
     height: 24px;
 }
-.autoHideTitlebar .titlebar {
-    position: absolute;
-    inset: 0 0 auto;
-    height: 24px;
-}
-.autoHideTitlebar:is(:hover, :focus-within) .titlebar {
-    height: 38px;
-}
-.workspaceToggle {
+.app[data-compact='true'] .workspaceTab kbd,
+.app[data-compact='true'] .brand span {
     display: none;
 }
-.autoHideTitlebar:not(:hover):not(:focus-within) .workspaceTab:not(.activeWorkspace),
-.autoHideTitlebar:not(:hover):not(:focus-within) .tabClose,
-.autoHideTitlebar:not(:hover):not(:focus-within) .addWorkspace,
-.autoHideTitlebar:not(:hover):not(:focus-within) .workspaceTab kbd,
-.autoHideTitlebar:not(:hover):not(:focus-within) .brand span {
-    display: none;
-}
-.autoHideTitlebar:not(:hover):not(:focus-within) .brand {
+.app[data-compact='true'] .brand {
     width: 40px;
 }
-.autoHideTitlebar:not(:hover):not(:focus-within) .brand svg {
+.app[data-compact='true'] .brand svg {
     width: 16px;
 }
-.autoHideTitlebar:not(:hover):not(:focus-within) .workspaces {
+.app[data-compact='true'] .workspaces {
+    gap: 4px;
     padding-top: 0;
 }
-.autoHideTitlebar:not(:hover):not(:focus-within) .workspaceTab {
-    min-width: 0;
+.app[data-compact='true'] .workspaceTab {
+    min-width: 100px;
     border-radius: 0;
     font-size: 12px;
 }
-.autoHideTitlebar:not(:hover):not(:focus-within) .workspaceToggle {
-    display: block;
+.app[data-compact='true'] .workspaceTab > button:first-child {
+    gap: 6px;
+    padding: 0 8px;
 }
-.autoHideTitlebar:not(:hover):not(:focus-within) .titlebarActions button {
+.app[data-compact='true'] .titlebar .tabClose {
+    padding: 0 5px;
+}
+.app[data-compact='true'] .addWorkspace {
+    width: 28px;
+}
+.app[data-compact='true'] .addWorkspace svg,
+.app[data-compact='true'] .titlebarActions svg {
+    width: 16px;
+    height: 16px;
+}
+.app[data-compact='true'] .titlebarActions button {
     height: 22px;
+}
+.app[data-compact='true'] .fileTabs {
+    height: 28px;
+}
+.app[data-compact='true'] .fileTab > button:first-child {
+    gap: 8px;
+    padding: 0 8px 0 12px;
+}
+.app[data-compact='true'] .fileTab > button:first-child > :first-child {
+    width: 14px;
+    height: 14px;
 }
 .brand {
     width: 115px;

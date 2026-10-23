@@ -33,6 +33,18 @@
     flex-shrink: 0;
     white-space: nowrap;
 }
+:global([data-compact='true']) .statusbar {
+    height: 26px;
+    gap: 16px;
+    padding: 0 12px;
+}
+:global([data-compact='true']) .mode {
+    padding: 2px 9px;
+}
+:global([data-compact='true']) .statusbar svg {
+    width: 12px;
+    height: 12px;
+}
 .searchStatus {
     display: inline-flex;
     align-items: center;
