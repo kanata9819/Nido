@@ -552,6 +552,96 @@ test('scroll batches publish the latest cursor with collection changes preserved
     assert.deepEqual(events.state.diagnostics, { '/alpha/main.rs': 2 });
 });
 
+test('diagnostic refreshes resolve each buffer once and keep paths and severity live', async (context) => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        const result = await session.client.request('nvim_exec_lua', [
+            `
+local api = vim.api
+local root = vim.fn.getcwd()
+local first, second, info, unnamed, wiped = api.nvim_get_current_buf(), api.nvim_create_buf(true, false),
+  api.nvim_create_buf(true, false), api.nvim_create_buf(true, false), api.nvim_create_buf(true, false)
+local first_path, second_path, info_path = root .. '/.downloads/diagnostic-first.ts',
+  root .. '/.downloads/diagnostic-second.ts', root .. '/.downloads/diagnostic-info.ts'
+api.nvim_buf_set_name(first, first_path)
+api.nvim_buf_set_name(second, second_path)
+api.nvim_buf_set_name(info, info_path)
+api.nvim_buf_delete(wiped, {force=true})
+vim.wait(30, function() return false end, 1)
+local original_get, original_valid, original_name = vim.diagnostic.get, api.nvim_buf_is_valid, api.nvim_buf_get_name
+local notify, state, publications = vim.rpcnotify, nil, 0
+local checks, names, items = 0, 0, {}
+vim.diagnostic.get = function(...)
+  -- Synthetic stale diagnostics exercise the invalid-buffer guard as well.
+  if debug.getinfo(2, 'n').name == 'refresh_diagnostics' then return items end
+  return original_get(...)
+end
+api.nvim_buf_is_valid = function(...)
+  if debug.getinfo(2, 'n').name == 'refresh_diagnostics' then checks = checks + 1 end
+  return original_valid(...)
+end
+api.nvim_buf_get_name = function(...)
+  if debug.getinfo(2, 'n').name == 'refresh_diagnostics' then names = names + 1 end
+  return original_name(...)
+end
+vim.rpcnotify = function(channel, method, ...)
+  if method == 'nido:state' then state, publications = ..., publications + 1 end
+  return notify(channel, method, ...)
+end
+local function publish(change)
+  local before = publications
+  checks, names = 0, 0
+  if change then change() else api.nvim_exec_autocmds('DiagnosticChanged', {buffer=first}) end
+  assert(vim.wait(1000, function() return publications > before end, 1))
+end
+local function diagnostic(buffer, severity, message)
+  return {bufnr=buffer, lnum=2, col=4, severity=severity, message=message}
+end
+local ok, err = pcall(function()
+  for i=1,1000 do items[i] = diagnostic(first, 1, 'Error ' .. i) end
+  publish()
+  assert(checks == 1 and names == 1, ('1000 diagnostics: validity=%d names=%d'):format(checks, names))
+  assert(#state.problems == 1000 and state.diagnostics[first_path] == 1, vim.inspect(state))
+  assert(vim.deep_equal(state.problems[1000], {path=first_path, line=3, column=5,
+    severity=1, message='Error 1000', source=''}), vim.inspect(state.problems[1000]))
+  items = {
+    diagnostic(first, 2, 'Warning'), diagnostic(first, 3, 'Information'),
+    diagnostic(second, 2, 'Warning'), diagnostic(second, 1, 'Error'), diagnostic(second, 4, 'Hint'),
+    diagnostic(info, 3, 'Information'), diagnostic(info, 4, 'Hint'),
+    diagnostic(unnamed, 1, 'Unnamed'), diagnostic(wiped, 1, 'Wiped'), diagnostic(wiped, 2, 'Wiped again'),
+  }
+  items[2].source = 'test-server'
+  publish()
+  assert(checks == 5 and names == 4, ('multiple buffers: validity=%d names=%d'):format(checks, names))
+  assert(#state.problems == 7, 'all named-buffer severities remain in the problems list')
+  assert(vim.deep_equal(state.diagnostics, {[first_path]=2, [second_path]=1}), vim.inspect(state.diagnostics))
+  assert(state.problems[2].source == 'test-server' and state.problems[3].path == second_path)
+  assert(state.problems[6].path == info_path and state.problems[6].severity == 3)
+  local renamed = root .. '/.downloads/diagnostic-renamed.ts'
+  publish(function()
+    api.nvim_buf_set_name(first, renamed)
+    api.nvim_buf_delete(second, {force=true})
+  end)
+  assert(checks == 5 and names == 3, ('renamed/wiped buffers: validity=%d names=%d'):format(checks, names))
+  assert(#state.problems == 4 and state.problems[1].path == renamed and state.problems[3].path == info_path)
+  assert(vim.deep_equal(state.diagnostics, {[renamed]=2}), 'old names and deleted buffers must disappear')
+  local named = root .. '/.downloads/diagnostic-now-named.ts'
+  publish(function() api.nvim_buf_set_name(unnamed, named) end)
+  assert(#state.problems == 5 and state.problems[5].path == named, 'previously unnamed buffers refresh their path')
+  assert(vim.deep_equal(state.diagnostics, {[renamed]=2, [named]=1}), vim.inspect(state.diagnostics))
+end)
+vim.diagnostic.get, api.nvim_buf_is_valid, api.nvim_buf_get_name, vim.rpcnotify = original_get, original_valid, original_name, notify
+assert(ok, err)
+return {sameBufferDiagnostics=1000, validityChecks=1, fileNameReads=1, lifecycleRefreshes=3}
+`,
+            []
+        ]);
+        context.diagnostic(JSON.stringify(result));
+    } finally {
+        await session.stop();
+    }
+});
+
 test('native cursor movement avoids retransmitting a thousand diagnostics on every step', async () => {
     const sent: Extract<NidoEvent, { type: 'state' | 'statePatch' }>[] = [];
     let measuring = false;

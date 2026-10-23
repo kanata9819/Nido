@@ -37,9 +37,10 @@ export default async function setup(): Promise<void> {
                 stdio: 'pipe',
                 timeout: 30000
             });
-        } catch {
+        } catch (error) {
             throw new Error(
-                `Windows baseline requires ${command} on PATH. Prepare the Rust toolchain and Git before testing.`
+                `Windows baseline could not run ${command} --version. Prepare the Rust toolchain and Git before testing.`,
+                { cause: error }
             );
         }
     }

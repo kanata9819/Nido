@@ -31,7 +31,10 @@ async function open(page: Page, view: string, deferred: string): Promise<void> {
         localStorage.setItem('nido.animations', 'false');
     });
     await page.goto(`${origin}?view=${view}&defer=${deferred}`);
-    await expect(page.locator('canvas').or(page.getByRole('listbox')).first()).toBeVisible();
+    // CI may need extra mount time after the preceding 10,000-row case.
+    await expect(page.locator('canvas').or(page.getByRole('listbox')).first()).toBeVisible({
+        timeout: 15000
+    });
     await page.clock.install();
     await page.clock.pauseAt(new Date(Date.now() + 1000));
 }

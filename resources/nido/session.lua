@@ -138,23 +138,25 @@ local function refresh_diagnostics()
   diagnostics = vim.empty_dict()
   problems = {}
   diagnostics_version = diagnostics_version + 1
+  -- Resolve each buffer once per refresh, including unnamed and wiped buffers.
+  -- A fresh map keeps file renames and deletions live on the next publication.
+  local names = {}
   for _, diagnostic in ipairs(vim.diagnostic.get()) do
-    if vim.api.nvim_buf_is_valid(diagnostic.bufnr) then
-      local path = vim.api.nvim_buf_get_name(diagnostic.bufnr)
-      if path ~= '' then
-        table.insert(problems, {
-          path = path,
-          line = diagnostic.lnum + 1,
-          column = diagnostic.col + 1,
-          severity = diagnostic.severity,
-          message = diagnostic.message,
-          source = diagnostic.source or '',
-        })
-      end
+    local name = names[diagnostic.bufnr]
+    if name == nil then
+      name = vim.api.nvim_buf_is_valid(diagnostic.bufnr) and vim.api.nvim_buf_get_name(diagnostic.bufnr) or ''
+      names[diagnostic.bufnr] = name
     end
-    if diagnostic.severity <= vim.diagnostic.severity.WARN and vim.api.nvim_buf_is_valid(diagnostic.bufnr) then
-      local name = vim.api.nvim_buf_get_name(diagnostic.bufnr)
-      if name ~= '' then
+    if name ~= '' then
+      table.insert(problems, {
+        path = name,
+        line = diagnostic.lnum + 1,
+        column = diagnostic.col + 1,
+        severity = diagnostic.severity,
+        message = diagnostic.message,
+        source = diagnostic.source or '',
+      })
+      if diagnostic.severity <= vim.diagnostic.severity.WARN then
         diagnostics[name] = math.min(diagnostics[name] or diagnostic.severity, diagnostic.severity)
       end
     end
