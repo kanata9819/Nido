@@ -51,6 +51,10 @@ function cellForeground(h: Highlight, background: string, foreground: string): s
 export class GridCanvas {
     private rowImages = new WeakMap<Cell[], HTMLCanvasElement>();
     private dirtyImages = new WeakSet<HTMLCanvasElement>();
+    private dirtyPrefixes = new WeakMap<
+        HTMLCanvasElement,
+        { end: number; highlights: Set<number> }
+    >();
     private linearRows?: LinearRowImages;
     private imageStyle = '';
     private paintDirty = true;
@@ -62,11 +66,31 @@ export class GridCanvas {
 
     constructor(private readonly grid: Grid) {}
 
-    invalidate(row?: number): void {
+    invalidate(row?: number, column?: number, before?: Cell, after?: Cell): void {
         if (row !== undefined) {
             const cells = this.grid.cells[row];
             const image = this.rowImages.get(cells);
             if (image) {
+                let prefix = this.dirtyPrefixes.get(image);
+                const highlight = this.grid.highlights.get(after?.highlight ?? 0);
+                if (
+                    (!this.dirtyImages.has(image) || prefix) &&
+                    column !== undefined &&
+                    before &&
+                    after &&
+                    /^[\d ]$/.test(before.text) &&
+                    /^[\d ]$/.test(after.text) &&
+                    before.highlight === after.highlight &&
+                    !highlight?.codeLens &&
+                    !highlight?.diagnostic
+                ) {
+                    prefix ??= { end: 0, highlights: new Set() };
+                    prefix.end = Math.max(prefix.end, column + 1);
+                    prefix.highlights.add(after.highlight);
+                    this.dirtyPrefixes.set(image, prefix);
+                } else {
+                    this.dirtyPrefixes.delete(image);
+                }
                 this.linearRows?.invalidate(image);
                 this.dirtyImages.add(image);
             }
@@ -179,6 +203,7 @@ export class GridCanvas {
         // Resolve shared highlights once per paint; the next paint sees fresh
         // definitions, theme colors and font settings without invalidation state.
         const cellStyles = new Map<number, CellStyle>();
+        const digitWidths = new Map<string, number>();
         const cellStyle = (id: number): CellStyle => {
             let style = cellStyles.get(id);
             if (!style) {
@@ -337,14 +362,44 @@ export class GridCanvas {
                 // Opaque rows allow native LCD text, matching normal DOM rendering.
                 // Translucent themes need alpha surfaces and grayscale antialiasing.
                 const ctx = image.getContext('2d', { alpha: translucent })!;
+                // Track text state within this row paint, including prefix measurements.
+                let currentFont = '';
+                const prefix = this.dirtyPrefixes.get(image);
+                this.dirtyPrefixes.delete(image);
+                if (prefix) {
+                    ctx.save();
+                    let right = prefix.end * cellWidth + 0.5;
+                    for (const id of prefix.highlights) {
+                        const font = cellStyle(id).font;
+                        let ink = digitWidths.get(font);
+                        if (ink === undefined) {
+                            ctx.font = font;
+                            currentFont = font;
+                            ink = Math.max(
+                                ...Array.from(
+                                    '0123456789',
+                                    (text) => ctx.measureText(text).actualBoundingBoxRight
+                                )
+                            );
+                            digitWidths.set(font, ink);
+                        }
+                        right = Math.max(
+                            right,
+                            Math.round((prefix.end - 1) * cellWidth * dpr) / dpr + ink
+                        );
+                    }
+                    // Preserve the unchanged suffix, including glyphs crossing the damage edge.
+                    ctx.setTransform(1, 0, 0, 1, 0, 0);
+                    ctx.beginPath();
+                    ctx.rect(0, 0, Math.ceil(right * dpr) + 1, image.height);
+                    ctx.clip();
+                }
                 if (translucent) {
                     ctx.setTransform(1, 0, 0, 1, 0, 0);
                     ctx.clearRect(0, 0, image.width, image.height);
                 }
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 ctx.textBaseline = 'alphabetic';
-                // This row owns its context and never saves/restores text state.
-                let currentFont = '';
                 let currentColor = '';
                 const font = (value: string): void => {
                     if (value !== currentFont) {
@@ -491,6 +546,9 @@ export class GridCanvas {
                             1
                         );
                     }
+                }
+                if (prefix) {
+                    ctx.restore();
                 }
             }
             // Reuse rasterized text; scroll and cursor animation only composite row images.

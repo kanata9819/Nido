@@ -438,10 +438,15 @@ export class Grid {
                                                     this.rowText.set(row, text);
                                                 }
                                             }
-                                            this.canvas.invalidate(Number(args[1]));
                                             changed = true;
                                         }
                                         const next = { text: cell[0], highlight };
+                                        this.canvas.invalidate(
+                                            Number(args[1]),
+                                            column,
+                                            row[column],
+                                            next
+                                        );
                                         if (row[column]?.text !== next.text) {
                                             this.rowText.delete(row);
                                         }

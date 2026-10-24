@@ -838,6 +838,323 @@ for (const scale of [1, 1.25, 1.5, 2]) {
     });
 }
 
+test('row rasterization preserves native dark and light text pixels', async ({ browser }) => {
+    for (const scale of [1.25, 1.5]) {
+        const context = await browser.newContext({ deviceScaleFactor: scale });
+        try {
+            const page = await context.newPage();
+            await page.route('**/native-row-probe', (route) =>
+                route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+            );
+            await page.goto(`${origin}native-row-probe`);
+            const reports = await page.evaluate(
+                async (moduleUrl) => {
+                    const { Grid } = await import(moduleUrl);
+                    const reports: {
+                        foreground: string;
+                        weight: number;
+                        partialClip: boolean;
+                        mismatches: number;
+                    }[] = [];
+                    for (const [foreground, background] of [
+                        ['#d4d4d4', '#121212'],
+                        ['#202020', '#f5f5f5']
+                    ]) {
+                        for (const weight of [350, 400]) {
+                            const grid = new Grid();
+                            grid.busy = true;
+                            grid.background = background;
+                            grid.foreground = foreground;
+                            grid.pixelScrollEnabled = true;
+                            const cells: [string, number][] = [
+                                ...Array.from('0001', (text): [string, number] => [text, 0]),
+                                ['j', 2],
+                                ['日', 0],
+                                ['', 0],
+                                ['M', 1],
+                                ...Array.from(
+                                    ' Il1|[](){}MWmw __ fn(value)',
+                                    (text): [string, number] => [text, 0]
+                                )
+                            ];
+                            grid.apply([
+                                ['grid_resize', [1, 40, 4]],
+                                ['hl_attr_define', [1, { bold: true }, {}, []]],
+                                ['hl_attr_define', [2, { italic: true }, {}, []]],
+                                ['grid_line', [1, 1, 0, cells]],
+                                ['flush']
+                            ]);
+                            const rows = new Set<HTMLCanvasElement>();
+                            const fillText = CanvasRenderingContext2D.prototype.fillText;
+                            const rect = CanvasRenderingContext2D.prototype.rect;
+                            const clips: { canvas: HTMLCanvasElement; width: number }[] = [];
+                            CanvasRenderingContext2D.prototype.fillText = function (...args) {
+                                rows.add(this.canvas);
+                                return fillText.apply(this, args);
+                            };
+                            CanvasRenderingContext2D.prototype.rect = function (...args) {
+                                clips.push({ canvas: this.canvas, width: args[2] });
+                                return rect.apply(this, args);
+                            };
+                            let cellWidth: number;
+                            const canvas = document.createElement('canvas');
+                            const paint = (): void => {
+                                ({ cellWidth } = grid.draw(
+                                    canvas,
+                                    400,
+                                    76,
+                                    15,
+                                    '"Cascadia Code", monospace',
+                                    false,
+                                    undefined,
+                                    19,
+                                    weight
+                                ));
+                            };
+                            try {
+                                paint();
+                                const prefix = Array.from('0099', (text): [string, number] => [
+                                    text,
+                                    0
+                                ]);
+                                grid.apply([['grid_line', [1, 1, 0, prefix]], ['flush']]);
+                                cells.splice(0, 4, ...prefix);
+                                paint();
+                            } finally {
+                                CanvasRenderingContext2D.prototype.fillText = fillText;
+                                CanvasRenderingContext2D.prototype.rect = rect;
+                            }
+                            const row = [...rows][0];
+                            const native = document.createElement('canvas');
+                            native.width = row.width;
+                            native.height = row.height;
+                            const ctx = native.getContext('2d', { alpha: false })!;
+                            ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+                            ctx.fillStyle = background;
+                            ctx.fillRect(0, 0, native.width, native.height);
+                            ctx.textBaseline = 'alphabetic';
+                            ctx.fillStyle = foreground;
+                            cells.forEach(([text, highlight], column) => {
+                                if (text && text !== ' ') {
+                                    ctx.font = `${highlight === 2 ? 'italic ' : ''}${highlight === 1 ? Math.max(700, weight) : weight} 15px "Cascadia Code", monospace`;
+                                    ctx.fillText(
+                                        text,
+                                        Math.round(column * cellWidth * devicePixelRatio) /
+                                            devicePixelRatio,
+                                        Math.round(14 * devicePixelRatio) / devicePixelRatio
+                                    );
+                                }
+                            });
+                            const actual = row
+                                .getContext('2d')!
+                                .getImageData(0, 0, row.width, row.height).data;
+                            const expected = ctx.getImageData(
+                                0,
+                                0,
+                                native.width,
+                                native.height
+                            ).data;
+                            reports.push({
+                                foreground,
+                                weight,
+                                partialClip: clips.some(
+                                    ({ canvas, width }) =>
+                                        canvas === row && width > 0 && width < row.width
+                                ),
+                                mismatches: actual.reduce(
+                                    (count, value, index) =>
+                                        count + Number(value !== expected[index]),
+                                    0
+                                )
+                            });
+                        }
+                    }
+                    return reports;
+                },
+                `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+            );
+            console.log('native-row-pixels', JSON.stringify({ scale, reports }));
+            for (const report of reports) {
+                expect(report.partialClip).toBe(true);
+                expect(report.mismatches).toBe(0);
+            }
+        } finally {
+            await context.close();
+        }
+    }
+});
+
+for (const rows of [4, 8]) {
+    for (const direction of [1, -1]) {
+        test(`fast touchpad scrolling bounds work as dense rows enter the viewport (${rows}, ${direction})`, async ({
+            browser
+        }) => {
+            const context = await browser.newContext({ deviceScaleFactor: 1.25 });
+            try {
+                const page = await context.newPage();
+                await page.route('**/fast-touchpad-probe', (route) =>
+                    route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+                );
+                await page.goto(`${origin}fast-touchpad-probe`);
+                await requireWebGLCorrection(page);
+                const reports = await page.evaluate(
+                    async ({ moduleUrl, rows, direction }) => {
+                        const { Grid } = await import(moduleUrl);
+                        const reports: {
+                            rows: number;
+                            direction: number;
+                            frames: number;
+                            glyphs: number;
+                            uploads: number;
+                            canvases: number;
+                            p50Ms: number;
+                            p95Ms: number;
+                            maxMs: number;
+                            slowFrames: { frame: number; ms: number }[];
+                        }[] = [];
+                        const grid = new Grid();
+                        grid.pixelScrollEnabled = true;
+                        grid.scrolling = true;
+                        const line = (row: number): [string, number][] =>
+                            Array.from(
+                                `${String(row).padStart(4)} ROW_${row} ${'const value = example(argument); '.repeat(5)}`.slice(
+                                    0,
+                                    160
+                                ),
+                                (text) => [text, 0]
+                            );
+                        grid.apply([
+                            ['grid_resize', [1, 160, 50]],
+                            ...Array.from({ length: 49 }, (_, row) => [
+                                'grid_line',
+                                [1, row, 0, line(1000 + row)]
+                            ]),
+                            ['flush']
+                        ]);
+                        const canvas = document.createElement('canvas');
+                        const paint = (): void => {
+                            grid.draw(
+                                canvas,
+                                1500,
+                                950,
+                                15,
+                                'monospace',
+                                false,
+                                undefined,
+                                19,
+                                350
+                            );
+                        };
+                        grid.scrollFraction = 0.25 / (19 * devicePixelRatio);
+                        const getContext = HTMLCanvasElement.prototype.getContext;
+                        const text = CanvasRenderingContext2D.prototype.fillText;
+                        const upload = WebGL2RenderingContext.prototype.texImage2D;
+                        const canvases = new WeakSet<HTMLCanvasElement>();
+                        let canvasCount = 0;
+                        let glyphs = 0;
+                        let uploads = 0;
+                        HTMLCanvasElement.prototype.getContext = function (...args) {
+                            if (args[0] === '2d' && this !== canvas && !canvases.has(this)) {
+                                canvases.add(this);
+                                canvasCount++;
+                            }
+                            return Reflect.apply(getContext, this, args);
+                        };
+                        CanvasRenderingContext2D.prototype.fillText = function (...args) {
+                            glyphs++;
+                            return text.apply(this, args);
+                        };
+                        WebGL2RenderingContext.prototype.texImage2D = function (...args) {
+                            uploads++;
+                            return Reflect.apply(upload, this, args);
+                        };
+                        const durations: number[] = [];
+                        let initialImages = 0;
+                        try {
+                            paint();
+                            initialImages = canvasCount;
+                            glyphs = uploads = 0;
+                            for (let frame = 0; frame < 40; frame++) {
+                                await new Promise(requestAnimationFrame);
+                                const start = performance.now();
+                                const count = rows * direction;
+                                grid.apply([
+                                    ['nido_scroll', [1, 0, 49, 0, 160, count, 0]],
+                                    ['grid_scroll', [1, 0, 49, 0, 160, count, 0]],
+                                    ...Array.from({ length: rows }, (_, row) => [
+                                        'grid_line',
+                                        [
+                                            1,
+                                            direction > 0 ? 49 - rows + row : row,
+                                            0,
+                                            line(1000 + (frame + 1) * count + row)
+                                        ]
+                                    ]),
+                                    ...Array.from({ length: 49 }, (_, row) => [
+                                        'grid_line',
+                                        [
+                                            1,
+                                            row,
+                                            0,
+                                            Array.from(
+                                                String(Math.abs(row - (frame % 49))).padStart(4),
+                                                (text) => [text, 0]
+                                            )
+                                        ]
+                                    ]),
+                                    ['flush']
+                                ]);
+                                paint();
+                                durations.push(performance.now() - start);
+                            }
+                        } finally {
+                            HTMLCanvasElement.prototype.getContext = getContext;
+                            CanvasRenderingContext2D.prototype.fillText = text;
+                            WebGL2RenderingContext.prototype.texImage2D = upload;
+                        }
+                        const slowFrames = durations
+                            .map((ms, frame) => ({ frame, ms }))
+                            .filter(({ ms }) => ms > 25);
+                        durations.sort((a, b) => a - b);
+                        reports.push({
+                            rows,
+                            direction,
+                            frames: durations.length,
+                            glyphs,
+                            uploads,
+                            canvases: canvasCount - initialImages,
+                            p50Ms: durations[20],
+                            p95Ms: durations[38],
+                            maxMs: durations[39],
+                            slowFrames
+                        });
+                        return reports;
+                    },
+                    {
+                        moduleUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+                        rows,
+                        direction
+                    }
+                );
+                console.log('fast-touchpad-work', JSON.stringify(reports));
+                await test.info().attach('fast-touchpad-work', {
+                    body: JSON.stringify(reports, null, 2),
+                    contentType: 'application/json'
+                });
+                for (const work of reports) {
+                    expect(work.frames).toBe(40);
+                    expect(work.glyphs).toBeGreaterThan(0);
+                    expect(work.glyphs).toBeLessThanOrEqual(work.frames * 49 * 160);
+                    expect(work.uploads).toBeLessThanOrEqual(work.frames * 49);
+                    expect(work.canvases).toBeLessThanOrEqual(work.frames * work.rows);
+                }
+            } finally {
+                await context.close();
+            }
+        });
+    }
+}
+
 for (const scale of [1, 1.25, 1.5, 2]) {
     test(`relative line numbers reuse canvases and defer GPU uploads at ${scale * 100}% scale`, async ({
         browser
@@ -929,7 +1246,9 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                         }
                         const native = { ...calls };
                         const initialImages = rowCanvases.size;
+                        const scrollTimes: number[] = [];
                         for (let frame = 0; frame < 80; frame++) {
+                            const start = performance.now();
                             const rows = frame < 40 ? 1 : -1;
                             grid.apply([
                                 ['nido_scroll', [1, 0, 39, 0, 140, rows, 0]],
@@ -961,6 +1280,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                                 ['flush']
                             ]);
                             paint();
+                            scrollTimes.push(performance.now() - start);
                         }
                         const relativeUploads = calls.uploads - native.uploads;
                         const createdImages = rowCanvases.size - initialImages;
@@ -975,6 +1295,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                         const cachedUploads = calls.uploads - warmUploads;
                         cursorTimes.sort((a, b) => a - b);
                         editTimes.sort((a, b) => a - b);
+                        scrollTimes.sort((a, b) => a - b);
                         return {
                             initialTextures,
                             native,
@@ -986,7 +1307,10 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                             cursorP50: cursorTimes[80],
                             cursorP95: cursorTimes[152],
                             editP50: editTimes[80],
-                            editP95: editTimes[152]
+                            editP95: editTimes[152],
+                            scrollP50: scrollTimes[40],
+                            scrollP95: scrollTimes[76],
+                            scrollMax: scrollTimes[79]
                         };
                     } finally {
                         gpu.clear = clear;
@@ -1442,13 +1766,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                         ]);
                         const canvas = document.createElement('canvas');
                         const reference = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d', { alpha: opacity < 1 })!;
                         let copies = 0;
-                        const drawImage = ctx.drawImage;
-                        ctx.drawImage = function (...args) {
-                            copies++;
-                            Reflect.apply(drawImage, this, args);
-                        };
                         let width = 1119;
                         let height = 1119;
                         let lineHeight = 28;
@@ -1517,6 +1835,14 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                                 if (expected[i] !== actual[i]) mismatches++;
                             }
                         };
+                        paint(canvas);
+                        const ctx = canvas.getContext('2d')!;
+                        const drawImage = ctx.drawImage;
+                        ctx.drawImage = function (...args) {
+                            copies++;
+                            Reflect.apply(drawImage, this, args);
+                        };
+                        grid.invalidatePaint();
                         paint(canvas);
                         const fullCopies = copies;
                         copies = 0;

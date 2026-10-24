@@ -3,6 +3,7 @@ local api = vim.api
 local entries, pending, published, color_pending = {}, {}, {}, {}
 local outlines = {}
 local method_separators = false
+local method_namespace = api.nvim_create_namespace('nido_method_separators')
 local script_filetypes = {typescript=true, typescriptreact=true, javascript=true, javascriptreact=true}
 
 local function cancel_outline(buffer)
@@ -113,6 +114,20 @@ local function fallback_methods(lines)
   return methods
 end
 
+local function set_methods(buffer, entry, methods)
+  entry.methods = methods
+  api.nvim_buf_clear_namespace(buffer, method_namespace, 0, -1)
+  for _, line in ipairs(methods or {}) do
+    local text = entry.lines[line] or ''
+    local first = text:find('%S')
+    if first then
+      -- Native ranges follow edits and invalidate when the whole header is deleted.
+      api.nvim_buf_set_extmark(buffer, method_namespace, line - 1, first - 1,
+        {end_col=#text, invalidate=true})
+    end
+  end
+end
+
 local function refresh(buffer)
   cancel_outline(buffer)
   if not api.nvim_buf_is_valid(buffer) or not api.nvim_buf_is_loaded(buffer)
@@ -124,6 +139,7 @@ local function refresh(buffer)
   local tick = api.nvim_buf_get_changedtick(buffer)
   if api.nvim_buf_get_offset(buffer, api.nvim_buf_line_count(buffer)) > 1024 * 1024 then
     entries[buffer] = {tick=tick, lines={}, scopes={}, methods={}, highlights={}}
+    set_methods(buffer, entries[buffer], {})
     redraw()
     return
   end
@@ -133,10 +149,13 @@ local function refresh(buffer)
   local entry = {tick=tick, lines=lines, scopes=sort(scopes),
     methods=method_separators and api.nvim_buf_call(buffer, function() return fallback_methods(lines) end) or nil,
     highlights={}}
+  local previous = entries[buffer]
   entries[buffer] = entry
   redraw()
+  local requested = false
   for _, client in ipairs(vim.lsp.get_clients({bufnr=buffer, method='textDocument/documentSymbol'})) do
     if client.initialized then
+      requested = true
       local request = {client=client}
       outlines[buffer] = request
       local ok, id = client:request('textDocument/documentSymbol', {textDocument={uri=vim.uri_from_bufnr(buffer)}}, function(err, result)
@@ -177,16 +196,19 @@ local function refresh(buffer)
         visit(result)
         if #outline > 0 or #methods > 0 then
           entry.scopes = sort(outline)
-          table.sort(methods)
-          entry.methods, entry.highlights = methods, {}
-          redraw()
+          entry.highlights = {}
         end
+        table.sort(methods)
+        set_methods(buffer, entry, methods)
+        redraw()
       end, buffer)
       request.id = id
       if not ok and outlines[buffer] == request then outlines[buffer] = nil end
       break
     end
   end
+  -- Retain tracked separators until the new outline replaces them, including empty replies.
+  if not requested or not previous then set_methods(buffer, entry, entry.methods) end
 end
 
 local function schedule(buffer)
@@ -230,13 +252,14 @@ function M.publish(window, buffer)
     width=info.width, height=info.height, gutter=info.textoff, tabstop=vim.bo[buffer].tabstop,
     leftcol=0, scopes={}, separators={}}
   local entry = entries[buffer]
-  if entry and entry.tick == api.nvim_buf_get_changedtick(buffer)
+  local current = entry and entry.tick == api.nvim_buf_get_changedtick(buffer)
+  if entry
       and vim.bo[buffer].buftype == '' and api.nvim_win_get_config(window).relative == '' then
     api.nvim_win_call(window, function()
       local view = vim.fn.winsaveview()
       local last_line = vim.fn.line('w$')
       state.leftcol = view.leftcol
-      for _, scope in ipairs(entry.scopes) do
+      for _, scope in ipairs(current and entry.scopes or {}) do
         if scope.line <= last_line and scope.ending >= view.topline
             and not (vim.fn.foldclosed(scope.line) >= 0 and vim.fn.foldclosedend(scope.line) >= scope.ending) then
           local first = vim.fn.screenpos(window, scope.line, 1)
@@ -251,8 +274,12 @@ function M.publish(window, buffer)
       end
       -- Reuse the cached outline; disabled separators do no screen-position work.
       if method_separators then
-        for _, line in ipairs(entry.methods or {}) do
-          if line >= view.topline and line <= last_line then
+        local previous_line
+        for _, mark in ipairs(api.nvim_buf_get_extmarks(buffer, method_namespace,
+            {view.topline - 1, 0}, {last_line - 1, -1}, {details=true})) do
+          local line = mark[2] + 1
+          if not mark[4].invalid and line ~= previous_line then
+            previous_line = line
             local folded = vim.fn.foldclosed(line)
             if folded == -1 or folded == line then
               local position = vim.fn.screenpos(window, line, 1)
@@ -264,7 +291,8 @@ function M.publish(window, buffer)
         end
       end
     end)
-  elseif vim.bo[buffer].buftype == '' and not pending[buffer] then
+  end
+  if not current and vim.bo[buffer].buftype == '' and not pending[buffer] then
     schedule(buffer)
   end
   if not vim.deep_equal(published[window], state) then
@@ -280,7 +308,11 @@ function M.set_method_separators(enabled)
   if enabled then
     for buffer, entry in pairs(entries) do
       if not entry.methods and api.nvim_buf_is_valid(buffer) then
-        entry.methods = api.nvim_buf_call(buffer, function() return fallback_methods(entry.lines) end)
+        if entry.tick == api.nvim_buf_get_changedtick(buffer) then
+          set_methods(buffer, entry, api.nvim_buf_call(buffer, function() return fallback_methods(entry.lines) end))
+        else
+          schedule(buffer)
+        end
       end
     end
   end

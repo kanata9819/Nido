@@ -135,16 +135,32 @@ local function update(buffer, ticket)
       on_lines = function(_, buf, _, first, last, new_last)
         local marks = marks_by_buffer[buf]
         if not marks then return true end
-        -- Extmarks on replaced lines can move to the next line; discard only those rows.
+        local changed = {}
         for row=first,last-1 do
-          for _, mark in pairs(marks[row] or {}) do api.nvim_buf_del_extmark(buf, namespace, mark.id) end
+          changed[row] = marks[row]
           marks[row] = nil
         end
         if new_last ~= last then
           local shifted = {}
           for row, items in pairs(marks) do shifted[row >= last and row + new_last - last or row] = items end
-          marks_by_buffer[buf] = shifted
+          marks = shifted
         end
+        local lines = next(changed) and api.nvim_buf_get_lines(buf, first, new_last, false) or {}
+        -- Preserve moved brackets until reparsing; deleted ranges must not color their new neighbors.
+        for _, items in pairs(changed) do
+          for _, mark in pairs(items) do
+            local pos = api.nvim_buf_get_extmark_by_id(buf, namespace, mark.id, {details=true})
+            local line = pos[1] and lines[pos[1] - first + 1]
+            if line and pos[3].end_row == pos[1] and pos[3].end_col == pos[2] + 1
+                and line:sub(pos[2] + 1, pos[2] + 1) == mark.text then
+              marks[pos[1]] = marks[pos[1]] or {}
+              marks[pos[1]][pos[2]] = mark
+            else
+              api.nvim_buf_del_extmark(buf, namespace, mark.id)
+            end
+          end
+        end
+        marks_by_buffer[buf] = marks
       end,
       on_detach = function(_, buf)
         marks_by_buffer[buf], parsed_ticks[buf] = nil, nil
@@ -154,7 +170,7 @@ local function update(buffer, ticket)
   end
   local marks = marks_by_buffer[buffer]
   local version = {}
-  local function highlight(position, group)
+  local function highlight(position, group, text)
     local row = marks[position.row]
     if not row then row = {}; marks[position.row] = row end
     local mark = row[position.column]
@@ -166,6 +182,7 @@ local function update(buffer, ticket)
       mark = {id=id, group=group}
       row[position.column] = mark
     end
+    mark.text = text
     mark.version = version
   end
   -- Keep full syntax correctness while giving input a turn between bounded chunks.
@@ -197,8 +214,8 @@ local function update(buffer, ticket)
                 color=colors[(#stack % #colors) + 1],
               })
             end
-            highlight(opening, group)
-            highlight({row=row - 1, column=column - 1}, group)
+            highlight(opening, group, opening.bracket)
+            highlight({row=row - 1, column=column - 1}, group, bracket)
           end
         end
         yield_if_busy()

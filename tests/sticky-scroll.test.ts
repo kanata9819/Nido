@@ -224,6 +224,94 @@ assert(ok,err)
     }
 });
 
+test('method separators survive edits and pending outlines without retaining deleted or obsolete methods', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.client.request('nvim_exec_lua', [
+            `
+local api, sticky = vim.api, require('nido_sticky')
+local buffer, window = api.nvim_get_current_buf(), api.nvim_get_current_win()
+api.nvim_buf_set_lines(buffer,0,-1,false,{
+  'class Panel {','  constructor(','    value: number','  ) {','    work();','  }',
+  '  later() {','    work();','  }','}'})
+local held, cancelled, counts = {}, {}, {}
+local clients, notify, latest, recording = vim.lsp.get_clients, vim.rpcnotify, nil, false
+local client = {initialized=true, offset_encoding='utf-16',
+  request=function(_,_,_,callback) held[#held+1]=callback;return true,#held end,
+  cancel_request=function(_,id) cancelled[id]=true end}
+vim.lsp.get_clients=function(filter)
+  if filter and filter.method=='textDocument/documentSymbol' then return {client} end
+  return clients(filter)
+end
+vim.rpcnotify=function(channel,name,state,...)
+  if name=='nido:sticky_scroll' then
+    latest=vim.deepcopy(state)
+    if recording then counts[#counts+1]=#state.separators end
+  end
+  return notify(channel,name,state,...)
+end
+local function rows()
+  sticky.publish(window,buffer)
+  return vim.tbl_map(function(item) return item.line end,latest.separators)
+end
+local function expect(expected,why)
+  local actual=rows()
+  assert(vim.deep_equal(actual,expected),why .. ': ' .. vim.inspect(actual))
+end
+local function request()
+  local before=#held
+  api.nvim_exec_autocmds('TextChanged',{buffer=buffer})
+  assert(vim.wait(5000,function() return #held>before end,5),'Outline request missing')
+  return #held
+end
+local ok,err=pcall(function()
+  sticky.set_method_separators(true)
+  request()
+  held[#held](nil,{
+    {name='constructor',kind=9,range={start={line=1,character=2},['end']={line=5,character=3}}},
+    {name='later',kind=6,range={start={line=6,character=2},['end']={line=8,character=3}}}
+  })
+  expect({2,7},'The multiline constructor must come from the outline')
+  recording=true
+  for _,text in ipairs({'x','y','z'}) do
+    api.nvim_buf_set_text(buffer,4,4,4,4,{text})
+    expect({2,7},'Typing must not erase existing separators before reparsing')
+  end
+  local failed=request()
+  held[failed]({message='Temporarily unavailable'},nil)
+  expect({2,7},'An outline error must not erase the tracked methods')
+  local stale=request()
+  expect({2,7},'Fallback refresh must retain LSP-only methods while waiting')
+  api.nvim_buf_set_text(buffer,4,4,4,4,{'日'})
+  expect({2,7},'Unicode edits must preserve method positions')
+  request()
+  assert(cancelled[stale],'An obsolete outline must be cancelled')
+  held[stale](nil,{})
+  expect({2,7},'A cancelled empty reply must not erase the current methods')
+  api.nvim_buf_set_text(buffer,1,0,1,0,{'',''})
+  expect({3,8},'Inserting a newline before the header must move both separators')
+  api.nvim_buf_set_lines(buffer,1,2,false,{})
+  expect({2,7},'Removing that blank line must restore the positions')
+  for _,count in ipairs(counts) do
+    assert(count==2,'A redraw temporarily lost a separator during editing or an outline request')
+  end
+  recording=false
+  api.nvim_buf_set_lines(buffer,1,2,false,{})
+  expect({6},'Deleting a method header must not move its separator onto its neighbor')
+  request()
+  held[#held](nil,{})
+  expect({},'A current empty outline must remove old methods')
+end)
+vim.lsp.get_clients,vim.rpcnotify=clients,notify
+assert(ok,err)
+`,
+            []
+        ]);
+    } finally {
+        await session.stop();
+    }
+});
+
 test('sticky publication reads viewport bounds once per call and follows viewport changes', async () => {
     const session = await Session.create(process.cwd(), () => {});
     try {
