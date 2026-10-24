@@ -226,6 +226,12 @@ export function buildItems(
                   ...(workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal'
                       ? [
                             {
+                                key: 'o',
+                                title: 'Go to symbol in file',
+                                detail: 'Find functions, classes and methods · Ctrl+Shift+O',
+                                run: () => showPanel('symbols')
+                            },
+                            {
                                 key: '',
                                 title: 'Search in files',
                                 detail: 'Search project text · Ctrl+Shift+F',

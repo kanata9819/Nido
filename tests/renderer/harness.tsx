@@ -66,6 +66,7 @@ const parameters = new URLSearchParams(location.search);
 const deferred = new Set(parameters.get('defer')?.split(',') || []);
 const listeners = new Set<(event: NidoEvent) => void>();
 const calls: Call[] = [];
+const symbolVersions = new Map<string, number>();
 const pending: (Call & { resolve: (value: unknown) => void; reject: (value: unknown) => void })[] =
     [];
 const workspace = { id: 'alpha', root: '/alpha', name: 'Alpha' };
@@ -126,6 +127,12 @@ window.nido = new Proxy({} as NidoAPI, {
                 return new Promise((resolve, reject) =>
                     pending.push({ method, args, resolve, reject })
                 );
+            }
+            if (method === 'findSymbols') {
+                const id = String(args[0]);
+                const version = (symbolVersions.get(id) ?? 0) + 1;
+                symbolVersions.set(id, version);
+                return Promise.resolve(version);
             }
             if (method === 'attach') {
                 queueMicrotask(() => {
@@ -321,6 +328,13 @@ window.rendererTest = {
     pending,
     render,
     emit(event) {
+        if ((event.type === 'state' || event.type === 'statePatch') && event.state.symbols) {
+            symbolVersions.set(
+                event.id,
+                Math.max(symbolVersions.get(event.id) ?? 0, event.state.symbols.version)
+            );
+        }
+        if (event.type === 'exit') symbolVersions.delete(event.id);
         for (const listener of listeners) listener(event);
     },
     settle(method, index, value, reject = false) {

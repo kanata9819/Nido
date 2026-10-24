@@ -610,6 +610,8 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
             <PanelComponent
                 settings={settings}
                 workspaceId={active}
+                buffer={state.current}
+                symbols={state.symbols}
                 initialFolder={workspace?.root || ''}
                 folderKind={folderKind}
                 favorites={favorites}

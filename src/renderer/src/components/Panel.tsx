@@ -8,13 +8,16 @@ import styles from '../assets/Palette.module.css';
 import FolderPicker from './FolderPicker';
 import GitBrowser from './GitBrowser';
 import TimeMachine from './TimeMachine';
-import type { FavoriteWorkspace } from '../../../shared/types';
+import type { DocumentSymbolList, FavoriteWorkspace } from '../../../shared/types';
+import SymbolPalette from './SymbolPalette';
 import OverlayPresence from './OverlayPresence';
 import { useState } from 'react';
 
 interface PanelProps {
     settings: SettingsPanelProps;
     workspaceId: string;
+    buffer: number;
+    symbols?: DocumentSymbolList;
     initialFolder: string;
     folderKind: 'editor' | 'terminal';
     favorites: FavoriteWorkspace[];
@@ -41,6 +44,7 @@ const panelTitles = {
     git: 'Source control',
     folders: 'Open a workspace',
     files: 'Find a file',
+    symbols: 'File symbols',
     search: 'Search in files',
     workspaces: 'Your workspaces',
     buffers: 'Open files',
@@ -51,6 +55,8 @@ const panelTitles = {
 export function Panel({
     settings,
     workspaceId,
+    buffer,
+    symbols,
     initialFolder,
     folderKind,
     favorites,
@@ -81,6 +87,17 @@ export function Panel({
 
     let content: React.JSX.Element;
     switch (panel) {
+        case 'symbols':
+            content = (
+                <SymbolPalette
+                    key={`${workspaceId}:${buffer}`}
+                    workspaceId={workspaceId}
+                    buffer={buffer}
+                    symbols={symbols}
+                    focusEditor={focusEditor}
+                />
+            );
+            break;
         case 'search':
             content = (
                 <WorkspaceSearch

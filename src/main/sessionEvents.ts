@@ -93,9 +93,9 @@ export class SessionEvents {
         // a snapshot when they change, and only lightweight changes between them.
         if (
             !previous ||
-            (['buffers', 'problems', 'diagnostics', 'references', 'debug'] as const).some(
-                (key) => previous[key] !== current[key]
-            )
+            (
+                ['buffers', 'problems', 'diagnostics', 'references', 'symbols', 'debug'] as const
+            ).some((key) => previous[key] !== current[key])
         ) {
             this.sendToRenderer({ type: 'state', id: this.workspaceId, state: current });
             return;
@@ -276,7 +276,8 @@ export class SessionEvents {
                     ...this.state,
                     ...update,
                     debug: this.state.debug,
-                    references: this.state.references
+                    references: this.state.references,
+                    symbols: this.state.symbols
                 };
                 // MessagePack nil explicitly clears optional values in partial updates.
                 if (this.state.scrollCursor === null) {
@@ -307,6 +308,15 @@ export class SessionEvents {
                     }));
                 }
                 this.state = { ...this.state, references };
+                this.publishState();
+                break;
+            }
+            case 'nido:symbols': {
+                const symbols = args[0] as NonNullable<SessionState['symbols']>;
+                if (!Array.isArray(symbols.items)) {
+                    symbols.items = [];
+                }
+                this.state = { ...this.state, symbols };
                 this.publishState();
                 break;
             }

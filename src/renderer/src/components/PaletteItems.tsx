@@ -10,6 +10,7 @@ interface PaletteItemsProps {
     selection: number;
     query: string;
     loading: boolean;
+    message?: string;
     setQuery: (value: string) => void;
     setSelection: React.Dispatch<React.SetStateAction<number>>;
 }
@@ -28,6 +29,7 @@ function itemIcon(panel: Exclude<Panel, null>, severity: number | undefined): Re
         case 'workspaces':
             return <FolderOpen size={18} />;
         case 'files':
+        case 'symbols':
         case 'search':
         case 'buffers':
             return <FileCode2 size={18} />;
@@ -49,9 +51,15 @@ const PaletteItem = memo(function PaletteItem({
 }): React.JSX.Element {
     return (
         <button
-            id={panel === 'problems' ? `problem-${index}` : undefined}
-            role={panel === 'problems' ? 'option' : undefined}
-            aria-selected={panel === 'problems' ? selected : undefined}
+            id={
+                panel === 'problems'
+                    ? `problem-${index}`
+                    : panel === 'symbols'
+                      ? `symbol-${index}`
+                      : undefined
+            }
+            role={panel === 'problems' || panel === 'symbols' ? 'option' : undefined}
+            aria-selected={panel === 'problems' || panel === 'symbols' ? selected : undefined}
             data-severity={item.severity}
             className={selected ? styles.selectedItem : ''}
             ref={(node) => {
@@ -77,6 +85,7 @@ export default function PaletteItems({
     selection,
     query,
     loading,
+    message,
     setQuery,
     setSelection
 }: PaletteItemsProps): React.JSX.Element {
@@ -119,13 +128,22 @@ export default function PaletteItems({
                 ref={filter}
                 autoFocus={panel !== 'problems'}
                 className={styles.paletteInput}
+                role={panel === 'symbols' ? 'combobox' : undefined}
+                aria-expanded={panel === 'symbols' ? true : undefined}
+                aria-autocomplete={panel === 'symbols' ? 'list' : undefined}
+                aria-controls={panel === 'symbols' ? 'symbol-results' : undefined}
+                aria-activedescendant={
+                    panel === 'symbols' && filtered[selection] ? `symbol-${selection}` : undefined
+                }
                 aria-label={panel === 'search' ? t('Search in files') : t('Filter items')}
                 placeholder={
                     panel === 'files'
                         ? t('Type a filename…')
-                        : panel === 'search'
-                          ? t('Type text to grep…')
-                          : t('Type to search…')
+                        : panel === 'symbols'
+                          ? t('Type a symbol name…')
+                          : panel === 'search'
+                            ? t('Type text to grep…')
+                            : t('Type to search…')
                 }
                 value={query}
                 onChange={(event) => {
@@ -148,7 +166,7 @@ export default function PaletteItems({
                         setSelection((n) => Math.max(0, n - 1));
                     } else if (event.key === 'Enter') {
                         event.preventDefault();
-                        if ((panel === 'files' || panel === 'search') && loading) {
+                        if (['files', 'search', 'symbols'].includes(panel) && loading) {
                             pendingEnter.current = query;
                         } else {
                             filtered[Math.max(0, selection)]?.run();
@@ -158,10 +176,18 @@ export default function PaletteItems({
             />
             <div
                 className={styles.paletteItems}
+                id={panel === 'symbols' ? 'symbol-results' : undefined}
                 ref={results}
                 tabIndex={panel === 'problems' ? 0 : undefined}
-                role={panel === 'problems' ? 'listbox' : undefined}
-                aria-label={panel === 'problems' ? t('Problems') : undefined}
+                role={panel === 'problems' || panel === 'symbols' ? 'listbox' : undefined}
+                aria-label={
+                    panel === 'problems'
+                        ? t('Problems')
+                        : panel === 'symbols'
+                          ? t('File symbols')
+                          : undefined
+                }
+                aria-busy={panel === 'symbols' ? loading : undefined}
                 aria-activedescendant={
                     panel === 'problems' && filtered[selection] ? `problem-${selection}` : undefined
                 }
@@ -197,6 +223,11 @@ export default function PaletteItems({
                     }
                 }}
             >
+                {panel === 'symbols' && message && filtered.length > 0 && (
+                    <p className={styles.noResults} role="status">
+                        {t(message)}
+                    </p>
+                )}
                 {filtered.map((item, i) => (
                     <PaletteItem
                         key={`${item.title}-${i}`}
@@ -209,14 +240,18 @@ export default function PaletteItems({
                 {!filtered.length && (
                     <p className={styles.noResults}>
                         {loading
-                            ? t('Looking through your project…')
-                            : panel === 'search'
-                              ? query
-                                  ? t('No matching lines.')
-                                  : t('Enter text to search this workspace.')
-                              : panel === 'problems' && !query
-                                ? t('No problems reported.')
-                                : t('No matching items.')}
+                            ? panel === 'symbols'
+                                ? t('Loading symbols…')
+                                : t('Looking through your project…')
+                            : message
+                              ? t(message)
+                              : panel === 'search'
+                                ? query
+                                    ? t('No matching lines.')
+                                    : t('Enter text to search this workspace.')
+                                : panel === 'problems' && !query
+                                  ? t('No problems reported.')
+                                  : t('No matching items.')}
                     </p>
                 )}
             </div>

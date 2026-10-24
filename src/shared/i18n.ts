@@ -318,6 +318,25 @@ export const japanese: Record<string, string> = {
     'git palette': 'ソース管理',
     'folders palette': 'ワークスペースを開く',
     'files palette': 'ファイルを検索',
+    'symbols palette': 'ファイル内のシンボル',
+    'File symbols': 'ファイル内のシンボル',
+    'Go to symbol in file': 'ファイル内のシンボルへ移動',
+    'Find functions, classes and methods · Ctrl+Shift+O':
+        '関数・クラス・メソッドを検索 · Ctrl+Shift+O',
+    'Type a symbol name…': 'シンボル名を入力…',
+    'Loading symbols…': 'シンボルを読み込み中…',
+    'No symbols found in this file.': 'このファイルにシンボルはありません。',
+    'Line {line}': '{line} 行',
+    'No language server supports symbols for this file.':
+        'このファイルのシンボル検索に対応する言語サーバーがありません。',
+    'The symbol request timed out.': 'シンボルの取得がタイムアウトしました。',
+    'The language server could not accept the symbol request.':
+        '言語サーバーがシンボルの取得を開始できませんでした。',
+    'The file changed. Reopen symbol search.':
+        'ファイルが変更されました。シンボル検索を開き直してください。',
+    'Symbols changed. Select a result again.':
+        'シンボルが変更されました。結果を選び直してください。',
+    'Symbol is no longer available.': 'このシンボルは利用できなくなりました。',
     'workspaces palette': 'ワークスペース一覧',
     'buffers palette': '開いているファイル',
     'commands palette': 'すべてのコマンド',

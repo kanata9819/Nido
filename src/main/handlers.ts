@@ -356,6 +356,10 @@ export function registerHandlers({
             }
         }
     });
+    handle('findSymbols', (id) => session(id).findSymbols());
+    handle('openSymbol', (id, index, version) =>
+        session(id).openSymbol(integer(index), integer(version))
+    );
     handle('openReference', (id, index, version) =>
         session(id).openReference(integer(index), integer(version))
     );

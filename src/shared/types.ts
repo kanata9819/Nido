@@ -72,6 +72,7 @@ export interface SessionState {
     scrollPercent?: number;
     diagnostics?: Record<string, number>;
     references?: ReferenceList;
+    symbols?: DocumentSymbolList;
     debug?: DebugState;
     lineEnding?: 'LF' | 'CRLF' | 'Mixed' | 'CR';
     lsp?: string;
@@ -90,6 +91,19 @@ export interface ReferenceList {
     loading: boolean;
     error: string;
     items: { path: string; line: number; column: number; text: string }[];
+}
+export interface DocumentSymbolList {
+    version: number;
+    buffer: number;
+    loading: boolean;
+    error: string;
+    items: {
+        name: string;
+        kind: string;
+        container: string;
+        line: number;
+        column: number;
+    }[];
 }
 export interface ReferencePreview {
     first: number;
@@ -297,6 +311,8 @@ export interface NidoAPI {
     openFile(id: string, relative: string, line?: number, column?: number): Promise<void>;
     openReference(id: string, index: number, version: number): Promise<void>;
     openProblem(id: string, index: number, version: number): Promise<void>;
+    findSymbols(id: string): Promise<number>;
+    openSymbol(id: string, index: number, version: number): Promise<void>;
     previewReference(id: string, index: number, version: number): Promise<ReferencePreview>;
     selectBuffer(id: string, buffer: number): Promise<void>;
     closeBuffer(id: string, buffer: number): Promise<boolean>;

@@ -9,6 +9,7 @@ export default defineConfig({
         'history-renderer.spec.ts',
         'workspace-search-renderer.spec.ts',
         'workspace-actions-renderer.spec.ts',
+        'document-symbols.spec.ts',
         'overlay-motion.spec.ts'
     ],
     timeout: 30000,

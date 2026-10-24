@@ -301,6 +301,22 @@ export function useKeyboardShortcuts({
             }
             return;
         }
+        if (
+            active &&
+            !terminalFocused &&
+            workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal' &&
+            event.ctrlKey &&
+            event.shiftKey &&
+            !event.altKey &&
+            !event.metaKey &&
+            event.key.toLowerCase() === 'o'
+        ) {
+            consume();
+            if (!event.repeat) {
+                showPanel('symbols');
+            }
+            return;
+        }
         if (panel) {
             if (event.key === 'Tab' && modal.current) {
                 const nodes = [

@@ -665,6 +665,20 @@ return false`,
         ]);
     }
 
+    async findSymbols(): Promise<number> {
+        return this.client.request('nvim_exec_lua', ["return require('nido_symbols').find()", []]);
+    }
+
+    async openSymbol(index: number, version: number): Promise<void> {
+        this.interaction.cancelPrefetch();
+        await this.interaction.enqueue(() =>
+            this.client.request('nvim_exec_lua', [
+                "require('nido_symbols').open(...)",
+                [index, version]
+            ])
+        );
+    }
+
     async openProblem(index: number, version: number): Promise<void> {
         const problem = this.state.problems?.[index - 1];
         if (!problem || version !== this.state.diagnosticsVersion) {

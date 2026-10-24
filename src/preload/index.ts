@@ -71,6 +71,8 @@ const api: NidoAPI = {
     cancelFindFiles: (id) => ipcRenderer.invoke('nido:cancelFindFiles', id),
     openFile: (id, path, line, column) =>
         ipcRenderer.invoke('nido:openFile', id, path, line, column),
+    findSymbols: (id) => ipcRenderer.invoke('nido:findSymbols', id),
+    openSymbol: (id, index, version) => ipcRenderer.invoke('nido:openSymbol', id, index, version),
     openReference: (id, index, version) =>
         ipcRenderer.invoke('nido:openReference', id, index, version),
     openProblem: (id, index, version) => ipcRenderer.invoke('nido:openProblem', id, index, version),
