@@ -13,6 +13,7 @@ import { translate, type Language } from '../shared/i18n';
 import { LanguagePacks } from './languagePacks';
 import type { LanguagePackSnapshot } from '../shared/languagePacks';
 import type { SearchOptions } from '../shared/search';
+import { availableTerminalShells } from './terminalShells';
 
 export interface AppState {
     language?: Language;
@@ -85,6 +86,8 @@ export function registerHandlers({
             return fn(...args);
         });
     };
+
+    handle('availableTerminalShells', () => availableTerminalShells());
 
     const languagePacks = new LanguagePacks(neovimResources, app.getPath('userData'));
     let packUpdate: Promise<unknown> = Promise.resolve();

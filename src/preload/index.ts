@@ -9,6 +9,7 @@ const api: NidoAPI = {
     reloadLanguagePacks: () => ipcRenderer.invoke('nido:reloadLanguagePacks'),
     openLanguagePackFolder: () => ipcRenderer.invoke('nido:openLanguagePackFolder'),
     wslDistributions: () => ipcRenderer.invoke('nido:wslDistributions'),
+    availableTerminalShells: () => ipcRenderer.invoke('nido:availableTerminalShells'),
     setHistoryEnabled: (enabled) => ipcRenderer.invoke('nido:historyEnabled', enabled),
     history: (id) => ipcRenderer.invoke('nido:history', id),
     historyPreview: (id, path, version) =>

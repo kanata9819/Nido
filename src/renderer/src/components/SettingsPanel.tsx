@@ -3,8 +3,17 @@ import type { TerminalShell, UITheme } from '../../../shared/types';
 import type { ActivityBarPosition, EditorSettings } from '../hooks/useEditorSettings';
 import styles from '../assets/SettingsPanel.module.css';
 import type { Language } from '../../../shared/i18n';
+import { useEffect, useState } from 'react';
 
 export type SettingsPanelProps = Omit<EditorSettings, 'sidebarWidth' | 'resizeSidebar'>;
+
+const shellLabels: Record<TerminalShell, string> = {
+    auto: 'Auto (installed shell)',
+    pwsh: 'PowerShell 7 (pwsh)',
+    'powershell.exe': 'Windows PowerShell',
+    'cmd.exe': 'Command Prompt (cmd)',
+    'wsl.exe': 'WSL'
+};
 
 export default function SettingsPanel({
     historyEnabled,
@@ -55,6 +64,28 @@ export default function SettingsPanel({
     setLineHeight
 }: SettingsPanelProps): React.JSX.Element {
     const t = useI18n();
+    const [installedShells, setInstalledShells] = useState<TerminalShell[]>();
+    const [shellError, setShellError] = useState(false);
+    useEffect(() => {
+        let cancelled = false;
+        void window.nido
+            .availableTerminalShells()
+            .then((shells) => {
+                if (!cancelled) {
+                    setInstalledShells(shells);
+                    setTerminalShell((current) => (shells.includes(current) ? current : 'auto'));
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setShellError(true);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [setTerminalShell]);
+    const shellChoices: TerminalShell[] = installedShells ?? ['auto'];
     return (
         <div
             className={styles.settings}
@@ -86,7 +117,7 @@ export default function SettingsPanel({
                     const inputs = [
                         ...event.currentTarget.querySelectorAll<
                             HTMLInputElement | HTMLSelectElement
-                        >('input, select')
+                        >('input:not(:disabled), select:not(:disabled)')
                     ];
                     const index = inputs.indexOf(target);
                     inputs[(index + (next ? 1 : -1) + inputs.length) % inputs.length]?.focus();
@@ -386,16 +417,26 @@ export default function SettingsPanel({
                 <label>
                     {t('Shell')}
                     <select
-                        value={terminalShell}
+                        value={installedShells?.includes(terminalShell) ? terminalShell : 'auto'}
+                        disabled={!installedShells}
+                        aria-busy={!installedShells && !shellError}
+                        aria-describedby="settings-shell-status"
                         onChange={(event) => setTerminalShell(event.target.value as TerminalShell)}
                     >
-                        <option value="auto">{t('Auto (PowerShell)')}</option>
-                        <option value="pwsh">PowerShell 7 (pwsh)</option>
-                        <option value="powershell.exe">Windows PowerShell</option>
-                        <option value="cmd.exe">{t('Command Prompt (cmd)')}</option>
-                        <option value="wsl.exe">WSL</option>
+                        {shellChoices.map((shell) => (
+                            <option key={shell} value={shell}>
+                                {t(shellLabels[shell])}
+                            </option>
+                        ))}
                     </select>
                 </label>
+                <small id="settings-shell-status" role="status">
+                    {shellError
+                        ? t('Could not check installed shells.')
+                        : !installedShells
+                          ? t('Checking installed shells…')
+                          : t('Only installed shells are shown.')}
+                </small>
                 <small>
                     {t('Applies to new terminals and Restart Shell. The selection is saved.')}
                 </small>

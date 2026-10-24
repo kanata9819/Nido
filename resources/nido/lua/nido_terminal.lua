@@ -1,19 +1,19 @@
 local M = {}
 local job, buffer
 
-function M.start(choice)
-  local commands = {
-    auto = {vim.fn.executable('pwsh') == 1 and 'pwsh' or 'powershell.exe', '-NoLogo'},
-    pwsh = {'pwsh', '-NoLogo'},
-    ['powershell.exe'] = {'powershell.exe', '-NoLogo'},
-    ['cmd.exe'] = {'cmd.exe'},
-    ['wsl.exe'] = {'wsl.exe'},
+function M.start(choice, command)
+  local choices = {
+    auto = true,
+    pwsh = true,
+    ['powershell.exe'] = true,
+    ['cmd.exe'] = true,
+    ['wsl.exe'] = true,
   }
-  local command = commands[choice or 'auto']
-  assert(command, 'Invalid terminal shell.')
+  assert(choices[choice or 'auto'], 'Invalid terminal shell.')
   if vim.env.NIDO_WSL == '1' then
     command = {vim.env.SHELL or '/bin/sh', '-l'}
   end
+  assert(type(command) == 'table' and type(command[1]) == 'string', 'Invalid terminal command.')
   assert(vim.fn.executable(command[1]) == 1, 'Shell is not installed or not on PATH: ' .. command[1])
   vim.cmd('stopinsert')
   local previous_job = job

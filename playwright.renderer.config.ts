@@ -10,6 +10,7 @@ export default defineConfig({
         'workspace-search-renderer.spec.ts',
         'workspace-actions-renderer.spec.ts',
         'document-symbols.spec.ts',
+        'terminal-shells.spec.ts',
         'overlay-motion.spec.ts'
     ],
     timeout: 30000,

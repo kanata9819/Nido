@@ -2008,8 +2008,9 @@ test('settings can be navigated and changed entirely with the keyboard', async (
         await expect(history).not.toBeChecked();
         await page.keyboard.press('Enter');
         await expect(history).toBeChecked();
-        await page.keyboard.press('ArrowDown');
         const shell = page.getByRole('combobox', { name: 'Shell', exact: true });
+        await expect(shell).toBeEnabled();
+        await page.keyboard.press('ArrowDown');
         await expect(shell).toBeFocused();
         await page.keyboard.press('Control+k');
         await expect(history).toBeFocused();
@@ -4276,6 +4277,8 @@ test('settings navigation crosses the shell selector with Ctrl D and Ctrl U', as
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         const shell = page.getByRole('combobox', { name: 'Shell', exact: true });
         const extension = page.getByRole('checkbox', { name: 'Use EditorConfig' });
+        await expect(shell).toBeEnabled();
+        const firstInstalled = await shell.locator('option').nth(1).getAttribute('value');
         await shell.focus();
         await page.keyboard.press('Control+d');
         await expect(extension).toBeFocused();
@@ -4287,7 +4290,7 @@ test('settings navigation crosses the shell selector with Ctrl D and Ctrl U', as
         await expect(shell).toBeFocused();
         await page.keyboard.press('ArrowDown');
         await expect(shell).toBeFocused();
-        await expect(shell).toHaveValue('pwsh');
+        await expect(shell).toHaveValue(firstInstalled!);
     } finally {
         await running.evaluate(({ app }) => app.exit(0));
         await running.close();

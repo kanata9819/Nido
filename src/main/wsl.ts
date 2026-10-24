@@ -27,12 +27,12 @@ export function wslArguments(distribution: string, cwd: string, args: string[]):
     return ['--distribution', distribution, '--cd', cwd, '--exec', ...args];
 }
 
-export async function wslDistributions(): Promise<string[]> {
+export async function wslDistributions(executable = 'wsl.exe'): Promise<string[]> {
     if (process.platform !== 'win32') {
         return [];
     }
     try {
-        const { stdout } = await exec('wsl.exe', ['--list', '--quiet'], {
+        const { stdout } = await exec(executable, ['--list', '--quiet'], {
             encoding: 'buffer',
             windowsHide: true,
             timeout: 15000

@@ -301,6 +301,10 @@ export const japanese: Record<string, string> = {
     Terminal: 'ターミナル',
     Shell: 'シェル',
     'Auto (PowerShell)': '自動（PowerShell）',
+    'Auto (installed shell)': '自動（利用可能なシェル）',
+    'Checking installed shells…': 'インストール済みのシェルを確認中…',
+    'Could not check installed shells.': 'インストール済みのシェルを確認できませんでした。',
+    'Only installed shells are shown.': 'インストール済みのシェルのみ表示します。',
     'Command Prompt (cmd)': 'コマンドプロンプト（cmd）',
     'Applies to new terminals and Restart Shell. The selection is saved.':
         '新しいターミナルとシェルの再起動に適用します。選択は保存されます。',

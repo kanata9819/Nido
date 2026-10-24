@@ -275,7 +275,7 @@ export function registerWorkspaceHandlers({
         state.active = selected;
     });
 
-    handle('wslDistributions', wslDistributions);
+    handle('wslDistributions', () => wslDistributions());
     handle('browseFolders', async (value, distribution) => {
         const requested = value === undefined || value === '' ? app.getPath('home') : text(value);
         const remote = parseWslPath(requested);

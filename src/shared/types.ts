@@ -235,6 +235,7 @@ export interface NidoAPI {
     reloadLanguagePacks(): Promise<void>;
     openLanguagePackFolder(): Promise<void>;
     wslDistributions(): Promise<string[]>;
+    availableTerminalShells(): Promise<TerminalShell[]>;
     setHistoryEnabled(enabled: boolean): Promise<void>;
     history(id: string): Promise<HistoryList>;
     historyPreview(id: string, path: string, version: string): Promise<HistoryPreview>;

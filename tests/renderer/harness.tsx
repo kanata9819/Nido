@@ -73,6 +73,7 @@ const workspace = { id: 'alpha', root: '/alpha', name: 'Alpha' };
 const defaults: Record<string, unknown> = {
     windowState: { maximized: false },
     wslDistributions: [],
+    availableTerminalShells: ['auto', 'powershell.exe', 'cmd.exe'],
     favoriteWorkspaces: [],
     restoreWorkspaces: { workspaces: [workspace], active: 'alpha', errors: [] },
     files: [],

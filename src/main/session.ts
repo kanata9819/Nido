@@ -25,6 +25,8 @@ import { prepareWsl, resolveWslFolder, trashWslFile, wslArguments } from './wsl'
 import { discoverLanguagePacks } from './languagePacks';
 import type { LanguagePackConfiguration, LanguagePackRuntime } from '../shared/languagePacks';
 import type { SearchOptions, ReplacementPreview, ReplacementResult } from '../shared/search';
+import { terminalShells, type TerminalShell } from '../shared/types';
+import { resolveTerminalShell } from './terminalShells';
 
 export class Session {
     terminal?: Session;
@@ -316,9 +318,13 @@ export class Session {
 
     async startTerminal(shell = 'auto'): Promise<void> {
         return this.interaction.enqueue(async () => {
+            if (!terminalShells.includes(shell as TerminalShell)) {
+                throw new Error('Invalid terminal shell.');
+            }
+            const command = this.workspace.wsl ? [] : await resolveTerminalShell(shell);
             await this.client.request('nvim_exec_lua', [
                 "require('nido_terminal').start(...)",
-                [shell]
+                [shell, command]
             ]);
             this.workspace.kind = 'terminal';
             this.workspace.name = `Terminal · ${basename(this.workspace.root)}`;
