@@ -50,6 +50,9 @@ function cellForeground(h: Highlight, background: string, foreground: string): s
 /** Paint grid snapshots, reusing rasterized row images until their content changes. */
 export class GridCanvas {
     private rowImages = new WeakMap<Cell[], HTMLCanvasElement>();
+    private rowOverhangs = new WeakMap<HTMLCanvasElement, number>();
+    private glyphMetrics = new Map<string, Map<string, TextMetrics>>();
+    private glyphMetricCount = 0;
     private dirtyImages = new WeakSet<HTMLCanvasElement>();
     private dirtyPrefixes = new WeakMap<
         HTMLCanvasElement,
@@ -99,6 +102,8 @@ export class GridCanvas {
         } else {
             this.invalidatePaint();
             this.rowImages = new WeakMap();
+            this.glyphMetrics.clear();
+            this.glyphMetricCount = 0;
         }
     }
 
@@ -203,7 +208,33 @@ export class GridCanvas {
         // Resolve shared highlights once per paint; the next paint sees fresh
         // definitions, theme colors and font settings without invalidation state.
         const cellStyles = new Map<number, CellStyle>();
-        const digitWidths = new Map<string, number>();
+        const digitBounds = new Map<string, { left: number; right: number }>();
+        const measure = (
+            context: CanvasRenderingContext2D,
+            font: string,
+            text: string
+        ): TextMetrics => {
+            let glyphs = this.glyphMetrics.get(font);
+            if (!glyphs) {
+                glyphs = new Map();
+                this.glyphMetrics.set(font, glyphs);
+            }
+            let metrics = glyphs.get(text);
+            if (!metrics) {
+                // Reuse native ink metrics across scroll frames without retaining
+                // every visited CodeLens string for the life of the editor.
+                if (this.glyphMetricCount >= 1024) {
+                    this.glyphMetrics.clear();
+                    this.glyphMetricCount = 0;
+                    glyphs = new Map();
+                    this.glyphMetrics.set(font, glyphs);
+                }
+                metrics = context.measureText(text);
+                glyphs.set(text, metrics);
+                this.glyphMetricCount++;
+            }
+            return metrics;
+        };
         const cellStyle = (id: number): CellStyle => {
             let style = cellStyles.get(id);
             if (!style) {
@@ -246,6 +277,8 @@ export class GridCanvas {
         if (imageStyle !== this.imageStyle) {
             this.imageStyle = imageStyle;
             this.rowImages = new WeakMap();
+            this.glyphMetrics.clear();
+            this.glyphMetricCount = 0;
             this.invalidatePaint();
         }
         const previousOffset = this.grid.scrollOffset;
@@ -366,33 +399,49 @@ export class GridCanvas {
                 let currentFont = '';
                 const prefix = this.dirtyPrefixes.get(image);
                 this.dirtyPrefixes.delete(image);
+                const previousOverhang = prefix ? this.rowOverhangs.get(image) : undefined;
+                // Cover snapped indent strokes and CSS-rounded box-drawing lines,
+                // including their native antialias fringe at any device scale.
+                let overhang = Math.max(previousOverhang ?? 0, 2.5 / dpr, 0.5 + 1 / dpr);
+                let columns = this.grid.columns;
                 if (prefix) {
                     ctx.save();
                     let right = prefix.end * cellWidth + 0.5;
                     for (const id of prefix.highlights) {
                         const font = cellStyle(id).font;
-                        let ink = digitWidths.get(font);
+                        let ink = digitBounds.get(font);
                         if (ink === undefined) {
                             ctx.font = font;
                             currentFont = font;
-                            ink = Math.max(
-                                ...Array.from(
-                                    '0123456789',
-                                    (text) => ctx.measureText(text).actualBoundingBoxRight
-                                )
-                            );
-                            digitWidths.set(font, ink);
+                            ink = { left: -Infinity, right: -Infinity };
+                            for (const text of '0123456789') {
+                                const metrics = measure(ctx, font, text);
+                                ink.left = Math.max(ink.left, metrics.actualBoundingBoxLeft);
+                                ink.right = Math.max(ink.right, metrics.actualBoundingBoxRight);
+                            }
+                            digitBounds.set(font, ink);
                         }
+                        overhang = Number.isFinite(ink.left)
+                            ? Math.max(overhang, ink.left + 1.5 / dpr)
+                            : Infinity;
                         right = Math.max(
                             right,
-                            Math.round((prefix.end - 1) * cellWidth * dpr) / dpr + ink
+                            Math.round((prefix.end - 1) * cellWidth * dpr) / dpr + ink.right
                         );
                     }
                     // Preserve the unchanged suffix, including glyphs crossing the damage edge.
                     ctx.setTransform(1, 0, 0, 1, 0, 0);
                     ctx.beginPath();
-                    ctx.rect(0, 0, Math.ceil(right * dpr) + 1, image.height);
+                    const edge = Math.ceil(right * dpr) + 1;
+                    ctx.rect(0, 0, edge, image.height);
                     ctx.clip();
+                    if (previousOverhang !== undefined) {
+                        // A row-wide ink bound also retains distant combining glyphs.
+                        columns = Math.min(
+                            columns,
+                            Math.max(prefix.end, Math.ceil((edge / dpr + overhang) / cellWidth))
+                        );
+                    }
                 }
                 if (translucent) {
                     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -413,6 +462,16 @@ export class GridCanvas {
                         currentColor = value;
                     }
                 };
+                const rememberText = (text: string): void => {
+                    if (previousOverhang !== undefined) {
+                        return;
+                    }
+                    const left = measure(ctx, currentFont, text).actualBoundingBoxLeft;
+                    // Snapped text origins differ by at most half a physical pixel.
+                    overhang = Number.isFinite(left)
+                        ? Math.max(overhang, left + 1.5 / dpr)
+                        : Infinity;
+                };
                 const y = 0;
                 const highlightTop = Math.max(
                     0,
@@ -427,7 +486,7 @@ export class GridCanvas {
                     ctx.fillRect(0, 0, width, image.height / dpr);
                 }
                 // Paint all cell backgrounds first so a wide glyph is not erased by its continuation cell.
-                for (let col = 0; col < this.grid.columns; col++) {
+                for (let col = 0; col < columns; col++) {
                     const style = cellStyle(cells[col]?.highlight || 0);
                     const h = style.highlight;
                     const background = style.background;
@@ -471,7 +530,7 @@ export class GridCanvas {
                     );
                 }
 
-                for (let col = 0; col < this.grid.columns; col++) {
+                for (let col = 0; col < columns; col++) {
                     const cell = cells[col];
                     if (!cell?.text || cell.text === ' ') {
                         continue;
@@ -490,6 +549,7 @@ export class GridCanvas {
                         }
                         font(style.font);
                         foreground(style.foreground);
+                        rememberText(text);
                         ctx.fillText(
                             text,
                             Math.round(start * cellWidth * dpr) / dpr,
@@ -517,6 +577,7 @@ export class GridCanvas {
                         ctx.fillRect(Math.round(x + cellWidth / 2), y, 1, rowHeight);
                     } else {
                         // Keep glyph origins on physical pixels, including fractional Windows scaling.
+                        rememberText(cell.text);
                         ctx.fillText(cell.text, Math.round(x * dpr) / dpr, baseline);
                     }
                     if (h.bracketMatch) {
@@ -547,6 +608,8 @@ export class GridCanvas {
                         );
                     }
                 }
+                // New digits may overhang farther; retain them for shorter prefixes.
+                this.rowOverhangs.set(image, overhang);
                 if (prefix) {
                     ctx.restore();
                 }

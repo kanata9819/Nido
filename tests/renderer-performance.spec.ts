@@ -984,6 +984,133 @@ test('row rasterization preserves native dark and light text pixels', async ({ b
     }
 });
 
+test('numeric row damage preserves overhanging text and decorations across repeated edits', async ({
+    browser
+}) => {
+    for (const scale of [1, 1.25, 1.5, 2]) {
+        const context = await browser.newContext({ deviceScaleFactor: scale });
+        try {
+            const page = await context.newPage();
+            await page.route('**/numeric-damage-probe', (route) =>
+                route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+            );
+            await page.goto(`${origin}numeric-damage-probe`);
+            const failures = await page.evaluate(
+                async (moduleUrl) => {
+                    const { Grid } = await import(moduleUrl);
+                    const failures: string[] = [];
+                    for (const family of ['monospace', 'serif']) {
+                        for (const opacity of [1, 0.8]) {
+                            const cells: [string, number][] = [
+                                ...Array.from('0001', (text): [string, number] => [text, 0]),
+                                ['j\u0301\u0338', 1],
+                                ['\u0361\u0488', 1],
+                                ['日', 0],
+                                ['', 0],
+                                ...Array.from(' lens42 ', (text): [string, number] => [text, 2]),
+                                ['\u0301\u0338', 1],
+                                [' ', 0],
+                                [' ', 0],
+                                ...Array.from(' warning ', (text): [string, number] => [text, 3]),
+                                ['(', 4],
+                                ['│', 5],
+                                ['x', 6],
+                                ['│', 0]
+                            ];
+                            const setup = (): EditorGrid => {
+                                const grid = new Grid();
+                                grid.busy = true;
+                                grid.backgroundOpacity = opacity;
+                                grid.pixelScrollEnabled = true;
+                                grid.apply([
+                                    ['grid_resize', [1, 40, 4]],
+                                    ['hl_attr_define', [1, { italic: true }, {}, []]],
+                                    ['hl_attr_define', [2, {}, {}, [{ hi_name: 'NidoCodeLens' }]]],
+                                    [
+                                        'hl_attr_define',
+                                        [
+                                            3,
+                                            { background: 0x302020, special: 0xff7777 },
+                                            {},
+                                            [{ hi_name: 'DiagnosticVirtualTextError' }]
+                                        ]
+                                    ],
+                                    [
+                                        'hl_attr_define',
+                                        [4, {}, {}, [{ hi_name: 'NidoBracketMatch' }]]
+                                    ],
+                                    ['hl_attr_define', [5, {}, {}, [{ hi_name: 'NidoIndent1' }]]],
+                                    [
+                                        'hl_attr_define',
+                                        [6, { underline: true, strikethrough: true }, {}, []]
+                                    ],
+                                    ['grid_line', [1, 1, 0, cells]],
+                                    ['flush']
+                                ]);
+                                return grid;
+                            };
+                            const canvas = document.createElement('canvas');
+                            const grid = setup();
+                            const paint = (
+                                grid: EditorGrid,
+                                canvas: HTMLCanvasElement
+                            ): Uint8ClampedArray => {
+                                grid.draw(canvas, 600, 76, 15, family, false, undefined, 19, 350);
+                                // Read a copy so the probe cannot change the renderer's Canvas backing.
+                                const sample = document.createElement('canvas');
+                                sample.width = canvas.width;
+                                sample.height = canvas.height;
+                                const ctx = sample.getContext('2d')!;
+                                ctx.drawImage(canvas, 0, 0);
+                                return ctx.getImageData(0, 0, sample.width, sample.height).data;
+                            };
+                            paint(grid, canvas);
+                            for (const [column, text, fractional = true] of [
+                                [3, '9'],
+                                [17, '8'],
+                                [3, '2'],
+                                // Follow a full repaint with another numeric edit before fractional motion.
+                                [4, 'f\u0301\u0338', false],
+                                [3, '7'],
+                                [17, ' ']
+                            ] as const) {
+                                cells[column] = [text, cells[column][1]];
+                                grid.apply([
+                                    ['grid_line', [1, 1, column, [cells[column]]]],
+                                    ['flush']
+                                ]);
+                                for (const phase of fractional ? [0, 0.25] : [0]) {
+                                    grid.scrollFraction = phase / (19 * devicePixelRatio);
+                                    const reference = setup();
+                                    reference.scrollFraction = grid.scrollFraction;
+                                    const actual = paint(grid, canvas);
+                                    const expected = paint(
+                                        reference,
+                                        document.createElement('canvas')
+                                    );
+                                    const mismatch = actual.findIndex(
+                                        (value, index) => value !== expected[index]
+                                    );
+                                    if (mismatch >= 0) {
+                                        failures.push(
+                                            `${family}, opacity ${opacity}, column ${column}, phase ${phase}, pixel ${Math.floor(mismatch / 4) % canvas.width},${Math.floor(mismatch / 4 / canvas.width)}`
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return failures;
+                },
+                `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+            );
+            expect(failures, `numeric damage at ${scale * 100}% scale`).toEqual([]);
+        } finally {
+            await context.close();
+        }
+    }
+});
+
 for (const rows of [4, 8]) {
     for (const direction of [1, -1]) {
         test(`fast touchpad scrolling bounds work as dense rows enter the viewport (${rows}, ${direction})`, async ({
@@ -1144,7 +1271,12 @@ for (const rows of [4, 8]) {
                 for (const work of reports) {
                     expect(work.frames).toBe(40);
                     expect(work.glyphs).toBeGreaterThan(0);
-                    expect(work.glyphs).toBeLessThanOrEqual(work.frames * 49 * 160);
+                    if (!process.env.NIDO_PERFORMANCE_BASELINE) {
+                        expect(
+                            work.glyphs,
+                            'repaint incoming text and the changed gutter only'
+                        ).toBeLessThanOrEqual(work.frames * (work.rows * 160 + 49 * 8));
+                    }
                     expect(work.uploads).toBeLessThanOrEqual(work.frames * 49);
                     expect(work.canvases).toBeLessThanOrEqual(work.frames * work.rows);
                 }

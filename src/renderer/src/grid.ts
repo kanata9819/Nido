@@ -425,9 +425,9 @@ export class Grid {
                                         if (!changed) {
                                             this.layoutDirty = true;
                                             if (
+                                                retainedRows?.has(row) ||
                                                 this.upperRows.includes(row) ||
-                                                this.lowerRows.includes(row) ||
-                                                retainedRows?.has(row)
+                                                this.lowerRows.includes(row)
                                             ) {
                                                 const previous = row;
                                                 row = this.cells[Number(args[1])] = row.slice();
@@ -595,6 +595,7 @@ export class Grid {
                           : retainedView[source];
                 const after = this.cells[row];
                 if (
+                    before !== after &&
                     before &&
                     after &&
                     before.length === after.length &&

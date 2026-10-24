@@ -154,6 +154,128 @@ test('gutter updates reuse row geometry without scanning unchanged cells', () =>
     assert.equal(grid.rowTop(40), 40 * 28);
 });
 
+test('scrolling with relative numbers preserves cached rows without searching the full cache for each gutter', (context) => {
+    for (const direction of [-1, 1]) {
+        const grid = new Grid();
+        grid.apply([
+            ['grid_resize', [1, 160, 50]],
+            ...Array.from({ length: 49 }, (_, row) => [
+                'grid_line',
+                [
+                    1,
+                    row,
+                    0,
+                    [
+                        ['9', 0, 4],
+                        ['body', 0, 156]
+                    ]
+                ]
+            ]),
+            ['flush']
+        ]);
+        const cached = (): Grid['cells'] =>
+            Array.from({ length: 256 }, () =>
+                Array.from({ length: 160 }, () => ({ text: 'cached', highlight: 0 }))
+            );
+        Reflect.set(grid, 'upperRows', cached());
+        Reflect.set(grid, 'lowerRows', cached());
+        const before = grid.cells.slice();
+        const upper = grid.historyRows.slice();
+        const lower = grid.futureRows.slice();
+        const includes = Array.prototype.includes;
+        let searchedRows = 0;
+        Array.prototype.includes = function (value, ...rest) {
+            if (Array.isArray(value)) searchedRows += this.length;
+            return Reflect.apply(includes, this, [value, ...rest]);
+        };
+        try {
+            grid.apply([
+                ['nido_scroll', [1, 0, 49, 0, 160, direction * 4, 0]],
+                ['grid_scroll', [1, 0, 49, 0, 160, direction * 4, 0]],
+                ...Array.from({ length: 4 }, (_, row) => [
+                    'grid_line',
+                    [
+                        1,
+                        direction > 0 ? 45 + row : row,
+                        0,
+                        [
+                            ['9', 0, 4],
+                            ['new', 0, 156]
+                        ]
+                    ]
+                ]),
+                ...Array.from({ length: 49 }, (_, row) => [
+                    'grid_line',
+                    [1, row, 0, Array.from(String(row).padStart(4, '0'), (text) => [text, 0])]
+                ]),
+                ['flush']
+            ]);
+        } finally {
+            Array.prototype.includes = includes;
+        }
+        assert.ok(
+            searchedRows <= 4 * 2 * 512,
+            `cache lookup work must scale with incoming rows, not every gutter: ${searchedRows}`
+        );
+        context.diagnostic(JSON.stringify({ direction, searchedRows }));
+        for (const rows of [upper, lower]) {
+            for (const row of rows) assert.equal(row[0].text, 'cached');
+        }
+        for (const row of before.slice(0, 49)) assert.equal(row[0].text, '9');
+        for (let row = 0; row < 49; row++) {
+            assert.equal(
+                grid.cells[row]
+                    .slice(0, 4)
+                    .map((cell) => cell.text)
+                    .join(''),
+                String(row).padStart(4, '0')
+            );
+        }
+    }
+});
+
+test('native scrolling reuses unchanged row identities without rereading their body cells', () => {
+    for (const direction of [-1, 1]) {
+        const grid = new Grid();
+        grid.apply([
+            ['grid_resize', [1, 160, 50]],
+            ...Array.from({ length: 49 }, (_, row) => [
+                'grid_line',
+                [1, row, 0, [['body', 0, 160]]]
+            ]),
+            ['flush']
+        ]);
+        grid.prepareLayout(1000, 8, 20);
+        const before = grid.cells.slice();
+        let reads = 0;
+        for (const row of before) {
+            for (const cell of row) {
+                const text = cell.text;
+                Object.defineProperty(cell, 'text', {
+                    get: () => {
+                        reads++;
+                        return text;
+                    }
+                });
+            }
+        }
+        grid.apply([
+            ['nido_scroll', [1, 0, 49, 0, 160, direction * 4, 0]],
+            ['grid_scroll', [1, 0, 49, 0, 160, direction * 4, 0]],
+            ...Array.from({ length: 4 }, (_, row) => [
+                'grid_line',
+                [1, direction > 0 ? 45 + row : row, 0, [['new', 0, 160]]]
+            ]),
+            ['flush']
+        ]);
+        assert.equal(reads, 0, 'unchanged native rows already have authoritative identities');
+        for (let row = direction > 0 ? 0 : 4; row < (direction > 0 ? 45 : 49); row++) {
+            assert.equal(grid.cells[row], before[row + direction * 4]);
+        }
+        assert.equal(grid.cells[49], before[49], 'the command row stays fixed');
+    }
+});
+
 test('compact row counts follow edits, highlight changes and rectangular scrolling', () => {
     const grid = new Grid();
     grid.apply([
