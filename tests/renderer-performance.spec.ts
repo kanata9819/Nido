@@ -85,7 +85,14 @@ for (const scale of [1, 1.25, 1.5]) {
                 `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
             );
             for (const result of results) {
-                expect(result.bottom, JSON.stringify(result)).toEqual([32, 64, 96, 255]);
+                // Windows CI rounds RGB readback by up to two levels; an unpainted row differs far more.
+                for (const [channel, expected] of [32, 64, 96].entries()) {
+                    expect(
+                        Math.abs(result.bottom[channel] - expected),
+                        JSON.stringify(result)
+                    ).toBeLessThanOrEqual(2);
+                }
+                expect(result.bottom[3], JSON.stringify(result)).toBe(255);
                 expect(result.row, JSON.stringify(result)).toBeGreaterThanOrEqual(0);
             }
         } finally {
