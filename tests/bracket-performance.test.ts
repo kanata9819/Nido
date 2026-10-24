@@ -51,7 +51,103 @@ for first=-1,201,3 do
       'Indexed viewport query omitted or reordered visible pairs')
   end
 end
+-- Native extmarks preserve endpoint order while shifting rows. Removed leaves must
+-- stop contributing bounds, even when their old coordinates would hide a sibling.
+for _,pair in ipairs(pairs) do
+  pair.first.row=pair.first.row+3
+  pair.last.row=pair.last.row+3
+end
+for i=2,#pairs,3 do
+  pairs[i].first.invalid=true
+  index.invalidate(pairs[i].first)
+  index.invalidate(pairs[i].last)
+end
+for row=0,205 do
+  local expected
+  for _,pair in ipairs(pairs) do
+    if not pair.first.invalid and not before({row=row,column=6},pair.first)
+        and not before(pair.last,{row=row,column=6}) then expected=pair;break end
+  end
+  assert(index.innermost(row,6)==expected,'A removed endpoint corrupted the indexed cursor bounds')
+  local visible={}
+  for _,pair in ipairs(pairs) do
+    if not pair.first.invalid and pair.first.row<row+4 and pair.last.row>=row then
+      visible[#visible+1]=pair
+    end
+  end
+  assert(vim.deep_equal(index.overlapping(row,row+4),visible),'A removed endpoint corrupted viewport bounds')
+end
+for _,pair in ipairs(pairs) do index.invalidate(pair.first) end
+assert(index.innermost(10,6)==nil and #index.overlapping(0,300)==0,'Removing all leaves must empty the index')
 `,
+            []
+        ]);
+    } finally {
+        await session.stop();
+    }
+});
+
+test('completed bracket guides and matching frames survive yielded analysis and discard deleted endpoints', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.client.request('nvim_exec_lua', [
+            `local api,brackets=vim.api,require('nido_brackets')
+local buffer=api.nvim_get_current_buf()
+local lines={}
+for i=1,3000 do
+  lines[#lines+1]='scope {';lines[#lines+1]='  content();';lines[#lines+1]='}'
+end
+api.nvim_buf_set_lines(buffer,0,-1,false,lines)
+api.nvim_win_set_cursor(0,{2,3})
+api.nvim_exec_autocmds('TextChanged',{buffer=buffer})
+assert(vim.wait(10000,function() return brackets.ready(buffer) end,5))
+local defer,notify=vim.defer_fn,vim.rpcnotify
+local held,latest={},nil
+vim.defer_fn=function(fn,ms)
+  if ms==1 then held[#held+1]=fn else return defer(fn,ms) end
+end
+vim.rpcnotify=function(channel,name,value,...)
+  if name=='nido:bracket_guides' then latest=vim.deepcopy(value) end
+  return notify(channel,name,value,...)
+end
+local function frame()
+  return api.nvim_buf_get_extmarks(buffer,api.nvim_create_namespace('nido_bracket_match'),0,-1,{})
+end
+local ok,err=pcall(function()
+  api.nvim_buf_set_text(buffer,1,3,1,3,{'x'})
+  api.nvim_exec_autocmds('TextChanged',{buffer=buffer})
+  assert(vim.wait(5000,function() return #held>0 end,1),'Analysis did not yield')
+  assert(not brackets.ready(buffer))
+  api.nvim_exec_autocmds('CursorMoved',{buffer=buffer})
+  vim.cmd.redraw({bang=true})
+  assert(#frame()==2,'A yielded analysis erased the completed matching frame')
+  assert(latest and #latest>0 and latest[1].active,'A yielded analysis erased the active bracket guide')
+  vim.defer_fn=defer
+  for _,fn in ipairs(held) do defer(fn,1) end
+  assert(vim.wait(10000,function() return brackets.ready(buffer) end,1))
+  api.nvim_buf_set_lines(buffer,0,-1,false,{'outer {','  inner {','    content();','  }','}'})
+  api.nvim_win_set_cursor(0,{3,5})
+  api.nvim_exec_autocmds('TextChanged',{buffer=buffer})
+  assert(vim.wait(5000,function() return brackets.ready(buffer) end,1))
+  api.nvim_buf_set_text(buffer,1,8,1,9,{''})
+  api.nvim_exec_autocmds('CursorMoved',{buffer=buffer})
+  vim.cmd.redraw({bang=true})
+  local marks=frame()
+  assert(#marks==2 and marks[1][2]==0 and marks[2][2]==4,
+    'Deleting an inner endpoint must select the remaining outer pair before parsing')
+  assert(#brackets.pairs(buffer)==1,'Deleted scopes must not reach Sticky Scroll fallback')
+  api.nvim_buf_set_lines(buffer,0,0,false,{'header'})
+  api.nvim_win_set_cursor(0,{4,5})
+  api.nvim_exec_autocmds('CursorMoved',{buffer=buffer})
+  marks=frame()
+  assert(#marks==2 and marks[1][2]==1 and marks[2][2]==5,
+    'Retained bounds and matching frames must follow subsequent line shifts')
+  api.nvim_set_current_buf(api.nvim_create_buf(true,false))
+  api.nvim_buf_delete(buffer,{force=true,unload=true})
+  assert(#brackets.pairs(buffer)==0,'Unloaded buffers must not retain scope snapshots')
+end)
+vim.defer_fn,vim.rpcnotify=defer,notify
+assert(ok,err)`,
             []
         ]);
     } finally {
@@ -116,6 +212,53 @@ return {scopeReads=reads, moves=20, scopes=3000}
                 `cursor movement inspected ${result.scopeReads} scopes`
             );
         }
+    } finally {
+        await session.stop();
+    }
+});
+
+test('retained bracket indices match native endpoints after mixed multiline edits', async () => {
+    const session = await Session.create(process.cwd(), () => {});
+    try {
+        await session.client.request('nvim_exec_lua', [
+            `local api,brackets=vim.api,require('nido_brackets')
+local buffer=api.nvim_get_current_buf()
+api.nvim_buf_set_lines(buffer,0,-1,false,{'outer {','  { { { {','    content','  } } } }','}'})
+api.nvim_exec_autocmds('TextChanged',{buffer=buffer})
+assert(vim.wait(5000,function() return brackets.ready(buffer) end,5))
+local pairs=brackets.pairs(buffer)
+assert(#pairs==5)
+local defer=vim.defer_fn
+vim.defer_fn=function(fn,ms) if ms~=80 then return defer(fn,ms) end end
+local ok,err=pcall(function()
+  api.nvim_buf_set_text(buffer,1,2,1,3,{'removed','prefix '})
+  local function before(a,b)
+    return a.row<b.row or (a.row==b.row and a.column<b.column)
+  end
+  for row,text in ipairs(api.nvim_buf_get_lines(buffer,0,-1,false)) do
+    for column=0,#text do
+      api.nvim_win_set_cursor(0,{row,column})
+      -- Normal mode clamps a cursor at end-of-line onto the last character.
+      local cursor={row=row-1,column=api.nvim_win_get_cursor(0)[2]}
+      local expected
+      for _,pair in ipairs(pairs) do
+        if not pair.first.invalid and not pair.last.invalid
+            and not before(cursor,pair.first) and not before(pair.last,cursor) then
+          expected=pair;break
+        end
+      end
+      api.nvim_exec_autocmds('CursorMoved',{buffer=buffer})
+      local marks=api.nvim_buf_get_extmarks(buffer,api.nvim_create_namespace('nido_bracket_match'),0,-1,{})
+      local actual=vim.tbl_map(function(mark) return {mark[2],mark[3]} end,marks)
+      local wanted=expected and {{expected.first.row,expected.first.column},{expected.last.row,expected.last.column}} or {}
+      assert(vim.deep_equal(actual,wanted),'Mixed edits corrupted indexed matching at '..row..':'..column..': '..vim.inspect(actual))
+    end
+  end
+end)
+vim.defer_fn=defer
+assert(ok,err)`,
+            []
+        ]);
     } finally {
         await session.stop();
     }

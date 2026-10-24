@@ -1807,6 +1807,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                                 'cursorVisible',
                                 'cursorOpacity',
                                 'bracketGuides',
+                                'stickyScroll',
                                 'foreground',
                                 'background'
                             ] as const) {
@@ -1915,6 +1916,30 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                             ['flush']
                         ]);
                         compare();
+                        for (const row of [7, 9, -1]) {
+                            grid.apply([
+                                [
+                                    'nido_sticky_scroll',
+                                    [
+                                        {
+                                            window: 1,
+                                            buffer: 1,
+                                            top: 0,
+                                            left: 0,
+                                            width: 140,
+                                            height: 39,
+                                            gutter: 4,
+                                            tabstop: 4,
+                                            leftcol: 0,
+                                            scopes: [],
+                                            separators: row >= 0 ? [{ line: row + 1, row }] : []
+                                        }
+                                    ]
+                                ],
+                                ['flush']
+                            ]);
+                            compare();
+                        }
                         grid.apply([['default_colors_set', [0xffffff, 0x101010]], ['flush']]);
                         compare();
                         grid.apply([['grid_line', [1, 5, 0, [['EDITED', 1]]]], ['flush']]);

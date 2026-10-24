@@ -14,12 +14,22 @@ local guide_context
 local matched
 local match_namespace = api.nvim_create_namespace('nido_bracket_match')
 
+local function invalidate_position(buffer, position)
+  position.invalid = true
+  if match_indices[buffer] then match_indices[buffer].invalidate(position) end
+  if scope_indices[buffer] then scope_indices[buffer].invalidate(position) end
+  if matched and matched.buffer == buffer
+      and (matched.pair.first.invalid or matched.pair.last.invalid) then
+    api.nvim_buf_clear_namespace(buffer, match_namespace, 0, -1)
+    matched = nil
+  end
+end
+
 local function match_brackets()
   local buffer = api.nvim_get_current_buf()
   local cursor = require('nido_scroll').cursor() or api.nvim_win_get_cursor(0)
   local active
-  if parsed_ticks[buffer] == api.nvim_buf_get_changedtick(buffer)
-      and vim.fn.mode():match('^[niR]') and vim.bo.buftype == '' then
+  if vim.fn.mode():match('^[niR]') and vim.bo.buftype == '' then
     active = match_indices[buffer] and match_indices[buffer].innermost(cursor[1] - 1, cursor[2])
   end
   local next_match = active and {buffer=buffer, pair=active} or nil
@@ -114,15 +124,12 @@ local function update(buffer, ticket)
     match_brackets()
     return
   end
-  pairs_by_buffer[buffer] = {}
-  match_indices[buffer], scope_indices[buffer] = nil, nil
-  if matched and matched.buffer == buffer then
-    api.nvim_buf_clear_namespace(buffer, match_namespace, 0, -1)
-    matched = nil
-  end
   if vim.bo[buffer].buftype ~= ''
       or api.nvim_buf_get_offset(buffer, api.nvim_buf_line_count(buffer)) > 1024 * 1024 then
+    pairs_by_buffer[buffer] = {}
+    match_indices[buffer], scope_indices[buffer] = nil, nil
     api.nvim_buf_clear_namespace(buffer, namespace, 0, -1)
+    match_brackets()
     -- Keep an existing attachment so returning to ordinary text cannot register it twice.
     marks_by_buffer[buffer] = marks_by_buffer[buffer] and {}
     parsed_ticks[buffer], pending[buffer] = tick, nil
@@ -142,10 +149,15 @@ local function update(buffer, ticket)
         end
         if new_last ~= last then
           local shifted = {}
-          for row, items in pairs(marks) do shifted[row >= last and row + new_last - last or row] = items end
+          for row, items in pairs(marks) do
+            local target = row >= last and row + new_last - last or row
+            shifted[target] = items
+            for _, mark in pairs(items) do mark.position.row = target end
+          end
           marks = shifted
         end
         local lines = next(changed) and api.nvim_buf_get_lines(buf, first, new_last, false) or {}
+        local invalid = {}
         -- Preserve moved brackets until reparsing; deleted ranges must not color their new neighbors.
         for _, items in pairs(changed) do
           for _, mark in pairs(items) do
@@ -153,17 +165,22 @@ local function update(buffer, ticket)
             local line = pos[1] and lines[pos[1] - first + 1]
             if line and pos[3].end_row == pos[1] and pos[3].end_col == pos[2] + 1
                 and line:sub(pos[2] + 1, pos[2] + 1) == mark.text then
+              mark.position.row, mark.position.column = pos[1], pos[2]
               marks[pos[1]] = marks[pos[1]] or {}
               marks[pos[1]][pos[2]] = mark
             else
+              invalid[#invalid + 1] = mark.position
               api.nvim_buf_del_extmark(buf, namespace, mark.id)
             end
           end
         end
+        -- Recompute bounds only after all surviving endpoints have their native coordinates.
+        for _, position in ipairs(invalid) do invalidate_position(buf, position) end
         marks_by_buffer[buf] = marks
       end,
       on_detach = function(_, buf)
         marks_by_buffer[buf], parsed_ticks[buf] = nil, nil
+        pairs_by_buffer[buf] = nil
         match_indices[buf], scope_indices[buf] = nil, nil
       end,
     })
@@ -179,11 +196,13 @@ local function update(buffer, ticket)
         id=mark and mark.id or nil,
         end_col=position.column + 1, hl_group=group, priority=150,
       })
-      mark = {id=id, group=group}
+      mark = {id=id, group=group, position=mark and mark.position or position}
       row[position.column] = mark
     end
     mark.text = text
+    mark.position.bracket = text
     mark.version = version
+    return mark.position
   end
   -- Keep full syntax correctness while giving input a turn between bounded chunks.
   local task = coroutine.create(function()
@@ -205,17 +224,17 @@ local function update(buffer, ticket)
           elseif #stack > 0 and stack[#stack].bracket == closing[bracket] then
             local group = 'NidoBracket' .. ((#stack - 1) % #colors + 1)
             local opening = table.remove(stack)
+            opening = highlight(opening, group, opening.bracket)
+            local ending = highlight({row=row - 1, column=column - 1}, group, bracket)
             table.insert(matches, {
-              first=opening, last={row=row - 1, column=column - 1},
+              first=opening, last=ending,
             })
             if opening.row < row - 1 then
               table.insert(scopes, {
-                first=opening, last={row=row - 1, column=column - 1},
+                first=opening, last=ending,
                 color=colors[(#stack % #colors) + 1],
               })
             end
-            highlight(opening, group, opening.bracket)
-            highlight({row=row - 1, column=column - 1}, group, bracket)
           end
         end
         yield_if_busy()
@@ -225,6 +244,7 @@ local function update(buffer, ticket)
     for row, items in pairs(marks) do
       for column, mark in pairs(items) do
         if mark.version ~= version then
+          invalidate_position(buffer, mark.position)
           api.nvim_buf_del_extmark(buffer, namespace, mark.id)
           items[column] = nil
         end
@@ -361,7 +381,13 @@ api.nvim_create_autocmd({ 'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'T
 })
 
 return {
-  pairs = function(buffer) return pairs_by_buffer[buffer] or {} end,
+  pairs = function(buffer)
+    local valid = {}
+    for _, pair in ipairs(pairs_by_buffer[buffer] or {}) do
+      if not pair.first.invalid and not pair.last.invalid then valid[#valid + 1] = pair end
+    end
+    return valid
+  end,
   -- Readiness includes deferred syntax updates, even when the text is unchanged.
   ready = function(buffer)
     return api.nvim_buf_is_valid(buffer) and not pending[buffer]

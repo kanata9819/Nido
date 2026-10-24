@@ -178,3 +178,62 @@ assert(#marks() == 0)`,
         await session.stop();
     }
 });
+
+test('typing, line breaks and undo keep bracket frames and guides in every redraw', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-bracket-decorations-'));
+    const grid = new Grid();
+    const frames: { matches: number; guides: number; active: number }[] = [];
+    let recording = false;
+    let session: Session | undefined;
+    const snapshot = (): (typeof frames)[number] => ({
+        matches: grid.cells
+            .flat()
+            .filter(
+                (cell) =>
+                    '{}'.includes(cell.text) &&
+                    cell.text &&
+                    grid.highlights.get(cell.highlight)?.bracketMatch
+            ).length,
+        guides: grid.bracketGuides.length,
+        active: grid.bracketGuides.filter((guide) => guide.active).length
+    });
+    try {
+        await writeFile(join(root, 'sample.txt'), 'fn main() {\n  let value = 1;\n}\n');
+        session = await Session.create(root, (event) => {
+            if (event.type !== 'redraw') return;
+            grid.apply(event.events);
+            if (recording) frames.push(snapshot());
+        });
+        await session.openFile('sample.txt');
+        await session.input('2G$ai');
+        assert.equal(await session.inputMode(), 'i');
+        await session.client.request('nvim_exec_lua', [
+            `local buffer=vim.api.nvim_get_current_buf()
+assert(vim.wait(3000,function() return require('nido_brackets').ready(buffer) end,5))
+vim.api.nvim_exec_autocmds('CursorMovedI',{buffer=buffer})
+vim.cmd.redraw({bang=true})`,
+            []
+        ]);
+        const expected = { matches: 2, guides: 1, active: 1 };
+        assert.deepEqual(snapshot(), expected);
+        recording = true;
+        for (const input of ['x', 'y', 'z', '<CR>', 'value', '<Esc>u', '<C-r>']) {
+            await session.input(input);
+            await session.client.request('nvim_exec_lua', ['vim.cmd.redraw()', []]);
+        }
+        await session.client.request('nvim_exec_lua', [
+            `local buffer=vim.api.nvim_get_current_buf()
+assert(vim.wait(3000,function() return require('nido_brackets').ready(buffer) end,5))
+vim.cmd.redraw({bang=true})`,
+            []
+        ]);
+        assert.ok(frames.length > 7, 'the test must observe intermediate editor redraws');
+        assert.deepEqual(
+            frames,
+            frames.map(() => expected)
+        );
+    } finally {
+        await session?.stop();
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+});

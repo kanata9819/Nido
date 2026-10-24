@@ -4,6 +4,7 @@ local entries, pending, published, color_pending = {}, {}, {}, {}
 local outlines = {}
 local method_separators = false
 local method_namespace = api.nvim_create_namespace('nido_method_separators')
+local scope_namespace = api.nvim_create_namespace('nido_sticky_scopes')
 local script_filetypes = {typescript=true, typescriptreact=true, javascript=true, javascriptreact=true}
 
 local function cancel_outline(buffer)
@@ -128,6 +129,26 @@ local function set_methods(buffer, entry, methods)
   end
 end
 
+local function set_scopes(buffer, entry, scopes)
+  entry.scopes, entry.scope_marks = sort(scopes), {}
+  api.nvim_buf_clear_namespace(buffer, scope_namespace, 0, -1)
+  for _, scope in ipairs(scopes) do
+    local text, ending = entry.lines[scope.line] or '', entry.lines[scope.ending] or ''
+    local first = text:find('%S')
+    if first then
+      local id = api.nvim_buf_set_extmark(buffer, scope_namespace, scope.line - 1, first - 1,
+        {end_row=scope.ending - 1, end_col=#ending, invalidate=true})
+      -- Separate endpoint ranges invalidate deleted headers instead of pinning their neighbors.
+      entry.scope_marks[id] = {
+        header=api.nvim_buf_set_extmark(buffer, scope_namespace, scope.line - 1, first - 1,
+          {end_col=#text, invalidate=true}),
+        ending=api.nvim_buf_set_extmark(buffer, scope_namespace, scope.ending - 1, 0,
+          {end_col=#ending, invalidate=true}),
+      }
+    end
+  end
+end
+
 local function refresh(buffer)
   cancel_outline(buffer)
   if not api.nvim_buf_is_valid(buffer) or not api.nvim_buf_is_loaded(buffer)
@@ -140,16 +161,18 @@ local function refresh(buffer)
   if api.nvim_buf_get_offset(buffer, api.nvim_buf_line_count(buffer)) > 1024 * 1024 then
     entries[buffer] = {tick=tick, lines={}, scopes={}, methods={}, highlights={}}
     set_methods(buffer, entries[buffer], {})
+    set_scopes(buffer, entries[buffer], {})
     redraw()
     return
   end
   local lines = api.nvim_buf_get_lines(buffer, 0, -1, false)
   -- Match the existing bracket scanner's bound; never scan a huge file during scrolling.
   local scopes = api.nvim_buf_call(buffer, function() return fallback(buffer, lines) end)
+  local previous = entries[buffer]
   local entry = {tick=tick, lines=lines, scopes=sort(scopes),
     methods=method_separators and api.nvim_buf_call(buffer, function() return fallback_methods(lines) end) or nil,
-    highlights={}}
-  local previous = entries[buffer]
+    highlights=previous and previous.highlights or {},
+    scope_marks=previous and previous.scope_marks or {}}
   entries[buffer] = entry
   redraw()
   local requested = false
@@ -194,10 +217,7 @@ local function refresh(buffer)
           end
         end
         visit(result)
-        if #outline > 0 or #methods > 0 then
-          entry.scopes = sort(outline)
-          entry.highlights = {}
-        end
+        set_scopes(buffer, entry, outline)
         table.sort(methods)
         set_methods(buffer, entry, methods)
         redraw()
@@ -208,7 +228,10 @@ local function refresh(buffer)
     end
   end
   -- Retain tracked separators until the new outline replaces them, including empty replies.
-  if not requested or not previous then set_methods(buffer, entry, entry.methods) end
+  if not requested or not previous then
+    set_methods(buffer, entry, entry.methods)
+    set_scopes(buffer, entry, scopes)
+  end
 end
 
 local function schedule(buffer)
@@ -223,12 +246,17 @@ local function schedule(buffer)
   end, 120)
 end
 
-local function highlight(entry, buffer, line)
-  if not entry.highlights[line] then
-    local text = entry.lines[line] or ''
-    entry.highlights[line] = require('nido_references').highlight(buffer, line, {text})[1]
+local function highlight(entry, buffer, line, scope, key)
+  local text = api.nvim_buf_get_lines(buffer, line - 1, line, false)[1] or ''
+  if scope.colors ~= entry.highlights then
+    scope.colors, scope.header_colors, scope.ending_colors = entry.highlights, nil, nil
   end
-  return entry.highlights[line]
+  local cached = scope[key] or entry.highlights[line]
+  if not cached or cached.text ~= text then
+    cached = {text=text, spans=require('nido_references').highlight(buffer, line, {text})[1]}
+  end
+  scope[key], entry.highlights[line] = cached, cached
+  return cached.spans
 end
 
 local function recolor(buffer)
@@ -259,19 +287,30 @@ function M.publish(window, buffer)
       local view = vim.fn.winsaveview()
       local last_line = vim.fn.line('w$')
       state.leftcol = view.leftcol
-      for _, scope in ipairs(current and entry.scopes or {}) do
-        if scope.line <= last_line and scope.ending >= view.topline
-            and not (vim.fn.foldclosed(scope.line) >= 0 and vim.fn.foldclosedend(scope.line) >= scope.ending) then
-          local first = vim.fn.screenpos(window, scope.line, 1)
-          local last = vim.fn.screenpos(window, scope.ending, 1)
-          if scope.line < view.topline or (first.row > 0 and first.row - 1 < state.top + 10) then
-            state.scopes[#state.scopes + 1] = {line=scope.line, ending=scope.ending,
-              top=scope.line < view.topline and -1 or first.row - 1,
-              bottom=last.row > 0 and last.row - 1 or state.top + info.height + 10,
-              text=highlight(entry, buffer, scope.line), endText=highlight(entry, buffer, scope.ending)}
+      for _, mark in ipairs(api.nvim_buf_get_extmarks(buffer, scope_namespace,
+          {view.topline - 1, 0}, {last_line - 1, -1}, {details=true, overlap=true})) do
+        local scope = entry.scope_marks[mark[1]]
+        if scope and not mark[4].invalid then
+          local header = api.nvim_buf_get_extmark_by_id(buffer, scope_namespace, scope.header, {details=true})
+          local ending = api.nvim_buf_get_extmark_by_id(buffer, scope_namespace, scope.ending, {details=true})
+          if header[3] and ending[3] and not header[3].invalid and not ending[3].invalid then
+            local line, finish = header[1] + 1, ending[1] + 1
+            if line < finish
+                and not (vim.fn.foldclosed(line) >= 0 and vim.fn.foldclosedend(line) >= finish) then
+              local first = vim.fn.screenpos(window, line, 1)
+              local last = vim.fn.screenpos(window, finish, 1)
+              if line < view.topline or (first.row > 0 and first.row - 1 < state.top + 10) then
+                state.scopes[#state.scopes + 1] = {line=line, ending=finish,
+                  top=line < view.topline and -1 or first.row - 1,
+                  bottom=last.row > 0 and last.row - 1 or state.top + info.height + 10,
+                  text=highlight(entry, buffer, line, scope, 'header_colors'),
+                  endText=highlight(entry, buffer, finish, scope, 'ending_colors')}
+              end
+            end
           end
         end
       end
+      sort(state.scopes)
       -- Reuse the cached outline; disabled separators do no screen-position work.
       if method_separators then
         local previous_line
@@ -333,7 +372,10 @@ api.nvim_set_decoration_provider(api.nvim_create_namespace('nido_sticky'), {on_w
   return M.publish(win, buffer)
 end})
 api.nvim_create_autocmd({'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'TextChangedI', 'TextChangedP', 'LspAttach', 'LspDetach'}, {
-  callback=function(event) schedule(event.buf) end,
+  callback=function(event)
+    if entries[event.buf] and not event.event:match('^TextChanged') then entries[event.buf].highlights = {} end
+    schedule(event.buf)
+  end,
 })
 api.nvim_create_autocmd('User', {pattern='NidoBracketsUpdated', callback=function(event)
   -- A long parse can finish after the initial indentation fallback was cached.
@@ -348,7 +390,7 @@ api.nvim_create_autocmd('LspRequest', {callback=function(event)
   end
 end})
 api.nvim_create_autocmd('ColorScheme', {callback=function()
-  for buffer in pairs(entries) do schedule(buffer) end
+  for buffer, entry in pairs(entries) do entry.highlights = {}; schedule(buffer) end
 end})
 api.nvim_create_autocmd({'BufUnload', 'BufWipeout'}, {callback=function(event)
   cancel_outline(event.buf)

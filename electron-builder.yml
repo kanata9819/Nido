@@ -12,6 +12,7 @@ files:
     - '!test-results/**'
     - '!playwright-report/**'
     - '!reports/**'
+    - '!logs/**'
     - '!docs/**'
     - '!**/*.log'
     - '!**/*.log.*'

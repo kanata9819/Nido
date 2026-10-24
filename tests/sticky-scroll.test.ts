@@ -236,6 +236,15 @@ api.nvim_buf_set_lines(buffer,0,-1,false,{
   '  later() {','    work();','  }','}'})
 local held, cancelled, counts = {}, {}, {}
 local clients, notify, latest, recording = vim.lsp.get_clients, vim.rpcnotify, nil, false
+local references, faded = require('nido_references'), false
+local original_highlight = references.highlight
+references.highlight=function(...)
+  local lines=original_highlight(...)
+  if faded then
+    for _,spans in ipairs(lines) do for _,span in ipairs(spans) do span.color='#ffffff' end end
+  end
+  return lines
+end
 local client = {initialized=true, offset_encoding='utf-16',
   request=function(_,_,_,callback) held[#held+1]=callback;return true,#held end,
   cancel_request=function(_,id) cancelled[id]=true end}
@@ -246,7 +255,7 @@ end
 vim.rpcnotify=function(channel,name,state,...)
   if name=='nido:sticky_scroll' then
     latest=vim.deepcopy(state)
-    if recording then counts[#counts+1]=#state.separators end
+    if recording then counts[#counts+1]={#state.separators,#state.scopes} end
   end
   return notify(channel,name,state,...)
 end
@@ -256,6 +265,10 @@ local function rows()
 end
 local function expect(expected,why)
   local actual=rows()
+  assert(vim.deep_equal(actual,expected),why .. ': ' .. vim.inspect(actual))
+end
+local function expect_scopes(expected,why)
+  local actual=vim.tbl_map(function(item) return item.line end,latest.scopes)
   assert(vim.deep_equal(actual,expected),why .. ': ' .. vim.inspect(actual))
 end
 local function request()
@@ -272,16 +285,22 @@ local ok,err=pcall(function()
     {name='later',kind=6,range={start={line=6,character=2},['end']={line=8,character=3}}}
   })
   expect({2,7},'The multiline constructor must come from the outline')
+  expect_scopes({2,7},'The outline must supply sticky scopes')
+  local header=vim.deepcopy(latest.scopes[1].text)
+  faded=true -- Simulate syntax-only colors while updated semantic tokens are pending.
   recording=true
   for _,text in ipairs({'x','y','z'}) do
     api.nvim_buf_set_text(buffer,4,4,4,4,{text})
     expect({2,7},'Typing must not erase existing separators before reparsing')
+    expect_scopes({2,7},'Typing must not erase sticky scopes before reparsing')
+    assert(vim.deep_equal(latest.scopes[1].text,header),'Unchanged sticky header colors must remain stable')
   end
   local failed=request()
   held[failed]({message='Temporarily unavailable'},nil)
   expect({2,7},'An outline error must not erase the tracked methods')
   local stale=request()
   expect({2,7},'Fallback refresh must retain LSP-only methods while waiting')
+  expect_scopes({2,7},'Fallback refresh must retain LSP-only scopes while waiting')
   api.nvim_buf_set_text(buffer,4,4,4,4,{'日'})
   expect({2,7},'Unicode edits must preserve method positions')
   request()
@@ -290,19 +309,24 @@ local ok,err=pcall(function()
   expect({2,7},'A cancelled empty reply must not erase the current methods')
   api.nvim_buf_set_text(buffer,1,0,1,0,{'',''})
   expect({3,8},'Inserting a newline before the header must move both separators')
+  expect_scopes({3,8},'Inserting a newline must move sticky scopes immediately')
+  assert(vim.deep_equal(latest.scopes[1].text,header),'Moved unchanged headers must preserve their cached colors')
   api.nvim_buf_set_lines(buffer,1,2,false,{})
   expect({2,7},'Removing that blank line must restore the positions')
   for _,count in ipairs(counts) do
-    assert(count==2,'A redraw temporarily lost a separator during editing or an outline request')
+    assert(count[1]==2 and count[2]==2,'A redraw temporarily lost a separator or sticky scope during editing or an outline request')
   end
   recording=false
   api.nvim_buf_set_lines(buffer,1,2,false,{})
   expect({6},'Deleting a method header must not move its separator onto its neighbor')
+  expect_scopes({6},'Deleting a scope header must not pin its neighboring text')
   request()
   held[#held](nil,{})
   expect({},'A current empty outline must remove old methods')
+  expect_scopes({},'A current empty outline must remove old sticky scopes')
 end)
 vim.lsp.get_clients,vim.rpcnotify=clients,notify
+references.highlight=original_highlight
 assert(ok,err)
 `,
             []
@@ -646,6 +670,8 @@ test('sticky scope geometry shares the completed Neovim frame, survives pixel sc
     const grid = new Grid();
     grid.pixelScrollEnabled = true;
     let pixelOffset: unknown;
+    const typingFrames: StickyScrollState[] = [];
+    let recording = false;
     let session: Session | undefined;
     try {
         const file = join(root, 'scopes.txt');
@@ -665,6 +691,7 @@ test('sticky scope geometry shares the completed Neovim frame, survives pixel sc
         session = await Session.create(root, (event) => {
             if (event.type === 'redraw') {
                 grid.apply(event.events);
+                if (recording && grid.stickyScroll) typingFrames.push(grid.stickyScroll);
                 for (const [name, ...calls] of event.events) {
                     if (name === 'nido_pixel_scroll') pixelOffset = calls.at(-1)?.[0];
                 }
@@ -685,6 +712,24 @@ test('sticky scope geometry shares the completed Neovim frame, survives pixel sc
         );
         assert.equal(sticky.scopes[0].text.map((part) => part.text).join(''), 'class Panel {');
         assert.equal(pixelOffset, 0.5);
+        recording = true;
+        await session.input('i');
+        assert.equal(await session.inputMode(), 'i');
+        for (const text of ['x', '日', 'y']) {
+            await session.input(text);
+            assert.equal(await session.inputMode(), 'i');
+        }
+        await session.input('<Esc>');
+        assert.equal(await session.inputMode(), 'n');
+        recording = false;
+        assert.ok(typingFrames.length, 'input must produce Neovim redraw frames');
+        for (const frame of typingFrames) {
+            assert.deepEqual(
+                frame.scopes.slice(0, 3).map((scope) => scope.line),
+                [1, 2, 3],
+                'typing must not remove pinned headers for an intermediate frame'
+            );
+        }
         const cursor = await session.client.request('nvim_win_get_cursor', [0]);
         await session.jumpSticky(sticky.window, sticky.buffer + 999, 2);
         assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), cursor);
