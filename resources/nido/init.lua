@@ -82,6 +82,11 @@ vim.o.signcolumn = 'yes:2'
 vim.o.fillchars = 'eob: '
 vim.cmd('syntax enable')
 vim.cmd('filetype plugin indent on')
+-- Keep Neovim's specialized log formats ahead of the generic log fallback.
+vim.filetype.add({pattern={
+  ['.*%.[lL][oO][gG]'] = {'log', {priority=-math.huge}},
+  ['.*%.[lL][oO][gG]%.%d+'] = {'log', {priority=-math.huge}},
+}})
 vim.opt.completeopt = { 'menu', 'menuone', 'noselect', 'noinsert', 'fuzzy' }
 vim.o.pumheight = 10
 vim.keymap.set('i', '<Tab>', function()

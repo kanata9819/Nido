@@ -225,6 +225,110 @@ end), 'syntax-only previews use the same keyword color')
   }
 });
 
+test('application logs detect their format and highlight levels, timestamps and values in the editor and previews', async (context) => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-log-highlights-'));
+  let session: Session | undefined;
+  const grid = new Grid();
+  const lines = [
+    '2026-10-25T12:29:10.919169Z INFO apply_to_screen{row: 1} message="日本語" enabled=true',
+    '[2026-10-25 21:29:11,123] DEBUG elapsed=12.5 code=0x2a',
+    '2026-10-25T21:29:12+09:00 WARN message="ERROR 42"',
+    '21:29:13.000 error connection failed',
+    'TRACE message="unfinished',
+    '2026-10-25T12:29:14Z INFO recovered value=42'
+  ];
+  try {
+    await writeFile(join(root, 'chibi-20261025.log'), lines.join('\n'));
+    session = await Session.create(root, (event) => {
+      if (event.type === 'redraw') grid.apply(event.events);
+    });
+    await session.attach(140, 18);
+    await session.openFile('chibi-20261025.log');
+    const result = (await session.client.request('nvim_exec_lua', [
+      `local function token(row, text)
+  local line = vim.api.nvim_buf_get_lines(0, row - 1, row, false)[1]
+  local column = assert(line:find(text, 1, true))
+  local id = vim.fn.synID(row, column, true)
+  return {group=vim.fn.synIDattr(id, 'name'), color=vim.fn.synIDattr(vim.fn.synIDtrans(id), 'fg#')}
+end
+assert(vim.bo.filetype == 'log' and vim.bo.syntax == 'log', 'log syntax must load automatically')
+local tokens = {
+  timestamp=token(1, '2026'), info=token(1, 'INFO'), number=token(1, '1}'),
+  string=token(1, '日本語'), boolean=token(1, 'true'), debug=token(2, 'DEBUG'),
+  float=token(2, '12.5'), hex=token(2, '0x2a'), warning=token(3, 'WARN'),
+  quoted_level=token(3, 'ERROR'), error=token(4, 'error'), trace=token(5, 'TRACE'),
+  recovered=token(6, 'INFO'), time=token(4, '21:29')
+}
+for name, value in pairs(tokens) do
+  assert(value.color ~= '', name .. ' must have a color')
+end
+assert(tokens.timestamp.group == 'nidoLogTimestamp')
+assert(tokens.time.group == 'nidoLogTimestamp')
+assert(tokens.info.group == 'nidoLogInfo' and tokens.recovered.group == 'nidoLogInfo')
+assert(tokens.debug.group == 'nidoLogDebug' and tokens.trace.group == 'nidoLogTrace')
+assert(tokens.warning.group == 'nidoLogWarning' and tokens.error.group == 'nidoLogError')
+assert(tokens.number.group == 'nidoLogNumber' and tokens.float.group == 'nidoLogNumber' and tokens.hex.group == 'nidoLogNumber')
+assert(tokens.string.group == 'nidoLogString' and tokens.quoted_level.group == 'nidoLogString')
+assert(tokens.boolean.group == 'nidoLogBoolean')
+for _, filename in ipairs({'sample.LOG', 'sample.Log', 'sample.log.1', 'sample.log.12'}) do
+  assert(vim.filetype.match({filename=filename}) == 'log', filename)
+end
+assert(vim.filetype.match({filename='upstream.log'}) == 'upstreamlog', 'keep specialized log formats')
+assert(vim.filetype.match({filename='pacman.log'}) == 'pacmanlog', 'keep named log formats')
+assert(vim.filetype.match({filename='sample.txt'}) == 'text', 'plain text is unaffected')
+vim.cmd('redraw!')
+return tokens`,
+      []
+    ])) as Record<string, { group: string; color: string }>;
+    assert.equal(
+      new Set(['info', 'debug', 'warning', 'error'].map((key) => result[key].color)).size,
+      4
+    );
+    await session.client.request('nvim_eval', ['1']);
+    const first = grid.cells.find((row) =>
+      row
+        .map((cell) => cell.text)
+        .join('')
+        .includes(lines[0].slice(0, 24))
+    )!;
+    assert.ok(first, 'the actual editor draws the log');
+    const column = first
+      .map((cell) => cell.text)
+      .join('')
+      .indexOf('INFO');
+    assert.equal(
+      grid.highlights.get(first[column].highlight)?.foreground,
+      parseInt(result.info.color.slice(1), 16)
+    );
+    const [preview] = await session.highlightSources('sample.LOG', lines.join('\n'), '');
+    assert.equal(
+      preview.map((line) => line.map((span) => span.text).join('')).join('\n'),
+      lines.join('\n')
+    );
+    assert.ok(preview[0].some((span) => span.text === 'INFO' && span.color === result.info.color));
+    const performance = (await session.client.request('nvim_exec_lua', [
+      `local lines = {}
+for i=1,50000 do lines[i] = '2026-10-25T12:29:10.919169Z INFO count=' .. i end
+vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+local start = vim.uv.hrtime()
+for _, row in ipairs({50000, 25000, 1, 49000, 12000}) do
+  local id = vim.fn.synID(row, 29, true)
+  assert(vim.fn.synIDattr(id, 'name') == 'nidoLogInfo', 'large logs retain syntax far from the top')
+end
+return (vim.uv.hrtime() - start) / 1000000`,
+      []
+    ])) as number;
+    context.diagnostic(
+      `Highlighting distant rows in a 50,000-line log took ${performance.toFixed(2)} ms`
+    );
+    assert.ok(performance < 1000, 'independent log lines must not require parsing the whole file');
+    assert.equal(await readFile(join(root, 'chibi-20261025.log'), 'utf8'), lines.join('\n'));
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('matching brackets follow the innermost pair, syntax, edits and visual mode', async () => {
   const session = await Session.create(process.cwd(), () => {});
   try {

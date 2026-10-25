@@ -2349,6 +2349,113 @@ test('Japanese command search and keyboard navigation keep working after a langu
   );
 });
 
+test('file icons recognize common formats, exact names and Windows paths', async ({ page }) => {
+  await page.goto(`${origin}?view=icons`);
+  for (const [path, icon] of [
+    ['C:\\logs\\CHIBI.LOG', 'scroll-text'],
+    ['logs/chibi.log.2', 'scroll-text'],
+    ['Cargo.toml', 'package'],
+    ['Cargo.lock', 'package'],
+    ['package.json', 'package'],
+    ['.env.local', 'file-key'],
+    ['.gitignore', 'git-branch'],
+    ['.editorconfig', 'file-cog'],
+    ['.eslintrc.js', 'file-cog'],
+    ['README.md', 'book-open'],
+    ['Dockerfile.prod', 'container'],
+    ['compose.yaml', 'container'],
+    ['data.JSON', 'braces'],
+    ['settings.yml', 'file-cog'],
+    ['server.ps1', 'file-terminal'],
+    ['photo.PNG', 'file-image'],
+    ['sound.mp3', 'file-music'],
+    ['video.mp4', 'file-video-camera'],
+    ['archive.tar.gz', 'file-archive'],
+    ['data.sqlite3', 'database'],
+    ['data.csv', 'file-spreadsheet'],
+    ['notes.md', 'file-text'],
+    ['report.pdf', 'file-type'],
+    ['server.key', 'file-lock'],
+    ['file.unknown', 'file-code-2']
+  ]) {
+    await page.evaluate((path) => window.rendererTest.render({ path }), path);
+    const image = page.locator('[data-file-icon] svg');
+    await expect(image).toHaveClass(new RegExp(`lucide-${icon}\\b`));
+    await expect(image).toHaveAttribute('aria-hidden', 'true');
+  }
+  await page.evaluate(() => window.rendererTest.render({ path: 'C:\\project\\main.RS' }));
+  await expect(page.locator('[data-file-icon] img')).toHaveAttribute('src', /rust\.svg/);
+  await page.evaluate(() => window.rendererTest.render({ path: 'component.TSX' }));
+  await expect(page.locator('[data-file-icon] img')).toHaveAttribute(
+    'src',
+    /react\.svg|^data:image\/svg\+xml,/
+  );
+});
+
+test('folder icons distinguish project roles and keep ordinary folder open states', async ({
+  page
+}) => {
+  await page.goto(`${origin}?view=icons`);
+  for (const [path, icon] of [
+    ['C:\\project\\SRC', 'folder-code'],
+    ['project/tests', 'folder-check'],
+    ['logs', 'folder-clock'],
+    ['logger', 'folder-clock'],
+    ['.vscode', 'folder-cog'],
+    ['.github', 'folder-git-2'],
+    ['target', 'folder-archive'],
+    ['screen', 'folder-tree'],
+    ['consts', 'folder-lock']
+  ]) {
+    await page.evaluate((path) => window.rendererTest.render({ path }), path);
+    for (const selector of ['[data-folder-closed] svg', '[data-folder-open] svg']) {
+      await expect(page.locator(selector)).toHaveClass(new RegExp(`lucide-${icon}\\b`));
+      await expect(page.locator(selector)).toHaveAttribute('aria-hidden', 'true');
+    }
+  }
+  await page.evaluate(() => window.rendererTest.render({ path: 'my-project' }));
+  await expect(page.locator('[data-folder-closed] svg')).toHaveClass(/lucide-folder$/);
+  await expect(page.locator('[data-folder-open] svg')).toHaveClass(/lucide-folder-open\b/);
+});
+
+test('Explorer and editor tabs use the same log icon without changing file accessibility', async ({
+  page
+}) => {
+  await page.goto(`${origin}?view=app&defer=files`);
+  const tree = page.getByRole('tree', { name: 'Project files' });
+  await expect(tree).toBeVisible();
+  await page.evaluate(() => {
+    window.rendererTest.settle('files', 0, [
+      { name: 'logs', path: 'logs', directory: true, ignored: true },
+      { name: 'src', path: 'src', directory: true },
+      { name: 'chibi.log', path: 'chibi.log', directory: false }
+    ]);
+    window.rendererTest.emit({
+      type: 'state',
+      id: 'alpha',
+      state: {
+        buffers: [{ id: 1, name: '/alpha/chibi.log', modified: false }],
+        current: 1,
+        mode: 'n',
+        line: 1,
+        column: 1,
+        filetype: 'log'
+      }
+    });
+  });
+  const log = tree.getByRole('treeitem', { name: 'chibi.log', exact: true });
+  await expect(log.locator('.lucide-scroll-text')).toBeVisible();
+  await expect(
+    page.getByRole('tab', { name: 'chibi.log', exact: true }).locator('.lucide-scroll-text')
+  ).toBeVisible();
+  await expect(
+    tree.getByRole('treeitem', { name: 'src', exact: true }).locator('.lucide-folder-code')
+  ).toBeVisible();
+  const folder = tree.getByRole('treeitem', { name: 'logs', exact: true });
+  await expect(folder).toHaveAttribute('aria-expanded', 'false');
+  await expect(folder.locator('.lucide-folder-clock')).toHaveCSS('opacity', '0.55');
+});
+
 test('Git shortcuts use the enabled state as soon as loading finishes', async ({ page }) => {
   await page.goto(`${origin}?view=git&defer=gitStatus`);
   const branches = page.getByRole('button', { name: '3 Branches', exact: true });

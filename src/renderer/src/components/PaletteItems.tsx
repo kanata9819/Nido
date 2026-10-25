@@ -3,6 +3,7 @@ import { memo, useEffect, useRef } from 'react';
 import { Command, FolderOpen, FileCode2, CircleAlert, TriangleAlert, Info } from 'lucide-react';
 import type { Panel, Item } from '../types';
 import styles from '../assets/Palette.module.css';
+import FileIcon from './FileIcon';
 
 interface PaletteItemsProps {
   panel: Exclude<Panel, null>;
@@ -28,10 +29,8 @@ function itemIcon(panel: Exclude<Panel, null>, severity: number | undefined): Re
       }
     case 'workspaces':
       return <FolderOpen size={18} />;
-    case 'files':
     case 'symbols':
     case 'search':
-    case 'buffers':
       return <FileCode2 size={18} />;
     default:
       return <Command size={17} />;
@@ -69,7 +68,13 @@ const PaletteItem = memo(function PaletteItem({
       }}
       onClick={item.run}
     >
-      <span className={styles.itemIcon}>{itemIcon(panel, item.severity)}</span>
+      <span className={styles.itemIcon}>
+        {panel === 'files' || panel === 'buffers' ? (
+          <FileIcon path={item.detail} />
+        ) : (
+          itemIcon(panel, item.severity)
+        )}
+      </span>
       <span>
         <strong>{item.title}</strong>
         <small>{item.detail}</small>

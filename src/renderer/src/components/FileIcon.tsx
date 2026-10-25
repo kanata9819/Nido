@@ -1,4 +1,25 @@
-import { FileCode2, FileCog, FileText } from 'lucide-react';
+import {
+  BookOpen,
+  Braces,
+  Container,
+  Database,
+  FileArchive,
+  FileCode2,
+  FileCog,
+  FileImage,
+  FileKey,
+  FileLock,
+  FileMusic,
+  FileSpreadsheet,
+  FileTerminal,
+  FileText,
+  FileType,
+  FileVideoCamera,
+  GitBranch,
+  Package,
+  ScrollText,
+  type LucideIcon
+} from 'lucide-react';
 import rust from '../assets/file-icons/rust.svg';
 import typescript from '../assets/file-icons/typescript.svg';
 import javascript from '../assets/file-icons/javascript.svg';
@@ -24,6 +45,7 @@ const icons: Record<string, string> = {
   jsx: react,
   py: python,
   pyw: python,
+  pyi: python,
   go,
   c,
   h: c,
@@ -31,12 +53,43 @@ const icons: Record<string, string> = {
   cc: cpp,
   cxx: cpp,
   hpp: cpp,
+  hxx: cpp,
+  hh: cpp,
   cs: csharp,
   html,
   htm: html,
   css,
+  scss: css,
+  sass: css,
+  less: css,
   lua
 };
+
+const fileKinds: [RegExp, LucideIcon, string][] = [
+  [/^(readme|changelog|license|licence|copying|authors)(\..+)?$/, BookOpen, '#80b9d9'],
+  [/^\.git(ignore|attributes|modules|keep)?$/, GitBranch, '#e59277'],
+  [/^\.env(\..+)?$/, FileKey, '#dcdcaa'],
+  [/^(dockerfile(\..+)?|compose\.(ya?ml)|docker-compose(\..+)?\.ya?ml)$/, Container, '#80b9d9'],
+  [
+    /^(cargo\.(toml|lock)|package(-lock)?\.json|pnpm-lock\.yaml|yarn\.lock|go\.(mod|sum))$/,
+    Package,
+    '#d9b777'
+  ],
+  [/^\.(editorconfig|npmrc|nvmrc|prettierrc|eslintrc)(\..+)?$/, FileCog, '#b6a2d8'],
+  [/\.(log(\.\d+)?|trace)$/, ScrollText, '#dcdcaa'],
+  [/\.(jsonc?|jsonl|ndjson)$/, Braces, '#dcdcaa'],
+  [/\.(toml|ya?ml|ini|conf|cfg|properties)$/, FileCog, '#b6a2d8'],
+  [/\.(lock|pem|key|crt|pfx)$/, FileLock, '#d9b777'],
+  [/\.(sh|bash|zsh|fish|ps1|psm1|psd1|bat|cmd)$/, FileTerminal, '#80b9d9'],
+  [/\.(png|jpe?g|gif|webp|avif|bmp|ico|svg)$/, FileImage, '#b6a2d8'],
+  [/\.(mp3|wav|ogg|flac|m4a|aac)$/, FileMusic, '#d89ab6'],
+  [/\.(mp4|webm|mkv|mov|avi)$/, FileVideoCamera, '#d89ab6'],
+  [/\.(zip|7z|rar|tar|gz|bz2|xz|zst)$/, FileArchive, '#d9b777'],
+  [/\.(db|sqlite3?|sql)$/, Database, '#80b9d9'],
+  [/\.(csv|tsv|xlsx?|ods)$/, FileSpreadsheet, '#9fc68e'],
+  [/\.(mdx?|txt|rst|adoc)$/, FileText, '#80b9d9'],
+  [/\.(pdf|docx?|odt)$/, FileType, '#e59b96']
+];
 
 export default function FileIcon({
   path,
@@ -45,8 +98,9 @@ export default function FileIcon({
   path: string;
   className?: string;
 }): React.JSX.Element {
-  const extension = path.split(/[\\/]/).pop()?.split('.').pop()?.toLowerCase() || '';
-  const src = icons[extension];
+  const name = path.split(/[\\/]/).pop()?.toLowerCase() || '';
+  const kind = fileKinds.find(([pattern]) => pattern.test(name));
+  const src = !kind && icons[name.split('.').pop() || ''];
   if (src) {
     return (
       <img
@@ -60,10 +114,13 @@ export default function FileIcon({
       />
     );
   }
-  const Icon = ['toml', 'json', 'yaml', 'yml', 'ini', 'lock'].includes(extension)
-    ? FileCog
-    : ['md', 'txt'].includes(extension)
-      ? FileText
-      : FileCode2;
-  return <Icon size={16} aria-hidden="true" className={className} />;
+  const Icon = kind?.[1] || FileCode2;
+  return (
+    <Icon
+      size={16}
+      aria-hidden="true"
+      className={className}
+      style={{ color: kind?.[2] || '#83b7d2', flexShrink: 0 }}
+    />
+  );
 }

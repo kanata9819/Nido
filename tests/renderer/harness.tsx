@@ -16,6 +16,8 @@ import ExplorerCommands from '../../src/renderer/src/components/ExplorerCommands
 import FolderPicker from '../../src/renderer/src/components/FolderPicker';
 import GitBrowser from '../../src/renderer/src/components/GitBrowser';
 import GitDiff from '../../src/renderer/src/components/GitDiff';
+import FileIcon from '../../src/renderer/src/components/FileIcon';
+import FolderIcon from '../../src/renderer/src/components/FolderIcon';
 import TimeMachine from '../../src/renderer/src/components/TimeMachine';
 import Notification from '../../src/renderer/src/components/Notification';
 import ReferencesPanel from '../../src/renderer/src/components/ReferencesPanel';
@@ -189,6 +191,21 @@ function setPaletteSelection(update: number | ((index: number) => number)): void
 function render(updates: Partial<HarnessProps>): void {
   props = { ...props, ...updates };
   switch (parameters.get('view')) {
+    case 'icons':
+      root.render(
+        <>
+          <div data-file-icon>
+            <FileIcon path={props.path} />
+          </div>
+          <div data-folder-closed>
+            <FolderIcon path={props.path} expanded={false} />
+          </div>
+          <div data-folder-open>
+            <FolderIcon path={props.path} expanded={true} />
+          </div>
+        </>
+      );
+      break;
     case 'palette':
       root.render(
         <PaletteItems

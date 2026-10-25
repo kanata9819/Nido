@@ -1,8 +1,9 @@
 import { useI18n } from './i18n';
 import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
-import { ChevronDown, ChevronRight, Folder, FolderOpen, RefreshCw, Command } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw, Command } from 'lucide-react';
 import ExplorerCommands from './components/ExplorerCommands';
 import FileIcon from './components/FileIcon';
+import FolderIcon from './components/FolderIcon';
 import DiagnosticBadges from './components/DiagnosticBadges';
 import type { Workspace } from '../../shared/types';
 import { useExplorer } from './hooks/useExplorer';
@@ -352,11 +353,7 @@ function Sidebar({
                   <span className={styles.treeSpacer} />
                 )}
                 {entry.directory ? (
-                  expanded.has(entry.path) ? (
-                    <FolderOpen size={15} />
-                  ) : (
-                    <Folder size={15} />
-                  )
+                  <FolderIcon path={entry.path} expanded={expanded.has(entry.path)} />
                 ) : (
                   <FileIcon path={entry.path} className={styles.fileIcon} />
                 )}
