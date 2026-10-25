@@ -714,6 +714,8 @@ export const japanese: Record<string, string> = {
   After: '変更後',
   '{count} changes': '変更 {count} 箇所',
   'Change {current} / {total}': '変更 {current} / {total}',
+  'Previous change (N)': '前の変更（N）',
+  'Next change (n)': '次の変更（n）',
   '{label} original': '{label}（元の内容）',
   'Select a change to preview its diff.': '変更を選択すると差分をプレビューします。',
   'No textual diff (the file may have a mode change or be empty).':
@@ -732,6 +734,14 @@ export const japanese: Record<string, string> = {
   Index: 'インデックス',
   'Index · Staged': 'インデックス · ステージ済み',
   'Commit message': 'コミットメッセージ',
+  'Summarize your changes…': '変更内容を簡潔に…',
+  'Stage changes to include them in the commit.': 'コミットする変更をステージしてください。',
+  'No changes to commit.': 'コミットする変更がありません。',
+  'Enter a message to commit staged changes ({count}).':
+    'メッセージを入力すると、ステージ済みの {count} ファイルをコミットできます。',
+  'Only staged changes ({count}) will be committed.':
+    'ステージ済みの {count} ファイルだけをコミットします。',
+  'Keyboard shortcuts': 'キーボード操作',
   'Commit staged': 'ステージ済みの変更をコミット',
   'j/k Select · s Stage · S Stage all · u Unstage · r Refresh · c Message · Esc Close':
     'j/k：選択 · s：ステージ · S：すべてステージ · u：ステージを解除 · r：更新 · c：メッセージ · Esc：閉じる',

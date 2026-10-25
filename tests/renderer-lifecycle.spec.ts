@@ -3010,6 +3010,225 @@ test('Git diff ignores an older response after selecting another file', async ({
   await expect(page.locator('[data-git-scroll="after"]')).not.toContainText('STALE_CONTENT');
 });
 
+test('Git staging keeps the reviewed file selected and commits only staged changes', async ({
+  page
+}) => {
+  await page.goto(`${origin}?view=git&defer=gitStatus,gitStage,gitCommit`);
+  await page.addStyleTag({ content: '#root { display: flex; flex-direction: column; }' });
+  const path = 'crate/chibi/src/screen/renderer.rs';
+  const first = { path: 'src/main.rs', status: 'M', staged: false };
+  const reviewed = { path, status: 'M', staged: false };
+  const status = { root: '/alpha', branch: 'main', changes: [first, reviewed] };
+  await page.evaluate((status) => window.rendererTest.settle('gitStatus', 0, status), status);
+  const list = page.getByRole('listbox', { name: 'Changed files' });
+  const input = page.getByRole('textbox', { name: 'Commit message' });
+  const commit = page.getByRole('button', { name: 'Commit staged', exact: true });
+  const preview = page.locator('[data-git-preview]');
+  await expect(commit).toBeDisabled();
+  await expect(input).toHaveAccessibleDescription('Stage changes to include them in the commit.');
+  const file = list.getByRole('option', { name: path, exact: true });
+  await expect(file.locator('strong')).toHaveText('renderer.rs');
+  await expect(file.locator('small')).toHaveText('crate/chibi/src/screen');
+  await file.click();
+  await input.fill('Improve rendering');
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.rendererTest.pending.filter((call) => call.method === 'gitStatus').length
+      )
+    )
+    .toBe(1);
+  await page.evaluate((status) => window.rendererTest.settle('gitStatus', 0, status), {
+    ...status,
+    changes: [first, reviewed, { ...reviewed, staged: true }]
+  });
+  await expect(preview.getByRole('button', { name: 'Stage (s)', exact: true })).toBeEnabled();
+
+  for (const staged of [true, false]) {
+    await list.focus();
+    await list.press(staged ? 's' : 'u');
+    await expect(input).toHaveAttribute('readonly', '');
+    await list.press(staged ? 's' : 'u');
+    expect(
+      await page.evaluate(() =>
+        window.rendererTest.pending
+          .filter((call) => call.method === 'gitStage')
+          .map((call) => call.args)
+      )
+    ).toEqual([['alpha', path, !staged]]);
+    await page.evaluate(() => window.rendererTest.settle('gitStage', 0, undefined));
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => window.rendererTest.pending.filter((call) => call.method === 'gitStatus').length
+        )
+      )
+      .toBe(1);
+    await page.evaluate((status) => window.rendererTest.settle('gitStatus', 0, status), {
+      ...status,
+      changes: [first, { ...reviewed, staged }]
+    });
+    await expect(list.getByRole('option', { selected: true })).toHaveAccessibleName(path);
+    await expect(
+      preview.getByRole('button', { name: staged ? 'Unstage (u)' : 'Stage (s)', exact: true })
+    ).toBeEnabled();
+    await expect(commit).toBeEnabled({ enabled: staged });
+    await expect(input).toHaveValue('Improve rendering');
+  }
+
+  await list.press('s');
+  await page.evaluate(() => window.rendererTest.settle('gitStage', 0, undefined));
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.rendererTest.pending.filter((call) => call.method === 'gitStatus').length
+      )
+    )
+    .toBe(1);
+  await page.evaluate((status) => window.rendererTest.settle('gitStatus', 0, status), {
+    ...status,
+    changes: [first, { ...reviewed, staged: true }]
+  });
+  await expect(input).toHaveAccessibleDescription('Only staged changes (1) will be committed.');
+  await expect(page.getByRole('heading', { name: 'Staged changes', exact: true })).toHaveText(
+    'Staged changes1'
+  );
+  await expect(page.getByRole('heading', { name: 'Changes', exact: true })).toHaveText('Changes1');
+  await commit.click();
+  await input.press('Control+Enter');
+  expect(
+    await page.evaluate(() =>
+      window.rendererTest.pending
+        .filter((call) => call.method === 'gitCommit')
+        .map((call) => call.args)
+    )
+  ).toEqual([['alpha', 'Improve rendering']]);
+  await page.evaluate(() =>
+    window.rendererTest.settle('gitCommit', 0, 'Committed Improve rendering')
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.rendererTest.pending.filter((call) => call.method === 'gitStatus').length
+      )
+    )
+    .toBe(1);
+  await page.evaluate((status) => window.rendererTest.settle('gitStatus', 0, status), {
+    ...status,
+    changes: [first]
+  });
+  await expect(input).toHaveValue('');
+  await expect(list.getByRole('option')).toHaveCount(1);
+  await expect(list.getByRole('option', { name: first.path })).toHaveAttribute(
+    'aria-selected',
+    'true'
+  );
+  await expect(page.getByRole('status')).toHaveText('Committed Improve rendering');
+  await expect(commit).toBeDisabled();
+});
+
+test('Git commit failures preserve the draft and it survives switching views', async ({ page }) => {
+  await page.goto(`${origin}?view=git&defer=gitStatus,gitCommit`);
+  await page.evaluate(() =>
+    window.rendererTest.settle('gitStatus', 0, {
+      root: '/alpha',
+      branch: 'main',
+      changes: [{ path: 'new name.ts', original: 'old name.ts', status: 'R', staged: true }]
+    })
+  );
+  const input = page.getByRole('textbox', { name: 'Commit message' });
+  await expect(input).toHaveAccessibleDescription('Enter a message to commit staged changes (1).');
+  await expect(page.getByRole('option', { name: 'new name.ts' })).toHaveAttribute(
+    'title',
+    'old name.ts → new name.ts'
+  );
+  await input.fill('Rename the module');
+  await input.press('Control+Enter');
+  await expect(input).toHaveAttribute('readonly', '');
+  await page.evaluate(() =>
+    window.rendererTest.settle('gitCommit', 0, 'Commit hook rejected the message.', true)
+  );
+  await expect(page.getByRole('alert')).toHaveText('Commit hook rejected the message.');
+  await expect(input).toHaveValue('Rename the module');
+  await expect(input).not.toHaveAttribute('readonly', '');
+  await page.getByRole('button', { name: '2 History', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.rendererTest.pending.filter((call) => call.method === 'gitStatus').length
+      )
+    )
+    .toBe(1);
+  await page.evaluate(() =>
+    window.rendererTest.settle('gitStatus', 0, { root: '/alpha', branch: 'main', changes: [] })
+  );
+  await page.getByRole('button', { name: '1 Changes', exact: true }).click();
+  await page.evaluate(() =>
+    window.rendererTest.settle('gitStatus', 0, { root: '/alpha', branch: 'main', changes: [] })
+  );
+  await expect(input).toHaveValue('Rename the module');
+  await expect(input).toHaveAccessibleDescription('No changes to commit.');
+  await expect(page.getByText('Working tree clean.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Stage all (S)', exact: true })).toBeDisabled();
+  await page.getByText('Keyboard shortcuts', { exact: true }).click();
+  await expect(
+    page.getByText(
+      'j/k Select · s Stage · S Stage all · u Unstage · r Refresh · c Message · Esc Close',
+      { exact: true }
+    )
+  ).toBeVisible();
+});
+
+test('Git keeps the commit input reachable while typing in a small window', async ({ page }) => {
+  await page.setViewportSize({ width: 850, height: 560 });
+  await page.goto(`${origin}?view=git`);
+  await page.addStyleTag({
+    content: '#root { display: flex; flex-direction: column; height: 350px; }'
+  });
+  const list = page.getByRole('listbox', { name: 'Changed files' });
+  const input = page.getByRole('textbox', { name: 'Commit message' });
+  await list.focus();
+  await list.press('c');
+  await input.fill('A commit message that stays visible');
+  await expect(input).toBeInViewport({ ratio: 1 });
+  await input.press('End');
+  await input.press('!');
+  await expect(input).toBeInViewport({ ratio: 1 });
+  await expect(input).toHaveValue('A commit message that stays visible!');
+  await list.focus();
+  await expect(list.getByRole('option', { selected: true })).toBeInViewport();
+  await list.press('j');
+  await expect(list.getByRole('option', { name: 'second.ts' })).toHaveAttribute(
+    'aria-selected',
+    'true'
+  );
+  await expect(list.getByRole('option', { selected: true })).toBeInViewport();
+  await list.press('c');
+  await expect(input).toBeInViewport({ ratio: 1 });
+  expect(await page.locator('#root').evaluate((node) => node.scrollTop)).toBe(0);
+});
+
+test('Git keyboard help stays in the modal focus cycle', async ({ page }) => {
+  await page.goto(`${origin}?view=app`);
+  await page
+    .getByRole('navigation')
+    .getByRole('button', { name: 'Source control', exact: true })
+    .click();
+  const dialog = page.locator('[data-panel="git"]');
+  const help = dialog.locator('summary');
+  const close = dialog.getByRole('button', { name: 'Close palette', exact: true });
+  await page.getByLabel('Git diff', { exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(help).toBeFocused();
+  await help.press('Enter');
+  await expect(dialog.locator('details')).toHaveAttribute('open', '');
+  await help.press('Tab');
+  await expect(close).toBeFocused();
+  await close.press('Shift+Tab');
+  await expect(help).toBeFocused();
+});
+
 test('Git history counts all commits and supports paging without reloading the first page', async ({
   page
 }) => {

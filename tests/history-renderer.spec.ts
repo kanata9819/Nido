@@ -137,6 +137,15 @@ test('ten thousand diff rows stay bounded in the DOM while scrolling and jumping
   expect(Math.abs(positions[0] - positions[1])).toBeLessThanOrEqual(1);
   await after.press('Shift+N');
   await expect(after.locator('[data-diff-active="true"]')).toContainText('changed 2');
+  await page.getByRole('button', { name: 'Next change (n)', exact: true }).click();
+  await expect(after.locator('[data-diff-active="true"]')).toContainText('changed 9500');
+  await expect(after).toBeFocused();
+  await page.getByRole('button', { name: 'Previous change (N)', exact: true }).click();
+  await expect(after.locator('[data-diff-active="true"]')).toContainText('changed 2');
+  const tops = await page
+    .locator('[data-git-scroll]')
+    .evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().top));
+  expect(tops[0]).toBe(tops[1]);
   await after.evaluate((node) => {
     node.scrollTop = 5000 * 22;
   });

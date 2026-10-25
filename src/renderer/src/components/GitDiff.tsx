@@ -1,6 +1,7 @@
 import { useI18n } from '../i18n';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReferencePreview } from '../../../shared/types';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { splitDiff } from '../gitDiff';
 import styles from '../assets/GitPanel.module.css';
 
@@ -88,6 +89,28 @@ export default function GitDiff({
   const before = useRef<HTMLPreElement>(null);
   const after = useRef<HTMLPreElement>(null);
   const synchronized = useRef(new WeakMap<HTMLPreElement, number>());
+
+  function jump(direction: number): void {
+    if (!changes.length) {
+      return;
+    }
+    const next =
+      activeChange < 0
+        ? direction === 1
+          ? 0
+          : changes.length - 1
+        : (activeChange + direction + changes.length) % changes.length;
+    const row = changes[next];
+    setSelectedChange({ diff, row });
+    setViewport({ diff, row });
+    for (const pane of [before.current, after.current]) {
+      pane?.scrollTo({ top: row * rowHeight, behavior: 'instant' });
+      if (pane) {
+        synchronized.current.set(pane, pane.scrollTop);
+      }
+    }
+  }
+
   useEffect(() => {
     const pane = after.current;
     if (!pane) {
@@ -135,15 +158,33 @@ export default function GitDiff({
             <strong>{side === 'before' ? t('Before') : t('After')}</strong>
             <span>{side === 'before' ? beforeLabel : afterLabel}</span>
             {side === 'after' && changes.length > 0 && (
-              <span>
-                {activeChange < 0
-                  ? t('{count} changes', { count: changes.length })
-                  : t('Change {current} / {total}', {
-                      current: activeChange + 1,
-                      total: changes.length
-                    })}{' '}
-                · n / N
-              </span>
+              <div className={styles.diffNavigation}>
+                <span>
+                  {activeChange < 0
+                    ? t('{count} changes', { count: changes.length })
+                    : t('Change {current} / {total}', {
+                        current: activeChange + 1,
+                        total: changes.length
+                      })}{' '}
+                  · n / N
+                </span>
+                {[
+                  { direction: -1, title: t('Previous change (N)'), Icon: ChevronUp },
+                  { direction: 1, title: t('Next change (n)'), Icon: ChevronDown }
+                ].map(({ direction, title, Icon }) => (
+                  <button
+                    key={direction}
+                    aria-label={title}
+                    title={title}
+                    onClick={() => {
+                      jump(direction);
+                      after.current?.focus({ preventScroll: true });
+                    }}
+                  >
+                    <Icon size={16} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
             )}
             {side === 'after' && error && <span role="status">{t(error)}</span>}
           </div>
@@ -164,26 +205,7 @@ export default function GitDiff({
               }
               event.preventDefault();
               event.stopPropagation();
-              if (!changes.length) {
-                return;
-              }
-              const direction = event.shiftKey || event.key === 'N' ? -1 : 1;
-              const next =
-                activeChange < 0
-                  ? direction === 1
-                    ? 0
-                    : changes.length - 1
-                  : (activeChange + direction + changes.length) % changes.length;
-              const row = changes[next];
-              setSelectedChange({ diff, row });
-              const top = row * rowHeight;
-              setViewport({ diff, row });
-              for (const pane of [before.current, after.current]) {
-                pane?.scrollTo({ top, behavior: 'instant' });
-                if (pane) {
-                  synchronized.current.set(pane, pane.scrollTop);
-                }
-              }
+              jump(event.shiftKey || event.key === 'N' ? -1 : 1);
             }}
             onScroll={(event) => {
               const pane = event.currentTarget;
