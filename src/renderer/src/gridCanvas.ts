@@ -51,6 +51,7 @@ function cellForeground(h: Highlight, background: string, foreground: string): s
 export class GridCanvas {
     private rowImages = new WeakMap<Cell[], HTMLCanvasElement>();
     private rowOverhangs = new WeakMap<HTMLCanvasElement, number>();
+    private rowIndents = new WeakMap<HTMLCanvasElement, { columns: number[]; cuts: number[] }>();
     private glyphMetrics = new Map<string, Map<string, TextMetrics>>();
     private glyphMetricCount = 0;
     private dirtyImages = new WeakSet<HTMLCanvasElement>();
@@ -85,6 +86,7 @@ export class GridCanvas {
                     /^[\d ]$/.test(after.text) &&
                     before.highlight === after.highlight &&
                     !highlight?.codeLens &&
+                    !highlight?.indentGuide &&
                     !highlight?.diagnostic
                 ) {
                     prefix ??= { end: 0, highlights: new Set() };
@@ -329,6 +331,95 @@ export class GridCanvas {
             this.linearRows?.begin(canvas.width, canvas.height);
         const [firstRow, lastRow] = this.rowRange(paintTop, paintBottom, dpr);
         const commandRow = this.grid.rows - 1;
+        const origin = this.grid.scrollOrigin;
+        const documentY = (row: number): number =>
+            (row === commandRow
+                ? this.grid.contentHeight + this.grid.scrollOffset + origin
+                : this.grid.rowTop(row) + origin) * dpr;
+        const guideRects: {
+            x: number;
+            top: number;
+            bottom: number;
+            width: number;
+            documentTop: number;
+            documentBottom: number;
+            color: string;
+            alpha: number;
+        }[] = [];
+        for (const guide of this.grid.bracketGuides) {
+            const snap = (value: number): number => Math.round(value * dpr) / dpr;
+            const first = guide.opening >= 0 ? guide.top + 1 : guide.top;
+            const last = guide.closing >= 0 ? guide.bottom + 1 : guide.bottom;
+            const inset = guide.opening >= 0 ? 1 : 0;
+            const endInset = guide.closing >= 0 ? 1 : 0;
+            const rect = {
+                x: snap(guide.column * cellWidth) - 1 / dpr,
+                top: this.grid.rowY(first) - inset / dpr,
+                bottom: this.grid.rowY(last) - endInset / dpr,
+                width: 1 / dpr,
+                documentTop: documentY(first) - inset,
+                documentBottom: documentY(last) - endInset,
+                color: guide.color,
+                alpha: guide.active ? 0.9 : 0.3
+            };
+            guideRects.push(rect);
+            if (guide.active) {
+                for (const [column, top, documentTop] of [
+                    [guide.opening, rect.top, rect.documentTop],
+                    [guide.closing, rect.bottom, rect.documentBottom]
+                ]) {
+                    if (column >= 0) {
+                        guideRects.push({
+                            ...rect,
+                            top,
+                            bottom: top + 1 / dpr,
+                            width: Math.max(1 / dpr, snap((column + 1) * cellWidth) - rect.x),
+                            documentTop,
+                            documentBottom: documentTop + 1
+                        });
+                    }
+                }
+            }
+        }
+        const coveredColumns = new Map<number, [number, number][]>();
+        const indentCuts = (column: number): [number, number][] => {
+            let cuts = coveredColumns.get(column);
+            if (!cuts) {
+                const left = Math.round(column * cellWidth * dpr) - 1;
+                const spans = guideRects
+                    .filter(
+                        (rect) =>
+                            Math.round(rect.x * dpr) < left + 1 &&
+                            Math.round((rect.x + rect.width) * dpr) > left
+                    )
+                    .map((rect): [number, number] => [rect.documentTop, rect.documentBottom])
+                    .sort((a, b) => a[0] - b[0]);
+                cuts = [];
+                for (const span of spans) {
+                    const previous = cuts[cuts.length - 1];
+                    if (previous && span[0] <= previous[1]) {
+                        previous[1] = Math.max(previous[1], span[1]);
+                    } else {
+                        cuts.push(span);
+                    }
+                }
+                coveredColumns.set(column, cuts);
+            }
+            return cuts;
+        };
+        const rowCuts = (columns: number[], top: number, height: number): number[] => {
+            const cuts: number[] = [];
+            for (const column of columns) {
+                for (const [start, end] of indentCuts(column)) {
+                    const first = Math.max(0, start - top);
+                    const last = Math.min(height, end - top);
+                    if (first < last) {
+                        cuts.push(column, first, last);
+                    }
+                }
+            }
+            return cuts;
+        };
         for (
             let row = Math.min(firstRow, Math.max(0, commandRow));
             row < Math.max(lastRow, this.grid.rows);
@@ -367,7 +458,6 @@ export class GridCanvas {
             }
             // Snap document origins, not scroll movement. All rows share the same
             // fractional translation, including across native viewport rebases.
-            const origin = this.grid.scrollOrigin;
             const top = commandLine
                 ? Math.round(rowY * dpr)
                 : Math.round((this.grid.rowTop(layoutRow) + origin) * dpr) -
@@ -390,6 +480,20 @@ export class GridCanvas {
                 this.rowImages.set(cells, image);
                 this.dirtyImages.add(image);
             }
+            const indentState = this.rowIndents.get(image);
+            const documentTop = Math.round((this.grid.rowTop(layoutRow) + origin) * dpr);
+            if (indentState?.columns.length) {
+                const cuts = rowCuts(indentState.columns, documentTop, imageHeight);
+                if (
+                    cuts.length !== indentState.cuts.length ||
+                    cuts.some((value, index) => value !== indentState.cuts[index])
+                ) {
+                    // Guide motion changes only the rows whose covered indent pixels changed.
+                    this.dirtyPrefixes.delete(image);
+                    this.dirtyImages.add(image);
+                    this.linearRows?.invalidate(image);
+                }
+            }
             if (this.dirtyImages.has(image)) {
                 this.dirtyImages.delete(image);
                 // Opaque rows allow native LCD text, matching normal DOM rendering.
@@ -399,6 +503,7 @@ export class GridCanvas {
                 let currentFont = '';
                 const prefix = this.dirtyPrefixes.get(image);
                 this.dirtyPrefixes.delete(image);
+                const indentColumns = prefix ? (indentState?.columns ?? []) : [];
                 const previousOverhang = prefix ? this.rowOverhangs.get(image) : undefined;
                 // Cover snapped indent strokes and CSS-rounded box-drawing lines,
                 // including their native antialias fringe at any device scale.
@@ -565,13 +670,24 @@ export class GridCanvas {
                     const baseline = Math.round((y + (rowHeight + textSize) / 2 - 3) * dpr) / dpr;
 
                     if (h.indentGuide) {
-                        // Use the same physical-pixel boundary as bracket pair guides.
-                        ctx.fillRect(
-                            Math.round(x * dpr) / dpr - 1 / dpr,
-                            y,
-                            1 / dpr,
-                            image.height / dpr
-                        );
+                        if (!prefix) {
+                            indentColumns.push(col);
+                        }
+                        const left = Math.round(x * dpr) / dpr - 1 / dpr;
+                        let start = 0;
+                        for (const [first, last] of indentCuts(col)) {
+                            const end = Math.min(image.height, first - documentTop);
+                            if (end > start) {
+                                ctx.fillRect(left, start / dpr, 1 / dpr, (end - start) / dpr);
+                            }
+                            start = Math.max(start, last - documentTop);
+                            if (start >= image.height) {
+                                break;
+                            }
+                        }
+                        if (start < image.height) {
+                            ctx.fillRect(left, start / dpr, 1 / dpr, (image.height - start) / dpr);
+                        }
                     } else if (cell.text === '│') {
                         // Box-drawing lines must span the cell, including the line spacing.
                         ctx.fillRect(Math.round(x + cellWidth / 2), y, 1, rowHeight);
@@ -610,6 +726,10 @@ export class GridCanvas {
                 }
                 // New digits may overhang farther; retain them for shorter prefixes.
                 this.rowOverhangs.set(image, overhang);
+                this.rowIndents.set(image, {
+                    columns: indentColumns,
+                    cuts: rowCuts(indentColumns, documentTop, image.height)
+                });
                 if (prefix) {
                     ctx.restore();
                 }
@@ -639,36 +759,10 @@ export class GridCanvas {
                 ctx.fillRect(left, y, Math.max(0, right - left), 1 / dpr);
             }
         }
-        for (const guide of this.grid.bracketGuides) {
-            const snap = (value: number): number => Math.round(value * dpr) / dpr;
-            // Keep the vertical stroke outside the bracket's cell, including at fractional DPI.
-            const x = snap(guide.column * cellWidth) - 1 / dpr;
-            const top =
-                guide.opening >= 0
-                    ? this.grid.rowY(guide.top + 1) - 1 / dpr
-                    : this.grid.rowY(guide.top);
-            const bottom =
-                guide.closing >= 0
-                    ? this.grid.rowY(guide.bottom + 1) - 1 / dpr
-                    : this.grid.rowY(guide.bottom);
-            ctx.fillStyle = guide.color;
-            ctx.globalAlpha = guide.active ? 0.9 : 0.3;
-            ctx.fillRect(x, top, 1 / dpr, bottom - top);
-            if (guide.active) {
-                for (const [column, y] of [
-                    [guide.opening, top],
-                    [guide.closing, bottom]
-                ]) {
-                    if (column >= 0) {
-                        ctx.fillRect(
-                            x,
-                            y,
-                            Math.max(1 / dpr, snap((column + 1) * cellWidth) - x),
-                            1 / dpr
-                        );
-                    }
-                }
-            }
+        for (const rect of guideRects) {
+            ctx.fillStyle = rect.color;
+            ctx.globalAlpha = rect.alpha;
+            ctx.fillRect(rect.x, rect.top, rect.width, rect.bottom - rect.top);
         }
         ctx.restore();
         const cursor = this.grid.scrollCursor ?? this.grid.cursor;

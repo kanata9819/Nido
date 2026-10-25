@@ -984,6 +984,257 @@ test('row rasterization preserves native dark and light text pixels', async ({ b
     }
 });
 
+for (const scale of [1, 1.25, 1.5, 2]) {
+    for (const opacity of [1, 0.5]) {
+        test(`bracket guides replace only overlapping indent pixels at ${scale * 100}% scale and ${opacity} opacity`, async ({
+            browser
+        }) => {
+            const context = await browser.newContext({ deviceScaleFactor: scale });
+            try {
+                const page = await context.newPage();
+                await page.route('**/guide-priority-probe', (route) =>
+                    route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+                );
+                await page.goto(`${origin}guide-priority-probe`);
+                const result = await page.evaluate(
+                    async ({ moduleUrl, opacity }) => {
+                        const { Grid } = await import(moduleUrl);
+                        const setup = (indents: boolean): EditorGrid => {
+                            const grid = new Grid();
+                            grid.busy = true;
+                            grid.pixelScrollEnabled = true;
+                            grid.backgroundOpacity = opacity;
+                            const cells = (row: number): [string, number][] => {
+                                const cells: [string, number][] = Array.from({ length: 32 }, () => [
+                                    ' ',
+                                    0
+                                ]);
+                                cells[0] = [String(row), 0];
+                                for (const column of [2, 4, 6])
+                                    cells[column] = [indents ? '│' : ' ', 1];
+                                cells[1] = [' ', 2];
+                                cells[3] = [' ', 3];
+                                cells[8] = ['日', 0];
+                                cells[9] = ['', 0];
+                                cells[10] = ['j\u0301', 4];
+                                return cells;
+                            };
+                            grid.apply([
+                                ['grid_resize', [1, 32, 8]],
+                                [
+                                    'hl_attr_define',
+                                    [1, { foreground: 0xff0040 }, {}, [{ hi_name: 'NidoIndent1' }]]
+                                ],
+                                ['hl_attr_define', [2, { background: 0x24364a }, {}, []]],
+                                ['hl_attr_define', [3, { background: 0x304020 }, {}, []]],
+                                ['hl_attr_define', [4, { italic: true }, {}, []]],
+                                ...Array.from({ length: 7 }, (_, row) => [
+                                    'grid_line',
+                                    [1, row, 0, cells(row)]
+                                ]),
+                                ['flush']
+                            ]);
+                            return grid;
+                        };
+                        const grid = setup(true);
+                        const indents = setup(true);
+                        const brackets = setup(false);
+                        const canvas = document.createElement('canvas');
+                        const indentCanvas = document.createElement('canvas');
+                        const bracketCanvas = document.createElement('canvas');
+                        let cellWidth = 0;
+                        const paint = (
+                            value: EditorGrid,
+                            target: HTMLCanvasElement
+                        ): Uint8ClampedArray => {
+                            ({ cellWidth } = value.draw(
+                                target,
+                                360,
+                                152,
+                                15,
+                                'monospace',
+                                false,
+                                undefined,
+                                19
+                            ));
+                            const sample = document.createElement('canvas');
+                            sample.width = target.width;
+                            sample.height = target.height;
+                            const ctx = sample.getContext('2d')!;
+                            ctx.drawImage(target, 0, 0);
+                            return ctx.getImageData(0, 0, sample.width, sample.height).data;
+                        };
+                        const first = {
+                            column: 2,
+                            top: 1,
+                            bottom: 4,
+                            opening: 8,
+                            closing: 2,
+                            color: '#20a0ff',
+                            active: false
+                        };
+                        const nested = { ...first, top: 2, bottom: 3, color: '#e0b020' };
+                        const states = [
+                            [],
+                            [first],
+                            [first, nested],
+                            [{ ...first, color: '#40c080' }, nested],
+                            [{ ...first, active: true }, nested],
+                            [{ ...first, column: 4, active: true }, nested],
+                            [
+                                { ...first, column: 4, top: 0, bottom: 3, active: true },
+                                { ...nested, top: 1, bottom: 2 }
+                            ],
+                            []
+                        ];
+                        const text = CanvasRenderingContext2D.prototype.fillText;
+                        let measuring = false;
+                        let glyphs = 0;
+                        let warmGlyphs = 0;
+                        let compared = 0;
+                        const failures: string[] = [];
+                        CanvasRenderingContext2D.prototype.fillText = function (...args) {
+                            if (measuring) glyphs++;
+                            return text.apply(this, args);
+                        };
+                        try {
+                            for (const [state, guides] of states.entries()) {
+                                if (state === 6) {
+                                    for (const value of [grid, indents, brackets]) {
+                                        value.apply([
+                                            ['nido_scroll', [1, 0, 7, 0, 32, 1, 0]],
+                                            ['grid_scroll', [1, 0, 7, 0, 32, 1, 0]],
+                                            ...Array.from({ length: 7 }, (_, row) => [
+                                                'grid_line',
+                                                [1, row, 0, [[String(row), 0]]]
+                                            ]),
+                                            ['flush']
+                                        ]);
+                                        value.scrollOrigin += 19;
+                                    }
+                                }
+                                for (const value of [grid, brackets]) {
+                                    value.apply([['nido_bracket_guides', [guides]], ['flush']]);
+                                }
+                                for (const [frame, phase] of [0, 0.25, 0.75, 0].entries()) {
+                                    for (const value of [grid, indents, brackets]) {
+                                        value.scrollFraction = phase / (19 * devicePixelRatio);
+                                    }
+                                    const before = glyphs;
+                                    measuring = true;
+                                    const actual = paint(grid, canvas);
+                                    measuring = false;
+                                    if (frame > 0 || state === 3) warmGlyphs += glyphs - before;
+                                    const withIndents = paint(indents, indentCanvas);
+                                    const withBrackets = paint(brackets, bracketCanvas);
+                                    const rectangles: {
+                                        left: number;
+                                        right: number;
+                                        top: number;
+                                        bottom: number;
+                                    }[] = [];
+                                    for (const guide of guides) {
+                                        const left =
+                                            Math.round(
+                                                guide.column * cellWidth * devicePixelRatio
+                                            ) - 1;
+                                        const top = grid.rowY(guide.top + 1) * devicePixelRatio - 1;
+                                        const bottom =
+                                            grid.rowY(guide.bottom + 1) * devicePixelRatio - 1;
+                                        rectangles.push({ left, right: left + 1, top, bottom });
+                                        if (guide.active) {
+                                            for (const [column, y] of [
+                                                [guide.opening, top],
+                                                [guide.closing, bottom]
+                                            ]) {
+                                                rectangles.push({
+                                                    left,
+                                                    right: Math.max(
+                                                        left + 1,
+                                                        Math.round(
+                                                            (column + 1) *
+                                                                cellWidth *
+                                                                devicePixelRatio
+                                                        )
+                                                    ),
+                                                    top: y,
+                                                    bottom: y + 1
+                                                });
+                                            }
+                                        }
+                                    }
+                                    let mismatches = 0;
+                                    let sample = '';
+                                    // Fractional row filtering blends neighboring edge pixels.
+                                    const fringe =
+                                        ((grid.scrollOffset + grid.scrollOrigin) *
+                                            devicePixelRatio) %
+                                        1
+                                            ? 2
+                                            : 0;
+                                    for (let y = 0; y < canvas.height; y++) {
+                                        for (let x = 0; x < canvas.width; x++) {
+                                            const covered = rectangles.some(
+                                                (rect) =>
+                                                    x >= rect.left &&
+                                                    x + 1 <= rect.right &&
+                                                    y >= rect.top + fringe &&
+                                                    y + 1 <= rect.bottom - fringe
+                                            );
+                                            const outside = rectangles.every(
+                                                (rect) =>
+                                                    x + 1 <= rect.left ||
+                                                    x >= rect.right ||
+                                                    y + 1 <= rect.top - fringe ||
+                                                    y >= rect.bottom + fringe
+                                            );
+                                            if (!covered && !outside) continue;
+                                            const expected = covered ? withBrackets : withIndents;
+                                            const index = (y * canvas.width + x) * 4;
+                                            compared++;
+                                            for (let channel = 0; channel < 4; channel++) {
+                                                // GPU filtering may round a channel by one level.
+                                                if (
+                                                    Math.abs(
+                                                        actual[index + channel] -
+                                                            expected[index + channel]
+                                                    ) > 1
+                                                ) {
+                                                    mismatches++;
+                                                    sample ||= `${x},${y}, covered ${covered}, ${Array.from(actual.slice(index, index + 4))}/${Array.from(expected.slice(index, index + 4))}`;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (mismatches)
+                                        failures.push(
+                                            `state ${state}, phase ${phase}: ${mismatches} channels, ${sample}`
+                                        );
+                                }
+                            }
+                        } finally {
+                            CanvasRenderingContext2D.prototype.fillText = text;
+                        }
+                        return { failures, warmGlyphs, compared };
+                    },
+                    {
+                        moduleUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+                        opacity
+                    }
+                );
+                expect(result.failures).toEqual([]);
+                expect(
+                    result.warmGlyphs,
+                    'fractional motion and guide colors must reuse text'
+                ).toBe(0);
+                expect(result.compared).toBeGreaterThan(100000);
+            } finally {
+                await context.close();
+            }
+        });
+    }
+}
+
 test('numeric row damage preserves overhanging text and decorations across repeated edits', async ({
     browser
 }) => {
