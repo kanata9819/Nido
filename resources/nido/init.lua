@@ -212,7 +212,7 @@ vim.diagnostic.config({
   signs = { text = { [1] = 'E', [2] = 'W', [3] = 'I', [4] = 'H' } },
   underline = true,
   severity_sort = true,
-  update_in_insert = false,
+  update_in_insert = true,
   float = { border = 'rounded', source = true },
 })
 -- Bundle only Azami and its theme dependency; personal plugins stay isolated.

@@ -175,6 +175,7 @@ for (const [extension, native, packageName] of [
         { timeout: 60000 },
         async () => {
             const root = await mkdtemp(join(tmpdir(), 'nido-ts-js-'));
+            const grid = new Grid();
             let session: Session | undefined;
             try {
                 if (native) {
@@ -213,7 +214,13 @@ for (const [extension, native, packageName] of [
                     path,
                     `import { greet } from './lib';\nconst answer=greet();\nanswer.toUpperCase();\n`
                 );
-                session = await Session.create(root, () => {}, process.env.NIDO_TEST_RESOURCES);
+                session = await Session.create(
+                    root,
+                    (event) => {
+                        if (event.type === 'redraw') grid.apply(event.events);
+                    },
+                    process.env.NIDO_TEST_RESOURCES
+                );
                 if (!native || packageName === '@typescript/native') {
                     const config = join(root, 'lsp.json');
                     await writeFile(config, JSON.stringify({ typescript: { server: 'legacy' } }));
@@ -237,6 +244,7 @@ for (const [extension, native, packageName] of [
                     }
                 }
                 await session.openFile(`main.${extension}`);
+                await session.attach(180, 25);
                 const lua = (code: string, args: unknown[] = []): Promise<unknown> =>
                     session!.client.request('nvim_exec_lua', [code, args]);
                 assert.equal(
@@ -318,6 +326,51 @@ for (const [extension, native, packageName] of [
                     JSON.stringify(await lua('return vim.diagnostic.get(0)')),
                     /toUpperCase/
                 );
+                const saved = await readFile(path, 'utf8');
+                const annotations = (): string =>
+                    grid.cells
+                        .flat()
+                        .filter((cell) => grid.highlights.get(cell.highlight)?.diagnostic)
+                        .map((cell) => cell.text)
+                        .join('');
+                await session.input('3G0fUct(Fixed');
+                assert.match(await session.inputMode(), /^i/);
+                assert.equal(
+                    await lua(
+                        'return vim.wait(15000, function() return #vim.diagnostic.get(0) == 0 end, 50)'
+                    ),
+                    true
+                );
+                await lua('vim.cmd.redraw()');
+                assert.equal(
+                    annotations(),
+                    '',
+                    'fixing code clears badges before leaving Insert mode'
+                );
+                await session.input('<Esc>3G0fFct(UpperCase');
+                assert.match(await session.inputMode(), /^i/);
+                assert.equal(
+                    await lua(`return vim.wait(15000, function()
+        for _, diagnostic in ipairs(vim.diagnostic.get(0)) do
+          if diagnostic.message:find('toUpperCase', 1, true) then return true end
+        end
+        return false
+      end, 50)`),
+                    true
+                );
+                await lua('vim.cmd.redraw()');
+                assert.match(
+                    annotations(),
+                    /ERROR.*toUpperCase/,
+                    'new errors appear during Insert mode'
+                );
+                assert.match(await session.inputMode(), /^i/);
+                assert.equal(
+                    await readFile(path, 'utf8'),
+                    saved,
+                    'diagnostics do not require a save'
+                );
+                await session.input('<Esc>');
                 await lua(`vim.api.nvim_win_set_cursor(0, {2, 14})
         local notify = vim.rpcnotify
         local hover = ''
