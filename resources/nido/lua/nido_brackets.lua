@@ -268,8 +268,15 @@ local function update(buffer, ticket)
     local ok, err
     api.nvim_buf_call(buffer, function() ok, err = coroutine.resume(task) end)
     if not ok then
-      pending[buffer] = nil
-      vim.notify('Bracket analysis failed: ' .. tostring(err), vim.log.levels.ERROR)
+      if tostring(err):find('Keyboard interrupt', 1, true) then
+        -- A cancelled coroutine is dead; restart only if no newer edit superseded it.
+        vim.defer_fn(function()
+          if pending[buffer] == ticket then update(buffer, ticket) end
+        end, 80)
+      else
+        pending[buffer] = nil
+        vim.notify('Bracket analysis failed: ' .. tostring(err), vim.log.levels.ERROR)
+      end
     elseif coroutine.status(task) == 'dead' then
       pending[buffer] = nil
       match_brackets()
