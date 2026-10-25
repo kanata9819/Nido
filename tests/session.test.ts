@@ -745,6 +745,93 @@ test('wheel scrolling can retain the edit position and resumes input and paste a
   }
 });
 
+test('keyboard movement and editing keep the cursor above pixel-scroll overscan', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-cursor-bottom-'));
+  const grid = new Grid();
+  grid.pixelScrollEnabled = true;
+  let session: Session | undefined;
+  const check = async (height: number, action: string): Promise<string> => {
+    const mode = await session!.inputMode();
+    await session!.client.request('nvim_command', ['redraw']);
+    grid.prepareLayout(height, 8, 22);
+    const bottom = grid.rowY(grid.cursor.row) + 22;
+    assert.ok(bottom <= height, `${action}, height ${height}: cursor bottom ${bottom}`);
+    assert.ok(grid.rowY(grid.cursor.row) >= 0);
+    return mode;
+  };
+  try {
+    session = await Session.create(root, (event) => {
+      if (event.type === 'redraw') grid.apply(event.events);
+    });
+    await session.client.request('nvim_exec_lua', [
+      'vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.tbl_map(tostring, vim.fn.range(1, 160)))',
+      []
+    ]);
+    for (const height of [396, 403, 1046]) {
+      await session.resize(80, Math.ceil(height / 22) + 2);
+      for (const [keys, mode] of [
+        ['ggG', 'n'],
+        ['gg159G', 'n'],
+        ['gg160G', 'n'],
+        ['ggGzb', 'n'],
+        ['gg150G10j', 'n'],
+        ['ggvG', 'v'],
+        ['ggVG', 'V'],
+        ['gg<C-v>G', '\u0016'],
+        ['ggGR', 'R'],
+        ['ggGoX', 'i']
+      ]) {
+        await session.input(keys);
+        assert.equal(await check(height, keys), mode);
+        await session.input('<Esc>');
+      }
+    }
+    await session.resize(80, Math.ceil(403 / 22) + 2);
+    await check(403, 'resize at EOF');
+    await session.client.request('nvim_exec_lua', [
+      `local last = vim.api.nvim_buf_line_count(0)
+      vim.api.nvim_buf_set_lines(0, last - 1, last, false, {string.rep('x', 160)})
+      vim.api.nvim_buf_set_extmark(0, vim.api.nvim_create_namespace('cursor-bottom-lens'), last - 1, 0, {
+        virt_lines=vim.tbl_map(function() return {{'Run', 'NidoCodeLens'}} end, vim.fn.range(1, 5)),
+        virt_lines_above=true,
+      })`,
+      []
+    ]);
+    await session.input('ggG$');
+    await check(403, 'wrapped EOF');
+    assert.ok(grid.extraRows > 0, 'compact annotations add native overscan rows');
+    await session.resize(80, Math.ceil(403 / 22) + 2 + grid.extraRows);
+    await check(403, 'compact annotations');
+    const last = Number(await session.client.request('nvim_eval', ["line('$')"]));
+    await session.input('2');
+    const countedResize = session.resize(80, 20);
+    await session.input('k');
+    await countedResize;
+    assert.equal(await session.client.request('nvim_eval', ["line('.')"]), last - 2);
+    await session.input(':let g:nido_bottom_resize = ');
+    const commandResize = session.resize(80, 24);
+    await session.input('42<CR>');
+    await commandResize;
+    assert.equal(await session.client.request('nvim_eval', ['g:nido_bottom_resize']), 42);
+    await session.input('G$');
+    await session.inputMode();
+    const before = await session.client.request('nvim_exec_lua', [
+      'return vim.fn.winsaveview()',
+      []
+    ]);
+    await session.prefetchScroll(false);
+    await session.prefetchScroll(true);
+    assert.deepEqual(
+      await session.client.request('nvim_exec_lua', ['return vim.fn.winsaveview()', []]),
+      before,
+      'speculative rows must not move the editing viewport'
+    );
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('keyboard page scrolling reveals the last row hidden by pixel-scroll overscan', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-page-end-'));
   let session: Session | undefined;

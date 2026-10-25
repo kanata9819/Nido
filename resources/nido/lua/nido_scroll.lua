@@ -132,6 +132,14 @@ function M.center(count)
   publish_offset()
 end
 
+local function reveal_row(row)
+  -- Overscan plus fractional-height and compact-row rounding can hide three native rows.
+  local bottom = math.max(1, api.nvim_win_get_height(0) - 3)
+  if row > bottom then
+    vim.cmd.normal({args={(row - bottom) .. string.char(5)}, bang=true})
+  end
+end
+
 function M.page(key, count)
   M.restore()
   local keys = api.nvim_replace_termcodes(key, true, false, true)
@@ -145,10 +153,7 @@ function M.page(key, count)
   local last = api.nvim_buf_line_count(0)
   local column = vim.wo.wrap and math.max(1, #vim.fn.getline(last)) or 1
   local bottom = vim.fn.screenpos(window, last, column).row
-  -- The final content row is overscan, so EOF there still needs one screen row of scrolling.
-  if bottom == info.winrow + info.height - 1 then
-    vim.cmd.normal({args={string.char(5)}, bang=true})
-  end
+  reveal_row(bottom - info.winrow + 1)
 end
 
 function M.prefetch(down, previous)
@@ -276,6 +281,16 @@ function M.scroll(lines, follow, pixel)
 end
 
 api.nvim_create_autocmd('BufLeave', {callback=function() M.restore() end})
+api.nvim_create_autocmd({'CursorMoved', 'CursorMovedI', 'WinScrolled', 'WinResized'}, {callback=function()
+  if anchor or mouse_scrolloff or vim.bo.buftype ~= '' or api.nvim_win_get_config(0).relative ~= '' then
+    return
+  end
+  local mode = api.nvim_get_mode()
+  if mode.blocking or mode.mode:match('^[cr]') then
+    return
+  end
+  reveal_row(vim.fn.winline())
+end})
 api.nvim_create_autocmd('WinScrolled', {callback=function()
   if not centered_view then
     return
