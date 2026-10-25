@@ -563,9 +563,10 @@ test('Rust sticky headers pick up delayed semantic colors even when their source
     await lua("vim.lsp.enable('rust_analyzer', false)");
     await session.openFile('scopes.rs');
     await lua("vim.wait(300); vim.cmd('normal! 12Gzt'); vim.cmd.redraw()");
+    let headerLine = 1;
     const headerColor = (): string | undefined =>
       grid.stickyScroll?.scopes
-        .find((scope) => scope.line === 1)
+        .find((scope) => scope.line === headerLine)
         ?.text.find((span) => span.text.includes('Screen'))?.color;
     const syntaxColor = headerColor();
     assert.ok(syntaxColor);
@@ -621,7 +622,7 @@ test('Rust sticky headers pick up delayed semantic colors even when their source
               end,
             })
             assert(vim.wait(5000, function() return #_G.sticky_semantic_requests > 0 end))
-            table.remove(_G.sticky_semantic_requests, 1)({data={0, 5, 6, 0, 0}})
+            table.remove(_G.sticky_semantic_requests, 1)({data={0, 5, 6, 0, 0, 37, 12, 5, 1, 0}})
             assert(vim.wait(5000, function()
               return #(vim.lsp.semantic_tokens.get_at_pos(0, 0, 5) or {}) > 0
             end))
@@ -632,19 +633,115 @@ test('Rust sticky headers pick up delayed semantic colors even when their source
         `);
     assert.equal(headerColor(), '#4ec9b0', 'late Rust type colors replace the cached plain header');
     assert.deepEqual(bracketColors(), [['#ffd700'], ['#da70d6', '#da70d6', '#da70d6']]);
+    // LspAttach independently refreshes the outline after its debounce.
+    await lua('vim.wait(200); vim.cmd.redraw()');
+    const repeatedPaint = await lua(`
+            local references = require('nido_references')
+            local highlight, redraw = references.highlight, vim.cmd.redraw
+            local highlights, redraws, tokenPaints = 0, 0, 0
+            references.highlight = function(...)
+              highlights = highlights + 1
+              return highlight(...)
+            end
+            vim.cmd.redraw = function(...)
+              redraws = redraws + 1
+              return redraw(...)
+            end
+            local observer = vim.api.nvim_create_autocmd('LspTokenUpdate', {callback=function(event)
+              if event.data.token.line == 37 then tokenPaints = tokenPaints + 1 end
+            end})
+            assert(#vim.inspect_pos(0, 37, 12).semantic_tokens == 0,
+              'The body token must be unpainted before scrolling it into view')
+            -- Paint a new body row from the same semantic result. The sticky
+            -- source rows and their semantic colors have not changed.
+            vim.cmd.normal({args={'8' .. string.char(5)}, bang=true})
+            redraw()
+            vim.wait(80)
+            require('nido_sticky').publish(vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf())
+            references.highlight, vim.cmd.redraw = highlight, redraw
+            vim.api.nvim_del_autocmd(observer)
+            assert(tokenPaints > 0, 'Scrolling must paint the previously offscreen semantic token')
+            return {highlights=highlights, redraws=redraws}
+        `);
+    assert.deepEqual(
+      repeatedPaint,
+      { highlights: 0, redraws: 0 },
+      'painting unchanged semantic tokens must reuse sticky header colors without a forced redraw'
+    );
+    assert.equal(headerColor(), '#4ec9b0');
     await lua(`
             vim.api.nvim_set_hl(0, '@lsp.typemod.struct.declaration.rust', {fg='#4fc1ff'})
             vim.lsp.semantic_tokens.force_refresh(0)
             assert(vim.wait(5000, function() return #_G.sticky_semantic_requests > 0 end))
+            local before_decode
+            local observer = vim.api.nvim_create_autocmd('LspRequest', {callback=function(event)
+              if event.data.request.type == 'complete'
+                  and event.data.request.method:match('^textDocument/semanticTokens/') then
+                vim.schedule(function()
+                  before_decode = #(vim.lsp.semantic_tokens.get_at_pos(0, 0, 5) or {})
+                  -- Rebuild the cache while the semantic response is still decoding.
+                  require('nido_sticky').publish(vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf())
+                end)
+              end
+            end})
+            local hrtime, clock_calls = vim.uv.hrtime, 0
+            vim.uv.hrtime = function()
+              clock_calls = clock_calls + 1
+              return hrtime() + clock_calls * 6000000
+            end
             table.remove(_G.sticky_semantic_requests, 1)({data={0, 5, 6, 0, 1, 11, 12, 5, 1, 0}})
+            vim.uv.hrtime = hrtime
+            assert(clock_calls >= 2, 'The semantic decoder must run long enough to yield')
             assert(vim.wait(5000, function()
               local tokens = vim.lsp.semantic_tokens.get_at_pos(0, 0, 5) or {}
+              return tokens[1] and tokens[1].modifiers.declaration
+            end))
+            vim.api.nvim_del_autocmd(observer)
+            assert(before_decode == 0, 'LspRequest complete must precede the decoded token data')
+            vim.wait(80)
+        `);
+    assert.equal(headerColor(), '#4fc1ff', 'semantic refreshes preserve modifier priority');
+    headerLine = 3;
+    await lua(`
+            vim.api.nvim_buf_set_lines(0, 0, 0, false, {'', ''})
+            require('nido_sticky').publish(vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf())
+        `);
+    assert.equal(
+      headerColor(),
+      '#4fc1ff',
+      'moving a header down retains its pending semantic colors'
+    );
+    headerLine = 2;
+    await lua(`
+            vim.api.nvim_buf_set_lines(0, 0, 1, false, {})
+            require('nido_sticky').publish(vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf())
+        `);
+    assert.equal(
+      headerColor(),
+      '#4fc1ff',
+      'moving a header up retains its pending semantic colors'
+    );
+    await lua(`
+            vim.wait(200)
+            require('nido_sticky').publish(vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf())
+        `);
+    assert.equal(
+      headerColor(),
+      '#4fc1ff',
+      'outline refreshes preserve the moved header while tokens are pending'
+    );
+    await lua(`
+            assert(vim.wait(5000, function() return #_G.sticky_semantic_requests > 0 end))
+            vim.api.nvim_set_hl(0, '@lsp.typemod.struct.declaration.rust', {fg='#ff8040'})
+            table.remove(_G.sticky_semantic_requests, #_G.sticky_semantic_requests)({data={1, 5, 6, 0, 1}})
+            assert(vim.wait(5000, function()
+              local tokens = vim.lsp.semantic_tokens.get_at_pos(0, 1, 5) or {}
               return tokens[1] and tokens[1].modifiers.declaration
             end))
             vim.wait(80)
             vim.cmd.redraw()
         `);
-    assert.equal(headerColor(), '#4fc1ff', 'semantic refreshes preserve modifier priority');
+    assert.equal(headerColor(), '#ff8040', 'a new semantic response updates the moved header');
     await lua(
       'vim.lsp.get_client_by_id(_G.sticky_color_client):stop(true); vim.wait(300); vim.cmd.redraw()'
     );

@@ -252,8 +252,32 @@ local function highlight(entry, buffer, line, scope, key)
     scope.colors, scope.header_colors, scope.ending_colors = entry.highlights, nil, nil
   end
   local cached = scope[key] or entry.highlights[line]
-  if not cached or cached.text ~= text then
-    cached = {text=text, spans=require('nido_references').highlight(buffer, line, {text})[1]}
+  local columns = cached and cached.text == text and cached.columns
+  if not columns then
+    columns = {}
+    local column = 0
+    for character in text:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
+      columns[#columns + 1] = column
+      column = column + #character
+    end
+  end
+  local tokens, count, changed = {}, 0, not cached or cached.text ~= text
+  -- An unchanged header can move before the LSP replaces its old coordinates.
+  -- Keep its colors until the response invalidates the cache for the new row.
+  if not cached or cached.line == line or changed then
+    for _, column in ipairs(columns) do
+      for _, token in ipairs(vim.lsp.semantic_tokens.get_at_pos(buffer, line - 1, column) or {}) do
+        if not tokens[token] then
+          tokens[token], count = true, count + 1
+          changed = changed or not cached.tokens[token]
+        end
+      end
+    end
+    changed = changed or count ~= cached.token_count
+  end
+  if changed then
+    cached = {text=text, line=line, columns=columns, tokens=tokens, token_count=count,
+      spans=require('nido_references').highlight(buffer, line, {text})[1]}
   end
   scope[key], entry.highlights[line] = cached, cached
   return cached.spans
@@ -262,7 +286,7 @@ end
 local function recolor(buffer)
   if color_pending[buffer] or not entries[buffer] then return end
   color_pending[buffer] = true
-  -- Token notifications can arrive during redraw, once per token. Repaint once afterwards.
+  -- Coalesce semantic replies and let their handlers update the token data first.
   vim.schedule(function()
     color_pending[buffer] = nil
     local entry = entries[buffer]
@@ -381,10 +405,10 @@ api.nvim_create_autocmd('User', {pattern='NidoBracketsUpdated', callback=functio
   -- A long parse can finish after the initial indentation fallback was cached.
   if not pending[event.data.buffer] then schedule(event.data.buffer) end
 end})
-api.nvim_create_autocmd('LspTokenUpdate', {callback=function(event) recolor(event.buf) end})
 api.nvim_create_autocmd('LspRequest', {callback=function(event)
   local request = event.data.request
-  -- A response containing only offscreen tokens does not emit LspTokenUpdate.
+  -- Cached colors already include offscreen tokens. Painting those same tokens
+  -- during scrolling emits LspTokenUpdate, but only a new response changes them.
   if request.type == 'complete' and request.method:match('^textDocument/semanticTokens/') then
     recolor(event.buf)
   end

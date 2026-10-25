@@ -112,6 +112,104 @@ test('editor allocates full-height document rows plus command and scroll oversca
     .toBe(true);
 });
 
+test('prefetch strips preserve visible row bitmaps and repaint actual content changes', async ({
+  page
+}) => {
+  await page.route('**/prefetch-cache-probe', (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+  );
+  await page.goto(`${origin}prefetch-cache-probe`);
+  const result = await page.evaluate(
+    async (moduleUrl) => {
+      const { Grid } = await import(moduleUrl);
+      const grid = new Grid();
+      grid.busy = true;
+      grid.pixelScrollEnabled = true;
+      const cells = (line: number, row: number): [string, number][] =>
+        Array.from(
+          `${String(row + 1).padStart(3)} const value${line} = example(${line});`.padEnd(60),
+          (text) => [text, 1]
+        );
+      const setup = [
+        ['grid_resize', [1, 60, 8]],
+        ['hl_attr_define', [1, { foreground: 0x60a0ff }, {}, []]],
+        ...Array.from({ length: 7 }, (_, row) => ['grid_line', [1, row, 0, cells(row, row)]]),
+        ['flush']
+      ];
+      grid.apply(setup);
+      const canvas = document.createElement('canvas');
+      const paint = (): Uint8ClampedArray => {
+        grid.draw(canvas, 560, 152, 15, 'monospace', false, undefined, 19);
+        const sample = document.createElement('canvas');
+        sample.width = canvas.width;
+        sample.height = canvas.height;
+        const context = sample.getContext('2d')!;
+        context.drawImage(canvas, 0, 0);
+        return context.getImageData(0, 0, sample.width, sample.height).data;
+      };
+      const original = paint();
+      const visible = grid.cells.slice();
+      const text = CanvasRenderingContext2D.prototype.fillText;
+      let glyphs = 0;
+      CanvasRenderingContext2D.prototype.fillText = function (...args) {
+        glyphs++;
+        return text.apply(this, args);
+      };
+      const roundTrip = (direction: number): unknown[][] => [
+        ['nido_scroll', [1, 0, 7, 0, 60, direction, 0]],
+        ['grid_scroll', [1, 0, 7, 0, 60, direction, 0]],
+        ...Array.from({ length: 7 }, (_, row) => [
+          'grid_line',
+          [1, row, 0, cells(row + direction, row)]
+        ]),
+        ['nido_scroll', [1, 0, 7, 0, 60, -direction, 0]],
+        ['grid_scroll', [1, 0, 7, 0, 60, -direction, 0]],
+        ...Array.from({ length: 7 }, (_, row) => ['grid_line', [1, row, 0, cells(row, row)]]),
+        ['nido_scroll_cache', [false, false, false, true]]
+      ];
+      try {
+        let unchanged = true;
+        let retained = true;
+        for (const direction of [-2, -2, 2, 2]) {
+          grid.apply([...roundTrip(direction), ['flush']]);
+          const pixels = paint();
+          unchanged &&= original.every((value, index) => value === pixels[index]);
+          retained &&= visible.every((row, index) => row === grid.cells[index]);
+        }
+        const prefetchGlyphs = glyphs;
+        const edited = cells(99, 3);
+        grid.apply([...roundTrip(2), ['grid_line', [1, 3, 0, edited]], ['flush']]);
+        const changed = paint();
+        const changedGlyphs = glyphs - prefetchGlyphs;
+        const reference = new Grid();
+        reference.busy = true;
+        reference.pixelScrollEnabled = true;
+        reference.apply([...setup, ['grid_line', [1, 3, 0, edited]], ['flush']]);
+        const fresh = document.createElement('canvas');
+        reference.draw(fresh, 560, 152, 15, 'monospace', false, undefined, 19);
+        const expected = fresh.getContext('2d')!.getImageData(0, 0, fresh.width, fresh.height).data;
+        return {
+          prefetchGlyphs,
+          changedGlyphs,
+          unchanged,
+          retained,
+          changed: original.some((value, index) => value !== changed[index]),
+          matchesFresh: changed.every((value, index) => value === expected[index])
+        };
+      } finally {
+        CanvasRenderingContext2D.prototype.fillText = text;
+      }
+    },
+    `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+  );
+  expect(result.prefetchGlyphs).toBe(0);
+  expect(result.unchanged).toBe(true);
+  expect(result.retained).toBe(true);
+  expect(result.changedGlyphs).toBeGreaterThan(0);
+  expect(result.changed).toBe(true);
+  expect(result.matchesFresh).toBe(true);
+});
+
 for (const scale of [1, 1.25, 1.5, 2]) {
   for (const opacity of [1, 0.5]) {
     test(`cached viewport animations preserve pixels at ${scale * 100}% scale and ${opacity} opacity`, async ({
