@@ -9,10 +9,10 @@ import { EditorCursor } from '../src/renderer/src/editorCursor';
 import { setTimeout as delay } from 'node:timers/promises';
 
 test('hover rejects edited text and cancels obsolete requests across cursor, window and buffer changes', async (context) => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        const result = await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    const result = await session.client.request('nvim_exec_lua', [
+      `
 local api, hover = vim.api, require('nido_hover')
 local buffer, win = api.nvim_get_current_buf(), api.nvim_get_current_win()
 api.nvim_buf_set_lines(buffer, 0, -1, false, {'alpha beta'})
@@ -108,32 +108,32 @@ vim.lsp.get_clients, vim.lsp.buf_request_all, vim.rpcnotify = original_clients, 
 assert(ok, err)
 return {requests=#requests, cancelled=cancelled, latest=latest}
 `,
-            []
-        ]);
-        context.diagnostic(JSON.stringify(result));
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+    context.diagnostic(JSON.stringify(result));
+  } finally {
+    await session.stop();
+  }
 });
 
 test('inline diagnostics abbreviate annotations while retaining full keyboard details and clearing old badges', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nido-inline-diagnostics-'));
-    const grid = new Grid();
-    const cards: string[] = [];
-    let session: Session | undefined;
-    try {
-        await writeFile(join(root, 'sample.txt'), 'first line\nsecond line\nthird line\n');
-        session = await Session.create(root, (event) => {
-            if (event.type === 'redraw') grid.apply(event.events);
-            if (event.type === 'diagnostics' && event.items.length) {
-                cards.push(event.items[0].message);
-            }
-        });
-        await session.attach(240, 24);
-        await session.openFile('sample.txt');
-        const message = '型が一致しません。'.repeat(12) + '\nCompiler explanation stays available.';
-        await session.client.request('nvim_exec_lua', [
-            `local message = ...
+  const root = await mkdtemp(join(tmpdir(), 'nido-inline-diagnostics-'));
+  const grid = new Grid();
+  const cards: string[] = [];
+  let session: Session | undefined;
+  try {
+    await writeFile(join(root, 'sample.txt'), 'first line\nsecond line\nthird line\n');
+    session = await Session.create(root, (event) => {
+      if (event.type === 'redraw') grid.apply(event.events);
+      if (event.type === 'diagnostics' && event.items.length) {
+        cards.push(event.items[0].message);
+      }
+    });
+    await session.attach(240, 24);
+    await session.openFile('sample.txt');
+    const message = '型が一致しません。'.repeat(12) + '\nCompiler explanation stays available.';
+    await session.client.request('nvim_exec_lua', [
+      `local message = ...
 local ns = vim.api.nvim_create_namespace('inline-diagnostic-test')
 vim.diagnostic.set(ns, 0, {
   {lnum=0, col=0, severity=3, message=message},
@@ -142,63 +142,61 @@ vim.diagnostic.set(ns, 0, {
   {lnum=2, col=0, severity=4, message='Try a clearer name'},
 })
 vim.cmd('redraw!')`,
-            [message]
-        ]);
-        await session.client.request('nvim_eval', ['1']);
-        const rows = grid.cells.map((cells) => cells.map((cell) => cell.text).join(''));
-        assert.match(
-            rows.find((text) => text.includes('first line'))!,
-            /INFO · 型が一致.*…/u
-        );
-        assert.ok(!rows.some((text) => text.includes('Compiler explanation')));
-        assert.match(
-            rows.find((text) => text.includes('second line'))!,
-            /ERROR \+1 · Expected a semicolon/
-        );
-        assert.match(
-            rows.find((text) => text.includes('third line'))!,
-            /HINT · Try a clearer name/
-        );
-        const annotations = grid.cells
-            .flat()
-            .filter((cell) => grid.highlights.get(cell.highlight)?.diagnostic);
-        assert.ok(annotations.length, 'Native virtual text reaches the GUI as diagnostic badges');
-        for (const cell of annotations) {
-            const highlight = grid.highlights.get(cell.highlight)!;
-            assert.notEqual(highlight.background, undefined);
-            assert.notEqual(
-                highlight.foreground,
-                highlight.special,
-                'Only the accent uses severity color'
-            );
-        }
-        await session.input('gg0gl');
-        await session.client.request('nvim_eval', ['1']);
-        assert.equal(cards.at(-1), message, 'gl retains the full Unicode compiler message');
-        await session.client.request('nvim_exec_lua', [
-            "vim.diagnostic.reset(vim.api.nvim_create_namespace('inline-diagnostic-test'), 0); vim.cmd('redraw!')",
-            []
-        ]);
-        await session.client.request('nvim_eval', ['1']);
-        assert.ok(
-            !grid.cells.flat().some((cell) => grid.highlights.get(cell.highlight)?.diagnostic)
-        );
-        assert.equal(
-            await readFile(join(root, 'sample.txt'), 'utf8'),
-            'first line\nsecond line\nthird line\n'
-        );
-    } finally {
-        await session?.stop();
-        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      [message]
+    ]);
+    await session.client.request('nvim_eval', ['1']);
+    const rows = grid.cells.map((cells) => cells.map((cell) => cell.text).join(''));
+    assert.match(
+      rows.find((text) => text.includes('first line'))!,
+      /INFO · 型が一致.*…/u
+    );
+    assert.ok(!rows.some((text) => text.includes('Compiler explanation')));
+    assert.match(
+      rows.find((text) => text.includes('second line'))!,
+      /ERROR \+1 · Expected a semicolon/
+    );
+    assert.match(
+      rows.find((text) => text.includes('third line'))!,
+      /HINT · Try a clearer name/
+    );
+    const annotations = grid.cells
+      .flat()
+      .filter((cell) => grid.highlights.get(cell.highlight)?.diagnostic);
+    assert.ok(annotations.length, 'Native virtual text reaches the GUI as diagnostic badges');
+    for (const cell of annotations) {
+      const highlight = grid.highlights.get(cell.highlight)!;
+      assert.notEqual(highlight.background, undefined);
+      assert.notEqual(
+        highlight.foreground,
+        highlight.special,
+        'Only the accent uses severity color'
+      );
     }
+    await session.input('gg0gl');
+    await session.client.request('nvim_eval', ['1']);
+    assert.equal(cards.at(-1), message, 'gl retains the full Unicode compiler message');
+    await session.client.request('nvim_exec_lua', [
+      "vim.diagnostic.reset(vim.api.nvim_create_namespace('inline-diagnostic-test'), 0); vim.cmd('redraw!')",
+      []
+    ]);
+    await session.client.request('nvim_eval', ['1']);
+    assert.ok(!grid.cells.flat().some((cell) => grid.highlights.get(cell.highlight)?.diagnostic));
+    assert.equal(
+      await readFile(join(root, 'sample.txt'), 'utf8'),
+      'first line\nsecond line\nthird line\n'
+    );
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
 });
 
 test('Rust cast and import aliases use keyword colors without recoloring operators or strings', async () => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        await session.attach(80, 24);
-        await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.attach(80, 24);
+    await session.client.request('nvim_exec_lua', [
+      `
 vim.lsp.enable('rust_analyzer', false)
 vim.api.nvim_buf_set_lines(0, 0, -1, false, {
   'let value = count as i16;',
@@ -220,19 +218,19 @@ assert(vim.iter(preview[1]):any(function(span)
   return span.text == 'as' and span.color == '#569cd6'
 end), 'syntax-only previews use the same keyword color')
 `,
-            []
-        ]);
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
 });
 
 test('matching brackets follow the innermost pair, syntax, edits and visual mode', async () => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        await session.attach(80, 24);
-        await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.attach(80, 24);
+    await session.client.request('nvim_exec_lua', [
+      `
 local api = vim.api
 local buffer = api.nvim_get_current_buf()
 local ns = api.nvim_create_namespace('nido_bracket_match')
@@ -276,22 +274,22 @@ move(1, 1)
 ready()
 assert(vim.deep_equal(marks(), {{0,0}, {0,4}}), 'Edits must not leave stale borders')
 `,
-            []
-        ]);
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
 });
 
 test('word fallback is case sensitive, uses whole words and clears on whitespace and selection', async () => {
-    const grid = new Grid();
-    const session = await Session.create(process.cwd(), (event) => {
-        if (event.type === 'redraw') grid.apply(event.events);
-    });
-    try {
-        await session.attach(80, 24);
-        await session.client.request('nvim_exec_lua', [
-            String.raw`
+  const grid = new Grid();
+  const session = await Session.create(process.cwd(), (event) => {
+    if (event.type === 'redraw') grid.apply(event.events);
+  });
+  try {
+    await session.attach(80, 24);
+    await session.client.request('nvim_exec_lua', [
+      String.raw`
 local api = vim.api
 api.nvim_buf_set_lines(0, 0, -1, false, {'cells cells cellsOther Cells', '日本 日本 日本語', '  cells'})
 api.nvim_win_set_cursor(0, {1, 0})
@@ -309,24 +307,24 @@ assert(vim.fn.getmatches()[1] and vim.fn.getmatches()[1].id == matches[1].id,
   'Unrelated text changes must preserve the still-valid fallback pattern')
 vim.cmd('redraw!')
 `,
-            []
-        ]);
-        await session.client.request('nvim_eval', ['1']);
-        await delay(400);
-        await session.client.request('nvim_command', ['redraw!']);
-        await session.client.request('nvim_eval', ['1']);
-        const cells = grid.cells[0];
-        const start = cells.findIndex((cell) => cell.text === 'c');
-        const highlighted = cells
-            .map((cell, index) => (grid.highlights.get(cell.highlight)?.wordHighlight ? index : -1))
-            .filter((index) => index >= 0);
-        assert.deepEqual(
-            highlighted,
-            Array.from({ length: 11 }, (_, i) => start + i).filter((i) => i !== start + 5)
-        );
-        assert.equal(grid.highlights.get(cells[start].highlight)?.background, 0xffffff);
-        await session.client.request('nvim_exec_lua', [
-            String.raw`
+      []
+    ]);
+    await session.client.request('nvim_eval', ['1']);
+    await delay(400);
+    await session.client.request('nvim_command', ['redraw!']);
+    await session.client.request('nvim_eval', ['1']);
+    const cells = grid.cells[0];
+    const start = cells.findIndex((cell) => cell.text === 'c');
+    const highlighted = cells
+      .map((cell, index) => (grid.highlights.get(cell.highlight)?.wordHighlight ? index : -1))
+      .filter((index) => index >= 0);
+    assert.deepEqual(
+      highlighted,
+      Array.from({ length: 11 }, (_, i) => start + i).filter((i) => i !== start + 5)
+    );
+    assert.equal(grid.highlights.get(cells[start].highlight)?.background, 0xffffff);
+    await session.client.request('nvim_exec_lua', [
+      String.raw`
 local api = vim.api
 api.nvim_win_set_cursor(0, {2, 0})
 api.nvim_exec_autocmds('CursorMoved', {buffer=0})
@@ -343,19 +341,19 @@ vim.cmd('normal! v')
 vim.wait(300)
 assert(#vim.fn.getmatches() == 0, 'Visual selection must clear word matches')
 `,
-            []
-        ]);
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
 });
 
 test('word highlighting reuses one timer during cursor bursts and clears pending work on focus and window changes', async (context) => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        await session.attach(80, 24);
-        const result = await session.client.request('nvim_exec_lua', [
-            String.raw`
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.attach(80, 24);
+    const result = await session.client.request('nvim_exec_lua', [
+      String.raw`
 local api = vim.api
 api.nvim_buf_set_lines(0, 0, -1, false, {'alpha alpha beta beta'})
 vim.wait(300)
@@ -407,20 +405,20 @@ local _, closed = timers()
 assert(closed <= open-2, 'word and Git timers must close before shutdown')
 return {moves=40, maximumPendingWordTimers=active-baseline, timerAllocations=after-before, latestWord='beta'}
 `,
-            []
-        ]);
-        context.diagnostic(JSON.stringify(result));
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+    context.diagnostic(JSON.stringify(result));
+  } finally {
+    await session.stop();
+  }
 });
 
 test('document highlights reject late responses after moving, editing and leaving the buffer', async () => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        await session.attach(80, 24);
-        await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.attach(80, 24);
+    await session.client.request('nvim_exec_lua', [
+      `
 local api = vim.api
 local buffer = api.nvim_get_current_buf()
 local ns = api.nvim_create_namespace('nvim.lsp.references')
@@ -490,44 +488,44 @@ end)
 vim.lsp.get_clients, vim.lsp.get_client_by_id, vim.lsp.buf_request_all = unpack(original)
 assert(ok, err)
 `,
-            []
-        ]);
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
 });
 
 for (const server of ['auto', 'legacy']) {
-    test(`TypeScript ${server} occurrence highlights distinguish a shadowed variable after Unicode`, async () => {
-        const root = await mkdtemp(join(tmpdir(), 'nido-occurrences-'));
-        const grid = new Grid();
-        let session: Session | undefined;
-        try {
-            await writeFile(join(root, 'tsconfig.json'), '{}');
-            await writeFile(
-                join(root, 'sample.ts'),
-                [
-                    'export function outer() {',
-                    '  const value = 1;',
-                    '  console.log("日本😀", value);',
-                    '  function inner() { const value = 2; return value; }',
-                    '  return value;',
-                    '}'
-                ].join('\n')
-            );
-            session = await Session.create(root, (event) => {
-                if (event.type === 'redraw') grid.apply(event.events);
-            });
-            const config = join(root, 'lsp.json');
-            await writeFile(config, JSON.stringify({ typescript: { server } }));
-            await session.client.request('nvim_exec_lua', [
-                "vim.env.NIDO_LSP_CONFIG = ...; require('nido_typescript').setup()",
-                [config]
-            ]);
-            await session.openFile('sample.ts');
-            await session.attach(100, 24);
-            await session.client.request('nvim_exec_lua', [
-                `
+  test(`TypeScript ${server} occurrence highlights distinguish a shadowed variable after Unicode`, async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-occurrences-'));
+    const grid = new Grid();
+    let session: Session | undefined;
+    try {
+      await writeFile(join(root, 'tsconfig.json'), '{}');
+      await writeFile(
+        join(root, 'sample.ts'),
+        [
+          'export function outer() {',
+          '  const value = 1;',
+          '  console.log("日本😀", value);',
+          '  function inner() { const value = 2; return value; }',
+          '  return value;',
+          '}'
+        ].join('\n')
+      );
+      session = await Session.create(root, (event) => {
+        if (event.type === 'redraw') grid.apply(event.events);
+      });
+      const config = join(root, 'lsp.json');
+      await writeFile(config, JSON.stringify({ typescript: { server } }));
+      await session.client.request('nvim_exec_lua', [
+        "vim.env.NIDO_LSP_CONFIG = ...; require('nido_typescript').setup()",
+        [config]
+      ]);
+      await session.openFile('sample.ts');
+      await session.attach(100, 24);
+      await session.client.request('nvim_exec_lua', [
+        `
 local api = vim.api
 local ns = api.nvim_create_namespace('nvim.lsp.references')
 assert(vim.wait(20000, function()
@@ -537,13 +535,13 @@ local line = api.nvim_buf_get_lines(0, 2, 3, false)[1]
 api.nvim_win_set_cursor(0, {3, line:find('value', 1, true) - 1})
 api.nvim_exec_autocmds('CursorMoved', {buffer=0})
 `,
-                []
-            ]);
-            let positions: number[][] = [];
-            for (let attempt = 0; attempt < 200 && positions.length < 3; attempt++) {
-                await delay(100);
-                positions = await session.client.request('nvim_exec_lua', [
-                    `
+        []
+      ]);
+      let positions: number[][] = [];
+      for (let attempt = 0; attempt < 200 && positions.length < 3; attempt++) {
+        await delay(100);
+        positions = await session.client.request('nvim_exec_lua', [
+          `
 local api = vim.api
 local ns = api.nvim_create_namespace('nvim.lsp.references')
 local positions = {}
@@ -553,194 +551,189 @@ end
 vim.cmd('redraw!')
 return positions
 `,
-                    []
-                ]);
-            }
-            assert.deepEqual(positions, [
-                [1, 8],
-                [2, Buffer.byteLength('  console.log("日本😀", ')],
-                [4, 9]
-            ]);
-            await session.client.request('nvim_eval', ['1']);
-            assert.ok(
-                grid.cells.some((row) =>
-                    row.some((cell) => grid.highlights.get(cell.highlight)?.wordHighlight)
-                ),
-                'Document highlights must reach the GUI grid'
-            );
-        } finally {
-            await session?.stop();
-            await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-        }
-    });
+          []
+        ]);
+      }
+      assert.deepEqual(positions, [
+        [1, 8],
+        [2, Buffer.byteLength('  console.log("日本😀", ')],
+        [4, 9]
+      ]);
+      await session.client.request('nvim_eval', ['1']);
+      assert.ok(
+        grid.cells.some((row) =>
+          row.some((cell) => grid.highlights.get(cell.highlight)?.wordHighlight)
+        ),
+        'Document highlights must reach the GUI grid'
+      );
+    } finally {
+      await session?.stop();
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
 }
 
 test('cursor width follows wide cells and interpolates in both directions and during stationary edits', () => {
-    const grid = new Grid();
-    grid.apply([
-        ['grid_resize', [1, 12, 3]],
-        ['grid_line', [1, 0, 0, [['a', 0], ['日'], [''], ['😀'], [''], ['e\u0301'], ['x']]]],
-        ['flush']
-    ]);
-    const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
-    Object.defineProperty(globalThis, 'document', {
-        configurable: true,
-        value: { hasFocus: () => true }
-    });
-    try {
-        const media = { matches: false } as MediaQueryList;
-        const cursor = new EditorCursor(
-            grid,
-            {} as HTMLElement,
-            {} as HTMLTextAreaElement,
-            media,
-            false,
-            () => {}
-        );
-        const update = (now: number, smooth = true): number =>
-            cursor.update(now, smooth, false, true).width;
-        assert.equal(update(0), 1);
-        grid.cursor.column = 1;
-        assert.equal(update(10), 1);
-        assert.ok(update(60) > 1 && update(60) < 2);
-        assert.equal(update(110), 2);
-        grid.cursor.column = 3;
-        assert.equal(update(120), 2, 'Emoji uses its continuation cell');
-        grid.cursor.column = 5;
-        update(130);
-        assert.ok(update(135) > 1 && update(135) < 2);
-        assert.equal(update(230), 1, 'Combining marks stay in one cell');
-        grid.cells[0][5] = { text: '本', highlight: 0 };
-        grid.cells[0][6] = { text: '', highlight: 0 };
-        update(240);
-        assert.ok(update(290) > 1 && update(290) < 2);
-        assert.equal(update(340), 2);
-        grid.cursor.column = 0;
-        assert.equal(update(350, false), 1);
-        grid.cursor.column = 1;
-        media.matches = true;
-        assert.equal(update(360), 2, 'Reduced motion skips interpolation');
-    } finally {
-        if (original) Object.defineProperty(globalThis, 'document', original);
-        else Reflect.deleteProperty(globalThis, 'document');
-    }
+  const grid = new Grid();
+  grid.apply([
+    ['grid_resize', [1, 12, 3]],
+    ['grid_line', [1, 0, 0, [['a', 0], ['日'], [''], ['😀'], [''], ['e\u0301'], ['x']]]],
+    ['flush']
+  ]);
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: { hasFocus: () => true }
+  });
+  try {
+    const media = { matches: false } as MediaQueryList;
+    const cursor = new EditorCursor(
+      grid,
+      {} as HTMLElement,
+      {} as HTMLTextAreaElement,
+      media,
+      false,
+      () => {}
+    );
+    const update = (now: number, smooth = true): number =>
+      cursor.update(now, smooth, false, true).width;
+    assert.equal(update(0), 1);
+    grid.cursor.column = 1;
+    assert.equal(update(10), 1);
+    assert.ok(update(60) > 1 && update(60) < 2);
+    assert.equal(update(110), 2);
+    grid.cursor.column = 3;
+    assert.equal(update(120), 2, 'Emoji uses its continuation cell');
+    grid.cursor.column = 5;
+    update(130);
+    assert.ok(update(135) > 1 && update(135) < 2);
+    assert.equal(update(230), 1, 'Combining marks stay in one cell');
+    grid.cells[0][5] = { text: '本', highlight: 0 };
+    grid.cells[0][6] = { text: '', highlight: 0 };
+    update(240);
+    assert.ok(update(290) > 1 && update(290) < 2);
+    assert.equal(update(340), 2);
+    grid.cursor.column = 0;
+    assert.equal(update(350, false), 1);
+    grid.cursor.column = 1;
+    media.matches = true;
+    assert.equal(update(360), 2, 'Reduced motion skips interpolation');
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'document', original);
+    else Reflect.deleteProperty(globalThis, 'document');
+  }
 });
 
 function withCursor(
-    run: (grid: Grid, cursor: EditorCursor, media: { matches: boolean }) => void
+  run: (grid: Grid, cursor: EditorCursor, media: { matches: boolean }) => void
 ): void {
-    const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
-    Object.defineProperty(globalThis, 'document', {
-        configurable: true,
-        value: { hasFocus: () => true }
-    });
-    try {
-        const grid = new Grid();
-        const media = { matches: false };
-        const cursor = new EditorCursor(
-            grid,
-            {} as HTMLElement,
-            {} as HTMLTextAreaElement,
-            media as MediaQueryList,
-            false,
-            () => {}
-        );
-        run(grid, cursor, media);
-    } finally {
-        if (original) Object.defineProperty(globalThis, 'document', original);
-        else Reflect.deleteProperty(globalThis, 'document');
-    }
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: { hasFocus: () => true }
+  });
+  try {
+    const grid = new Grid();
+    const media = { matches: false };
+    const cursor = new EditorCursor(
+      grid,
+      {} as HTMLElement,
+      {} as HTMLTextAreaElement,
+      media as MediaQueryList,
+      false,
+      () => {}
+    );
+    run(grid, cursor, media);
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'document', original);
+    else Reflect.deleteProperty(globalThis, 'document');
+  }
 }
 
 test('cursor keeps moving when repeat targets change on every animation frame', () => {
-    withCursor((grid, cursor) => {
-        cursor.update(0, true, false, true);
-        for (let step = 1; step <= 120; step++) {
-            grid.cursor.row = step;
-            const position = cursor.update(step * (1000 / 60), true, false, true);
-            if (step >= 4) {
-                assert.ok(
-                    step - position.row < 1.01,
-                    `Cursor must follow rather than freeze: target ${step}, painted ${position.row}`
-                );
-            }
-        }
-    });
+  withCursor((grid, cursor) => {
+    cursor.update(0, true, false, true);
+    for (let step = 1; step <= 120; step++) {
+      grid.cursor.row = step;
+      const position = cursor.update(step * (1000 / 60), true, false, true);
+      if (step >= 4) {
+        assert.ok(
+          step - position.row < 1.01,
+          `Cursor must follow rather than freeze: target ${step}, painted ${position.row}`
+        );
+      }
+    }
+  });
 });
 
 for (const fps of [60, 120, 165]) {
-    for (const interval of [33, 16]) {
-        test(`cursor follows held movement and reversals at ${fps} Hz / ${interval} ms repeats`, () => {
-            for (const axis of ['row', 'column'] as const) {
-                withCursor((grid, cursor) => {
-                    grid.cursor = { row: 200, column: 200 };
-                    cursor.update(0, true, false, true);
-                    const frameTime = 1000 / fps;
-                    let now = 0;
-                    for (const direction of [1, -1]) {
-                        const start = now + frameTime;
-                        const from = grid.cursor[axis];
-                        let lastTargetFrame = 0;
-                        for (let frame = 0; frame < fps * 2; frame++) {
-                            now = start + frame * frameTime;
-                            const count = Math.floor((now - start) / interval) + 1;
-                            const target = from + count * direction;
-                            if (grid.cursor[axis] !== target) lastTargetFrame = now;
-                            grid.cursor[axis] = target;
-                            const position = cursor.update(now, true, false, true);
-                            if (now > start + 200) {
-                                assert.ok(
-                                    Math.abs(target - position[axis]) <
-                                        Math.ceil(frameTime / interval) + 0.4,
-                                    `${axis}: target ${target}, painted ${position[axis]}`
-                                );
-                            }
-                        }
-                        const deadline = lastTargetFrame + interval + frameTime * 2;
-                        const position = cursor.update(deadline, true, false, true);
-                        assert.equal(
-                            position[axis],
-                            grid.cursor[axis],
-                            'Releasing settles promptly'
-                        );
-                        assert.equal(cursor.animating, false);
-                        now = deadline + 200;
-                    }
-                });
+  for (const interval of [33, 16]) {
+    test(`cursor follows held movement and reversals at ${fps} Hz / ${interval} ms repeats`, () => {
+      for (const axis of ['row', 'column'] as const) {
+        withCursor((grid, cursor) => {
+          grid.cursor = { row: 200, column: 200 };
+          cursor.update(0, true, false, true);
+          const frameTime = 1000 / fps;
+          let now = 0;
+          for (const direction of [1, -1]) {
+            const start = now + frameTime;
+            const from = grid.cursor[axis];
+            let lastTargetFrame = 0;
+            for (let frame = 0; frame < fps * 2; frame++) {
+              now = start + frame * frameTime;
+              const count = Math.floor((now - start) / interval) + 1;
+              const target = from + count * direction;
+              if (grid.cursor[axis] !== target) lastTargetFrame = now;
+              grid.cursor[axis] = target;
+              const position = cursor.update(now, true, false, true);
+              if (now > start + 200) {
+                assert.ok(
+                  Math.abs(target - position[axis]) < Math.ceil(frameTime / interval) + 0.4,
+                  `${axis}: target ${target}, painted ${position[axis]}`
+                );
+              }
             }
+            const deadline = lastTargetFrame + interval + frameTime * 2;
+            const position = cursor.update(deadline, true, false, true);
+            assert.equal(position[axis], grid.cursor[axis], 'Releasing settles promptly');
+            assert.equal(cursor.animating, false);
+            now = deadline + 200;
+          }
         });
-    }
+      }
+    });
+  }
 }
 
 test('cursor preserves single-step easing and resets repeat timing on interruptions', () => {
-    withCursor((grid, cursor, media) => {
-        cursor.update(0, true, false, true);
-        grid.cursor.row = 1;
-        assert.equal(cursor.update(10, true, false, true).row, 0);
-        const halfway = cursor.update(60, true, false, true).row;
-        assert.ok(halfway > 0 && halfway < 1, 'Single steps still animate');
-        assert.equal(cursor.update(110, true, false, true).row, 1);
+  withCursor((grid, cursor, media) => {
+    cursor.update(0, true, false, true);
+    grid.cursor.row = 1;
+    assert.equal(cursor.update(10, true, false, true).row, 0);
+    const halfway = cursor.update(60, true, false, true).row;
+    assert.ok(halfway > 0 && halfway < 1, 'Single steps still animate');
+    assert.equal(cursor.update(110, true, false, true).row, 1);
 
-        let now = 120;
-        for (const bypass of ['disabled', 'scroll', 'unfocused', 'reduced', 'reset'] as const) {
-            grid.cursor.row++;
-            if (bypass === 'reset') cursor.resetPosition();
-            media.matches = bypass === 'reduced';
-            const position = cursor.update(
-                now,
-                bypass !== 'disabled',
-                bypass === 'scroll',
-                bypass !== 'unfocused'
-            );
-            assert.equal(position.row, grid.cursor.row, `${bypass} snaps to the real position`);
-            assert.equal(cursor.animating, false);
-            media.matches = false;
-            grid.cursor.row++;
-            cursor.update(now + 1, true, false, true);
-            const next = cursor.update(now + 51, true, false, true).row;
-            assert.ok(next > grid.cursor.row - 1 && next < grid.cursor.row);
-            assert.equal(cursor.update(now + 101, true, false, true).row, grid.cursor.row);
-            now += 110;
-        }
-    });
+    let now = 120;
+    for (const bypass of ['disabled', 'scroll', 'unfocused', 'reduced', 'reset'] as const) {
+      grid.cursor.row++;
+      if (bypass === 'reset') cursor.resetPosition();
+      media.matches = bypass === 'reduced';
+      const position = cursor.update(
+        now,
+        bypass !== 'disabled',
+        bypass === 'scroll',
+        bypass !== 'unfocused'
+      );
+      assert.equal(position.row, grid.cursor.row, `${bypass} snaps to the real position`);
+      assert.equal(cursor.animating, false);
+      media.matches = false;
+      grid.cursor.row++;
+      cursor.update(now + 1, true, false, true);
+      const next = cursor.update(now + 51, true, false, true).row;
+      assert.ok(next > grid.cursor.row - 1 && next < grid.cursor.row);
+      assert.equal(cursor.update(now + 101, true, false, true).row, grid.cursor.row);
+      now += 110;
+    }
+  });
 });

@@ -10,121 +10,121 @@ import { HistoryService } from '../src/main/historyService';
 import type { LocalHistory } from '../src/main/localHistory';
 
 async function withSession(check: (session: Session) => Promise<void>): Promise<void> {
-    const root = await mkdtemp(join(tmpdir(), 'nido-feature-performance-'));
-    let session: Session | undefined;
-    try {
-        await writeFile(join(root, 'sample.txt'), 'one\ntwo\n');
-        session = await Session.create(root, () => {});
-        await session.openFile('sample.txt');
-        await check(session);
-    } finally {
-        await session?.stop();
-        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    }
+  const root = await mkdtemp(join(tmpdir(), 'nido-feature-performance-'));
+  let session: Session | undefined;
+  try {
+    await writeFile(join(root, 'sample.txt'), 'one\ntwo\n');
+    session = await Session.create(root, () => {});
+    await session.openFile('sample.txt');
+    await check(session);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
 }
 
 test('workspace grep skips line inspection in large nonmatching files', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nido-grep-performance-'));
-    const query = 'grep-performance-target';
-    const indexOf = String.prototype.indexOf;
-    let inspected = 0;
-    try {
-        for (let index = 0; index < 8; index++) {
-            await writeFile(join(root, `empty-${index}.txt`), 'ordinary row\n'.repeat(4000));
-        }
-        await writeFile(join(root, 'match.txt'), `first\n日本語 ${query}\nlast\n`);
-        const files = new SessionFiles(await realpath(root), {} as Session['client']);
-        String.prototype.indexOf = function (search, position) {
-            if (search === query) inspected++;
-            return indexOf.call(this, search, position);
-        };
-        const result = await files.searchText(query);
-        assert.deepEqual(result, {
-            matches: [{ path: 'match.txt', line: 2, column: 11, text: `日本語 ${query}` }],
-            truncated: false
-        });
-        assert.ok(inspected <= 4, `${inspected} lines inspected for one matching file`);
-    } finally {
-        String.prototype.indexOf = indexOf;
-        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  const root = await mkdtemp(join(tmpdir(), 'nido-grep-performance-'));
+  const query = 'grep-performance-target';
+  const indexOf = String.prototype.indexOf;
+  let inspected = 0;
+  try {
+    for (let index = 0; index < 8; index++) {
+      await writeFile(join(root, `empty-${index}.txt`), 'ordinary row\n'.repeat(4000));
     }
+    await writeFile(join(root, 'match.txt'), `first\n日本語 ${query}\nlast\n`);
+    const files = new SessionFiles(await realpath(root), {} as Session['client']);
+    String.prototype.indexOf = function (search, position) {
+      if (search === query) inspected++;
+      return indexOf.call(this, search, position);
+    };
+    const result = await files.searchText(query);
+    assert.deepEqual(result, {
+      matches: [{ path: 'match.txt', line: 2, column: 11, text: `日本語 ${query}` }],
+      truncated: false
+    });
+    assert.ok(inspected <= 4, `${inspected} lines inspected for one matching file`);
+  } finally {
+    String.prototype.indexOf = indexOf;
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
 });
 
 test('workspace grep batches directory ignores, bounds parallel reads and cancels in-flight searches', async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-grep-batches-')));
-    try {
-        execFileSync('git', ['init', '-q', root], { windowsHide: true });
-        await writeFile(join(root, '.gitignore'), '*.log\nignored/\n');
-        await mkdir(join(root, 'ignored'));
-        await writeFile(join(root, 'ignored', 'secret.txt'), 'batch-target');
-        await writeFile(join(root, 'tracked.log'), 'batch-target');
-        execFileSync('git', ['add', '-f', '--', 'tracked.log'], { cwd: root, windowsHide: true });
-        for (let i = 0; i < 32; i++) {
-            const directory = join(root, `dir-${i}`);
-            await mkdir(directory);
-            await Promise.all(
-                ['one.txt', 'two.txt', 'ignored.log'].map((name) =>
-                    writeFile(join(directory, name), '日本語 batch-target\n')
-                )
-            );
-        }
-        const service = new SessionFiles(root, {} as Session['client']);
-        const files = service.files.bind(service);
-        const path = service.path.bind(service);
-        let reading = 0;
-        let maximum = 0;
-        let cancel = false;
-        service.files = async (directory, checkIgnored) => {
-            assert.equal(checkIgnored, false, 'directories must share a Git ignore check');
-            assert.notEqual(directory, 'ignored');
-            return files(directory, checkIgnored);
-        };
-        service.path = async (relative) => {
-            if (!relative.endsWith('.txt')) return path(relative);
-            assert(!relative.includes('ignored'));
-            reading++;
-            maximum = Math.max(maximum, reading);
-            try {
-                if (cancel) {
-                    cancel = false;
-                    service.cancelFindFiles();
-                }
-                await new Promise((resolve) => setTimeout(resolve, 2));
-                return await path(relative);
-            } finally {
-                reading--;
-            }
-        };
-        const result = await service.searchText('batch-target');
-        assert.equal(result.matches.length, 65);
-        assert.equal(result.truncated, false);
-        assert(maximum > 1 && maximum <= 8, `unexpected concurrency: ${maximum}`);
-        assert(
-            result.matches
-                .filter((match) => match.path !== 'tracked.log')
-                .every((match) => match.column === 11)
-        );
-        assert.deepEqual(
-            await service.searchText('batch-target'),
-            result,
-            'parallel completion must not reorder results'
-        );
-        await writeFile(join(root, '.gitignore'), '*.log\nignored/\ndir-3/two.txt\n');
-        assert.equal((await service.searchText('batch-target')).matches.length, 64);
-        cancel = true;
-        assert.deepEqual(await service.searchText('batch-target'), {
-            matches: [],
-            truncated: false
-        });
-    } finally {
-        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-grep-batches-')));
+  try {
+    execFileSync('git', ['init', '-q', root], { windowsHide: true });
+    await writeFile(join(root, '.gitignore'), '*.log\nignored/\n');
+    await mkdir(join(root, 'ignored'));
+    await writeFile(join(root, 'ignored', 'secret.txt'), 'batch-target');
+    await writeFile(join(root, 'tracked.log'), 'batch-target');
+    execFileSync('git', ['add', '-f', '--', 'tracked.log'], { cwd: root, windowsHide: true });
+    for (let i = 0; i < 32; i++) {
+      const directory = join(root, `dir-${i}`);
+      await mkdir(directory);
+      await Promise.all(
+        ['one.txt', 'two.txt', 'ignored.log'].map((name) =>
+          writeFile(join(directory, name), '日本語 batch-target\n')
+        )
+      );
     }
+    const service = new SessionFiles(root, {} as Session['client']);
+    const files = service.files.bind(service);
+    const path = service.path.bind(service);
+    let reading = 0;
+    let maximum = 0;
+    let cancel = false;
+    service.files = async (directory, checkIgnored) => {
+      assert.equal(checkIgnored, false, 'directories must share a Git ignore check');
+      assert.notEqual(directory, 'ignored');
+      return files(directory, checkIgnored);
+    };
+    service.path = async (relative) => {
+      if (!relative.endsWith('.txt')) return path(relative);
+      assert(!relative.includes('ignored'));
+      reading++;
+      maximum = Math.max(maximum, reading);
+      try {
+        if (cancel) {
+          cancel = false;
+          service.cancelFindFiles();
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        return await path(relative);
+      } finally {
+        reading--;
+      }
+    };
+    const result = await service.searchText('batch-target');
+    assert.equal(result.matches.length, 65);
+    assert.equal(result.truncated, false);
+    assert(maximum > 1 && maximum <= 8, `unexpected concurrency: ${maximum}`);
+    assert(
+      result.matches
+        .filter((match) => match.path !== 'tracked.log')
+        .every((match) => match.column === 11)
+    );
+    assert.deepEqual(
+      await service.searchText('batch-target'),
+      result,
+      'parallel completion must not reorder results'
+    );
+    await writeFile(join(root, '.gitignore'), '*.log\nignored/\ndir-3/two.txt\n');
+    assert.equal((await service.searchText('batch-target')).matches.length, 64);
+    cancel = true;
+    assert.deepEqual(await service.searchText('batch-target'), {
+      matches: [],
+      truncated: false
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
 });
 
 test('line ending detection scans only changed lines and tracks inserts, deletes, options and reloads', () =>
-    withSession(async (session) => {
-        await session.client.request('nvim_exec_lua', [
-            `
+  withSession(async (session) => {
+    await session.client.request('nvim_exec_lua', [
+      `
 local api, module = vim.api, require('nido_eol')
 local lines = {}
 for i=1,10000 do lines[i] = 'row ' .. i end
@@ -163,14 +163,14 @@ end)
 api.nvim_buf_get_lines = get_lines
 assert(ok, err)
 `,
-            []
-        ]);
-    }));
+      []
+    ]);
+  }));
 
 test('reference searches cancel old requests, publish partial results and finish after a timeout', () =>
-    withSession(async (session) => {
-        await session.client.request('nvim_exec_lua', [
-            `
+  withSession(async (session) => {
+    await session.client.request('nvim_exec_lua', [
+      `
 local module = require('nido_references')
 local clients, locations, notify, defer = vim.lsp.get_clients, vim.lsp.util.locations_to_items, vim.rpcnotify, vim.defer_fn
 local latest, callbacks, cancelled = {}, {}, 0
@@ -209,14 +209,14 @@ end)
 vim.lsp.get_clients, vim.lsp.util.locations_to_items, vim.rpcnotify, vim.defer_fn = clients, locations, notify, defer
 assert(ok, err)
 `,
-            []
-        ]);
-    }));
+      []
+    ]);
+  }));
 
 test('debugger batches output bursts while final state and last output are immediate', () =>
-    withSession(async (session) => {
-        await session.client.request('nvim_exec_lua', [
-            `
+  withSession(async (session) => {
+    await session.client.request('nvim_exec_lua', [
+      `
 require('nido_debug').action('breakpoint', vim.g.nido_channel)
 local dap, notify = require('dap'), vim.rpcnotify
 local count, latest = 0, {}
@@ -238,113 +238,113 @@ end)
 vim.rpcnotify = notify
 assert(ok, err)
 `,
-            []
-        ]);
-    }));
+      []
+    ]);
+  }));
 
 test('Markdown snapshots skip unchanged text and follow unsaved edits', () =>
-    withSession(async (session) => {
-        await session.client.request('nvim_exec_lua', [
-            "vim.bo.filetype='markdown'; vim.api.nvim_buf_set_lines(0, 0, -1, false, {'# Draft'})",
-            []
-        ]);
-        const first = await session.markdownPreview();
-        assert.equal(first.text, '# Draft');
-        const unchanged = await session.markdownPreview(first.token);
-        assert.equal(unchanged.text, undefined);
-        assert.equal(unchanged.token, first.token);
-        await session.client.request('nvim_exec_lua', [
-            "vim.api.nvim_buf_set_lines(0, 0, 1, false, {'# Changed'})",
-            []
-        ]);
-        const changed = await session.markdownPreview(first.token);
-        assert.equal(changed.text, '# Changed');
-        assert.notEqual(changed.token, first.token);
-        assert.equal(await session.modified(), true);
-    }));
+  withSession(async (session) => {
+    await session.client.request('nvim_exec_lua', [
+      "vim.bo.filetype='markdown'; vim.api.nvim_buf_set_lines(0, 0, -1, false, {'# Draft'})",
+      []
+    ]);
+    const first = await session.markdownPreview();
+    assert.equal(first.text, '# Draft');
+    const unchanged = await session.markdownPreview(first.token);
+    assert.equal(unchanged.text, undefined);
+    assert.equal(unchanged.token, first.token);
+    await session.client.request('nvim_exec_lua', [
+      "vim.api.nvim_buf_set_lines(0, 0, 1, false, {'# Changed'})",
+      []
+    ]);
+    const changed = await session.markdownPreview(first.token);
+    assert.equal(changed.text, '# Changed');
+    assert.notEqual(changed.token, first.token);
+    assert.equal(await session.modified(), true);
+  }));
 
 test('queued history previews only calculate the latest request', async () => {
-    let calculated = 0;
-    const snapshot = {
-        path: '/notes.txt',
-        buffer: 1,
-        tick: 1,
-        fileformat: 'unix',
-        endOfLine: true,
-        modified: false,
-        text: 'current\n'
-    };
-    const session = {
-        historyCurrent: async () => snapshot,
-        historyDiff: async () => {
-            calculated++;
-            return '';
-        }
-    } as unknown as Session;
-    const store = {
-        version: async (_path: string, id: string) => ({
-            id,
-            timestamp: 1,
-            kind: 'draft',
-            bytes: 8,
-            lines: 1,
-            text: 'before\n'
-        })
-    } as unknown as LocalHistory;
-    const service = new HistoryService(store);
-    const results = await Promise.allSettled(
-        Array.from({ length: 20 }, (_, i) => service.preview(session, snapshot.path, String(i)))
-    );
-    assert.equal(calculated, 1);
-    assert.equal(results.filter((result) => result.status === 'rejected').length, 19);
-    assert.equal(results[19].status, 'fulfilled');
+  let calculated = 0;
+  const snapshot = {
+    path: '/notes.txt',
+    buffer: 1,
+    tick: 1,
+    fileformat: 'unix',
+    endOfLine: true,
+    modified: false,
+    text: 'current\n'
+  };
+  const session = {
+    historyCurrent: async () => snapshot,
+    historyDiff: async () => {
+      calculated++;
+      return '';
+    }
+  } as unknown as Session;
+  const store = {
+    version: async (_path: string, id: string) => ({
+      id,
+      timestamp: 1,
+      kind: 'draft',
+      bytes: 8,
+      lines: 1,
+      text: 'before\n'
+    })
+  } as unknown as LocalHistory;
+  const service = new HistoryService(store);
+  const results = await Promise.allSettled(
+    Array.from({ length: 20 }, (_, i) => service.preview(session, snapshot.path, String(i)))
+  );
+  assert.equal(calculated, 1);
+  assert.equal(results.filter((result) => result.status === 'rejected').length, 19);
+  assert.equal(results[19].status, 'fulfilled');
 });
 
 test('file search finds matches past 5000 entries and twelve levels, supports cancellation and refreshes cached directories', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nido-file-search-'));
-    try {
-        await mkdir(join(root, 'a'));
-        for (let start = 0; start < 5100; start += 100) {
-            await Promise.all(
-                Array.from({ length: 100 }, (_, i) =>
-                    writeFile(join(root, 'a', `file-${start + i}.txt`), '')
-                )
-            );
-        }
-        const deep = Array(14).fill('deep').join('/');
-        await mkdir(join(root, deep), { recursive: true });
-        await writeFile(join(root, deep, 'unique-target.ts'), '');
-        const files = new SessionFiles(await realpath(root), {} as Session['client']);
-        assert.equal((await files.findFiles()).length, 100);
-        assert.equal((await files.findFiles('file-5099')).length, 1);
-        assert.equal((await files.findFiles('unique-target')).length, 1);
-        const pending = files.findFiles('no-match');
-        files.cancelFindFiles();
-        assert.deepEqual(await pending, []);
-        const small = join(root, 'small');
-        await mkdir(small);
-        await writeFile(join(small, 'before.txt'), '');
-        const cached = new SessionFiles(await realpath(small), {} as Session['client']);
-        let reads = 0;
-        const read = cached.files.bind(cached);
-        cached.files = async (...args) => {
-            reads++;
-            return read(...args);
-        };
-        await cached.findFiles();
-        await cached.findFiles();
-        assert.equal(reads, 1, 'unchanged directory entries are reused');
-        await writeFile(join(small, 'added.txt'), '');
-        const changedTime = new Date(Date.now() + 1000);
-        await utimes(small, changedTime, changedTime);
-        assert.equal((await cached.findFiles('added')).length, 1);
-        await unlink(join(small, 'added.txt'));
-        const removedTime = new Date(Date.now() + 2000);
-        await utimes(small, removedTime, removedTime);
-        assert.equal((await cached.findFiles('added')).length, 0);
-        await cached.fileAction('createFile', 'created.txt', '', async () => {});
-        assert.equal((await cached.findFiles('created')).length, 1);
-    } finally {
-        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  const root = await mkdtemp(join(tmpdir(), 'nido-file-search-'));
+  try {
+    await mkdir(join(root, 'a'));
+    for (let start = 0; start < 5100; start += 100) {
+      await Promise.all(
+        Array.from({ length: 100 }, (_, i) =>
+          writeFile(join(root, 'a', `file-${start + i}.txt`), '')
+        )
+      );
     }
+    const deep = Array(14).fill('deep').join('/');
+    await mkdir(join(root, deep), { recursive: true });
+    await writeFile(join(root, deep, 'unique-target.ts'), '');
+    const files = new SessionFiles(await realpath(root), {} as Session['client']);
+    assert.equal((await files.findFiles()).length, 100);
+    assert.equal((await files.findFiles('file-5099')).length, 1);
+    assert.equal((await files.findFiles('unique-target')).length, 1);
+    const pending = files.findFiles('no-match');
+    files.cancelFindFiles();
+    assert.deepEqual(await pending, []);
+    const small = join(root, 'small');
+    await mkdir(small);
+    await writeFile(join(small, 'before.txt'), '');
+    const cached = new SessionFiles(await realpath(small), {} as Session['client']);
+    let reads = 0;
+    const read = cached.files.bind(cached);
+    cached.files = async (...args) => {
+      reads++;
+      return read(...args);
+    };
+    await cached.findFiles();
+    await cached.findFiles();
+    assert.equal(reads, 1, 'unchanged directory entries are reused');
+    await writeFile(join(small, 'added.txt'), '');
+    const changedTime = new Date(Date.now() + 1000);
+    await utimes(small, changedTime, changedTime);
+    assert.equal((await cached.findFiles('added')).length, 1);
+    await unlink(join(small, 'added.txt'));
+    const removedTime = new Date(Date.now() + 2000);
+    await utimes(small, removedTime, removedTime);
+    assert.equal((await cached.findFiles('added')).length, 0);
+    await cached.fileAction('createFile', 'created.txt', '', async () => {});
+    assert.equal((await cached.findFiles('created')).length, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
 });

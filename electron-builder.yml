@@ -1,80 +1,80 @@
 appId: com.kanata9819.nido
 productName: nido
 directories:
-    buildResources: build
+  buildResources: build
 files:
-    - '!dist/**'
-    - '!resources/**'
-    - '!scripts/**'
-    - '!patches/**'
-    - '!tests/**'
-    - '!prototypes/**'
-    - '!test-results/**'
-    - '!playwright-report/**'
-    - '!reports/**'
-    - '!logs/**'
-    - '!docs/**'
-    - '!**/*.log'
-    - '!**/*.log.*'
-    - '!**/*.tsbuildinfo'
-    - '!.downloads/**'
-    - '!**/.vscode/*'
-    - '!src/*'
-    - '!electron.vite.config.{js,ts,mjs,cjs}'
-    - '!{.eslintcache,.nvimlog,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md,pnpm-workspace.yaml}'
-    - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-    - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,tsconfig.windows-tests.json,playwright*.config.ts}'
+  - '!dist/**'
+  - '!resources/**'
+  - '!scripts/**'
+  - '!patches/**'
+  - '!tests/**'
+  - '!prototypes/**'
+  - '!test-results/**'
+  - '!playwright-report/**'
+  - '!reports/**'
+  - '!logs/**'
+  - '!docs/**'
+  - '!**/*.log'
+  - '!**/*.log.*'
+  - '!**/*.tsbuildinfo'
+  - '!.downloads/**'
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,.nvimlog,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md,pnpm-workspace.yaml}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,tsconfig.windows-tests.json,playwright*.config.ts}'
 extraResources:
-    - from: resources/languages
-      to: languages
-    - from: resources/languages/node_modules/typescript
-      to: languages/node_modules/typescript
-    - from: resources/languages/node_modules/typescript-language-server
-      to: languages/node_modules/typescript-language-server
-    - from: resources/debug
-      to: debug
-    - from: resources/icon.png
-      to: icon.png
-    - from: resources/nvim-win64
-      to: nvim-win64
-    - from: resources/nido
-      to: nido
+  - from: resources/languages
+    to: languages
+  - from: resources/languages/node_modules/typescript
+    to: languages/node_modules/typescript
+  - from: resources/languages/node_modules/typescript-language-server
+    to: languages/node_modules/typescript-language-server
+  - from: resources/debug
+    to: debug
+  - from: resources/icon.png
+    to: icon.png
+  - from: resources/nvim-win64
+    to: nvim-win64
+  - from: resources/nido
+    to: nido
 win:
-    icon: build/icon.ico
-    target:
-        - target: nsis
-          arch: [x64]
-    executableName: nido
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  executableName: nido
 nsis:
-    include: build/installer.nsh
-    perMachine: false
-    deleteAppDataOnUninstall: false
-    artifactName: ${name}-${version}-setup.${ext}
-    shortcutName: ${productName}
-    uninstallDisplayName: ${productName}
-    createDesktopShortcut: always
+  include: build/installer.nsh
+  perMachine: false
+  deleteAppDataOnUninstall: false
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
 mac:
-    entitlementsInherit: build/entitlements.mac.plist
-    extendInfo:
-        - NSCameraUsageDescription: Application requests access to the device's camera.
-        - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-        - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-        - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
-    notarize: false
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    - NSCameraUsageDescription: Application requests access to the device's camera.
+    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+  notarize: false
 dmg:
-    artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}.${ext}
 linux:
-    target:
-        - AppImage
-        - snap
-        - deb
-    maintainer: electronjs.org
-    category: Utility
+  target:
+    - AppImage
+    - snap
+    - deb
+  maintainer: electronjs.org
+  category: Utility
 appImage:
-    artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:
-    provider: github
-    owner: kanata9819
-    repo: Nido
-    releaseType: release
+  provider: github
+  owner: kanata9819
+  repo: Nido
+  releaseType: release

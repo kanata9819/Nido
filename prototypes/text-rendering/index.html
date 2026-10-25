@@ -1,163 +1,163 @@
 <!doctype html>
 <html lang="ja">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Nido · 文字描画の比較</title>
-        <style>
-            :root {
-                color-scheme: dark;
-                font:
-                    14px 'Segoe UI',
-                    'Yu Gothic UI',
-                    sans-serif;
-                background: #121212;
-                color: #ccc;
-            }
-            body {
-                margin: 24px;
-            }
-            h1 {
-                font-size: 22px;
-                margin: 0 0 8px;
-            }
-            p {
-                color: #aaa;
-                margin: 8px 0 20px;
-            }
-            form {
-                display: flex;
-                align-items: center;
-                flex-wrap: wrap;
-                gap: 16px;
-                margin-bottom: 20px;
-            }
-            label {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            }
-            button,
-            select,
-            input {
-                font: inherit;
-            }
-            button,
-            select {
-                background: #202020;
-                color: #ddd;
-                border: 1px solid #444;
-                padding: 6px 10px;
-                border-radius: 4px;
-            }
-            button[aria-pressed='true'] {
-                border-color: #a0c78c;
-            }
-            .panes {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 24px;
-            }
-            h2 {
-                font-size: 15px;
-                font-weight: 500;
-                margin: 0 0 12px;
-            }
-            .viewport {
-                position: relative;
-                overflow: hidden;
-                background: #121212;
-                outline: 1px solid #333;
-            }
-            .surface {
-                position: absolute;
-            }
-            #dom {
-                overflow: hidden;
-                white-space: pre;
-            }
-            #lines {
-                position: absolute;
-                width: 100%;
-                background: #121212;
-            }
-            .row {
-                position: absolute;
-                white-space: pre;
-            }
-            .cell {
-                display: inline-block;
-                vertical-align: baseline;
-            }
-            .baseline {
-                display: inline-block;
-                width: 0;
-                height: 0;
-            }
-            footer {
-                color: #999;
-                margin-top: 16px;
-                font-variant-numeric: tabular-nums;
-            }
-        </style>
-    </head>
-    <body>
-        <h1>文字描画の比較</h1>
-        <p>
-            同じフォント・色・セル幅で比較。両側の上でタッチパッドを使うと、一行分をゆっくりスクロールできます。
-        </p>
-        <form onsubmit="return false;">
-            <label
-                >フォント
-                <select id="family">
-                    <option value="cascadia">Cascadia Code + Yu Gothic UI</option>
-                    <option value="consolas">Consolas + Yu Gothic UI</option>
-                    <option value="meiryo">Cascadia Code + Meiryo</option>
-                </select></label
-            >
-            <label
-                >サイズ
-                <select id="size">
-                    <option>11</option>
-                    <option>13</option>
-                    <option>15</option>
-                </select></label
-            >
-            <label
-                >太さ
-                <select id="weight">
-                    <option>350</option>
-                    <option>400</option>
-                </select></label
-            >
-            <label
-                >DOMの移動
-                <select id="motion">
-                    <option value="direct">行の位置を変更</option>
-                    <option value="layer">レイヤーごと移動</option>
-                </select></label
-            >
-            <button type="button" id="animate" aria-pressed="false">ゆっくりスクロール</button>
-            <button type="button" id="reset">先頭に戻す</button>
-            <label
-                >移動量 <input id="offset" type="range" min="0" max="16" step="0.01" value="0"
-            /></label>
-        </form>
-        <main class="panes">
-            <section>
-                <h2>Canvas · 現在のNido</h2>
-                <div class="viewport">
-                    <canvas id="canvas" class="surface" aria-label="現在のCanvas描画"></canvas>
-                </div>
-            </section>
-            <section>
-                <h2>DOM · 比較用</h2>
-                <div class="viewport">
-                    <div id="dom" class="surface" aria-label="比較用DOM描画"></div>
-                </div>
-            </section>
-        </main>
-        <footer id="status" aria-live="off"></footer>
-        <script type="module" src="./main.ts"></script>
-    </body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nido · 文字描画の比較</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font:
+          14px 'Segoe UI',
+          'Yu Gothic UI',
+          sans-serif;
+        background: #121212;
+        color: #ccc;
+      }
+      body {
+        margin: 24px;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 8px;
+      }
+      p {
+        color: #aaa;
+        margin: 8px 0 20px;
+      }
+      form {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+      label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      button,
+      select,
+      input {
+        font: inherit;
+      }
+      button,
+      select {
+        background: #202020;
+        color: #ddd;
+        border: 1px solid #444;
+        padding: 6px 10px;
+        border-radius: 4px;
+      }
+      button[aria-pressed='true'] {
+        border-color: #a0c78c;
+      }
+      .panes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+      h2 {
+        font-size: 15px;
+        font-weight: 500;
+        margin: 0 0 12px;
+      }
+      .viewport {
+        position: relative;
+        overflow: hidden;
+        background: #121212;
+        outline: 1px solid #333;
+      }
+      .surface {
+        position: absolute;
+      }
+      #dom {
+        overflow: hidden;
+        white-space: pre;
+      }
+      #lines {
+        position: absolute;
+        width: 100%;
+        background: #121212;
+      }
+      .row {
+        position: absolute;
+        white-space: pre;
+      }
+      .cell {
+        display: inline-block;
+        vertical-align: baseline;
+      }
+      .baseline {
+        display: inline-block;
+        width: 0;
+        height: 0;
+      }
+      footer {
+        color: #999;
+        margin-top: 16px;
+        font-variant-numeric: tabular-nums;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>文字描画の比較</h1>
+    <p>
+      同じフォント・色・セル幅で比較。両側の上でタッチパッドを使うと、一行分をゆっくりスクロールできます。
+    </p>
+    <form onsubmit="return false;">
+      <label
+        >フォント
+        <select id="family">
+          <option value="cascadia">Cascadia Code + Yu Gothic UI</option>
+          <option value="consolas">Consolas + Yu Gothic UI</option>
+          <option value="meiryo">Cascadia Code + Meiryo</option>
+        </select></label
+      >
+      <label
+        >サイズ
+        <select id="size">
+          <option>11</option>
+          <option>13</option>
+          <option>15</option>
+        </select></label
+      >
+      <label
+        >太さ
+        <select id="weight">
+          <option>350</option>
+          <option>400</option>
+        </select></label
+      >
+      <label
+        >DOMの移動
+        <select id="motion">
+          <option value="direct">行の位置を変更</option>
+          <option value="layer">レイヤーごと移動</option>
+        </select></label
+      >
+      <button type="button" id="animate" aria-pressed="false">ゆっくりスクロール</button>
+      <button type="button" id="reset">先頭に戻す</button>
+      <label
+        >移動量 <input id="offset" type="range" min="0" max="16" step="0.01" value="0"
+      /></label>
+    </form>
+    <main class="panes">
+      <section>
+        <h2>Canvas · 現在のNido</h2>
+        <div class="viewport">
+          <canvas id="canvas" class="surface" aria-label="現在のCanvas描画"></canvas>
+        </div>
+      </section>
+      <section>
+        <h2>DOM · 比較用</h2>
+        <div class="viewport">
+          <div id="dom" class="surface" aria-label="比較用DOM描画"></div>
+        </div>
+      </section>
+    </main>
+    <footer id="status" aria-live="off"></footer>
+    <script type="module" src="./main.ts"></script>
+  </body>
 </html>

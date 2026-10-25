@@ -9,56 +9,56 @@ import OverlayPresence from './OverlayPresence';
 type Notice = Extract<NidoEvent, { type: 'notification' }>;
 
 export default function Notification({
-    workspaceId,
-    animations
+  workspaceId,
+  animations
 }: {
-    workspaceId: string;
-    animations: boolean;
+  workspaceId: string;
+  animations: boolean;
 }): React.JSX.Element | null {
-    const t = useI18n();
-    const [notice, setNotice] = useState<Notice>();
-    const [previousWorkspace, setPreviousWorkspace] = useState(workspaceId);
-    if (workspaceId !== previousWorkspace) {
-        setPreviousWorkspace(workspaceId);
-        setNotice(undefined);
-    }
-    const dismiss = useCallback(() => setNotice(undefined), []);
-    const fading = useNotificationDismissal(notice, animations, dismiss);
-    useEffect(() => {
-        return window.nido.onEvent((event) => {
-            if (
-                event.type === 'notification' &&
-                (event.id === workspaceId || event.severity !== 'info')
-            ) {
-                setNotice(event);
-            }
-        });
-    }, [workspaceId]);
+  const t = useI18n();
+  const [notice, setNotice] = useState<Notice>();
+  const [previousWorkspace, setPreviousWorkspace] = useState(workspaceId);
+  if (workspaceId !== previousWorkspace) {
+    setPreviousWorkspace(workspaceId);
+    setNotice(undefined);
+  }
+  const dismiss = useCallback(() => setNotice(undefined), []);
+  const fading = useNotificationDismissal(notice, animations, dismiss);
+  useEffect(() => {
+    return window.nido.onEvent((event) => {
+      if (
+        event.type === 'notification' &&
+        (event.id === workspaceId || event.severity !== 'info')
+      ) {
+        setNotice(event);
+      }
+    });
+  }, [workspaceId]);
 
-    if (!notice) {
-        return <OverlayPresence>{null}</OverlayPresence>;
-    }
-    const Icon = notice.severity === 'info' ? Info : CircleAlert;
-    return (
-        <OverlayPresence>
-            <aside
-                className={`${styles.notice} ${styles.dismissal}`}
-                data-severity={notice.severity}
-                data-animations={animations}
-                data-fading={fading}
-                role={notice.severity === 'info' ? 'status' : 'alert'}
-                aria-label={t(notice.title)}
-            >
-                <Icon size={19} className={styles.icon} aria-hidden="true" />
-                <div className={styles.content}>
-                    <strong>{t(notice.title)}</strong>
-                    <p>{t(notice.message)}</p>
-                    <small>{t('Esc to dismiss')}</small>
-                </div>
-                <button aria-label={t('Dismiss notification')} onClick={() => setNotice(undefined)}>
-                    <X size={16} />
-                </button>
-            </aside>
-        </OverlayPresence>
-    );
+  if (!notice) {
+    return <OverlayPresence>{null}</OverlayPresence>;
+  }
+  const Icon = notice.severity === 'info' ? Info : CircleAlert;
+  return (
+    <OverlayPresence>
+      <aside
+        className={`${styles.notice} ${styles.dismissal}`}
+        data-severity={notice.severity}
+        data-animations={animations}
+        data-fading={fading}
+        role={notice.severity === 'info' ? 'status' : 'alert'}
+        aria-label={t(notice.title)}
+      >
+        <Icon size={19} className={styles.icon} aria-hidden="true" />
+        <div className={styles.content}>
+          <strong>{t(notice.title)}</strong>
+          <p>{t(notice.message)}</p>
+          <small>{t('Esc to dismiss')}</small>
+        </div>
+        <button aria-label={t('Dismiss notification')} onClick={() => setNotice(undefined)}>
+          <X size={16} />
+        </button>
+      </aside>
+    </OverlayPresence>
+  );
 }

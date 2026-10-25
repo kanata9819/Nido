@@ -4,6 +4,6 @@ import { createTranslator, type Language, type Translator } from '../../shared/i
 export const LanguageContext = createContext<Language>('en');
 
 export function useI18n(): Translator {
-    const language = useContext(LanguageContext);
-    return useMemo(() => createTranslator(language), [language]);
+  const language = useContext(LanguageContext);
+  return useMemo(() => createTranslator(language), [language]);
 }

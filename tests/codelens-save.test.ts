@@ -7,46 +7,46 @@ import { Session } from '../src/main/session';
 import { Grid } from '../src/renderer/src/grid';
 
 test('Rust saves keep source rows stable without CodeLens', { timeout: 90000 }, async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nido-lens-save-'));
-    let session: Session | undefined;
-    const grid = new Grid();
-    let measuring = false;
-    const frames: string[][] = [];
-    const mainRows: number[] = [];
-    try {
-        await mkdir(join(root, 'src'));
-        await writeFile(
-            join(root, 'Cargo.toml'),
-            '[package]\nname="lens_save"\nversion="0.1.0"\nedition="2021"\n'
+  const root = await mkdtemp(join(tmpdir(), 'nido-lens-save-'));
+  let session: Session | undefined;
+  const grid = new Grid();
+  let measuring = false;
+  const frames: string[][] = [];
+  const mainRows: number[] = [];
+  try {
+    await mkdir(join(root, 'src'));
+    await writeFile(
+      join(root, 'Cargo.toml'),
+      '[package]\nname="lens_save"\nversion="0.1.0"\nedition="2021"\n'
+    );
+    await writeFile(
+      join(root, 'src/main.rs'),
+      'fn main() {}\n\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn example() {\n        assert_eq!(1, 1);\n    }\n}\n'
+    );
+    session = await Session.create(root, (event) => {
+      if (event.type !== 'redraw') return;
+      grid.apply(event.events);
+      if (measuring) {
+        mainRows.push(
+          grid.cells.findIndex((row) =>
+            row
+              .map((cell) => cell.text)
+              .join('')
+              .includes('fn main()')
+          )
         );
-        await writeFile(
-            join(root, 'src/main.rs'),
-            'fn main() {}\n\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn example() {\n        assert_eq!(1, 1);\n    }\n}\n'
+        frames.push(
+          grid.cells
+            .map((row) => row.map((cell) => cell.text).join(''))
+            .filter((row) => row.includes('▶'))
         );
-        session = await Session.create(root, (event) => {
-            if (event.type !== 'redraw') return;
-            grid.apply(event.events);
-            if (measuring) {
-                mainRows.push(
-                    grid.cells.findIndex((row) =>
-                        row
-                            .map((cell) => cell.text)
-                            .join('')
-                            .includes('fn main()')
-                    )
-                );
-                frames.push(
-                    grid.cells
-                        .map((row) => row.map((cell) => cell.text).join(''))
-                        .filter((row) => row.includes('▶'))
-                );
-            }
-        });
-        await session.attach(100, 35);
-        await session.openFile('src/main.rs');
-        const lua = (code: string): ReturnType<Session['client']['request']> =>
-            session!.client.request('nvim_exec_lua', [code, []]);
-        await lua(`assert(vim.wait(30000, function()
+      }
+    });
+    await session.attach(100, 35);
+    await session.openFile('src/main.rs');
+    const lua = (code: string): ReturnType<Session['client']['request']> =>
+      session!.client.request('nvim_exec_lua', [code, []]);
+    await lua(`assert(vim.wait(30000, function()
           local client = vim.lsp.get_clients({bufnr=0, name='rust_analyzer'})[1]
           if not client or not client.initialized then return false end
           local response = client:request_sync('experimental/runnables',
@@ -55,16 +55,16 @@ test('Rust saves keep source rows stable without CodeLens', { timeout: 90000 }, 
             return item.kind == 'cargo' and item.location and item.location.targetRange
           end, response.result) >= 3
         end, 50), 'Rust runnables did not load')`);
-        measuring = true;
-        for (let i = 0; i < 3; i++) {
-            await lua(`local line = vim.api.nvim_buf_get_lines(0, 6, 7, false)[1]
+    measuring = true;
+    for (let i = 0; i < 3; i++) {
+      await lua(`local line = vim.api.nvim_buf_get_lines(0, 6, 7, false)[1]
               vim.api.nvim_buf_set_text(0, 6, 0, 6, #line, {'        assert_eq! (1,1);'})`);
-            await session.save(true);
-            await lua('vim.wait(1500)');
-        }
-        // Whole-document TextEdits are allowed even when the formatted text is unchanged.
-        // Neovim moves extmarks inside the replaced range to its end before analysis refreshes.
-        await lua(`_G.original_format = vim.lsp.buf.format
+      await session.save(true);
+      await lua('vim.wait(1500)');
+    }
+    // Whole-document TextEdits are allowed even when the formatted text is unchanged.
+    // Neovim moves extmarks inside the replaced range to its end before analysis refreshes.
+    await lua(`_G.original_format = vim.lsp.buf.format
 vim.lsp.buf.format = function()
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   vim.lsp.util.apply_text_edits({{range={start={line=0, character=0},
@@ -73,30 +73,30 @@ vim.lsp.buf.format = function()
   vim.cmd.redraw()
   vim.wait(40)
 end`);
-        await session.save(true);
-        await lua('vim.lsp.buf.format = _G.original_format; vim.wait(1500)');
-        assert.ok(frames.length > 0);
-        assert.ok(
-            mainRows.every((row) => row === 0),
-            `main moved between rows: ${mainRows}`
-        );
-        assert.ok(
-            frames.every((frame) => frame.length === 0),
-            JSON.stringify(frames)
-        );
-    } finally {
-        await session?.stop();
-        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    }
+    await session.save(true);
+    await lua('vim.lsp.buf.format = _G.original_format; vim.wait(1500)');
+    assert.ok(frames.length > 0);
+    assert.ok(
+      mainRows.every((row) => row === 0),
+      `main moved between rows: ${mainRows}`
+    );
+    assert.ok(
+      frames.every((frame) => frame.length === 0),
+      JSON.stringify(frames)
+    );
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
 });
 
 test('whole-document edits preserve anchors and match native text edit results', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nido-text-edits-'));
-    let session: Session | undefined;
-    try {
-        session = await Session.create(root, () => {});
-        await session.client.request('nvim_exec_lua', [
-            `
+  const root = await mkdtemp(join(tmpdir(), 'nido-text-edits-'));
+  let session: Session | undefined;
+  try {
+    session = await Session.create(root, () => {});
+    await session.client.request('nvim_exec_lua', [
+      `
 local api = vim.api
 local native = assert(loadfile(vim.env.VIMRUNTIME .. '/lua/vim/lsp/util.lua'))().apply_text_edits
 local namespace = api.nvim_create_namespace('text-edit-test')
@@ -137,22 +137,22 @@ for index, case in ipairs(cases) do
   api.nvim_buf_delete(reference, {force=true})
 end
 `,
-            []
-        ]);
-    } finally {
-        await session?.stop();
-        await rm(root, { recursive: true, force: true });
-    }
+      []
+    ]);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('Rust target requests never add rows or move the viewport', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nido-lens-reload-'));
-    let session: Session | undefined;
-    try {
-        session = await Session.create(root, () => {});
-        await session.attach(80, 20);
-        await session.client.request('nvim_exec_lua', [
-            `
+  const root = await mkdtemp(join(tmpdir(), 'nido-lens-reload-'));
+  let session: Session | undefined;
+  try {
+    session = await Session.create(root, () => {});
+    await session.attach(80, 20);
+    await session.client.request('nvim_exec_lua', [
+      `
 local api = vim.api
 local buffer = api.nvim_get_current_buf()
 local lines = {'fn main() {}'}
@@ -200,10 +200,10 @@ end)
 vim.lsp.get_clients, debugger.runnable = get_clients, runnable
 assert(ok, err)
 `,
-            []
-        ]);
-    } finally {
-        await session?.stop();
-        await rm(root, { recursive: true, force: true });
-    }
+      []
+    ]);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
 });

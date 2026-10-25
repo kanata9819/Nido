@@ -1,25 +1,25 @@
 export type GitView = 'changes' | 'history' | 'branches';
 
 export type Panel =
-    | 'commands'
-    | 'workspaces'
-    | 'files'
-    | 'symbols'
-    | 'search'
-    | 'buffers'
-    | 'settings'
-    | 'folders'
-    | 'git'
-    | 'problems'
-    | 'markdown'
-    | 'extensions'
-    | 'history'
-    | null;
+  | 'commands'
+  | 'workspaces'
+  | 'files'
+  | 'symbols'
+  | 'search'
+  | 'buffers'
+  | 'settings'
+  | 'folders'
+  | 'git'
+  | 'problems'
+  | 'markdown'
+  | 'extensions'
+  | 'history'
+  | null;
 
 export interface Item {
-    severity?: number;
-    key: string;
-    title: string;
-    detail: string;
-    run: () => void;
+  severity?: number;
+  key: string;
+  title: string;
+  detail: string;
+  run: () => void;
 }

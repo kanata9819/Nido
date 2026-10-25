@@ -7,101 +7,101 @@ import { Session } from '../src/main/session';
 import { Grid } from '../src/renderer/src/grid';
 
 test('typing inside a bracket pair preserves its existing colors until reparsing completes', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nido-highlight-stability-'));
-    const grid = new Grid();
-    const frames: { text: string; colors: (number | undefined)[] }[] = [];
-    const ink = (content: string, token: string): number | undefined => {
-        const row = grid.cells.find((cells) =>
-            cells
-                .map((cell) => cell.text)
-                .join('')
-                .includes(content)
-        );
-        if (!row) return undefined;
-        const text = row.map((cell) => cell.text).join('');
-        return grid.highlights.get(row[text.indexOf(token)].highlight)?.foreground;
-    };
-    let recording = false;
-    let session: Session | undefined;
-    try {
-        await writeFile(
-            join(root, 'sample.txt'),
-            'fn main() {\n  let value = ([1]);\n  let label = "hello";\n}\n'
-        );
-        session = await Session.create(root, (event) => {
-            if (event.type !== 'redraw') return;
-            grid.apply(event.events);
-            if (!recording) return;
-            const row = grid.cells.find((cells) =>
-                cells
-                    .map((cell) => cell.text)
-                    .join('')
-                    .includes('let value')
-            );
-            if (!row) return;
-            const text = row.map((cell) => cell.text).join('');
-            frames.push({
-                text,
-                colors: [
-                    ink('let value', '('),
-                    ink('let value', 'let'),
-                    ink('fn main', 'main'),
-                    ink('let label', '"hello"')
-                ]
-            });
-        });
-        await session.openFile('sample.txt');
-        await session.client.request('nvim_exec_lua', [
-            `vim.bo.syntax='rust'
+  const root = await mkdtemp(join(tmpdir(), 'nido-highlight-stability-'));
+  const grid = new Grid();
+  const frames: { text: string; colors: (number | undefined)[] }[] = [];
+  const ink = (content: string, token: string): number | undefined => {
+    const row = grid.cells.find((cells) =>
+      cells
+        .map((cell) => cell.text)
+        .join('')
+        .includes(content)
+    );
+    if (!row) return undefined;
+    const text = row.map((cell) => cell.text).join('');
+    return grid.highlights.get(row[text.indexOf(token)].highlight)?.foreground;
+  };
+  let recording = false;
+  let session: Session | undefined;
+  try {
+    await writeFile(
+      join(root, 'sample.txt'),
+      'fn main() {\n  let value = ([1]);\n  let label = "hello";\n}\n'
+    );
+    session = await Session.create(root, (event) => {
+      if (event.type !== 'redraw') return;
+      grid.apply(event.events);
+      if (!recording) return;
+      const row = grid.cells.find((cells) =>
+        cells
+          .map((cell) => cell.text)
+          .join('')
+          .includes('let value')
+      );
+      if (!row) return;
+      const text = row.map((cell) => cell.text).join('');
+      frames.push({
+        text,
+        colors: [
+          ink('let value', '('),
+          ink('let value', 'let'),
+          ink('fn main', 'main'),
+          ink('let label', '"hello"')
+        ]
+      });
+    });
+    await session.openFile('sample.txt');
+    await session.client.request('nvim_exec_lua', [
+      `vim.bo.syntax='rust'
 assert(vim.wait(3000, function() return require('nido_brackets').ready(vim.api.nvim_get_current_buf()) end, 5))
 vim.cmd.redraw({bang=true})`,
-            []
-        ]);
-        await session.input('2G0f1a');
-        assert.equal(await session.inputMode(), 'i');
-        await session.client.request('nvim_exec_lua', ['vim.cmd.redraw()', []]);
-        const expected = [0xda70d6, 0x569cd6, 0xdcdcaa, 0xce9178];
-        assert.deepEqual(
-            [
-                ink('let value', '('),
-                ink('let value', 'let'),
-                ink('fn main', 'main'),
-                ink('let label', '"hello"')
-            ],
-            expected
-        );
-        recording = true;
-        for (const character of ['x', 'y', 'z']) {
-            await session.input(character);
-            assert.equal(await session.inputMode(), 'i');
-        }
-        await session.input('<Esc>u');
-        assert.equal(await session.inputMode(), 'n');
-        await session.input('<C-r>');
-        assert.equal(await session.inputMode(), 'n');
-        await session.client.request('nvim_exec_lua', [
-            `vim.cmd.redraw()
+      []
+    ]);
+    await session.input('2G0f1a');
+    assert.equal(await session.inputMode(), 'i');
+    await session.client.request('nvim_exec_lua', ['vim.cmd.redraw()', []]);
+    const expected = [0xda70d6, 0x569cd6, 0xdcdcaa, 0xce9178];
+    assert.deepEqual(
+      [
+        ink('let value', '('),
+        ink('let value', 'let'),
+        ink('fn main', 'main'),
+        ink('let label', '"hello"')
+      ],
+      expected
+    );
+    recording = true;
+    for (const character of ['x', 'y', 'z']) {
+      await session.input(character);
+      assert.equal(await session.inputMode(), 'i');
+    }
+    await session.input('<Esc>u');
+    assert.equal(await session.inputMode(), 'n');
+    await session.input('<C-r>');
+    assert.equal(await session.inputMode(), 'n');
+    await session.client.request('nvim_exec_lua', [
+      `vim.cmd.redraw()
 assert(vim.wait(3000, function() return require('nido_brackets').ready(vim.api.nvim_get_current_buf()) end, 5))
 vim.cmd.redraw()`,
-            []
-        ]);
-        const edited = frames.filter((frame) => frame.text.includes('1x'));
-        assert.ok(edited.length, 'the edited text must reach the renderer');
-        assert.deepEqual(
-            frames.map((frame) => frame.colors),
-            frames.map(() => expected)
-        );
-    } finally {
-        await session?.stop();
-        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    }
+      []
+    ]);
+    const edited = frames.filter((frame) => frame.text.includes('1x'));
+    assert.ok(edited.length, 'the edited text must reach the renderer');
+    assert.deepEqual(
+      frames.map((frame) => frame.colors),
+      frames.map(() => expected)
+    );
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
 });
 
 test('bracket retention follows byte and line edits and drops removed or replaced ranges', async () => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        await session.client.request('nvim_exec_lua', [
-            `local api, brackets = vim.api, require('nido_brackets')
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.client.request('nvim_exec_lua', [
+      `local api, brackets = vim.api, require('nido_brackets')
 local buffer = api.nvim_get_current_buf()
 local namespace = api.nvim_create_namespace('nido_brackets')
 local function settle()
@@ -172,68 +172,66 @@ assert(#position(before[1][1]) == 0, 'ordinary replacement text must never retai
 validate()
 settle()
 assert(#marks() == 0)`,
-            []
-        ]);
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
 });
 
 test('typing, line breaks and undo keep bracket frames and guides in every redraw', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nido-bracket-decorations-'));
-    const grid = new Grid();
-    const frames: { matches: number; guides: number; active: number }[] = [];
-    let recording = false;
-    let session: Session | undefined;
-    const snapshot = (): (typeof frames)[number] => ({
-        matches: grid.cells
-            .flat()
-            .filter(
-                (cell) =>
-                    '{}'.includes(cell.text) &&
-                    cell.text &&
-                    grid.highlights.get(cell.highlight)?.bracketMatch
-            ).length,
-        guides: grid.bracketGuides.length,
-        active: grid.bracketGuides.filter((guide) => guide.active).length
+  const root = await mkdtemp(join(tmpdir(), 'nido-bracket-decorations-'));
+  const grid = new Grid();
+  const frames: { matches: number; guides: number; active: number }[] = [];
+  let recording = false;
+  let session: Session | undefined;
+  const snapshot = (): (typeof frames)[number] => ({
+    matches: grid.cells
+      .flat()
+      .filter(
+        (cell) =>
+          '{}'.includes(cell.text) && cell.text && grid.highlights.get(cell.highlight)?.bracketMatch
+      ).length,
+    guides: grid.bracketGuides.length,
+    active: grid.bracketGuides.filter((guide) => guide.active).length
+  });
+  try {
+    await writeFile(join(root, 'sample.txt'), 'fn main() {\n  let value = 1;\n}\n');
+    session = await Session.create(root, (event) => {
+      if (event.type !== 'redraw') return;
+      grid.apply(event.events);
+      if (recording) frames.push(snapshot());
     });
-    try {
-        await writeFile(join(root, 'sample.txt'), 'fn main() {\n  let value = 1;\n}\n');
-        session = await Session.create(root, (event) => {
-            if (event.type !== 'redraw') return;
-            grid.apply(event.events);
-            if (recording) frames.push(snapshot());
-        });
-        await session.openFile('sample.txt');
-        await session.input('2G$ai');
-        assert.equal(await session.inputMode(), 'i');
-        await session.client.request('nvim_exec_lua', [
-            `local buffer=vim.api.nvim_get_current_buf()
+    await session.openFile('sample.txt');
+    await session.input('2G$ai');
+    assert.equal(await session.inputMode(), 'i');
+    await session.client.request('nvim_exec_lua', [
+      `local buffer=vim.api.nvim_get_current_buf()
 assert(vim.wait(3000,function() return require('nido_brackets').ready(buffer) end,5))
 vim.api.nvim_exec_autocmds('CursorMovedI',{buffer=buffer})
 vim.cmd.redraw({bang=true})`,
-            []
-        ]);
-        const expected = { matches: 2, guides: 1, active: 1 };
-        assert.deepEqual(snapshot(), expected);
-        recording = true;
-        for (const input of ['x', 'y', 'z', '<CR>', 'value', '<Esc>u', '<C-r>']) {
-            await session.input(input);
-            await session.client.request('nvim_exec_lua', ['vim.cmd.redraw()', []]);
-        }
-        await session.client.request('nvim_exec_lua', [
-            `local buffer=vim.api.nvim_get_current_buf()
+      []
+    ]);
+    const expected = { matches: 2, guides: 1, active: 1 };
+    assert.deepEqual(snapshot(), expected);
+    recording = true;
+    for (const input of ['x', 'y', 'z', '<CR>', 'value', '<Esc>u', '<C-r>']) {
+      await session.input(input);
+      await session.client.request('nvim_exec_lua', ['vim.cmd.redraw()', []]);
+    }
+    await session.client.request('nvim_exec_lua', [
+      `local buffer=vim.api.nvim_get_current_buf()
 assert(vim.wait(3000,function() return require('nido_brackets').ready(buffer) end,5))
 vim.cmd.redraw({bang=true})`,
-            []
-        ]);
-        assert.ok(frames.length > 7, 'the test must observe intermediate editor redraws');
-        assert.deepEqual(
-            frames,
-            frames.map(() => expected)
-        );
-    } finally {
-        await session?.stop();
-        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    }
+      []
+    ]);
+    assert.ok(frames.length > 7, 'the test must observe intermediate editor redraws');
+    assert.deepEqual(
+      frames,
+      frames.map(() => expected)
+    );
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
 });

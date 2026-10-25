@@ -1,72 +1,72 @@
 name: Release Windows
 
 on:
-    push:
-        tags: ['v*']
+  push:
+    tags: ['v*']
 
 permissions:
-    actions: read
-    contents: write
+  actions: read
+  contents: write
 
 concurrency:
-    group: release-${{ github.ref }}
-    cancel-in-progress: false
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-    windows:
-        runs-on: windows-latest
-        timeout-minutes: 15
-        steps:
-            - uses: actions/checkout@v7
-            - name: Download assets from the successful Windows baseline for this commit
-              shell: pwsh
-              run: |
-                  $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-                  if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag must match package.json version.' }
-                  $sha = git rev-parse HEAD
-                  if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the release commit.' }
-                  $runId = gh run list --repo $env:GITHUB_REPOSITORY --workflow windows-check.yml --branch main --commit $sha --status success --limit 1 --json databaseId --jq '.[0].databaseId'
-                  if ($LASTEXITCODE -ne 0) { throw 'Unable to find the Windows baseline.' }
-                  if (!$runId -or $runId -eq 'null') { throw "No successful main Windows baseline for $sha. Push this commit to main and wait for CI to pass before tagging." }
-                  gh run download $runId --repo $env:GITHUB_REPOSITORY --name windows-release-assets --dir dist/release
-                  if ($LASTEXITCODE -ne 0) { throw 'Verified assets are missing or expired. Re-run the Windows baseline on this main commit.' }
-                  foreach ($name in @("nido-$version-setup.exe", "nido-$version-setup.exe.blockmap", 'latest.yml')) {
-                      $asset = Get-Item -LiteralPath "dist/release/$name" -ErrorAction Stop
-                      if ($asset.Length -le 0) { throw "Empty release asset: $name" }
-                  }
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            - name: Prepare a single draft release
-              shell: pwsh
-              run: |
-                  # Keep partial uploads in a draft until all three assets are verified.
-                  gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY *> $null
-                  if ($LASTEXITCODE -ne 0) {
-                      gh release create $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --verify-tag --draft --title "Nido $env:GITHUB_REF_NAME" --generate-notes
-                      if ($LASTEXITCODE -ne 0) { throw 'Unable to prepare the draft release.' }
-                  }
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            - name: Upload the verified installer and update metadata
-              shell: pwsh
-              run: |
-                  $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-                  gh release upload $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --clobber "dist/release/nido-$version-setup.exe" "dist/release/nido-$version-setup.exe.blockmap" 'dist/release/latest.yml'
-                  if ($LASTEXITCODE -ne 0) { throw 'Unable to upload the verified release assets.' }
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            - name: Verify assets and publish release
-              shell: pwsh
-              run: |
-                  $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-                  $releaseJson = gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --json assets
-                  if ($LASTEXITCODE -ne 0) { throw 'Unable to verify release assets.' }
-                  $release = $releaseJson | ConvertFrom-Json
-                  foreach ($name in @("nido-$version-setup.exe", "nido-$version-setup.exe.blockmap", 'latest.yml')) {
-                      $asset = @($release.assets | Where-Object { $_.name -eq $name })
-                      if ($asset.Count -ne 1 -or $asset[0].size -le 0) { throw "Missing release asset: $name" }
-                  }
-                  gh release edit $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --draft=false --latest
-                  if ($LASTEXITCODE -ne 0) { throw 'Unable to publish the complete release.' }
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download assets from the successful Windows baseline for this commit
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag must match package.json version.' }
+          $sha = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the release commit.' }
+          $runId = gh run list --repo $env:GITHUB_REPOSITORY --workflow windows-check.yml --branch main --commit $sha --status success --limit 1 --json databaseId --jq '.[0].databaseId'
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to find the Windows baseline.' }
+          if (!$runId -or $runId -eq 'null') { throw "No successful main Windows baseline for $sha. Push this commit to main and wait for CI to pass before tagging." }
+          gh run download $runId --repo $env:GITHUB_REPOSITORY --name windows-release-assets --dir dist/release
+          if ($LASTEXITCODE -ne 0) { throw 'Verified assets are missing or expired. Re-run the Windows baseline on this main commit.' }
+          foreach ($name in @("nido-$version-setup.exe", "nido-$version-setup.exe.blockmap", 'latest.yml')) {
+              $asset = Get-Item -LiteralPath "dist/release/$name" -ErrorAction Stop
+              if ($asset.Length -le 0) { throw "Empty release asset: $name" }
+          }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prepare a single draft release
+        shell: pwsh
+        run: |
+          # Keep partial uploads in a draft until all three assets are verified.
+          gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+              gh release create $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --verify-tag --draft --title "Nido $env:GITHUB_REF_NAME" --generate-notes
+              if ($LASTEXITCODE -ne 0) { throw 'Unable to prepare the draft release.' }
+          }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload the verified installer and update metadata
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          gh release upload $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --clobber "dist/release/nido-$version-setup.exe" "dist/release/nido-$version-setup.exe.blockmap" 'dist/release/latest.yml'
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to upload the verified release assets.' }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify assets and publish release
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $releaseJson = gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --json assets
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to verify release assets.' }
+          $release = $releaseJson | ConvertFrom-Json
+          foreach ($name in @("nido-$version-setup.exe", "nido-$version-setup.exe.blockmap", 'latest.yml')) {
+              $asset = @($release.assets | Where-Object { $_.name -eq $name })
+              if ($asset.Count -ne 1 -or $asset[0].size -le 0) { throw "Missing release asset: $name" }
+          }
+          gh release edit $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to publish the complete release.' }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

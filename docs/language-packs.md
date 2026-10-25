@@ -10,16 +10,16 @@ Install the language server separately on the machine where the workspace lives.
 
 ```json
 {
-    "schemaVersion": 1,
-    "id": "go",
-    "version": "1.0.0",
-    "title": "Go",
-    "description": "Completion, diagnostics and navigation for Go.",
-    "filetypes": ["go", "gomod", "gowork"],
-    "serverName": "gopls",
-    "command": ["gopls"],
-    "rootMarkers": ["go.work", "go.mod", ".git"],
-    "setup": "Install gopls and make it available on PATH."
+  "schemaVersion": 1,
+  "id": "go",
+  "version": "1.0.0",
+  "title": "Go",
+  "description": "Completion, diagnostics and navigation for Go.",
+  "filetypes": ["go", "gomod", "gowork"],
+  "serverName": "gopls",
+  "command": ["gopls"],
+  "rootMarkers": ["go.work", "go.mod", ".git"],
+  "setup": "Install gopls and make it available on PATH."
 }
 ```
 

@@ -5,74 +5,74 @@ import type { ActivityBarPosition } from '../hooks/useEditorSettings';
 import styles from '../assets/Nido.module.css';
 
 export default function NavigationRail({
-    position,
-    sidebar,
-    active,
-    panel,
-    showExplorer,
-    showPanel
+  position,
+  sidebar,
+  active,
+  panel,
+  showExplorer,
+  showPanel
 }: {
-    position: ActivityBarPosition;
-    sidebar: boolean;
-    active: string;
-    panel: Panel;
-    showExplorer: () => void;
-    showPanel: (panel: Panel) => void;
+  position: ActivityBarPosition;
+  sidebar: boolean;
+  active: string;
+  panel: Panel;
+  showExplorer: () => void;
+  showPanel: (panel: Panel) => void;
 }): React.JSX.Element {
-    const t = useI18n();
-    return (
-        <nav className={styles.rail} data-position={position} aria-label={t('Navigation')}>
-            <button
-                className={sidebar && panel !== 'extensions' ? styles.railActive : ''}
-                aria-label={t('Explorer')}
-                title={t('Explorer (Space e)')}
-                onClick={showExplorer}
-            >
-                <Files size={22} />
-            </button>
-            <button
-                aria-label={t('Find file')}
-                title={t('Find file (Space f)')}
-                disabled={!active}
-                onClick={() => showPanel('files')}
-            >
-                <Search size={22} />
-            </button>
-            <button
-                aria-label={t('Workspaces')}
-                title={t('Workspaces (Space w)')}
-                onClick={() => showPanel('workspaces')}
-            >
-                <Square size={20} />
-            </button>
-            <button
-                aria-label={t('Source control')}
-                title={t('Source control (Ctrl+Shift+G / Space g)')}
-                disabled={!active}
-                onClick={() => showPanel('git')}
-            >
-                <GitBranch size={21} />
-            </button>
-            <button
-                className={panel === 'history' ? styles.railActive : ''}
-                aria-label={t('Time Machine')}
-                aria-pressed={panel === 'history'}
-                title={t('Time Machine (Ctrl+Shift+H / Space h)')}
-                disabled={!active}
-                onClick={() => showPanel('history')}
-            >
-                <History size={21} />
-            </button>
-            <button
-                className={panel === 'extensions' ? styles.railActive : ''}
-                aria-label={t('Extensions')}
-                aria-pressed={panel === 'extensions'}
-                title={t('Extensions (Ctrl+Shift+X)')}
-                data-extensions-trigger
-                onClick={() => showPanel('extensions')}
-            >
-                <Blocks size={22} />
-            </button>
-        </nav>
-    );
+  const t = useI18n();
+  return (
+    <nav className={styles.rail} data-position={position} aria-label={t('Navigation')}>
+      <button
+        className={sidebar && panel !== 'extensions' ? styles.railActive : ''}
+        aria-label={t('Explorer')}
+        title={t('Explorer (Space e)')}
+        onClick={showExplorer}
+      >
+        <Files size={22} />
+      </button>
+      <button
+        aria-label={t('Find file')}
+        title={t('Find file (Space f)')}
+        disabled={!active}
+        onClick={() => showPanel('files')}
+      >
+        <Search size={22} />
+      </button>
+      <button
+        aria-label={t('Workspaces')}
+        title={t('Workspaces (Space w)')}
+        onClick={() => showPanel('workspaces')}
+      >
+        <Square size={20} />
+      </button>
+      <button
+        aria-label={t('Source control')}
+        title={t('Source control (Ctrl+Shift+G / Space g)')}
+        disabled={!active}
+        onClick={() => showPanel('git')}
+      >
+        <GitBranch size={21} />
+      </button>
+      <button
+        className={panel === 'history' ? styles.railActive : ''}
+        aria-label={t('Time Machine')}
+        aria-pressed={panel === 'history'}
+        title={t('Time Machine (Ctrl+Shift+H / Space h)')}
+        disabled={!active}
+        onClick={() => showPanel('history')}
+      >
+        <History size={21} />
+      </button>
+      <button
+        className={panel === 'extensions' ? styles.railActive : ''}
+        aria-label={t('Extensions')}
+        aria-pressed={panel === 'extensions'}
+        title={t('Extensions (Ctrl+Shift+X)')}
+        data-extensions-trigger
+        onClick={() => showPanel('extensions')}
+      >
+        <Blocks size={22} />
+      </button>
+    </nav>
+  );
 }

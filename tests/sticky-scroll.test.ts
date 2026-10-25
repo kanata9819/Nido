@@ -11,63 +11,63 @@ import type { StickyScrollState } from '../src/shared/types';
 const span = [{ text: 'scope {', color: '#d4d4d4' }];
 
 for (const server of ['legacy', 'native'] as const) {
-    test(`TypeScript ${server} method separators exclude callbacks and retain declarations and sticky scopes`, async () => {
-        const root = await mkdtemp(join(tmpdir(), 'nido-ts-separators-'));
-        let session: Session | undefined;
-        try {
-            const lines = [
-                'declare const backend: { on(name: string, callback: (...args: number[]) => void): void; };',
-                'export class Updates {',
-                '    constructor(',
-                '        private enabled = true',
-                '    ) {',
-                '        backend.on("available", (info) => console.log(info));',
-                '        backend.on("progress", (info) => {',
-                '            console.log(info);',
-                '        });',
-                '        backend.on("error", function (error) {',
-                '            console.log(error);',
-                '        });',
-                '        backend.on("named", function onReady(info) { console.log(info); });',
-                '        function helper() { return 1; }',
-                '        helper();',
-                '    }',
-                '    snapshot() { return this.enabled; }',
-                '}',
-                'export function topLevel() { return 1; }',
-                'export default function () { return 1; }',
-                'backend.on("日本語😀", function () {}); function next() { return 1; }'
-            ];
-            const config = join(root, 'lsp.json');
-            await writeFile(join(root, 'sample.ts'), lines.join('\n'));
-            await writeFile(join(root, 'tsconfig.json'), '{}');
-            await writeFile(
-                config,
-                JSON.stringify({
-                    typescript: {
-                        server,
-                        ...(server === 'native'
-                            ? {
-                                  command: [
-                                      process.execPath,
-                                      resolve('node_modules/@typescript/native/bin/tsc'),
-                                      '--lsp',
-                                      '--stdio'
-                                  ]
-                              }
-                            : {})
-                    }
-                })
-            );
-            session = await Session.create(root, () => {});
-            await session.client.request('nvim_exec_lua', [
-                "vim.env.NIDO_LSP_CONFIG = ...; require('nido_typescript').setup()",
-                [config]
-            ]);
-            await session.attach(110, 45);
-            await session.openFile('sample.ts');
-            await session.client.request('nvim_exec_lua', [
-                `
+  test(`TypeScript ${server} method separators exclude callbacks and retain declarations and sticky scopes`, async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-ts-separators-'));
+    let session: Session | undefined;
+    try {
+      const lines = [
+        'declare const backend: { on(name: string, callback: (...args: number[]) => void): void; };',
+        'export class Updates {',
+        '    constructor(',
+        '        private enabled = true',
+        '    ) {',
+        '        backend.on("available", (info) => console.log(info));',
+        '        backend.on("progress", (info) => {',
+        '            console.log(info);',
+        '        });',
+        '        backend.on("error", function (error) {',
+        '            console.log(error);',
+        '        });',
+        '        backend.on("named", function onReady(info) { console.log(info); });',
+        '        function helper() { return 1; }',
+        '        helper();',
+        '    }',
+        '    snapshot() { return this.enabled; }',
+        '}',
+        'export function topLevel() { return 1; }',
+        'export default function () { return 1; }',
+        'backend.on("日本語😀", function () {}); function next() { return 1; }'
+      ];
+      const config = join(root, 'lsp.json');
+      await writeFile(join(root, 'sample.ts'), lines.join('\n'));
+      await writeFile(join(root, 'tsconfig.json'), '{}');
+      await writeFile(
+        config,
+        JSON.stringify({
+          typescript: {
+            server,
+            ...(server === 'native'
+              ? {
+                  command: [
+                    process.execPath,
+                    resolve('node_modules/@typescript/native/bin/tsc'),
+                    '--lsp',
+                    '--stdio'
+                  ]
+                }
+              : {})
+          }
+        })
+      );
+      session = await Session.create(root, () => {});
+      await session.client.request('nvim_exec_lua', [
+        "vim.env.NIDO_LSP_CONFIG = ...; require('nido_typescript').setup()",
+        [config]
+      ]);
+      await session.attach(110, 45);
+      await session.openFile('sample.ts');
+      await session.client.request('nvim_exec_lua', [
+        `
 local api, sticky = vim.api, require('nido_sticky')
 local buffer, window = api.nvim_get_current_buf(), api.nvim_get_current_win()
 local original, latest = vim.rpcnotify, nil
@@ -97,21 +97,21 @@ end)
 vim.rpcnotify = original
 assert(ok, err)
 `,
-                []
-            ]);
-        } finally {
-            await session?.stop();
-            await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-        }
-    });
+        []
+      ]);
+    } finally {
+      await session?.stop();
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
 }
 
 test('TypeScript fallback method separators exclude function callbacks while preserving declarations and bindings', async () => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        await session.attach(110, 45);
-        await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.attach(110, 45);
+    await session.client.request('nvim_exec_lua', [
+      `
 local api, sticky = vim.api, require('nido_sticky')
 vim.lsp.enable('typescript', false)
 local buffer, window = api.nvim_get_current_buf(), api.nvim_get_current_win()
@@ -162,18 +162,18 @@ end)
 vim.rpcnotify = original
 assert(ok, err)
 `,
-            []
-        ]);
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
 });
 
 test('method separators follow cached functions, virtual rows, folds and edits, and clear when disabled', async () => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.client.request('nvim_exec_lua', [
+      `
 local api, sticky, brackets = vim.api, require('nido_sticky'), require('nido_brackets')
 local buffer, window = api.nvim_get_current_buf(), api.nvim_get_current_win()
 api.nvim_buf_set_lines(buffer,0,-1,false,{
@@ -217,18 +217,18 @@ end)
 vim.rpcnotify=notify
 assert(ok,err)
 `,
-            []
-        ]);
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
 });
 
 test('method separators survive edits and pending outlines without retaining deleted or obsolete methods', async () => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.client.request('nvim_exec_lua', [
+      `
 local api, sticky = vim.api, require('nido_sticky')
 local buffer, window = api.nvim_get_current_buf(), api.nvim_get_current_win()
 api.nvim_buf_set_lines(buffer,0,-1,false,{
@@ -329,18 +329,18 @@ vim.lsp.get_clients,vim.rpcnotify=clients,notify
 references.highlight=original_highlight
 assert(ok,err)
 `,
-            []
-        ]);
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
 });
 
 test('sticky publication reads viewport bounds once per call and follows viewport changes', async () => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        const result = await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    const result = await session.client.request('nvim_exec_lua', [
+      `
 local api, sticky, brackets = vim.api, require('nido_sticky'), require('nido_brackets')
 local buffer, window = api.nvim_get_current_buf(), api.nvim_get_current_win()
 local lines = {}
@@ -381,19 +381,19 @@ vim.fn.line,vim.rpcnotify=original_line,original_notify
 assert(ok,err)
 return true
 `,
-            []
-        ]);
-        assert.equal(result, true);
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+    assert.equal(result, true);
+  } finally {
+    await session.stop();
+  }
 });
 
 test('sticky outlines cancel obsolete requests and reject late replies through failure and unload', async () => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.client.request('nvim_exec_lua', [
+      `
 local api, brackets, sticky = vim.api, require('nido_brackets'), require('nido_sticky')
 local buffer = api.nvim_get_current_buf()
 api.nvim_buf_set_lines(buffer,0,-1,false,{'scope {','  content();','  other();','}'})
@@ -481,109 +481,107 @@ vim.rpcnotify=original_notify
 client:stop(true)
 assert(ok,err)
 `,
-            []
-        ]);
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
 });
 
 function state(scopes: StickyScrollState['scopes']): StickyScrollState {
-    return {
-        window: 1,
-        buffer: 1,
-        top: 0,
-        left: 0,
-        width: 80,
-        height: 30,
-        gutter: 6,
-        tabstop: 2,
-        leftcol: 0,
-        scopes
-    };
+  return {
+    window: 1,
+    buffer: 1,
+    top: 0,
+    left: 0,
+    width: 80,
+    height: 30,
+    gutter: 6,
+    tabstop: 2,
+    leftcol: 0,
+    scopes
+  };
 }
 
 test('sticky scopes pin in nesting order, respect the line limit and slide out at their closing line', () => {
-    const scopes = [
-        { line: 1, ending: 100, top: 0, bottom: 25, text: span, endText: span },
-        { line: 4, ending: 20, top: 3, bottom: 5, text: span, endText: span },
-        { line: 25, ending: 35, top: 7, bottom: 12, text: span, endText: span }
-    ];
-    const data = state(scopes);
-    assert.deepEqual(
-        stickyRows(data, (row) => row * 18, 0, 18, 5),
-        []
-    );
-    const rows = stickyRows(data, (row) => row * 18 - 60, 0, 18, 5);
-    assert.deepEqual(
-        rows.map((row) => row.scope.line),
-        [1, 4]
-    );
-    assert.deepEqual(
-        rows.map((row) => row.offset),
-        [0, -6]
-    );
-    assert.deepEqual(
-        stickyRows(data, (row) => row * 18 - 60, 0, 18, 1).map((row) => row.scope.line),
-        [1]
-    );
-    assert.deepEqual(
-        stickyRows(data, (row) => row * 18 - 110, 0, 18, 5).map((row) => row.scope.line),
-        [1, 25]
-    );
-    assert.deepEqual(
-        stickyRows(data, (row) => row * 18 - 450, 0, 18, 5),
-        []
-    );
+  const scopes = [
+    { line: 1, ending: 100, top: 0, bottom: 25, text: span, endText: span },
+    { line: 4, ending: 20, top: 3, bottom: 5, text: span, endText: span },
+    { line: 25, ending: 35, top: 7, bottom: 12, text: span, endText: span }
+  ];
+  const data = state(scopes);
+  assert.deepEqual(
+    stickyRows(data, (row) => row * 18, 0, 18, 5),
+    []
+  );
+  const rows = stickyRows(data, (row) => row * 18 - 60, 0, 18, 5);
+  assert.deepEqual(
+    rows.map((row) => row.scope.line),
+    [1, 4]
+  );
+  assert.deepEqual(
+    rows.map((row) => row.offset),
+    [0, -6]
+  );
+  assert.deepEqual(
+    stickyRows(data, (row) => row * 18 - 60, 0, 18, 1).map((row) => row.scope.line),
+    [1]
+  );
+  assert.deepEqual(
+    stickyRows(data, (row) => row * 18 - 110, 0, 18, 5).map((row) => row.scope.line),
+    [1, 25]
+  );
+  assert.deepEqual(
+    stickyRows(data, (row) => row * 18 - 450, 0, 18, 5),
+    []
+  );
 });
 
 test('Rust sticky headers pick up delayed semantic colors even when their source rows are offscreen', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nido-sticky-colors-'));
-    const grid = new Grid();
-    let session: Session | undefined;
-    try {
-        await writeFile(
-            join(root, 'scopes.rs'),
-            [
-                'impl Screen {',
-                '    pub fn apply_csi(&mut self, csi: CsiActions) {',
-                ...Array.from({ length: 40 }, () => '        let value = 0;'),
-                '    }',
-                '}'
-            ].join('\n')
+  const root = await mkdtemp(join(tmpdir(), 'nido-sticky-colors-'));
+  const grid = new Grid();
+  let session: Session | undefined;
+  try {
+    await writeFile(
+      join(root, 'scopes.rs'),
+      [
+        'impl Screen {',
+        '    pub fn apply_csi(&mut self, csi: CsiActions) {',
+        ...Array.from({ length: 40 }, () => '        let value = 0;'),
+        '    }',
+        '}'
+      ].join('\n')
+    );
+    session = await Session.create(root, (event) => {
+      if (event.type === 'redraw') grid.apply(event.events);
+    });
+    const lua = async (source: string): Promise<unknown> => {
+      const result = await session!.client.request('nvim_exec_lua', [source, []]);
+      await session!.client.request('nvim_eval', ['1']);
+      return result;
+    };
+    await lua("vim.lsp.enable('rust_analyzer', false)");
+    await session.openFile('scopes.rs');
+    await lua("vim.wait(300); vim.cmd('normal! 12Gzt'); vim.cmd.redraw()");
+    const headerColor = (): string | undefined =>
+      grid.stickyScroll?.scopes
+        .find((scope) => scope.line === 1)
+        ?.text.find((span) => span.text.includes('Screen'))?.color;
+    const syntaxColor = headerColor();
+    assert.ok(syntaxColor);
+    assert.notEqual(syntaxColor, '#4ec9b0');
+    const bracketColors = (): string[][] =>
+      grid
+        .stickyScroll!.scopes.slice(0, 2)
+        .map((scope) =>
+          scope.text.flatMap((span) =>
+            [...span.text].filter((character) => /[(){}]/.test(character)).map(() => span.color)
+          )
         );
-        session = await Session.create(root, (event) => {
-            if (event.type === 'redraw') grid.apply(event.events);
-        });
-        const lua = async (source: string): Promise<unknown> => {
-            const result = await session!.client.request('nvim_exec_lua', [source, []]);
-            await session!.client.request('nvim_eval', ['1']);
-            return result;
-        };
-        await lua("vim.lsp.enable('rust_analyzer', false)");
-        await session.openFile('scopes.rs');
-        await lua("vim.wait(300); vim.cmd('normal! 12Gzt'); vim.cmd.redraw()");
-        const headerColor = (): string | undefined =>
-            grid.stickyScroll?.scopes
-                .find((scope) => scope.line === 1)
-                ?.text.find((span) => span.text.includes('Screen'))?.color;
-        const syntaxColor = headerColor();
-        assert.ok(syntaxColor);
-        assert.notEqual(syntaxColor, '#4ec9b0');
-        const bracketColors = (): string[][] =>
-            grid
-                .stickyScroll!.scopes.slice(0, 2)
-                .map((scope) =>
-                    scope.text.flatMap((span) =>
-                        [...span.text]
-                            .filter((character) => /[(){}]/.test(character))
-                            .map(() => span.color)
-                    )
-                );
-        assert.deepEqual(bracketColors(), [['#ffd700'], ['#da70d6', '#da70d6', '#da70d6']]);
-        assert.equal(grid.stickyScroll!.scopes[0].endText.at(-1)?.color, '#ffd700');
-        assert.equal(grid.stickyScroll!.scopes[1].endText.at(-1)?.color, '#da70d6');
-        await lua(`
+    assert.deepEqual(bracketColors(), [['#ffd700'], ['#da70d6', '#da70d6', '#da70d6']]);
+    assert.equal(grid.stickyScroll!.scopes[0].endText.at(-1)?.color, '#ffd700');
+    assert.equal(grid.stickyScroll!.scopes[1].endText.at(-1)?.color, '#da70d6');
+    await lua(`
             _G.sticky_semantic_requests = {}
             -- A real Neovim LSP client with a controlled in-process transport.
             -- Hold semantic replies until the headers have already been cached offscreen.
@@ -632,13 +630,9 @@ test('Rust sticky headers pick up delayed semantic colors even when their source
             assert(#vim.inspect_pos(0, 0, 5).semantic_tokens == 0,
               'offscreen source rows have no painted semantic extmarks')
         `);
-        assert.equal(
-            headerColor(),
-            '#4ec9b0',
-            'late Rust type colors replace the cached plain header'
-        );
-        assert.deepEqual(bracketColors(), [['#ffd700'], ['#da70d6', '#da70d6', '#da70d6']]);
-        await lua(`
+    assert.equal(headerColor(), '#4ec9b0', 'late Rust type colors replace the cached plain header');
+    assert.deepEqual(bracketColors(), [['#ffd700'], ['#da70d6', '#da70d6', '#da70d6']]);
+    await lua(`
             vim.api.nvim_set_hl(0, '@lsp.typemod.struct.declaration.rust', {fg='#4fc1ff'})
             vim.lsp.semantic_tokens.force_refresh(0)
             assert(vim.wait(5000, function() return #_G.sticky_semantic_requests > 0 end))
@@ -650,161 +644,157 @@ test('Rust sticky headers pick up delayed semantic colors even when their source
             vim.wait(80)
             vim.cmd.redraw()
         `);
-        assert.equal(headerColor(), '#4fc1ff', 'semantic refreshes preserve modifier priority');
-        await lua(
-            'vim.lsp.get_client_by_id(_G.sticky_color_client):stop(true); vim.wait(300); vim.cmd.redraw()'
-        );
-        assert.equal(
-            headerColor(),
-            syntaxColor,
-            'detaching the server restores syntax-only colors'
-        );
-    } finally {
-        await session?.stop();
-        await rm(root, { recursive: true, force: true });
-    }
+    assert.equal(headerColor(), '#4fc1ff', 'semantic refreshes preserve modifier priority');
+    await lua(
+      'vim.lsp.get_client_by_id(_G.sticky_color_client):stop(true); vim.wait(300); vim.cmd.redraw()'
+    );
+    assert.equal(headerColor(), syntaxColor, 'detaching the server restores syntax-only colors');
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('sticky scope geometry shares the completed Neovim frame, survives pixel scrolling, and guards stale jumps', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nido-sticky-session-'));
-    const grid = new Grid();
-    grid.pixelScrollEnabled = true;
-    let pixelOffset: unknown;
-    const typingFrames: StickyScrollState[] = [];
-    let recording = false;
-    let session: Session | undefined;
-    try {
-        const file = join(root, 'scopes.txt');
-        await writeFile(
-            file,
-            [
-                'class Panel {',
-                '  render() {',
-                '    if (ready) {',
-                ...Array.from({ length: 40 }, (_, i) => `      item${i}();`),
-                '    }',
-                '  }',
-                '}',
-                ...Array.from({ length: 50 }, () => 'outside();')
-            ].join('\n')
-        );
-        session = await Session.create(root, (event) => {
-            if (event.type === 'redraw') {
-                grid.apply(event.events);
-                if (recording && grid.stickyScroll) typingFrames.push(grid.stickyScroll);
-                for (const [name, ...calls] of event.events) {
-                    if (name === 'nido_pixel_scroll') pixelOffset = calls.at(-1)?.[0];
-                }
-            }
-        });
-        await session.openFile('scopes.txt');
-        await session.client.request('nvim_exec_lua', [
-            "assert(vim.wait(5000, function() return require('nido_brackets').pairs(0)[1] ~= nil or #require('nido_brackets').pairs(vim.api.nvim_get_current_buf()) > 0 end)); vim.wait(180); vim.cmd.redraw()",
-            []
-        ]);
-        await session.client.request('nvim_eval', ['1']);
-        await session.scroll(12.5, false, true);
-        const sticky = grid.stickyScroll;
-        assert.ok(sticky);
-        assert.deepEqual(
-            sticky.scopes.slice(0, 3).map((scope) => scope.line),
-            [1, 2, 3]
-        );
-        assert.equal(sticky.scopes[0].text.map((part) => part.text).join(''), 'class Panel {');
-        assert.equal(pixelOffset, 0.5);
-        recording = true;
-        await session.input('i');
-        assert.equal(await session.inputMode(), 'i');
-        for (const text of ['x', '日', 'y']) {
-            await session.input(text);
-            assert.equal(await session.inputMode(), 'i');
+  const root = await mkdtemp(join(tmpdir(), 'nido-sticky-session-'));
+  const grid = new Grid();
+  grid.pixelScrollEnabled = true;
+  let pixelOffset: unknown;
+  const typingFrames: StickyScrollState[] = [];
+  let recording = false;
+  let session: Session | undefined;
+  try {
+    const file = join(root, 'scopes.txt');
+    await writeFile(
+      file,
+      [
+        'class Panel {',
+        '  render() {',
+        '    if (ready) {',
+        ...Array.from({ length: 40 }, (_, i) => `      item${i}();`),
+        '    }',
+        '  }',
+        '}',
+        ...Array.from({ length: 50 }, () => 'outside();')
+      ].join('\n')
+    );
+    session = await Session.create(root, (event) => {
+      if (event.type === 'redraw') {
+        grid.apply(event.events);
+        if (recording && grid.stickyScroll) typingFrames.push(grid.stickyScroll);
+        for (const [name, ...calls] of event.events) {
+          if (name === 'nido_pixel_scroll') pixelOffset = calls.at(-1)?.[0];
         }
-        await session.input('<Esc>');
-        assert.equal(await session.inputMode(), 'n');
-        recording = false;
-        assert.ok(typingFrames.length, 'input must produce Neovim redraw frames');
-        for (const frame of typingFrames) {
-            assert.deepEqual(
-                frame.scopes.slice(0, 3).map((scope) => scope.line),
-                [1, 2, 3],
-                'typing must not remove pinned headers for an intermediate frame'
-            );
-        }
-        const cursor = await session.client.request('nvim_win_get_cursor', [0]);
-        await session.jumpSticky(sticky.window, sticky.buffer + 999, 2);
-        assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), cursor);
-        await session.jumpSticky(sticky.window, sticky.buffer, 2);
-        assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), [2, 0]);
-        assert.equal(
-            await session.client.request('nvim_exec_lua', [
-                "return require('nido_scroll').cursor() == nil",
-                []
-            ]),
-            true
-        );
-        await session.client.request('nvim_exec_lua', [
-            "vim.api.nvim_buf_set_lines(0, 0, -1, false, {'plain text', 'no scopes'}); vim.cmd('doautocmd TextChanged'); vim.wait(300); vim.cmd.redraw()",
-            []
-        ]);
-        await session.client.request('nvim_eval', ['1']);
-        assert.deepEqual(grid.stickyScroll?.scopes, []);
-    } finally {
-        await session?.stop();
-        await rm(root, { recursive: true, force: true });
+      }
+    });
+    await session.openFile('scopes.txt');
+    await session.client.request('nvim_exec_lua', [
+      "assert(vim.wait(5000, function() return require('nido_brackets').pairs(0)[1] ~= nil or #require('nido_brackets').pairs(vim.api.nvim_get_current_buf()) > 0 end)); vim.wait(180); vim.cmd.redraw()",
+      []
+    ]);
+    await session.client.request('nvim_eval', ['1']);
+    await session.scroll(12.5, false, true);
+    const sticky = grid.stickyScroll;
+    assert.ok(sticky);
+    assert.deepEqual(
+      sticky.scopes.slice(0, 3).map((scope) => scope.line),
+      [1, 2, 3]
+    );
+    assert.equal(sticky.scopes[0].text.map((part) => part.text).join(''), 'class Panel {');
+    assert.equal(pixelOffset, 0.5);
+    recording = true;
+    await session.input('i');
+    assert.equal(await session.inputMode(), 'i');
+    for (const text of ['x', '日', 'y']) {
+      await session.input(text);
+      assert.equal(await session.inputMode(), 'i');
     }
+    await session.input('<Esc>');
+    assert.equal(await session.inputMode(), 'n');
+    recording = false;
+    assert.ok(typingFrames.length, 'input must produce Neovim redraw frames');
+    for (const frame of typingFrames) {
+      assert.deepEqual(
+        frame.scopes.slice(0, 3).map((scope) => scope.line),
+        [1, 2, 3],
+        'typing must not remove pinned headers for an intermediate frame'
+      );
+    }
+    const cursor = await session.client.request('nvim_win_get_cursor', [0]);
+    await session.jumpSticky(sticky.window, sticky.buffer + 999, 2);
+    assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), cursor);
+    await session.jumpSticky(sticky.window, sticky.buffer, 2);
+    assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), [2, 0]);
+    assert.equal(
+      await session.client.request('nvim_exec_lua', [
+        "return require('nido_scroll').cursor() == nil",
+        []
+      ]),
+      true
+    );
+    await session.client.request('nvim_exec_lua', [
+      "vim.api.nvim_buf_set_lines(0, 0, -1, false, {'plain text', 'no scopes'}); vim.cmd('doautocmd TextChanged'); vim.wait(300); vim.cmd.redraw()",
+      []
+    ]);
+    await session.client.request('nvim_eval', ['1']);
+    assert.deepEqual(grid.stickyScroll?.scopes, []);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('sticky headers follow wrapped lines, virtual rows and folds, and ignore outdated outline responses', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'nido-sticky-outline-'));
-    const grid = new Grid();
-    let session: Session | undefined;
-    try {
-        await writeFile(
-            join(root, 'outline.txt'),
-            [
-                'class Panel {',
-                '  render() {',
-                ...Array.from({ length: 12 }, () => '    item();'),
-                '  }',
-                '}',
-                ...Array.from({ length: 40 }, () => 'outside();')
-            ].join('\n')
-        );
-        session = await Session.create(root, (event) => {
-            if (event.type === 'redraw') grid.apply(event.events);
-        });
-        await session.openFile('outline.txt');
-        const lua = async (source: string): Promise<unknown> => {
-            const timeout = setTimeout(() => session!.process.kill(), 10000);
-            try {
-                const result = await session!.client.request('nvim_exec_lua', [source, []]);
-                await session!.client.request('nvim_eval', ['1']);
-                return result;
-            } finally {
-                clearTimeout(timeout);
-            }
-        };
-        await lua("vim.wait(300); vim.cmd('normal! 8Gzt'); vim.cmd.redraw()");
-        const firstBottom = grid.stickyScroll!.scopes.find((scope) => scope.line === 2)!.bottom;
-        await lua(
-            "vim.api.nvim_buf_set_lines(0, 9, 10, false, {string.rep('x', 200)}); vim.cmd('doautocmd TextChanged'); vim.wait(300); vim.cmd.redraw()"
-        );
-        const wrappedBottom = grid.stickyScroll!.scopes.find((scope) => scope.line === 2)!.bottom;
-        assert.ok(wrappedBottom >= firstBottom + 2, 'wrapped source lines extend the screen range');
-        await lua(
-            "vim.api.nvim_buf_set_extmark(0, vim.api.nvim_create_namespace('sticky-lens-test'), 11, 0, {virt_lines={{{'Run Tests', 'NidoCodeLens'}}}, virt_lines_above=true}); vim.cmd.redraw()"
-        );
-        assert.equal(
-            grid.stickyScroll!.scopes.find((scope) => scope.line === 2)!.bottom,
-            wrappedBottom + 1
-        );
-        await lua("vim.wo.foldmethod='manual'; vim.cmd('11,14fold'); vim.cmd.redraw()");
-        assert.equal(
-            grid.stickyScroll!.scopes.find((scope) => scope.line === 2)!.bottom,
-            wrappedBottom - 3
-        );
+  const root = await mkdtemp(join(tmpdir(), 'nido-sticky-outline-'));
+  const grid = new Grid();
+  let session: Session | undefined;
+  try {
+    await writeFile(
+      join(root, 'outline.txt'),
+      [
+        'class Panel {',
+        '  render() {',
+        ...Array.from({ length: 12 }, () => '    item();'),
+        '  }',
+        '}',
+        ...Array.from({ length: 40 }, () => 'outside();')
+      ].join('\n')
+    );
+    session = await Session.create(root, (event) => {
+      if (event.type === 'redraw') grid.apply(event.events);
+    });
+    await session.openFile('outline.txt');
+    const lua = async (source: string): Promise<unknown> => {
+      const timeout = setTimeout(() => session!.process.kill(), 10000);
+      try {
+        const result = await session!.client.request('nvim_exec_lua', [source, []]);
+        await session!.client.request('nvim_eval', ['1']);
+        return result;
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
+    await lua("vim.wait(300); vim.cmd('normal! 8Gzt'); vim.cmd.redraw()");
+    const firstBottom = grid.stickyScroll!.scopes.find((scope) => scope.line === 2)!.bottom;
+    await lua(
+      "vim.api.nvim_buf_set_lines(0, 9, 10, false, {string.rep('x', 200)}); vim.cmd('doautocmd TextChanged'); vim.wait(300); vim.cmd.redraw()"
+    );
+    const wrappedBottom = grid.stickyScroll!.scopes.find((scope) => scope.line === 2)!.bottom;
+    assert.ok(wrappedBottom >= firstBottom + 2, 'wrapped source lines extend the screen range');
+    await lua(
+      "vim.api.nvim_buf_set_extmark(0, vim.api.nvim_create_namespace('sticky-lens-test'), 11, 0, {virt_lines={{{'Run Tests', 'NidoCodeLens'}}}, virt_lines_above=true}); vim.cmd.redraw()"
+    );
+    assert.equal(
+      grid.stickyScroll!.scopes.find((scope) => scope.line === 2)!.bottom,
+      wrappedBottom + 1
+    );
+    await lua("vim.wo.foldmethod='manual'; vim.cmd('11,14fold'); vim.cmd.redraw()");
+    assert.equal(
+      grid.stickyScroll!.scopes.find((scope) => scope.line === 2)!.bottom,
+      wrappedBottom - 3
+    );
 
-        await lua(`
+    await lua(`
             _G.sticky_callbacks = {}
             local original = vim.lsp.get_clients
             vim.lsp.get_clients = function(filter)
@@ -825,11 +815,11 @@ test('sticky headers follow wrapped lines, virtual rows and folds, and ignore ou
             vim.wait(30)
             vim.cmd.redraw()
         `);
-        assert.deepEqual(
-            grid.stickyScroll!.scopes.map((scope) => [scope.line, scope.ending]),
-            [[1, 16]]
-        );
-        await lua(`
+    assert.deepEqual(
+      grid.stickyScroll!.scopes.map((scope) => [scope.line, scope.ending]),
+      [[1, 16]]
+    );
+    await lua(`
             local before = #_G.sticky_callbacks
             vim.cmd('doautocmd Syntax')
             assert(vim.wait(5000, function() return #_G.sticky_callbacks > before end))
@@ -842,9 +832,9 @@ test('sticky headers follow wrapped lines, virtual rows and folds, and ignore ou
             vim.wait(300)
             vim.cmd.redraw()
         `);
-        assert.deepEqual(grid.stickyScroll!.scopes, []);
-    } finally {
-        await session?.stop();
-        await rm(root, { recursive: true, force: true });
-    }
+    assert.deepEqual(grid.stickyScroll!.scopes, []);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
 });

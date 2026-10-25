@@ -3,10 +3,10 @@ import { test } from 'node:test';
 import { Session } from '../src/main/session';
 
 test('bracket index agrees with a full scan for nested pairs, cursor boundaries and viewport ranges', async () => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.client.request('nvim_exec_lua', [
+      `
 local factory = require('nido_bracket_index')
 local empty = factory.new({})
 assert(empty.innermost(0, 0) == nil and #empty.overlapping(0, 10) == 0)
@@ -80,18 +80,18 @@ end
 for _,pair in ipairs(pairs) do index.invalidate(pair.first) end
 assert(index.innermost(10,6)==nil and #index.overlapping(0,300)==0,'Removing all leaves must empty the index')
 `,
-            []
-        ]);
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
 });
 
 test('completed bracket guides and matching frames survive yielded analysis and discard deleted endpoints', async () => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        await session.client.request('nvim_exec_lua', [
-            `local api,brackets=vim.api,require('nido_brackets')
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.client.request('nvim_exec_lua', [
+      `local api,brackets=vim.api,require('nido_brackets')
 local buffer=api.nvim_get_current_buf()
 local lines={}
 for i=1,3000 do
@@ -148,18 +148,18 @@ local ok,err=pcall(function()
 end)
 vim.defer_fn,vim.rpcnotify=defer,notify
 assert(ok,err)`,
-            []
-        ]);
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
 });
 
 test('cursor movement inspects only visible bracket scopes in a large file', async (context) => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        const result = (await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    const result = (await session.client.request('nvim_exec_lua', [
+      `
 local api, brackets = vim.api, require('nido_brackets')
 local buffer = api.nvim_get_current_buf()
 local lines = {}
@@ -203,25 +203,22 @@ vim.rpcnotify = original_notify
 assert(ok, err)
 return {scopeReads=reads, moves=20, scopes=3000}
 `,
-            []
-        ])) as { scopeReads: number; moves: number; scopes: number };
-        context.diagnostic(JSON.stringify(result));
-        if (!process.env.NIDO_PERFORMANCE_BASELINE) {
-            assert.ok(
-                result.scopeReads <= 1000,
-                `cursor movement inspected ${result.scopeReads} scopes`
-            );
-        }
-    } finally {
-        await session.stop();
+      []
+    ])) as { scopeReads: number; moves: number; scopes: number };
+    context.diagnostic(JSON.stringify(result));
+    if (!process.env.NIDO_PERFORMANCE_BASELINE) {
+      assert.ok(result.scopeReads <= 1000, `cursor movement inspected ${result.scopeReads} scopes`);
     }
+  } finally {
+    await session.stop();
+  }
 });
 
 test('retained bracket indices match native endpoints after mixed multiline edits', async () => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        await session.client.request('nvim_exec_lua', [
-            `local api,brackets=vim.api,require('nido_brackets')
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.client.request('nvim_exec_lua', [
+      `local api,brackets=vim.api,require('nido_brackets')
 local buffer=api.nvim_get_current_buf()
 api.nvim_buf_set_lines(buffer,0,-1,false,{'outer {','  { { { {','    content','  } } } }','}'})
 api.nvim_exec_autocmds('TextChanged',{buffer=buffer})
@@ -257,18 +254,18 @@ local ok,err=pcall(function()
 end)
 vim.defer_fn=defer
 assert(ok,err)`,
-            []
-        ]);
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
 });
 
 test('cursor-only bracket geometry is reused and scope, viewport and text changes still match a full redraw', async (context) => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        const result = await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    const result = await session.client.request('nvim_exec_lua', [
+      `
 local api, brackets = vim.api, require('nido_brackets')
 local lines = {'outer {','  outer content long enough to move the cursor','  nested {',
   '    inner content long enough to move the cursor','  }','  outer content','}'}
@@ -323,19 +320,19 @@ vim.fn.indent, vim.fn.screenpos, vim.rpcnotify = indent, screenpos, notify
 assert(ok,err)
 return {moves=20, unchangedGeometryReads=0, changedGeometryReads=indents+positions}
 `,
-            []
-        ]);
-        context.diagnostic(JSON.stringify(result));
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+    context.diagnostic(JSON.stringify(result));
+  } finally {
+    await session.stop();
+  }
 });
 
 test('sticky scopes refresh after bracket analysis completes in later chunks', async () => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.client.request('nvim_exec_lua', [
+      `
 local api, brackets, sticky = vim.api, require('nido_brackets'), require('nido_sticky')
 local buffer = api.nvim_get_current_buf()
 local lines = {}
@@ -374,18 +371,18 @@ end)
 vim.defer_fn, vim.rpcnotify = original_defer, original_notify
 assert(ok, err)
 `,
-            []
-        ]);
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
 });
 
 test('large bracket analysis yields to edits and discards obsolete partial work', async (context) => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        const result = (await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    const result = (await session.client.request('nvim_exec_lua', [
+      `
 local api, module = vim.api, require('nido_brackets')
 local buffer = api.nvim_get_current_buf()
 local namespace = api.nvim_create_namespace('nido_brackets')
@@ -435,67 +432,67 @@ api.nvim_buf_call, vim.fn.synstack = original_call, original_syntax
 assert(ok, err)
 return {interleaved=interleaved, longestCallbackMs=longest, callbacks=callbacks, inspected=inspected}
 `,
-            []
-        ])) as {
-            interleaved: boolean;
-            longestCallbackMs: number;
-            callbacks: number;
-            inspected: number;
-        };
-        context.diagnostic(JSON.stringify(result));
-        assert.equal(
-            result.interleaved,
-            true,
-            'Editing must run before the entire bracket scan finishes'
-        );
-    } finally {
-        await session.stop();
-    }
+      []
+    ])) as {
+      interleaved: boolean;
+      longestCallbackMs: number;
+      callbacks: number;
+      inspected: number;
+    };
+    context.diagnostic(JSON.stringify(result));
+    assert.equal(
+      result.interleaved,
+      true,
+      'Editing must run before the entire bracket scan finishes'
+    );
+  } finally {
+    await session.stop();
+  }
 });
 
 test('unchanged bracket scopes avoid duplicate cursor notifications and buffer rescans', async (context) => {
-    let guides = 0;
-    let redrawGuides = 0;
-    let measuring = false;
-    const session = await Session.create(process.cwd(), () => {});
-    session.client.on('notification', (method: string, args: unknown[]) => {
-        if (!measuring || method !== 'nido:bracket_guides') return;
-        // Full redraws replay the snapshot; only cursor-only notifications are deduplicated.
-        if (args[1] === true) guides++;
-        else redrawGuides++;
-    });
-    const lua = (code: string): ReturnType<Session['client']['request']> =>
-        session.client.request('nvim_exec_lua', [code, []]);
-    try {
-        await session.attach(80, 24);
-        await lua(`
+  let guides = 0;
+  let redrawGuides = 0;
+  let measuring = false;
+  const session = await Session.create(process.cwd(), () => {});
+  session.client.on('notification', (method: string, args: unknown[]) => {
+    if (!measuring || method !== 'nido:bracket_guides') return;
+    // Full redraws replay the snapshot; only cursor-only notifications are deduplicated.
+    if (args[1] === true) guides++;
+    else redrawGuides++;
+  });
+  const lua = (code: string): ReturnType<Session['client']['request']> =>
+    session.client.request('nvim_exec_lua', [code, []]);
+  try {
+    await session.attach(80, 24);
+    await lua(`
             local lines = {'{', string.rep('content ', 20), '}'}
             vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
             vim.api.nvim_win_set_cursor(0, {2, 0})
         `);
-        // The first native input can finish the undo header and advance changedtick.
-        await session.input('l');
-        await session.client.request('nvim_eval', ['1']);
-        await lua(`
+    // The first native input can finish the undo header and advance changedtick.
+    await session.input('l');
+    await session.client.request('nvim_eval', ['1']);
+    await lua(`
             local buffer = vim.api.nvim_get_current_buf()
             assert(vim.wait(5000, function() return require('nido_brackets').ready(buffer) end, 5),
               'Initial bracket analysis did not complete')
             vim.cmd.redraw({bang=true})
             vim.api.nvim_exec_autocmds('CursorMoved', {buffer=buffer})
         `);
-        await lua('return 1');
-        measuring = true;
-        for (let i = 0; i < 20; i++) {
-            await session.input('l');
-            await session.client.request('nvim_eval', ['1']);
-            if (i === 9) {
-                // Sticky scopes can finish refreshing while cursor movement is measured.
-                await lua('vim.cmd.redraw({bang=true})');
-            }
-        }
-        await lua("vim.api.nvim_exec_autocmds('CursorMoved', {buffer=0})");
-        measuring = false;
-        await lua(`
+    await lua('return 1');
+    measuring = true;
+    for (let i = 0; i < 20; i++) {
+      await session.input('l');
+      await session.client.request('nvim_eval', ['1']);
+      if (i === 9) {
+        // Sticky scopes can finish refreshing while cursor movement is measured.
+        await lua('vim.cmd.redraw({bang=true})');
+      }
+    }
+    await lua("vim.api.nvim_exec_autocmds('CursorMoved', {buffer=0})");
+    measuring = false;
+    await lua(`
             local original = vim.api.nvim_buf_set_extmark
             local namespace = vim.api.nvim_create_namespace('nido_brackets')
             vim.g.bracket_writes = 0
@@ -508,43 +505,41 @@ test('unchanged bracket scopes avoid duplicate cursor notifications and buffer r
             assert(vim.wait(5000, function() return require('nido_brackets').ready(buffer) end, 5),
               'Bracket analysis after buffer entry did not complete')
         `);
-        const writes = Number(await lua('return vim.g.bracket_writes'));
-        context.diagnostic(
-            JSON.stringify({
-                cursorGuideNotifications: guides,
-                redrawGuideSnapshots: redrawGuides,
-                unchangedBracketWrites: writes
-            })
-        );
-        assert.ok(redrawGuides > 0, 'The measurement must include a full-redraw snapshot');
-        if (!process.env.NIDO_PERFORMANCE_BASELINE) {
-            assert.equal(guides, 0);
-            assert.equal(writes, 0);
-        }
-        await lua(`
+    const writes = Number(await lua('return vim.g.bracket_writes'));
+    context.diagnostic(
+      JSON.stringify({
+        cursorGuideNotifications: guides,
+        redrawGuideSnapshots: redrawGuides,
+        unchangedBracketWrites: writes
+      })
+    );
+    assert.ok(redrawGuides > 0, 'The measurement must include a full-redraw snapshot');
+    if (!process.env.NIDO_PERFORMANCE_BASELINE) {
+      assert.equal(guides, 0);
+      assert.equal(writes, 0);
+    }
+    await lua(`
             vim.api.nvim_buf_set_lines(0, 1, 2, false, {'nested { content }'})
             vim.api.nvim_exec_autocmds('TextChanged', {buffer=0})
             local buffer = vim.api.nvim_get_current_buf()
             assert(vim.wait(5000, function() return require('nido_brackets').ready(buffer) end, 5),
               'Bracket analysis after editing did not complete')
         `);
-        assert.ok(Number(await lua('return vim.g.bracket_writes')) > writes);
-        assert.equal(
-            Number(
-                await lua("return #require('nido_brackets').pairs(vim.api.nvim_get_current_buf())")
-            ),
-            1
-        );
-    } finally {
-        await session.stop();
-    }
+    assert.ok(Number(await lua('return vim.g.bracket_writes')) > writes);
+    assert.equal(
+      Number(await lua("return #require('nido_brackets').pairs(vim.api.nvim_get_current_buf())")),
+      1
+    );
+  } finally {
+    await session.stop();
+  }
 });
 
 test('bracket edits reuse distant marks, shift rows correctly and invalidate changed syntax', async (context) => {
-    const session = await Session.create(process.cwd(), () => {});
-    try {
-        const result = await session.client.request('nvim_exec_lua', [
-            `
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    const result = await session.client.request('nvim_exec_lua', [
+      `
 local api, module = vim.api, require('nido_brackets')
 local buffer = api.nvim_get_current_buf()
 local namespace = api.nvim_create_namespace('nido_brackets')
@@ -627,10 +622,10 @@ api.nvim_buf_set_extmark = original
 assert(ok, err)
 return {ordinaryEditWrites=2, unaffectedRows=2997}
 `,
-            []
-        ]);
-        context.diagnostic(JSON.stringify(result));
-    } finally {
-        await session.stop();
-    }
+      []
+    ]);
+    context.diagnostic(JSON.stringify(result));
+  } finally {
+    await session.stop();
+  }
 });

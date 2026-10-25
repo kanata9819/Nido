@@ -1,26 +1,26 @@
 {
-    "schemaVersion": 1,
-    "id": "deno",
-    "version": "1.0.0",
-    "title": "Deno",
-    "category": "other",
-    "description": "Completion, diagnostics, hover, definitions, references, rename, formatting and code actions.",
-    "filetypes": ["typescript", "typescriptreact", "javascript", "javascriptreact"],
-    "serverName": "denols",
-    "adapter": "deno",
-    "setup": "Requires Deno",
-    "languages": [
-        {
-            "id": "deno",
-            "title": "Deno",
-            "mark": "D",
-            "category": "runtimes",
-            "extensions": "TypeScript · JavaScript",
-            "keywords": "deno.json deno.jsonc deno.lock .ts .tsx .js .jsx .mts .mjs",
-            "description": "Completion, diagnostics, hover, definitions, references, rename, formatting and code actions.",
-            "requirement": "Requires Deno",
-            "setup": "Uses your installed Deno. Projects with deno.json, deno.jsonc or deno.lock are detected automatically.",
-            "command": "winget install --id DenoLand.Deno -e"
-        }
-    ]
+  "schemaVersion": 1,
+  "id": "deno",
+  "version": "1.0.0",
+  "title": "Deno",
+  "category": "other",
+  "description": "Completion, diagnostics, hover, definitions, references, rename, formatting and code actions.",
+  "filetypes": ["typescript", "typescriptreact", "javascript", "javascriptreact"],
+  "serverName": "denols",
+  "adapter": "deno",
+  "setup": "Requires Deno",
+  "languages": [
+    {
+      "id": "deno",
+      "title": "Deno",
+      "mark": "D",
+      "category": "runtimes",
+      "extensions": "TypeScript · JavaScript",
+      "keywords": "deno.json deno.jsonc deno.lock .ts .tsx .js .jsx .mts .mjs",
+      "description": "Completion, diagnostics, hover, definitions, references, rename, formatting and code actions.",
+      "requirement": "Requires Deno",
+      "setup": "Uses your installed Deno. Projects with deno.json, deno.jsonc or deno.lock are detected automatically.",
+      "command": "winget install --id DenoLand.Deno -e"
+    }
+  ]
 }
