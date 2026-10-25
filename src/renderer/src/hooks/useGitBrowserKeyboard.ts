@@ -55,7 +55,7 @@ export function useGitBrowserKeyboard({
         let horizontal = 0;
         if (event.ctrlKey && !event.shiftKey) {
           if (key === 'd' || key === 'u') {
-            vertical = (preview.clientHeight / 2) * (key === 'd' ? 1 : -1);
+            vertical = Math.round(preview.clientHeight / 2) * (key === 'd' ? 1 : -1);
           } else if (key === 'f' || key === 'b') {
             vertical = preview.clientHeight * (key === 'f' ? 1 : -1);
           }
@@ -75,7 +75,12 @@ export function useGitBrowserKeyboard({
         }
         if (vertical || horizontal) {
           event.preventDefault();
-          preview.scrollBy({ top: vertical, left: horizontal, behavior: 'instant' });
+          // Absolute pixel targets avoid accumulating Windows display-scale rounding.
+          preview.scrollTo({
+            top: Math.round(preview.scrollTop + vertical),
+            left: Math.round(preview.scrollLeft + horizontal),
+            behavior: 'instant'
+          });
           return;
         }
       }

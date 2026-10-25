@@ -742,6 +742,7 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
     const sessionId = await page.evaluate(
       () => document.documentElement.dataset.completionSession!
     );
+    await expect(canvas).toHaveAttribute('aria-description', /\bam[ \t]+(?:ERROR[^\n]*)?\n/);
     const inputTop = await input.evaluate((node) => node.offsetTop);
     const menuTop = await menu.evaluate((node) => node.parentElement!.offsetTop);
     await page.evaluate(({ id, keys }) => window.nido.input(id, keys), {
@@ -768,7 +769,7 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
     await page.keyboard.type('oun', { delay: 180 });
     await expect(menu).toHaveAttribute('data-test-continuity', 'kept');
     await page.keyboard.press('Backspace');
-    await expect(canvas).toHaveAttribute('aria-description', /amou\s*\n/);
+    await expect(canvas).toHaveAttribute('aria-description', /amou[ \t]+(?:ERROR[^\n]*)?\n/);
     await expect(menu).toHaveAttribute('aria-busy', 'false');
     await expect(menu).toHaveAttribute('data-test-continuity', 'kept');
     await page.keyboard.press('Tab');
@@ -785,7 +786,7 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
     expect(methodCandidates.length).toBeGreaterThan(1);
     const popupBounds = await menu.boundingBox();
     await page.keyboard.type('F');
-    await expect(canvas).toHaveAttribute('aria-description', /amount\.toF\s*\n/);
+    await expect(canvas).toHaveAttribute('aria-description', /amount\.toF[ \t]+(?:ERROR[^\n]*)?\n/);
     await expect(menu.getByRole('option')).toHaveText([/^toFixed/]);
     expect(await menu.boundingBox()).toEqual(popupBounds);
     await page.keyboard.press('Backspace');
@@ -844,7 +845,7 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
     await expect(
       menu.getByRole('option').first().getByText('getUser', { exact: true })
     ).toBeVisible();
-    await expect(canvas).toHaveAttribute('aria-description', /getU\s*\n/);
+    await expect(canvas).toHaveAttribute('aria-description', /getU[ \t]+(?:ERROR[^\n]*)?\n/);
     await expect(menu).toHaveAttribute('aria-busy', 'false');
     await page.keyboard.press('Tab');
     await page.keyboard.press('Escape');

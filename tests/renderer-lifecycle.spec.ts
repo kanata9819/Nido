@@ -3117,6 +3117,43 @@ test('Git diff ignores an older response after selecting another file', async ({
   await expect(page.locator('[data-git-scroll="after"]')).not.toContainText('STALE_CONTENT');
 });
 
+test('Git page scrolling returns to the same position with an odd viewport height', async ({
+  page
+}) => {
+  await page.goto(`${origin}?view=app&defer=gitDiff`);
+  await page
+    .getByRole('navigation')
+    .getByRole('button', { name: 'Source control', exact: true })
+    .click();
+  await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+  await page.evaluate(() =>
+    window.rendererTest.settle(
+      'gitDiff',
+      0,
+      '@@ -1,500 +1,500 @@\n' + Array.from({ length: 500 }, (_, i) => ` row ${i}`).join('\n')
+    )
+  );
+  await page.addStyleTag({
+    content: 'pre[data-git-scroll] { flex: none; height: 335px; padding: 0; }'
+  });
+  for (const side of ['before', 'after']) {
+    const preview = page.locator(`[data-git-scroll="${side}"]`);
+    expect(await preview.evaluate((node) => node.clientHeight)).toBe(335);
+    await preview.focus();
+    for (const [down, up, distance] of [
+      ['Control+d', 'Control+u', 168],
+      ['Control+f', 'Control+b', 335]
+    ] as const) {
+      for (let step = 0; step < 3; step++) {
+        await preview.press(down);
+        await expect.poll(() => preview.evaluate((node) => node.scrollTop)).toBe(distance);
+        await preview.press(up);
+        await expect.poll(() => preview.evaluate((node) => node.scrollTop)).toBe(0);
+      }
+    }
+  }
+});
+
 test('Git staging keeps the reviewed file selected and commits only staged changes', async ({
   page
 }) => {
