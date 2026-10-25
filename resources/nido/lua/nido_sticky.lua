@@ -393,7 +393,12 @@ function M.jump(window, buffer, line)
 end
 
 api.nvim_set_decoration_provider(api.nvim_create_namespace('nido_sticky'), {on_win=function(_, win, buffer)
-  return M.publish(win, buffer)
+  -- An interrupted highlight keeps the last complete sticky frame until the next redraw.
+  local ok, result = pcall(M.publish, win, buffer)
+  if not ok and not tostring(result):find('Keyboard interrupt', 1, true) then
+    error(result)
+  end
+  return false
 end})
 api.nvim_create_autocmd({'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'TextChangedI', 'TextChangedP', 'LspAttach', 'LspDetach'}, {
   callback=function(event)

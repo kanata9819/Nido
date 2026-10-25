@@ -336,6 +336,87 @@ assert(ok,err)
   }
 });
 
+test('sticky redraws retain their last complete frame after a highlight interrupt and recover', async () => {
+  const grid = new Grid();
+  const messages = new Set<string>();
+  const session = await Session.create(process.cwd(), (event) => {
+    if (event.type === 'redraw') grid.apply(event.events);
+    if (event.type === 'notification' || event.type === 'error') messages.add(event.message);
+    if (event.type === 'neovimUI') {
+      for (const message of event.state.messages) {
+        messages.add(message.content.map(([, text]) => text).join(''));
+      }
+    }
+  });
+  const lua = (source: string): Promise<unknown> =>
+    session.client.request('nvim_exec_lua', [source, []]);
+  try {
+    await lua(`
+      local api = vim.api
+      local lines = {'impl Screen {', '  pub fn prepare(&mut self) {'}
+      for _ = 1, 40 do lines[#lines + 1] = '    work();' end
+      lines[#lines + 1], lines[#lines + 2] = '  }', '}'
+      api.nvim_buf_set_lines(0, 0, -1, false, lines)
+      vim.bo.syntax = 'rust'
+      api.nvim_exec_autocmds('TextChanged', {buffer=api.nvim_get_current_buf()})
+      assert(vim.wait(5000, function()
+        return require('nido_brackets').ready(api.nvim_get_current_buf())
+      end))
+      vim.wait(300)
+      vim.cmd('normal! 12Gzt')
+      vim.cmd.redraw({bang=true})
+    `);
+    const before = structuredClone(grid.stickyScroll);
+    assert.ok(before && before.scopes.some((scope) => scope.line === 1));
+    const interrupt = (message: string): Promise<unknown> =>
+      lua(`
+        local inspect, attempts = vim.inspect_pos, 0
+        vim.inspect_pos = function()
+          attempts = attempts + 1
+          error(${JSON.stringify(message)})
+        end
+        local ok, err = pcall(function()
+          vim.api.nvim_exec_autocmds('ColorScheme', {})
+          vim.cmd.redraw({bang=true})
+        end)
+        vim.inspect_pos = inspect
+        assert(ok, err)
+        assert(attempts > 0, 'The real decoration provider must inspect an uncached header')
+      `);
+    await interrupt('Keyboard interrupt');
+    await lua('vim.wait(50)');
+    assert.deepEqual(
+      [...messages].filter((message) => message.includes('Keyboard interrupt')),
+      []
+    );
+    assert.deepEqual(
+      grid.stickyScroll,
+      before,
+      'An interrupted header must not publish a partial frame'
+    );
+    await lua(`
+      vim.api.nvim_buf_set_text(0, 0, 11, 0, 11, {'2'})
+      vim.cmd.redraw({bang=true})
+    `);
+    assert.equal(
+      grid.stickyScroll?.scopes
+        .find((scope) => scope.line === 1)
+        ?.text.map((span) => span.text)
+        .join(''),
+      'impl Screen2 {',
+      'The provider must keep updating after the interrupt'
+    );
+    await interrupt('sticky-fixture-unexpected');
+    await lua('vim.wait(50)');
+    assert.ok(
+      [...messages].some((message) => message.includes('sticky-fixture-unexpected')),
+      'Unexpected errors must remain visible'
+    );
+  } finally {
+    await session.stop();
+  }
+});
+
 test('sticky publication reads viewport bounds once per call and follows viewport changes', async () => {
   const session = await Session.create(process.cwd(), () => {});
   try {
