@@ -19,7 +19,13 @@ export class EditorScroll {
   private disposed = false;
   private generation = 0;
   private settleTimer?: ReturnType<typeof setTimeout>;
-  private wheelMotion?: { distance: number; remaining: number; start: number; follow: boolean };
+  private wheelMotion?: {
+    distance: number;
+    remaining: number;
+    start: number;
+    follow: boolean;
+    duration: number;
+  };
 
   constructor(private readonly options: Options) {}
 
@@ -86,18 +92,20 @@ export class EditorScroll {
     this.options.schedule();
   };
 
-  request(lines: number, follow: boolean, animate = false, now = performance.now()): void {
+  request(lines: number, follow: boolean, duration = 0, now = performance.now()): void {
     // Retarget from the current position, preserving unconsumed distance through wheel bursts.
-    if (animate) {
+    if (duration) {
       const motion = this.wheelMotion;
-      const offset = motion ? scrollOffset(motion.distance, now - motion.start) : 0;
+      const offset = motion
+        ? scrollOffset(motion.distance, now - motion.start, motion.duration)
+        : 0;
       // Keep the gesture's speed near file edges. Clamp each rendered step,
       // rather than easing over the shorter distance left to the boundary.
       const distance = offset + lines;
       const remaining = (motion?.remaining ?? 0) + lines;
       // Native requests are dispatched by paints, even if several inputs arrive per frame.
       this.wheelMotion = this.options.grid.limitScroll(remaining)
-        ? { distance, remaining, start: now, follow }
+        ? { distance, remaining, start: now, follow, duration }
         : undefined;
       this.options.schedule();
     } else {
@@ -111,7 +119,7 @@ export class EditorScroll {
     if (!motion) {
       return;
     }
-    const offset = animate ? scrollOffset(motion.distance, now - motion.start) : 0;
+    const offset = animate ? scrollOffset(motion.distance, now - motion.start, motion.duration) : 0;
     const remaining = Math.abs(offset) < 0.001 ? 0 : offset;
     const delta = motion.remaining - remaining;
     const lines = this.options.grid.limitScroll(delta);

@@ -481,7 +481,10 @@ export class Grid {
             this.upperLayout = undefined;
             this.lowerLayout = undefined;
             this.rowLayout.invalidate();
-            this.canvas.invalidate();
+            // New IDs cannot affect previously rasterized rows.
+            if (this.highlights.has(Number(args[0]))) {
+              this.canvas.invalidate();
+            }
             const info = args[3] as { hi_name?: string }[] | undefined;
             this.highlights.set(Number(args[0]), {
               ...(args[1] as Highlight),

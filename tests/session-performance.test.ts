@@ -1093,6 +1093,84 @@ test('scroll input runs between prefetch strips without losing the viewport or c
   }
 });
 
+for (const down of [false, true]) {
+  test(`opposite-direction scroll abandons obsolete ${down ? 'downward' : 'upward'} prefetch after its current strip`, async (context) => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-prefetch-reversal-'));
+    const grid = new Grid();
+    const session = await Session.create(root, (event) => {
+      if (event.type === 'redraw') grid.apply(event.events);
+    });
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    try {
+      await writeFile(
+        join(root, 'rows.txt'),
+        Array.from({ length: 2000 }, (_, i) => `ROW_${i + 1}`).join('\n')
+      );
+      await session.attach(80, 40);
+      await session.openFile('rows.txt');
+      await session.input('1000Gzt');
+      const request = session.client.request.bind(session.client);
+      const before = Number(await request('nvim_eval', ["line('w0')"]));
+      let strips = 0;
+      session.client.request = async (method, args = []) => {
+        if (method === 'nvim_exec_lua' && String(args[0]).includes('.prefetch(')) {
+          if (++strips === 1) {
+            entered();
+            await gate;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        return request(method, args);
+      };
+      const prefetch = session.prefetchScroll(down);
+      await started;
+      const delta = down ? -3 : 3;
+      const scroll = session.scroll(delta, true, true);
+      const reversed = performance.now();
+      release();
+      await Promise.all([scroll, prefetch]);
+      context.diagnostic(
+        JSON.stringify({ down, strips, reversalMs: performance.now() - reversed })
+      );
+      assert.equal(strips, 1, 'an opposite gesture must not wait for seven obsolete strips');
+      const top = Number(await request('nvim_eval', ["line('w0')"]));
+      assert.equal(
+        top,
+        before + delta,
+        'cancelling speculative work preserves the requested movement'
+      );
+      await session.prefetchScroll(!down);
+      const rows = down ? grid.historyRows : grid.futureRows;
+      assert.equal(rows.length, 256, 'the new direction can fill its cache immediately');
+      const first = down ? top - rows.length : top + grid.rows - 1;
+      assert.deepEqual(
+        rows.map((row) =>
+          Number(
+            row
+              .map((cell) => cell.text)
+              .join('')
+              .match(/ROW_(\d+)/)?.[1]
+          )
+        ),
+        Array.from({ length: rows.length }, (_, i) => first + i),
+        'new cached rows stay contiguous after the reversal'
+      );
+      assert.equal(Number(await request('nvim_eval', ["line('w0')"])), top);
+    } finally {
+      release();
+      await session.stop();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
+
 test('buffer switches discard cached rows and cancel an unfinished prefetch', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-prefetch-buffer-'));
   const grid = new Grid();

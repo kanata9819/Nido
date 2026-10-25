@@ -44,8 +44,8 @@ test('fast gestures keep their speed until the actual file boundary in both dire
         onCompletion: () => {}
       });
       try {
-        scrolling.request(direction * 60, true, true, 0);
-        scrolling.request(direction * 60, true, true, 8);
+        scrolling.request(direction * 60, true, 120, 0);
+        scrolling.request(direction * 60, true, 120, 8);
         scrolling.advance(24, true);
         scrolling.flush();
         assert.equal(
@@ -100,7 +100,7 @@ test('animated wheel steps interpolate distance, coalesce reversals and finish i
   };
   const distance = (): number => sent.reduce((sum, lines) => sum + lines, 0);
   try {
-    scrolling.request(1, true, true, 0);
+    scrolling.request(1, true, 120, 0);
     assert.equal(sent.length, 0, 'A wheel detent must not jump a whole line during input');
     await step(16);
     assert.ok(distance() > 0 && distance() < 1, 'The first paint advances a fraction of a line');
@@ -111,16 +111,16 @@ test('animated wheel steps interpolate distance, coalesce reversals and finish i
     assert.equal(distance(), 1, 'Easing preserves the exact wheel distance');
     assert.equal(scrolling.animating, false);
 
-    scrolling.request(3, true, true, 200);
+    scrolling.request(3, true, 120, 200);
     await step(224);
     const beforeReversal = distance();
-    scrolling.request(-3, true, true, 224);
+    scrolling.request(-3, true, 120, 224);
     await step(240);
     assert.ok(distance() < beforeReversal, 'An opposite detent reverses the remaining motion');
     await step(344);
     assert.ok(Math.abs(distance() - 1) < 1e-10, 'Retargeting never loses queued distance');
 
-    scrolling.request(2, false, true, 400);
+    scrolling.request(2, false, 120, 400);
     await step(416);
     await step(432, false);
     assert.ok(
@@ -129,7 +129,7 @@ test('animated wheel steps interpolate distance, coalesce reversals and finish i
     );
     assert.equal(scrolling.animating, false);
 
-    scrolling.request(2, true, true, 500);
+    scrolling.request(2, true, 120, 500);
     await step(516);
     scrolling.stop();
     const stopped = distance();
@@ -137,8 +137,8 @@ test('animated wheel steps interpolate distance, coalesce reversals and finish i
     assert.equal(distance(), stopped, 'Editing or clicking cancels unpainted wheel movement');
 
     grid.apply([['nido_pixel_scroll', [0, true, undefined, true]], ['flush']]);
-    scrolling.request(-20, true, true, 800);
-    scrolling.request(1, true, true, 801);
+    scrolling.request(-20, true, 120, 800);
+    scrolling.request(1, true, 120, 801);
     await step(817);
     assert.ok(
       distance() > stopped,
@@ -154,14 +154,98 @@ test('animated wheel steps interpolate distance, coalesce reversals and finish i
       ['flush']
     ]);
     const atEnd = distance();
-    scrolling.request(20, true, true, 1000);
-    scrolling.request(-1, true, true, 1001);
+    scrolling.request(20, true, 120, 1000);
+    scrolling.request(-1, true, 120, 1001);
     await step(1017);
     assert.ok(distance() < atEnd, 'At EOF, reverse input also responds immediately');
     await step(1121);
     assert.ok(Math.abs(distance() - atEnd + 1) < 1e-10);
   } finally {
     scrolling.dispose();
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+    else Reflect.deleteProperty(globalThis, 'window');
+  }
+});
+
+test('touchpad interpolation fills input gaps and stays responsive while native replies are delayed', async () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  try {
+    for (const direction of [-1, 1]) {
+      let applied = 0;
+      const pending: { lines: number; resolve: () => void }[] = [];
+      const completions: Promise<void>[] = [];
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: {
+          nido: {
+            scroll: (_id: string, lines: number): Promise<void> =>
+              new Promise((resolve) => pending.push({ lines, resolve })),
+            prefetchScroll: async (): Promise<void> => {}
+          }
+        }
+      });
+      const grid = new Grid();
+      const scrolling = new EditorScroll({
+        id: 'alpha',
+        grid,
+        enabled: () => true,
+        schedule: () => {},
+        onError: (error) => {
+          throw error;
+        },
+        onCompletion: (promise) => {
+          completions.push(promise);
+        }
+      });
+      const frames: number[] = [];
+      const inputs = [0, 24, 56, 80, 120, 152, 176];
+      const position = (): number => applied + grid.scrollPreview;
+      try {
+        for (let now = 0; now <= 216; now += 8) {
+          if (inputs.includes(now)) scrolling.request(direction * 0.3, true, 40, now);
+          scrolling.advance(now, true);
+          scrolling.flush();
+          const before = position();
+          if (now && now % 64 === 0 && pending.length) {
+            const reply = pending.shift()!;
+            applied += reply.lines;
+            grid.scrollFraction = applied;
+            scrolling.acknowledge(true);
+            reply.resolve();
+            await Promise.all(completions.slice());
+            assert.ok(
+              Math.abs(position() - before) < 1e-10,
+              'a delayed acknowledgement must not jump'
+            );
+          }
+          frames.push(direction * position());
+        }
+        assert.ok(frames[1] > 0 && frames[1] < 0.3, 'the first frame must respond without jumping');
+        assert.ok(frames[2] > frames[1], 'paint frames between touchpad inputs must keep moving');
+        for (let index = 1; index < frames.length; index++) {
+          assert.ok(
+            frames[index] >= frames[index - 1] - 1e-10,
+            'delayed replies must not reverse motion'
+          );
+          assert.ok(
+            frames[index] - frames[index - 1] < 0.25,
+            'input bursts must not become whole steps'
+          );
+        }
+        assert.ok(
+          Math.abs(frames.at(-1)! - inputs.length * 0.3) < 1e-10,
+          'touchpad motion settles within 40ms of the last input'
+        );
+        assert.equal(scrolling.animating, false);
+      } finally {
+        scrolling.dispose();
+        while (pending.length) {
+          pending.shift()!.resolve();
+          await Promise.all(completions.slice());
+        }
+      }
+    }
+  } finally {
     if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
     else Reflect.deleteProperty(globalThis, 'window');
   }

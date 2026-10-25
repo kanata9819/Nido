@@ -152,7 +152,7 @@ export function useEditorRendering({
       scrolling.request(
         lines,
         follow,
-        (discrete || scrolling.animating) && animationsRef.current && !reducedMotion.matches
+        animationsRef.current && !reducedMotion.matches ? (discrete ? 120 : 40) : 0
       );
     };
 

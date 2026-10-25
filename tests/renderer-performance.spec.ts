@@ -315,7 +315,7 @@ test('held j/k viewport scrolling reuses frames until a redraw, while editing in
 });
 
 for (const setting of ['on', 'off', 'reduced'] as const) {
-  test(`wheel detents interpolate only with animations enabled (${setting}), while fine pixel input stays direct`, async ({
+  test(`wheel detents and touchpad input interpolate only with animations enabled (${setting})`, async ({
     page
   }) => {
     await page.clock.install({ time: new Date(0) });
@@ -369,6 +369,13 @@ for (const setting of ['on', 'off', 'reduced'] as const) {
     expect(await distance()).toBeCloseTo(1, 10);
     const beforeFineInput = await distance();
     await canvas.dispatchEvent('wheel', { deltaY: 2, deltaMode: 0 });
+    if (setting === 'on') {
+      expect(await distance()).toBe(beforeFineInput);
+      await page.clock.runFor(16);
+      expect(await distance()).toBeGreaterThan(beforeFineInput);
+      expect(await distance()).toBeLessThan(beforeFineInput + 1 / 18);
+      await page.clock.runFor(40);
+    }
     expect(await distance()).toBeCloseTo(beforeFineInput + 1 / 18, 10);
     if (setting === 'on') {
       await canvas.dispatchEvent('wheel', { deltaY: 3, deltaMode: 1 });
@@ -897,6 +904,68 @@ test('row rasterization preserves native dark and light text pixels', async ({ b
       await context.close();
     }
   }
+});
+
+test('new highlight IDs preserve cached rows while existing highlight changes repaint them', async ({
+  page
+}) => {
+  await page.route('**/highlight-cache-probe', (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+  );
+  await page.goto(`${origin}highlight-cache-probe`);
+  const result = await page.evaluate(
+    async (moduleUrl) => {
+      const { Grid } = await import(moduleUrl);
+      const grid = new Grid();
+      grid.busy = true;
+      grid.apply([
+        ['grid_resize', [1, 80, 5]],
+        ['hl_attr_define', [1, { foreground: 0x60a0ff }, {}, []]],
+        ...Array.from({ length: 4 }, (_, row) => [
+          'grid_line',
+          [1, row, 0, Array.from(`const value${row} = example(42);`, (text) => [text, 1])]
+        ]),
+        ['flush']
+      ]);
+      const canvas = document.createElement('canvas');
+      const paint = (): Uint8ClampedArray => {
+        grid.draw(canvas, 640, 95, 15, 'monospace', false, undefined, 19);
+        const sample = document.createElement('canvas');
+        sample.width = canvas.width;
+        sample.height = canvas.height;
+        const context = sample.getContext('2d')!;
+        context.drawImage(canvas, 0, 0);
+        return context.getImageData(0, 0, sample.width, sample.height).data;
+      };
+      const original = paint();
+      const text = CanvasRenderingContext2D.prototype.fillText;
+      let glyphs = 0;
+      CanvasRenderingContext2D.prototype.fillText = function (...args) {
+        glyphs++;
+        return text.apply(this, args);
+      };
+      try {
+        grid.apply([['hl_attr_define', [2, { foreground: 0xffd700 }, {}, []]], ['flush']]);
+        const added = paint();
+        const newIdGlyphs = glyphs;
+        grid.apply([['hl_attr_define', [1, { foreground: 0xff6040 }, {}, []]], ['flush']]);
+        const changed = paint();
+        return {
+          newIdGlyphs,
+          changedIdGlyphs: glyphs - newIdGlyphs,
+          unchanged: original.every((value, index) => value === added[index]),
+          changed: original.some((value, index) => value !== changed[index])
+        };
+      } finally {
+        CanvasRenderingContext2D.prototype.fillText = text;
+      }
+    },
+    `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+  );
+  expect(result.newIdGlyphs).toBe(0);
+  expect(result.unchanged).toBe(true);
+  expect(result.changedIdGlyphs).toBeGreaterThan(0);
+  expect(result.changed).toBe(true);
 });
 
 for (const scale of [1, 1.25, 1.5, 2]) {
