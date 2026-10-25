@@ -1078,14 +1078,15 @@ test('touchpad horizontal scrolling reveals long lines and preserves ordinary ed
   const root = await mkdtemp(join(tmpdir(), 'nido-horizontal-scroll-ui-'));
   const workspace = join(root, 'workspace');
   await mkdir(workspace);
-  const file = join(workspace, 'wide.txt');
+  const file = join(workspace, 'wide.log');
   await writeFile(
     file,
     [
       'short',
       ...Array.from(
         { length: 99 },
-        (_, index) => `LEFT_${index} ${'0123456789'.repeat(20)} RIGHT_${index}`
+        (_, index) =>
+          `LEFT_${index} 2026-10-25T12:29:10Z INFO params=[${'42, '.repeat(40)}0] message="日本語" RIGHT_${index}`
       )
     ].join('\n') + '\n'
   );
@@ -1103,8 +1104,8 @@ test('touchpad horizontal scrolling reveals long lines and preserves ordinary ed
     await chooseWorkspace(page, workspace);
     await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
     await page.keyboard.press('Control+p');
-    await page.getByRole('textbox', { name: 'Filter items' }).fill('wide.txt');
-    await expect(page.getByRole('button', { name: /wide.txt/ })).toBeVisible();
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('wide.log');
+    await expect(page.getByRole('button', { name: /wide.log/ })).toBeVisible();
     await page.keyboard.press('Enter');
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('checkbox', { name: 'Word wrap', exact: true }).uncheck();

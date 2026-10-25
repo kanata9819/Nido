@@ -439,6 +439,11 @@ test('touchpad horizontal scrolling accumulates fine input, coalesces bursts and
     });
   });
   const canvas = page.locator('canvas:visible');
+  const prefetches = (): Promise<number> =>
+    page.evaluate(
+      () => window.rendererTest.calls.filter((call) => call.method === 'prefetchScroll').length
+    );
+  const beforePrefetch = await prefetches();
   const totals = (): Promise<{ lines: number; columns: number; count: number }> =>
     page.evaluate(() =>
       window.rendererTest.calls
@@ -474,6 +479,7 @@ test('touchpad horizontal scrolling accumulates fine input, coalesces bursts and
   await canvas.dispatchEvent('wheel', { deltaX: 4, deltaY: 4, deltaMode: 1, shiftKey: true });
   await expect.poll(async () => (await totals()).columns).toBe(4);
   expect((await totals()).lines).toBe(0);
+  expect(await prefetches()).toBe(beforePrefetch);
   await canvas.dispatchEvent('wheel', { deltaX: 4, deltaY: 4, deltaMode: 1 });
   await expect.poll(totals).toMatchObject({ lines: 2, columns: 6 });
   const before = await totals();

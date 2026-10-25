@@ -153,7 +153,7 @@ export class EditorScroll {
     if (columns || !this.needsPrefetch) {
       this.flush();
       // A cold fast gesture still needs a cache; send native movement first.
-      if (this.prefetchNeeded && !this.fetching && this.options.enabled()) {
+      if (lines && this.prefetchNeeded && !this.fetching && this.options.enabled()) {
         this.prefetch();
       }
     }

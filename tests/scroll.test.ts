@@ -316,6 +316,66 @@ test('cold gestures send movement first and refill the final direction after rev
   }
 });
 
+test('horizontal gestures defer vertical prefetch until vertical input needs it', async () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const calls: unknown[][] = [];
+  const completions: Promise<void>[] = [];
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      nido: {
+        scroll: async (
+          _id: string,
+          lines: number,
+          _follow: boolean,
+          _pixel: boolean,
+          columns?: number
+        ): Promise<void> => {
+          calls.push(['scroll', lines, columns]);
+        },
+        prefetchScroll: async (_id: string, down?: boolean): Promise<void> => {
+          calls.push(['prefetch', down]);
+        }
+      }
+    }
+  });
+  const grid = new Grid();
+  grid.apply([['grid_resize', [1, 20, 12]], ['flush']]);
+  const scrolling = new EditorScroll({
+    id: 'alpha',
+    grid,
+    enabled: () => true,
+    schedule: () => {},
+    onError: (error) => {
+      throw error;
+    },
+    onCompletion: (promise) => completions.push(promise)
+  });
+  try {
+    for (const columns of [2, 2, -4]) {
+      scrolling.requestHorizontal(columns, false);
+      scrolling.acknowledge(true);
+      await Promise.all(completions.splice(0));
+    }
+    assert.deepEqual(calls, [
+      ['scroll', 0, 2],
+      ['scroll', 0, 2],
+      ['scroll', 0, -4]
+    ]);
+    scrolling.request(2, false);
+    scrolling.acknowledge(true);
+    await Promise.all(completions.splice(0));
+    assert.deepEqual(calls.slice(3), [
+      ['scroll', 2, undefined],
+      ['prefetch', true]
+    ]);
+  } finally {
+    scrolling.dispose();
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+    else Reflect.deleteProperty(globalThis, 'window');
+  }
+});
+
 test('late replies from a previous buffer cannot complete a new scroll or refill', async () => {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const replies: (() => void)[] = [];
