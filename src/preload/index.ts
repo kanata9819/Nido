@@ -53,7 +53,8 @@ const api: NidoAPI = {
     ipcRenderer.invoke('nido:relativeLineNumbers', id, enabled),
   openDocumentation: (url) => ipcRenderer.invoke('nido:openDocumentation', url),
   click: (id, row, column) => ipcRenderer.invoke('nido:click', id, row, column),
-  scroll: (id, lines, follow, pixel) => ipcRenderer.invoke('nido:scroll', id, lines, follow, pixel),
+  scroll: (id, lines, follow, pixel, columns) =>
+    ipcRenderer.invoke('nido:scroll', id, lines, follow, pixel, columns),
   prefetchScroll: (id, down) => ipcRenderer.invoke('nido:prefetchScroll', id, down),
   jumpSticky: (id, window, buffer, line) =>
     ipcRenderer.invoke('nido:jumpSticky', id, window, buffer, line),

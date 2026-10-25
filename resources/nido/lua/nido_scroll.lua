@@ -233,7 +233,43 @@ function M.prefetch(down, previous)
   end
 end
 
-function M.scroll(lines, follow, pixel)
+local function scroll_horizontal(columns)
+  local view = vim.fn.winsaveview()
+  local window = api.nvim_get_current_win()
+  local width = math.max(1, api.nvim_win_get_width(window) - vim.fn.getwininfo(window)[1].textoff)
+  local longest, longest_line = 0, view.lnum
+  local line, last = vim.fn.line('w0'), vim.fn.line('w$')
+  while line <= last do
+    local length = vim.fn.strdisplaywidth(vim.fn.getline(line))
+    if length > longest then longest, longest_line = length, line end
+    local folded = vim.fn.foldclosedend(line)
+    line = folded >= 0 and folded + 1 or line + 1
+  end
+  local left = math.max(0, math.min(view.leftcol + columns, longest - width))
+  if left == view.leftcol then return false end
+  -- A short cursor line must not prevent panning to longer visible lines.
+  if vim.fn.virtcol({view.lnum, '$'}) - 1 <= left then view.lnum = longest_line end
+  local column = math.max(left + 1, math.min(left + width, vim.fn.virtcol('.')))
+  view.col = math.max(0, vim.fn.virtcol2col(window, view.lnum, column) - 1)
+  local character = vim.fn.virtcol({view.lnum, view.col + 1}, true)
+  if character[1] - 1 < left then
+    view.col = math.max(0, vim.fn.virtcol2col(window, view.lnum, character[2] + 1) - 1)
+  end
+  view.leftcol, view.curswant = left, column - 1
+  if not mouse_scrolloff then
+    mouse_scrolloff = {window=window, value=vim.wo.scrolloff}
+  end
+  vim.wo.scrolloff = 0
+  vim.fn.winrestview(view)
+  return true
+end
+
+function M.scroll(lines, follow, pixel, columns)
+  columns = vim.wo.wrap and 0 or (columns or 0)
+  if lines == 0 and columns == 0 then
+    publish_offset(pixel)
+    return false
+  end
   centered_view = nil
   local previous_anchor = anchor
   if follow then
@@ -270,7 +306,8 @@ function M.scroll(lines, follow, pixel)
     fraction = 0
   end
   -- Fractional movement only changes the renderer offset, not the editor state.
-  local changed = lines ~= 0 or anchor ~= previous_anchor
+  local horizontal = columns ~= 0 and scroll_horizontal(columns)
+  local changed = lines ~= 0 or horizontal or anchor ~= previous_anchor
   if changed then
     api.nvim_exec_autocmds('User', {pattern='NidoScroll'})
     vim.cmd.redraw()

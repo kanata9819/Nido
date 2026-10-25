@@ -396,16 +396,19 @@ export function registerHandlers({
   handle('jumpSticky', (id, window, buffer, line) =>
     session(id).jumpSticky(integer(window), integer(buffer), integer(line))
   );
-  handle('scroll', (id, lines, follow, pixel) => {
+  handle('scroll', (id, lines, follow, pixel, columns = 0) => {
     if (
       typeof lines !== 'number' ||
       !Number.isFinite(lines) ||
       (pixel !== true && !Number.isInteger(lines)) ||
-      Math.abs(lines) > 1000
+      Math.abs(lines) > 1000 ||
+      typeof columns !== 'number' ||
+      !Number.isInteger(columns) ||
+      Math.abs(columns) > 1000
     ) {
       throw new Error('Invalid scroll distance');
     }
-    return session(id).scroll(lines, follow !== false, pixel === true);
+    return session(id).scroll(lines, follow !== false, pixel === true, columns);
   });
 
   handle('debug', (id, action, target) => {

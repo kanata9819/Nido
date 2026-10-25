@@ -31,6 +31,7 @@ export function accumulateScroll(
 interface ScrollCommand {
   lines: number;
   follow: boolean;
+  columns?: number;
 }
 
 interface PendingScroll extends ScrollCommand {
@@ -41,11 +42,12 @@ interface PendingScroll extends ScrollCommand {
 // Keep one command in flight while coalescing new wheel input.
 export class ScrollQueue {
   private queued = 0;
+  private horizontal = 0;
   private follow = true;
   private inFlight: PendingScroll | undefined;
 
   get hasQueued(): boolean {
-    return this.queued !== 0;
+    return this.queued !== 0 || this.horizontal !== 0;
   }
 
   get pending(): boolean {
@@ -57,17 +59,19 @@ export class ScrollQueue {
     return this.queued + (this.inFlight?.acknowledged ? 0 : (this.inFlight?.lines ?? 0));
   }
 
-  enqueue(lines: number, follow: boolean): void {
+  enqueue(lines: number, follow: boolean, columns = 0): void {
     this.queued += lines;
+    this.horizontal += columns;
     this.follow = follow;
   }
 
   cancelQueued(): void {
     this.queued = 0;
+    this.horizontal = 0;
   }
 
   reset(): void {
-    this.queued = 0;
+    this.cancelQueued();
     this.inFlight = undefined;
   }
 
@@ -75,11 +79,14 @@ export class ScrollQueue {
     if (this.pending || !this.hasQueued) {
       return undefined;
     }
+    const columns = Math.max(-1000, Math.min(1000, this.horizontal));
     const command = {
       lines: Math.max(-1000, Math.min(1000, this.queued)),
-      follow: this.follow
+      follow: this.follow,
+      ...(columns ? { columns } : {})
     };
     this.queued -= command.lines;
+    this.horizontal -= columns;
     this.inFlight = { ...command, acknowledged: false, completed: false };
     return command;
   }

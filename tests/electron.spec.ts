@@ -1074,6 +1074,64 @@ test('word wrap updates long lines immediately and persists after restarting', a
   }
 });
 
+test('touchpad horizontal scrolling reveals long lines and preserves ordinary editing', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-horizontal-scroll-ui-'));
+  const workspace = join(root, 'workspace');
+  await mkdir(workspace);
+  const file = join(workspace, 'wide.txt');
+  await writeFile(
+    file,
+    [
+      'short',
+      ...Array.from(
+        { length: 99 },
+        (_, index) => `LEFT_${index} ${'0123456789'.repeat(20)} RIGHT_${index}`
+      )
+    ].join('\n') + '\n'
+  );
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const running = await electron.launch({
+    args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+    env
+  });
+  try {
+    const page = await running.firstWindow();
+    await page.setViewportSize({ width: 1000, height: 700 });
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, workspace);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.press('Control+p');
+    await page.getByRole('textbox', { name: 'Filter items' }).fill('wide.txt');
+    await expect(page.getByRole('button', { name: /wide.txt/ })).toBeVisible();
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Word wrap', exact: true }).uncheck();
+    await page.getByRole('checkbox', { name: 'Cursor follows scrolling', exact: true }).uncheck();
+    await page.keyboard.press('Escape');
+    const canvas = page.locator('canvas:visible');
+    await expect(canvas).toHaveAttribute('aria-description', /LEFT_0/);
+    await expect(canvas).not.toHaveAttribute('aria-description', /RIGHT_0/);
+    await canvas.hover();
+    await page.mouse.wheel(3000, 0);
+    await expect(canvas).toHaveAttribute('aria-description', /RIGHT_0/);
+    await expect(canvas).not.toHaveAttribute('aria-description', /LEFT_0/);
+    await page.mouse.wheel(-3000, 0);
+    await expect(canvas).toHaveAttribute('aria-description', /LEFT_0/);
+    await page.mouse.wheel(3000, 0);
+    await expect(canvas).toHaveAttribute('aria-description', /RIGHT_0/);
+    await page.keyboard.type('iX');
+    await page.keyboard.press('Escape');
+    await expect(canvas).toHaveAttribute('aria-description', /Xshort/);
+    await page.keyboard.press('Control+s');
+    await expect.poll(() => readSavedFile(file)).toMatch(/^Xshort\r?\nLEFT_0 /);
+  } finally {
+    await running.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('font family and line height update the canvas and survive restarting', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-font-'));
   const workspace = join(root, 'workspace');

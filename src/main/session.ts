@@ -494,8 +494,8 @@ end`,
     return this.interaction.prefetchScroll(down);
   }
 
-  scroll(lines: number, follow = true, pixel = false): Promise<void> {
-    return this.interaction.scroll(lines, follow, pixel);
+  scroll(lines: number, follow = true, pixel = false, columns = 0): Promise<void> {
+    return this.interaction.scroll(lines, follow, pixel, columns);
   }
 
   async debug(action: DebugAction, target?: number): Promise<void> {

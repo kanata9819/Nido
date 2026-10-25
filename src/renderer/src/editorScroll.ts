@@ -132,19 +132,25 @@ export class EditorScroll {
     }
   }
 
-  private move(lines: number, follow: boolean): void {
+  requestHorizontal(columns: number, follow: boolean): void {
+    this.move(0, follow, columns);
+  }
+
+  private move(lines: number, follow: boolean, columns = 0): void {
     const { grid, schedule } = this.options;
     grid.scrolling = true;
     clearTimeout(this.settleTimer);
     this.settleTimer = setTimeout(this.settle, 160);
-    this.queue.enqueue(lines, follow);
-    this.down = lines > 0;
+    this.queue.enqueue(lines, follow, columns);
+    if (lines) {
+      this.down = lines > 0;
+    }
     grid.scrollPreview = this.queue.preview;
-    if (!this.fetching && (lines < 0 ? grid.needsUpperRows : grid.needsLowerRows)) {
+    if (columns || (!this.fetching && (lines < 0 ? grid.needsUpperRows : grid.needsLowerRows))) {
       this.prefetchNeeded = true;
     }
     // Start native movement during input; paints stay coalesced on animation frames.
-    if (!this.needsPrefetch) {
+    if (columns || !this.needsPrefetch) {
       this.flush();
       // A cold fast gesture still needs a cache; send native movement first.
       if (this.prefetchNeeded && !this.fetching && this.options.enabled()) {
@@ -187,9 +193,11 @@ export class EditorScroll {
     }
     const { id, grid, onError, onCompletion, schedule } = this.options;
     const generation = this.generation;
+    const request = command.columns
+      ? window.nido.scroll(id, command.lines, command.follow, true, command.columns)
+      : window.nido.scroll(id, command.lines, command.follow, true);
     onCompletion(
-      window.nido
-        .scroll(id, command.lines, command.follow, true)
+      request
         .catch((error) => {
           if (this.disposed || generation !== this.generation) {
             return;

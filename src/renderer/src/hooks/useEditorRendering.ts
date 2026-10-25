@@ -29,7 +29,9 @@ interface UseEditorRenderingOptions {
   attachedRef: RefObject<boolean>;
   paintRef: RefObject<() => void>;
   afterPaintRef: RefObject<(motionOffset: number) => void>;
-  scrollRef: RefObject<(lines: number, follow: boolean, discrete: boolean) => void>;
+  scrollRef: RefObject<
+    (lines: number, follow: boolean, discrete: boolean, columns?: number) => void
+  >;
   scrollCompletionRef: RefObject<Promise<void>>;
   fontFamily: string;
 }
@@ -146,14 +148,19 @@ export function useEditorRendering({
       }
     };
 
-    scrollRef.current = (lines, follow, discrete): void => {
+    scrollRef.current = (lines, follow, discrete, columns = 0): void => {
       directScroll = true;
       motion = undefined;
-      scrolling.request(
-        lines,
-        follow,
-        animationsRef.current && !reducedMotion.matches ? (discrete ? 120 : 40) : 0
-      );
+      if (lines) {
+        scrolling.request(
+          lines,
+          follow,
+          animationsRef.current && !reducedMotion.matches ? (discrete ? 120 : 40) : 0
+        );
+      }
+      if (columns) {
+        scrolling.requestHorizontal(columns, follow);
+      }
     };
 
     const render = (): void => {

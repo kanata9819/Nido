@@ -362,6 +362,36 @@ test('late replies from a previous buffer cannot complete a new scroll or refill
   }
 });
 
+test('horizontal wheel bursts coalesce with vertical movement without adding vertical preview', () => {
+  const queue = new ScrollQueue();
+  queue.enqueue(0, false, 2);
+  assert.deepEqual(queue.start(), { lines: 0, follow: false, columns: 2 });
+  assert.equal(queue.preview, 0);
+  queue.enqueue(1.5, false, 2500);
+  queue.enqueue(0.5, false, -3);
+  assert.equal(queue.start(), undefined);
+  queue.acknowledge();
+  queue.complete();
+  assert.equal(queue.finish(), true);
+  let columns = 0;
+  let lines = 0;
+  while (queue.hasQueued) {
+    const command = queue.start()!;
+    assert.ok(Math.abs(command.columns ?? 0) <= 1000);
+    columns += command.columns ?? 0;
+    lines += command.lines;
+    queue.acknowledge();
+    queue.complete();
+    queue.finish();
+  }
+  assert.equal(columns, 2497);
+  assert.equal(lines, 2);
+  queue.enqueue(0, false, 5);
+  queue.cancelQueued();
+  assert.equal(queue.hasQueued, false);
+  assert.equal(queue.preview, 0);
+});
+
 for (const first of ['reply', 'redraw'] as const) {
   test(`wheel input waits for both reply and redraw when ${first} arrives first`, () => {
     const queue = new ScrollQueue();

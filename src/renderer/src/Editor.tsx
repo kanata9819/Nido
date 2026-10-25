@@ -67,15 +67,19 @@ function Editor({
   const composing = useRef(false);
   const attached = useRef(false);
   const wheel = useRef({ remainder: 0, time: 0 });
+  const horizontalWheel = useRef({ remainder: 0, time: 0 });
   const paint = useRef<() => void>(() => {});
   const stickyPaint = useRef<(motionOffset: number) => void>(() => {});
-  const scroll = useRef<(lines: number, follow: boolean, discrete: boolean) => void>(() => {});
+  const scroll = useRef<
+    (lines: number, follow: boolean, discrete: boolean, columns?: number) => void
+  >(() => {});
   const scrollCompletion = useRef<Promise<void>>(Promise.resolve());
   const error = useRef(onError);
 
   useEffect(() => {
     wheel.current = { remainder: 0, time: 0 };
-  }, [active, blocked, lineHeight]);
+    horizontalWheel.current = { remainder: 0, time: 0 };
+  }, [active, blocked, lineHeight, fontSize, fontFamily]);
 
   useEffect(() => {
     const resetComposition = (): void => {
@@ -229,20 +233,36 @@ function Editor({
 
         const delta = event.deltaY * 0.5;
         if (!terminal) {
+          const now = performance.now();
+          const horizontal = event.deltaX || (event.shiftKey ? event.deltaY : 0);
+          const width = grid.current.cellWidth;
+          const result = width
+            ? accumulateScroll(
+                now - horizontalWheel.current.time > 200 ? 0 : horizontalWheel.current.remainder,
+                horizontal * 0.5,
+                event.deltaMode,
+                width,
+                event.currentTarget.clientWidth
+              )
+            : { lines: 0, remainder: 0 };
+          if (horizontal) {
+            horizontalWheel.current = { remainder: result.remainder, time: now };
+          }
           const height = lineHeight;
           const pixels =
-            delta *
+            (event.shiftKey ? 0 : delta) *
             (event.deltaMode === 1
               ? height
               : event.deltaMode === 2
                 ? event.currentTarget.clientHeight
                 : 1);
-          if (Number.isFinite(pixels) && pixels) {
+          if ((Number.isFinite(pixels) && pixels) || result.lines) {
             scroll.current(
-              pixels / height,
+              Number.isFinite(pixels) ? pixels / height : 0,
               scrollFollowCursor,
               // Fine pixel deltas already describe smooth touchpad motion.
-              event.deltaMode !== 0 || Math.abs(pixels) >= height
+              event.deltaMode !== 0 || Math.abs(pixels) >= height,
+              result.lines
             );
           }
           return;

@@ -283,12 +283,15 @@ export class SessionInteraction {
     }
   }
 
-  async scroll(lines: number, follow = true, pixel = false): Promise<void> {
-    if (!lines) {
+  async scroll(lines: number, follow = true, pixel = false, columns = 0): Promise<void> {
+    if (!lines && !columns) {
       return;
     }
+    if (columns) {
+      this.cancelPrefetch();
+    }
     const down = lines > 0;
-    if (this.prefetchDown !== undefined && this.prefetchDown !== down) {
+    if (lines && this.prefetchDown !== undefined && this.prefetchDown !== down) {
       // Finish the current strip, then refill in the gesture's new direction.
       this.prefetchGeneration++;
       this.prefetchDown = undefined;
@@ -302,7 +305,7 @@ export class SessionInteraction {
         }
         const changed = await this.client.request('nvim_exec_lua', [
           "return require('nido_scroll').scroll(...)",
-          [lines, follow, pixel]
+          [lines, follow, pixel, columns]
         ]);
         // Neovim emits cursor/WinScrolled updates when the Lua request returns to its event loop.
         // Pure fractional offsets have no editor updates to wait for.

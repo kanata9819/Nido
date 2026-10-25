@@ -2759,6 +2759,122 @@ test('indent guides follow depth, tabs and blank lines without changing text', a
   }
 });
 
+for (const [kind, wide] of [
+  ['ASCII', 'abcdef0123456789'.repeat(30)],
+  ['wide characters and tabs', '\t日本語a'.repeat(60)]
+] as const) {
+  test(`horizontal scroll reaches long visible lines, preserves detached edits and combines with vertical scrolling (${kind})`, async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nido-horizontal-scroll-'));
+    const file = join(root, 'wide.txt');
+    const source = Array.from({ length: 100 }, (_, index) =>
+      index % 2 ? `ROW_${index + 1} ` + wide + ' END' : 'short'
+    ).join('\n');
+    let session: Session | undefined;
+    const frames: Redraw[] = [];
+    try {
+      await writeFile(file, source);
+      session = await Session.create(root, (event) => {
+        if (event.type === 'redraw') frames.push(event.events);
+      });
+      await session.openFile('wide.txt');
+      await session.attach(70, 20);
+      await session.setWordWrap(false);
+      const lua = (code: string): Promise<unknown> =>
+        session!.client.request('nvim_exec_lua', [code, []]);
+      const view = (): Promise<{ leftcol: number; topline: number }> =>
+        lua('return vim.fn.winsaveview()') as Promise<{ leftcol: number; topline: number }>;
+      for (const follow of [false, true]) {
+        await session.input('<Esc>gg0');
+        await session.client.request('nvim_eval', ['1']);
+        await session.scroll(0, follow, true, 20);
+        assert.equal((await view()).leftcol, 20, 'A short cursor line must not cap the viewport');
+        if (!follow) assert.deepEqual(await lua("return require('nido_scroll').cursor()"), [1, 0]);
+        await session.scroll(0, follow, true, -20);
+        assert.equal((await view()).leftcol, 0);
+        await session.scroll(0, follow, true, 1000);
+        assert.ok((await view()).leftcol > 100);
+        await session.scroll(0, follow, true, 1000);
+        const right = await view();
+        await session.scroll(0, follow, true, 1000);
+        assert.deepEqual(await view(), right, 'Scrolling stops at the right edge');
+        await session.scroll(0, follow, true, -1000);
+        assert.equal((await view()).leftcol, 0);
+      }
+      await session.input('<Esc>gg0i');
+      await session.client.request('nvim_eval', ['1']);
+      await session.scroll(3.25, false, true, 12);
+      const diagonal = await view();
+      assert.equal(diagonal.leftcol, 12);
+      assert.ok(diagonal.topline > 1);
+      frames.length = 0;
+      await session.scroll(0, false, true, 7);
+      assert.equal((await view()).topline, diagonal.topline);
+      assert.equal((await view()).leftcol, 19);
+      assert.ok(
+        frames
+          .flat()
+          .some(
+            ([name, ...calls]) =>
+              name === 'nido_pixel_scroll' && (calls[0] as unknown[])[0] === 0.25
+          )
+      );
+      const beforePrefetch = await view();
+      await session.prefetchScroll(true);
+      assert.deepEqual(await view(), beforePrefetch);
+      await session.input('X<Esc>');
+      await session.client.request('nvim_eval', ['1']);
+      assert.equal(await lua('return vim.fn.getline(1)'), 'Xshort');
+      assert.equal(await lua('return vim.fn.mode()'), 'n');
+      assert.equal((await view()).leftcol, 0, 'Editing returns to the original anchor');
+      await session.input('u');
+      await session.setWordWrap(true);
+      await session.client.request('nvim_eval', ['1']);
+      const wrapped = await view();
+      await session.scroll(0, false, true, 30);
+      assert.deepEqual(await view(), wrapped, 'Horizontal input must not disable wrapping');
+      assert.equal(await lua('return vim.wo.wrap'), true);
+      assert.equal(await session.modified(), false);
+      assert.equal(await readFile(file, 'utf8'), source);
+    } finally {
+      await session?.stop();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test('horizontal panning preserves the vertical viewport and ignores text inside closed folds', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-horizontal-viewport-'));
+  let session: Session | undefined;
+  try {
+    await writeFile(join(root, 'wide.txt'), Array.from({ length: 100 }, () => 'short').join('\n'));
+    session = await Session.create(root, () => {});
+    await session.openFile('wide.txt');
+    await session.attach(70, 20);
+    await session.setWordWrap(false);
+    const lua = (code: string): Promise<unknown> =>
+      session!.client.request('nvim_exec_lua', [code, []]);
+    await lua(
+      "vim.wo.scrolloff = 8; local last = vim.fn.line('w$'); vim.api.nvim_buf_set_lines(0, last-1, last, false, {string.rep('wide ', 100)}); vim.cmd.redraw()"
+    );
+    const before = await lua('return vim.fn.winsaveview().topline');
+    await session.scroll(0, false, true, 20);
+    assert.equal(await lua('return vim.fn.winsaveview().topline'), before);
+    assert.equal(await lua('return vim.fn.winsaveview().leftcol'), 20);
+    assert.equal(await lua('return vim.wo.scrolloff'), 0);
+    await session.input('<Esc>gg0');
+    await session.client.request('nvim_eval', ['1']);
+    assert.equal(await lua('return vim.wo.scrolloff'), 8);
+    await lua("vim.wo.foldmethod = 'manual'; vim.cmd('2,99fold'); vim.cmd.redraw()");
+    await session.scroll(0, false, true, 20);
+    assert.equal(await lua('return vim.fn.foldclosed(2)'), 2);
+    assert.equal(await lua('return vim.fn.winsaveview().leftcol'), 0);
+    assert.equal(await lua('return vim.wo.scrolloff'), 8);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('scroll follows pixel distance and preserves insert mode and file contents', async () => {
   assert.equal(scrollOffset(100, 0), 100);
   assert.equal(scrollOffset(100, 60), 12.5);

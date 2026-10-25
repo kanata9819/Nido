@@ -412,6 +412,85 @@ test('held j/k viewport scrolling reuses frames until a redraw, while editing in
   );
 });
 
+test('touchpad horizontal scrolling accumulates fine input, coalesces bursts and supports Shift and diagonal gestures', async ({
+  page
+}) => {
+  await page.clock.install({ time: new Date(0) });
+  await page.clock.pauseAt(new Date(1000));
+  await page.addInitScript(() => localStorage.setItem('nido.animations', 'false'));
+  await page.goto(`${origin}?view=app`);
+  await page.clock.runFor(32);
+  await page.evaluate(() => {
+    const api = window.nido;
+    let fraction = 0;
+    window.nido = new Proxy(api, {
+      get(target, method) {
+        if (method !== 'scroll') return Reflect.get(target, method);
+        return async (...args: Parameters<typeof api.scroll>) => {
+          await api.scroll(...args);
+          fraction += args[1];
+          window.rendererTest.emit({
+            type: 'redraw',
+            id: args[0],
+            events: [['nido_pixel_scroll', [fraction, true]], ['flush']]
+          });
+        };
+      }
+    });
+  });
+  const canvas = page.locator('canvas:visible');
+  const totals = (): Promise<{ lines: number; columns: number; count: number }> =>
+    page.evaluate(() =>
+      window.rendererTest.calls
+        .filter((call) => call.method === 'scroll')
+        .reduce(
+          (total, call) => ({
+            lines: total.lines + Number(call.args[1]),
+            columns: total.columns + Number(call.args[4] ?? 0),
+            count: total.count + 1
+          }),
+          { lines: 0, columns: 0, count: 0 }
+        )
+    );
+  await canvas.dispatchEvent('wheel', { deltaX: 1, deltaMode: 0 });
+  expect(await totals()).toEqual({ lines: 0, columns: 0, count: 0 });
+  await canvas.evaluate((node) => {
+    for (let i = 0; i < 119; i++) {
+      node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaX: 1 }));
+    }
+  });
+  await expect.poll(async () => (await totals()).columns).toBeGreaterThan(0);
+  expect((await totals()).count).toBeLessThanOrEqual(3);
+  expect((await totals()).lines).toBe(0);
+  await canvas.evaluate((node) => {
+    for (let i = 0; i < 120; i++) {
+      node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaX: -1 }));
+    }
+  });
+  await expect.poll(async () => (await totals()).columns).toBe(0);
+  await canvas.dispatchEvent('wheel', { deltaY: 4, deltaMode: 1, shiftKey: true });
+  await expect.poll(async () => (await totals()).columns).toBe(2);
+  expect((await totals()).lines).toBe(0);
+  await canvas.dispatchEvent('wheel', { deltaX: 4, deltaY: 4, deltaMode: 1, shiftKey: true });
+  await expect.poll(async () => (await totals()).columns).toBe(4);
+  expect((await totals()).lines).toBe(0);
+  await canvas.dispatchEvent('wheel', { deltaX: 4, deltaY: 4, deltaMode: 1 });
+  await expect.poll(totals).toMatchObject({ lines: 2, columns: 6 });
+  const before = await totals();
+  await canvas.dispatchEvent('wheel', { deltaX: 10, ctrlKey: true });
+  const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+  await input.dispatchEvent('compositionstart');
+  await canvas.dispatchEvent('wheel', { deltaX: 10 });
+  await input.dispatchEvent('compositionend', { data: '' });
+  expect(await totals()).toEqual(before);
+  await canvas.dispatchEvent('wheel', { deltaX: 1, deltaMode: 1 });
+  await page.clock.runFor(250);
+  await canvas.dispatchEvent('wheel', { deltaX: 1, deltaMode: 1 });
+  expect(await totals()).toEqual(before);
+  await canvas.dispatchEvent('wheel', { deltaX: 1, deltaMode: 1 });
+  await expect.poll(async () => (await totals()).columns).toBe(7);
+});
+
 for (const setting of ['on', 'off', 'reduced'] as const) {
   test(`wheel detents and touchpad input interpolate only with animations enabled (${setting})`, async ({
     page
