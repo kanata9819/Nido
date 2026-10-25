@@ -11,7 +11,9 @@ local function request(buffer, callback, attempt)
   client:request('experimental/runnables', {
     textDocument={uri=vim.uri_from_bufnr(buffer)}, position=vim.NIL,
   }, function(err, result)
-    if err and (err.code == -32801 or err.code == -32802 or err.code == -32800) and (attempt or 0) < 3 then
+    -- Cargo reloads can temporarily return no targets without an error.
+    if ((err and (err.code == -32801 or err.code == -32802 or err.code == -32800))
+        or (not err and #(result or {}) == 0)) and (attempt or 0) < 3 then
       vim.defer_fn(function()
         if vim.api.nvim_buf_is_valid(buffer) then
           request(buffer, callback, (attempt or 0)+1)

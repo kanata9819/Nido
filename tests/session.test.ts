@@ -2641,6 +2641,7 @@ test('Rust runnable commands request current targets and reject edits during ana
 local api = vim.api
 local buffer = api.nvim_get_current_buf()
 api.nvim_buf_set_lines(0, 0, -1, false, {'fn main() {}', '', '#[test] fn sample() {}'})
+vim.lsp.enable('rust_analyzer', false)
 vim.bo.filetype = 'rust'
 local module = require('nido_runnables')
 local debugger = require('nido_debug')
@@ -2652,12 +2653,14 @@ local function item(row, command)
   }}
 end
 local original, runnable, notify = vim.lsp.get_clients, debugger.runnable, vim.notify
-local requests, calls, notices, pending = 0, {}, {}, nil
+local requests, calls, notices, pending, empty = 0, {}, {}, nil, 0
 vim.lsp.get_clients = function(options)
   if options and options.name == 'rust_analyzer' then
     return {{request=function(_, _, _, callback)
       requests = requests + 1
-      if pending then table.insert(pending, callback) else callback(nil, items) end
+      if pending then table.insert(pending, callback)
+      elseif empty > 0 then empty = empty - 1; callback(nil, {})
+      else callback(nil, items) end
     end}}
   end
   return original(options)
@@ -2689,6 +2692,17 @@ local ok, err = pcall(function()
   api.nvim_win_set_cursor(0, {5, 0})
   module.execute(true)
   assert(requests == 5 and calls[4][1] == items[2], 'a new command must use the updated target')
+  empty = 1
+  module.execute(false)
+  assert(vim.wait(1000, function() return #calls == 5 end, 10),
+    'an empty response during Cargo reload must recover without another command')
+  assert(requests == 7 and calls[5][1] == items[2] and #notices == 1,
+    vim.inspect({requests=requests, calls=#calls, notices=notices, target=calls[5][1]}))
+  items = {}
+  module.execute(false)
+  assert(vim.wait(1500, function() return #notices == 2 end, 10),
+    'a genuinely empty target list must still finish with a notice')
+  assert(requests == 11 and #calls == 5, 'empty target retries must remain bounded')
   assert(#api.nvim_buf_get_extmarks(buffer, namespace, 0, -1, {}) == 0,
     'runnables must not add CodeLens rows')
 end)

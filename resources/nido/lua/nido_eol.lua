@@ -48,6 +48,11 @@ local function track(buffer)
 end
 
 function M.open(path)
+  local buffer = vim.fn.bufnr(path)
+  if buffer > 0 and api.nvim_buf_is_loaded(buffer) and vim.bo[buffer].modified then
+    vim.cmd.buffer(buffer)
+    return
+  end
   -- GUI navigation opens text files; inherited binary mode bypasses CRLF detection.
   vim.cmd('edit ++nobin ' .. vim.fn.fnameescape(path))
 end

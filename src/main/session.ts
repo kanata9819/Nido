@@ -508,7 +508,9 @@ end`,
   }
 
   async setLineEnding(format: 'LF' | 'CRLF'): Promise<void> {
-    await this.client.request('nvim_exec_lua', ["require('nido_eol').convert(...)", [format]]);
+    await this.interaction.command(() =>
+      this.client.request('nvim_exec_lua', ["require('nido_eol').convert(...)", [format]])
+    );
   }
 
   async snapshot(options: { restoreScroll?: boolean } = {}): Promise<SavedWorkspace> {
@@ -602,15 +604,17 @@ end`,
   }
 
   async modified(): Promise<boolean> {
-    return (await this.client.request('nvim_exec_lua', [
-      `for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+    return (await this.interaction.command(() =>
+      this.client.request('nvim_exec_lua', [
+        `for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
   if (vim.bo[buffer].buftype == '' or vim.bo[buffer].buftype == 'acwrite') and vim.bo[buffer].modified then
     return true
   end
 end
 return false`,
-      []
-    ])) as boolean;
+        []
+      ])
+    )) as boolean;
   }
 
   async saveAll(): Promise<void> {
@@ -618,21 +622,26 @@ return false`,
   }
 
   async selectBuffer(buffer: number): Promise<void> {
-    await this.client.request('nvim_set_current_buf', [buffer]);
+    this.interaction.cancelPrefetch();
+    await this.interaction.command(() => this.client.request('nvim_set_current_buf', [buffer]));
   }
 
   async closeBuffer(buffer: number, force = false): Promise<void> {
-    if (!force && (await this.bufferModified(buffer))) {
-      throw new Error('Buffer has unsaved changes.');
-    }
-    await this.client.request('nvim_buf_delete', [buffer, { force }]);
+    this.interaction.cancelPrefetch();
+    await this.interaction.command(() =>
+      this.client.request('nvim_exec_lua', [
+        `local buffer, force = ...
+if not force and vim.bo[buffer].modified then error('Buffer has unsaved changes.') end
+vim.api.nvim_buf_delete(buffer, {force=force})`,
+        [buffer, force]
+      ])
+    );
   }
 
   async bufferModified(buffer: number): Promise<boolean> {
-    return (await this.client.request('nvim_get_option_value', [
-      'modified',
-      { buf: buffer }
-    ])) as boolean;
+    return (await this.interaction.command(() =>
+      this.client.request('nvim_get_option_value', ['modified', { buf: buffer }])
+    )) as boolean;
   }
 
   async path(relativePath: string): Promise<string> {
@@ -644,7 +653,7 @@ return false`,
       throw new Error('Open an Editor session to edit files.');
     }
     this.interaction.cancelPrefetch();
-    await this.interaction.enqueue(() => this.fileService.openFile(relativePath, line, column));
+    await this.interaction.command(() => this.fileService.openFile(relativePath, line, column));
   }
 
   async fileAction(
@@ -653,6 +662,8 @@ return false`,
     target: string,
     trash: (path: string) => Promise<void>
   ): Promise<void> {
+    // Drain preceding input without blocking typing during the filesystem operation.
+    await this.inputMode();
     await this.fileService.fileAction(
       action,
       path,
@@ -662,10 +673,14 @@ return false`,
   }
 
   async openReference(index: number, version: number): Promise<void> {
-    await this.client.request('nvim_exec_lua', [
-      "require('nido_references').open(...)",
-      [index, version]
-    ]);
+    this.interaction.cancelPrefetch();
+    await this.interaction.command(async () => {
+      await this.interaction.restoreScroll();
+      await this.client.request('nvim_exec_lua', [
+        "require('nido_references').open(...)",
+        [index, version]
+      ]);
+    });
   }
 
   async findSymbols(): Promise<number> {
@@ -674,19 +689,21 @@ return false`,
 
   async openSymbol(index: number, version: number): Promise<void> {
     this.interaction.cancelPrefetch();
-    await this.interaction.enqueue(() =>
+    await this.interaction.command(() =>
       this.client.request('nvim_exec_lua', ["require('nido_symbols').open(...)", [index, version]])
     );
   }
 
   async openProblem(index: number, version: number): Promise<void> {
-    const problem = this.state.problems?.[index - 1];
-    if (!problem || version !== this.state.diagnosticsVersion) {
-      throw new Error('Problems have changed. Select the item again.');
-    }
-    await this.interaction.restoreScroll();
-    await this.client.request('nvim_exec_lua', [
-      `local path, line, column = ...
+    this.interaction.cancelPrefetch();
+    await this.interaction.command(async () => {
+      const problem = this.state.problems?.[index - 1];
+      if (!problem || version !== this.state.diagnosticsVersion) {
+        throw new Error('Problems have changed. Select the item again.');
+      }
+      await this.interaction.restoreScroll();
+      await this.client.request('nvim_exec_lua', [
+        `local path, line, column = ...
 vim.cmd("normal! m'")
 require('nido_eol').open(path)
 line = math.min(line, vim.api.nvim_buf_line_count(0))
@@ -694,8 +711,9 @@ local text = vim.api.nvim_buf_get_lines(0, line-1, line, false)[1] or ''
 vim.api.nvim_win_set_cursor(0, {line, math.min(column-1, #text)})
 vim.cmd('normal! zv')
 require('nido_scroll').center()`,
-      [editorPath(this.workspace.root, problem.path), problem.line, problem.column]
-    ]);
+        [editorPath(this.workspace.root, problem.path), problem.line, problem.column]
+      ]);
+    });
   }
 
   async previewReference(index: number, version: number): Promise<ReferencePreview> {

@@ -31,6 +31,22 @@ export class SessionInteraction {
     return next;
   }
 
+  command<T>(operation: () => Promise<T>): Promise<T> {
+    // Observe preceding keys before probing for commands that still need a reply.
+    const ready = this.inputMode();
+    return this.enqueue(async () => {
+      await ready;
+      const mode = (await this.client.request('nvim_get_mode', [])) as {
+        mode: string;
+        blocking: boolean;
+      };
+      if (mode.blocking || mode.mode.startsWith('r')) {
+        throw new Error('Finish the current Neovim command before doing this.');
+      }
+      return operation();
+    });
+  }
+
   input(keys: string): Promise<void> {
     // nvim_input can accept only part of a byte sequence when its input queue is full.
     const next = this.inputQueue.then(async () => {

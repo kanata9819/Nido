@@ -371,6 +371,7 @@ export function registerHandlers({
   handle('closeBuffer', async (id, value) => {
     const s = session(id);
     const buffer = integer(value);
+    let force = false;
     if (await s.bufferModified(buffer)) {
       const t = (message: string): string => translate(state.language ?? 'en', message);
       const { response } = await dialog.showMessageBox(window, {
@@ -384,8 +385,9 @@ export function registerHandlers({
       if (response !== 1) {
         return false;
       }
+      force = true;
     }
-    await s.closeBuffer(buffer, true);
+    await s.closeBuffer(buffer, force);
     return true;
   });
 
