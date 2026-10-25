@@ -638,6 +638,38 @@ test('external confirmation and hit-enter cards send replies to Neovim before di
   state = applyNeovimUI(state, 'msg_clear', []);
   await emit();
   await expect(messages).toHaveCount(0);
+
+  state = applyNeovimUI(state, 'cmdline_show', [
+    [[0, '']],
+    0,
+    '',
+    'Do you really want to write to it (y/n)?',
+    0,
+    1
+  ]);
+  await emit();
+  const command = page.getByRole('dialog', { name: 'Neovim command line' });
+  await expect(command).toBeVisible();
+  await page.keyboard.press('n');
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.rendererTest.calls.filter((call) => call.method === 'input').at(-1)?.args
+      )
+    )
+    .toEqual(['alpha', 'n']);
+  await command.getByRole('button', { name: 'Cancel command', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.rendererTest.calls.filter((call) => call.method === 'input').at(-1)?.args
+      )
+    )
+    .toEqual(['alpha', '<Esc>']);
+  state = applyNeovimUI(state, 'cmdline_hide', [1, true]);
+  await emit();
+  await expect(command).toHaveCount(0);
+  await expect(input).toBeFocused();
 });
 
 test('native diagnostic cards show severity, source, codes and safe selectable text with keyboard navigation', async ({

@@ -8,6 +8,7 @@ import {
   readFile,
   realpath,
   rm,
+  utimes,
   writeFile,
   rename,
   symlink
@@ -3318,6 +3319,96 @@ test(
     }
   }
 );
+
+for (const command of ['save', 'saveAll'] as const) {
+  for (const reply of ['n<CR>', '<Esc>', 'y<CR>']) {
+    test(
+      `${command} accepts ${reply} while an external file change awaits confirmation`,
+      { timeout: 10000 },
+      async () => {
+        const root = await mkdtemp(join(tmpdir(), 'nido-save-confirmation-'));
+        const path = join(root, 'file.txt');
+        let ui = emptyNeovimUI();
+        let session: Session | undefined;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let release!: () => void;
+        const ready = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        try {
+          await writeFile(path, 'original\n');
+          session = await Session.create(root, (event) => {
+            if (event.type === 'neovimUI') ui = event.state;
+          });
+          await session.openFile('file.txt');
+          await session.input('gg0Cmy draft<Esc>');
+          assert.equal(await session.client.request('nvim_get_current_line', []), 'my draft');
+          await writeFile(path, 'external\n');
+          const changed = new Date(Date.now() + 2000);
+          await utimes(path, changed, changed);
+          const request = session.client.request.bind(session.client);
+          session.client.request = async (name, args = []) => {
+            // Make the first fast mode probe precede the write's confirmation prompt.
+            if (name === 'nvim_exec_lua') await ready;
+            const result = await request(name, args);
+            if (name === 'nvim_get_mode') release();
+            return result;
+          };
+          const saving = session[command]().then(() => '', String);
+          const hasPrompt = (): boolean =>
+            Object.values(ui.commands).some((line) =>
+              (line.prompt + line.content.map((chunk) => chunk[1]).join('')).includes(
+                'Do you really want to write to it'
+              )
+            );
+          for (let attempt = 0; attempt < 200 && !hasPrompt(); attempt++) {
+            await new Promise((done) => setTimeout(done, 10));
+          }
+          assert.ok(hasPrompt(), JSON.stringify(ui));
+          const promptMode = await session.client.request('nvim_get_mode', []);
+          const [, error] = await Promise.race([
+            Promise.all([
+              session.inputMode().then((mode) => {
+                assert.equal(mode, 'r?');
+                return session!.input(reply);
+              }),
+              saving
+            ]),
+            new Promise<never>((_resolve, reject) => {
+              timer = setTimeout(
+                () =>
+                  reject(
+                    new Error(
+                      `Confirmation reply was blocked by the save: ${JSON.stringify({ promptMode, commands: ui.commands })}`
+                    )
+                  ),
+                2000
+              );
+            })
+          ]);
+          await session.client.request('nvim_eval', ['1']);
+          assert.ok(!hasPrompt(), 'answering or cancelling closes the prompt');
+          const accepted = reply === 'y<CR>';
+          if (accepted) assert.equal(error, '');
+          assert.equal(await readFile(path, 'utf8'), accepted ? 'my draft\n' : 'external\n');
+          assert.equal(await session.client.request('nvim_get_current_line', []), 'my draft');
+          assert.equal(
+            await session.client.request('nvim_get_option_value', ['modified', { buf: 0 }]),
+            !accepted
+          );
+          await session.input('A!<Esc>');
+          assert.equal(await session.client.request('nvim_get_current_line', []), 'my draft!');
+        } finally {
+          release();
+          clearTimeout(timer);
+          await session?.client.request('nvim_input', ['<Esc><C-c>']).catch(() => {});
+          await session?.stop();
+          await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+        }
+      }
+    );
+  }
+}
 
 test('two real Neovim sessions edit, save, switch buffers and isolate state', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-test-'));

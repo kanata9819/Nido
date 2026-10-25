@@ -89,7 +89,8 @@ export class SessionInteraction {
           mode: string;
           blocking: boolean;
         };
-        if (mode.blocking) {
+        // Reply prompts (r/rm/r?) can report blocking=false.
+        if (mode.blocking || mode.mode.startsWith('r')) {
           return mode.mode === 'n' ? 'pending' : mode.mode;
         }
         if (!completed) {
@@ -289,6 +290,7 @@ export class SessionInteraction {
         throw new Error('Neovim session is closed.');
       }
       await this.restoreScroll();
+      let completed = false;
       const writing = this.client
         .request('nvim_exec_lua', [
           `local command, format = ...
@@ -318,13 +320,24 @@ return ok and "" or tostring(err)`,
           if (error) {
             throw new Error(error as string);
           }
+        })
+        .finally(() => {
+          completed = true;
         });
-      // A deferred write cannot complete while r/f/getchar waits for its next key.
-      // Let that key through while still returning the write's actual completion.
+      // A confirmation can appear after the first fast probe; keep checking so
+      // its reply can bypass the pending write without reordering ordinary edits.
       void writing.catch(() => {});
-      const mode = (await this.client.request('nvim_get_mode', [])) as { blocking: boolean };
-      if (!mode.blocking) {
-        await writing;
+      while (!completed) {
+        const mode = (await this.client.request('nvim_get_mode', [])) as {
+          mode: string;
+          blocking: boolean;
+        };
+        if (mode.blocking || mode.mode.startsWith('r')) {
+          break;
+        }
+        if (!completed) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
       }
       return { writing };
     });
