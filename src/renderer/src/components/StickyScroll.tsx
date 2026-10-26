@@ -14,6 +14,7 @@ interface Model {
   lineHeight: number;
   cellWidth: number;
   background: string;
+  horizontalOffset: number;
 }
 
 export default function StickyScroll({
@@ -90,7 +91,8 @@ export default function StickyScroll({
             width: state.width * surface.cellWidth,
             lineHeight: surface.cellHeight,
             cellWidth: surface.cellWidth,
-            background: surface.background
+            background: surface.background,
+            horizontalOffset: surface.horizontalOffset
           }
         : undefined;
       setModel((previous) => {
@@ -104,6 +106,7 @@ export default function StickyScroll({
           previous.cellWidth === next.cellWidth &&
           previous.lineHeight === next.lineHeight &&
           previous.background === next.background &&
+          previous.horizontalOffset === next.horizontalOffset &&
           previous.rows.length === next.rows.length &&
           previous.rows.every(
             (row, index) =>
@@ -226,7 +229,7 @@ export default function StickyScroll({
               <span className={styles.code}>
                 <span
                   style={{
-                    transform: `translateX(${-model.state.leftcol * model.cellWidth}px)`
+                    transform: `translateX(${-model.state.leftcol * model.cellWidth + model.horizontalOffset}px)`
                   }}
                 >
                   {(ending ? scope.endText : scope.text).map((span, i) => (

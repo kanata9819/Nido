@@ -115,6 +115,7 @@ export function useEditorRendering({
         scrollCompletionRef.current = promise;
       }
     });
+    scrolling.observeHorizontal(grid.horizontalColumn);
     const previousFrame = document.createElement('canvas');
     const targetFrame = document.createElement('canvas');
     let motion: FrameMotion | undefined;
@@ -150,8 +151,9 @@ export function useEditorRendering({
 
     scrollRef.current = (lines, follow, discrete, columns = 0): void => {
       directScroll = true;
-      motion = undefined;
       if (lines) {
+        motion = undefined;
+        scrolling.stopHorizontal();
         scrolling.request(
           lines,
           follow,
@@ -175,6 +177,9 @@ export function useEditorRendering({
       const now = performance.now();
       scrolling.advance(now, animationsRef.current && !reducedMotion.matches);
       const focused = document.activeElement === input;
+      if (motion?.offsetX !== undefined) {
+        motion.offsetX = scrolling.horizontalOffset * cellWidth;
+      }
       if (
         pixelScroll &&
         scrolling.canPrefetch &&
@@ -199,8 +204,7 @@ export function useEditorRendering({
       const reuseTarget = !!(
         motion?.targetReady &&
         metrics.cellWidth &&
-        animationsRef.current &&
-        !reducedMotion.matches &&
+        (motion?.offsetX !== undefined || (animationsRef.current && !reducedMotion.matches)) &&
         targetFrame.width === Math.round(bounds.width * dpr) &&
         targetFrame.height === Math.round(bounds.height * dpr) &&
         paintedFocus === focused &&
@@ -237,8 +241,16 @@ export function useEditorRendering({
         backgroundOpacity,
         reuseTarget
       });
+      if (motion?.offsetX !== undefined && !painted.motion) {
+        scrolling.discardHorizontalFrame();
+      }
       motion = painted.motion;
       const overlayOffset = painted.overlayOffset;
+      grid.horizontalOffset = painted.horizontalOffset;
+      grid.horizontalColumn = scrolling.horizontalColumn;
+      if (motion?.offsetX !== undefined) {
+        grid.horizontalGutter = motion.left;
+      }
 
       afterPaintRef.current(overlayOffset);
       if (descriptionDirty) {
@@ -250,7 +262,10 @@ export function useEditorRendering({
       }
 
       if (inputRef.current && !inputRef.current.hasAttribute('data-nvim-command-active')) {
-        const left = bounds.left + grid.cursor.column * metrics.cellWidth;
+        const left =
+          bounds.left +
+          grid.cursor.column * metrics.cellWidth +
+          (grid.cursor.column >= grid.horizontalGutter ? grid.horizontalOffset : 0);
         const top = bounds.top + grid.rowY(grid.cursor.row);
         // Unchanged styles wake popup observers and force layout during cursor blinking.
         if (!(Math.abs(parseFloat(inputRef.current.style.left) - left) * dpr < 0.01)) {
@@ -296,7 +311,7 @@ export function useEditorRendering({
       }
       if (
         cursor.animating ||
-        motion ||
+        (motion && motion.offsetX === undefined) ||
         scrolling.animating ||
         (pixelScroll && scrolling.canPrefetch)
       ) {
@@ -339,6 +354,10 @@ export function useEditorRendering({
           lastScrollTime = undefined;
           directScroll = false;
           scrolling.reset();
+          const buffer = event.events.find(([name]) => name === 'nido_buffer')?.[1];
+          if (typeof buffer?.[2] === 'number') {
+            scrolling.observeHorizontal(buffer[2]);
+          }
           cursor.resetPosition();
         }
         if (edited) {
@@ -351,7 +370,7 @@ export function useEditorRendering({
           grid.scrollFraction = Number(args[0]);
           grid.scrollCursor = args[2] as { row: number; column: number } | undefined;
           directScroll = args[1] === true;
-          scrolling.acknowledge(directScroll);
+          scrolling.acknowledge(directScroll, typeof args[4] === 'number' ? args[4] : undefined);
         }
         const viewportScrolls = event.events.flatMap(([name, ...calls]) =>
           name === 'nido_scroll' ? calls : []
@@ -360,6 +379,12 @@ export function useEditorRendering({
           ? viewportScrolls
           : event.events.flatMap(([name, ...calls]) => (name === 'grid_scroll' ? calls : []));
         const scroll = scrolls.length === 1 ? (scrolls[0] as number[]) : undefined;
+        if (!pixelOffsets.length) {
+          const last = viewportScrolls.at(-1);
+          if (typeof last?.[8] === 'number') {
+            scrolling.observeHorizontal(last[8]);
+          }
+        }
         if (
           scrolls.length ||
           event.events.some(
@@ -370,6 +395,50 @@ export function useEditorRendering({
         }
         const now = performance.now();
         if (
+          scroll &&
+          scroll[5] === 0 &&
+          scroll[6] &&
+          directScroll &&
+          scrolling.horizontalActive &&
+          Math.abs(scroll[6]) < scroll[4] - scroll[3]
+        ) {
+          cancelAnimationFrame(frame);
+          frame = 0;
+          if (previousFrame.width !== surface.width || previousFrame.height !== surface.height) {
+            previousFrame.width = surface.width;
+            previousFrame.height = surface.height;
+          }
+          const previousContext = previousFrame.getContext('2d')!;
+          previousContext.globalCompositeOperation = 'copy';
+          if (
+            motion?.offsetX !== undefined &&
+            motion.targetReady &&
+            targetFrame.width === surface.width &&
+            targetFrame.height === surface.height
+          ) {
+            previousContext.drawImage(targetFrame, 0, 0);
+          } else {
+            motion = undefined;
+            grid.invalidatePaint();
+            preparingMotion = true;
+            render();
+            preparingMotion = false;
+            previousContext.drawImage(surface, 0, 0);
+          }
+          motion = {
+            top: scroll[1],
+            bottom: scroll[2],
+            left: scroll[3],
+            right: scroll[4],
+            distance: 0,
+            distanceX: scroll[6] * cellWidth,
+            incomingRows: 0,
+            start: now,
+            edit: false,
+            duration: 0,
+            offsetX: scrolling.horizontalOffset * cellWidth
+          };
+        } else if (
           scroll &&
           !bufferChanged &&
           (!edited || (scroll[5] > 0 && scroll[6] === 0)) &&
@@ -420,8 +489,12 @@ export function useEditorRendering({
             duration: edited ? 90 : Math.max(1, Math.min(120, now - (lastScrollTime ?? now - 120)))
           };
           lastScrollTime = now;
-        } else if (scrolls.length || directScroll) {
+        } else if (scrolls.length || (directScroll && motion?.offsetX === undefined)) {
           motion = undefined;
+          if (scroll && directScroll && Math.abs(scroll[6]) >= scroll[4] - scroll[3]) {
+            // shortcut: viewport-sized jumps snap, until horizontal overscan supplies the missing edge.
+            scrolling.discardHorizontalFrame();
+          }
         }
 
         const { row, column } = grid.cursor;
@@ -482,6 +555,7 @@ export function useEditorRendering({
       paintRef.current = () => {};
       scrollRef.current = () => {};
       grid.scrollPreview = 0;
+      grid.horizontalOffset = 0;
       grid.scrolling = false;
       cursor.dispose();
       scrolling.dispose();

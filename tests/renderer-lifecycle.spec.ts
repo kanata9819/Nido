@@ -1282,7 +1282,14 @@ for (const scale of [1, 1.25, 1.5]) {
             const source = args[0];
             if (!(source instanceof HTMLCanvasElement)) return;
             if (this.canvas !== canvas) {
-              resampled++;
+              const width = Number(args[args.length === 9 ? 7 : 3] ?? source.width);
+              const height = Number(args[args.length === 9 ? 8 : 4] ?? source.height);
+              const transform = this.getTransform();
+              if (
+                Math.abs(width * transform.a - source.width) > 0.001 ||
+                Math.abs(height * transform.d - source.height) > 0.001
+              )
+                resampled++;
               return;
             }
             if (!source.getContext('2d')) {

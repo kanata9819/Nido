@@ -200,6 +200,10 @@ function Editor({
 
         const bounds = canvas.current.getBoundingClientRect();
         const x = event.clientX - bounds.left;
+        const horizontalColumn = grid.current.horizontalColumn;
+        const gutter = grid.current.horizontalGutter;
+        const body = x >= gutter * cellWidth;
+        const column = Math.floor((x - (body ? grid.current.horizontalOffset : 0)) / cellWidth);
         const y = event.clientY - bounds.top;
         if (x < 0 || x >= columns * cellWidth) {
           return;
@@ -213,7 +217,16 @@ function Editor({
             }
             const row = grid.current.rowAt(y);
             if (row >= 0) {
-              await window.nido.click(id, row, Math.floor(x / cellWidth));
+              const currentGutter = grid.current.horizontalGutter;
+              let target = body
+                ? column - gutter + currentGutter + horizontalColumn - grid.current.horizontalColumn
+                : column;
+              if (body && target < currentGutter) {
+                // The leftmost partial cell can still belong to the previous native frame.
+                await window.nido.scroll(id, 0, false, true, target - currentGutter);
+                target = currentGutter;
+              }
+              await window.nido.click(id, row, Math.max(0, target));
             }
           })()
         );
@@ -235,18 +248,20 @@ function Editor({
         if (!terminal) {
           const now = performance.now();
           const horizontal = event.deltaX || (event.shiftKey ? event.deltaY : 0);
+          const diagonal = !event.shiftKey && delta !== 0;
           const width = grid.current.cellWidth;
-          const result = width
-            ? accumulateScroll(
-                now - horizontalWheel.current.time > 200 ? 0 : horizontalWheel.current.remainder,
-                horizontal * 0.5,
-                event.deltaMode,
-                width,
-                event.currentTarget.clientWidth
-              )
-            : { lines: 0, remainder: 0 };
+          const result =
+            width && diagonal
+              ? accumulateScroll(
+                  now - horizontalWheel.current.time > 200 ? 0 : horizontalWheel.current.remainder,
+                  horizontal * 0.5,
+                  event.deltaMode,
+                  width,
+                  event.currentTarget.clientWidth
+                )
+              : { lines: 0, remainder: 0 };
           if (horizontal) {
-            horizontalWheel.current = { remainder: result.remainder, time: now };
+            horizontalWheel.current = { remainder: diagonal ? result.remainder : 0, time: now };
           }
           const height = lineHeight;
           const pixels =
@@ -256,13 +271,22 @@ function Editor({
               : event.deltaMode === 2
                 ? event.currentTarget.clientHeight
                 : 1);
-          if ((Number.isFinite(pixels) && pixels) || result.lines) {
+          const horizontalPixels =
+            horizontal *
+            0.5 *
+            (event.deltaMode === 1
+              ? width
+              : event.deltaMode === 2
+                ? event.currentTarget.clientWidth
+                : 1);
+          const columns = pixels ? result.lines : horizontalPixels / width;
+          if ((Number.isFinite(pixels) && pixels) || (Number.isFinite(columns) && columns)) {
             scroll.current(
               Number.isFinite(pixels) ? pixels / height : 0,
               scrollFollowCursor,
               // Fine pixel deltas already describe smooth touchpad motion.
               event.deltaMode !== 0 || Math.abs(pixels) >= height,
-              result.lines
+              Number.isFinite(columns) ? columns : 0
             );
           }
           return;

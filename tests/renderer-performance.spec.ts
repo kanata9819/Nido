@@ -423,16 +423,18 @@ test('touchpad horizontal scrolling accumulates fine input, coalesces bursts and
   await page.evaluate(() => {
     const api = window.nido;
     let fraction = 0;
+    let column = 0;
     window.nido = new Proxy(api, {
       get(target, method) {
         if (method !== 'scroll') return Reflect.get(target, method);
         return async (...args: Parameters<typeof api.scroll>) => {
           await api.scroll(...args);
           fraction += args[1];
+          column = Math.max(0, column + (args[4] ?? 0));
           window.rendererTest.emit({
             type: 'redraw',
             id: args[0],
-            events: [['nido_pixel_scroll', [fraction, true]], ['flush']]
+            events: [['nido_pixel_scroll', [fraction, true, undefined, false, column]], ['flush']]
           });
         };
       }
@@ -458,7 +460,7 @@ test('touchpad horizontal scrolling accumulates fine input, coalesces bursts and
         )
     );
   await canvas.dispatchEvent('wheel', { deltaX: 1, deltaMode: 0 });
-  expect(await totals()).toEqual({ lines: 0, columns: 0, count: 0 });
+  await expect.poll(totals).toEqual({ lines: 0, columns: 1, count: 1 });
   await canvas.evaluate((node) => {
     for (let i = 0; i < 119; i++) {
       node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaX: 1 }));
@@ -490,11 +492,126 @@ test('touchpad horizontal scrolling accumulates fine input, coalesces bursts and
   await input.dispatchEvent('compositionend', { data: '' });
   expect(await totals()).toEqual(before);
   await canvas.dispatchEvent('wheel', { deltaX: 1, deltaMode: 1 });
+  await expect.poll(async () => (await totals()).columns).toBe(7);
   await page.clock.runFor(250);
   await canvas.dispatchEvent('wheel', { deltaX: 1, deltaMode: 1 });
-  expect(await totals()).toEqual(before);
+  expect((await totals()).columns).toBe(7);
   await canvas.dispatchEvent('wheel', { deltaX: 1, deltaMode: 1 });
-  await expect.poll(async () => (await totals()).columns).toBe(7);
+  await expect.poll(async () => (await totals()).columns).toBe(8);
+
+  // Pure horizontal input already consumed its fraction; a diagonal gesture
+  // must not add that fraction a second time through the integer accumulator.
+  await input.dispatchEvent('keydown', { key: 'Escape' });
+  await page.clock.runFor(32);
+  const beforeDiagonal = await totals();
+  await canvas.dispatchEvent('wheel', { deltaX: 1.5, deltaMode: 1 });
+  await expect.poll(async () => (await totals()).columns).toBe(beforeDiagonal.columns + 1);
+  await canvas.dispatchEvent('wheel', { deltaX: 0.5, deltaY: 2, deltaMode: 1 });
+  await expect.poll(totals).toMatchObject({
+    lines: beforeDiagonal.lines + 1,
+    columns: beforeDiagonal.columns + 1
+  });
+
+  // Changing font settings recreates the renderer while the native viewport
+  // remains horizontally scrolled. Keep that native origin for the next gesture.
+  await page.clock.runFor(32);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'Editor font size' }).fill('18');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('nido.fontSize'))).toBe('18');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeHidden();
+  await page.clock.runFor(32);
+  const beforeFontGesture = await totals();
+  await canvas.dispatchEvent('wheel', { deltaX: 1.5, deltaMode: 1 });
+  await expect.poll(async () => (await totals()).columns).toBe(beforeFontGesture.columns + 1);
+  await canvas.dispatchEvent('wheel', { deltaX: 0.5, deltaMode: 1 });
+  await page.clock.runFor(32);
+  expect((await totals()).columns).toBe(beforeFontGesture.columns + 1);
+});
+
+test('direct horizontal frames retain fractional positions and fixed gutters through pauses and reversals', async ({
+  page
+}) => {
+  await page.route('**/horizontal-frame-probe', (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+  );
+  await page.goto(`${origin}horizontal-frame-probe`);
+  const results = await page.evaluate(
+    async ({ gridUrl, motionUrl }) => {
+      const { Grid } = await import(gridUrl);
+      const { paintEditorMotion } = await import(motionUrl);
+      const results: number[] = [];
+      for (const opacity of [1, 0.5]) {
+        const grid = new Grid();
+        grid.backgroundOpacity = opacity;
+        grid.pixelScrollEnabled = true;
+        grid.apply([['grid_resize', [1, 8, 3]], ['flush']]);
+        grid.prepareLayout(40, 8, 20);
+        const raw = (column: number): HTMLCanvasElement => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 64;
+          canvas.height = 40;
+          const context = canvas.getContext('2d')!;
+          const image = context.createImageData(64, 40);
+          for (let y = 0; y < 40; y++) {
+            for (let x = 0; x < 64; x++) {
+              const at = (y * 64 + x) * 4;
+              const value = x < 16 ? 200 : ((x - 16 + column * 8) % 17) * 12;
+              image.data.set([value, 100, 60, Math.round(255 * opacity)], at);
+            }
+          }
+          context.putImageData(image, 0, 0);
+          return canvas;
+        };
+        for (const direction of [1, -1]) {
+          const previousFrame = raw(direction > 0 ? 0 : 1);
+          const surface = raw(direction > 0 ? 1 : 0);
+          const targetFrame = document.createElement('canvas');
+          let motion: FrameMotion | undefined = {
+            top: 0,
+            bottom: 2,
+            left: 2,
+            right: 8,
+            distance: 0,
+            distanceX: direction * 8,
+            incomingRows: 0,
+            start: performance.now() - 10000,
+            edit: false,
+            duration: 1,
+            offsetX: direction > 0 ? 6 : -2
+          };
+          for (const position of [0.25, 0.5]) {
+            motion!.offsetX = ((direction > 0 ? 1 : 0) - position) * 8;
+            const painted = paintEditorMotion({
+              motion,
+              grid,
+              surface,
+              previousFrame,
+              targetFrame,
+              cellWidth: 8,
+              dpr: 1,
+              animate: false,
+              backgroundOpacity: opacity,
+              reuseTarget: motion!.targetReady === true
+            });
+            motion = painted.motion;
+            const actual = surface.getContext('2d')!.getImageData(0, 0, 64, 40).data;
+            const expected = raw(position).getContext('2d')!.getImageData(0, 0, 64, 40).data;
+            results.push(
+              actual.reduce((count, value, index) => count + Number(value !== expected[index]), 0)
+            );
+            if (!motion) throw new Error('A touchpad fraction must survive a pause');
+          }
+        }
+      }
+      return results;
+    },
+    {
+      gridUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+      motionUrl: `/@fs/${resolve('src/renderer/src/editorMotion.ts').replaceAll('\\', '/')}`
+    }
+  );
+  expect(results).toEqual(Array(8).fill(0));
 });
 
 for (const setting of ['on', 'off', 'reduced'] as const) {
@@ -735,7 +852,8 @@ test('row text reuses styles without leaking CodeLens, bold, italic or underline
       const styles: Record<string, { font: string; color: string }> = {};
       let fonts = 0,
         colors = 0,
-        conversions = 0;
+        conversions = 0,
+        glyphs = 0;
       Number.prototype.toString = function (this: number, radix?: number): string {
         if (radix === 16) conversions++;
         return numberToString.call(this, radix);
@@ -755,6 +873,7 @@ test('row text reuses styles without leaking CodeLens, bold, italic or underline
         }
       });
       proto.fillText = function (value, ...args): void {
+        glyphs++;
         styles[value] = { font: this.font, color: String(this.fillStyle) };
         return Reflect.apply(text, this, [value, ...args]);
       };
@@ -763,12 +882,18 @@ test('row text reuses styles without leaking CodeLens, bold, italic or underline
           grid.draw(canvas, 720, 100, 15, 'monospace', false, undefined, 19, 400);
         draw();
         const initialStyles = { ...styles };
-        fonts = colors = conversions = 0;
+        const cold = { fonts, colors, conversions, glyphs };
+        // Populate the digit rasters before measuring repeated row-style work.
+        for (let i = 0; i < 10; i++) {
+          grid.apply([['grid_line', [1, 0, 10, [[String(i), 1]]]], ['flush']]);
+          draw();
+        }
+        fonts = colors = conversions = glyphs = 0;
         for (let i = 0; i < 20; i++) {
           grid.apply([['grid_line', [1, 0, 10, [[String(i % 10), 1]]]], ['flush']]);
           draw();
         }
-        const work = { fonts, colors, conversions };
+        const work = { fonts, colors, conversions, glyphs };
         grid.apply([
           ['default_colors_set', [0xaabbcc, 0x112233]],
           [
@@ -779,7 +904,7 @@ test('row text reuses styles without leaking CodeLens, bold, italic or underline
           ['flush']
         ]);
         grid.draw(canvas, 720, 100, 18, 'serif', false, undefined, 23, 500);
-        return { styles: initialStyles, updated: { ...styles }, ...work };
+        return { styles: initialStyles, updated: { ...styles }, cold, ...work };
       } finally {
         Object.defineProperty(proto, 'font', font);
         Object.defineProperty(proto, 'fillStyle', fill);
@@ -800,6 +925,8 @@ test('row text reuses styles without leaking CodeLens, bold, italic or underline
     expect(result.styles[text].color).toBe('#d4d4d4');
   }
   expect(result.styles.r.color).toBe('#303030');
+  expect(result.cold.glyphs, 'a cold cache must rasterize the initial text').toBeGreaterThan(0);
+  expect(result.glyphs, 'repeated digits must use the warm glyph cache').toBe(0);
   expect(result.fonts).toBeLessThanOrEqual(40);
   expect(result.colors).toBeLessThanOrEqual(80);
   expect(result.conversions).toBeLessThanOrEqual(40);
@@ -1490,7 +1617,9 @@ for (const rows of [4, 8]) {
               rows: number;
               direction: number;
               frames: number;
+              coldGlyphs: number;
               glyphs: number;
+              changedPixels: number;
               uploads: number;
               canvases: number;
               p50Ms: number;
@@ -1546,9 +1675,15 @@ for (const rows of [4, 8]) {
             };
             const durations: number[] = [];
             let initialImages = 0;
+            let coldGlyphs = 0;
+            let changedPixels = 0;
             try {
               paint();
               initialImages = canvasCount;
+              coldGlyphs = glyphs;
+              const context = canvas.getContext('2d')!;
+              const sampleHeight = Math.ceil(19 * devicePixelRatio);
+              const initialPixels = context.getImageData(0, 0, canvas.width, sampleHeight).data;
               glyphs = uploads = 0;
               for (let frame = 0; frame < 40; frame++) {
                 await new Promise(requestAnimationFrame);
@@ -1583,6 +1718,13 @@ for (const rows of [4, 8]) {
                 paint();
                 durations.push(performance.now() - start);
               }
+              // Read pixels outside the measured frames. Warm glyph reuse still
+              // has to update the visible rows and upload their changed rasters.
+              const finalPixels = context.getImageData(0, 0, canvas.width, sampleHeight).data;
+              changedPixels = finalPixels.reduce(
+                (count, value, index) => count + Number(value !== initialPixels[index]),
+                0
+              );
             } finally {
               HTMLCanvasElement.prototype.getContext = getContext;
               CanvasRenderingContext2D.prototype.fillText = text;
@@ -1596,7 +1738,9 @@ for (const rows of [4, 8]) {
               rows,
               direction,
               frames: durations.length,
+              coldGlyphs,
               glyphs,
+              changedPixels,
               uploads,
               canvases: canvasCount - initialImages,
               p50Ms: durations[20],
@@ -1619,7 +1763,14 @@ for (const rows of [4, 8]) {
         });
         for (const work of reports) {
           expect(work.frames).toBe(40);
-          expect(work.glyphs).toBeGreaterThan(0);
+          expect(work.coldGlyphs, 'initial text must exercise cold rasterization').toBeGreaterThan(
+            0
+          );
+          expect(
+            work.changedPixels,
+            'scrolling must change the visible row pixels'
+          ).toBeGreaterThan(0);
+          expect(work.uploads, 'changed row rasters must reach WebGL').toBeGreaterThan(0);
           if (!process.env.NIDO_PERFORMANCE_BASELINE) {
             expect(
               work.glyphs,

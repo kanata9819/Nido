@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ScrollQueue } from '../src/renderer/src/scroll';
+import { ScrollQueue, scrollOffset } from '../src/renderer/src/scroll';
 import { EditorScroll } from '../src/renderer/src/editorScroll';
 import { Grid } from '../src/renderer/src/grid';
+
+test('zero-duration motion settles even before the first clock tick', () => {
+  assert.equal(scrollOffset(12, 0, 0), 0);
+  assert.equal(scrollOffset(0, 0, 0), 0);
+  assert.equal(Math.abs(scrollOffset(-12, 0, 0)), 0);
+});
 
 test('fast gestures keep their speed until the actual file boundary in both directions', () => {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');

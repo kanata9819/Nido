@@ -13,6 +13,7 @@ export interface FrameMotion {
   edit: boolean;
   duration: number;
   targetReady?: boolean;
+  offsetX?: number;
 }
 
 interface Options {
@@ -40,8 +41,9 @@ export function paintEditorMotion({
   animate,
   backgroundOpacity,
   reuseTarget = false
-}: Options): { motion?: FrameMotion; overlayOffset: number } {
+}: Options): { motion?: FrameMotion; overlayOffset: number; horizontalOffset: number } {
   let overlayOffset = 0;
+  let horizontalOffset = 0;
 
   if (motion) {
     if (motion.incomingRows) {
@@ -52,10 +54,16 @@ export function paintEditorMotion({
     }
     const elapsed = performance.now() - motion.start;
     const offset = scrollOffset(motion.distance, elapsed, motion.duration);
-    const offsetX = scrollOffset(motion.distanceX, elapsed, motion.duration);
+    const direct = motion.offsetX !== undefined;
+    const offsetX = direct
+      ? Math.max(
+          Math.min(0, motion.distanceX),
+          Math.min(Math.max(0, motion.distanceX), motion.offsetX ?? 0)
+        )
+      : scrollOffset(motion.distanceX, elapsed, motion.duration);
     if (
-      (Math.abs(offset) < 0.25 && Math.abs(offsetX) < 0.25) ||
-      !animate ||
+      (Math.abs(offset) < 0.25 && Math.abs(offsetX) < (direct ? 1e-8 : 0.25)) ||
+      (!animate && !direct) ||
       previousFrame.width !== surface.width ||
       previousFrame.height !== surface.height
     ) {
@@ -71,6 +79,7 @@ export function paintEditorMotion({
     } else {
       const snap = (value: number): number => Math.round(value * dpr) / dpr;
       overlayOffset = snap(offset);
+      horizontalOffset = snap(offsetX);
       if (targetFrame.width !== surface.width || targetFrame.height !== surface.height) {
         targetFrame.width = surface.width;
         targetFrame.height = surface.height;
@@ -133,5 +142,5 @@ export function paintEditorMotion({
     }
   }
 
-  return { motion, overlayOffset };
+  return { motion, overlayOffset, horizontalOffset };
 }

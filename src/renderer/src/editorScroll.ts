@@ -1,5 +1,6 @@
 import type { Grid } from './grid';
 import { ScrollQueue, scrollOffset } from './scroll';
+import { HorizontalScroll } from './horizontalScroll';
 
 interface Options {
   id: string;
@@ -13,6 +14,7 @@ interface Options {
 /** Own wheel requests, native redraw acknowledgements and history prefetch. */
 export class EditorScroll {
   private readonly queue = new ScrollQueue();
+  private readonly horizontal = new HorizontalScroll();
   private prefetchNeeded = true;
   private down = false;
   private fetching = false;
@@ -31,6 +33,33 @@ export class EditorScroll {
 
   get pending(): boolean {
     return this.queue.pending;
+  }
+
+  get horizontalOffset(): number {
+    return this.horizontal.offset;
+  }
+
+  get horizontalColumn(): number {
+    return this.horizontal.native;
+  }
+
+  get horizontalActive(): boolean {
+    return this.horizontal.active;
+  }
+
+  observeHorizontal(column: number): void {
+    if (this.horizontal.acknowledge(column, 0)) {
+      this.queue.cancelHorizontal();
+    }
+  }
+
+  stopHorizontal(): void {
+    this.horizontal.stop(this.queue.pendingColumns);
+    this.queue.cancelHorizontal();
+  }
+
+  discardHorizontalFrame(): void {
+    this.horizontal.discardFrame();
   }
 
   get prefetchPending(): boolean {
@@ -61,6 +90,7 @@ export class EditorScroll {
   reset(): void {
     this.generation++;
     this.queue.reset();
+    this.horizontal.reset();
     this.fetching = false;
     this.prefetchNeeded = true;
     this.stop();
@@ -70,6 +100,7 @@ export class EditorScroll {
     if (!this.options.enabled()) {
       this.wheelMotion = undefined;
       this.queue.cancelQueued();
+      this.horizontal.stop(this.queue.pendingColumns);
       this.options.grid.scrollPreview = 0;
     }
   }
@@ -77,6 +108,7 @@ export class EditorScroll {
   stop(): void {
     this.wheelMotion = undefined;
     this.queue.cancelQueued();
+    this.horizontal.stop(this.queue.pendingColumns);
     this.options.grid.scrollPreview = 0;
     this.options.grid.scrolling = false;
     clearTimeout(this.settleTimer);
@@ -93,6 +125,7 @@ export class EditorScroll {
   };
 
   request(lines: number, follow: boolean, duration = 0, now = performance.now()): void {
+    this.horizontal.invalidateLimit();
     // Retarget from the current position, preserving unconsumed distance through wheel bursts.
     if (duration) {
       const motion = this.wheelMotion;
@@ -133,7 +166,12 @@ export class EditorScroll {
   }
 
   requestHorizontal(columns: number, follow: boolean): void {
-    this.move(0, follow, columns);
+    const movement = this.horizontal.request(columns);
+    if (movement) {
+      this.move(0, follow, movement);
+    } else {
+      this.options.schedule();
+    }
   }
 
   private move(lines: number, follow: boolean, columns = 0): void {
@@ -160,7 +198,13 @@ export class EditorScroll {
     schedule();
   }
 
-  acknowledge(direct: boolean): void {
+  acknowledge(direct: boolean, column?: number): void {
+    if (
+      column !== undefined &&
+      this.horizontal.acknowledge(column, direct ? this.queue.pendingColumns : 0)
+    ) {
+      this.queue.cancelHorizontal();
+    }
     if (direct && this.pending) {
       this.queue.acknowledge();
       this.options.grid.scrollPreview = this.queue.preview;
@@ -203,6 +247,7 @@ export class EditorScroll {
             return;
           }
           this.queue.fail();
+          this.horizontal.stop();
           this.wheelMotion = undefined;
           grid.scrollPreview = 0;
           onError(error);

@@ -1,5 +1,5 @@
 export function scrollOffset(distance: number, elapsed: number, duration = 120): number {
-  const progress = Math.min(1, Math.max(0, elapsed / duration));
+  const progress = duration > 0 ? Math.min(1, Math.max(0, elapsed / duration)) : 1;
   return distance * (1 - progress) ** 3;
 }
 
@@ -52,6 +52,14 @@ export class ScrollQueue {
 
   get pending(): boolean {
     return this.inFlight !== undefined;
+  }
+
+  get pendingColumns(): number {
+    return this.inFlight?.acknowledged ? 0 : (this.inFlight?.columns ?? 0);
+  }
+
+  cancelHorizontal(): void {
+    this.horizontal = 0;
   }
 
   get preview(): number {

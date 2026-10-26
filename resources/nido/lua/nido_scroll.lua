@@ -29,9 +29,10 @@ local function view_at_start(view)
 end
 
 local function publish_offset(pixel)
-  local at_start = view_at_start(vim.fn.winsaveview())
+  local view = vim.fn.winsaveview()
+  local at_start = view_at_start(view)
   for _, ui in ipairs(api.nvim_list_uis()) do
-    vim.rpcnotify(ui.chan, 'nido:pixel_scroll', fraction, pixel == true, M.screen_cursor(), at_start)
+    vim.rpcnotify(ui.chan, 'nido:pixel_scroll', fraction, pixel == true, M.screen_cursor(), at_start, view.leftcol)
   end
 end
 

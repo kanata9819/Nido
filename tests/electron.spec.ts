@@ -1114,6 +1114,29 @@ test('touchpad horizontal scrolling reveals long lines and preserves ordinary ed
     const canvas = page.locator('canvas:visible');
     await expect(canvas).toHaveAttribute('aria-description', /LEFT_0/);
     await expect(canvas).not.toHaveAttribute('aria-description', /RIGHT_0/);
+    const fractional = await canvas.evaluate(async (surface: HTMLCanvasElement) => {
+      const width = surface.getContext('2d')!.measureText('M').width;
+      return new Promise<{ width: number; gutter: number }>((resolve) => {
+        const unsubscribe = window.nido.onEvent((event) => {
+          if (event.type !== 'redraw') return;
+          const scroll = event.events.find(([name]) => name === 'nido_scroll')?.[1];
+          if (scroll?.[8] !== 1) return;
+          unsubscribe();
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => resolve({ width, gutter: Number(scroll[3]) }))
+          );
+        });
+        surface.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaX: width / 2 }));
+      });
+    });
+    await canvas.click({ position: { x: (fractional.gutter + 0.1) * fractional.width, y: 27 } });
+    await expect(page.getByText('Ln 2, Col 1', { exact: true })).toBeVisible();
+    await page.keyboard.type('iQ');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+s');
+    await expect.poll(() => readSavedFile(file)).toMatch(/^short\r?\nQLEFT_0 /);
+    await page.keyboard.type('ugg0');
+    await page.keyboard.press('Control+s');
     await canvas.hover();
     await page.mouse.wheel(3000, 0);
     await expect(canvas).toHaveAttribute('aria-description', /RIGHT_0/);

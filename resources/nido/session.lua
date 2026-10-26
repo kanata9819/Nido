@@ -29,7 +29,7 @@ vim.api.nvim_set_decoration_provider(vim.api.nvim_create_namespace('nido_viewpor
     views[win] = {buffer=buffer, height=info.height, width=info.width,
       topline=view.topline, skipcol=view.skipcol, leftcol=view.leftcol, topfill=view.topfill}
     if not previous or previous.buffer ~= buffer then
-      vim.rpcnotify(channel, 'nido:buffer', win, buffer)
+      vim.rpcnotify(channel, 'nido:buffer', win, buffer, view.leftcol)
     end
     if not previous or previous.buffer ~= buffer or previous.height ~= info.height
         or previous.width ~= info.width
@@ -47,7 +47,7 @@ vim.api.nvim_set_decoration_provider(vim.api.nvim_create_namespace('nido_viewpor
     -- Horizontal scrolling leaves line numbers and signs fixed in place.
     vim.rpcnotify(channel, 'nido:scroll', {
       1, top, top + info.height, rows == 0 and left + info.textoff or left,
-      left + info.width, rows, columns, view.topline <= 1 and view.skipcol == 0,
+      left + info.width, rows, columns, view.topline <= 1 and view.skipcol == 0, view.leftcol,
     })
     return false
   end,

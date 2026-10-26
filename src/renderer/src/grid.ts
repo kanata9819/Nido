@@ -26,6 +26,9 @@ export class Grid {
   scrolling = false;
   scrollFraction = 0;
   scrollPreview = 0;
+  horizontalOffset = 0;
+  horizontalGutter = 0;
+  horizontalColumn = 0;
   // Preserve the document's raster phase when Neovim rebases the viewport.
   scrollOrigin = 0;
   cellWidth = 0;
@@ -463,7 +466,9 @@ export class Grid {
             const old = this.cells.slice(top, bottom).map((row) => row.slice(left, right));
             for (let row = top; row < bottom; row++) {
               if (retainedRows?.has(this.cells[row])) {
-                this.cells[row] = this.cells[row].slice();
+                const before = this.cells[row];
+                this.cells[row] = before.slice();
+                this.canvas.moveRowImage(before, this.cells[row]);
               }
               this.canvas.invalidate(row);
               this.rowLayout.invalidate(this.cells[row]);

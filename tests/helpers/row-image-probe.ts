@@ -41,7 +41,10 @@ export function installRowImageProbe(): void {
   CanvasRenderingContext2D.prototype.drawImage = function (...args) {
     const source = args[0];
     if (!this.canvas.isConnected && source instanceof HTMLCanvasElement) {
-      this.canvas.dataset.rowText = source.dataset.rowText ?? '';
+      this.canvas.dataset.rowText =
+        (source.height === this.canvas.height && source.width < this.canvas.width
+          ? (this.canvas.dataset.rowText ?? '')
+          : '') + (source.dataset.rowText ?? '');
       const scale =
         args.length === 3
           ? 1
