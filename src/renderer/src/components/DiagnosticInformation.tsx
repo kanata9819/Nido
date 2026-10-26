@@ -1,3 +1,4 @@
+import { onNidoEvent } from '../nidoEvents';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import {
   ChevronDown,
@@ -81,7 +82,7 @@ export default function DiagnosticInformation({
     if (hidden) {
       return;
     }
-    return window.nido.onEvent((event) => {
+    return onNidoEvent((event) => {
       if (event.id !== id) {
         return;
       }

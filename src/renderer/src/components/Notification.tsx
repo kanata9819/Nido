@@ -1,3 +1,4 @@
+import { onNidoEvent } from '../nidoEvents';
 import { useI18n } from '../i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { CircleAlert, Info, X } from 'lucide-react';
@@ -25,7 +26,7 @@ export default function Notification({
   const dismiss = useCallback(() => setNotice(undefined), []);
   const fading = useNotificationDismissal(notice, animations, dismiss);
   useEffect(() => {
-    return window.nido.onEvent((event) => {
+    return onNidoEvent((event) => {
       if (
         event.type === 'notification' &&
         (event.id === workspaceId || event.severity !== 'info')

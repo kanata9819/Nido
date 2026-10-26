@@ -1,3 +1,4 @@
+import { onNidoEvent } from '../nidoEvents';
 import {
   useEffect,
   useLayoutEffect,
@@ -124,7 +125,7 @@ export default function NeovimUI({
   const messageBody = useRef<HTMLDivElement>(null);
   useEffect(
     () =>
-      window.nido.onEvent((event) => {
+      onNidoEvent((event) => {
         if (event.id === id && event.type === 'neovimUI') {
           setState(event.state);
         }

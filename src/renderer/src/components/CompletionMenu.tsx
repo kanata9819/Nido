@@ -1,3 +1,4 @@
+import { onNidoEvent } from '../nidoEvents';
 import { useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import {
@@ -102,7 +103,7 @@ export default function CompletionMenu({
   }
   useEffect(
     () =>
-      window.nido.onEvent((event) => {
+      onNidoEvent((event) => {
         if (event.id !== id) {
           return;
         }

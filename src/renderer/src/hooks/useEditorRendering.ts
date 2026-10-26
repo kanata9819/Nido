@@ -1,3 +1,4 @@
+import { onNidoEvent } from '../nidoEvents';
 import { useEffect, useRef, type RefObject } from 'react';
 import type { Grid } from '../grid';
 import { scrollOffset } from '../scroll';
@@ -344,7 +345,7 @@ export function useEditorRendering({
     input.addEventListener('input', stopMotion);
     input.addEventListener('compositionstart', stopMotion);
     input.addEventListener('blur', stopMotion);
-    const unsubscribe = window.nido.onEvent((event) => {
+    const unsubscribe = onNidoEvent((event) => {
       if (event.type === 'redraw' && event.id === id) {
         // Editing can shift grid rows without scrolling the viewport.
         const edited = event.events.some(([name]) => name === 'nido_edit');

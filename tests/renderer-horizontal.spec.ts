@@ -24,7 +24,7 @@ test.afterAll(async () => {
 
 for (const scale of [1, 1.25, 1.5, 2]) {
   for (const opacity of [1, 0.5]) {
-    test(`horizontal log rasters match native glyphs at ${scale * 100}% scale and ${opacity} opacity`, async ({
+    test(`horizontal log updates match fresh rasters at ${scale * 100}% scale and ${opacity} opacity`, async ({
       browser
     }) => {
       const context = await browser.newContext({ deviceScaleFactor: scale });
@@ -47,16 +47,18 @@ for (const scale of [1, 1.25, 1.5, 2]) {
             try {
               const grids = [new Grid(), new Grid()];
               const canvases = grids.map(() => document.createElement('canvas'));
-              Reflect.set(Reflect.get(grids[1], 'canvas'), 'glyphImage', () => undefined);
               const columns = 88;
               const rows = 14;
               const source =
+                Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i)).join('') +
                 '2026-10-25T23:25:43.824Z INFO rows=[42, 227, 32] message="debug params" '.repeat(
                   4
                 );
               const cells = (row: number, shift: number): [string, number][] =>
                 Array.from({ length: columns }, (_, col) => [
-                  col < 6 ? `${row}`.padStart(5).concat(' ')[col] : source[col - 6 + shift],
+                  col < 6
+                    ? `${row}`.padStart(5).concat(' ')[col]
+                    : source[(col - 6 + shift + row * 7) % source.length],
                   col < 6 ? 1 : (col + shift) % 17 < 4 ? 2 : 3
                 ]);
               for (const grid of grids) {
@@ -75,6 +77,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                 ]);
               }
               let mismatches = 0;
+              const differences: unknown[] = [];
               for (let frame = 0; frame < 10; frame++) {
                 const family = frame < 6 ? 'monospace' : 'Consolas, monospace';
                 const size = frame < 7 ? 14 : 17;
@@ -110,6 +113,9 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                       : []),
                     ['flush']
                   ]);
+                  if (index === 1) {
+                    Reflect.get(grid, 'canvas').invalidate();
+                  }
                   grid.draw(canvases[index], 860, 308, size, family, false, undefined, 22);
                 }
                 const pixels = canvases.map(
@@ -119,20 +125,28 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                 for (let pixel = 0; pixel < pixels[0].length; pixel++) {
                   if (pixels[0][pixel] !== pixels[1][pixel]) {
                     mismatches++;
+                    if (differences.length < 8) {
+                      differences.push({
+                        frame,
+                        pixel,
+                        actual: pixels[0][pixel],
+                        expected: pixels[1][pixel]
+                      });
+                    }
                   }
                 }
               }
-              return { counts, mismatches };
+              return { counts, mismatches, differences };
             } finally {
               CanvasRenderingContext2D.prototype.fillText = native;
             }
           },
           { opacity, moduleUrl: '/src/renderer/src/grid.ts' }
         );
-        expect(result.mismatches).toBe(0);
-        if (opacity === 1) {
-          expect(result.counts[0]).toBeLessThan(result.counts[1] / 2);
-        }
+        expect(result.mismatches, JSON.stringify(result.differences)).toBe(0);
+        expect(result.counts[0], 'unchanged rows must reuse their existing rasters').toBeLessThan(
+          result.counts[1]
+        );
       } finally {
         await context.close();
       }

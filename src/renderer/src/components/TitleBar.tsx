@@ -1,3 +1,4 @@
+import { onNidoEvent } from '../nidoEvents';
 import { useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
@@ -81,7 +82,7 @@ export default function TitleBar({
   useEffect(() => {
     let active = true;
     let received = false;
-    const unsubscribe = window.nido.onEvent((event) => {
+    const unsubscribe = onNidoEvent((event) => {
       if (event.type === 'windowState') {
         received = true;
         setMaximized(event.state.maximized);

@@ -1,3 +1,4 @@
+import { onNidoEvent } from '../nidoEvents';
 import { useI18n } from '../i18n';
 import { memo, useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
@@ -80,7 +81,7 @@ function MarkdownPreview({
       timer = undefined;
       refresh();
     };
-    const unsubscribe = window.nido.onEvent((event) => {
+    const unsubscribe = onNidoEvent((event) => {
       if (event.id !== workspaceId) {
         return;
       }

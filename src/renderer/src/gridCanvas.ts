@@ -54,7 +54,6 @@ export class GridCanvas {
   private rowIndents = new WeakMap<HTMLCanvasElement, { columns: number[]; cuts: number[] }>();
   private glyphMetrics = new Map<string, Map<string, TextMetrics>>();
   private glyphMetricCount = 0;
-  private glyphImages = new Map<string, HTMLCanvasElement>();
   private dirtyImages = new WeakSet<HTMLCanvasElement>();
   private dirtyPrefixes = new WeakMap<
     HTMLCanvasElement,
@@ -70,46 +69,6 @@ export class GridCanvas {
   private lastDirtyRow = -Infinity;
 
   constructor(private readonly grid: Grid) {}
-
-  private glyphImage(
-    document: Document,
-    style: CellStyle,
-    text: string,
-    metrics: TextMetrics,
-    width: number,
-    height: number,
-    dpr: number,
-    baseline: number
-  ): HTMLCanvasElement | undefined {
-    if (
-      !Number.isFinite(metrics.actualBoundingBoxLeft) ||
-      !Number.isFinite(metrics.actualBoundingBoxRight) ||
-      metrics.actualBoundingBoxLeft > 0 ||
-      metrics.actualBoundingBoxRight * dpr > width
-    ) {
-      return undefined;
-    }
-    const key = `${style.font}|${style.foreground}|${width}|${height}|${baseline}|${text}`;
-    let image = this.glyphImages.get(key);
-    if (!image) {
-      if (this.glyphImages.size >= 4096) {
-        this.glyphImages.clear();
-      }
-      image = document.createElement('canvas');
-      image.width = width;
-      image.height = height;
-      const context = image.getContext('2d', { alpha: false })!;
-      context.fillStyle = this.grid.background;
-      context.fillRect(0, 0, width, height);
-      context.setTransform(dpr, 0, 0, dpr, 0, 0);
-      context.font = style.font;
-      context.fillStyle = style.foreground;
-      context.textBaseline = 'alphabetic';
-      context.fillText(text, 0, baseline);
-      this.glyphImages.set(key, image);
-    }
-    return image;
-  }
 
   invalidate(row?: number, column?: number, before?: Cell, after?: Cell): void {
     if (row !== undefined) {
@@ -145,7 +104,6 @@ export class GridCanvas {
     } else {
       this.invalidatePaint();
       this.rowImages = new WeakMap();
-      this.glyphImages.clear();
       this.glyphMetrics.clear();
       this.glyphMetricCount = 0;
     }
@@ -314,7 +272,6 @@ export class GridCanvas {
     if (imageStyle !== this.imageStyle) {
       this.imageStyle = imageStyle;
       this.rowImages = new WeakMap();
-      this.glyphImages.clear();
       this.glyphMetrics.clear();
       this.glyphMetricCount = 0;
       this.invalidatePaint();
@@ -611,26 +568,6 @@ export class GridCanvas {
           overhang = Number.isFinite(left) ? Math.max(overhang, left + 1.5 / dpr) : Infinity;
         };
         const y = 0;
-        const cachedGlyphs =
-          !translucent &&
-          cells.every((cell) => {
-            const style = cellStyle(cell.highlight);
-            const h = style.highlight;
-            return (
-              /^[\x20-\x7e]?$/.test(cell.text) &&
-              style.background === this.grid.background &&
-              !h.codeLens &&
-              !h.indentGuide &&
-              !h.diagnostic &&
-              !h.wordHighlight &&
-              !h.bracketMatch &&
-              !h.italic &&
-              !h.underline &&
-              !h.undercurl &&
-              !h.strikethrough
-            );
-          });
-        let paintedInkRight = -Infinity;
         const highlightTop = Math.max(0, Math.round(((rowHeight - fontSize - 2) / 2) * dpr));
         const highlightHeight = Math.min(
           imageHeight - highlightTop,
@@ -742,32 +679,7 @@ export class GridCanvas {
             // Keep glyph origins on physical pixels, including fractional Windows scaling.
             rememberText(cell.text);
             const left = Math.round(x * dpr);
-            const right = Math.round((x + cellWidth) * dpr);
-            const metrics = cachedGlyphs ? measure(ctx, currentFont, cell.text) : undefined;
-            const glyph =
-              metrics && paintedInkRight <= left
-                ? this.glyphImage(
-                    image.ownerDocument,
-                    style,
-                    cell.text,
-                    metrics,
-                    right - left,
-                    image.height,
-                    dpr,
-                    baseline
-                  )
-                : undefined;
-            if (glyph) {
-              ctx.drawImage(glyph, left / dpr, 0, glyph.width / dpr, glyph.height / dpr);
-            } else {
-              ctx.fillText(cell.text, left / dpr, baseline);
-            }
-            if (metrics) {
-              paintedInkRight = Math.max(
-                paintedInkRight,
-                left + metrics.actualBoundingBoxRight * dpr
-              );
-            }
+            ctx.fillText(cell.text, left / dpr, baseline);
           }
           if (h.bracketMatch) {
             const left = Math.round(x * dpr);

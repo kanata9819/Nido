@@ -883,11 +883,6 @@ test('row text reuses styles without leaking CodeLens, bold, italic or underline
         draw();
         const initialStyles = { ...styles };
         const cold = { fonts, colors, conversions, glyphs };
-        // Populate the digit rasters before measuring repeated row-style work.
-        for (let i = 0; i < 10; i++) {
-          grid.apply([['grid_line', [1, 0, 10, [[String(i), 1]]]], ['flush']]);
-          draw();
-        }
         fonts = colors = conversions = glyphs = 0;
         for (let i = 0; i < 20; i++) {
           grid.apply([['grid_line', [1, 0, 10, [[String(i % 10), 1]]]], ['flush']]);
@@ -926,7 +921,10 @@ test('row text reuses styles without leaking CodeLens, bold, italic or underline
   }
   expect(result.styles.r.color).toBe('#303030');
   expect(result.cold.glyphs, 'a cold cache must rasterize the initial text').toBeGreaterThan(0);
-  expect(result.glyphs, 'repeated digits must use the warm glyph cache').toBe(0);
+  // The first letter-to-digit edit repaints the row; subsequent digits damage only its prefix.
+  expect(result.glyphs, 'consecutive numeric edits must bound repaint work').toBeLessThanOrEqual(
+    70 + 19 * 14
+  );
   expect(result.fonts).toBeLessThanOrEqual(40);
   expect(result.colors).toBeLessThanOrEqual(80);
   expect(result.conversions).toBeLessThanOrEqual(40);

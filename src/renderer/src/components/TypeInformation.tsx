@@ -1,3 +1,4 @@
+import { onNidoEvent } from '../nidoEvents';
 import { useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Braces, X } from 'lucide-react';
@@ -42,7 +43,7 @@ export default function TypeInformation({
       return;
     }
     const requests = linkRequest.current;
-    const unsubscribe = window.nido.onEvent((event) => {
+    const unsubscribe = onNidoEvent((event) => {
       if (event.type === 'diagnostics' && event.id === id && event.items.length) {
         requests.generation++;
         if (!event.focus && card.current?.contains(document.activeElement)) {

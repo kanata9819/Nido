@@ -1,3 +1,4 @@
+import { onNidoEvent } from '../nidoEvents';
 import {
   useEffect,
   useRef,
@@ -45,7 +46,7 @@ export function useWorkspaceSessions(report: (message: string) => void): Workspa
   useEffect(() => {
     const pendingStates = new Map<string, Partial<SessionState>>();
     let frame = 0;
-    const unsubscribe = window.nido.onEvent((event) => {
+    const unsubscribe = onNidoEvent((event) => {
       switch (event.type) {
         case 'state':
         case 'statePatch': {

@@ -1,3 +1,4 @@
+import { onNidoEvent } from '../nidoEvents';
 import { useI18n } from '../i18n';
 import { useEffect, useState } from 'react';
 import { ArrowDownToLine, Check, LoaderCircle, RefreshCw } from 'lucide-react';
@@ -10,7 +11,7 @@ export default function UpdateButton(): React.JSX.Element {
   useEffect(() => {
     let active = true;
     let received = false;
-    const unsubscribe = window.nido.onEvent((event) => {
+    const unsubscribe = onNidoEvent((event) => {
       if (event.type === 'update') {
         received = true;
         setUpdate(event.state);

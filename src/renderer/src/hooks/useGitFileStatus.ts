@@ -1,3 +1,4 @@
+import { onNidoEvent } from '../nidoEvents';
 import { useEffect, useMemo, useState } from 'react';
 import type { BufferInfo } from '../../../shared/types';
 
@@ -102,7 +103,7 @@ export function useGitFileStatus(
       void refresh();
     };
     window.addEventListener('focus', focus);
-    const unsubscribe = window.nido.onEvent((event) => {
+    const unsubscribe = onNidoEvent((event) => {
       if (event.type === 'filesChanged' && event.id === workspaceId) {
         void refresh();
       }

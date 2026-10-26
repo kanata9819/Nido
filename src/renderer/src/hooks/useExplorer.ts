@@ -1,3 +1,4 @@
+import { onNidoEvent } from '../nidoEvents';
 import {
   useCallback,
   useEffect,
@@ -158,7 +159,7 @@ export function useExplorer({
   }, [save]);
   useEffect(
     () =>
-      window.nido.onEvent((event) => {
+      onNidoEvent((event) => {
         if ((event.type === 'filesChanged' || event.type === 'exit') && event.id === workspace.id) {
           if (event.type === 'filesChanged') {
             invalidate();

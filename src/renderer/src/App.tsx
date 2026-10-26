@@ -1,3 +1,4 @@
+import { onNidoEvent } from './nidoEvents';
 import { LanguageContext, useI18n } from './i18n';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
@@ -95,7 +96,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
   }, []);
   useEffect(
     () =>
-      window.nido.onEvent((event) => {
+      onNidoEvent((event) => {
         if (event.type === 'exit') {
           setInitializedEditors((old) => {
             if (!old.has(event.id)) {
@@ -255,7 +256,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         });
     };
     const timer = window.setTimeout(refresh, 75);
-    const unsubscribe = window.nido.onEvent((event) => {
+    const unsubscribe = onNidoEvent((event) => {
       if (event.type === 'filesChanged' && event.id === active) {
         refresh();
       }
