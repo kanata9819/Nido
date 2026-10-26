@@ -529,6 +529,96 @@ test('touchpad horizontal scrolling accumulates fine input, coalesces bursts and
   expect((await totals()).columns).toBe(beforeFontGesture.columns + 1);
 });
 
+test('horizontal touchpad noise retains lookahead without vertical scrolling or prefetch', async ({
+  page
+}) => {
+  await page.clock.install({ time: new Date(0) });
+  await page.clock.pauseAt(new Date(1000));
+  await page.addInitScript(() => {
+    localStorage.setItem('nido.animations', 'false');
+    localStorage.setItem('nido.scrollFollowCursor', 'false');
+    localStorage.setItem('nido.lineHeight', '18');
+  });
+  await page.goto(`${origin}?view=app`);
+  await page.clock.runFor(32);
+  await page.evaluate(() => {
+    const api = window.nido;
+    let fraction = 0;
+    let column = 0;
+    window.nido = new Proxy(api, {
+      get(target, method) {
+        if (method !== 'scroll') return Reflect.get(target, method);
+        return async (...args: Parameters<typeof api.scroll>) => {
+          await api.scroll(...args);
+          fraction += args[1];
+          column = Math.max(0, column + (args[4] ?? 0));
+          window.rendererTest.emit({
+            type: 'redraw',
+            id: args[0],
+            events: [['nido_pixel_scroll', [fraction, true, undefined, false, column]], ['flush']]
+          });
+        };
+      }
+    });
+  });
+  const canvas = page.locator('canvas:visible');
+  const totals = (): Promise<{
+    lines: number;
+    columns: number;
+    count: number;
+    prefetches: number;
+  }> =>
+    page.evaluate(() => {
+      const calls = window.rendererTest.calls;
+      const scrolls = calls.filter((call) => call.method === 'scroll');
+      return {
+        lines: scrolls.reduce((sum, call) => sum + Number(call.args[1]), 0),
+        columns: scrolls.reduce((sum, call) => sum + Number(call.args[4] ?? 0), 0),
+        count: scrolls.length,
+        prefetches: calls.filter((call) => call.method === 'prefetchScroll').length
+      };
+    });
+  const before = await totals();
+  await canvas.dispatchEvent('wheel', { deltaX: 16, deltaY: 0.1 });
+  await expect.poll(totals).toMatchObject({ lines: 0, columns: 8, count: before.count + 1 });
+  for (const direction of [1, -1]) {
+    for (let step = direction > 0 ? 1 : 0; step < 8; step++) {
+      await canvas.dispatchEvent('wheel', {
+        deltaX: direction * 16,
+        deltaY: step % 2 ? 0.1 : -0.1
+      });
+      await page.clock.runFor(16);
+    }
+  }
+  await page.clock.runFor(200);
+  await expect.poll(totals).toMatchObject({ lines: 0, columns: 0, prefetches: before.prefetches });
+  expect((await totals()).count - before.count).toBeLessThan(8);
+
+  const diagonal = await totals();
+  await canvas.dispatchEvent('wheel', { deltaX: 36, deltaY: 36 });
+  await page.clock.runFor(64);
+  await expect.poll(async () => (await totals()).lines).toBeGreaterThan(diagonal.lines);
+  await expect.poll(async () => (await totals()).columns).toBeGreaterThan(diagonal.columns);
+  const vertical = await totals();
+  await canvas.dispatchEvent('wheel', { deltaY: 36 });
+  await page.clock.runFor(64);
+  await expect.poll(async () => (await totals()).lines).toBeCloseTo(vertical.lines + 1, 10);
+  expect((await totals()).columns).toBe(vertical.columns);
+
+  const shifted = await totals();
+  await canvas.dispatchEvent('wheel', { deltaY: 4, deltaMode: 1, shiftKey: true });
+  await page.clock.runFor(200);
+  await expect.poll(async () => (await totals()).columns).toBe(shifted.columns + 2);
+  expect((await totals()).lines).toBe(shifted.lines);
+  for (const mode of [1, 2]) {
+    const discrete = await totals();
+    await canvas.dispatchEvent('wheel', { deltaX: 2, deltaY: 0.01, deltaMode: mode });
+    await page.clock.runFor(64);
+    await expect.poll(async () => (await totals()).lines).toBeGreaterThan(discrete.lines);
+    await expect.poll(async () => (await totals()).columns).toBeGreaterThan(discrete.columns);
+  }
+});
+
 test('direct horizontal frames retain fractional positions and fixed gutters through pauses and reversals', async ({
   page
 }) => {
@@ -563,9 +653,14 @@ test('direct horizontal frames retain fractional positions and fixed gutters thr
           context.putImageData(image, 0, 0);
           return canvas;
         };
-        for (const direction of [1, -1]) {
-          const previousFrame = raw(direction > 0 ? 0 : 1);
-          const surface = raw(direction > 0 ? 1 : 0);
+        for (const [ahead, direction] of [
+          [1, 1],
+          [1, -1],
+          [4, 1],
+          [4, -1]
+        ]) {
+          const previousFrame = raw(direction > 0 ? 0 : ahead);
+          const surface = raw(direction > 0 ? ahead : 0);
           const targetFrame = document.createElement('canvas');
           let motion: FrameMotion | undefined = {
             top: 0,
@@ -573,7 +668,7 @@ test('direct horizontal frames retain fractional positions and fixed gutters thr
             left: 2,
             right: 8,
             distance: 0,
-            distanceX: direction * 8,
+            distanceX: direction * ahead * 8,
             incomingRows: 0,
             start: performance.now() - 10000,
             edit: false,
@@ -581,7 +676,7 @@ test('direct horizontal frames retain fractional positions and fixed gutters thr
             offsetX: direction > 0 ? 6 : -2
           };
           for (const position of [0.25, 0.5]) {
-            motion!.offsetX = ((direction > 0 ? 1 : 0) - position) * 8;
+            motion!.offsetX = ((direction > 0 ? ahead : 0) - position) * 8;
             const painted = paintEditorMotion({
               motion,
               grid,
@@ -611,7 +706,7 @@ test('direct horizontal frames retain fractional positions and fixed gutters thr
       motionUrl: `/@fs/${resolve('src/renderer/src/editorMotion.ts').replaceAll('\\', '/')}`
     }
   );
-  expect(results).toEqual(Array(8).fill(0));
+  expect(results).toEqual(Array(16).fill(0));
 });
 
 for (const setting of ['on', 'off', 'reduced'] as const) {

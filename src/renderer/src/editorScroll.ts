@@ -200,8 +200,15 @@ export class EditorScroll {
   requestHorizontal(columns: number, follow: boolean, preview = true): void {
     clearTimeout(this.settleTimer);
     this.settleTimer = setTimeout(this.settle, 160);
-    // Detached scrolling can retain a strip ahead without moving the editing cursor.
-    const ahead = !follow && preview && !this.animating && !this.queue.verticalPending ? 8 : 1;
+    // Keep both cached edges overlapping when a fast gesture reverses.
+    const maxAhead = Math.max(
+      1,
+      Math.floor((this.options.grid.columns - this.options.grid.horizontalGutter - 1) / 2)
+    );
+    const ahead =
+      !follow && preview && !this.animating && !this.queue.verticalPending
+        ? Math.min(maxAhead, 32, Math.max(8, Math.ceil(Math.abs(columns) * 4)))
+        : 1;
     const movement = this.horizontal.request(columns, ahead);
     if (movement) {
       this.move(0, follow, movement);

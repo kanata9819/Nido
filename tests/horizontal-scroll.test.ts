@@ -206,6 +206,7 @@ test('discarding recreated lookahead frames requests fresh pixels for the next f
 async function withEditorScroll(
   run: (harness: {
     scroll: import('../src/renderer/src/editorScroll').EditorScroll;
+    grid: import('../src/renderer/src/grid').Grid;
     calls: { lines: number; columns: number; follow: boolean; resolve: () => void }[];
     completions: Promise<void>[];
   }) => Promise<void>,
@@ -225,16 +226,22 @@ async function withEditorScroll(
       }
     }
   });
+  const grid = {
+    scrollPreview: 0,
+    scrolling: false,
+    columns: 80,
+    horizontalGutter: 6
+  } as import('../src/renderer/src/grid').Grid;
   const scroll = new EditorScroll({
     id: 'editor',
-    grid: { scrollPreview: 0, scrolling: false } as import('../src/renderer/src/grid').Grid,
+    grid,
     enabled,
     schedule: () => {},
     onError: (error) => assert.fail(String(error)),
     onCompletion: (promise) => completions.push(promise)
   });
   try {
-    await run({ scroll, calls, completions });
+    await run({ scroll, grid, calls, completions });
   } finally {
     scroll.dispose();
     for (const call of calls) call.resolve();
@@ -298,6 +305,29 @@ test('cursor-following horizontal scrolling keeps one-column native requests rea
     assert.equal(scroll.alignHorizontal(), false);
     assert.equal(calls.length, 1);
   });
+});
+
+test('fast horizontal input scales lookahead while narrow viewports retain overlapping edges', async () => {
+  for (const [columns, gutter, delta, expected] of [
+    [80, 6, 7.25, 29],
+    [80, 6, 10, 32],
+    [20, 6, 1.25, 6],
+    [8, 7, 0.5, 1]
+  ]) {
+    await withEditorScroll(async ({ scroll, grid, calls, completions }) => {
+      grid.columns = columns;
+      grid.horizontalGutter = gutter;
+      scroll.requestHorizontal(delta, false);
+      assert.equal(calls[0].columns, expected);
+      scroll.acknowledge(true, expected);
+      calls[0].resolve();
+      await completions[0];
+      assert.equal(scroll.horizontalColumn - scroll.horizontalOffset, delta);
+      scroll.requestHorizontal(-0.25, false);
+      assert.equal(calls.length, 1);
+      assert.equal(scroll.horizontalColumn - scroll.horizontalOffset, delta - 0.25);
+    });
+  }
 });
 
 test('cached horizontal input postpones idle settlement until the continuous gesture stops', async (t) => {

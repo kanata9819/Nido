@@ -1136,7 +1136,9 @@ test('touchpad horizontal scrolling reveals long lines and preserves ordinary ed
               requestAnimationFrame(() => resolve({ width, gutter: Number(scroll[3]), pixels }))
             );
           });
-          surface.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaX: width / 2 }));
+          surface.dispatchEvent(
+            new WheelEvent('wheel', { bubbles: true, deltaX: width / 2, deltaY: 0.1 })
+          );
         });
       });
     const fractional = await startFractional();

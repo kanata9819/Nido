@@ -258,7 +258,11 @@ function Editor({
         if (!terminal) {
           const now = performance.now();
           const horizontal = event.deltaX || (event.shiftKey ? event.deltaY : 0);
-          const diagonal = !event.shiftKey && delta !== 0;
+          // Precision touchpads add small vertical deltas during horizontal gestures.
+          const diagonal =
+            !event.shiftKey &&
+            delta !== 0 &&
+            (event.deltaMode !== 0 || Math.abs(event.deltaY) * 4 >= Math.abs(horizontal));
           const width = grid.current.cellWidth;
           const result =
             width && diagonal
@@ -275,7 +279,7 @@ function Editor({
           }
           const height = lineHeight;
           const pixels =
-            (event.shiftKey ? 0 : delta) *
+            (diagonal ? delta : 0) *
             (event.deltaMode === 1
               ? height
               : event.deltaMode === 2
