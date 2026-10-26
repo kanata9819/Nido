@@ -322,7 +322,7 @@ test('cold gestures send movement first and refill the final direction after rev
   }
 });
 
-test('horizontal gestures defer vertical prefetch until vertical input needs it', async () => {
+test('horizontal gestures without lookahead defer prefetch until vertical input needs it', async () => {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const calls: unknown[][] = [];
   const completions: Promise<void>[] = [];
@@ -359,7 +359,7 @@ test('horizontal gestures defer vertical prefetch until vertical input needs it'
   });
   try {
     for (const columns of [2, 2, -4]) {
-      scrolling.requestHorizontal(columns, false);
+      scrolling.requestHorizontal(columns, false, false);
       scrolling.acknowledge(true);
       await Promise.all(completions.splice(0));
     }

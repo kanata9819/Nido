@@ -120,6 +120,8 @@ export function useEditorRendering({
     const previousFrame = document.createElement('canvas');
     const targetFrame = document.createElement('canvas');
     let motion: FrameMotion | undefined;
+    let deferredScroll:
+      { lines: number; columns: number; follow: boolean; discrete: boolean } | undefined;
     let lastScrollTime: number | undefined;
     let metrics = { cellWidth: 0, cellHeight: 0 };
     let paintedFocus = false;
@@ -127,9 +129,19 @@ export function useEditorRendering({
     let paintedCursorOpacity = 1;
 
     const stopMotion = (): void => {
+      deferredScroll = undefined;
       motion = undefined;
       lastScrollTime = undefined;
       scrolling.stop();
+    };
+
+    const pauseMotion = (): void => {
+      deferredScroll = undefined;
+      lastScrollTime = undefined;
+      if (motion?.offsetX === undefined) {
+        motion = undefined;
+      }
+      scrolling.stop(true);
     };
 
     const keyDown = (event: KeyboardEvent): void => {
@@ -151,6 +163,19 @@ export function useEditorRendering({
     };
 
     scrollRef.current = (lines, follow, discrete, columns = 0): void => {
+      if (deferredScroll) {
+        deferredScroll.lines += lines;
+        deferredScroll.columns += columns;
+        deferredScroll.follow = follow;
+        deferredScroll.discrete ||= discrete;
+        return;
+      }
+      // Finish horizontal lookahead before vertical movement replaces its cached frames.
+      if (lines && scrolling.alignHorizontal()) {
+        deferredScroll = { lines, columns, follow, discrete };
+        schedule();
+        return;
+      }
       directScroll = true;
       if (lines) {
         motion = undefined;
@@ -162,7 +187,7 @@ export function useEditorRendering({
         );
       }
       if (columns) {
-        scrolling.requestHorizontal(columns, follow);
+        scrolling.requestHorizontal(columns, follow, !lines);
       }
     };
 
@@ -172,10 +197,18 @@ export function useEditorRendering({
         return;
       }
       scrolling.pauseIfDisabled();
+      if (!scrollEnabledRef.current) {
+        deferredScroll = undefined;
+      }
       if (!element.clientWidth || !element.clientHeight) {
         return;
       }
       const now = performance.now();
+      if (deferredScroll && !scrolling.alignHorizontal()) {
+        const request = deferredScroll;
+        deferredScroll = undefined;
+        scrollRef.current(request.lines, request.follow, request.discrete, request.columns);
+      }
       scrolling.advance(now, animationsRef.current && !reducedMotion.matches);
       const focused = document.activeElement === input;
       if (motion?.offsetX !== undefined) {
@@ -314,6 +347,7 @@ export function useEditorRendering({
         cursor.animating ||
         (motion && motion.offsetX === undefined) ||
         scrolling.animating ||
+        deferredScroll ||
         (pixelScroll && scrolling.canPrefetch)
       ) {
         cancelAnimationFrame(frame);
@@ -333,7 +367,7 @@ export function useEditorRendering({
       if (event.button !== 0) {
         return;
       }
-      stopMotion();
+      pauseMotion();
       cursor.resetBlink();
     };
 
@@ -344,13 +378,14 @@ export function useEditorRendering({
     input.addEventListener('keydown', keyDown);
     input.addEventListener('input', stopMotion);
     input.addEventListener('compositionstart', stopMotion);
-    input.addEventListener('blur', stopMotion);
+    input.addEventListener('blur', pauseMotion);
     const unsubscribe = onNidoEvent((event) => {
       if (event.type === 'redraw' && event.id === id) {
         // Editing can shift grid rows without scrolling the viewport.
         const edited = event.events.some(([name]) => name === 'nido_edit');
         const bufferChanged = event.events.some(([name]) => name === 'nido_buffer');
         if (bufferChanged) {
+          deferredScroll = undefined;
           motion = undefined;
           lastScrollTime = undefined;
           directScroll = false;
@@ -565,7 +600,7 @@ export function useEditorRendering({
       input.removeEventListener('keydown', keyDown);
       input.removeEventListener('input', stopMotion);
       input.removeEventListener('compositionstart', stopMotion);
-      input.removeEventListener('blur', stopMotion);
+      input.removeEventListener('blur', pauseMotion);
       observer.disconnect();
       resolution.removeEventListener('change', resolutionChanged);
       window.removeEventListener('resize', stopMotion);

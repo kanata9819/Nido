@@ -19,6 +19,7 @@ export class EditorScroll {
   private down = false;
   private fetching = false;
   private disposed = false;
+  private paused = false;
   private generation = 0;
   private settleTimer?: ReturnType<typeof setTimeout>;
   private wheelMotion?: {
@@ -56,6 +57,22 @@ export class EditorScroll {
   stopHorizontal(): void {
     this.horizontal.stop(this.queue.pendingColumns);
     this.queue.cancelHorizontal();
+  }
+
+  alignHorizontal(): boolean {
+    if (
+      !this.horizontal.active ||
+      (Math.abs(this.horizontal.offset) <= 1 && Math.abs(this.queue.pendingColumns) <= 1)
+    ) {
+      return false;
+    }
+    if (!this.pending) {
+      const columns = this.horizontal.settle();
+      if (columns) {
+        this.move(0, false, columns);
+      }
+    }
+    return true;
   }
 
   discardHorizontalFrame(): void {
@@ -98,26 +115,41 @@ export class EditorScroll {
 
   pauseIfDisabled(): void {
     if (!this.options.enabled()) {
+      this.paused = true;
       this.wheelMotion = undefined;
       this.queue.cancelQueued();
-      this.horizontal.stop(this.queue.pendingColumns);
+      this.horizontal.stop(this.queue.pendingColumns, true);
       this.options.grid.scrollPreview = 0;
+    } else if (this.paused) {
+      this.paused = false;
+      if (this.horizontal.active) {
+        clearTimeout(this.settleTimer);
+        this.settleTimer = setTimeout(this.settle, 160);
+      }
     }
   }
 
-  stop(): void {
+  stop(preserveHorizontal = false): void {
     this.wheelMotion = undefined;
     this.queue.cancelQueued();
-    this.horizontal.stop(this.queue.pendingColumns);
+    this.horizontal.stop(this.queue.pendingColumns, preserveHorizontal);
     this.options.grid.scrollPreview = 0;
     this.options.grid.scrolling = false;
     clearTimeout(this.settleTimer);
+    if (preserveHorizontal && this.horizontal.active) {
+      this.settleTimer = setTimeout(this.settle, 160);
+    }
     this.options.schedule();
   }
 
   private settle = (): void => {
     if (this.animating || this.pending || this.queue.hasQueued || this.fetching) {
       this.settleTimer = setTimeout(this.settle, 40);
+      return;
+    }
+    const columns = this.options.enabled() ? this.horizontal.settle() : 0;
+    if (columns) {
+      this.move(0, false, columns);
       return;
     }
     this.options.grid.scrolling = false;
@@ -165,8 +197,12 @@ export class EditorScroll {
     }
   }
 
-  requestHorizontal(columns: number, follow: boolean): void {
-    const movement = this.horizontal.request(columns);
+  requestHorizontal(columns: number, follow: boolean, preview = true): void {
+    clearTimeout(this.settleTimer);
+    this.settleTimer = setTimeout(this.settle, 160);
+    // Detached scrolling can retain a strip ahead without moving the editing cursor.
+    const ahead = !follow && preview && !this.animating && !this.queue.verticalPending ? 8 : 1;
+    const movement = this.horizontal.request(columns, ahead);
     if (movement) {
       this.move(0, follow, movement);
     } else {

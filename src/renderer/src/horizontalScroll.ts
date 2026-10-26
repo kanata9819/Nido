@@ -25,7 +25,7 @@ export class HorizontalScroll {
     );
   }
 
-  request(delta: number): number {
+  request(delta: number, ahead = 1): number {
     if (!Number.isFinite(delta) || !delta) {
       return 0;
     }
@@ -38,13 +38,31 @@ export class HorizontalScroll {
     }
     const rounded = Math.round(position);
     this.position = Math.abs(position - rounded) < 1e-9 ? rounded : position;
-    const target = Number.isInteger(this.position)
-      ? this.position
-      : this.covers(this.position)
-        ? this.column
-        : this.position < this.column
-          ? Math.floor(this.position)
-          : Math.ceil(this.position);
+    const distance = (this.position - this.column) / ahead;
+    const target =
+      ahead === 1 && Number.isInteger(this.position)
+        ? this.position
+        : this.covers(this.position)
+          ? this.column
+          : Math.max(
+              0,
+              this.column + (distance < 0 ? Math.floor(distance) : Math.ceil(distance)) * ahead
+            );
+    const movement = target - this.requested;
+    this.requested = target;
+    return movement;
+  }
+
+  settle(): number {
+    if (
+      this.position === undefined ||
+      this.column === Math.floor(this.position) ||
+      this.column === Math.ceil(this.position)
+    ) {
+      return 0;
+    }
+    const target =
+      this.column > this.position ? Math.floor(this.position) : Math.ceil(this.position);
     const movement = target - this.requested;
     this.requested = target;
     return movement;
@@ -65,9 +83,13 @@ export class HorizontalScroll {
       return false;
     }
     if (column !== previous + expected) {
-      this.position = column;
+      const limited = expected > 0 && column >= previous && column < previous + expected;
+      this.position = limited ? Math.min(this.position!, column) : column;
       this.requested = column;
-      this.limit = expected > 0 && column < previous + expected ? column : undefined;
+      this.limit = limited ? column : undefined;
+      if (!limited) {
+        this.previous = column;
+      }
       return true;
     }
     if (this.position !== undefined && this.covers(this.position) && this.requested !== column) {
@@ -85,11 +107,13 @@ export class HorizontalScroll {
     this.previous = this.column;
   }
 
-  stop(pendingColumns = 0): void {
-    this.position = undefined;
-    this.previous = this.column;
+  stop(pendingColumns = 0, preservePosition = false): void {
+    if (!preservePosition) {
+      this.position = undefined;
+      this.previous = this.column;
+      this.invalidateLimit();
+    }
     this.requested = Math.max(0, this.column + pendingColumns);
-    this.invalidateLimit();
   }
 
   reset(): void {

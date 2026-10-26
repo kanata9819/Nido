@@ -54,6 +54,10 @@ export class ScrollQueue {
     return this.inFlight !== undefined;
   }
 
+  get verticalPending(): boolean {
+    return this.queued !== 0 || !!this.inFlight?.lines;
+  }
+
   get pendingColumns(): number {
     return this.inFlight?.acknowledged ? 0 : (this.inFlight?.columns ?? 0);
   }

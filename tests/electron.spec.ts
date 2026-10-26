@@ -1114,21 +1114,105 @@ test('touchpad horizontal scrolling reveals long lines and preserves ordinary ed
     const canvas = page.locator('canvas:visible');
     await expect(canvas).toHaveAttribute('aria-description', /LEFT_0/);
     await expect(canvas).not.toHaveAttribute('aria-description', /RIGHT_0/);
-    const fractional = await canvas.evaluate(async (surface: HTMLCanvasElement) => {
-      const width = surface.getContext('2d')!.measureText('M').width;
-      return new Promise<{ width: number; gutter: number }>((resolve) => {
-        const unsubscribe = window.nido.onEvent((event) => {
-          if (event.type !== 'redraw') return;
-          const scroll = event.events.find(([name]) => name === 'nido_scroll')?.[1];
-          if (scroll?.[8] !== 1) return;
-          unsubscribe();
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() => resolve({ width, gutter: Number(scroll[3]) }))
-          );
+    const startFractional = (): Promise<{ width: number; gutter: number; pixels: number[] }> =>
+      canvas.evaluate(async (surface: HTMLCanvasElement) => {
+        const ctx = surface.getContext('2d')!;
+        const width = Math.ceil(ctx.measureText('M').width * devicePixelRatio) / devicePixelRatio;
+        const pixels = Array.from(
+          ctx.getImageData(
+            100 * devicePixelRatio,
+            80 * devicePixelRatio,
+            200 * devicePixelRatio,
+            18 * devicePixelRatio
+          ).data
+        );
+        return new Promise<{ width: number; gutter: number; pixels: number[] }>((resolve) => {
+          const unsubscribe = window.nido.onEvent((event) => {
+            if (event.type !== 'redraw') return;
+            const scroll = event.events.find(([name]) => name === 'nido_scroll')?.[1];
+            if (!(Number(scroll?.[8]) > 0)) return;
+            unsubscribe();
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => resolve({ width, gutter: Number(scroll[3]), pixels }))
+            );
+          });
+          surface.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaX: width / 2 }));
         });
-        surface.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaX: width / 2 }));
       });
+    const fractional = await startFractional();
+    const pausedPixels = await canvas.evaluate(async (surface: HTMLCanvasElement) => {
+      const input = document.querySelector<HTMLTextAreaElement>('[aria-label="Neovim input"]')!;
+      const ctx = surface.getContext('2d')!;
+      const pixels = (): Uint8ClampedArray =>
+        ctx.getImageData(
+          100 * devicePixelRatio,
+          80 * devicePixelRatio,
+          200 * devicePixelRatio,
+          18 * devicePixelRatio
+        ).data;
+      const before = pixels();
+      input.blur();
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      );
+      const paused = pixels();
+      input.focus();
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      );
+      const resumed = pixels();
+      return {
+        paused: before.reduce((count, value, i) => count + Number(value !== paused[i]), 0),
+        resumed: before.reduce((count, value, i) => count + Number(value !== resumed[i]), 0)
+      };
     });
+    expect(pausedPixels).toEqual({ paused: 0, resumed: 0 });
+    const centered = await canvas.evaluate(
+      (surface: HTMLCanvasElement, initial) =>
+        new Promise<number>((resolve) => {
+          const unsubscribe = window.nido.onEvent((event) => {
+            if (event.type !== 'redraw') return;
+            const offset = event.events
+              .flatMap(([name, ...calls]) => (name === 'nido_pixel_scroll' ? calls : []))
+              .find((args) => args[1] === true);
+            if (!offset) return;
+            unsubscribe();
+            resolve(Number(offset[4]));
+          });
+          const bounds = surface.getBoundingClientRect();
+          const point = {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+            pointerId: 1,
+            pointerType: 'mouse',
+            clientX: bounds.left + (initial.gutter + 20.5) * initial.width,
+            clientY: bounds.top + 27
+          };
+          surface.dispatchEvent(new PointerEvent('pointerdown', { ...point, buttons: 1 }));
+          surface.dispatchEvent(new PointerEvent('pointerup', { ...point, buttons: 0 }));
+        }),
+      fractional
+    );
+    expect(centered).toBeGreaterThanOrEqual(0);
+    expect(centered).toBeLessThanOrEqual(1);
+    await expect(page.getByText('Ln 2, Col 21', { exact: true })).toBeVisible();
+    await expect
+      .poll(() =>
+        canvas.evaluate((surface: HTMLCanvasElement, before) => {
+          const pixels = surface
+            .getContext('2d')!
+            .getImageData(
+              100 * devicePixelRatio,
+              80 * devicePixelRatio,
+              200 * devicePixelRatio,
+              18 * devicePixelRatio
+            ).data;
+          return before.reduce((count, value, i) => count + Number(value !== pixels[i]), 0);
+        }, fractional.pixels)
+      )
+      .toBe(0);
+    await startFractional();
     await canvas.click({ position: { x: (fractional.gutter + 0.1) * fractional.width, y: 27 } });
     await expect(page.getByText('Ln 2, Col 1', { exact: true })).toBeVisible();
     await page.keyboard.type('iQ');
@@ -1137,6 +1221,40 @@ test('touchpad horizontal scrolling reveals long lines and preserves ordinary ed
     await expect.poll(() => readSavedFile(file)).toMatch(/^short\r?\nQLEFT_0 /);
     await page.keyboard.type('ugg0');
     await page.keyboard.press('Control+s');
+    const axisSwitch = await canvas.evaluate(
+      (surface: HTMLCanvasElement, width) =>
+        new Promise<{ column: number; overscan: number; inputInterval: number }>((resolve) => {
+          let overscan = -1;
+          let inputInterval = 0;
+          const unsubscribe = window.nido.onEvent((event) => {
+            if (event.type !== 'redraw') return;
+            for (const [name, ...calls] of event.events) {
+              if (name !== 'nido_pixel_scroll') continue;
+              for (const args of calls) {
+                if (args[1] !== true) continue;
+                const column = Number(args[4]);
+                overscan = Math.max(overscan, column);
+                if (!(Number(args[0]) > 0)) continue;
+                unsubscribe();
+                requestAnimationFrame(() =>
+                  requestAnimationFrame(() => resolve({ column, overscan, inputInterval }))
+                );
+                return;
+              }
+            }
+          });
+          const started = performance.now();
+          surface.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaX: width }));
+          surface.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 12 }));
+          inputInterval = performance.now() - started;
+        }),
+      fractional.width
+    );
+    expect(axisSwitch.overscan).toBeGreaterThan(1);
+    expect(axisSwitch.inputInterval).toBeLessThan(160);
+    expect(axisSwitch.column).toBeGreaterThanOrEqual(0);
+    expect(axisSwitch.column).toBeLessThanOrEqual(1);
+    await expect(canvas).toHaveAttribute('aria-description', /LEFT_/);
     await canvas.hover();
     await page.mouse.wheel(3000, 0);
     await expect(canvas).toHaveAttribute('aria-description', /RIGHT_0/);
@@ -1736,7 +1854,12 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
           if (wide < 0 && tab < 0) return;
           node.setAttribute(
             wide >= 0 ? 'data-wide-point' : 'data-tab-point',
-            JSON.stringify({ x: column * ctx.measureText('M').width, y })
+            JSON.stringify({
+              x:
+                column *
+                (Math.ceil(ctx.measureText('M').width * devicePixelRatio) / devicePixelRatio),
+              y
+            })
           );
         });
       }) as typeof draw;
@@ -2102,7 +2225,11 @@ test('smooth cursor movement and blink animate and persist their settings', asyn
       node.dataset.cursorXs = '[]';
       const input = document.querySelector<HTMLTextAreaElement>('[aria-label="Neovim input"]')!;
       return {
-        x: parseFloat(input.style.left) + node.getContext('2d')!.measureText('M').width * 8.5,
+        x:
+          parseFloat(input.style.left) +
+          (Math.ceil(node.getContext('2d')!.measureText('M').width * devicePixelRatio) /
+            devicePixelRatio) *
+            8.5,
         y: parseFloat(input.style.top) + 8
       };
     });

@@ -201,9 +201,10 @@ function Editor({
         const bounds = canvas.current.getBoundingClientRect();
         const x = event.clientX - bounds.left;
         const horizontalColumn = grid.current.horizontalColumn;
+        const horizontalOffset = grid.current.horizontalOffset;
         const gutter = grid.current.horizontalGutter;
         const body = x >= gutter * cellWidth;
-        const column = Math.floor((x - (body ? grid.current.horizontalOffset : 0)) / cellWidth);
+        const column = Math.floor((x - (body ? horizontalOffset : 0)) / cellWidth);
         const y = event.clientY - bounds.top;
         if (x < 0 || x >= columns * cellWidth) {
           return;
@@ -218,6 +219,15 @@ function Editor({
             const row = grid.current.rowAt(y);
             if (row >= 0) {
               const currentGutter = grid.current.horizontalGutter;
+              if (Math.abs(horizontalOffset) > cellWidth) {
+                const delta =
+                  Math.max(0, Math.floor(horizontalColumn - horizontalOffset / cellWidth)) -
+                  grid.current.horizontalColumn;
+                if (delta) {
+                  await window.nido.scroll(id, 0, false, true, delta);
+                  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+                }
+              }
               let target = body
                 ? column - gutter + currentGutter + horizontalColumn - grid.current.horizontalColumn
                 : column;

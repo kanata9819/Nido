@@ -23,6 +23,104 @@ test.afterAll(async () => {
 });
 
 for (const scale of [1, 1.25, 1.5, 2]) {
+  test(`horizontal native rebases preserve glyph shapes in both directions at ${scale * 100}% scale`, async ({
+    browser
+  }) => {
+    const context = await browser.newContext({ deviceScaleFactor: scale });
+    try {
+      const page = await context.newPage();
+      await page.route('**/horizontal-rebase-probe', (route) =>
+        route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+      );
+      await page.goto(`${origin}/horizontal-rebase-probe`);
+      const result = await page.evaluate(async (moduleUrl) => {
+        const { Grid } = await import(moduleUrl);
+        const grid = new Grid();
+        grid.cursorVisible = false;
+        grid.busy = true;
+        const columns = 64;
+        const rows = 8;
+        const gutter = 6;
+        const source = 'WM[]()lI|\\/fox_09 : Console::trace(args); '.repeat(8);
+        grid.apply([
+          ['grid_resize', [1, columns, rows]],
+          ['hl_attr_define', [1, { foreground: 0x81c784 }, {}, []]],
+          ['hl_attr_define', [2, { foreground: 0xf0ae81 }, {}, []]],
+          ['flush']
+        ]);
+        const canvas = document.createElement('canvas');
+        let previous: Uint8ClampedArray | undefined;
+        let previousShift = 0;
+        let mismatches = 0;
+        let comparisons = 0;
+        let rawPitch = 0;
+        const failures: { shift: number; mismatches: number }[] = [];
+        for (const shift of [0, 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1, 0]) {
+          grid.apply([
+            ...Array.from({ length: rows - 1 }, (_, row) => [
+              'grid_line',
+              [
+                1,
+                row,
+                0,
+                Array.from({ length: columns }, (_, col) => [
+                  col < gutter ? ' ' : source[col - gutter + shift],
+                  col < gutter ? 0 : (col - gutter + shift) % 7 < 3 ? 1 : 2
+                ])
+              ]
+            ]),
+            ['flush']
+          ]);
+          const { cellWidth } = grid.draw(
+            canvas,
+            660,
+            132,
+            15.3,
+            'Consolas, monospace',
+            false,
+            undefined,
+            22
+          );
+          const ctx = canvas.getContext('2d')!;
+          rawPitch = ctx.measureText('M').width * devicePixelRatio;
+          const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+          if (previous) {
+            const movement = Math.round((shift - previousShift) * cellWidth * devicePixelRatio);
+            let changed = 0;
+            for (
+              let y = Math.round(22 * devicePixelRatio);
+              y < Math.round(66 * devicePixelRatio);
+              y++
+            ) {
+              for (
+                let x = Math.ceil((gutter + 4) * cellWidth * devicePixelRatio);
+                x < Math.floor((columns - 4) * cellWidth * devicePixelRatio);
+                x++
+              ) {
+                const current = (y * canvas.width + x) * 4;
+                const prior = (y * canvas.width + x + movement) * 4;
+                for (let channel = 0; channel < 4; channel++) {
+                  changed += Number(pixels[current + channel] !== previous[prior + channel]);
+                }
+              }
+            }
+            mismatches += changed;
+            comparisons++;
+            if (changed && failures.length < 4) failures.push({ shift, mismatches: changed });
+          }
+          previous = pixels;
+          previousShift = shift;
+        }
+        return { rawPitch, comparisons, mismatches, failures };
+      }, '/src/renderer/src/grid.ts');
+      expect(Math.abs(result.rawPitch - Math.round(result.rawPitch))).toBeGreaterThan(0.001);
+      expect(result.comparisons).toBe(16);
+      expect(result.mismatches, JSON.stringify(result)).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
   for (const opacity of [1, 0.5]) {
     test(`horizontal log updates match fresh rasters at ${scale * 100}% scale and ${opacity} opacity`, async ({
       browser

@@ -115,8 +115,8 @@ test('bracket pair guides connect scopes and track the active scope and virtual 
       const line = JSON.parse(node.dataset.guideLines!).find(
         (item: { width: number; height: number }) => item.height > item.width
       );
-      const width = node.getContext('2d')!.measureText('M').width;
       const dpr = window.devicePixelRatio;
+      const width = Math.ceil(node.getContext('2d')!.measureText('M').width * dpr) / dpr;
       return {
         aligned: JSON.parse(node.dataset.indentLines!).some(
           (indent: { x: number; width: number }) =>
