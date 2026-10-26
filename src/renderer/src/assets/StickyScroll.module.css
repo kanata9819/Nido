@@ -22,6 +22,7 @@
   line-height: inherit;
   text-align: left;
   font-variant-ligatures: none;
+  font-kerning: none;
   cursor: pointer;
 }
 .row button:hover {
@@ -45,5 +46,7 @@
   white-space: pre;
 }
 .code > span {
-  display: inline-block;
+  position: relative;
+  display: block;
+  height: 100%;
 }

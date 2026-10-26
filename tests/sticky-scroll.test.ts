@@ -10,6 +10,102 @@ import type { StickyScrollState } from '../src/shared/types';
 
 const span = [{ text: 'scope {', color: '#d4d4d4' }];
 
+test('sticky header cells preserve native widths for wide text, combining marks and tab stops', async () => {
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.attach(90, 25);
+    await session.client.request('nvim_exec_lua', [
+      `
+local api, sticky = vim.api, require('nido_sticky')
+local header = 'function é日本😀()\t{'
+local lines = {header}
+for _ = 1, 35 do lines[#lines + 1] = '  work();' end
+lines[#lines + 1] = '}'
+api.nvim_buf_set_lines(0, 0, -1, false, lines)
+vim.cmd('setlocal syntax=typescript tabstop=8')
+api.nvim_exec_autocmds('TextChanged', {buffer=api.nvim_get_current_buf()})
+assert(vim.wait(5000, function() return require('nido_brackets').ready(api.nvim_get_current_buf()) end, 5))
+vim.wait(350)
+vim.cmd('normal! 12Gzt')
+local notify, latest = vim.rpcnotify, nil
+vim.rpcnotify = function(channel, name, state, ...)
+  if name == 'nido:sticky_scroll' then latest = state end
+  return notify(channel, name, state, ...)
+end
+local ok, err = pcall(function()
+  local function check(tabstop)
+    vim.bo.tabstop = tabstop
+    sticky.publish(api.nvim_get_current_win(), api.nvim_get_current_buf())
+    local spans = assert(latest.scopes[1], 'Missing sticky scope').text
+    local text, width, found = '', 0, {}
+    for _, span in ipairs(spans) do
+      text = text .. span.text
+      width = width + span.cells
+      found[span.text] = span.cells
+    end
+    assert(text == header, 'The displayed text must remain intact')
+    assert(width == vim.fn.strdisplaywidth(header), 'Cell widths must match Neovim')
+    assert(found['é'] == 1 and not found['́'], 'Combining marks must share their base cell')
+    assert(found['日'] == 2 and found['本'] == 2 and found['😀'] == 2, 'Wide text needs two cells')
+    assert(found['\t'] == (tabstop == 8 and 6 or 2), 'Tabs must start at the current display column')
+  end
+  check(8)
+  check(4)
+end)
+vim.rpcnotify = notify
+assert(ok, err)
+`,
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
+});
+
+test('sticky relative numbers follow the editing cursor and remain anchored during detached scrolling', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-sticky-relative-'));
+  const grid = new Grid();
+  let session: Session | undefined;
+  try {
+    await writeFile(
+      join(root, 'scope.txt'),
+      ['function work() {', ...Array.from({ length: 100 }, () => '  work();'), '}'].join('\n')
+    );
+    session = await Session.create(root, (event) => {
+      if (event.type === 'redraw') grid.apply(event.events);
+    });
+    await session.attach(80, 20);
+    await session.openFile('scope.txt');
+    const redraw = async (): Promise<void> => {
+      await session!.client.request('nvim_command', ['redraw!']);
+      await session!.client.request('nvim_eval', ['1']);
+    };
+    await session.input('20Gzt');
+    await session.setRelativeLineNumbers(true);
+    await redraw();
+    assert.equal(grid.stickyScroll?.relativeTo, 20);
+    await session.input('j');
+    await redraw();
+    assert.equal(grid.stickyScroll?.relativeTo, 21);
+
+    await session.scroll(30, false, true);
+    assert.equal(grid.stickyScroll?.relativeTo, 21);
+    assert.notEqual(
+      ((await session.client.request('nvim_win_get_cursor', [0])) as number[])[0],
+      21
+    );
+    await session.setRelativeLineNumbers(false);
+    await redraw();
+    assert.equal(grid.stickyScroll?.relativeTo, undefined);
+    await session.setRelativeLineNumbers(true);
+    await redraw();
+    assert.equal(grid.stickyScroll?.relativeTo, 21);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 for (const server of ['legacy', 'native'] as const) {
   test(`TypeScript ${server} method separators exclude callbacks and retain declarations and sticky scopes`, async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-ts-separators-'));
@@ -648,7 +744,7 @@ test('Rust sticky headers pick up delayed semantic colors even when their source
     const headerColor = (): string | undefined =>
       grid.stickyScroll?.scopes
         .find((scope) => scope.line === headerLine)
-        ?.text.find((span) => span.text.includes('Screen'))?.color;
+        ?.text.flatMap((span) => Array.from(span.text, () => span.color))[5];
     const syntaxColor = headerColor();
     assert.ok(syntaxColor);
     assert.notEqual(syntaxColor, '#4ec9b0');

@@ -12,13 +12,14 @@ import {
 import type { FileEntry, Workspace } from '../../../shared/types';
 import type { FileRequest } from '../components/ExplorerCommands';
 import { getVisibleEntries } from '../sidebarTree';
-import { readExplorerState, writeExplorerState } from '../explorerState';
+import { explorerFilePath, readExplorerState, writeExplorerState } from '../explorerState';
 
 interface ExplorerState {
   visible: ReturnType<typeof getVisibleEntries>;
   expanded: Set<string>;
   selected: string;
   selectedIndex: number;
+  reveal: number;
   setSelected: Dispatch<SetStateAction<string>>;
   setExpanded: Dispatch<SetStateAction<Set<string>>>;
   load: (path: string) => Promise<void>;
@@ -60,16 +61,19 @@ function sameEntries(previous: FileEntry[] | undefined, next: FileEntry[]): bool
 export function useExplorer({
   workspace,
   active,
+  currentFile,
   onError
 }: {
   workspace: Workspace;
   active: boolean;
+  currentFile: string;
   onError: (message: string) => void;
 }): ExplorerState {
   const [entriesByDirectory, setEntries] = useState<Record<string, FileEntry[]>>({});
   const [saved] = useState(() => readExplorerState(workspace.root));
   const [expanded, setExpanded] = useState(() => new Set(saved.expanded));
   const [selected, setSelected] = useState(saved.selected);
+  const [reveal, setReveal] = useState(0);
   const [ready, setReady] = useState(false);
   const [pageVisible, setPageVisible] = useState(() => !document.hidden);
   const latest = useRef(saved);
@@ -264,6 +268,65 @@ export function useExplorer({
   };
 
   useEffect(() => {
+    const path = explorerFilePath(workspace.root, currentFile);
+    if (!active || !path) {
+      return;
+    }
+    let cancelled = false;
+    const revealFile = async (): Promise<void> => {
+      const parts = path.split(/[\\/]/);
+      const parents: string[] = [];
+      let directory = '';
+      for (const [index, part] of parts.entries()) {
+        let request: DirectoryRequest;
+        let files: FileEntry[];
+        do {
+          request = requestDirectory(directory);
+          try {
+            files = await request.files;
+          } catch (error) {
+            if (requests.current.get(directory) === request) {
+              requests.current.delete(directory);
+            }
+            throw error;
+          }
+          if (cancelled) {
+            return;
+          }
+          // Watchers and manual refreshes can supersede an in-flight directory read.
+        } while (requests.current.get(directory) !== request);
+        const entry = files.find((entry) => {
+          const relative = explorerFilePath(workspace.root, `${workspace.root}/${entry.path}`);
+          return relative.split(/[\\/]/)[index] === part;
+        });
+        if (!entry) {
+          return;
+        }
+        if (!entry.directory) {
+          if (index !== parts.length - 1) {
+            return;
+          }
+          setExpanded((old) => new Set([...old, ...parents]));
+          setSelected(entry.path);
+          setReveal((value) => value + 1);
+          invalidate([]);
+          return;
+        }
+        directory = entry.path;
+        parents.push(directory);
+      }
+    };
+    void revealFile().catch((error) => {
+      if (!cancelled && !String(error).includes('ENOENT')) {
+        onError(String(error));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace.root, active, currentFile, requestDirectory, invalidate, onError]);
+
+  useEffect(() => {
     // Keep each tree's state, but load hidden workspaces only when first activated or changed.
     if (!active || !pageVisible || loadedRevision.current === revision) {
       return;
@@ -439,6 +502,7 @@ export function useExplorer({
     expanded,
     selected,
     selectedIndex,
+    reveal,
     setSelected,
     setExpanded,
     load,

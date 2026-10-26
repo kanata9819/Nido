@@ -6,6 +6,31 @@ import { join } from 'node:path';
 import { readLayout, writeLayout, type SavedLayout } from '../src/main/persistence';
 import { WorkspaceCheckpoints } from '../src/main/workspaceCheckpoints';
 import { Session } from '../src/main/session';
+import { explorerFilePath } from '../src/renderer/src/explorerState';
+
+test('Explorer resolves workspace files across Windows separators and WSL aliases', () => {
+  for (const [root, file, expected] of [
+    ['C:\\Project', 'c:/PROJECT/src/Main.ts', 'src\\main.ts'],
+    ['C:/Project/', 'C:\\project\\main.ts', 'main.ts'],
+    ['C:\\Project', 'C:\\Projects\\main.ts', ''],
+    ['C:\\Project', 'term://C:/Project/shell', ''],
+    ['C:\\Project', '', ''],
+    ['C:\\Project', 'C:\\Project\\..\\outside.ts', ''],
+    ['C:\\Project', 'C:\\Project', ''],
+    ['/', '/main.ts', 'main.ts'],
+    ['/Project', '/Project/src/Main.ts', 'src/Main.ts'],
+    ['/Project', '/project/main.ts', ''],
+    [
+      '\\\\wsl.localhost\\Fedora\\home\\me\\Project',
+      '//wsl$/fedora/home/me/Project/src/Main.ts',
+      'src\\Main.ts'
+    ],
+    ['\\\\wsl$\\Fedora\\Project', '\\\\wsl.localhost\\Fedora\\project\\main.ts', ''],
+    ['\\\\wsl$\\Fedora\\Project', '\\\\wsl$\\Ubuntu\\Project\\main.ts', '']
+  ]) {
+    assert.equal(explorerFilePath(root, file), expected, `${root}: ${file}`);
+  }
+});
 
 async function temporaryRoot(context: TestContext): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'nido-checkpoints-'));

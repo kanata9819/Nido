@@ -356,6 +356,185 @@ for (const saved of [
   });
 }
 
+test('Explorer reveals the current editor file through collapsed parents without taking input focus', async ({
+  page
+}) => {
+  await open(page, 'app', 'files');
+  const tree = page.getByRole('tree', { name: 'Project files' });
+  const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+  await editor.focus();
+  await page.evaluate(() =>
+    window.rendererTest.emit({
+      type: 'statePatch',
+      id: 'alpha',
+      state: {
+        buffers: [{ id: 1, name: '/alpha/src/nested/file-099.txt', modified: false }],
+        current: 1
+      }
+    })
+  );
+  await page.clock.runFor(32);
+  await page.evaluate(() =>
+    window.rendererTest.settle('files', 0, [{ name: 'src', path: 'src', directory: true }])
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.rendererTest.pending
+          .filter(({ method }) => method === 'files')
+          .map(({ args }) => args[1])
+      )
+    )
+    .toEqual(['src']);
+  await page.evaluate(() =>
+    window.rendererTest.settle('files', 0, [
+      { name: 'nested', path: 'src/nested', directory: true }
+    ])
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.rendererTest.pending
+          .filter(({ method }) => method === 'files')
+          .map(({ args }) => args[1])
+      )
+    )
+    .toEqual(['src/nested']);
+  await page.evaluate(() =>
+    window.rendererTest.settle(
+      'files',
+      0,
+      Array.from({ length: 100 }, (_, index) => ({
+        name: `file-${String(index).padStart(3, '0')}.txt`,
+        path: `src/nested/file-${String(index).padStart(3, '0')}.txt`,
+        directory: false
+      }))
+    )
+  );
+  const selected = tree.locator('[aria-selected="true"]');
+  await expect(selected).toHaveText('file-099.txt');
+  await expect(tree).toHaveAttribute('data-row-count', '102');
+  await expect
+    .poll(() =>
+      selected.evaluate((node) => {
+        const row = node.getBoundingClientRect();
+        const viewport = node.closest('[role="tree"]')!.getBoundingClientRect();
+        return row.top >= viewport.top && row.bottom <= viewport.bottom;
+      })
+    )
+    .toBe(true);
+  await expect(editor).toBeFocused();
+  await page.evaluate(() =>
+    window.rendererTest.emit({
+      type: 'statePatch',
+      id: 'alpha',
+      state: {
+        buffers: [{ id: 2, name: '/alpha/src/nested/file-000.txt', modified: false }],
+        current: 2
+      }
+    })
+  );
+  await page.clock.runFor(32);
+  await expect(selected).toHaveText('file-000.txt');
+  await expect.poll(() => tree.evaluate((node) => node.scrollTop)).toBeLessThan(100);
+  await expect(editor).toBeFocused();
+  expect(
+    await page.evaluate(() =>
+      window.rendererTest.calls
+        .filter(({ method }) => method === 'files')
+        .map(({ args }) => args[1])
+    )
+  ).toEqual(['', 'src', 'src/nested']);
+});
+
+test('Explorer cancels stale file reveals and leaves manual selection alone for unchanged or external files', async ({
+  page
+}) => {
+  await open(page, 'app', 'files');
+  await page.evaluate(() =>
+    window.rendererTest.settle('files', 0, [
+      { name: 'first', path: 'first', directory: true },
+      { name: 'second', path: 'second', directory: true }
+    ])
+  );
+  const tree = page.getByRole('tree', { name: 'Project files' });
+  const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+  await editor.focus();
+  const showFile = async (name: string): Promise<void> => {
+    await page.evaluate(
+      (path) =>
+        window.rendererTest.emit({
+          type: 'statePatch',
+          id: 'alpha',
+          state: { buffers: [{ id: 1, name: path, modified: false }], current: 1 }
+        }),
+      name
+    );
+    await page.clock.runFor(32);
+  };
+  await showFile('/alpha/first/old.txt');
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.rendererTest.pending.some(
+          ({ method, args }) => method === 'files' && args[1] === 'first'
+        )
+      )
+    )
+    .toBe(true);
+  await showFile('/alpha/second/current.txt');
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.rendererTest.pending.some(
+          ({ method, args }) => method === 'files' && args[1] === 'second'
+        )
+      )
+    )
+    .toBe(true);
+  await page.evaluate(() => {
+    const reads = window.rendererTest.pending.filter(({ method }) => method === 'files');
+    window.rendererTest.settle(
+      'files',
+      reads.findIndex(({ args }) => args[1] === 'second'),
+      [{ name: 'current.txt', path: 'second/current.txt', directory: false }]
+    );
+  });
+  const selected = tree.locator('[aria-selected="true"]');
+  await expect(selected).toHaveText('current.txt');
+  await page.evaluate(() => {
+    const reads = window.rendererTest.pending.filter(({ method }) => method === 'files');
+    window.rendererTest.settle(
+      'files',
+      reads.findIndex(({ args }) => args[1] === 'first'),
+      [{ name: 'old.txt', path: 'first/old.txt', directory: false }]
+    );
+  });
+  await page.clock.runFor(32);
+  await expect(selected).toHaveText('current.txt');
+  await expect(editor).toBeFocused();
+  await tree.press('Home');
+  await expect(selected).toHaveText('first');
+  const reads = await page.evaluate(
+    () => window.rendererTest.calls.filter(({ method }) => method === 'files').length
+  );
+  await page.evaluate(() =>
+    window.rendererTest.emit({ type: 'statePatch', id: 'alpha', state: { line: 2, column: 3 } })
+  );
+  await page.clock.runFor(32);
+  await expect(selected).toHaveText('first');
+  await showFile('/alphabet/second/current.txt');
+  await expect(selected).toHaveText('first');
+  await showFile('');
+  await expect(selected).toHaveText('first');
+  expect(
+    await page.evaluate(
+      () => window.rendererTest.calls.filter(({ method }) => method === 'files').length
+    )
+  ).toBe(reads);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
 test('Explorer refresh bounds directory requests and stops obsolete queued work', async ({
   page
 }) => {

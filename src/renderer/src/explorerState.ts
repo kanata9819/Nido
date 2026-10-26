@@ -6,14 +6,25 @@ export interface SavedExplorerState {
   scrollTop: number;
 }
 
-function storageKey(root: string): string {
+function pathKey(root: string): string {
   const remote = parseWslPath(root);
   const path = remote
     ? `//wsl.localhost/${remote.distribution.toLowerCase()}${remote.path}`
     : /^[a-z]:|^[\\/]{2}/i.test(root)
       ? root.replaceAll('\\', '/').toLowerCase()
       : root;
-  return `nido.explorer.${path.replace(/\/+$/, '')}`;
+  return path.replace(/\/+$/, '');
+}
+
+function storageKey(root: string): string {
+  return `nido.explorer.${pathKey(root)}`;
+}
+
+export function explorerFilePath(root: string, file: string): string {
+  const prefix = `${pathKey(root)}/`;
+  const path = pathKey(file);
+  const relative = path.startsWith(prefix) ? path.slice(prefix.length) : '';
+  return relativePath(relative) ? relative.replaceAll('/', root.includes('\\') ? '\\' : '/') : '';
 }
 
 function relativePath(value: unknown): value is string {

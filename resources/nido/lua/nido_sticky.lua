@@ -261,7 +261,8 @@ local function highlight(entry, buffer, line, scope, key)
       column = column + #character
     end
   end
-  local tokens, count, changed = {}, 0, not cached or cached.text ~= text
+  local tokens, count, changed = {}, 0,
+    not cached or cached.text ~= text or cached.tabstop ~= vim.bo[buffer].tabstop
   -- An unchanged header can move before the LSP replaces its old coordinates.
   -- Keep its colors until the response invalidates the cache for the new row.
   if not cached or cached.line == line or changed then
@@ -276,8 +277,22 @@ local function highlight(entry, buffer, line, scope, key)
     changed = changed or count ~= cached.token_count
   end
   if changed then
+    local spans, column = {}, 0
+    for _, span in ipairs(require('nido_references').highlight(buffer, line, {text})[1]) do
+      for character in span.text:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
+        local previous = spans[#spans]
+        if previous and vim.fn.strdisplaywidth(previous.text .. character,
+            column - previous.cells) == previous.cells then
+          previous.text = previous.text .. character
+        else
+          local cells = vim.fn.strdisplaywidth(character, column)
+          spans[#spans + 1] = {text=character, color=span.color, cells=cells}
+          column = column + cells
+        end
+      end
+    end
     cached = {text=text, line=line, columns=columns, tokens=tokens, token_count=count,
-      spans=require('nido_references').highlight(buffer, line, {text})[1]}
+      tabstop=vim.bo[buffer].tabstop, spans=spans}
   end
   scope[key], entry.highlights[line] = cached, cached
   return cached.spans
@@ -302,7 +317,8 @@ function M.publish(window, buffer)
   if not info then return false end
   local state = {window=window, buffer=buffer, top=info.winrow - 1, left=info.wincol - 1,
     width=info.width, height=info.height, gutter=info.textoff, tabstop=vim.bo[buffer].tabstop,
-    leftcol=0, scopes={}, separators={}}
+    leftcol=0, scopes={}, separators={}, relativeTo=vim.wo[window].relativenumber
+      and (require('nido_scroll').cursor() or api.nvim_win_get_cursor(window))[1] or nil}
   local entry = entries[buffer]
   local current = entry and entry.tick == api.nvim_buf_get_changedtick(buffer)
   if entry

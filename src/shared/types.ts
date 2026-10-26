@@ -120,14 +120,15 @@ export interface StickyScrollState {
   gutter: number;
   tabstop: number;
   leftcol: number;
+  relativeTo?: number;
   separators?: { line: number; row: number }[];
   scopes: {
     line: number;
     ending: number;
     top: number;
     bottom: number;
-    text: ReferencePreview['lines'][number];
-    endText: ReferencePreview['lines'][number];
+    text: (ReferencePreview['lines'][number][number] & { cells?: number })[];
+    endText: (ReferencePreview['lines'][number][number] & { cells?: number })[];
   }[];
 }
 export type DebugAction =

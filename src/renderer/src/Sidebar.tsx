@@ -59,6 +59,7 @@ function Sidebar({
     expanded,
     selected,
     selectedIndex,
+    reveal,
     setSelected,
     setExpanded,
     load,
@@ -72,11 +73,12 @@ function Sidebar({
     commands,
     closeOperation,
     onDone
-  } = useExplorer({ workspace, active, onError });
+  } = useExplorer({ workspace, active, currentFile, onError });
   const [top, setTop] = useState(initialScrollTop);
   const viewport = useRef(initialScrollTop);
   const restored = useRef(false);
   const previousSelection = useRef(selected);
+  const previousReveal = useRef(0);
   const [height, setHeight] = useState(200);
   const first = Math.max(
     0,
@@ -103,7 +105,11 @@ function Sidebar({
       restored.current = true;
       previousSelection.current = selected;
       rememberScroll(node.scrollTop);
-    } else if (selected !== previousSelection.current && selectedIndex >= 0) {
+    }
+    if (
+      (selected !== previousSelection.current || reveal !== previousReveal.current) &&
+      selectedIndex >= 0
+    ) {
       const rowTop = selectedIndex * rowHeight + 5;
       if (rowTop < node.scrollTop) {
         node.scrollTo({ top: rowTop });
@@ -113,10 +119,11 @@ function Sidebar({
     }
     if (selectedIndex >= 0 || !selected) {
       previousSelection.current = selected;
+      previousReveal.current = reveal;
     }
     viewport.current = node.scrollTop;
     setTop(node.scrollTop);
-  }, [selected, selectedIndex, visible, active, ready, tree, rememberScroll]);
+  }, [selected, selectedIndex, reveal, visible, active, ready, tree, rememberScroll]);
   useEffect(() => {
     const node = tree.current;
     if (!node) {
@@ -317,7 +324,7 @@ function Sidebar({
                 aria-expanded={entry.directory ? expanded.has(entry.path) : undefined}
                 aria-selected={selected === entry.path}
                 data-ignored={entry.ignored || undefined}
-                className={`${styles.treeItem} ${selected === entry.path ? styles.treeSelected : ''} ${currentFile.endsWith(entry.path) ? styles.currentFile : ''}`}
+                className={`${styles.treeItem} ${selected === entry.path ? styles.treeSelected : ''} ${gitFileKey(currentFile) === gitFileKey(`${workspace.root}/${entry.path}`) ? styles.currentFile : ''}`}
                 style={
                   {
                     '--tree-depth': entry.depth,

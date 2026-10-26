@@ -189,6 +189,11 @@ export default function StickyScroll({
     >
       {model.rows.map(({ scope, offset }, index) => {
         const ending = peek === scope.line;
+        const line = ending ? scope.ending : scope.line;
+        const relativeTo = model.state.relativeTo;
+        const spans = ending ? scope.endText : scope.text;
+        const positioned = spans.every((span) => span.cells !== undefined);
+        let column = 0;
         return (
           <div
             key={scope.line}
@@ -224,7 +229,7 @@ export default function StickyScroll({
                   paddingRight: model.cellWidth
                 }}
               >
-                {ending ? scope.ending : scope.line}
+                {relativeTo && line !== relativeTo ? Math.abs(line - relativeTo) : line}
               </span>
               <span className={styles.code}>
                 <span
@@ -232,11 +237,25 @@ export default function StickyScroll({
                     transform: `translateX(${-model.state.leftcol * model.cellWidth + model.horizontalOffset}px)`
                   }}
                 >
-                  {(ending ? scope.endText : scope.text).map((span, i) => (
-                    <span key={i} style={{ color: span.color }}>
-                      {span.text}
-                    </span>
-                  ))}
+                  {spans.map((span, i) => {
+                    // Use the total column so fractional CSS widths cannot accumulate rounding errors.
+                    const left = column * model.cellWidth;
+                    column += span.cells ?? 0;
+                    return (
+                      <span
+                        key={i}
+                        style={{
+                          color: span.color,
+                          position: positioned ? 'absolute' : undefined,
+                          top: positioned ? 0 : undefined,
+                          left: positioned ? left : undefined,
+                          width: positioned ? span.cells! * model.cellWidth : undefined
+                        }}
+                      >
+                        {positioned && span.text === '\t' ? ' ' : span.text}
+                      </span>
+                    );
+                  })}
                 </span>
               </span>
             </button>

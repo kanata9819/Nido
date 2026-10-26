@@ -62,6 +62,20 @@ test('Sticky Scroll pins nested headers, jumps by mouse and keyboard, and saves 
     await expect(sticky.getByRole('button')).toHaveCount(3);
     await expect(sticky.locator('[data-source-line="1"]')).toContainText('class Panel');
     await expect(sticky.locator('[data-source-line="2"]')).toContainText('render()');
+    const number = sticky.locator('[data-source-line="1"] > span').first();
+    const relativeNumbers = async (enabled: boolean): Promise<void> => {
+      await page.evaluate(async (enabled) => {
+        const layout = await window.nido.restoreWorkspaces();
+        await window.nido.setRelativeLineNumbers(layout.workspaces[0].id, enabled);
+      }, enabled);
+    };
+    await relativeNumbers(true);
+    await expect(number).toHaveText('19');
+    await send('<Cmd>normal! 21G<CR>');
+    await expect(number).toHaveText('20');
+    await relativeNumbers(false);
+    await expect(number).toHaveText('1');
+    await send('<Cmd>normal! 20Gzt<CR>');
     const brackets = (line: number): Promise<string[]> =>
       sticky
         .locator(`[data-source-line="${line}"] span[style*="color"]`)

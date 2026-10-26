@@ -54,6 +54,146 @@ test.beforeAll(async () => {
   origin = server.resolvedUrls!.local[0];
 });
 
+for (const [scale, size, family] of [
+  [1, 15, '"Cascadia Code", monospace'],
+  [1.25, 18, '"Cascadia Code", monospace'],
+  [1.5, 15, 'serif']
+] as const) {
+  test(`Sticky Scroll preserves editor cells and relative numbers at ${scale * 100}% scale`, async ({
+    browser
+  }) => {
+    const context = await browser.newContext({ deviceScaleFactor: scale });
+    try {
+      const page = await context.newPage();
+      await page.addInitScript(
+        ({ size, family }) => {
+          localStorage.setItem('nido.language', 'en');
+          localStorage.setItem('nido.fontSize', String(size));
+          localStorage.setItem('nido.fontFamily', family);
+          localStorage.setItem('nido.animations', 'false');
+        },
+        { size, family }
+      );
+      await page.goto(`${origin}?view=app`);
+      const display = page.locator('canvas[aria-label="Neovim editor display"]');
+      await expect(display).toBeVisible();
+      const publish = async (relativeTo?: number): Promise<void> => {
+        await page.evaluate((relativeTo) => {
+          window.rendererTest.emit({
+            type: 'redraw',
+            id: 'alpha',
+            events: [
+              [
+                'nido_sticky_scroll',
+                [
+                  {
+                    window: 1,
+                    buffer: 1,
+                    top: 0,
+                    left: 0,
+                    width: 60,
+                    height: 24,
+                    gutter: 4,
+                    tabstop: 8,
+                    leftcol: 0,
+                    relativeTo,
+                    scopes: [
+                      {
+                        line: 27,
+                        ending: 90,
+                        top: -1,
+                        bottom: 30,
+                        text: [
+                          { text: 'i', color: '#ffffff', cells: 1 },
+                          { text: 'm', color: '#ffffff', cells: 1 },
+                          { text: '日', color: '#ffffff', cells: 2 },
+                          { text: 'e\u0301', color: '#ffffff', cells: 1 },
+                          { text: '\t', color: '#ffffff', cells: 3 },
+                          ...Array.from({ length: 200 }, () => ({
+                            text: 'x',
+                            color: '#ffffff',
+                            cells: 1
+                          })),
+                          { text: 'W', color: '#ffffff', cells: 1 }
+                        ],
+                        endText: [{ text: '}', color: '#ffffff', cells: 1 }]
+                      }
+                    ]
+                  }
+                ]
+              ],
+              ['flush']
+            ]
+          });
+        }, relativeTo);
+      };
+      await publish(32);
+      const sticky = page.getByRole('navigation', { name: 'Sticky Scroll' });
+      const header = sticky.locator('[data-source-line="27"]');
+      await expect(header).toHaveAttribute('aria-label', 'Go to line 27');
+      const number = header.locator(':scope > span').first();
+      await expect(number).toHaveText('5');
+      const layout = await header.evaluate(
+        async (node, { url, size, family }) => {
+          const { Grid } = await import(url);
+          const grid = new Grid();
+          grid.apply([['grid_resize', [1, 60, 24]], ['flush']]);
+          const canvas = document.createElement('canvas');
+          document.body.append(canvas);
+          const { cellWidth } = grid.draw(
+            canvas,
+            600,
+            432,
+            size,
+            family,
+            false,
+            undefined,
+            18,
+            350
+          );
+          canvas.remove();
+          const code = node.children[1];
+          const spans = [...code.querySelectorAll<HTMLElement>('span[style*="color"]')];
+          const start = code.getBoundingClientRect().left;
+          return {
+            cellWidth,
+            spans: spans.map((span) => ({
+              left: span.getBoundingClientRect().left - start,
+              width: span.getBoundingClientRect().width,
+              size: getComputedStyle(span).fontSize,
+              weight: getComputedStyle(span).fontWeight
+            }))
+          };
+        },
+        { url: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`, size, family }
+      );
+      const columns = [0, 1, 2, 4, 5, ...Array.from({ length: 201 }, (_, index) => index + 8)];
+      expect(layout.spans).toHaveLength(columns.length);
+      for (const [index, column] of columns.entries()) {
+        expect(
+          Math.abs(layout.spans[index].left - column * layout.cellWidth),
+          JSON.stringify(layout)
+        ).toBeLessThan(0.1);
+        expect(layout.spans[index].size).toBe(`${size}px`);
+        expect(layout.spans[index].weight).toBe('350');
+      }
+      await publish(33);
+      await expect(number).toHaveText('6');
+      await header.hover();
+      await page.keyboard.down('Shift');
+      await expect(header).toHaveAttribute('aria-label', 'Go to line 90');
+      await expect(number).toHaveText('57');
+      await page.keyboard.up('Shift');
+      await publish(27);
+      await expect(number).toHaveText('27');
+      await publish();
+      await expect(number).toHaveText('27');
+    } finally {
+      await context.close();
+    }
+  });
+}
+
 for (const scale of [1, 1.25, 1.5]) {
   test(`bracket borders, translucent word highlights and wide cursors render at ${scale * 100}% scale`, async ({
     browser

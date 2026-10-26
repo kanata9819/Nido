@@ -607,6 +607,8 @@ test('file tabs scroll into view when switching hidden buffers with Shift H and 
   const root = await mkdtemp(join(tmpdir(), 'nido-tab-scroll-'));
   const workspace = join(root, 'workspace');
   await mkdir(workspace);
+  await mkdir(join(workspace, 'nested', 'deep'), { recursive: true });
+  await writeFile(join(workspace, 'nested', 'deep', 'target.txt'), 'nested sample\n');
   const files = Array.from(
     { length: 15 },
     (_, index) => `file-${String(index).padStart(2, '0')}.txt`
@@ -628,9 +630,11 @@ test('file tabs scroll into view when switching hidden buffers with Shift H and 
     await chooseWorkspace(page, workspace);
     const tabs = page.getByRole('tablist', { name: 'Files', exact: true });
     const selected = tabs.locator('[role="tab"][aria-selected="true"]');
+    const tree = page.getByRole('tree', { name: 'Project files' });
     await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
     const expectSelectedVisible = async (file: string): Promise<void> => {
       await expect(selected).toHaveText(file);
+      await expect(tree.locator('[aria-selected="true"]')).toHaveText(file);
       await expect
         .poll(() =>
           selected.evaluate((node) => {
@@ -654,6 +658,9 @@ test('file tabs scroll into view when switching hidden buffers with Shift H and 
     await expect.poll(() => tabs.evaluate((node) => node.scrollLeft)).toBe(0);
     await page.keyboard.press('Shift+H');
     await expectSelectedVisible(files.at(-1)!);
+    await page.keyboard.type(':edit nested/deep/target.txt');
+    await page.keyboard.press('Enter');
+    await expectSelectedVisible('target.txt');
   } finally {
     await running.close();
     await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
