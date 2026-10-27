@@ -301,6 +301,10 @@ export function useEditorRendering({
           grid.cursor.column * metrics.cellWidth +
           (grid.cursor.column >= grid.horizontalGutter ? grid.horizontalOffset : 0);
         const top = bounds.top + grid.rowY(grid.cursor.row);
+        const maxWidth = `${Math.max(2, bounds.left + bounds.width - left)}px`;
+        if (inputRef.current.style.maxWidth !== maxWidth) {
+          inputRef.current.style.maxWidth = maxWidth;
+        }
         // Unchanged styles wake popup observers and force layout during cursor blinking.
         if (!(Math.abs(parseFloat(inputRef.current.style.left) - left) * dpr < 0.01)) {
           inputRef.current.style.left = `${left}px`;

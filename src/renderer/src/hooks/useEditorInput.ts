@@ -18,7 +18,7 @@ export function useEditorInput({
 }: UseEditorInputOptions): {
   onFocus: (event: React.FocusEvent<HTMLTextAreaElement>) => void;
   onBlur: (event: React.FocusEvent<HTMLTextAreaElement>) => void;
-  onCompositionStart: () => void;
+  onCompositionStart: (event: React.CompositionEvent<HTMLTextAreaElement>) => void;
   onCompositionEnd: (event: React.CompositionEvent<HTMLTextAreaElement>) => void;
   onInput: (event: React.FormEvent<HTMLTextAreaElement>) => void;
   onPaste: (event: React.ClipboardEvent<HTMLTextAreaElement>) => void;
@@ -32,15 +32,18 @@ export function useEditorInput({
     onFocus(event: React.FocusEvent<HTMLTextAreaElement>): void {
       composingRef.current = false;
       event.currentTarget.value = '';
+      event.currentTarget.removeAttribute('data-composing');
       paintRef.current();
     },
     onBlur(event: React.FocusEvent<HTMLTextAreaElement>): void {
       composingRef.current = false;
       event.currentTarget.value = '';
+      event.currentTarget.removeAttribute('data-composing');
       paintRef.current();
     },
-    onCompositionStart(): void {
+    onCompositionStart(event: React.CompositionEvent<HTMLTextAreaElement>): void {
       composingRef.current = !blocked;
+      event.currentTarget.toggleAttribute('data-composing', !blocked);
     },
     onCompositionEnd(event: React.CompositionEvent<HTMLTextAreaElement>): void {
       const committed = composingRef.current && !blocked;
@@ -49,6 +52,7 @@ export function useEditorInput({
         send(window.nido.input(id, event.data.replaceAll('<', '<LT>')));
       }
       event.currentTarget.value = '';
+      event.currentTarget.removeAttribute('data-composing');
     },
     onInput(event: React.FormEvent<HTMLTextAreaElement>): void {
       if (blocked) {

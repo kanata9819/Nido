@@ -45,6 +45,7 @@ function positionCommandInput(
   const point = cursor.getBoundingClientRect();
   anchor.style.left = `${point.left - host.left}px`;
   anchor.style.top = `${point.top - host.top}px`;
+  anchor.style.maxWidth = `${Math.max(2, host.right - point.left)}px`;
 }
 
 function Chunks({ content, grid }: { content: MessageChunk[]; grid: Grid }): React.JSX.Element {

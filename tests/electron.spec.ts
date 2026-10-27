@@ -4201,18 +4201,27 @@ test('keyboard-only workspace switching, editing, saving and dirty-close guard',
     await expect(page.getByText('NORMAL', { exact: true })).toBeVisible();
     await page.keyboard.type('Go');
     await expect(page.getByText('INSERT', { exact: true })).toBeVisible();
-    await page.locator('textarea:visible').evaluate((element) => {
-      const input = element as HTMLTextAreaElement;
-      input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
-      input.value = '日本語入力';
-      input.dispatchEvent(
-        new InputEvent('input', { bubbles: true, data: '日本語入力', isComposing: true })
-      );
-      input.dispatchEvent(
-        new CompositionEvent('compositionend', { bubbles: true, data: '日本語入力' })
-      );
-      input.dispatchEvent(new InputEvent('input', { bubbles: true, data: '日本語入力' }));
-    });
+    const input = page.getByRole('textbox', { name: 'Neovim input' });
+    const ime = await page.context().newCDPSession(page);
+    try {
+      for (const text of ['に', 'にほ', '日本語入力']) {
+        await ime.send('Input.imeSetComposition', {
+          text,
+          selectionStart: text.length,
+          selectionEnd: text.length
+        });
+        await expect(input).toHaveValue(text);
+        await expect(input).toHaveCSS('opacity', '1');
+        await expect(page.locator('canvas:visible')).not.toHaveAttribute(
+          'aria-description',
+          /日本語入力/
+        );
+      }
+      await page.screenshot({ path: test.info().outputPath('japanese-composition.png') });
+      await ime.send('Input.insertText', { text: '日本語入力' });
+    } finally {
+      await ime.detach();
+    }
     await expect(page.locator('canvas:visible')).toHaveAttribute('aria-description', /日本語入力/);
     await page.keyboard.press('Escape');
     await page.keyboard.press('Control+s');

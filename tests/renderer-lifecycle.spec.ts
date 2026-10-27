@@ -3000,6 +3000,80 @@ test('interrupted IME input recovers on focus return and ignores an obsolete com
   }
 });
 
+test('native IME text is visible as it changes and only committed text reaches Neovim', async ({
+  page
+}) => {
+  await page.goto(`${origin}?view=app`);
+  const input = page.getByRole('textbox', { name: 'Neovim input' });
+  await expect(input).toBeFocused();
+  const ime = await page.context().newCDPSession(page);
+  try {
+    let previousWidth = 0;
+    for (const text of ['に', 'にほ', '日本語<入力>']) {
+      await ime.send('Input.imeSetComposition', {
+        text,
+        selectionStart: text.length,
+        selectionEnd: text.length
+      });
+      await expect(input).toHaveValue(text);
+      await expect(input).toHaveCSS('opacity', '1');
+      await expect(input).not.toHaveCSS('color', 'rgba(0, 0, 0, 0)');
+      const width = await input.evaluate((node) => node.clientWidth);
+      expect(width).toBeGreaterThan(previousWidth);
+      previousWidth = width;
+      expect(
+        await page.evaluate(() =>
+          window.rendererTest.calls.filter((call) => call.method === 'input')
+        )
+      ).toEqual([]);
+    }
+    await page.screenshot({ path: test.info().outputPath('japanese-composition.png') });
+    await ime.send('Input.insertText', { text: '日本語<入力>' });
+    await expect(input).toHaveValue('');
+    await expect(input).not.toHaveAttribute('data-composing');
+    expect(
+      await page.evaluate(() =>
+        window.rendererTest.calls
+          .filter((call) => call.method === 'input')
+          .map((call) => call.args[1])
+      )
+    ).toEqual(['日本語<LT>入力>']);
+    await ime.send('Input.imeSetComposition', {
+      text: '未確定',
+      selectionStart: 3,
+      selectionEnd: 3
+    });
+    await expect(input).toHaveCSS('opacity', '1');
+    const longText = '未確定の日本語'.repeat(100);
+    await ime.send('Input.imeSetComposition', {
+      text: longText,
+      selectionStart: longText.length,
+      selectionEnd: longText.length
+    });
+    expect(await input.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(true);
+    expect(await input.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+    expect(
+      await input.evaluate(
+        (node) =>
+          node.getBoundingClientRect().right <=
+          node.parentElement!.getBoundingClientRect().right + 1
+      )
+    ).toBe(true);
+    await ime.send('Input.imeSetComposition', { text: '', selectionStart: 0, selectionEnd: 0 });
+    await expect(input).toHaveValue('');
+    await expect(input).not.toHaveAttribute('data-composing');
+    expect(
+      await page.evaluate(() =>
+        window.rendererTest.calls
+          .filter((call) => call.method === 'input')
+          .map((call) => call.args[1])
+      )
+    ).toEqual(['日本語<LT>入力>']);
+  } finally {
+    await ime.detach();
+  }
+});
+
 test('native IME commits remain intact when editor focus moves', async ({ page }) => {
   await page.goto(`${origin}?view=app`);
   const input = page.getByRole('textbox', { name: 'Neovim input' });

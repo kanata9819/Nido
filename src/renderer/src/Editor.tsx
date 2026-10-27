@@ -86,6 +86,7 @@ function Editor({
       composing.current = false;
       if (input.current) {
         input.current.value = '';
+        input.current.removeAttribute('data-composing');
       }
     };
     if (!active || blocked) {
@@ -387,11 +388,19 @@ function Editor({
       <textarea
         ref={input}
         className={styles.editorInput}
+        style={{
+          fontFamily,
+          fontSize,
+          fontWeight,
+          lineHeight: `${lineHeight}px`,
+          height: lineHeight
+        }}
         data-editor-input={terminal ? 'terminal' : 'editor'}
         aria-label={terminal ? t('Terminal input') : t('Neovim input')}
         spellCheck={false}
         autoCapitalize="off"
         autoComplete="off"
+        wrap="off"
         {...inputHandlers}
       />
     </div>

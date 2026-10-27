@@ -26,3 +26,13 @@
   background: transparent;
   caret-color: transparent;
 }
+.editorInput[data-composing] {
+  z-index: 40;
+  width: auto;
+  min-width: 1ch;
+  field-sizing: content;
+  opacity: 1;
+  color: #d6dce2;
+  background: #121212;
+  caret-color: currentColor;
+}
