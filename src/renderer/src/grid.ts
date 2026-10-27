@@ -51,6 +51,7 @@ export class Grid {
   private upperLayout?: Cell[][];
   private upperFontHeight = 0;
   private lowerRows: Cell[][] = [];
+  private readonly cacheMembers = new WeakMap<Cell[][], Set<Cell[]>>();
   private lowerRowsAtEnd = false;
   private lowerTops: number[] = [0];
   private lowerLayout?: Cell[][];
@@ -145,6 +146,19 @@ export class Grid {
       row++;
     }
     return row < this.rows - 1 ? row : -1;
+  }
+
+  private cacheContains(rows: Cell[][], row: Cell[]): boolean {
+    if (!rows.length) {
+      return false;
+    }
+    let members = this.cacheMembers.get(rows);
+    if (!members) {
+      // Scroll caches are replaced as arrays; their membership expires with them.
+      members = new Set(rows);
+      this.cacheMembers.set(rows, members);
+    }
+    return members.has(row);
   }
 
   apply(events: Redraw): boolean {
@@ -409,8 +423,8 @@ export class Grid {
                       this.layoutDirty = true;
                       if (
                         retainedRows?.has(row) ||
-                        this.upperRows.includes(row) ||
-                        this.lowerRows.includes(row)
+                        this.cacheContains(this.upperRows, row) ||
+                        this.cacheContains(this.lowerRows, row)
                       ) {
                         const previous = row;
                         row = this.cells[Number(args[1])] = row.slice();

@@ -355,11 +355,11 @@ return {redraws=20, previous=previous, following=following, elapsedMs=elapsed}
   }
 });
 
-test('indent guides preserve blank boundaries, edits and window-local options', async () => {
+test('indent guides preserve blank boundaries and local options while bounding work to visible columns', async (context) => {
   const session = await Session.create(process.cwd(), () => {});
   try {
     await session.attach(100, 24);
-    await session.client.request('nvim_exec_lua', [
+    const result = await session.client.request('nvim_exec_lua', [
       String.raw`
 local api = vim.api
 local namespace = api.nvim_get_namespaces().nido_indent
@@ -373,7 +373,7 @@ local loaded, err = pcall(dofile, api.nvim_get_runtime_file('lua/nido_indent.lua
 api.nvim_set_decoration_provider = register
 assert(loaded, err)
 local original_mark = api.nvim_buf_set_extmark
-local function check(window, first, last)
+local function check(window, first, last, budget)
   local buffer = api.nvim_win_get_buf(window)
   local expected = api.nvim_win_call(window, function()
     local values = {}
@@ -401,14 +401,23 @@ local function check(window, first, last)
     actual[#actual + 1] = {row, options.virt_text_win_col, options.virt_text[1][2]}
     return 0
   end
+  local batches = 0
   local ok, error = pcall(function()
     provider.on_start()
     provider.on_win(nil, window, buffer, first, last)
+    if budget then
+      -- Count Lua work independently of wall-clock load and native extmark rendering.
+      jit.off(provider.on_line, true)
+      debug.sethook(function() batches=batches+1 end, '', 100)
+    end
     for row=first,last do provider.on_line(nil, window, buffer, row) end
   end)
+  debug.sethook()
   api.nvim_buf_set_extmark = original_mark
   assert(ok, error)
   assert(vim.deep_equal(actual, expected), vim.inspect({actual=actual, expected=expected}))
+  if budget then assert(batches <= budget, 'Offscreen indentation consumed ' .. batches .. ' instruction batches') end
+  return batches
 end
 local first_window = api.nvim_get_current_win()
 local first_buffer = api.nvim_get_current_buf()
@@ -443,9 +452,23 @@ end)
 check(first_window, 0, #lines-1)
 api.nvim_buf_set_lines(second_buffer, 0, -1, false, {'', ' ', '\t'})
 check(second_window, 0, 2)
+api.nvim_buf_set_lines(second_buffer, 0, -1, false,
+  {string.rep(' ', 20000) .. 'top', '', string.rep('\t', 5000) .. 'tail'})
+vim.bo[second_buffer].shiftwidth, vim.bo[second_buffer].tabstop = 3, 4
+vim.wo[second_window].wrap = false
+local batches = 0
+for _,left in ipairs({0, 1, 19973, 20000, 20003}) do
+  api.nvim_win_call(second_window, function()
+    vim.fn.winrestview({leftcol=left})
+    assert(vim.fn.winsaveview().leftcol == left)
+  end)
+  batches = batches + check(second_window, 0, 2, 150)
+end
+return {instructionBatches=batches, deepIndentColumns=20000, publications=5}
 `,
       []
     ]);
+    context.diagnostic(JSON.stringify(result));
   } finally {
     await session.stop();
   }

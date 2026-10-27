@@ -60,18 +60,17 @@ api.nvim_set_decoration_provider(namespace, {
     end
 
     local indent = state.indents[row] or 0
-    for column = 0, indent - 1, state.step do
+    for column = math.ceil(state.left / state.step) * state.step,
+        math.min(indent - 1, state.left + state.width - 1), state.step do
       local screen_column = column - state.left
-      if screen_column >= 0 and screen_column < state.width then
-        local level = (column / state.step) % #colors + 1
-        api.nvim_buf_set_extmark(buffer, namespace, row, 0, {
-          ephemeral = true,
-          virt_text = { { '│', 'NidoIndent' .. level } },
-          virt_text_win_col = screen_column,
-          hl_mode = 'combine',
-          priority = 1,
-        })
-      end
+      local level = (column / state.step) % #colors + 1
+      api.nvim_buf_set_extmark(buffer, namespace, row, 0, {
+        ephemeral = true,
+        virt_text = { { '│', 'NidoIndent' .. level } },
+        virt_text_win_col = screen_column,
+        hl_mode = 'combine',
+        priority = 1,
+      })
     end
   end,
 })

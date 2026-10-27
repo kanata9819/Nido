@@ -234,6 +234,62 @@ test('scrolling with relative numbers preserves cached rows without searching th
   }
 });
 
+test('relative number redraws reuse cache membership and preserve shared scroll rows', (context) => {
+  const grid = new Grid();
+  grid.apply([
+    ['grid_resize', [1, 20, 40]],
+    ...Array.from({ length: 40 }, (_, row) => ['grid_line', [1, row, 0, [['0', 0, 20]]]]),
+    ['flush']
+  ]);
+  let examined = 0;
+  const cached = (): Grid['cells'] => {
+    const rows = Array.from({ length: 256 }, () =>
+      Array.from({ length: 20 }, () => ({ text: 'cached', highlight: 0 }))
+    );
+    const includes = rows.includes;
+    rows.includes = function (...args) {
+      examined += this.length;
+      return includes.apply(this, args);
+    };
+    const iterator = rows[Symbol.iterator];
+    rows[Symbol.iterator] = function* () {
+      for (const row of iterator.call(this)) {
+        examined++;
+        yield row;
+      }
+    };
+    return rows;
+  };
+  const upper = cached();
+  const lower = cached();
+  Reflect.set(grid, 'upperRows', upper);
+  Reflect.set(grid, 'lowerRows', lower);
+  grid.cells[0] = upper[0];
+  for (let move = 0; move < 20; move++) {
+    grid.apply([
+      ...Array.from({ length: 39 }, (_, row) => [
+        'grid_line',
+        [1, row, 0, [[String((move + 1) % 10), 0]]]
+      ]),
+      ['flush']
+    ]);
+    assert.equal(grid.cells[0][0].text, String((move + 1) % 10));
+  }
+  assert.equal(upper[0][0].text, 'cached');
+  assert.equal(lower[0][0].text, 'cached');
+  context.diagnostic(
+    JSON.stringify({ cursorMoves: 20, updatedRows: 39, examinedCacheRows: examined })
+  );
+  assert.ok(examined <= 512, `cursor redraws repeatedly searched ${examined} cached rows`);
+  // A replacement cache needs a fresh lookup, even without a viewport scroll event.
+  const replacement = cached();
+  Reflect.set(grid, 'upperRows', replacement);
+  grid.cells[0] = replacement[0];
+  grid.apply([['grid_line', [1, 0, 0, [['new', 0]]]], ['flush']]);
+  assert.equal(grid.cells[0][0].text, 'new');
+  assert.equal(replacement[0][0].text, 'cached');
+});
+
 test('native scrolling reuses unchanged row identities without rereading their body cells', () => {
   for (const direction of [-1, 1]) {
     const grid = new Grid();
