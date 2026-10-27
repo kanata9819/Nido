@@ -3790,22 +3790,21 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
     await expect(pair).toBeFocused();
     await page.keyboard.press('l');
     await expect(pair).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.locator('[data-debug-variable][aria-level="2"]')).toHaveCount(20);
+    const childVariables = page.locator('[data-debug-variable][aria-level="2"]');
+    await expect(childVariables).toHaveCount(20);
     await page.keyboard.press('l');
-    await expect(page.locator('[aria-level="2"]').first()).toBeFocused();
+    await expect(childVariables.first()).toBeFocused();
     await page.keyboard.press('Control+d');
     const jumpedId = await page
       .locator('[data-debug-variable]:focus')
       .getAttribute('data-debug-variable');
-    expect(jumpedId).not.toBe(
-      await page.locator('[aria-level="2"]').first().getAttribute('data-debug-variable')
-    );
+    expect(jumpedId).not.toBe(await childVariables.first().getAttribute('data-debug-variable'));
     await page.keyboard.press('Control+k');
     await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
     await page.keyboard.press('Control+j');
     await expect(page.locator(`[data-debug-variable="${jumpedId}"]`)).toBeFocused();
     await page.keyboard.press('Control+u');
-    await expect(page.locator('[aria-level="2"]').first()).toBeFocused();
+    await expect(childVariables.first()).toBeFocused();
     await page.keyboard.press('Tab');
     const output = page.getByLabel('Debug output');
     await expect(output).toBeFocused();
@@ -3818,12 +3817,12 @@ test('Rust debugger keyboard controls stop, inspect and step in the packaged app
     await page.keyboard.press('Control+u');
     await expect.poll(() => output.evaluate((element) => element.scrollTop)).toBe(beforeScroll);
     await page.keyboard.press('Control+j');
-    await expect(page.locator('[aria-level="2"]').first()).toBeFocused();
+    await expect(childVariables.first()).toBeFocused();
     await page.keyboard.press('h');
     await expect(pair).toBeFocused();
     await page.keyboard.press('h');
     await expect(pair).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.locator('[data-debug-variable][aria-level="2"]')).toHaveCount(0);
+    await expect(childVariables).toHaveCount(0);
     await page.keyboard.press('Enter');
     await expect(pair).toHaveAttribute('aria-expanded', 'true');
     await page.keyboard.press('F10');

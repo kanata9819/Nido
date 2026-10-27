@@ -48,7 +48,10 @@ for (const scale of [1, 1.25, 1.5]) {
       await page.keyboard.type(':edit sample.txt');
       await page.keyboard.press('Enter');
       const canvas = page.locator('canvas:visible');
-      await expect(canvas).toHaveAttribute('aria-description', /ScreenCells/);
+      // The visible grid can wrap the fixture's identifier on narrow CI displays.
+      await expect
+        .poll(async () => (await canvas.getAttribute('aria-description'))?.replace(/\s/g, ''))
+        .toContain('ScreenCells');
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       await page.getByRole('checkbox', { name: 'UI animations' }).uncheck();
       await canvas.evaluate((node: HTMLCanvasElement, hasHardware) => {
