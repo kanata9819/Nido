@@ -82,6 +82,22 @@ test('translated command searches keep shortcut keys and actions, and preserve p
   japaneseItems.filtered[0].run();
   assert.deepEqual(panels, ['settings']);
   assert.equal(english.commands.find((item) => item.key === ',')?.title, 'Settings');
+  for (const title of ['Toggle line comments', 'Undo', 'Redo']) {
+    assert.ok(english.commands.some((item) => item.title === title));
+    assert.ok(japaneseItems.commands.some((item) => item.title === translate('ja', title)));
+  }
+  const terminal = buildItems(
+    'alpha',
+    'commands',
+    [{ ...workspaces[0], kind: 'terminal' }],
+    [],
+    state,
+    '',
+    callbacks
+  );
+  for (const title of ['Toggle line comments', 'Undo', 'Redo']) {
+    assert.ok(!terminal.commands.some((item) => item.title === title));
+  }
   const projects = buildItems(
     'alpha',
     'workspaces',

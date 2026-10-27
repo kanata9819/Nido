@@ -8,6 +8,9 @@ export function parseLanguage(value: unknown): Language {
 
 // English source messages are also the fallback for messages from external tools.
 export const japanese: Record<string, string> = {
+  'Toggle line comments': '行コメントを切り替え',
+  Undo: '元に戻す',
+  Redo: 'やり直す',
   Connection: '接続先',
   'This computer': 'このPC',
   'WSL unavailable': 'WSLを利用できません',

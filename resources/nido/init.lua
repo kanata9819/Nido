@@ -69,12 +69,25 @@ vim.o.laststatus = 0
 vim.keymap.set('n', '<C-z>', 'u', {remap=true, silent=true})
 vim.keymap.set('x', '<C-z>', '<Esc>u', {remap=true, silent=true})
 vim.keymap.set('i', '<C-z>', '<C-o>u', {remap=true, silent=true})
+vim.keymap.set('n', '<C-S-z>', '<C-r>', {remap=true, silent=true})
+vim.keymap.set('x', '<C-S-z>', '<Esc><C-r>', {remap=true, silent=true})
+vim.keymap.set('i', '<C-S-z>', '<C-o><C-r>', {remap=true, silent=true})
+for _, key in ipairs({'<C-/>', '<C-_>'}) do
+  vim.keymap.set('n', key, 'gcc', {remap=true, silent=true})
+  vim.keymap.set('x', key, 'gc', {remap=true, silent=true})
+  vim.keymap.set('i', key, '<C-o>gcc', {remap=true, silent=true})
+end
+vim.keymap.set('i', '<S-Tab>', '<C-d>', {silent=true})
+vim.keymap.set('x', '<Tab>', '>gv', {silent=true})
+vim.keymap.set('x', '<S-Tab>', '<gv', {silent=true})
 vim.o.showtabline = 0
 vim.o.mouse = 'a'
 vim.o.hidden = true
 vim.o.expandtab = true
 vim.o.shiftwidth = 2
 vim.o.tabstop = 2
+-- Follow each buffer's indentation width, including changes from EditorConfig.
+vim.o.softtabstop = -1
 vim.o.ignorecase = true
 vim.o.smartcase = true
 vim.o.scrolloff = 5

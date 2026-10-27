@@ -1972,7 +1972,101 @@ test('file mutations serialize and retain edits arriving during OS operations', 
   }
 });
 
-test('Ctrl Z undoes in normal, insert and visual modes', async () => {
+test('Tab, Shift Tab and Backspace respect indentation and preserve selected lines', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-indent-keys-'));
+  const session = await Session.create(root, () => {});
+  const lua = (code: string): ReturnType<Session['client']['request']> =>
+    session.client.request('nvim_exec_lua', [code, []]);
+  try {
+    for (const [width, spaces] of [
+      [2, true],
+      [4, true],
+      [4, false]
+    ] as const) {
+      await session.input('<Esc>');
+      await lua(`vim.bo.shiftwidth=${width}; vim.bo.tabstop=${width}; vim.bo.expandtab=${spaces}
+vim.api.nvim_buf_set_lines(0,0,-1,false,{''}); vim.api.nvim_win_set_cursor(0,{1,0})`);
+      const indent = spaces ? ' '.repeat(width) : '\t';
+      await session.input('i<Tab><Tab><BS>');
+      assert.equal(await lua('return vim.api.nvim_get_current_line()'), indent);
+      await session.input('<Tab><S-Tab>');
+      assert.equal(await lua('return vim.api.nvim_get_current_line()'), indent);
+      await session.input('日本語<BS>');
+      assert.equal(await lua('return vim.api.nvim_get_current_line()'), indent + '日本');
+    }
+    await session.input('<Esc>');
+    await lua(`vim.bo.shiftwidth=4; vim.bo.tabstop=4; vim.bo.expandtab=true
+vim.fn.setreg('"', 'keep clipboard')
+vim.api.nvim_buf_set_lines(0,0,-1,false,{'one','    日本語','last'})`);
+    await session.input('ggVj<Tab>');
+    assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0,0,-1,false)'), [
+      '    one',
+      '        日本語',
+      'last'
+    ]);
+    assert.equal(await lua('return vim.fn.mode()'), 'V');
+    await session.input('<S-Tab>');
+    assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0,0,-1,false)'), [
+      'one',
+      '    日本語',
+      'last'
+    ]);
+    assert.equal(await lua('return vim.fn.mode()'), 'V');
+    assert.equal(await lua("return vim.fn.getreg('\"')"), 'keep clipboard');
+  } finally {
+    await session.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('Ctrl slash toggles language comments on the current line and selected lines', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-comment-keys-'));
+  const session = await Session.create(root, () => {});
+  const lua = (code: string): ReturnType<Session['client']['request']> =>
+    session.client.request('nvim_exec_lua', [code, []]);
+  try {
+    for (const [filetype, prefix] of [
+      ['typescript', '//'],
+      ['python', '#'],
+      ['lua', '--']
+    ]) {
+      await session.input('<Esc>');
+      await lua(`vim.bo.filetype='${filetype}'
+vim.api.nvim_buf_set_lines(0,0,-1,false,{'  first()','  second()','last()'})
+vim.api.nvim_win_set_cursor(0,{1,2})`);
+      await session.input('<C-/>');
+      assert.equal(
+        await lua('return vim.api.nvim_get_current_line()'),
+        `  ${prefix} first()`,
+        filetype
+      );
+      await session.input('<C-/>');
+      assert.equal(await lua('return vim.api.nvim_get_current_line()'), '  first()');
+      await session.input('I<C-/>');
+      assert.equal(await lua('return vim.api.nvim_get_current_line()'), `  ${prefix} first()`);
+      assert.equal(await lua('return vim.fn.mode()'), 'i');
+      await session.input('<C-/>');
+      assert.equal(await lua('return vim.api.nvim_get_current_line()'), '  first()');
+      await session.input('<Esc>ggVj<C-/>');
+      assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0,0,-1,false)'), [
+        `  ${prefix} first()`,
+        `  ${prefix} second()`,
+        'last()'
+      ]);
+      await session.input('ggVj<C-/>');
+      assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0,0,-1,false)'), [
+        '  first()',
+        '  second()',
+        'last()'
+      ]);
+    }
+  } finally {
+    await session.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('Ctrl Z and Ctrl Shift Z undo and redo in normal, insert and visual modes', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-undo-key-'));
   let session: Session | undefined;
   try {
@@ -1985,15 +2079,25 @@ test('Ctrl Z undoes in normal, insert and visual modes', async () => {
     assert.equal(await lua('return vim.api.nvim_get_current_line()'), '');
     await session.input('<C-z>');
     assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'hello');
+    await session.input('<C-S-z>');
+    assert.equal(await lua('return vim.api.nvim_get_current_line()'), '');
+    await session.input('<C-z>');
     await session.input('A world');
     await lua('return 1');
     await session.input('<C-z>');
     assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'hello');
     assert.equal(await lua('return vim.fn.mode()'), 'i');
+    await session.input('<C-S-z>');
+    assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'hello world');
+    assert.equal(await lua('return vim.fn.mode()'), 'i');
+    await session.input('<C-z>');
     await session.input('<Esc>dd');
     await lua('return 1');
     await session.input('V<C-z>');
     assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'hello');
+    assert.equal(await lua('return vim.fn.mode()'), 'n');
+    await session.input('V<C-S-z>');
+    assert.equal(await lua('return vim.api.nvim_get_current_line()'), '');
     assert.equal(await lua('return vim.fn.mode()'), 'n');
   } finally {
     await session?.stop();

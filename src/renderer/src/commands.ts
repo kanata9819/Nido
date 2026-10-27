@@ -145,6 +145,19 @@ export function buildItems(
             : []),
           ...(workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal'
             ? [
+                ...[
+                  ['Toggle line comments', 'Ctrl+/', '<C-/>'],
+                  ['Undo', 'Ctrl+Z', '<C-z>'],
+                  ['Redo', 'Ctrl+Shift+Z', '<C-S-z>']
+                ].map(([title, detail, keys]) => ({
+                  key: '',
+                  title,
+                  detail,
+                  run: () => {
+                    run(window.nido.input(active, keys));
+                    focusEditor();
+                  }
+                })),
                 {
                   key: 'D',
                   title: 'Open debug panel',
