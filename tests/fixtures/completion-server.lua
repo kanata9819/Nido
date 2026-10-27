@@ -7,10 +7,11 @@ vim.lsp.start({name='nido-completion-test',cmd=function(dispatchers)
       serial = serial + 1
       local id, result, delay, prefix = serial, nil, 0, nil
       if method == 'initialize' then
-        result = {capabilities={textDocumentSync=1,completionProvider={triggerCharacters={'.'}}}}
+        result = {capabilities={textDocumentSync=1,completionProvider={triggerCharacters=vim.g.nido_completion_test_triggers or {'.'}}}}
       elseif method == 'textDocument/completion' then
-        prefix = vim.api.nvim_get_current_line():sub(1, params.position.character)
-        requests[#requests+1] = {prefix=prefix,at=vim.uv.hrtime()/1e6}
+        local line = vim.api.nvim_get_current_line()
+        prefix = line:sub(1, vim.str_byteindex(line, 'utf-16', params.position.character, false))
+        requests[#requests+1] = {prefix=prefix,at=vim.uv.hrtime()/1e6,context=params.context}
         vim.g.nido_completion_test_requests = requests
         result = {isIncomplete=false,items={}}
         local labels = (vim.g.nido_completion_test_labels or {})[prefix]

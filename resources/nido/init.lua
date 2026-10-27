@@ -124,10 +124,20 @@ vim.api.nvim_create_autocmd({ 'TextChangedI', 'TextChangedP' }, {
     end
     completion_context = context
     completion_scheduled = nil
-    if not vim.api.nvim_get_current_line():sub(1, vim.fn.col('.') - 1):match('[%w_\128-\255]$') then
+    local clients = vim.lsp.get_clients({bufnr=buffer, method='textDocument/completion'})
+    if #clients == 0 then
       return
     end
-    if #vim.lsp.get_clients({bufnr=buffer, method='textDocument/completion'}) == 0 then
+    local prefix = vim.api.nvim_get_current_line():sub(1, vim.fn.col('.') - 1)
+    local character = vim.fn.matchstr(prefix, '.$')
+    local trigger
+    for _, client in ipairs(clients) do
+      if vim.list_contains(vim.tbl_get(client.server_capabilities, 'completionProvider', 'triggerCharacters') or {}, character) then
+        trigger = character
+        break
+      end
+    end
+    if not trigger and not prefix:match('[%w_\128-\255]$') then
       return
     end
     local scheduled = {}
@@ -145,7 +155,10 @@ vim.api.nvim_create_autocmd({ 'TextChangedI', 'TextChangedP' }, {
           and #vim.lsp.get_clients({bufnr=buffer, method='textDocument/completion'}) > 0 then
         -- Native completion otherwise filters the old response while typing, but re-requests on BS.
         -- Empty native completion first: get() otherwise merges cached items even when the menu hid.
-        local keys = vim.api.nvim_replace_termcodes('<Cmd>lua vim.fn.complete(vim.fn.col("."), {}); vim.lsp.completion.get()<CR>', true, false, true)
+        -- get() also cancels Neovim's 25ms trigger-character timer.
+        local opts = trigger and {ctx={triggerKind=2, triggerCharacter=trigger}} or {}
+        local command = '<Cmd>lua vim.fn.complete(vim.fn.col("."), {}); vim.lsp.completion.get(' .. vim.inspect(opts, {newline=' ', indent=''}) .. ')<CR>'
+        local keys = vim.api.nvim_replace_termcodes(command, true, false, true)
         vim.api.nvim_feedkeys(keys, 'n', false)
       else
         completion_refresh(false)

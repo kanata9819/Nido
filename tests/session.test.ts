@@ -2213,6 +2213,51 @@ end, 10))`);
   }
 });
 
+test('completion requests server trigger characters on the next turn without duplicate requests', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-completion-triggers-'));
+  const session = await Session.create(root, () => {});
+  const lua = (code: string): ReturnType<Session['client']['request']> =>
+    session.client.request('nvim_exec_lua', [code, []]);
+  try {
+    await lua("vim.g.nido_completion_test_triggers={'.', \"'\", '<', '。'}");
+    await lua(await readFile(join(process.cwd(), 'tests/fixtures/completion-server.lua'), 'utf8'));
+    await lua(`vim.g.completion_get_contexts = {}
+local get = vim.lsp.completion.get
+vim.lsp.completion.get = function(opts)
+  local contexts = vim.g.completion_get_contexts
+  contexts[#contexts+1] = opts and opts.ctx or {triggerKind=1}
+  vim.g.completion_get_contexts = contexts
+  return get(opts)
+end`);
+    for (const character of ['.', "'", '<', '。', 'p']) {
+      await session.input('<Esc>');
+      await lua(
+        "vim.api.nvim_buf_set_lines(0,0,-1,false,{''}); vim.api.nvim_win_set_cursor(0,{1,0}); vim.g.completion_get_contexts={}"
+      );
+      const count = (await lua('return #vim.g.nido_completion_test_requests')) as number;
+      await session.input(`i${character === '<' ? '<LT>' : character}`);
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if ((await lua('return #vim.g.completion_get_contexts')) === 1) break;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      const context =
+        character === 'p' ? { triggerKind: 1 } : { triggerKind: 2, triggerCharacter: character };
+      assert.deepEqual(await lua('return vim.g.completion_get_contexts'), [context], character);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const requests = (await lua('return vim.g.nido_completion_test_requests')) as {
+        prefix: string;
+        context: typeof context;
+      }[];
+      assert.equal(requests.length, count + 1, `Duplicate completion for ${character}`);
+      assert.equal(requests.at(-1)?.prefix, character);
+      assert.deepEqual(requests.at(-1)?.context, context);
+    }
+  } finally {
+    await session.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('completion ignores obsolete replies and closes when the latest prefix has no candidates', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-completion-stale-'));
   const session = await Session.create(root, () => {});
