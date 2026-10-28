@@ -1,16 +1,16 @@
-name: Windows baseline
+name: Windows native
 
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, replace-to-rust]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: windows-baseline-${{ github.ref }}
+  group: windows-native-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -19,104 +19,46 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 12.5.1
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Prepare Rust language and debugging tests
-        run: rustup component add rust-analyzer rust-src rustfmt
-      - uses: denoland/setup-deno@v2
-      - name: Lint without warnings
-        run: pnpm lint --max-warnings 0
-      - name: Check application and Windows test types
+          node-version: '24.22.0'
+          cache: npm
+          cache-dependency-path: resources/languages/package-lock.json
+      - name: Prepare Rust checks
+        run: rustup component add rustfmt clippy rust-analyzer rust-src
+      - name: Prepare bundled editor, language servers and debugger
+        run: ./scripts/prepare-runtime.ps1
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Check Rust without warnings
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Test parsers and data protection
+        run: cargo test --locked
+      - name: Test Neovim integration and native UI state
         run: |
-          pnpm typecheck
-          if ($LASTEXITCODE -ne 0) { throw 'Application typecheck failed.' }
-          pnpm typecheck:windows
-          if ($LASTEXITCODE -ne 0) { throw 'Windows test typecheck failed.' }
-      - name: Build the packaged Windows app
-        id: build
-        run: pnpm build:unpack
-      - name: Run unit and Neovim integration tests
-        run: pnpm test
-      - name: Verify Deno language support
-        run: pnpm test:deno
-      - name: Repeat prefetch frame verification
-        run: pnpm test:prefetch
-      - name: Prepare renderer browser
-        id: browser
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: pnpm exec playwright install chromium
-      - name: Verify renderer state transitions
-        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
-        run: pnpm test:renderer
-      - name: Verify WebGL correction and row caches
-        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
-        env:
-          NIDO_TEST_SOFTWARE_GPU: '1'
-        run: >-
-          pnpm test:renderer
-          --grep "slow touchpad scrolling|fractional text preserves|dense touchpad scrolling|relative line numbers reuse canvases|paint bands bound|WebGL is"
-          --output=test-results/renderer-webgl
-      - name: Repeat renderer timer checks
-        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
-        env:
-          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/renderer-repeat
-        run: >-
-          pnpm test:renderer
-          --grep "startup|failed restoration|failed editor attachment|Notification replacement"
-          --repeat-each 5
-          --reporter=list,html
-          --output=test-results/renderer-repeat
-      - name: Verify the packaged Windows app
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: pnpm test:windows
-      - name: Repeat Git, reference and Neovim UI checks
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        env:
-          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/windows-repeat
-        run: >-
-          pnpm test:windows
-          --grep "Git changes can be reviewed|references stay accessible|stage all keeps HEAD gutter marks|Neovim commands, completion"
-          --repeat-each 3
-          --reporter=list,html
-          --output=test-results/windows-repeat
-      - name: Upload test reports
+          New-Item -ItemType Directory -Force reports | Out-Null
+          cargo run --locked -- --smoke-test 2>&1 | Tee-Object reports/native-smoke.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Native smoke tests failed.' }
+      - name: Install NSIS
+        run: choco install nsis --no-progress --yes
+      - name: Build native Windows release assets
+        run: ./scripts/package-windows.ps1
+      - name: Verify installed package with isolated data
+        run: |
+          ./scripts/test-package.ps1 2>&1 | Tee-Object reports/native-package.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged native smoke tests failed.' }
+      - name: Record the verified source revision
+        run: |
+          git rev-parse HEAD | Set-Content reports/source-sha.txt
+          Copy-Item reports/source-sha.txt dist/release/source-sha.txt
+      - uses: actions/upload-artifact@v7
         if: always()
-        uses: actions/upload-artifact@v7
         with:
           name: windows-baseline-reports
-          path: |
-            playwright-report/
-            test-results/
-          retention-days: 7
-      - name: Verify packaged update download, cancellation and save
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: pnpm verify:update
-      - name: Verify installer file transfer
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: pnpm test:installer
-      - name: Upload update test reports
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: windows-updater-reports
-          path: |
-            playwright-report/updater/
-            test-results/updater/
-          retention-days: 7
-      - name: Save verified release assets
-        uses: actions/upload-artifact@v7
+          path: reports/native-*.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-release-assets
-          path: |
-            dist/auto-update/nido-*-setup.exe
-            dist/auto-update/nido-*-setup.exe.blockmap
-            dist/auto-update/latest.yml
+          path: dist/release/*
           if-no-files-found: error
-          compression-level: 0
-          retention-days: 7

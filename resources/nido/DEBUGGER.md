@@ -31,5 +31,5 @@ fields, watches and interactive stdin are
 not yet exposed by Nido. All debug executables run locally with your permissions.
 Custom dev profiles must retain debug information for source stepping.
 
-Run `pnpm test:debug` for an actual Rust build, breakpoint, step into/out/over,
-local-variable and process-output test. No personal Neovim plugins are loaded.
+Run `cargo run -- --smoke-test` for an actual Rust build, breakpoint, step into/out,
+local-variable and continue test. No personal Neovim plugins are loaded.

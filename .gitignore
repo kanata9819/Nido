@@ -2,6 +2,7 @@ node_modules
 dist
 out
 *.tsbuildinfo
+/target/
 
 # Local environment and authentication settings
 .env
@@ -27,3 +28,6 @@ out
 /resources/nvim-win64/
 /resources/debug/
 /resources/.nvim-*/
+/resources/node/
+/resources/.node-*/
+/reports/native-*.txt

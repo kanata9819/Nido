@@ -25,6 +25,11 @@ if ($nidoActualHash -ne $nidoHash) {
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $nidoTemporary = Join-Path $nidoResources ('.nvim-' + [Guid]::NewGuid().ToString('N'))
 $nidoBackup = Join-Path $nidoResources ('.nvim-backup-' + [Guid]::NewGuid().ToString('N'))
+foreach ($path in @($nidoTemporary, $nidoBackup, $nidoBundle)) {
+    if (![IO.Path]::GetFullPath($path).StartsWith("$nidoResources\", [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Unsafe Neovim runtime destination.'
+    }
+}
 try {
     [System.IO.Compression.ZipFile]::ExtractToDirectory($nidoArchive, $nidoTemporary)
     $nidoPrepared = Join-Path $nidoTemporary 'nvim-win64'

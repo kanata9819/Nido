@@ -1,3 +1,0 @@
-Devicon https://github.com/devicons/devicon
-Revision: 7330accdbc47e2dc0c19789a48533c4a3c50fe58
-Rust monochrome fill adapted for the dark UI.

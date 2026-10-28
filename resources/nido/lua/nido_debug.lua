@@ -190,7 +190,7 @@ local function check_saved()
 end
 
 local function start_build(args)
-  assert(vim.fn.executable(dap.adapters.codelldb.executable.command) == 1, 'Bundled CodeLLDB is missing. Run pnpm prepare:neovim.')
+  assert(vim.fn.executable(dap.adapters.codelldb.executable.command) == 1, 'Bundled CodeLLDB is missing. Run scripts/prepare-runtime.ps1.')
   check_saved()
   launch_args = args and args.executableArgs or {}
   launch_cwd = args and (args.cwd or args.workspaceRoot) or root
