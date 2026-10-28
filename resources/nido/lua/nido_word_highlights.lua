@@ -32,6 +32,8 @@ end
 
 local function refresh()
   if stopped then return end
+  -- Scrolling moves Neovim's cursor for the viewport; keep the editing anchor's references.
+  if require('nido_scroll').cursor() then invalidate(); return end
   local buffer, window = api.nvim_get_current_buf(), api.nvim_get_current_win()
   if vim.bo[buffer].buftype ~= '' or not vim.fn.mode():match('^[niR]') then clear(); return end
   -- shortcut: skip buffers over 1 MiB; use indexed matching if large-file highlighting is needed.
@@ -98,6 +100,7 @@ api.nvim_create_autocmd({
   'CursorMoved', 'CursorMovedI', 'BufEnter', 'TextChanged', 'TextChangedI', 'TextChangedP',
   'ModeChanged', 'LspAttach', 'LspDetach', 'FocusGained',
 }, {callback=refresh})
+api.nvim_create_autocmd('User', {pattern='NidoScroll', callback=refresh})
 api.nvim_create_autocmd({'BufLeave', 'WinLeave', 'FocusLost'}, {callback=clear})
 api.nvim_create_autocmd('VimLeavePre', {callback=function()
   if stopped then return end

@@ -3,7 +3,12 @@ import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Session } from '../src/main/session';
 import { SessionEvents } from '../src/main/sessionEvents';
-import { applyNeovimUI, emptyNeovimUI, splitCommandContent } from '../src/shared/neovimUI';
+import {
+  applyNeovimUI,
+  emptyNeovimUI,
+  patchNeovimUI,
+  splitCommandContent
+} from '../src/shared/neovimUI';
 import type { NidoEvent } from '../src/shared/types';
 
 test('external messages preserve chunks, replace only the last entry and clear independently', () => {
@@ -139,10 +144,64 @@ test('external UI is published only with complete grid frames and replayed on re
   events.endScrollBatch();
   assert.deepEqual(
     sent.slice(2).map((event) => event.type),
-    ['redraw', 'neovimUI']
+    ['redraw', 'neovimUIPatch']
   );
+  const patch = sent.at(-1);
+  assert.equal(patch?.type, 'neovimUIPatch');
   events.replayUI();
-  assert.deepEqual(sent.at(-1), sent.at(-2));
+  if (ui.type === 'neovimUI' && patch?.type === 'neovimUIPatch') {
+    assert.deepEqual(sent.at(-1), {
+      type: 'neovimUI',
+      id: 'alpha',
+      state: patchNeovimUI(ui.state, patch.state)
+    });
+  }
+});
+
+test('external UI patches retain unchanged large collections and replay a full snapshot', () => {
+  const sent: NidoEvent[] = [];
+  let latest = emptyNeovimUI();
+  const events = new SessionEvents('alpha', (event) => {
+    sent.push(event);
+    if (event.type === 'neovimUI') latest = event.state;
+    if (event.type === 'neovimUIPatch') latest = patchNeovimUI(latest, event.state);
+  });
+  const items = Array.from({ length: 10000 }, (_, index) => [`item${index}`, '', '', '']);
+  events.receiveNotification('redraw', [
+    ['cmdline_show', [[[0, 'edit ']], 5, ':', '', 0, 1]],
+    ['popupmenu_show', [items, 0, 0, 0, -1]],
+    ['flush', []]
+  ]);
+  const first = sent.length;
+  for (let index = 1; index <= 20; index++) {
+    events.receiveNotification('redraw', [
+      ['popupmenu_select', [index]],
+      ['cmdline_pos', [index, 1]],
+      ['flush', []]
+    ]);
+  }
+  const updates = sent.slice(first).filter((event) => event.type !== 'redraw');
+  assert.equal(updates.length, 20);
+  let bytes = 0;
+  for (const update of updates) {
+    assert.equal(update.type, 'neovimUIPatch');
+    if (update.type !== 'neovimUIPatch') continue;
+    assert.equal(update.state.completion?.items, undefined);
+    bytes += Buffer.byteLength(JSON.stringify(update));
+  }
+  assert.ok(bytes < 6000, `${bytes} bytes for twenty lightweight UI changes`);
+  assert.equal(latest.completion?.items, items);
+  assert.equal(latest.completion?.selected, 20);
+  assert.equal(latest.commands[1].position, 20);
+  events.replayUI();
+  assert.deepEqual(sent.at(-1), { type: 'neovimUI', id: 'alpha', state: latest });
+  events.receiveNotification('redraw', [
+    ['popupmenu_hide', []],
+    ['flush', []]
+  ]);
+  assert.equal(latest.completion, null);
+  assert.equal(latest.commands[1].position, 20);
+  console.log('external-ui-patch', JSON.stringify({ bytes, updates: updates.length }));
 });
 
 test(
@@ -153,6 +212,7 @@ test(
     const grids: string[] = [];
     const session = await Session.create(process.cwd(), (event) => {
       if (event.type === 'neovimUI') latest = event.state;
+      if (event.type === 'neovimUIPatch') latest = patchNeovimUI(latest, event.state);
       if (event.type === 'redraw') {
         for (const [name, ...calls] of event.events)
           if (name === 'grid_line') {

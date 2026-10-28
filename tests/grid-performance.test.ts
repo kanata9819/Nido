@@ -355,6 +355,65 @@ test('compact row counts follow edits, highlight changes and rectangular scrolli
   assert.equal(height(), 28);
 });
 
+test('new highlight IDs retain compact geometry for visible and cached rows', (context) => {
+  const grid = new Grid();
+  grid.apply([
+    ['grid_resize', [1, 160, 45]],
+    ['hl_attr_define', [1, {}, {}, [{ hi_name: 'NidoCodeLens' }]]],
+    ...Array.from({ length: 44 }, (_, row) => [
+      'grid_line',
+      [1, row, 0, [[row % 2 ? 'lens' : 'body', row % 2 ? 1 : 0, 160]]]
+    ]),
+    ['flush']
+  ]);
+  const cached = (): Grid['cells'] =>
+    Array.from({ length: 256 }, (_, row) =>
+      Array.from({ length: 160 }, () => ({
+        text: row % 2 ? 'lens' : 'body',
+        highlight: row % 2 ? 1 : 0
+      }))
+    );
+  Reflect.set(grid, 'upperRows', cached());
+  Reflect.set(grid, 'lowerRows', cached());
+  grid.prepareLayout(1260, 8, 28);
+  const before = [-256, -1, 1, 2, 44, 45, 299].map((row) => grid.rowTop(row));
+  let reads = 0;
+  for (const row of [...grid.historyRows, ...grid.cells, ...grid.futureRows]) {
+    for (const cell of row) {
+      const text = cell.text;
+      Object.defineProperty(cell, 'text', {
+        get: () => {
+          reads++;
+          return text;
+        }
+      });
+    }
+  }
+  for (let update = 0; update < 20; update++) {
+    grid.apply([
+      ['hl_attr_define', [100 + update, {}, {}, [{ hi_name: 'NidoCodeLens' }]]],
+      ['flush']
+    ]);
+    grid.prepareLayout(1260, 8, 28);
+    assert.deepEqual(
+      [-256, -1, 1, 2, 44, 45, 299].map((row) => grid.rowTop(row)),
+      before
+    );
+  }
+  context.diagnostic(JSON.stringify({ newHighlights: 20, unchangedCellReads: reads }));
+  assert.equal(reads, 0, 'new IDs cannot change the geometry of already defined cells');
+  grid.apply([['grid_line', [1, 0, 0, [['lens', 119, 160]]]], ['flush']]);
+  grid.prepareLayout(1260, 8, 28);
+  assert.equal(grid.rowTop(1), 20, 'newly used IDs compact their new rows');
+  grid.apply([['hl_attr_define', [119, {}, {}, []]], ['flush']]);
+  grid.prepareLayout(1260, 8, 28);
+  assert.equal(grid.rowTop(1), 28, 'redefined IDs still invalidate old geometry');
+  grid.apply([['hl_attr_define', [1, {}, {}, []]], ['flush']]);
+  grid.prepareLayout(1260, 8, 28);
+  assert.equal(grid.rowTop(-1), -28, 'redefinition updates the upper cache');
+  assert.equal(grid.rowTop(46) - grid.rowTop(45), 28, 'redefinition updates the lower cache');
+});
+
 test('native pixel scrolling preserves raster origins through compact rows and cache refills', () => {
   const grid = new Grid();
   grid.apply([

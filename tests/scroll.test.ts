@@ -257,6 +257,106 @@ test('touchpad interpolation fills input gaps and stays responsive while native 
   }
 });
 
+test('pixel gestures preserve their distance across compact CodeLens rows in both directions', async () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  try {
+    for (const height of [18, 23]) {
+      for (const direction of [-1, 1]) {
+        const grid = new Grid();
+        grid.pixelScrollEnabled = true;
+        grid.apply([
+          ['grid_resize', [1, 20, 16]],
+          ['hl_attr_define', [1, {}, {}, [{ hi_name: 'NidoCodeLens' }]]],
+          ...[1, 5, 9].map((row) => ['grid_line', [1, row, 0, [['Run Tests', 1]]]]),
+          ['flush']
+        ]);
+        grid.prepareLayout(180, 8, height);
+        grid.scrollFraction = direction < 0 ? 8 : 0;
+        const origin = grid.rowTop(grid.scrollFraction);
+        const completions: Promise<void>[] = [];
+        Object.defineProperty(globalThis, 'window', {
+          configurable: true,
+          value: {
+            nido: {
+              scroll: async (_id: string, lines: number): Promise<void> => {
+                grid.scrollFraction += lines;
+              },
+              prefetchScroll: async (): Promise<void> => {}
+            }
+          }
+        });
+        const scrolling = new EditorScroll({
+          id: 'alpha',
+          grid,
+          enabled: () => true,
+          schedule: () => {},
+          onError: (error) => assert.fail(String(error)),
+          onCompletion: (promise) => completions.push(promise)
+        });
+        try {
+          for (let step = 1; step <= 20; step++) {
+            scrolling.request((direction * 4.5) / height, false);
+            scrolling.flush();
+            scrolling.acknowledge(true);
+            await Promise.all(completions.splice(0));
+            assert.ok(
+              Math.abs(grid.rowTop(grid.scrollFraction) - origin - direction * step * 4.5) < 1e-8,
+              'compact annotations must not change physical input distance'
+            );
+          }
+        } finally {
+          scrolling.dispose();
+        }
+      }
+    }
+  } finally {
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+    else Reflect.deleteProperty(globalThis, 'window');
+  }
+});
+
+test('non-pixel gestures retain native row distances and the reserved command row', async () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const sent: number[] = [];
+  const completions: Promise<void>[] = [];
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      nido: {
+        scroll: async (_id: string, lines: number): Promise<void> => {
+          sent.push(lines);
+        },
+        prefetchScroll: async (): Promise<void> => {}
+      }
+    }
+  });
+  const grid = new Grid();
+  grid.apply([['grid_resize', [1, 20, 12]], ['flush']]);
+  grid.prepareLayout(180, 8, 18);
+  const scrolling = new EditorScroll({
+    id: 'alpha',
+    grid,
+    enabled: () => true,
+    schedule: () => {},
+    onError: (error) => assert.fail(String(error)),
+    onCompletion: (promise) => completions.push(promise)
+  });
+  try {
+    for (let step = 0; step < 3; step++) {
+      scrolling.request(0.25, true);
+      scrolling.flush();
+      scrolling.acknowledge(true);
+      await Promise.all(completions.splice(0));
+      assert.equal(grid.contentHeight, 162, 'scroll input must not shrink the viewport');
+    }
+    assert.deepEqual(sent, [0.25, 0.25, 0.25]);
+  } finally {
+    scrolling.dispose();
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+    else Reflect.deleteProperty(globalThis, 'window');
+  }
+});
+
 test('cold gestures send movement first and refill the final direction after reversing', async () => {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const calls: (string | boolean | undefined)[][] = [];

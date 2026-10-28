@@ -713,6 +713,134 @@ test('native cursor movement avoids retransmitting a thousand diagnostics on eve
   }
 });
 
+test('editing bursts bound deferred analysis timers and cancel them when a buffer is unloaded', async (context) => {
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    const result = await session.client.request('nvim_exec_lua', [
+      `
+local api = vim.api
+api.nvim_buf_set_lines(0,0,-1,false,{'scope {','  alpha','}'})
+vim.wait(400)
+local original, handles = vim.defer_fn, {}
+vim.defer_fn = function(callback, delay)
+  local timer = original(callback, delay)
+  local source = debug.getinfo(2, 'S').source:match('nido_([%w_]+)%.lua$')
+  if source == 'brackets' or source == 'sticky' or source == 'git_signs' then
+    handles[source] = handles[source] or {}
+    handles[source][#handles[source]+1] = timer
+  end
+  return timer
+end
+local tracking = vim.defer_fn
+local function active()
+  local counts = {}
+  for source, timers in pairs(handles) do
+    counts[source] = 0
+    for _, timer in ipairs(timers) do
+      if not timer:is_closing() and timer:is_active() then counts[source] = counts[source] + 1 end
+    end
+  end
+  return counts
+end
+local ok, result = pcall(function()
+  local buffer = api.nvim_get_current_buf()
+  for edit=1,40 do api.nvim_exec_autocmds('TextChangedI', {buffer=buffer}) end
+  local counts = active()
+  for _, source in ipairs({'brackets','sticky','git_signs'}) do
+    assert(counts[source] == 1, 'Editing retained pending timers: ' .. vim.inspect(counts))
+  end
+  vim.defer_fn = original
+  api.nvim_set_current_buf(api.nvim_create_buf(true,false))
+  api.nvim_buf_delete(buffer, {force=true,unload=true})
+  for source, count in pairs(active()) do
+    assert(count == 0, source .. ' retained a timer after unload')
+  end
+  vim.defer_fn = tracking
+  api.nvim_exec_autocmds('TextChangedI', {buffer=0})
+  api.nvim_exec_autocmds('VimLeavePre', {})
+  for source, count in pairs(active()) do
+    assert(count == 0, source .. ' retained a timer after shutdown')
+  end
+  return {edits=40, maximumPendingTimers=counts}
+end)
+vim.defer_fn = original
+assert(ok, result)
+return result
+`,
+      []
+    ]);
+    context.diagnostic(JSON.stringify(result));
+  } finally {
+    await session.stop();
+  }
+});
+
+test('search cursor bursts cancel obsolete timers while preserving the latest count and shutdown cleanup', async (context) => {
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    const result = await session.client.request('nvim_exec_lua', [
+      `
+local api = vim.api
+api.nvim_buf_set_lines(0,0,-1,false,vim.fn['repeat']({'alpha'},100))
+vim.v.hlsearch=0
+vim.wait(400)
+local defer, count, notify = vim.defer_fn, vim.fn.searchcount, vim.rpcnotify
+local held, scans, latest = {}, 0, nil
+vim.defer_fn = function(callback, delay)
+  if debug.getinfo(2,'n').name ~= 'search_status' then return defer(callback,delay) end
+  -- Hold the actual native timers so a delayed event loop cannot run the count early.
+  local timer = defer(callback,5000)
+  held[#held+1] = {timer=timer,callback=callback}
+  return timer
+end
+vim.fn.searchcount = function(options) scans=scans+1; return count(options) end
+vim.rpcnotify = function(channel, method, state, ...)
+  if method == 'nido:state' then latest=vim.deepcopy(state) end
+  return notify(channel,method,state,...)
+end
+local function publish()
+  api.nvim_exec_autocmds('User',{pattern='NidoSearch'}); vim.wait(5)
+end
+local function active()
+  local total=0
+  for _,item in ipairs(held) do
+    if not item.timer:is_closing() and item.timer:is_active() then total=total+1 end
+  end
+  return total
+end
+local ok, result = pcall(function()
+  vim.fn.setreg('/','alpha'); vim.o.ignorecase=false; vim.v.hlsearch=1
+  for row=1,40 do api.nvim_win_set_cursor(0,{row,0}); publish() end
+  assert(scans==0 and latest.line==40, 'Counting delayed cursor state')
+  assert(active()==1, 'Search retained pending timers: ' .. active())
+  for _,item in ipairs(held) do
+    if not item.timer:is_closing() then item.timer:stop(); item.timer:close() end
+    item.callback()
+  end
+  vim.wait(5)
+  assert(scans==1 and latest.search.current==40 and latest.search.total==100,
+    'Cancelled callbacks changed the latest count')
+  api.nvim_win_set_cursor(0,{41,0}); publish()
+  vim.v.hlsearch=0; publish()
+  assert(active()==0 and latest.search==false, 'Clearing search retained a timer')
+  vim.v.hlsearch=1; publish()
+  assert(active()==1)
+  api.nvim_exec_autocmds('VimLeavePre',{})
+  assert(active()==0, 'Shutdown retained a search timer')
+  return {moves=40,maximumPendingSearchTimers=1,scans=scans}
+end)
+vim.defer_fn, vim.fn.searchcount, vim.rpcnotify = defer, count, notify
+assert(ok,result)
+return result
+`,
+      []
+    ]);
+    context.diagnostic(JSON.stringify(result));
+  } finally {
+    await session.stop();
+  }
+});
+
 test('search counts reuse unchanged views and refresh for cursor, edits, patterns and case options', async () => {
   const session = await Session.create(process.cwd(), () => {});
   const lua = (code: string): ReturnType<Session['client']['request']> =>

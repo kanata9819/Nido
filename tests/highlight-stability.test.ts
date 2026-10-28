@@ -54,8 +54,8 @@ for (const language of ['rust', 'typescript'] as const) {
           ) {
             failures.push({ action, message: event.message });
           }
-          if (event.type === 'neovimUI') {
-            for (const message of event.state.messages) {
+          if (event.type === 'neovimUI' || event.type === 'neovimUIPatch') {
+            for (const message of event.state.messages ?? []) {
               if (['emsg', 'echoerr', 'lua_error'].includes(message.kind)) {
                 failures.push({
                   action,

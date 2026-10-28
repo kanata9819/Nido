@@ -3,6 +3,14 @@ local namespace = api.nvim_create_namespace('nido_brackets')
 local colors = { '#FFD700', '#DA70D6', '#179FFF' }
 local closing = { [')'] = '(', [']'] = '[', ['}'] = '{' }
 local pending = {}
+local function cancel_pending(buffer)
+  local ticket = pending[buffer]
+  pending[buffer] = nil
+  if ticket and ticket.timer and not ticket.timer:is_closing() then
+    ticket.timer:stop()
+    ticket.timer:close()
+  end
+end
 local pairs_by_buffer = {}
 local match_indices = {}
 local scope_indices = {}
@@ -270,7 +278,7 @@ local function update(buffer, ticket)
     if not ok then
       if tostring(err):find('Keyboard interrupt', 1, true) then
         -- A cancelled coroutine is dead; restart only if no newer edit superseded it.
-        vim.defer_fn(function()
+        ticket.timer = vim.defer_fn(function()
           if pending[buffer] == ticket then update(buffer, ticket) end
         end, 80)
       else
@@ -282,7 +290,7 @@ local function update(buffer, ticket)
       match_brackets()
       api.nvim_exec_autocmds('User', {pattern='NidoBracketsUpdated', data={buffer=buffer}})
     else
-      vim.defer_fn(resume, 1)
+      ticket.timer = vim.defer_fn(resume, 1)
     end
   end
   resume()
@@ -361,12 +369,15 @@ api.nvim_create_autocmd({'CursorMoved', 'CursorMovedI'}, {callback=function(even
   publish_guides(api.nvim_get_current_win(), event.buf, vim.fn.line('w0') - 1, vim.fn.line('w$'), true)
 end})
 api.nvim_create_autocmd('ModeChanged', {callback=match_brackets})
-api.nvim_create_autocmd('BufWipeout', {callback=function(event)
+api.nvim_create_autocmd({'BufUnload', 'BufWipeout'}, {callback=function(event)
   pairs_by_buffer[event.buf] = nil
   match_indices[event.buf], scope_indices[event.buf] = nil, nil
   parsed_ticks[event.buf] = nil
   marks_by_buffer[event.buf] = nil
-  pending[event.buf] = nil
+  cancel_pending(event.buf)
+end})
+api.nvim_create_autocmd('VimLeavePre', {callback=function()
+  for buffer in pairs(pending) do cancel_pending(buffer) end
 end})
 
 set_colors()
@@ -378,9 +389,10 @@ api.nvim_create_autocmd({ 'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'T
     if event.event == 'FileType' or event.event == 'Syntax' then
       parsed_ticks[buffer] = nil
     end
+    cancel_pending(buffer)
     local ticket = {}
     pending[buffer] = ticket
-    vim.defer_fn(function()
+    ticket.timer = vim.defer_fn(function()
       if pending[buffer] ~= ticket then return end
       update(buffer, ticket)
     end, 80)

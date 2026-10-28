@@ -517,6 +517,50 @@ return {moves=40, maximumPendingWordTimers=active-baseline, timerAllocations=aft
   }
 });
 
+test('word highlights preserve the editing anchor while horizontal scrolling moves the native cursor', async () => {
+  const session = await Session.create(process.cwd(), () => {});
+  try {
+    await session.attach(80, 24);
+    await session.client.request('nvim_exec_lua', [
+      String.raw`
+local api = vim.api
+vim.wo.wrap = false
+api.nvim_buf_set_lines(0, 0, -1, false, {'alpha ' .. string.rep('beta ', 100)})
+api.nvim_win_set_cursor(0, {1, 0})
+api.nvim_exec_autocmds('CursorMoved', {buffer=0})
+assert(vim.wait(3000, function() return #vim.fn.getmatches() == 1 end, 5))
+assert(vim.fn.getmatches()[1].pattern == [[\C\V\<alpha\>]])
+`,
+      []
+    ]);
+    await session.scroll(0, false, true, 40);
+    await delay(400);
+    await session.client.request('nvim_exec_lua', [
+      String.raw`
+assert(vim.deep_equal(require('nido_scroll').cursor(), {1, 0}))
+assert(vim.api.nvim_win_get_cursor(0)[2] >= 40, 'scrolling must move the native cursor off the anchor')
+local matches = vim.fn.getmatches()
+assert(#matches == 1 and matches[1].pattern == [[\C\V\<alpha\>]],
+  'Scrolling replaced the editing anchor highlight: ' .. vim.inspect(matches))
+`,
+      []
+    ]);
+    await session.input('w');
+    await session.client.request('nvim_exec_lua', [
+      String.raw`
+assert(require('nido_scroll').cursor() == nil)
+assert(vim.wait(3000, function()
+  local matches = vim.fn.getmatches()
+  return #matches == 1 and matches[1].pattern == [[\C\V\<beta\>]]
+end, 5), 'Keyboard navigation must resume highlighting the selected word')
+`,
+      []
+    ]);
+  } finally {
+    await session.stop();
+  }
+});
+
 test('document highlights reject late responses after moving, editing and leaving the buffer', async () => {
   const session = await Session.create(process.cwd(), () => {});
   try {

@@ -100,6 +100,7 @@ export function useEditorRendering({
     let preparingMotion = false;
     let lastColumns = 0;
     let lastRows = 0;
+    let resizePending = false;
     let cellWidth = 0;
     const input = inputRef.current!;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -127,6 +128,24 @@ export function useEditorRendering({
     let paintedFocus = false;
     let paintedCursorVisible = true;
     let paintedCursorOpacity = 1;
+
+    const resize = (columns: number, rows: number): void => {
+      resizePending = true;
+      void window.nido
+        .resize(id, columns, rows)
+        .catch((error) => {
+          if (!disposed) {
+            errorRef.current(String(error));
+          }
+        })
+        .finally(() => {
+          resizePending = false;
+          // Intermediate window sizes need no IPC while Neovim is still resizing.
+          if (!disposed && (columns !== lastColumns || rows !== lastRows)) {
+            resize(lastColumns, lastRows);
+          }
+        });
+    };
 
     const stopMotion = (): void => {
       deferredScroll = undefined;
@@ -341,11 +360,9 @@ export function useEditorRendering({
       } else if (columns !== lastColumns || rows !== lastRows) {
         lastColumns = columns;
         lastRows = rows;
-        void window.nido.resize(id, columns, rows).catch((e) => {
-          if (!disposed) {
-            errorRef.current(String(e));
-          }
-        });
+        if (!resizePending) {
+          resize(columns, rows);
+        }
       }
       if (
         cursor.animating ||

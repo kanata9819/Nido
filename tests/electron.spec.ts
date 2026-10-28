@@ -1176,52 +1176,77 @@ test('touchpad horizontal scrolling reveals long lines and preserves ordinary ed
       };
     });
     expect(pausedPixels).toEqual({ paused: 0, resumed: 0 });
-    const centered = await canvas.evaluate(
-      (surface: HTMLCanvasElement, initial) =>
-        new Promise<number>((resolve) => {
-          const unsubscribe = window.nido.onEvent((event) => {
-            if (event.type !== 'redraw') return;
-            const offset = event.events
-              .flatMap(([name, ...calls]) => (name === 'nido_pixel_scroll' ? calls : []))
-              .find((args) => args[1] === true);
-            if (!offset) return;
-            unsubscribe();
-            resolve(Number(offset[4]));
-          });
-          const bounds = surface.getBoundingClientRect();
-          const point = {
-            bubbles: true,
-            cancelable: true,
-            button: 0,
-            pointerId: 1,
-            pointerType: 'mouse',
-            clientX: bounds.left + (initial.gutter + 20.5) * initial.width,
-            clientY: bounds.top + 27
-          };
-          surface.dispatchEvent(new PointerEvent('pointerdown', { ...point, buttons: 1 }));
-          surface.dispatchEvent(new PointerEvent('pointerup', { ...point, buttons: 0 }));
-        }),
-      fractional
-    );
-    expect(centered).toBeGreaterThanOrEqual(0);
-    expect(centered).toBeLessThanOrEqual(1);
+    const centered = await canvas.evaluate((surface: HTMLCanvasElement, initial) => {
+      const pixels = Array.from(
+        surface
+          .getContext('2d')!
+          .getImageData(
+            100 * devicePixelRatio,
+            80 * devicePixelRatio,
+            200 * devicePixelRatio,
+            18 * devicePixelRatio
+          ).data
+      );
+      return new Promise<{ column: number; pixels: number[] }>((resolve) => {
+        const unsubscribe = window.nido.onEvent((event) => {
+          if (event.type !== 'redraw') return;
+          // An idle gesture is already aligned; a click then publishes a non-pixel restore.
+          const offset = event.events
+            .flatMap(([name, ...calls]) => (name === 'nido_pixel_scroll' ? calls : []))
+            .at(-1);
+          if (!offset) return;
+          unsubscribe();
+          resolve({ column: Number(offset[4]), pixels });
+        });
+        const bounds = surface.getBoundingClientRect();
+        const point = {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          pointerId: 1,
+          pointerType: 'mouse',
+          clientX: bounds.left + (initial.gutter + 20.5) * initial.width,
+          clientY: bounds.top + 27
+        };
+        surface.dispatchEvent(new PointerEvent('pointerdown', { ...point, buttons: 1 }));
+        surface.dispatchEvent(new PointerEvent('pointerup', { ...point, buttons: 0 }));
+      });
+    }, fractional);
+    expect(centered.column).toBeGreaterThanOrEqual(0);
+    expect(centered.column).toBeLessThanOrEqual(1);
     await expect(page.getByText('Ln 2, Col 21', { exact: true })).toBeVisible();
     await expect
       .poll(() =>
-        canvas.evaluate((surface: HTMLCanvasElement, before) => {
-          const pixels = surface
-            .getContext('2d')!
-            .getImageData(
-              100 * devicePixelRatio,
-              80 * devicePixelRatio,
-              200 * devicePixelRatio,
-              18 * devicePixelRatio
-            ).data;
-          return before.reduce((count, value, i) => count + Number(value !== pixels[i]), 0);
-        }, fractional.pixels)
+        canvas.evaluate(
+          (surface: HTMLCanvasElement, before) => {
+            const pixels = surface
+              .getContext('2d')!
+              .getImageData(
+                100 * devicePixelRatio,
+                80 * devicePixelRatio,
+                200 * devicePixelRatio,
+                18 * devicePixelRatio
+              ).data;
+            // A click aligns active lookahead or preserves an already settled fractional frame.
+            return Math.min(
+              ...before.map((frame) =>
+                frame.reduce((count, value, i) => count + Number(value !== pixels[i]), 0)
+              )
+            );
+          },
+          [fractional.pixels, centered.pixels]
+        )
       )
       .toBe(0);
-    await startFractional();
+    await canvas.evaluate(async (surface: HTMLCanvasElement, width) => {
+      // Cached horizontal frames can preview the next gesture without another native redraw.
+      surface.dispatchEvent(
+        new WheelEvent('wheel', { bubbles: true, deltaX: width / 2, deltaY: 0.1 })
+      );
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      );
+    }, fractional.width);
     await canvas.click({ position: { x: (fractional.gutter + 0.1) * fractional.width, y: 27 } });
     await expect(page.getByText('Ln 2, Col 1', { exact: true })).toBeVisible();
     await page.keyboard.type('iQ');

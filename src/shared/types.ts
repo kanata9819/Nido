@@ -1,5 +1,5 @@
 import type { Language } from './i18n';
-import type { NeovimUIState } from './neovimUI';
+import type { NeovimUIPatch, NeovimUIState } from './neovimUI';
 import type { HistoryList, HistoryPreview } from './history';
 import type { LanguagePackSnapshot } from './languagePacks';
 import type { SearchOptions, ReplacementPreview, ReplacementResult } from './search';
@@ -211,6 +211,7 @@ export type NidoEvent =
   | { type: 'directoryChanged'; id: string; paths: string[] }
   | { type: 'redraw'; id: string; events: Redraw }
   | { type: 'neovimUI'; id: string; state: NeovimUIState }
+  | { type: 'neovimUIPatch'; id: string; state: NeovimUIPatch }
   | { type: 'state'; id: string; state: SessionState }
   | { type: 'statePatch'; id: string; state: Partial<SessionState> }
   | { type: 'exit'; id: string }

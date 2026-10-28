@@ -438,8 +438,8 @@ test('sticky redraws retain their last complete frame after a highlight interrup
   const session = await Session.create(process.cwd(), (event) => {
     if (event.type === 'redraw') grid.apply(event.events);
     if (event.type === 'notification' || event.type === 'error') messages.add(event.message);
-    if (event.type === 'neovimUI') {
-      for (const message of event.state.messages) {
+    if (event.type === 'neovimUI' || event.type === 'neovimUIPatch') {
+      for (const message of event.state.messages ?? []) {
         messages.add(message.content.map(([, text]) => text).join(''));
       }
     }

@@ -27,6 +27,29 @@ export interface NeovimUIState {
   completion: { items: [string, string, string, string][]; selected: number } | null;
 }
 
+export type NeovimUIPatch = Partial<Omit<NeovimUIState, 'completion'>> & {
+  completion?: {
+    items?: NonNullable<NeovimUIState['completion']>['items'];
+    selected: number;
+  } | null;
+};
+
+export function patchNeovimUI(state: NeovimUIState, patch: NeovimUIPatch): NeovimUIState {
+  return {
+    ...state,
+    ...patch,
+    completion:
+      patch.completion === undefined
+        ? state.completion
+        : patch.completion === null
+          ? null
+          : {
+              items: patch.completion.items ?? state.completion?.items ?? [],
+              selected: patch.completion.selected
+            }
+  };
+}
+
 export function emptyNeovimUI(): NeovimUIState {
   return {
     commands: {},

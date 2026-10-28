@@ -187,6 +187,8 @@ export class Grid {
       name === 'nido_scroll' ? calls : []
     );
     const prefetched = events.some(([name]) => name === 'nido_scroll_cache');
+    const repaintedScroll =
+      viewportMoves.length > 0 && !events.some(([name]) => name === 'grid_scroll');
     const retainedRows =
       prefetched || viewportMoves.length
         ? new Set([...this.upperRows, ...this.cells, ...this.lowerRows])
@@ -428,8 +430,8 @@ export class Grid {
                       ) {
                         const previous = row;
                         row = this.cells[Number(args[1])] = row.slice();
-                        // Prefetch restores retained cells, so keep their visible bitmaps.
-                        if (!prefetched) {
+                        // Prefetch and wrapped redraws restore retained cells after applying the frame.
+                        if (!prefetched && !repaintedScroll) {
                           this.canvas.moveRowImage(previous, row);
                         }
                         this.rowLayout.clone(previous, row);
@@ -499,12 +501,12 @@ export class Grid {
             break;
           }
           case 'hl_attr_define': {
-            this.layoutDirty = true;
-            this.upperLayout = undefined;
-            this.lowerLayout = undefined;
-            this.rowLayout.invalidate();
-            // New IDs cannot affect previously rasterized rows.
+            // New IDs cannot affect previously laid out or rasterized rows.
             if (this.highlights.has(Number(args[0]))) {
+              this.layoutDirty = true;
+              this.upperLayout = undefined;
+              this.lowerLayout = undefined;
+              this.rowLayout.invalidate();
               this.canvas.invalidate();
             }
             const info = args[3] as { hi_name?: string }[] | undefined;

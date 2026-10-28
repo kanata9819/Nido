@@ -599,6 +599,80 @@ test('external command cards preserve native input focus, UTF-8 cursor, nested p
   await expect(input).not.toHaveAttribute('data-nvim-command-active');
 });
 
+test('command completion bounds large lists while preserving selection and manual scrolling', async ({
+  page
+}) => {
+  await page.goto(`${origin}?view=app`);
+  let state = applyNeovimUI(emptyNeovimUI(), 'cmdline_show', [[[0, 'edit ']], 5, ':', '', 0, 1]);
+  state = applyNeovimUI(state, 'popupmenu_show', [
+    Array.from({ length: 10000 }, (_, index) => [`候補${index}日本😀`, '', `detail ${index}`, '']),
+    0,
+    0,
+    0,
+    -1
+  ]);
+  const publish = async (): Promise<void> => {
+    await page.evaluate(
+      (state) => window.rendererTest.emit({ type: 'neovimUI', id: 'alpha', state }),
+      state
+    );
+  };
+  await publish();
+  const list = page.getByRole('listbox', { name: 'Command completion' });
+  await expect(list).toBeVisible();
+  const before = await list.evaluate((node) => ({
+    count: node.querySelectorAll('[role="option"]').length,
+    rowHeight: node.querySelector('[role="option"]')!.getBoundingClientRect().height
+  }));
+  console.log('command-completion-rows', JSON.stringify(before));
+  expect(before.count).toBeLessThan(60);
+  state = applyNeovimUI(state, 'popupmenu_select', [9999]);
+  await page.evaluate(() =>
+    window.rendererTest.emit({
+      type: 'neovimUIPatch',
+      id: 'alpha',
+      state: { completion: { selected: 9999 } }
+    })
+  );
+  const selected = list.locator('[aria-selected="true"]');
+  await expect(selected).toContainText('候補9999日本😀');
+  await expect(selected).toHaveAttribute('aria-posinset', '10000');
+  await expect(selected).toHaveAttribute('aria-setsize', '10000');
+  await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toHaveAttribute(
+    'aria-activedescendant',
+    'neovim-completion-alpha-9999'
+  );
+  const visible = async (): Promise<boolean> =>
+    selected.evaluate((node) => {
+      const bounds = node.getBoundingClientRect();
+      const list = node.closest('[role="listbox"]')!.getBoundingClientRect();
+      const pixel = 1 / devicePixelRatio;
+      return bounds.top >= list.top - pixel && bounds.bottom <= list.bottom + pixel;
+    });
+  await expect.poll(visible).toBe(true);
+  await list.evaluate((node) => {
+    node.scrollTop = 0;
+  });
+  await expect(list.getByRole('option').first()).toContainText('候補0日本😀');
+  await expect(list.locator('[aria-selected="true"]')).toHaveCount(1);
+  expect(await list.getByRole('option').count()).toBeLessThan(60);
+  await list.getByRole('option').first().click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.rendererTest.calls.filter((call) => call.method === 'selectCompletion').at(-1)
+            ?.args
+      )
+    )
+    .toEqual(['alpha', 0]);
+  await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+  state = applyNeovimUI(state, 'popupmenu_show', [[['short', '', '', '']], -1, 0, 0, -1]);
+  await publish();
+  await expect(list.getByRole('option')).toHaveCount(1);
+  await expect(list.getByRole('option')).toContainText('short');
+});
+
 test('external command input keeps spaces, Unicode and control keys in order', async ({ page }) => {
   await page.goto(`${origin}?view=app&defer=inputMode`);
   const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
@@ -1232,6 +1306,90 @@ test('failed editor attachment dismisses loading and displays the error', async 
   await expect(loading).toHaveCount(0);
   await expect(page.getByText('Editor startup failed', { exact: true })).toBeVisible();
 });
+
+for (const reject of [false, true]) {
+  test(`editor resize keeps only the latest dimensions behind a ${reject ? 'failed' : 'slow'} request`, async ({
+    page
+  }) => {
+    await pauseRendererClock(page);
+    await page.goto(`${origin}?view=app&defer=resize`);
+    await page.clock.runFor(100);
+    const paintWidth = async (width: number): Promise<void> => {
+      await page.evaluate((width) => {
+        const host = document.querySelector(
+          'canvas[aria-label="Neovim editor display"]'
+        )?.parentElement;
+        if (!host) throw new Error('Missing editor host');
+        host.style.width = `${width}px`;
+        window.rendererTest.emit({ type: 'redraw', id: 'alpha', events: [['flush']] });
+      }, width);
+      await page.clock.runFor(32);
+    };
+    await paintWidth(600);
+    for (let pass = 0; pass < 3; pass++) {
+      await page.evaluate(() => {
+        while (window.rendererTest.pending.some((call) => call.method === 'resize')) {
+          window.rendererTest.settle('resize', 0, undefined);
+        }
+      });
+      await page.clock.runFor(32);
+    }
+    const before = await page.evaluate(() => {
+      const resizes = window.rendererTest.calls.filter((call) => call.method === 'resize');
+      return { count: resizes.length, dimensions: resizes.at(-1)!.args };
+    });
+    for (let index = 0; index < 20; index++) {
+      await paintWidth(index === 19 ? 600 : 800 + index * 10);
+    }
+    const queued = await page.evaluate(() => ({
+      pending: window.rendererTest.pending.filter((call) => call.method === 'resize').length,
+      calls: window.rendererTest.calls.filter((call) => call.method === 'resize').length
+    }));
+    expect(queued.pending).toBe(1);
+    expect(queued.calls - before.count).toBe(1);
+    await page.evaluate((reject) => {
+      window.rendererTest.settle('resize', 0, reject ? 'Resize interrupted' : undefined, reject);
+    }, reject);
+    await page.clock.runFor(32);
+    const latest = await page.evaluate(() => {
+      const resizes = window.rendererTest.calls.filter((call) => call.method === 'resize');
+      return {
+        pending: window.rendererTest.pending.filter((call) => call.method === 'resize').length,
+        calls: resizes.length,
+        dimensions: resizes.at(-1)!.args
+      };
+    });
+    expect(latest.pending).toBe(1);
+    expect(latest.calls - before.count).toBe(2);
+    expect(latest.dimensions).toEqual(before.dimensions);
+    await page.evaluate(() => window.rendererTest.settle('resize', 0, undefined));
+    await page.clock.runFor(32);
+    expect(
+      await page.evaluate(
+        () => window.rendererTest.pending.filter((call) => call.method === 'resize').length
+      )
+    ).toBe(0);
+    if (reject) {
+      await expect(page.getByText('Resize interrupted', { exact: true })).toBeVisible();
+    }
+    await paintWidth(800);
+    await paintWidth(900);
+    const beforeClose = await page.evaluate(
+      () => window.rendererTest.calls.filter((call) => call.method === 'resize').length
+    );
+    await page.evaluate(() => window.rendererTest.emit({ type: 'exit', id: 'alpha' }));
+    await page.clock.runFor(32);
+    await expect(page.locator('canvas[aria-label="Neovim editor display"]')).toHaveCount(0);
+    await page.evaluate(() => window.rendererTest.settle('resize', 0, undefined));
+    await page.clock.runFor(32);
+    expect(
+      await page.evaluate(
+        () => window.rendererTest.calls.filter((call) => call.method === 'resize').length
+      )
+    ).toBe(beforeClose);
+    console.log('editor-resize-backpressure', JSON.stringify({ reject, queued, latest }));
+  });
+}
 
 for (const scale of [1, 1.25, 1.5]) {
   test(`editor canvas fits physical pixels at ${scale * 100}% scale`, async ({ browser }) => {

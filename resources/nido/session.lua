@@ -77,41 +77,52 @@ local published_diagnostics_version = -1
 local buffers = {}
 local buffers_dirty = true
 local publish
-local search_cache, search_pending
+local search_cache, search_pending, search_timer
 local search_delay = 16
+local function cancel_search()
+  search_pending = nil
+  if search_timer and not search_timer:is_closing() then
+    search_timer:stop()
+    search_timer:close()
+  end
+  search_timer = nil
+end
 local function search_context()
   local pattern = vim.fn.getreg('/')
   if vim.v.hlsearch ~= 1 or pattern == '' or vim.bo.buftype ~= '' then
     return nil
   end
   local cursor = vim.api.nvim_win_get_cursor(0)
-  local context = table.concat({vim.api.nvim_get_current_buf(), vim.api.nvim_buf_get_changedtick(0),
+  local buffer = vim.api.nvim_get_current_buf()
+  local context = table.concat({buffer, vim.api.nvim_buf_get_changedtick(0),
     pattern, tostring(vim.o.ignorecase), tostring(vim.o.smartcase),
     tostring(vim.o.magic), vim.bo.iskeyword, vim.o.regexpengine}, '\0')
-  return {context=context, key=context .. '\0' .. cursor[1] .. ':' .. cursor[2], pattern=pattern}
+  return {buffer=buffer, context=context, key=context .. '\0' .. cursor[1] .. ':' .. cursor[2], pattern=pattern}
 end
 local function search_status()
   local request = search_context()
   if not request then
     search_cache = nil
-    search_pending = nil
+    cancel_search()
     search_delay = 16
     return false
   end
   if search_cache and search_cache.key == request.key then
     -- Moving back to the cached position also invalidates a different queued count.
-    search_pending = nil
+    cancel_search()
     return search_cache.value
   end
   if not search_pending or search_pending.key ~= request.key then
     request.started = search_pending and search_pending.started or vim.uv.hrtime()
+    cancel_search()
     search_pending = request
     -- Keep full-buffer regex scans off the immediate cursor/input notification.
     -- Slow counts wait for nearby inputs, but continuous movement still updates
     -- at least every 120ms (plus the event loop's timer scheduling).
     local delay = math.min(search_delay, math.max(0, 120 - (vim.uv.hrtime() - request.started) / 1e6))
-    vim.defer_fn(function()
+    search_timer = vim.defer_fn(function()
       if search_pending ~= request then return end
+      search_timer = nil
       local current = search_context()
       search_pending = nil
       if not current or current.key ~= request.key then
@@ -130,6 +141,10 @@ local function search_status()
   if search_cache and search_cache.context == request.context then return search_cache.value end
   return {pattern=request.pattern, current=0, total=0, incomplete=1}
 end
+vim.api.nvim_create_autocmd('BufUnload', {callback=function(event)
+  if search_pending and search_pending.buffer == event.buf then cancel_search() end
+end})
+vim.api.nvim_create_autocmd('VimLeavePre', {callback=cancel_search})
 local function refresh_diagnostics()
   if not diagnostics_dirty then
     return

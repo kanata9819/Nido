@@ -1,6 +1,14 @@
 local M = {}
 local api = vim.api
 local entries, pending, published, color_pending = {}, {}, {}, {}
+local function cancel_pending(buffer)
+  local ticket = pending[buffer]
+  pending[buffer] = nil
+  if ticket and ticket.timer and not ticket.timer:is_closing() then
+    ticket.timer:stop()
+    ticket.timer:close()
+  end
+end
 local outlines = {}
 local method_separators = false
 local method_namespace = api.nvim_create_namespace('nido_method_separators')
@@ -236,10 +244,11 @@ end
 
 local function schedule(buffer)
   cancel_outline(buffer)
+  cancel_pending(buffer)
   local ticket = {}
   pending[buffer] = ticket
   -- Structure is cached between edits; wheel frames only read it and their screen positions.
-  vim.defer_fn(function()
+  ticket.timer = vim.defer_fn(function()
     if pending[buffer] ~= ticket then return end
     pending[buffer] = nil
     refresh(buffer)
@@ -439,7 +448,11 @@ api.nvim_create_autocmd('ColorScheme', {callback=function()
 end})
 api.nvim_create_autocmd({'BufUnload', 'BufWipeout'}, {callback=function(event)
   cancel_outline(event.buf)
+  cancel_pending(event.buf)
   entries[event.buf], pending[event.buf], color_pending[event.buf] = nil, nil, nil
+end})
+api.nvim_create_autocmd('VimLeavePre', {callback=function()
+  for buffer in pairs(pending) do cancel_pending(buffer) end
 end})
 api.nvim_create_autocmd('WinClosed', {callback=function(event) published[tonumber(event.match)] = nil end})
 api.nvim_create_autocmd('UIEnter', {callback=function()

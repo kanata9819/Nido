@@ -23,7 +23,7 @@ import { accumulateScroll, scrollOffset } from '../src/renderer/src/scroll';
 import { readFavorites, readLayout, writeFavorites, writeLayout } from '../src/main/persistence';
 import { fileDecorations, gitFileKey } from '../src/renderer/src/fileDecorations';
 import type { NidoEvent, Redraw, SessionState } from '../src/shared/types';
-import { emptyNeovimUI } from '../src/shared/neovimUI';
+import { emptyNeovimUI, patchNeovimUI } from '../src/shared/neovimUI';
 
 test('workspace grep finds saved text beyond filename limits, respects ignores and opens byte positions', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-workspace-grep-'));
@@ -1447,6 +1447,7 @@ test('normal Ctrl+C avoids the Neovim quit hint while command entry remains visi
     session = await Session.create(root, (event) => {
       if (event.type === 'redraw') grid.apply(event.events);
       if (event.type === 'neovimUI') ui = event.state;
+      if (event.type === 'neovimUIPatch') ui = patchNeovimUI(ui, event.state);
     });
     await session.attach(80, 24);
     await session.input('<C-c>');
@@ -3705,6 +3706,7 @@ for (const command of ['save', 'saveAll'] as const) {
           await writeFile(path, 'original\n');
           session = await Session.create(root, (event) => {
             if (event.type === 'neovimUI') ui = event.state;
+            if (event.type === 'neovimUIPatch') ui = patchNeovimUI(ui, event.state);
           });
           await session.openFile('file.txt');
           await session.input('gg0Cmy draft<Esc>');

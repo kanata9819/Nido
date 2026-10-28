@@ -5,6 +5,14 @@ local api = vim.api
 local namespace = api.nvim_create_namespace('nido_git_signs')
 local generations = {}
 local pending = {}
+local function cancel_pending(buffer)
+  local token = pending[buffer]
+  pending[buffer] = nil
+  if token and token.timer and not token.timer:is_closing() then
+    token.timer:stop()
+    token.timer:close()
+  end
+end
 local bases = {}
 local rendered = {}
 local active = {}
@@ -179,9 +187,10 @@ end
 api.nvim_create_autocmd({'BufEnter', 'BufWritePost', 'TextChanged', 'TextChangedI', 'TextChangedP', 'FileChangedShellPost'}, {
   callback = function(event)
     local buffer = event.buf
+    cancel_pending(buffer)
     local token = {}
     pending[buffer] = token
-    vim.defer_fn(function()
+    token.timer = vim.defer_fn(function()
       if pending[buffer] == token then
         pending[buffer] = nil
         M.refresh(buffer)
@@ -197,7 +206,7 @@ local function forget(buffer)
     pcall(current.process.handle.kill, current.process.handle, 15)
   end
   generations[buffer] = nil
-  pending[buffer] = nil
+  cancel_pending(buffer)
   bases[buffer] = nil
   rendered[buffer] = nil
 end
@@ -212,6 +221,7 @@ api.nvim_create_autocmd('VimLeavePre', { callback = function()
   stopped = true
   timer:stop()
   timer:close()
+  for buffer in pairs(pending) do cancel_pending(buffer) end
   for buffer in pairs(active) do forget(buffer) end
 end })
 

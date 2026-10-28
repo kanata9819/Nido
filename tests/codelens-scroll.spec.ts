@@ -63,7 +63,9 @@ for (const scale of [1, 1.25, 1.5]) {
             source instanceof HTMLCanvasElement &&
             /ROW_110(?:\D|$)/.test(source.dataset.rowText ?? '')
           ) {
-            probe.samples.push({ y: Number(args[2]), input: probe.input });
+            const baseline = Number(source.dataset.rowBaseline ?? 0);
+            const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
+            probe.samples.push({ y: Number(args[2]) + phase, input: probe.input });
           }
           Reflect.apply(draw, context, args);
         }) as typeof draw;
@@ -94,9 +96,11 @@ for (const scale of [1, 1.25, 1.5]) {
           }, delta);
           const steps = samples.slice(1).map((sample, index) => ({
             movement: Math.sign(delta) * (samples[index].y - sample.y),
-            input: Math.sign(delta) * (sample.input - samples[index].input) * 0.5
+            excess:
+              Math.sign(delta) * (samples[0].y - sample.y) - Math.sign(delta) * sample.input * 0.5
           }));
           const distance = Math.sign(delta) * (samples[0].y - samples.at(-1)!.y);
+          const requested = Math.sign(delta) * samples.at(-1)!.input * 0.5;
           console.log('codelens-scroll', {
             scale,
             mode,
@@ -104,7 +108,7 @@ for (const scale of [1, 1.25, 1.5]) {
             distance,
             paints: samples.length,
             minStep: Math.min(...steps.map((step) => step.movement)),
-            maxExcess: Math.max(...steps.map((step) => step.movement - step.input))
+            maxExcess: Math.max(...steps.map((step) => step.excess))
           });
           expect(samples.length).toBeGreaterThan(30);
           expect(
@@ -112,9 +116,14 @@ for (const scale of [1, 1.25, 1.5]) {
             'the gesture must move the viewport through a CodeLens row'
           ).toBeGreaterThan(60);
           expect(steps.every((step) => step.movement >= -0.01)).toBe(true);
+          // Easing can consume earlier input after a frame gap or after input stops.
           expect(
-            Math.max(...steps.map((step) => step.movement - step.input)),
-            'crossing a CodeLens row or settling must not add an unrequested jump'
+            Math.max(...steps.map((step) => step.excess)),
+            'movement must never exceed the total requested distance'
+          ).toBeLessThanOrEqual(1 / scale + 0.01);
+          expect(
+            Math.abs(distance - requested),
+            'settling must preserve the exact requested distance through CodeLens rows'
           ).toBeLessThanOrEqual(1 / scale + 0.01);
         }
       }

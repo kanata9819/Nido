@@ -182,7 +182,7 @@ test('wrapped upward scrolling reuses text and avoids continuous cache refills',
   }
 });
 
-test('touchpad deltas preview before RPC, coalesce and settle without double movement', async () => {
+test('non-animated touchpad deltas preview before RPC, coalesce and settle without double movement', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-touchpad-'));
   const profile = join(root, 'profile');
   const file = join(root, 'sample.txt');
@@ -202,6 +202,9 @@ test('touchpad deltas preview before RPC, coalesce and settle without double mov
   const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
   try {
     const page = await running.firstWindow();
+    // Isolate IPC coalescing; animated gestures send their eased remainder in a later RPC.
+    await page.addInitScript(() => localStorage.setItem('nido.animations', 'false'));
+    await page.reload();
     const canvas = page.locator('canvas:visible');
     await expect(canvas).toHaveAttribute('aria-description', /line 1/);
     const dpr = await page.evaluate(() => window.devicePixelRatio);

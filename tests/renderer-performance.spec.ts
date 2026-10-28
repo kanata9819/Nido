@@ -10,6 +10,91 @@ import { requireWebGLCorrection } from './helpers/row-image-probe';
 let server: ViteDevServer;
 let origin: string;
 
+test('wrapped row redraws retain the bitmaps of unchanged shifted text', async ({ browser }) => {
+  for (const scale of [1, 1.25, 1.5, 2]) {
+    const context = await browser.newContext({ deviceScaleFactor: scale });
+    try {
+      const page = await context.newPage();
+      await page.route('**/wrapped-cache-probe', (route) =>
+        route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+      );
+      await page.goto(`${origin}wrapped-cache-probe`);
+      const result = await page.evaluate(
+        async (moduleUrl) => {
+          const { Grid } = await import(moduleUrl);
+          const grid = new Grid();
+          grid.busy = true;
+          grid.pixelScrollEnabled = true;
+          const cells = (line: number): [string, number][] =>
+            Array.from(`ROW_${line} const value = example(argument);`.padEnd(64), (text) => [
+              text,
+              0
+            ]);
+          const setup = [
+            ['grid_resize', [1, 64, 9]],
+            ...Array.from({ length: 8 }, (_, row) => ['grid_line', [1, row, 0, cells(row)]]),
+            ['flush']
+          ];
+          grid.apply(setup);
+          const canvas = document.createElement('canvas');
+          const paint = (value: EditorGrid, target: HTMLCanvasElement): Uint8ClampedArray => {
+            value.draw(target, 640, 152, 15, 'monospace', false, undefined, 19);
+            return target.getContext('2d')!.getImageData(0, 0, target.width, target.height).data;
+          };
+          paint(grid, canvas);
+          const fillText = CanvasRenderingContext2D.prototype.fillText;
+          let glyphs = 0;
+          CanvasRenderingContext2D.prototype.fillText = function (...args) {
+            glyphs++;
+            return fillText.apply(this, args);
+          };
+          let first = 0;
+          let mismatches = 0;
+          const redrawGlyphs: number[] = [];
+          try {
+            for (const direction of [-2, -2, 2, 2]) {
+              first += direction;
+              grid.apply([
+                ['nido_scroll', [1, 0, 8, 0, 64, direction, 0]],
+                ...Array.from({ length: 8 }, (_, row) => [
+                  'grid_line',
+                  [1, row, 0, cells(first + row)]
+                ]),
+                ['flush']
+              ]);
+              glyphs = 0;
+              const actual = paint(grid, canvas);
+              redrawGlyphs.push(glyphs);
+              const reference = new Grid();
+              reference.busy = true;
+              reference.pixelScrollEnabled = true;
+              reference.apply([
+                ['grid_resize', [1, 64, 9]],
+                ...Array.from({ length: 8 }, (_, row) => [
+                  'grid_line',
+                  [1, row, 0, cells(first + row)]
+                ]),
+                ['flush']
+              ]);
+              const expected = paint(reference, document.createElement('canvas'));
+              mismatches += expected.filter((value, index) => value !== actual[index]).length;
+            }
+            return { redrawGlyphs, mismatches };
+          } finally {
+            CanvasRenderingContext2D.prototype.fillText = fillText;
+          }
+        },
+        `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+      );
+      console.log('wrapped-row-cache', JSON.stringify({ scale, ...result }));
+      expect(result.mismatches).toBe(0);
+      for (const glyphs of result.redrawGlyphs) expect(glyphs).toBeLessThanOrEqual(2 * 64);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
 for (const scale of [1, 1.25, 1.5]) {
   test(`code paints and accepts clicks to the viewport bottom at ${scale * 100}% scale`, async ({
     browser

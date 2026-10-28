@@ -332,7 +332,8 @@ test('fast horizontal input scales lookahead while narrow viewports retain overl
 
 test('cached horizontal input postpones idle settlement until the continuous gesture stops', async (t) => {
   await withEditorScroll(async ({ scroll, calls, completions }) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] });
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+    t.mock.method(performance, 'now', () => Date.now());
     scroll.requestHorizontal(0.125, false);
     scroll.acknowledge(true, 8);
     calls[0].resolve();
@@ -355,6 +356,34 @@ test('cached horizontal input postpones idle settlement until the continuous ges
   });
 });
 
+test('continuous cached gestures reuse the idle timer and retain the last-input deadline', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  t.mock.method(performance, 'now', () => Date.now());
+  const timers = t.mock.method(globalThis, 'setTimeout');
+  await withEditorScroll(async ({ scroll, calls, completions }) => {
+    scroll.requestHorizontal(0.125, false);
+    scroll.acknowledge(true, 8);
+    calls[0].resolve();
+    await completions[0];
+
+    for (let i = 0; i < 100; i++) {
+      t.mock.timers.tick(8);
+      scroll.requestHorizontal(0.005, false);
+    }
+    assert.ok(timers.mock.callCount() <= 6, 'a gesture must not allocate a timer for every input');
+    assert.equal(calls.length, 1);
+    t.mock.timers.tick(159);
+    assert.equal(calls.length, 1, 'the last input retains its complete idle interval');
+    t.mock.timers.tick(1);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].columns, -8);
+    scroll.acknowledge(true, 0);
+    calls[1].resolve();
+    await completions[1];
+    assert.ok(Math.abs(scroll.horizontalColumn - scroll.horizontalOffset - 0.625) < 1e-10);
+  });
+});
+
 test('pausing preserves the visible horizontal position and resynchronizes canceled settlement', () => {
   const scroll = new HorizontalScroll();
   assert.equal(scroll.request(0.5, 8), 8);
@@ -372,7 +401,8 @@ test('pausing preserves the visible horizontal position and resynchronizes cance
 });
 
 test('blur and modal dismissal settle preserved lookahead after input becomes idle', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  t.mock.method(performance, 'now', () => Date.now());
   for (const blocked of [false, true]) {
     let enabled = true;
     await withEditorScroll(

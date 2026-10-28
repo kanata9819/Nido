@@ -6,7 +6,7 @@ import type {
   ReferencePreview,
   DiagnosticDetails
 } from '../shared/types';
-import { applyNeovimUI, emptyNeovimUI } from '../shared/neovimUI';
+import { applyNeovimUI, emptyNeovimUI, type NeovimUIPatch } from '../shared/neovimUI';
 
 const rendererGridEvents = new Set([
   'popupmenu_show',
@@ -33,6 +33,7 @@ export class SessionEvents {
   private pendingState = false;
   private publishedState?: SessionState;
   private neovimUI = emptyNeovimUI();
+  private publishedUI?: typeof this.neovimUI;
   private pendingUI = false;
 
   constructor(
@@ -64,12 +65,34 @@ export class SessionEvents {
     this.sendToRenderer({ type: 'redraw', id: this.workspaceId, events: completedFrame });
     if (this.pendingUI) {
       this.pendingUI = false;
-      this.replayUI();
+      this.publishUI();
     }
   }
 
   replayUI(): void {
+    this.publishedUI = this.neovimUI;
     this.sendToRenderer({ type: 'neovimUI', id: this.workspaceId, state: this.neovimUI });
+  }
+
+  private publishUI(): void {
+    const previous = this.publishedUI;
+    const current = this.neovimUI;
+    if (!previous) {
+      this.replayUI();
+      return;
+    }
+    this.publishedUI = current;
+    const patch: NeovimUIPatch = Object.fromEntries(
+      Object.entries(current).filter(
+        ([key, value]) => value !== previous[key as keyof typeof current]
+      )
+    );
+    if (patch.completion && patch.completion.items === previous.completion?.items) {
+      patch.completion = { selected: patch.completion.selected };
+    }
+    if (Object.keys(patch).length) {
+      this.sendToRenderer({ type: 'neovimUIPatch', id: this.workspaceId, state: patch });
+    }
   }
 
   get hasInputPrompt(): boolean {

@@ -22,6 +22,7 @@ export class EditorScroll {
   private paused = false;
   private generation = 0;
   private settleTimer?: ReturnType<typeof setTimeout>;
+  private settleAt = 0;
   private wheelMotion?: {
     distance: number;
     remaining: number;
@@ -123,8 +124,7 @@ export class EditorScroll {
     } else if (this.paused) {
       this.paused = false;
       if (this.horizontal.active) {
-        clearTimeout(this.settleTimer);
-        this.settleTimer = setTimeout(this.settle, 160);
+        this.deferSettle();
       }
     }
   }
@@ -136,13 +136,25 @@ export class EditorScroll {
     this.options.grid.scrollPreview = 0;
     this.options.grid.scrolling = false;
     clearTimeout(this.settleTimer);
+    this.settleTimer = undefined;
     if (preserveHorizontal && this.horizontal.active) {
-      this.settleTimer = setTimeout(this.settle, 160);
+      this.deferSettle();
     }
     this.options.schedule();
   }
 
+  private deferSettle(): void {
+    this.settleAt = performance.now() + 160;
+    this.settleTimer ??= setTimeout(this.settle, 160);
+  }
+
   private settle = (): void => {
+    this.settleTimer = undefined;
+    const remaining = this.settleAt - performance.now();
+    if (remaining > 0) {
+      this.settleTimer = setTimeout(this.settle, remaining);
+      return;
+    }
     if (this.animating || this.pending || this.queue.hasQueued || this.fetching) {
       this.settleTimer = setTimeout(this.settle, 40);
       return;
@@ -175,7 +187,7 @@ export class EditorScroll {
       this.options.schedule();
     } else {
       this.advance(now, false);
-      this.move(lines, follow);
+      this.move(this.screenLines(lines), follow);
     }
   }
 
@@ -187,9 +199,10 @@ export class EditorScroll {
     const offset = animate ? scrollOffset(motion.distance, now - motion.start, motion.duration) : 0;
     const remaining = Math.abs(offset) < 0.001 ? 0 : offset;
     const delta = motion.remaining - remaining;
-    const lines = this.options.grid.limitScroll(delta);
+    const distance = this.screenLines(delta);
+    const lines = this.options.grid.limitScroll(distance);
     motion.remaining = remaining;
-    if (!remaining || lines !== delta) {
+    if (!remaining || lines !== distance) {
       this.wheelMotion = undefined;
     }
     if (lines) {
@@ -197,9 +210,46 @@ export class EditorScroll {
     }
   }
 
+  private screenLines(lines: number): number {
+    const grid = this.options.grid;
+    const height = grid.cellHeight;
+    if (!grid.pixelScrollEnabled || !height || !lines || grid.rows < 2) {
+      return lines;
+    }
+    grid.prepareLayout(grid.contentHeight, grid.cellWidth, height);
+    const position = grid.scrollFraction + grid.scrollPreview;
+    let low = -grid.historyRows.length;
+    let high = grid.rows - 1 + grid.futureRows.length;
+    const minimum = grid.rowTop(low);
+    const maximum = grid.rowTop(high);
+    const origin =
+      position < low
+        ? minimum + (position - low) * height
+        : position > high
+          ? maximum + (position - high) * height
+          : grid.rowTop(position);
+    const target = origin + lines * height;
+    // shortcut: unseen rows use standard height until their geometry is cached.
+    if (target < minimum) {
+      return low + (target - minimum) / height - position;
+    }
+    if (target >= maximum) {
+      return high + (target - maximum) / height - position;
+    }
+    while (high - low > 1) {
+      const middle = Math.floor((low + high) / 2);
+      if (grid.rowTop(middle) <= target) {
+        low = middle;
+      } else {
+        high = middle;
+      }
+    }
+    const top = grid.rowTop(low);
+    return low + (target - top) / (grid.rowTop(low + 1) - top) - position;
+  }
+
   requestHorizontal(columns: number, follow: boolean, preview = true): void {
-    clearTimeout(this.settleTimer);
-    this.settleTimer = setTimeout(this.settle, 160);
+    this.deferSettle();
     // Keep both cached edges overlapping when a fast gesture reverses.
     const maxAhead = Math.max(
       1,
@@ -220,8 +270,7 @@ export class EditorScroll {
   private move(lines: number, follow: boolean, columns = 0): void {
     const { grid, schedule } = this.options;
     grid.scrolling = true;
-    clearTimeout(this.settleTimer);
-    this.settleTimer = setTimeout(this.settle, 160);
+    this.deferSettle();
     this.queue.enqueue(lines, follow, columns);
     if (lines) {
       this.down = lines > 0;
@@ -343,6 +392,7 @@ export class EditorScroll {
     this.disposed = true;
     this.wheelMotion = undefined;
     clearTimeout(this.settleTimer);
+    this.settleTimer = undefined;
     this.options.grid.scrollPreview = 0;
     this.options.grid.scrolling = false;
   }

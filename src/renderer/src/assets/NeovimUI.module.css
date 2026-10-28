@@ -106,24 +106,37 @@
   border-top: 1px solid var(--ui-border, #ffffff09);
   padding: 5px;
 }
-.completion > div {
+.completionItems {
+  position: relative;
+}
+.completionItems > div {
+  position: absolute;
+  left: 0;
+  right: 0;
   display: flex;
   gap: 16px;
   padding: 7px 10px;
   border-radius: 5px;
   font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
   cursor: pointer;
 }
-.completion > div[aria-selected='true'] {
+.completionItems > div[aria-selected='true'] {
   background: #a8cf9e18;
   color: #d9efd2;
 }
-.completion > div:hover {
+.completionItems > div:hover {
   background: #ffffff08;
 }
 .completion small {
   margin-left: auto;
   color: #8e9aa5;
+}
+.completionItems > div > span,
+.completion small {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .messageBody {
   padding: 12px;

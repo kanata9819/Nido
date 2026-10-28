@@ -10,6 +10,7 @@ import {
 import { CircleAlert, History, MessageSquare, Search, Terminal, X } from 'lucide-react';
 import {
   emptyNeovimUI,
+  patchNeovimUI,
   splitCommandContent,
   type MessageChunk,
   type NeovimCommandLine
@@ -20,6 +21,9 @@ import { type Grid } from '../grid';
 import { vimKey } from '../keyboard';
 import styles from '../assets/NeovimUI.module.css';
 import OverlayPresence from './OverlayPresence';
+
+const completionRowHeight = 30;
+const completionOverscan = 8;
 
 // Keep the existing IME textarea aligned with the external command cursor.
 function positionCommandInput(
@@ -124,11 +128,18 @@ export default function NeovimUI({
   const commandCard = useRef<HTMLDivElement>(null);
   const commandBody = useRef<HTMLDivElement>(null);
   const messageBody = useRef<HTMLDivElement>(null);
+  const completionList = useRef<HTMLDivElement>(null);
+  const [completionViewport, setCompletionViewport] = useState({ top: 0, height: 280 });
   useEffect(
     () =>
       onNidoEvent((event) => {
-        if (event.id === id && event.type === 'neovimUI') {
+        if (event.id !== id) {
+          return;
+        }
+        if (event.type === 'neovimUI') {
           setState(event.state);
+        } else if (event.type === 'neovimUIPatch') {
+          setState((previous) => patchNeovimUI(previous, event.state));
         }
       }),
     [id]
@@ -137,6 +148,30 @@ export default function NeovimUI({
   const commands = Object.values(state.commands).sort((a, b) => a.level - b.level);
   const current = commands.at(-1);
   const showCommand = !hidden && (Boolean(current) || state.block.length > 0);
+  const showCompletion = showCommand && state.completion !== null;
+  const completionCount = state.completion?.items.length ?? 0;
+  const firstCompletion = Math.min(
+    Math.max(0, completionCount - 1),
+    Math.max(0, Math.floor(completionViewport.top / completionRowHeight) - completionOverscan)
+  );
+  const lastCompletion = Math.min(
+    completionCount,
+    Math.ceil((completionViewport.top + completionViewport.height) / completionRowHeight) +
+      completionOverscan
+  );
+  const completionIndices = Array.from(
+    { length: Math.max(0, lastCompletion - firstCompletion) },
+    (_, index) => firstCompletion + index
+  );
+  const selectedCompletion = state.completion?.selected ?? -1;
+  if (
+    selectedCompletion >= 0 &&
+    selectedCompletion < completionCount &&
+    !completionIndices.includes(selectedCompletion)
+  ) {
+    completionIndices.push(selectedCompletion);
+    completionIndices.sort((a, b) => a - b);
+  }
   const showHistory = state.history !== null && dismissed.history !== state.historyVersion;
   const messages = showHistory ? state.history! : state.messages;
   const showMessages =
@@ -160,6 +195,24 @@ export default function NeovimUI({
     setDismissed({ messages: state.messageVersion, history: state.historyVersion });
     input.current?.focus();
   };
+
+  useLayoutEffect(() => {
+    const list = completionList.current;
+    if (!showCompletion || !list) {
+      return;
+    }
+    const update = (): void => {
+      const top = list.scrollTop;
+      const height = list.clientHeight;
+      setCompletionViewport((previous) =>
+        previous.top === top && previous.height === height ? previous : { top, height }
+      );
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [showCompletion]);
 
   useLayoutEffect(() => {
     const anchor = input.current;
@@ -275,28 +328,45 @@ export default function NeovimUI({
             <OverlayPresence>
               {state.completion ? (
                 <div
+                  ref={completionList}
                   className={styles.completion}
                   id={`neovim-completion-${id}`}
                   role="listbox"
                   aria-label={t('Command completion')}
+                  onScroll={(event) => {
+                    const list = event.currentTarget;
+                    setCompletionViewport({ top: list.scrollTop, height: list.clientHeight });
+                  }}
                 >
-                  {state.completion.items.map(([word, , detail], index) => (
-                    <div
-                      key={index}
-                      role="option"
-                      id={`neovim-completion-${id}-${index}`}
-                      aria-selected={index === state.completion?.selected}
-                      onClick={() => {
-                        void window.nido
-                          .selectCompletion(id, index)
-                          .catch((error) => onError(String(error)));
-                        input.current?.focus();
-                      }}
-                    >
-                      <span>{word}</span>
-                      {detail && <small>{detail}</small>}
-                    </div>
-                  ))}
+                  <div
+                    className={styles.completionItems}
+                    style={{ height: completionCount * completionRowHeight }}
+                  >
+                    {completionIndices.map((index) => {
+                      const [word, , detail] = state.completion!.items[index];
+                      return (
+                        <div
+                          key={index}
+                          role="option"
+                          id={`neovim-completion-${id}-${index}`}
+                          aria-posinset={index + 1}
+                          aria-setsize={completionCount}
+                          aria-selected={index === state.completion?.selected}
+                          style={{ top: index * completionRowHeight, height: completionRowHeight }}
+                          title={detail || word}
+                          onClick={() => {
+                            void window.nido
+                              .selectCompletion(id, index)
+                              .catch((error) => onError(String(error)));
+                            input.current?.focus();
+                          }}
+                        >
+                          <span>{word}</span>
+                          {detail && <small>{detail}</small>}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : null}
             </OverlayPresence>
