@@ -28,8 +28,12 @@ fn plain_path(path: &Path) -> PathBuf {
     }
 }
 pub fn relative(root: &Path, path: &Path) -> String {
-    let root = plain_path(root);
-    let path = plain_path(path);
+    let mut root = plain_path(root);
+    let mut path = plain_path(path);
+    if !path.starts_with(&root) {
+        root = normal_path(root);
+        path = normal_path(path);
+    }
     path.strip_prefix(root)
         .unwrap_or(&path)
         .to_string_lossy()
@@ -406,7 +410,13 @@ mod tests {
         assert!(inside(&root, "../escape", false).is_err());
         assert!(writable(&root, ".GIT/config", true).is_err());
         fs::write(root.join("one.txt"), "日本語 Rust\r\nRust\r\n")?;
-        let found = search(&root, "Rust", json!({}))?;
+        fs::create_dir(root.join("alias-parent"))?;
+        let alias = root.join("alias-parent").join("..");
+        assert_eq!(
+            relative(&alias, &root.join("one.txt").canonicalize()?),
+            "one.txt"
+        );
+        let found = search(&alias, "Rust", json!({}))?;
         let preview = found.preview(&root, &found.token, "$literal", &[0])?;
         assert_eq!(preview.files[0].2, "日本語 $literal\r\nRust\r\n");
         let found = search(&root, "Rust$", json!({"regex":true}))?;
