@@ -1,7 +1,7 @@
 # Nido
 
 Neovimベースの、キーボードで操作するコードエディタ。
-アプリ本体とGUIはRust（eframe / egui）で動作します。
+アプリ本体とGUIはRust / GPUIで動作します。
 
 **キーボードですべての操作が完結する。**
 
@@ -14,14 +14,15 @@ WSL接続用のランタイムも維持しています。
 
 ## 開発
 
-Rust 1.95以上、MSVC C++ビルドツール、Node.js/npmが必要です。
+MSVC C++ビルドツール、Windows SDK、Node.js/npmが必要です。
+Rustは`rust-toolchain.toml`で1.99.1、GPUIは0.2.2に固定しています。
 Node.jsはTypeScript言語サーバーの取得・実行に使います。
 
 ```powershell
 ./scripts/prepare-runtime.ps1
-cargo run
+cargo run --locked
 # 指定フォルダーを開く
-cargo run -- C:\dev\project
+cargo run --locked -- C:\dev\project
 ```
 
 `Space`でコマンド、`Space f` / `Ctrl+P`でファイル、`Ctrl+H`でエクスプローラー、
@@ -35,6 +36,7 @@ cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
 cargo run --locked -- --smoke-test
+cargo run --locked -- --ui-smoke-test
 # NSISのmakensis.exeが必要
 ./scripts/package-windows.ps1
 ./scripts/test-package.ps1
@@ -42,6 +44,7 @@ cargo run --locked -- --smoke-test
 
 配布物は`dist/release`、展開済みアプリは`dist/native/nido.exe`に生成されます。
 スモークテストは一時フォルダーで実行し、利用中のワークスペースを変更しません。
+`--ui-smoke-test`は実際のGPUIウィンドウを開いて、描画・入力・各パネル・終了を確認します。
 
 設定・ワークスペース・お気に入り・Time Machineは従来と同じ`%APPDATA%/nido`を利用します。
 開発用に分離する場合は`NIDO_DATA_DIR`を指定してください。

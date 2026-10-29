@@ -28,6 +28,10 @@ try {
     if ($nidoProcess.ExitCode -ne 0) { throw "Packaged smoke test failed: $($nidoProcess.ExitCode). Logs: $nidoTestRoot" }
     if (!(Select-String -LiteralPath "$nidoTestRoot/stdout.txt" -SimpleMatch 'PASS: headless native UI')) { throw 'Packaged UI checks did not run.' }
     $nidoProcess.Dispose()
+    $nidoProcess = Start-Process -FilePath "$nidoInstalled/nido.exe" -ArgumentList '--ui-smoke-test' -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput "$nidoTestRoot/ui-stdout.txt" -RedirectStandardError "$nidoTestRoot/ui-stderr.txt"
+    Get-Content "$nidoTestRoot/ui-stdout.txt", "$nidoTestRoot/ui-stderr.txt"
+    if ($nidoProcess.ExitCode -ne 0 -or !(Select-String -LiteralPath "$nidoTestRoot/ui-stdout.txt" -SimpleMatch 'PASS: GPUI window')) { throw "Packaged GPUI check failed. Logs: $nidoTestRoot" }
+    $nidoProcess.Dispose()
     # Windows can signal process exit before releasing its executable image.
     $nidoUnlockDeadline = [DateTime]::UtcNow.AddSeconds(10)
     while ($true) {

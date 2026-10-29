@@ -1,122 +1,82 @@
 use super::*;
 use anyhow::{Result, bail, ensure};
-use eframe::App;
 
 struct Headless {
-    app: Nido,
-    context: egui::Context,
-    frame: eframe::Frame,
-    time: f64,
+    app: Model,
 }
 impl Headless {
-    fn pump(&mut self, mut events: Vec<egui::Event>, modifiers: egui::Modifiers) {
-        self.time += 1.0 / 60.0;
-        self.app.logic(&self.context, &mut self.frame);
-        events.insert(0, egui::Event::ModifiersChanged(modifiers));
-        let input = egui::RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 900.0))),
-            time: Some(self.time),
-            events,
-            focused: true,
-            ..Default::default()
-        };
-        let mut output = self
-            .context
-            .run_ui(input, |ui| self.app.ui(ui, &mut self.frame));
-        assert!(!output.shapes.is_empty(), "Native UI stopped painting");
-        output.textures_delta.clear();
+    fn pump(&mut self, events: Vec<InputEvent>, _: Modifiers) {
+        self.app.pump();
+        for event in events {
+            match event {
+                InputEvent::Key(key) => {
+                    self.app.key(&key, true);
+                }
+                InputEvent::Text(text) => self.app.text(&text),
+            }
+        }
+        self.app.pump();
     }
-    fn until(&mut self, label: &str, ready: impl Fn(&Nido) -> bool) -> Result<()> {
+    fn until(&mut self, label: &str, ready: impl Fn(&Model) -> bool) -> Result<()> {
         let start = Instant::now();
         while start.elapsed() < Duration::from_secs(15) {
-            self.pump(vec![], egui::Modifiers::NONE);
+            self.pump(vec![], Modifiers::none());
             if ready(&self.app) {
                 return Ok(());
             }
             if let Some((error, _)) = self.app.notifications.last() {
-                bail!("{label}: {error}")
+                bail!("{label}: {error}");
             }
             std::thread::sleep(Duration::from_millis(10));
         }
         bail!(
-            "Native UI timed out: {label}; palette={:?}, mode={}, pending={}, queued={}, file={:?}, focus={:?}",
-            self.app.palette.as_ref().map(|p| (&p.kind, &p.query)),
-            self.app.workspaces[0].state["mode"],
+            "Native UI state timed out: {label}; pending={}, palette={:?}",
             self.app.mode_pending,
-            self.app.queued_input.len(),
-            self.app
-                .file_request
-                .as_ref()
-                .map(|f| (&f.workspace, &f.action, &f.target)),
-            self.context.memory(|m| m.focused())
+            self.app.palette.as_ref().map(|p| (&p.kind, &p.query))
         )
     }
-    fn key(&mut self, key: Key, modifiers: egui::Modifiers) {
+    fn key(&mut self, key: &str, modifiers: Modifiers) {
         self.pump(
-            vec![egui::Event::Key {
-                key,
-                physical_key: Some(key),
-                pressed: true,
-                repeat: false,
+            vec![InputEvent::Key(Keystroke {
+                key: key.into(),
                 modifiers,
-            }],
-            modifiers,
-        );
-        self.pump(
-            vec![egui::Event::Key {
-                key,
-                physical_key: Some(key),
-                pressed: false,
-                repeat: false,
-                modifiers,
-            }],
+                key_char: None,
+            })],
             modifiers,
         );
     }
 }
-
 pub fn run(project: &Path, data: &Path) -> Result<()> {
-    let context = egui::Context::default();
-    let cc = eframe::CreationContext::_new_kittest(context.clone());
-    let mut empty = Nido::load(&cc, data.join("empty"));
+    let mut empty = Model::load(data.join("empty"), Arc::new(|| {}));
     empty.request_close(true);
     ensure!(empty.exit_allowed, "An empty window could not quit");
-    let mut app = Nido::load(&cc, data.into());
+    let mut app = Model::load(data.into(), Arc::new(|| {}));
     app.add_workspace(project.into(), false, None, None);
-    let mut ui = Headless {
-        app,
-        context,
-        frame: eframe::Frame::_new_kittest(),
-        time: 0.0,
-    };
+    let mut ui = Headless { app };
     ui.until("attach", |a| a.workspaces[0].ready)?;
     ui.app.send("open", json!(["hello.txt", 1, 1]));
     ui.until("open", |a| a.workspaces[0].current().ends_with("hello.txt"))?;
-    ui.key(Key::I, egui::Modifiers::NONE);
-    ui.pump(vec![egui::Event::Text("i".into())], egui::Modifiers::NONE);
+    ui.key("i", Modifiers::none());
+    ui.pump(vec![InputEvent::Text("i".into())], Modifiers::none());
     ui.until("insert", |a| a.workspaces[0].state["mode"] == "i")?;
-    ui.pump(
-        vec![egui::Event::Ime(egui::ImeEvent::Preedit {
-            text: "日本語".into(),
-            active_range_chars: None,
-        })],
-        egui::Modifiers::NONE,
-    );
+    ui.app.preedit = "日本語".into();
     ensure!(
         ui.app.preedit == "日本語",
         "Preedit was not visible immediately"
     );
-    ui.pump(
-        vec![egui::Event::Ime(egui::ImeEvent::Commit(
-            "Rust日本語".into(),
-        ))],
-        egui::Modifiers::NONE,
-    );
-    ui.key(Key::Escape, egui::Modifiers::NONE);
+    ui.app.preedit.clear();
+    ui.app.text("Rust日本語");
+    ui.key("escape", Modifiers::none());
     ui.until("IME commit", |a| {
         a.workspaces[0].grid.description().contains("Rust日本語")
     })?;
-    ui.key(Key::S, egui::Modifiers::CTRL);
+    ui.key(
+        "s",
+        Modifiers {
+            control: true,
+            ..Modifiers::none()
+        },
+    );
     ui.until("save", |a| {
         a.workspaces[0]
             .buffers()
@@ -143,7 +103,7 @@ pub fn run(project: &Path, data: &Path) -> Result<()> {
             .iter()
             .any(|w| w.session.id == other_id && w.ready)
     })?;
-    ui.key(Key::Enter, egui::Modifiers::NONE);
+    ui.key("enter", Modifiers::none());
     ui.until("bound file operation", |_| {
         project.join("dialog-target.txt").is_file()
     })?;
@@ -160,11 +120,11 @@ pub fn run(project: &Path, data: &Path) -> Result<()> {
         "Closing the second workspace lost the first"
     );
     ui.app.focus_editor = true;
-    ui.pump(vec![], egui::Modifiers::NONE);
+    ui.pump(vec![], Modifiers::none());
 
     ui.pump(
-        vec![egui::Event::Text(" ".into()), egui::Event::Text("f".into())],
-        egui::Modifiers::NONE,
+        vec![InputEvent::Text(" ".into()), InputEvent::Text("f".into())],
+        Modifiers::none(),
     );
     ui.until("ordered leader keys", |a| {
         a.palette.as_ref().is_some_and(|p| p.kind == "files")
@@ -179,7 +139,6 @@ pub fn run(project: &Path, data: &Path) -> Result<()> {
     ensure!(ui.app.palette.as_ref().unwrap().generation > old_generation);
     let id = ui.app.active.clone();
     ui.app.result(
-        &ui.context,
         &id,
         &format!("palette:{old_generation}"),
         json!([{"path":"stale.txt"}]),
@@ -188,7 +147,7 @@ pub fn run(project: &Path, data: &Path) -> Result<()> {
         array(&ui.app.palette.as_ref().unwrap().items).is_empty(),
         "An old file search populated the new palette"
     );
-    ui.key(Key::Escape, egui::Modifiers::NONE);
+    ui.key("escape", Modifiers::none());
     ensure!(ui.app.palette.is_none(), "Escape did not close palette");
     ui.app.toggle_terminal();
     ui.until("paired terminal", |a| {
@@ -198,7 +157,13 @@ pub fn run(project: &Path, data: &Path) -> Result<()> {
         ui.app.input_index() == Some(1),
         "Terminal toggle did not focus terminal"
     );
-    ui.key(Key::K, egui::Modifiers::CTRL);
+    ui.key(
+        "k",
+        Modifiers {
+            control: true,
+            ..Modifiers::none()
+        },
+    );
     ensure!(
         ui.app.input_index() == Some(0),
         "Ctrl+K did not return to editor"
@@ -213,7 +178,13 @@ pub fn run(project: &Path, data: &Path) -> Result<()> {
     ui.until("terminal reopen", |a| {
         a.workspaces.len() == 2 && a.workspaces[1].ready
     })?;
-    ui.key(Key::K, egui::Modifiers::CTRL);
+    ui.key(
+        "k",
+        Modifiers {
+            control: true,
+            ..Modifiers::none()
+        },
+    );
     ui.app.show_panel("search");
     ui.app.search_query = "Native".into();
     ui.app
@@ -222,7 +193,6 @@ pub fn run(project: &Path, data: &Path) -> Result<()> {
     let id = ui.app.active.clone();
     let token = ui.app.search_results["token"].clone();
     ui.app.result(
-        &ui.context,
         &id,
         "search",
         json!({"query":"old query","options":ui.app.search_options,"token":"stale","matches":[]}),
@@ -232,15 +202,12 @@ pub fn run(project: &Path, data: &Path) -> Result<()> {
         "Stale search result replaced current results"
     );
     ui.app.show_panel("settings");
-    ui.pump(vec![], egui::Modifiers::NONE);
+    ui.pump(vec![], Modifiers::none());
     ui.app.panel.clear();
     ui.app.focus_editor = true;
-    ui.pump(vec![], egui::Modifiers::NONE);
-    ui.pump(
-        vec![egui::Event::Text("iUnsaved".into())],
-        egui::Modifiers::NONE,
-    );
-    ui.key(Key::Escape, egui::Modifiers::NONE);
+    ui.pump(vec![], Modifiers::none());
+    ui.pump(vec![InputEvent::Text("iUnsaved".into())], Modifiers::none());
+    ui.key("escape", Modifiers::none());
     ui.until("unsaved marker", |a| {
         a.workspaces[0]
             .buffers()
@@ -252,10 +219,15 @@ pub fn run(project: &Path, data: &Path) -> Result<()> {
         a.closing.as_ref().is_some_and(|c| c.stage == "prompt")
     })?;
     ensure!(!ui.app.exit_allowed, "Quit skipped unsaved confirmation");
-    ui.key(Key::Escape, egui::Modifiers::NONE);
+    ui.key("escape", Modifiers::none());
     ensure!(
         ui.app.closing.is_none(),
         "Cancel did not preserve running sessions"
+    );
+    ui.app.close_choice("save");
+    ensure!(
+        ui.app.closing.is_none(),
+        "Stale close action must be ignored"
     );
     ui.app.send("save", json!(["wall"]));
     ui.until("save all", |a| {
@@ -271,7 +243,7 @@ pub fn run(project: &Path, data: &Path) -> Result<()> {
         "Paired terminal state was not saved"
     );
     println!(
-        "PASS: headless native UI painting, IME commit, save, ordered leader/palette input, paired terminal focus, search/settings panels and unsaved close/cancel"
+        "PASS: headless native UI state, IME commit, save, ordered leader/palette input, paired terminal focus, search/settings panels and unsaved close/cancel"
     );
     Ok(())
 }

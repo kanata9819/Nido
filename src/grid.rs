@@ -1,4 +1,4 @@
-use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Stroke, Vec2};
+use gpui::{Hsla, Point, point, rgb};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap};
 
@@ -9,9 +9,9 @@ pub struct Cell {
 }
 #[derive(Clone, Default)]
 pub struct Highlight {
-    pub foreground: Option<Color32>,
-    pub background: Option<Color32>,
-    pub special: Option<Color32>,
+    pub foreground: Option<Hsla>,
+    pub background: Option<Hsla>,
+    pub special: Option<Hsla>,
     pub reverse: bool,
     pub bold: bool,
     pub italic: bool,
@@ -24,8 +24,8 @@ pub struct Grid {
     pub rows: usize,
     pub cells: Vec<Vec<Cell>>,
     pub cursor: (usize, usize),
-    pub foreground: Color32,
-    pub background: Color32,
+    pub foreground: Hsla,
+    pub background: Hsla,
     pub highlights: HashMap<u64, Highlight>,
     pub mode: String,
     pub modes: Vec<Value>,
@@ -36,11 +36,12 @@ pub struct Grid {
     pub completion: Value,
     pub sticky: Value,
     pub guides: Value,
-    pub pixel: Vec2,
+    pub pixel: Point<f32>,
     pending: Vec<(String, Value)>,
     pub scroll_cursor: Option<(usize, usize)>,
     pub frame: u64,
-    pub cursor_position: Option<Pos2>,
+    pub revision: u64,
+    pub cursor_position: Option<Point<f32>>,
     pub blink_origin: f64,
 }
 impl Default for Grid {
@@ -50,8 +51,8 @@ impl Default for Grid {
             rows: 0,
             cells: vec![],
             cursor: (0, 0),
-            foreground: Color32::from_rgb(214, 220, 226),
-            background: Color32::from_rgb(25, 30, 35),
+            foreground: rgb(0xd6dce2).into(),
+            background: rgb(0x191e23).into(),
             highlights: HashMap::new(),
             mode: "normal".into(),
             modes: vec![],
@@ -62,20 +63,21 @@ impl Default for Grid {
             completion: Value::Null,
             sticky: Value::Null,
             guides: Value::Null,
-            pixel: Vec2::ZERO,
+            pixel: point(0.0, 0.0),
             pending: vec![],
             scroll_cursor: None,
             frame: 0,
+            revision: 0,
             cursor_position: None,
             blink_origin: 0.0,
         }
     }
 }
-pub fn color(value: &Value) -> Option<Color32> {
+pub fn color(value: &Value) -> Option<Hsla> {
     value
         .as_i64()
         .filter(|n| *n >= 0)
-        .map(|n| Color32::from_rgb((n >> 16) as u8, (n >> 8) as u8, n as u8))
+        .map(|n| rgb(n as u32 & 0xffffff).into())
 }
 pub fn n(value: &Value) -> usize {
     value.as_u64().unwrap_or(0) as usize
@@ -122,13 +124,24 @@ impl Grid {
                 self.scroll_cursor = screen_cursor(&args[2]);
             }
             "nido:buffer" | "nido:edit" => {
-                self.pixel = Vec2::ZERO;
+                self.pixel = point(0.0, 0.0);
                 self.cursor_position = None;
             }
             _ => {}
         }
     }
     fn apply(&mut self, name: &str, a: &Value) {
+        if matches!(
+            name,
+            "grid_resize"
+                | "grid_clear"
+                | "grid_line"
+                | "grid_scroll"
+                | "hl_attr_define"
+                | "default_colors_set"
+        ) {
+            self.revision += 1;
+        }
         match name {
             "grid_resize" if a[0] == 1 => {
                 let (cols, rows) = (n(&a[1]).min(2000), n(&a[2]).min(1000));
@@ -276,7 +289,7 @@ impl Grid {
             _ => {}
         }
     }
-    pub fn colors(&self, id: u64) -> (Color32, Color32) {
+    pub fn colors(&self, id: u64) -> (Hsla, Hsla) {
         let attrs = self.highlights.get(&id);
         let fg = attrs.and_then(|a| a.foreground).unwrap_or(self.foreground);
         let bg = attrs.and_then(|a| a.background).unwrap_or(self.background);
@@ -284,261 +297,6 @@ impl Grid {
             (bg, fg)
         } else {
             (fg, bg)
-        }
-    }
-    pub fn metrics(ui: &egui::Ui, size: f32, line_height: f32) -> Vec2 {
-        let font = FontId::monospace(size);
-        let width = ui
-            .painter()
-            .layout_no_wrap("M".into(), font, Color32::WHITE)
-            .size()
-            .x;
-        Vec2::new(width.max(1.0), (size * line_height).max(size + 2.0))
-    }
-    pub fn paint(
-        &mut self,
-        ui: &egui::Ui,
-        rect: Rect,
-        cell: Vec2,
-        focused: bool,
-        settings: &Value,
-        acrylic: bool,
-    ) -> Rect {
-        let painter = ui.painter().with_clip_rect(rect);
-        let size = settings["fontSize"].as_f64().unwrap_or(14.0) as f32;
-        let font = FontId::monospace(size);
-        painter.rect_filled(
-            rect,
-            0.0,
-            if acrylic {
-                Color32::from_rgba_unmultiplied(
-                    self.background.r(),
-                    self.background.g(),
-                    self.background.b(),
-                    220,
-                )
-            } else {
-                self.background
-            },
-        );
-        let snap = |v: f32| {
-            let d = ui.ctx().pixels_per_point();
-            (v * d).round() / d
-        };
-        for (row, values) in self.cells.iter().enumerate() {
-            let y = snap(rect.top() + row as f32 * cell.y - self.pixel.y * cell.y);
-            if y + cell.y < rect.top() || y > rect.bottom() {
-                continue;
-            }
-            for (col, value) in values.iter().enumerate() {
-                let x = snap(rect.left() + col as f32 * cell.x);
-                let (fg, bg) = self.colors(value.highlight);
-                let width = if values.get(col + 1).is_some_and(|c| c.text.is_empty()) {
-                    cell.x * 2.0
-                } else {
-                    cell.x
-                };
-                let bounds = Rect::from_min_size(Pos2::new(x, y), Vec2::new(width, cell.y));
-                if bg != self.background {
-                    painter.rect_filled(bounds, 0.0, bg);
-                }
-                if value.text.is_empty() || value.text == " " {
-                    continue;
-                }
-                let hl = self.highlights.get(&value.highlight);
-                let mut text_font = font.clone();
-                if let Some(hl) = hl
-                    && (hl.bold || hl.italic)
-                {
-                    text_font.family = egui::FontFamily::Name(
-                        match (hl.bold, hl.italic) {
-                            (true, true) => "editor-bold-italic",
-                            (true, false) => "editor-bold",
-                            _ => "editor-italic",
-                        }
-                        .into(),
-                    );
-                }
-                let galley = painter.layout_no_wrap(value.text.clone(), text_font, fg);
-                let pos = Pos2::new(x, y + (cell.y - galley.size().y) * 0.5);
-                painter.galley(pos, galley.clone(), fg);
-                if let Some(hl) = self.highlights.get(&value.highlight) {
-                    if hl.underline || hl.undercurl {
-                        painter.line_segment(
-                            [
-                                Pos2::new(x, y + cell.y - 2.0),
-                                Pos2::new(x + width, y + cell.y - 2.0),
-                            ],
-                            Stroke::new(1.0, hl.special.unwrap_or(fg)),
-                        );
-                    }
-                    if hl.strike {
-                        painter.line_segment(
-                            [bounds.left_center(), bounds.right_center()],
-                            Stroke::new(1.0, fg),
-                        );
-                    }
-                }
-            }
-        }
-        for guide in array(&self.guides) {
-            let col = n(&guide["column"]);
-            let x = snap(rect.left() + (col as f32 + 0.15) * cell.x);
-            let top = guide["top"].as_i64().unwrap_or(0) as f32;
-            let bottom = guide["bottom"].as_i64().unwrap_or(0) as f32;
-            let y = rect.top() + (top + 1.0 - self.pixel.y) * cell.y;
-            let end = rect.top() + (bottom - self.pixel.y) * cell.y;
-            let color = parse_color(s(&guide["color"])).unwrap_or(Color32::from_gray(65));
-            painter.line_segment(
-                [Pos2::new(x, y), Pos2::new(x, end)],
-                Stroke::new(
-                    1.0,
-                    color.gamma_multiply(if guide["active"] == true { 0.8 } else { 0.35 }),
-                ),
-            );
-        }
-        let cursor = self.scroll_cursor.unwrap_or(self.cursor);
-        let hidden = cursor.0 >= self.rows || cursor.1 >= self.columns;
-        let cursor = (cursor.0.min(self.rows), cursor.1.min(self.columns));
-        let pos = Pos2::new(
-            snap(rect.left() + cursor.1 as f32 * cell.x),
-            snap(rect.top() + cursor.0 as f32 * cell.y - self.pixel.y * cell.y),
-        );
-        let now = ui.input(|i| i.time);
-        if self
-            .cursor_position
-            .is_none_or(|old| old.distance(pos) > 0.1)
-        {
-            self.blink_origin = now;
-        }
-        let visual = if settings["smoothCursor"] == true && focused {
-            let old = self.cursor_position.unwrap_or(pos);
-            let next = old.lerp(pos, 1.0 - (-ui.input(|i| i.stable_dt) * 30.0).exp());
-            if next.distance(pos) > 0.1 {
-                ui.ctx().request_repaint();
-            }
-            next
-        } else {
-            pos
-        };
-        self.cursor_position = if hidden { None } else { Some(visual) };
-        let mode = self.modes.get(self.mode_index).cloned().unwrap_or_default();
-        let shape = s(&mode["cursor_shape"]);
-        let pct = mode["cell_percentage"].as_f64().unwrap_or(20.0) as f32 / 100.0;
-        let width = if self
-            .cells
-            .get(cursor.0)
-            .and_then(|r| r.get(cursor.1 + 1))
-            .is_some_and(|c| c.text.is_empty())
-        {
-            cell.x * 2.0
-        } else {
-            cell.x
-        };
-        let mut bounds = Rect::from_min_size(visual, Vec2::new(width, cell.y));
-        if shape == "vertical" || self.mode.starts_with("insert") {
-            bounds.max.x = bounds.min.x + (cell.x * pct).max(1.0);
-        } else if shape == "horizontal" {
-            bounds.min.y = bounds.max.y - (cell.y * pct).max(1.0);
-        }
-        let phase = (now - self.blink_origin - 0.7).max(0.0);
-        let on = phase % 1.0 < 0.55;
-        let alpha = if settings["smoothBlink"] == true {
-            (0.5 + 0.5 * (phase * std::f64::consts::TAU).cos()) as f32
-        } else {
-            if on { 1.0 } else { 0.0 }
-        };
-        if focused && !self.busy && !hidden {
-            painter.rect_filled(bounds, 0.0, self.foreground.gamma_multiply(alpha * 0.7));
-        } else if !self.busy {
-            painter.rect_stroke(
-                bounds,
-                0.0,
-                Stroke::new(1.0, self.foreground),
-                egui::StrokeKind::Inside,
-            );
-        }
-        if focused {
-            ui.ctx()
-                .request_repaint_after(std::time::Duration::from_millis(
-                    if settings["smoothBlink"] == true {
-                        32
-                    } else {
-                        200
-                    },
-                ));
-        }
-        if settings["stickyScroll"] != false {
-            self.paint_sticky(ui, rect, cell, size, settings);
-        }
-        bounds
-    }
-    fn paint_sticky(&self, ui: &egui::Ui, rect: Rect, cell: Vec2, size: f32, settings: &Value) {
-        let painter = ui.painter().with_clip_rect(rect);
-        let max = settings["stickyScrollMaxLines"].as_f64().unwrap_or(5.0) as usize;
-        let mut row = 0;
-        let gutter = n(&self.sticky["gutter"]);
-        let left = n(&self.sticky["leftcol"]);
-        for scope in array(&self.sticky["scopes"])
-            .iter()
-            .filter(|s| s["top"].as_i64().unwrap_or(0) < 0)
-            .take(max)
-        {
-            let bounds = Rect::from_min_size(
-                rect.min + Vec2::new(0.0, row as f32 * cell.y),
-                Vec2::new(rect.width(), cell.y),
-            );
-            painter.rect_filled(bounds, 0.0, self.background);
-            let line = n(&scope["line"]);
-            let anchor = n(&self.sticky["relativeTo"]);
-            let number = if settings["relativeLineNumbers"] == true && anchor > 0 {
-                line.abs_diff(anchor)
-            } else {
-                line
-            };
-            painter.text(
-                bounds.min,
-                Align2::LEFT_TOP,
-                format!("{number:>width$}", width = gutter.saturating_sub(1)),
-                FontId::monospace(size),
-                Color32::from_gray(125),
-            );
-            let mut column = gutter as f32 - left as f32;
-            for chunk in array(&scope["text"]) {
-                let text = s(&chunk["text"]);
-                let color = parse_color(s(&chunk["color"])).unwrap_or(self.foreground);
-                let x = rect.left() + column * cell.x;
-                painter
-                    .with_clip_rect(Rect::from_min_max(
-                        Pos2::new(rect.left() + gutter as f32 * cell.x, bounds.top()),
-                        bounds.max,
-                    ))
-                    .text(
-                        Pos2::new(x, bounds.top()),
-                        Align2::LEFT_TOP,
-                        text,
-                        FontId::monospace(size),
-                        color,
-                    );
-                column += chunk["cells"]
-                    .as_f64()
-                    .unwrap_or(text.chars().count() as f64) as f32;
-            }
-            row += 1;
-        }
-        if row > 0 {
-            let y = rect.top() + row as f32 * cell.y;
-            painter.line_segment(
-                [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
-                Stroke::new(1.0, Color32::from_gray(70)),
-            );
-        }
-        for sep in array(&self.sticky["separators"]) {
-            let y = rect.top() + n(&sep["row"]) as f32 * cell.y;
-            painter.line_segment(
-                [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
-                Stroke::new(1.0, Color32::from_gray(48)),
-            );
         }
     }
     pub fn description(&self) -> String {
@@ -555,9 +313,9 @@ impl Grid {
             .join("\n")
     }
 }
-pub fn parse_color(value: &str) -> Option<Color32> {
+pub fn parse_color(value: &str) -> Option<Hsla> {
     let n = u32::from_str_radix(value.strip_prefix('#')?, 16).ok()?;
-    Some(Color32::from_rgb((n >> 16) as u8, (n >> 8) as u8, n as u8))
+    Some(rgb(n & 0xffffff).into())
 }
 
 pub fn screen_cursor(value: &Value) -> Option<(usize, usize)> {
@@ -589,11 +347,24 @@ mod tests {
         g.notify("redraw", &json!([["flush", []]]));
         assert_eq!(g.cells[0][1].text, "");
         assert_eq!(g.cells[0][3].highlight, 3);
+        let content_revision = g.revision;
+        g.notify(
+            "redraw",
+            &json!([["grid_cursor_goto", [1, 0, 2]], ["flush", []]]),
+        );
+        assert_eq!(
+            g.revision, content_revision,
+            "Cursor-only updates must reuse shaped text"
+        );
         g.notify(
             "redraw",
             &json!([["grid_scroll", [1, 0, 2, 0, 4, -1, 0]], ["flush", []]]),
         );
         assert_eq!(g.cells[1][0].text, "日");
+        assert!(
+            g.revision > content_revision,
+            "Scroll must invalidate shaped text"
+        );
         assert_eq!(g.cells[0][0].text, " ");
         g.notify(
             "nido:pixel_scroll",

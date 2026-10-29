@@ -39,6 +39,10 @@ jobs:
           New-Item -ItemType Directory -Force reports | Out-Null
           cargo run --locked -- --smoke-test 2>&1 | Tee-Object reports/native-smoke.txt
           if ($LASTEXITCODE -ne 0) { throw 'Native smoke tests failed.' }
+      - name: Test GPUI window and input
+        run: |
+          cargo run --locked -- --ui-smoke-test 2>&1 | Tee-Object reports/native-ui-smoke.txt
+          if ($LASTEXITCODE -ne 0) { throw 'GPUI window tests failed.' }
       - name: Install NSIS
         run: choco install nsis --no-progress --yes
       - name: Build native Windows release assets

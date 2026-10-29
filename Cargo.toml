@@ -2,14 +2,16 @@
 name = "nido"
 version = "0.4.0"
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.99"
 description = "A keyboard-first Neovim desktop client"
 license = "MIT"
 repository = "https://github.com/kanata9819/Nido"
 
 [dependencies]
 anyhow = "1"
-eframe = { version = "0.36.2", default-features = false, features = ["default_fonts", "glow", "x11", "wayland", "accesskit"] }
+gpui = { version = "=0.2.2", default-features = false, features = ["windows-manifest", "font-kit", "x11", "wayland"] }
+async-channel = "=2.5.0"
+unicode-segmentation = "1.13.3"
 fontdb = "0.23"
 ignore = "0.4"
 notify = "8"
@@ -25,13 +27,15 @@ sha2 = "0.10"
 similar = "2"
 trash = "5"
 uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(windows)'.dependencies]
+accesskit = "=0.24.1"
+accesskit_windows = "=0.32.1"
 raw-window-handle = "0.6"
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 
 [build-dependencies]
 winresource = "0.1.31"
-
-[target.'cfg(windows)'.dependencies]
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_Controls"] }
 
 [profile.release]
 lto = "thin"
