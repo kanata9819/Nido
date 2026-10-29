@@ -259,7 +259,7 @@ pub fn verify_gui() -> anyhow::Result<()> {
     if let Some(error) = failure.borrow_mut().take() {
         anyhow::bail!("{error}; data: {}", root.display());
     }
-    fs::remove_dir_all(&root)?;
+    crate::smoke::remove_test_dir(&root)?;
     println!(
         "PASS: GPUI window, grid painting, IME preedit/commit, candidate position, save, palette focus, all panels and clean close"
     );

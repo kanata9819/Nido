@@ -17,12 +17,14 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod cleanup;
 mod client;
 mod debug;
 mod editor;
 mod git;
 mod language;
 mod terminal;
+pub(crate) use cleanup::remove_test_dir;
 use client::Client;
 
 pub fn run() -> Result<()> {
@@ -30,7 +32,7 @@ pub fn run() -> Result<()> {
     fs::create_dir(&root)?;
     let result = check(&root);
     if result.is_ok() {
-        fs::remove_dir_all(&root)?;
+        remove_test_dir(&root)?;
     } else {
         eprintln!("Failed check data preserved at {}", root.display());
     }
