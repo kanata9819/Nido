@@ -318,7 +318,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
             let cachedPaints = 0;
             let referencePaints = 0;
             try {
-              for (const kind of ['down', 'up', 'horizontal', 'edit']) {
+              for (const kind of ['down', 'up', 'horizontal']) {
                 const pair = [false, true].map((cached) => {
                   const grid = new Grid();
                   grid.backgroundOpacity = opacity;
@@ -363,8 +363,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
                       distanceX: kind === 'horizontal' ? 15 : 0,
                       incomingRows: 0,
                       start: 0,
-                      duration: kind === 'edit' ? 90 : 33,
-                      edit: kind === 'edit'
+                      duration: 33
                     } as FrameMotion | undefined
                   };
                 });
@@ -420,7 +419,97 @@ for (const scale of [1, 1.25, 1.5, 2]) {
   }
 }
 
-test('held j/k viewport scrolling reuses frames until a redraw, while editing interrupts it', async ({
+test('edits and decoration row shifts paint their final positions without a scroll transition', async ({
+  page
+}) => {
+  await page.clock.install({ time: new Date(0) });
+  await page.clock.pauseAt(new Date(1000));
+  await page.addInitScript(() => {
+    localStorage.setItem('nido.animations', 'true');
+    localStorage.setItem('nido.smoothCursor', 'false');
+  });
+  await page.goto(`${origin}?view=app`);
+  await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+  await page.clock.runFor(32);
+  await page.evaluate(
+    async (url) => {
+      const { Grid } = await import(url);
+      const original = Grid.prototype.draw;
+      const probe = { grid: undefined as EditorGrid | undefined };
+      let arguments_: Parameters<EditorGrid['draw']>;
+      Grid.prototype.draw = function (...args) {
+        probe.grid = this;
+        arguments_ = args;
+        return original.apply(this, args);
+      };
+      Object.assign(window, {
+        editMotionProbe: {
+          mismatches: (): number => {
+            const [surface, ...rest] = arguments_;
+            const pixels = surface
+              .getContext('2d')!
+              .getImageData(0, 0, surface.width, surface.height);
+            const reference = document.createElement('canvas');
+            probe.grid!.invalidatePaint();
+            original.call(probe.grid!, reference, ...rest);
+            const expected = reference
+              .getContext('2d')!
+              .getImageData(0, 0, reference.width, reference.height);
+            return pixels.data.filter((value, index) => value !== expected.data[index]).length;
+          }
+        }
+      });
+      window.rendererTest.emit({
+        type: 'redraw',
+        id: 'alpha',
+        events: [
+          ['grid_resize', [1, 60, 8]],
+          ...Array.from({ length: 7 }, (_, row) => [
+            'grid_line',
+            [1, row, 0, Array.from(`row ${row} 日本語 text`, (text) => [text, 0])]
+          ]),
+          ['grid_cursor_goto', [1, 2, 0]],
+          ['flush']
+        ]
+      });
+    },
+    `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+  );
+  await page.clock.runFor(32);
+  for (const change of [
+    { name: 'dd', edited: true, viewport: false, rows: 1 },
+    { name: 'row shift before TextChanged', edited: false, viewport: false, rows: 1 },
+    { name: 'deletion at the viewport edge', edited: true, viewport: true, rows: 1 },
+    { name: 'undo or insertion', edited: true, viewport: false, rows: -1 },
+    { name: 'decoration rows', edited: false, viewport: false, rows: -1 }
+  ]) {
+    await page.evaluate(({ edited, viewport, rows }) => {
+      const scroll = [1, 2, 7, 0, 60, rows, 0];
+      window.rendererTest.emit({
+        type: 'redraw',
+        id: 'alpha',
+        events: [
+          ...(edited ? [['nido_edit', []]] : []),
+          ...(viewport ? [['nido_scroll', scroll]] : []),
+          ['grid_scroll', scroll],
+          ['grid_line', [1, rows > 0 ? 6 : 2, 0, [['new row', 0]]]],
+          ['flush']
+        ]
+      });
+    }, change);
+    for (const elapsed of [16, 32, 96]) {
+      await page.clock.runFor(elapsed);
+      const mismatches = await page.evaluate(() =>
+        (
+          window as unknown as { editMotionProbe: { mismatches: () => number } }
+        ).editMotionProbe.mismatches()
+      );
+      expect(mismatches, `${change.name} must not expose a moving gap`).toBe(0);
+    }
+  }
+});
+
+test('j/k viewport scrolling reuses frames until a redraw, while editing interrupts it', async ({
   page
 }) => {
   await page.clock.install({ time: new Date(0) });
@@ -471,6 +560,9 @@ test('held j/k viewport scrolling reuses frames until a redraw, while editing in
   const firstTarget = await count();
   await page.clock.runFor(32);
   expect(await count(), 'animation frames reuse the rendered target').toBe(firstTarget);
+  await input.dispatchEvent('keydown', { key: 'j', bubbles: true });
+  await page.clock.runFor(16);
+  expect(await count(), 'tapping j preserves the current visible animation').toBe(firstTarget);
   await input.dispatchEvent('keydown', { key: 'j', repeat: true, bubbles: true });
   await page.clock.runFor(16);
   expect(await count(), 'repeating j preserves the current visible animation').toBe(firstTarget);
@@ -478,7 +570,7 @@ test('held j/k viewport scrolling reuses frames until a redraw, while editing in
   await page.clock.runFor(16);
   const nextTarget = await count();
   expect(nextTarget, 'native redraws refresh the target').toBeGreaterThan(firstTarget);
-  await input.dispatchEvent('keydown', { key: 'k', repeat: true, bubbles: true });
+  await input.dispatchEvent('keydown', { key: 'k', bubbles: true });
   await page.clock.runFor(16);
   expect(await count(), 'repeating k can reverse without snapping first').toBe(nextTarget);
   await page.evaluate(() =>
@@ -756,7 +848,6 @@ test('direct horizontal frames retain fractional positions and fixed gutters thr
             distanceX: direction * ahead * 8,
             incomingRows: 0,
             start: performance.now() - 10000,
-            edit: false,
             duration: 1,
             offsetX: direction > 0 ? 6 : -2
           };

@@ -3167,7 +3167,7 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
   }
 });
 
-test('line deletion slides remaining rows upward only when animations are enabled', async () => {
+test('line deletion and undo stay still while viewport navigation animates', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-delete-motion-'));
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
@@ -3196,35 +3196,37 @@ test('line deletion slides remaining rows upward only when animations are enable
       const context = (surface as HTMLCanvasElement).getContext('2d')!;
       const draw = context.drawImage.bind(context);
       context.drawImage = ((...args: Parameters<typeof draw>) => {
-        surface.setAttribute(
-          'data-motion-frames',
-          String(Number(surface.getAttribute('data-motion-frames')) + 1)
-        );
-        const offsets = JSON.parse(surface.getAttribute('data-motion-offsets') || '[]') as number[];
-        offsets.push(Number(args[6]) - Number(args[2]) / window.devicePixelRatio);
-        surface.setAttribute('data-motion-offsets', JSON.stringify(offsets));
+        if (args.length === 9) {
+          surface.setAttribute(
+            'data-motion-frames',
+            String(Number(surface.getAttribute('data-motion-frames')) + 1)
+          );
+        }
         draw(...args);
       }) as typeof draw;
     });
-    for (const command of ['10Gdd', 'uggdd']) {
-      const before = Number(await canvas.getAttribute('data-motion-frames'));
-      await canvas.evaluate((node) => node.removeAttribute('data-motion-offsets'));
-      await page.keyboard.type(command);
-      await expect(canvas).not.toHaveAttribute(
-        'aria-description',
-        command === '10Gdd' ? /line 10\s/ : /line 1\s/
-      );
+    for (const [navigation, line] of [
+      ['10G', 10],
+      ['gg', 1],
+      ['G', 100]
+    ] as const) {
+      const removed = new RegExp(`line ${line}\\s`);
+      await page.keyboard.type(navigation);
+      await expect(canvas).toHaveAttribute('aria-description', removed);
       await page.waitForTimeout(150);
-      expect(Number(await canvas.getAttribute('data-motion-frames'))).toBeGreaterThan(before);
-      const offsets = JSON.parse((await canvas.getAttribute('data-motion-offsets'))!) as number[];
-      expect(offsets.every((offset) => offset >= 0)).toBe(true);
-      expect(offsets.at(-1)!).toBeLessThan(offsets[0]);
+      const before = Number(await canvas.getAttribute('data-motion-frames'));
+      await page.keyboard.type('dd');
+      await expect(canvas).not.toHaveAttribute('aria-description', removed);
+      await page.waitForTimeout(150);
+      expect(Number(await canvas.getAttribute('data-motion-frames'))).toBe(before);
+      await page.keyboard.type('u');
+      await expect(canvas).toHaveAttribute('aria-description', removed);
+      await page.waitForTimeout(150);
+      expect(Number(await canvas.getAttribute('data-motion-frames'))).toBe(before);
     }
-    const beforeUndo = Number(await canvas.getAttribute('data-motion-frames'));
-    await page.keyboard.type('u');
-    await expect(canvas).toHaveAttribute('aria-description', /line 1\s/);
+    await page.keyboard.type('gg');
     await page.waitForTimeout(150);
-    expect(Number(await canvas.getAttribute('data-motion-frames'))).toBe(beforeUndo);
+    const beforeUndo = Number(await canvas.getAttribute('data-motion-frames'));
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('checkbox', { name: 'UI animations', exact: true }).uncheck();
     await page.keyboard.press('Escape');
@@ -3239,7 +3241,7 @@ test('line deletion slides remaining rows upward only when animations are enable
     await page.keyboard.press('Control+d');
     await expect
       .poll(async () => Number(await canvas.getAttribute('data-motion-frames')))
-      .toBeGreaterThan(0);
+      .toBeGreaterThan(beforeUndo);
     await page.waitForTimeout(150);
     const frames = Number(await canvas.getAttribute('data-motion-frames'));
     await page.keyboard.type('G');

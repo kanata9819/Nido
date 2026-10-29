@@ -165,7 +165,6 @@ export function useEditorRendering({
 
     const keyDown = (event: KeyboardEvent): void => {
       if (
-        event.repeat &&
         !event.ctrlKey &&
         !event.altKey &&
         !event.metaKey &&
@@ -174,7 +173,7 @@ export function useEditorRendering({
         ['j', 'k'].includes(event.key) &&
         ['normal', 'visual', 'visual_line', 'visual_block'].includes(grid.mode)
       ) {
-        // Repeating navigation retargets the visible scroll instead of snapping it first.
+        // Navigation retargets the visible scroll instead of snapping it first.
         scrolling.stop();
       } else {
         stopMotion();
@@ -432,10 +431,9 @@ export function useEditorRendering({
         const viewportScrolls = event.events.flatMap(([name, ...calls]) =>
           name === 'nido_scroll' ? calls : []
         );
-        const scrolls = viewportScrolls.length
-          ? viewportScrolls
-          : event.events.flatMap(([name, ...calls]) => (name === 'grid_scroll' ? calls : []));
-        const scroll = scrolls.length === 1 ? (scrolls[0] as number[]) : undefined;
+        // Grid row shifts also describe edits and decorations, not viewport movement.
+        const scroll = viewportScrolls.length === 1 ? (viewportScrolls[0] as number[]) : undefined;
+        const gridShifted = event.events.some(([name]) => name === 'grid_scroll');
         if (!pixelOffsets.length) {
           const last = viewportScrolls.at(-1);
           if (typeof last?.[8] === 'number') {
@@ -443,7 +441,8 @@ export function useEditorRendering({
           }
         }
         if (
-          scrolls.length ||
+          viewportScrolls.length ||
+          gridShifted ||
           event.events.some(
             ([name]) => name === 'grid_resize' || name === 'grid_clear' || name === 'mode_change'
           )
@@ -491,14 +490,13 @@ export function useEditorRendering({
             distanceX: scroll[6] * cellWidth,
             incomingRows: 0,
             start: now,
-            edit: false,
             duration: 0,
             offsetX: scrolling.horizontalOffset * cellWidth
           };
         } else if (
           scroll &&
           !bufferChanged &&
-          (!edited || (scroll[5] > 0 && scroll[6] === 0)) &&
+          !edited &&
           !directScroll &&
           animationsRef.current &&
           !reducedMotion.matches &&
@@ -542,11 +540,14 @@ export function useEditorRendering({
                 ? Math.max(-width, Math.min(width, scroll[6] * cellWidth + remainingX))
                 : 0,
             start: now,
-            edit: edited,
-            duration: edited ? 90 : Math.max(1, Math.min(120, now - (lastScrollTime ?? now - 120)))
+            duration: Math.max(1, Math.min(120, now - (lastScrollTime ?? now - 120)))
           };
           lastScrollTime = now;
-        } else if (scrolls.length || (directScroll && motion?.offsetX === undefined)) {
+        } else if (
+          viewportScrolls.length ||
+          gridShifted ||
+          (directScroll && motion?.offsetX === undefined)
+        ) {
           motion = undefined;
           if (scroll && directScroll && Math.abs(scroll[6]) >= scroll[4] - scroll[3]) {
             // shortcut: viewport-sized jumps snap, until horizontal overscan supplies the missing edge.

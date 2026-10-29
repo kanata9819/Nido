@@ -10,7 +10,6 @@ export interface FrameMotion {
   distanceX: number;
   incomingRows: number;
   start: number;
-  edit: boolean;
   duration: number;
   targetReady?: boolean;
   offsetX?: number;
@@ -29,7 +28,7 @@ interface Options {
   reuseTarget?: boolean;
 }
 
-/** Composite old and incoming frame regions for scroll and deletion transitions. */
+/** Composite old and incoming frame regions for viewport scroll transitions. */
 export function paintEditorMotion({
   motion,
   grid,
@@ -106,11 +105,8 @@ export function paintEditorMotion({
       ctx.rect(left, top, width, height);
       ctx.clip();
       grid.paintBackground(ctx, left, top, width, height);
-      // Deleted rows disappear; the remaining rows slide into the gap without an old-frame overlay.
       const layers = [
-        ...(motion.edit
-          ? []
-          : [[previousFrame, offset - motion.distance, offsetX - motion.distanceX] as const]),
+        [previousFrame, offset - motion.distance, offsetX - motion.distanceX],
         [targetFrame, offset, offsetX]
       ] as const;
       for (const [image, shift, shiftX] of layers) {
