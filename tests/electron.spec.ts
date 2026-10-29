@@ -2228,9 +2228,16 @@ test('smooth cursor movement and blink animate and persist their settings', asyn
       ctx.fillRect = (x, y, w, h) => {
         if (ctx.fillStyle === '#f5f5f5') {
           const xs = JSON.parse(node.dataset.cursorXs!) as number[];
-          node.dataset.cursorXs = JSON.stringify([...xs.slice(-99), x]);
+          // The textarea uses host coordinates, including the canvas's DPI alignment.
+          node.dataset.cursorXs = JSON.stringify([
+            ...xs.slice(-99),
+            x + parseFloat(node.style.left)
+          ]);
           const ys = JSON.parse(node.dataset.cursorYs!) as number[];
-          node.dataset.cursorYs = JSON.stringify([...ys.slice(-99), y]);
+          node.dataset.cursorYs = JSON.stringify([
+            ...ys.slice(-99),
+            y + parseFloat(node.style.top)
+          ]);
           const alphas = JSON.parse(node.dataset.cursorAlphas!) as number[];
           node.dataset.cursorAlphas = JSON.stringify([...alphas.slice(-99), ctx.globalAlpha]);
         }
@@ -2260,11 +2267,12 @@ test('smooth cursor movement and blink animate and persist their settings', asyn
       const input = document.querySelector<HTMLTextAreaElement>('[aria-label="Neovim input"]')!;
       return {
         x:
-          parseFloat(input.style.left) +
+          parseFloat(input.style.left) -
+          parseFloat(node.style.left) +
           (Math.ceil(node.getContext('2d')!.measureText('M').width * devicePixelRatio) /
             devicePixelRatio) *
             8.5,
-        y: parseFloat(input.style.top) + 8
+        y: parseFloat(input.style.top) - parseFloat(node.style.top) + 8
       };
     });
     const bounds = (await canvas.boundingBox())!;

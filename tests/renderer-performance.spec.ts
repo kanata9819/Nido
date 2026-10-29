@@ -297,6 +297,121 @@ test('prefetch strips preserve visible row bitmaps and repaint actual content ch
 
 for (const scale of [1, 1.25, 1.5, 2]) {
   for (const opacity of [1, 0.5]) {
+    test(`distant cursor and edit damage skip unchanged intervening rows at ${scale * 100}% scale and ${opacity} opacity`, async ({
+      browser
+    }) => {
+      const context = await browser.newContext({ deviceScaleFactor: scale });
+      try {
+        const page = await context.newPage();
+        await page.route('**/damage-probe', (route) =>
+          route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+        );
+        await page.goto(`${origin}damage-probe`);
+        const result = await page.evaluate(
+          async ({ moduleUrl, opacity }) => {
+            const { Grid } = (await import(moduleUrl)) as { Grid: typeof EditorGrid };
+            const create = (): EditorGrid => {
+              const value = new Grid();
+              value.pixelScrollEnabled = true;
+              value.backgroundOpacity = opacity;
+              value.apply([
+                ['grid_resize', [1, 80, 40]],
+                ...Array.from({ length: 40 }, (_, row) => [
+                  'grid_line',
+                  [
+                    1,
+                    row,
+                    0,
+                    Array.from(`${row} 日本語 😀 ${'code(); '.repeat(8)}`, (text) => [text, 0])
+                  ]
+                ]),
+                ['flush']
+              ]);
+              return value;
+            };
+            const grid = create();
+            const full = create();
+            const canvas = document.createElement('canvas');
+            const reference = document.createElement('canvas');
+            let position: { row: number; column: number } | undefined;
+            const paint = (value: EditorGrid, target: HTMLCanvasElement): void => {
+              value.draw(target, 800, 780, 15, 'monospace', true, position, 19);
+            };
+            grid.cursor = { row: 1, column: 5 };
+            paint(grid, canvas);
+            const ctx = canvas.getContext('2d')!;
+            const drawImage = ctx.drawImage;
+            let copies = 0;
+            ctx.drawImage = function (...args) {
+              copies++;
+              return Reflect.apply(drawImage, this, args);
+            };
+            const work: { label: string; copies: number; mismatches: number }[] = [];
+            let mismatches = 0;
+            const compare = (label: string): void => {
+              copies = 0;
+              paint(grid, canvas);
+              for (const key of ['cursor', 'cursorOpacity', 'scrollFraction', 'mode'] as const) {
+                Reflect.set(full, key, grid[key]);
+              }
+              full.invalidatePaint();
+              paint(full, reference);
+              const expected = reference
+                .getContext('2d')!
+                .getImageData(0, 0, reference.width, reference.height).data;
+              const actual = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+              const before = mismatches;
+              for (let i = 0; i < expected.length; i++) {
+                if (expected[i] !== actual[i]) mismatches++;
+              }
+              work.push({ label, copies, mismatches: mismatches - before });
+            };
+            grid.cursor.row = 35;
+            compare('jump');
+            for (const row of [2.5, 10.25, 30.75]) {
+              position = { row, column: 7.5 };
+              compare('smooth');
+            }
+            position = undefined;
+            grid.cursor.row = 1;
+            compare('return');
+            paint(grid, canvas);
+            for (const value of [grid, full]) {
+              value.apply([['grid_line', [1, 35, 5, [['EDIT', 0]]]], ['flush']]);
+            }
+            compare('distant edit');
+            grid.cursor.row = 39;
+            compare('command row');
+            grid.scrollFraction = 0.25;
+            compare('fractional scroll');
+            grid.cursor.row = 2;
+            compare('fractional jump');
+            return { work, mismatches };
+          },
+          {
+            moduleUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+            opacity
+          }
+        );
+        console.log('distant-damage', JSON.stringify({ scale, opacity, ...result }));
+        expect(result.mismatches).toBe(0);
+        if (!process.env.NIDO_PERFORMANCE_BASELINE) {
+          for (const sample of result.work) {
+            if (sample.label !== 'fractional scroll') {
+              // Three separated cursor bands include whole rows and their raster overscan.
+              expect(sample.copies, sample.label).toBeLessThanOrEqual(12);
+            }
+          }
+        }
+      } finally {
+        await context.close();
+      }
+    });
+  }
+}
+
+for (const scale of [1, 1.25, 1.5, 2]) {
+  for (const opacity of [1, 0.5]) {
     test(`cached viewport animations preserve pixels at ${scale * 100}% scale and ${opacity} opacity`, async ({
       browser
     }) => {

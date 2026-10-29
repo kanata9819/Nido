@@ -64,7 +64,7 @@ export class GridCanvas {
   private paintDirty = true;
   private surface?: HTMLCanvasElement;
   private scrolling = false;
-  private previousCursor?: { top: number; bottom: number };
+  private previousCursorRows: number[] = [];
   private firstDirtyRow = Infinity;
   private lastDirtyRow = -Infinity;
 
@@ -292,487 +292,508 @@ export class GridCanvas {
     this.scrolling = this.grid.scrolling;
     const target = this.grid.scrollCursor ?? this.grid.cursor;
     const position = cursorPosition ?? target;
-    const cursorTop = Math.min(this.grid.rowY(target.row), this.grid.rowY(position.row));
-    const cursorBottom =
-      Math.max(this.grid.rowY(target.row), this.grid.rowY(position.row)) + cellHeight;
-    let damageTop = Math.min(cursorTop, this.previousCursor?.top ?? cursorTop);
-    let damageBottom = Math.max(cursorBottom, this.previousCursor?.bottom ?? cursorBottom);
+    const cursorRows = [target.row, position.row];
+    const cursorTops = cursorRows.map((row) => this.grid.rowY(row));
+    const damage = [...new Set([...cursorRows, ...this.previousCursorRows])].map((row) => ({
+      top: this.grid.rowY(Math.floor(row)),
+      bottom: this.grid.rowY(Math.ceil(row)) + cellHeight
+    }));
     if (this.firstDirtyRow !== Infinity) {
-      damageTop = Math.min(damageTop, this.grid.rowY(this.firstDirtyRow));
-      damageBottom = Math.max(damageBottom, this.grid.rowY(this.lastDirtyRow) + cellHeight);
+      damage.push({
+        top: this.grid.rowY(this.firstDirtyRow),
+        bottom: this.grid.rowY(this.lastDirtyRow) + cellHeight
+      });
     }
-    // Include changed rows and cursor motion, snapping the clip to physical pixels
-    // so acrylic and fractional DPI match a complete repaint.
-    const paintTop = this.paintDirty
-      ? 0
-      : Math.max(0, Math.floor((damageTop - 1 / dpr) * dpr) / dpr);
-    const paintBottom = this.paintDirty
-      ? canvas.height / dpr
-      : Math.min(canvas.height / dpr, Math.ceil((damageBottom + 1 / dpr) * dpr) / dpr);
-    this.previousCursor = { top: cursorTop, bottom: cursorBottom };
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, paintTop, canvas.width / dpr, Math.max(0, paintBottom - paintTop));
-    ctx.clip();
-    this.paintBackground(ctx, 0, 0, width, height);
-    ctx.textBaseline = 'alphabetic';
-    if (!translucent && this.grid.pixelScrollEnabled) {
-      this.linearRows ??= LinearRowImages.forDocument(canvas.ownerDocument);
-    }
-    const correctLight =
-      !translucent &&
-      this.grid.pixelScrollEnabled &&
-      this.linearRows?.begin(canvas.width, canvas.height);
-    const [firstRow, lastRow] = this.rowRange(paintTop, paintBottom, dpr);
-    const commandRow = this.grid.rows - 1;
-    const origin = this.grid.scrollOrigin;
-    const documentY = (row: number): number =>
-      (row === commandRow
-        ? this.grid.contentHeight + this.grid.scrollOffset + origin
-        : this.grid.rowTop(row) + origin) * dpr;
-    const guideRects: {
-      x: number;
-      top: number;
-      bottom: number;
-      width: number;
-      documentTop: number;
-      documentBottom: number;
-      color: string;
-      alpha: number;
-    }[] = [];
-    for (const guide of this.grid.bracketGuides) {
-      const snap = (value: number): number => Math.round(value * dpr) / dpr;
-      const first = guide.opening >= 0 ? guide.top + 1 : guide.top;
-      const last = guide.closing >= 0 ? guide.bottom + 1 : guide.bottom;
-      const inset = guide.opening >= 0 ? 1 : 0;
-      const endInset = guide.closing >= 0 ? 1 : 0;
-      const rect = {
-        x: snap(guide.column * cellWidth) - 1 / dpr,
-        top: this.grid.rowY(first) - inset / dpr,
-        bottom: this.grid.rowY(last) - endInset / dpr,
-        width: 1 / dpr,
-        documentTop: documentY(first) - inset,
-        documentBottom: documentY(last) - endInset,
-        color: guide.color,
-        alpha: guide.active ? 0.9 : 0.3
-      };
-      guideRects.push(rect);
-      if (guide.active) {
-        for (const [column, top, documentTop] of [
-          [guide.opening, rect.top, rect.documentTop],
-          [guide.closing, rect.bottom, rect.documentBottom]
-        ]) {
-          if (column >= 0) {
-            guideRects.push({
-              ...rect,
-              top,
-              bottom: top + 1 / dpr,
-              width: Math.max(1 / dpr, snap((column + 1) * cellWidth) - rect.x),
-              documentTop,
-              documentBottom: documentTop + 1
-            });
-          }
-        }
+    // Keep distant damage separate; physical-pixel clips preserve acrylic and fractional DPI.
+    const candidates = this.paintDirty
+      ? [{ top: 0, bottom: canvas.height / dpr }]
+      : damage
+          .map(({ top, bottom }) => ({
+            top: Math.max(0, Math.floor((top - 1 / dpr) * dpr) / dpr),
+            bottom: Math.min(canvas.height / dpr, Math.ceil((bottom + 1 / dpr) * dpr) / dpr)
+          }))
+          .filter(({ top, bottom }) => top < bottom);
+    const bands: { top: number; bottom: number }[] = [];
+    for (const band of candidates.sort((a, b) => a.top - b.top)) {
+      const previous = bands[bands.length - 1];
+      if (previous && band.top <= previous.bottom) {
+        previous.bottom = Math.max(previous.bottom, band.bottom);
+      } else {
+        bands.push(band);
       }
     }
-    const coveredColumns = new Map<number, [number, number][]>();
-    const indentCuts = (column: number): [number, number][] => {
-      let cuts = coveredColumns.get(column);
-      if (!cuts) {
-        const left = Math.round(column * cellWidth * dpr) - 1;
-        const spans = guideRects
-          .filter(
-            (rect) =>
-              Math.round(rect.x * dpr) < left + 1 && Math.round((rect.x + rect.width) * dpr) > left
-          )
-          .map((rect): [number, number] => [rect.documentTop, rect.documentBottom])
-          .sort((a, b) => a[0] - b[0]);
-        cuts = [];
-        for (const span of spans) {
-          const previous = cuts[cuts.length - 1];
-          if (previous && span[0] <= previous[1]) {
-            previous[1] = Math.max(previous[1], span[1]);
-          } else {
-            cuts.push(span);
-          }
-        }
-        coveredColumns.set(column, cuts);
-      }
-      return cuts;
-    };
-    const rowCuts = (columns: number[], top: number, height: number): number[] => {
-      const cuts: number[] = [];
-      for (const column of columns) {
-        for (const [start, end] of indentCuts(column)) {
-          const first = Math.max(0, start - top);
-          const last = Math.min(height, end - top);
-          if (first < last) {
-            cuts.push(column, first, last);
-          }
-        }
-      }
-      return cuts;
-    };
-    for (
-      let row = Math.min(firstRow, Math.max(0, commandRow));
-      row < Math.max(lastRow, this.grid.rows);
-      row++
-    ) {
-      // Retain the original document / command / future paint order, skipping
-      // either gap around the fixed command line without inspecting its rows.
-      if (row < firstRow && row !== commandRow) {
-        row = firstRow - 1;
-        continue;
-      }
-      if (row >= lastRow && row < commandRow) {
-        row = commandRow - 1;
-        continue;
-      }
-      const cells =
-        row < 0
-          ? this.grid.historyRows[this.grid.historyRows.length + row]
-          : row >= this.grid.rows
-            ? this.grid.futureRows[row - this.grid.rows]
-            : this.grid.cells[row];
-      const commandLine = row === this.grid.rows - 1;
-      const layoutRow = row >= this.grid.rows ? row - 1 : row;
-      const rowY =
-        row >= this.grid.rows
-          ? this.grid.rowTop(layoutRow) - this.grid.scrollOffset
-          : this.grid.rowY(row);
-      const rowHeight = commandLine
-        ? cellHeight
-        : this.grid.rowTop(layoutRow + 1) - this.grid.rowTop(layoutRow);
-      if (rowY + rowHeight + 1 / dpr < paintTop || rowY >= Math.min(paintBottom, height)) {
-        continue;
-      }
-      if (!commandLine && (rowY + rowHeight <= 0 || rowY >= this.grid.contentHeight)) {
-        continue;
-      }
-      // Snap document origins, not scroll movement. All rows share the same
-      // fractional translation, including across native viewport rebases.
-      const top = commandLine
-        ? Math.round(rowY * dpr)
-        : Math.round((this.grid.rowTop(layoutRow) + origin) * dpr) -
-          (this.grid.scrollOffset + origin) * dpr;
+    this.previousCursorRows = cursorRows;
+    // Separate rectangular clips retain native GPU antialiasing at fractional positions.
+    for (const { top: paintTop, bottom: paintBottom } of bands) {
       ctx.save();
-      if (!commandLine) {
+      ctx.beginPath();
+      ctx.rect(0, paintTop, canvas.width / dpr, paintBottom - paintTop);
+      ctx.clip();
+      this.paintBackground(ctx, 0, 0, width, height);
+      ctx.textBaseline = 'alphabetic';
+      if (!translucent && this.grid.pixelScrollEnabled) {
+        this.linearRows ??= LinearRowImages.forDocument(canvas.ownerDocument);
+      }
+      const correctLight =
+        !translucent &&
+        this.grid.pixelScrollEnabled &&
+        this.linearRows?.begin(canvas.width, canvas.height);
+      const [firstRow, lastRow] = this.rowRange(paintTop, paintBottom, dpr);
+      const commandRow = this.grid.rows - 1;
+      const origin = this.grid.scrollOrigin;
+      const documentY = (row: number): number =>
+        (row === commandRow
+          ? this.grid.contentHeight + this.grid.scrollOffset + origin
+          : this.grid.rowTop(row) + origin) * dpr;
+      const guideRects: {
+        x: number;
+        top: number;
+        bottom: number;
+        width: number;
+        documentTop: number;
+        documentBottom: number;
+        color: string;
+        alpha: number;
+      }[] = [];
+      for (const guide of this.grid.bracketGuides) {
+        const snap = (value: number): number => Math.round(value * dpr) / dpr;
+        const first = guide.opening >= 0 ? guide.top + 1 : guide.top;
+        const last = guide.closing >= 0 ? guide.bottom + 1 : guide.bottom;
+        const inset = guide.opening >= 0 ? 1 : 0;
+        const endInset = guide.closing >= 0 ? 1 : 0;
+        const rect = {
+          x: snap(guide.column * cellWidth) - 1 / dpr,
+          top: this.grid.rowY(first) - inset / dpr,
+          bottom: this.grid.rowY(last) - endInset / dpr,
+          width: 1 / dpr,
+          documentTop: documentY(first) - inset,
+          documentBottom: documentY(last) - endInset,
+          color: guide.color,
+          alpha: guide.active ? 0.9 : 0.3
+        };
+        guideRects.push(rect);
+        if (guide.active) {
+          for (const [column, top, documentTop] of [
+            [guide.opening, rect.top, rect.documentTop],
+            [guide.closing, rect.bottom, rect.documentBottom]
+          ]) {
+            if (column >= 0) {
+              guideRects.push({
+                ...rect,
+                top,
+                bottom: top + 1 / dpr,
+                width: Math.max(1 / dpr, snap((column + 1) * cellWidth) - rect.x),
+                documentTop,
+                documentBottom: documentTop + 1
+              });
+            }
+          }
+        }
+      }
+      const coveredColumns = new Map<number, [number, number][]>();
+      const indentCuts = (column: number): [number, number][] => {
+        let cuts = coveredColumns.get(column);
+        if (!cuts) {
+          const left = Math.round(column * cellWidth * dpr) - 1;
+          const spans = guideRects
+            .filter(
+              (rect) =>
+                Math.round(rect.x * dpr) < left + 1 &&
+                Math.round((rect.x + rect.width) * dpr) > left
+            )
+            .map((rect): [number, number] => [rect.documentTop, rect.documentBottom])
+            .sort((a, b) => a[0] - b[0]);
+          cuts = [];
+          for (const span of spans) {
+            const previous = cuts[cuts.length - 1];
+            if (previous && span[0] <= previous[1]) {
+              previous[1] = Math.max(previous[1], span[1]);
+            } else {
+              cuts.push(span);
+            }
+          }
+          coveredColumns.set(column, cuts);
+        }
+        return cuts;
+      };
+      const rowCuts = (columns: number[], top: number, height: number): number[] => {
+        const cuts: number[] = [];
+        for (const column of columns) {
+          for (const [start, end] of indentCuts(column)) {
+            const first = Math.max(0, start - top);
+            const last = Math.min(height, end - top);
+            if (first < last) {
+              cuts.push(column, first, last);
+            }
+          }
+        }
+        return cuts;
+      };
+      for (
+        let row = Math.min(firstRow, Math.max(0, commandRow));
+        row < Math.max(lastRow, this.grid.rows);
+        row++
+      ) {
+        // Retain the original document / command / future paint order, skipping
+        // either gap around the fixed command line without inspecting its rows.
+        if (row < firstRow && row !== commandRow) {
+          row = firstRow - 1;
+          continue;
+        }
+        if (row >= lastRow && row < commandRow) {
+          row = commandRow - 1;
+          continue;
+        }
+        const cells =
+          row < 0
+            ? this.grid.historyRows[this.grid.historyRows.length + row]
+            : row >= this.grid.rows
+              ? this.grid.futureRows[row - this.grid.rows]
+              : this.grid.cells[row];
+        const commandLine = row === this.grid.rows - 1;
+        const layoutRow = row >= this.grid.rows ? row - 1 : row;
+        const rowY =
+          row >= this.grid.rows
+            ? this.grid.rowTop(layoutRow) - this.grid.scrollOffset
+            : this.grid.rowY(row);
+        const rowHeight = commandLine
+          ? cellHeight
+          : this.grid.rowTop(layoutRow + 1) - this.grid.rowTop(layoutRow);
+        if (rowY + rowHeight + 1 / dpr < paintTop || rowY >= Math.min(paintBottom, height)) {
+          continue;
+        }
+        if (!commandLine && (rowY + rowHeight <= 0 || rowY >= this.grid.contentHeight)) {
+          continue;
+        }
+        // Snap document origins, not scroll movement. All rows share the same
+        // fractional translation, including across native viewport rebases.
+        const top = commandLine
+          ? Math.round(rowY * dpr)
+          : Math.round((this.grid.rowTop(layoutRow) + origin) * dpr) -
+            (this.grid.scrollOffset + origin) * dpr;
+        ctx.save();
+        if (!commandLine) {
+          ctx.beginPath();
+          ctx.rect(0, 0, width, this.grid.contentHeight);
+          ctx.clip();
+        }
+        let image = this.rowImages.get(cells);
+        const imageHeight = Math.ceil(rowHeight * dpr);
+        if (!image || image.height !== imageHeight) {
+          if (image) {
+            this.linearRows?.invalidate(image);
+          }
+          image = canvas.ownerDocument.createElement('canvas');
+          image.width = canvas.width;
+          image.height = imageHeight;
+          this.rowImages.set(cells, image);
+          this.dirtyImages.add(image);
+        }
+        const indentState = this.rowIndents.get(image);
+        const documentTop = Math.round((this.grid.rowTop(layoutRow) + origin) * dpr);
+        if (indentState?.columns.length) {
+          const cuts = rowCuts(indentState.columns, documentTop, imageHeight);
+          if (
+            cuts.length !== indentState.cuts.length ||
+            cuts.some((value, index) => value !== indentState.cuts[index])
+          ) {
+            // Guide motion changes only the rows whose covered indent pixels changed.
+            this.dirtyPrefixes.delete(image);
+            this.dirtyImages.add(image);
+            this.linearRows?.invalidate(image);
+          }
+        }
+        if (this.dirtyImages.has(image)) {
+          this.dirtyImages.delete(image);
+          // Opaque rows allow native LCD text, matching normal DOM rendering.
+          // Translucent themes need alpha surfaces and grayscale antialiasing.
+          const ctx = image.getContext('2d', { alpha: translucent })!;
+          // Track text state within this row paint, including prefix measurements.
+          let currentFont = '';
+          const prefix = this.dirtyPrefixes.get(image);
+          this.dirtyPrefixes.delete(image);
+          const indentColumns = prefix ? (indentState?.columns ?? []) : [];
+          const previousOverhang = prefix ? this.rowOverhangs.get(image) : undefined;
+          // Cover snapped indent strokes and CSS-rounded box-drawing lines,
+          // including their native antialias fringe at any device scale.
+          let overhang = Math.max(previousOverhang ?? 0, 2.5 / dpr, 0.5 + 1 / dpr);
+          let columns = this.grid.columns;
+          if (prefix) {
+            ctx.save();
+            let right = prefix.end * cellWidth + 0.5;
+            for (const id of prefix.highlights) {
+              const font = cellStyle(id).font;
+              let ink = digitBounds.get(font);
+              if (ink === undefined) {
+                ctx.font = font;
+                currentFont = font;
+                ink = { left: -Infinity, right: -Infinity };
+                for (const text of '0123456789') {
+                  const metrics = measure(ctx, font, text);
+                  ink.left = Math.max(ink.left, metrics.actualBoundingBoxLeft);
+                  ink.right = Math.max(ink.right, metrics.actualBoundingBoxRight);
+                }
+                digitBounds.set(font, ink);
+              }
+              overhang = Number.isFinite(ink.left)
+                ? Math.max(overhang, ink.left + 1.5 / dpr)
+                : Infinity;
+              right = Math.max(
+                right,
+                Math.round((prefix.end - 1) * cellWidth * dpr) / dpr + ink.right
+              );
+            }
+            // Preserve the unchanged suffix, including glyphs crossing the damage edge.
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.beginPath();
+            const edge = Math.ceil(right * dpr) + 1;
+            ctx.rect(0, 0, edge, image.height);
+            ctx.clip();
+            if (previousOverhang !== undefined) {
+              // A row-wide ink bound also retains distant combining glyphs.
+              columns = Math.min(
+                columns,
+                Math.max(prefix.end, Math.ceil((edge / dpr + overhang) / cellWidth))
+              );
+            }
+          }
+          if (translucent) {
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, image.width, image.height);
+          }
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.textBaseline = 'alphabetic';
+          let currentColor = '';
+          const font = (value: string): void => {
+            if (value !== currentFont) {
+              ctx.font = value;
+              currentFont = value;
+            }
+          };
+          const foreground = (value: string): void => {
+            if (value !== currentColor) {
+              ctx.fillStyle = value;
+              currentColor = value;
+            }
+          };
+          const rememberText = (text: string): void => {
+            if (previousOverhang !== undefined) {
+              return;
+            }
+            const left = measure(ctx, currentFont, text).actualBoundingBoxLeft;
+            // Snapped text origins differ by at most half a physical pixel.
+            overhang = Number.isFinite(left) ? Math.max(overhang, left + 1.5 / dpr) : Infinity;
+          };
+          const y = 0;
+          const highlightTop = Math.max(0, Math.round(((rowHeight - fontSize - 2) / 2) * dpr));
+          const highlightHeight = Math.min(
+            imageHeight - highlightTop,
+            Math.round((fontSize + 2) * dpr)
+          );
+          if (!translucent) {
+            foreground(this.grid.background);
+            ctx.fillRect(0, 0, width, image.height / dpr);
+          }
+          // Paint all cell backgrounds first so a wide glyph is not erased by its continuation cell.
+          for (let col = 0; col < columns; col++) {
+            const style = cellStyle(cells[col]?.highlight || 0);
+            const h = style.highlight;
+            const background = style.background;
+            if (h.diagnostic && !h.reverse) {
+              const start = col;
+              while (
+                col + 1 < this.grid.columns &&
+                cells[col + 1]?.highlight === cells[start]?.highlight
+              ) {
+                col++;
+              }
+              const left = Math.round(start * cellWidth * dpr) / dpr;
+              const right = Math.round((col + 1) * cellWidth * dpr) / dpr;
+              const inset = Math.min(2, rowHeight / 4);
+              const badgeHeight = rowHeight - inset * 2;
+              foreground(background);
+              ctx.beginPath();
+              ctx.roundRect(left, inset, right - left, badgeHeight, 4);
+              ctx.fill();
+              const accent = style.accent!;
+              ctx.strokeStyle = accent + '30';
+              ctx.lineWidth = 1 / dpr;
+              ctx.stroke();
+              foreground(accent);
+              ctx.beginPath();
+              ctx.roundRect(left + 4, inset + 4, 2, Math.max(1, badgeHeight - 8), 1);
+              ctx.fill();
+              continue;
+            }
+            // The default background is already filled (or transparent for acrylic).
+            // Repainting fractional cell edges can darken their native pixels.
+            if (background === this.grid.background) {
+              continue;
+            }
+            foreground(background);
+            ctx.fillRect(
+              col * cellWidth,
+              h.wordHighlight ? highlightTop / dpr : y,
+              cellWidth + 0.5,
+              h.wordHighlight ? highlightHeight / dpr : image.height / dpr
+            );
+          }
+
+          for (let col = 0; col < columns; col++) {
+            const cell = cells[col];
+            if (!cell?.text || cell.text === ' ') {
+              continue;
+            }
+
+            const style = cellStyle(cell.highlight);
+            const h = style.highlight;
+            if (h.codeLens) {
+              let text = cell.text;
+              const start = col;
+              while (col + 1 < this.grid.columns && cells[col + 1]?.highlight === cell.highlight) {
+                text += cells[++col].text;
+              }
+              font(style.font);
+              foreground(style.foreground);
+              rememberText(text);
+              ctx.fillText(
+                text,
+                Math.round(start * cellWidth * dpr) / dpr,
+                Math.round((y + (rowHeight + fontSize * 0.8) / 2 - 3) * dpr) / dpr
+              );
+              continue;
+            }
+            const textSize = style.textSize;
+            font(style.font);
+            foreground(style.foreground);
+
+            const x = col * cellWidth;
+            const baseline = Math.round((y + (rowHeight + textSize) / 2 - 3) * dpr) / dpr;
+
+            if (h.indentGuide) {
+              if (!prefix) {
+                indentColumns.push(col);
+              }
+              const left = Math.round(x * dpr) / dpr - 1 / dpr;
+              let start = 0;
+              for (const [first, last] of indentCuts(col)) {
+                const end = Math.min(image.height, first - documentTop);
+                if (end > start) {
+                  ctx.fillRect(left, start / dpr, 1 / dpr, (end - start) / dpr);
+                }
+                start = Math.max(start, last - documentTop);
+                if (start >= image.height) {
+                  break;
+                }
+              }
+              if (start < image.height) {
+                ctx.fillRect(left, start / dpr, 1 / dpr, (image.height - start) / dpr);
+              }
+            } else if (cell.text === '│') {
+              // Box-drawing lines must span the cell, including the line spacing.
+              ctx.fillRect(Math.round(x + cellWidth / 2), y, 1, rowHeight);
+            } else {
+              // Keep glyph origins on physical pixels, including fractional Windows scaling.
+              rememberText(cell.text);
+              const left = Math.round(x * dpr);
+              ctx.fillText(cell.text, left / dpr, baseline);
+            }
+            if (h.bracketMatch) {
+              const left = Math.round(x * dpr);
+              const right = Math.round((x + cellWidth) * dpr);
+              ctx.strokeStyle = '#ffffff80';
+              ctx.lineWidth = 1 / dpr;
+              ctx.strokeRect(
+                (left + 0.5) / dpr,
+                (highlightTop + 0.5) / dpr,
+                (right - left - 1) / dpr,
+                (highlightHeight - 1) / dpr
+              );
+            }
+            if ((!h.bracketMatch && h.underline) || h.undercurl || h.strikethrough) {
+              if (style.special !== undefined) {
+                foreground(style.special);
+              }
+              ctx.fillRect(
+                x,
+                h.strikethrough
+                  ? y + rowHeight / 2
+                  : h.underline && !h.undercurl
+                    ? Math.min(rowHeight - 1, baseline + 2)
+                    : y + rowHeight - 3,
+                cellWidth,
+                1
+              );
+            }
+          }
+          // New digits may overhang farther; retain them for shorter prefixes.
+          this.rowOverhangs.set(image, overhang);
+          this.rowIndents.set(image, {
+            columns: indentColumns,
+            cuts: rowCuts(indentColumns, documentTop, image.height)
+          });
+          if (prefix) {
+            ctx.restore();
+          }
+        }
+        // Reuse rasterized text; scroll and cursor animation only composite row images.
+        ctx.drawImage(image, 0, top / dpr, image.width / dpr, image.height / dpr);
+        if (correctLight && !commandLine) {
+          this.linearRows!.paint(image, top);
+        }
+        ctx.restore();
+      }
+      if (correctLight) {
+        this.linearRows!.finish(ctx, dpr, this.grid.contentHeight);
+      }
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, width, this.grid.contentHeight);
+      ctx.clip();
+      const outline = this.grid.stickyScroll;
+      if (outline?.separators?.length) {
+        const left = Math.round((outline.left + outline.gutter) * cellWidth * dpr) / dpr;
+        const right = Math.min(width, (outline.left + outline.width) * cellWidth);
+        ctx.fillStyle = this.grid.foreground;
+        ctx.globalAlpha = 0.22;
+        for (const separator of outline.separators) {
+          const y = Math.round(this.grid.rowY(separator.row) * dpr) / dpr;
+          ctx.fillRect(left, y, Math.max(0, right - left), 1 / dpr);
+        }
+      }
+      for (const rect of guideRects) {
+        ctx.fillStyle = rect.color;
+        ctx.globalAlpha = rect.alpha;
+        ctx.fillRect(rect.x, rect.top, rect.width, rect.bottom - rect.top);
+      }
+      ctx.restore();
+      const cursor = this.grid.scrollCursor ?? this.grid.cursor;
+      ctx.save();
+      if (cursor.row < this.grid.rows - 1) {
         ctx.beginPath();
         ctx.rect(0, 0, width, this.grid.contentHeight);
         ctx.clip();
       }
-      let image = this.rowImages.get(cells);
-      const imageHeight = Math.ceil(rowHeight * dpr);
-      if (!image || image.height !== imageHeight) {
-        if (image) {
-          this.linearRows?.invalidate(image);
-        }
-        image = canvas.ownerDocument.createElement('canvas');
-        image.width = canvas.width;
-        image.height = imageHeight;
-        this.rowImages.set(cells, image);
-        this.dirtyImages.add(image);
+      if (
+        focused &&
+        !this.grid.busy &&
+        /^(normal|insert|replace|visual)/.test(this.grid.mode) &&
+        cursor.row >= 0 &&
+        cursor.row < this.grid.rows &&
+        cursorTops[0] < paintBottom &&
+        cursorTops[0] + cellHeight > paintTop
+      ) {
+        const y = this.grid.rowY(cursor.row);
+        ctx.fillStyle = '#46515c';
+        ctx.fillRect(0, y, width, 1);
+        ctx.fillRect(0, y + cellHeight - 1, width, 1);
       }
-      const indentState = this.rowIndents.get(image);
-      const documentTop = Math.round((this.grid.rowTop(layoutRow) + origin) * dpr);
-      if (indentState?.columns.length) {
-        const cuts = rowCuts(indentState.columns, documentTop, imageHeight);
-        if (
-          cuts.length !== indentState.cuts.length ||
-          cuts.some((value, index) => value !== indentState.cuts[index])
-        ) {
-          // Guide motion changes only the rows whose covered indent pixels changed.
-          this.dirtyPrefixes.delete(image);
-          this.dirtyImages.add(image);
-          this.linearRows?.invalidate(image);
-        }
-      }
-      if (this.dirtyImages.has(image)) {
-        this.dirtyImages.delete(image);
-        // Opaque rows allow native LCD text, matching normal DOM rendering.
-        // Translucent themes need alpha surfaces and grayscale antialiasing.
-        const ctx = image.getContext('2d', { alpha: translucent })!;
-        // Track text state within this row paint, including prefix measurements.
-        let currentFont = '';
-        const prefix = this.dirtyPrefixes.get(image);
-        this.dirtyPrefixes.delete(image);
-        const indentColumns = prefix ? (indentState?.columns ?? []) : [];
-        const previousOverhang = prefix ? this.rowOverhangs.get(image) : undefined;
-        // Cover snapped indent strokes and CSS-rounded box-drawing lines,
-        // including their native antialias fringe at any device scale.
-        let overhang = Math.max(previousOverhang ?? 0, 2.5 / dpr, 0.5 + 1 / dpr);
-        let columns = this.grid.columns;
-        if (prefix) {
-          ctx.save();
-          let right = prefix.end * cellWidth + 0.5;
-          for (const id of prefix.highlights) {
-            const font = cellStyle(id).font;
-            let ink = digitBounds.get(font);
-            if (ink === undefined) {
-              ctx.font = font;
-              currentFont = font;
-              ink = { left: -Infinity, right: -Infinity };
-              for (const text of '0123456789') {
-                const metrics = measure(ctx, font, text);
-                ink.left = Math.max(ink.left, metrics.actualBoundingBoxLeft);
-                ink.right = Math.max(ink.right, metrics.actualBoundingBoxRight);
-              }
-              digitBounds.set(font, ink);
-            }
-            overhang = Number.isFinite(ink.left)
-              ? Math.max(overhang, ink.left + 1.5 / dpr)
-              : Infinity;
-            right = Math.max(
-              right,
-              Math.round((prefix.end - 1) * cellWidth * dpr) / dpr + ink.right
-            );
-          }
-          // Preserve the unchanged suffix, including glyphs crossing the damage edge.
-          ctx.setTransform(1, 0, 0, 1, 0, 0);
-          ctx.beginPath();
-          const edge = Math.ceil(right * dpr) + 1;
-          ctx.rect(0, 0, edge, image.height);
-          ctx.clip();
-          if (previousOverhang !== undefined) {
-            // A row-wide ink bound also retains distant combining glyphs.
-            columns = Math.min(
-              columns,
-              Math.max(prefix.end, Math.ceil((edge / dpr + overhang) / cellWidth))
-            );
-          }
-        }
-        if (translucent) {
-          ctx.setTransform(1, 0, 0, 1, 0, 0);
-          ctx.clearRect(0, 0, image.width, image.height);
-        }
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.textBaseline = 'alphabetic';
-        let currentColor = '';
-        const font = (value: string): void => {
-          if (value !== currentFont) {
-            ctx.font = value;
-            currentFont = value;
-          }
-        };
-        const foreground = (value: string): void => {
-          if (value !== currentColor) {
-            ctx.fillStyle = value;
-            currentColor = value;
-          }
-        };
-        const rememberText = (text: string): void => {
-          if (previousOverhang !== undefined) {
-            return;
-          }
-          const left = measure(ctx, currentFont, text).actualBoundingBoxLeft;
-          // Snapped text origins differ by at most half a physical pixel.
-          overhang = Number.isFinite(left) ? Math.max(overhang, left + 1.5 / dpr) : Infinity;
-        };
-        const y = 0;
-        const highlightTop = Math.max(0, Math.round(((rowHeight - fontSize - 2) / 2) * dpr));
-        const highlightHeight = Math.min(
-          imageHeight - highlightTop,
-          Math.round((fontSize + 2) * dpr)
-        );
-        if (!translucent) {
-          foreground(this.grid.background);
-          ctx.fillRect(0, 0, width, image.height / dpr);
-        }
-        // Paint all cell backgrounds first so a wide glyph is not erased by its continuation cell.
-        for (let col = 0; col < columns; col++) {
-          const style = cellStyle(cells[col]?.highlight || 0);
-          const h = style.highlight;
-          const background = style.background;
-          if (h.diagnostic && !h.reverse) {
-            const start = col;
-            while (
-              col + 1 < this.grid.columns &&
-              cells[col + 1]?.highlight === cells[start]?.highlight
-            ) {
-              col++;
-            }
-            const left = Math.round(start * cellWidth * dpr) / dpr;
-            const right = Math.round((col + 1) * cellWidth * dpr) / dpr;
-            const inset = Math.min(2, rowHeight / 4);
-            const badgeHeight = rowHeight - inset * 2;
-            foreground(background);
-            ctx.beginPath();
-            ctx.roundRect(left, inset, right - left, badgeHeight, 4);
-            ctx.fill();
-            const accent = style.accent!;
-            ctx.strokeStyle = accent + '30';
-            ctx.lineWidth = 1 / dpr;
-            ctx.stroke();
-            foreground(accent);
-            ctx.beginPath();
-            ctx.roundRect(left + 4, inset + 4, 2, Math.max(1, badgeHeight - 8), 1);
-            ctx.fill();
-            continue;
-          }
-          // The default background is already filled (or transparent for acrylic).
-          // Repainting fractional cell edges can darken their native pixels.
-          if (background === this.grid.background) {
-            continue;
-          }
-          foreground(background);
-          ctx.fillRect(
-            col * cellWidth,
-            h.wordHighlight ? highlightTop / dpr : y,
-            cellWidth + 0.5,
-            h.wordHighlight ? highlightHeight / dpr : image.height / dpr
-          );
-        }
-
-        for (let col = 0; col < columns; col++) {
-          const cell = cells[col];
-          if (!cell?.text || cell.text === ' ') {
-            continue;
-          }
-
-          const style = cellStyle(cell.highlight);
-          const h = style.highlight;
-          if (h.codeLens) {
-            let text = cell.text;
-            const start = col;
-            while (col + 1 < this.grid.columns && cells[col + 1]?.highlight === cell.highlight) {
-              text += cells[++col].text;
-            }
-            font(style.font);
-            foreground(style.foreground);
-            rememberText(text);
-            ctx.fillText(
-              text,
-              Math.round(start * cellWidth * dpr) / dpr,
-              Math.round((y + (rowHeight + fontSize * 0.8) / 2 - 3) * dpr) / dpr
-            );
-            continue;
-          }
-          const textSize = style.textSize;
-          font(style.font);
-          foreground(style.foreground);
-
-          const x = col * cellWidth;
-          const baseline = Math.round((y + (rowHeight + textSize) / 2 - 3) * dpr) / dpr;
-
-          if (h.indentGuide) {
-            if (!prefix) {
-              indentColumns.push(col);
-            }
-            const left = Math.round(x * dpr) / dpr - 1 / dpr;
-            let start = 0;
-            for (const [first, last] of indentCuts(col)) {
-              const end = Math.min(image.height, first - documentTop);
-              if (end > start) {
-                ctx.fillRect(left, start / dpr, 1 / dpr, (end - start) / dpr);
-              }
-              start = Math.max(start, last - documentTop);
-              if (start >= image.height) {
-                break;
-              }
-            }
-            if (start < image.height) {
-              ctx.fillRect(left, start / dpr, 1 / dpr, (image.height - start) / dpr);
-            }
-          } else if (cell.text === '│') {
-            // Box-drawing lines must span the cell, including the line spacing.
-            ctx.fillRect(Math.round(x + cellWidth / 2), y, 1, rowHeight);
-          } else {
-            // Keep glyph origins on physical pixels, including fractional Windows scaling.
-            rememberText(cell.text);
-            const left = Math.round(x * dpr);
-            ctx.fillText(cell.text, left / dpr, baseline);
-          }
-          if (h.bracketMatch) {
-            const left = Math.round(x * dpr);
-            const right = Math.round((x + cellWidth) * dpr);
-            ctx.strokeStyle = '#ffffff80';
-            ctx.lineWidth = 1 / dpr;
-            ctx.strokeRect(
-              (left + 0.5) / dpr,
-              (highlightTop + 0.5) / dpr,
-              (right - left - 1) / dpr,
-              (highlightHeight - 1) / dpr
-            );
-          }
-          if ((!h.bracketMatch && h.underline) || h.undercurl || h.strikethrough) {
-            if (style.special !== undefined) {
-              foreground(style.special);
-            }
-            ctx.fillRect(
-              x,
-              h.strikethrough
-                ? y + rowHeight / 2
-                : h.underline && !h.undercurl
-                  ? Math.min(rowHeight - 1, baseline + 2)
-                  : y + rowHeight - 3,
-              cellWidth,
-              1
-            );
-          }
-        }
-        // New digits may overhang farther; retain them for shorter prefixes.
-        this.rowOverhangs.set(image, overhang);
-        this.rowIndents.set(image, {
-          columns: indentColumns,
-          cuts: rowCuts(indentColumns, documentTop, image.height)
-        });
-        if (prefix) {
-          ctx.restore();
-        }
-      }
-      // Reuse rasterized text; scroll and cursor animation only composite row images.
-      ctx.drawImage(image, 0, top / dpr, image.width / dpr, image.height / dpr);
-      if (correctLight && !commandLine) {
-        this.linearRows!.paint(image, top);
+      if (cursorTops[1] < paintBottom && cursorTops[1] + cellHeight > paintTop) {
+        this.drawCursor(ctx, cellWidth, cellHeight, focused, cursorPosition);
       }
       ctx.restore();
+      ctx.restore();
     }
-    if (correctLight) {
-      this.linearRows!.finish(ctx, dpr, this.grid.contentHeight);
-    }
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, width, this.grid.contentHeight);
-    ctx.clip();
-    const outline = this.grid.stickyScroll;
-    if (outline?.separators?.length) {
-      const left = Math.round((outline.left + outline.gutter) * cellWidth * dpr) / dpr;
-      const right = Math.min(width, (outline.left + outline.width) * cellWidth);
-      ctx.fillStyle = this.grid.foreground;
-      ctx.globalAlpha = 0.22;
-      for (const separator of outline.separators) {
-        const y = Math.round(this.grid.rowY(separator.row) * dpr) / dpr;
-        ctx.fillRect(left, y, Math.max(0, right - left), 1 / dpr);
-      }
-    }
-    for (const rect of guideRects) {
-      ctx.fillStyle = rect.color;
-      ctx.globalAlpha = rect.alpha;
-      ctx.fillRect(rect.x, rect.top, rect.width, rect.bottom - rect.top);
-    }
-    ctx.restore();
-    const cursor = this.grid.scrollCursor ?? this.grid.cursor;
-    ctx.save();
-    if (cursor.row < this.grid.rows - 1) {
-      ctx.beginPath();
-      ctx.rect(0, 0, width, this.grid.contentHeight);
-      ctx.clip();
-    }
-    if (
-      focused &&
-      !this.grid.busy &&
-      /^(normal|insert|replace|visual)/.test(this.grid.mode) &&
-      cursor.row >= 0 &&
-      cursor.row < this.grid.rows
-    ) {
-      const y = this.grid.rowY(cursor.row);
-      ctx.fillStyle = '#46515c';
-      ctx.fillRect(0, y, width, 1);
-      ctx.fillRect(0, y + cellHeight - 1, width, 1);
-    }
-    this.drawCursor(ctx, cellWidth, cellHeight, focused, cursorPosition);
-    ctx.restore();
-    ctx.restore();
     this.paintDirty = false;
     this.firstDirtyRow = Infinity;
     this.lastDirtyRow = -Infinity;

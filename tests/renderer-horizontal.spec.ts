@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { createServer, type ViteDevServer } from 'vite';
+import { resolve } from 'node:path';
 
 let server: ViteDevServer;
 let origin: string;
@@ -7,7 +8,7 @@ let origin: string;
 test.beforeAll(async () => {
   server = await createServer({
     configFile: false,
-    root: process.cwd(),
+    root: resolve('src/renderer'),
     server: { host: '127.0.0.1', port: 0 }
   });
   await server.listen();
@@ -112,7 +113,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
           previousShift = shift;
         }
         return { rawPitch, comparisons, mismatches, failures };
-      }, '/src/renderer/src/grid.ts');
+      }, '/src/grid.ts');
       expect(Math.abs(result.rawPitch - Math.round(result.rawPitch))).toBeGreaterThan(0.001);
       expect(result.comparisons).toBe(16);
       expect(result.mismatches, JSON.stringify(result)).toBe(0);
@@ -239,7 +240,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
               CanvasRenderingContext2D.prototype.fillText = native;
             }
           },
-          { opacity, moduleUrl: '/src/renderer/src/grid.ts' }
+          { opacity, moduleUrl: '/src/grid.ts' }
         );
         expect(result.mismatches, JSON.stringify(result.differences)).toBe(0);
         expect(result.counts[0], 'unchanged rows must reuse their existing rasters').toBeLessThan(
