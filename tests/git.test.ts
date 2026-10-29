@@ -74,6 +74,72 @@ test('Git IPC shares pending status reads but refreshes after changes and failur
   }
 });
 
+test('Git previews skip superseded requests while keeping sessions and failures independent', async (context) => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-preview-queue-'));
+  const previousTrace = process.env.GIT_TRACE2_EVENT;
+  try {
+    const git = (...args: string[]): string =>
+      execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true });
+    git('init', '-q', '-b', 'main');
+    git('config', 'user.name', 'Nido Test');
+    git('config', 'user.email', 'nido@example.test');
+    git('config', 'commit.gpgsign', 'false');
+    await writeFile(join(root, 'file.txt'), 'before\n');
+    git('add', '.');
+    git('commit', '-qm', 'Initial');
+    const hash = git('rev-parse', 'HEAD').trim();
+    await writeFile(join(root, 'file.txt'), 'after\n');
+    const sessions = new Map(
+      ['current', 'other'].map((id) => [id, { workspace: { id, root } } as Session])
+    );
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    registerGitHandlers({
+      handle: (name, action) => handlers.set(name, action),
+      session: (id) => sessions.get(String(id))!,
+      text: (value) => String(value),
+      sessions,
+      send: () => {}
+    });
+    const working = (id = 'current', path = 'file.txt'): Promise<string> =>
+      handlers.get('gitDiff')!(id, path, false) as Promise<string>;
+    const trace = join(root, 'trace.jsonl');
+    process.env.GIT_TRACE2_EVENT = trace;
+    const results = await Promise.allSettled(
+      Array.from({ length: 20 }, (_, index) =>
+        index % 2
+          ? working()
+          : (handlers.get('gitCommitDiff')!('current', hash, 'file.txt') as Promise<string>)
+      )
+    );
+    const diffs = (await readFile(trace, 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { event: string; argv?: string[] })
+      .filter(({ event, argv }) => event === 'start' && argv?.includes('--unified=2147483647'));
+    context.diagnostic(
+      JSON.stringify({ previewRequests: results.length, nativeDiffs: diffs.length })
+    );
+    assert.equal(diffs.length, 1, 'Only the latest queued preview may start Git');
+    assert.equal(results.filter(({ status }) => status === 'fulfilled').length, 1);
+    for (const result of results.slice(0, -1)) {
+      assert.equal(result.status, 'rejected');
+      if (result.status === 'rejected') assert.match(String(result.reason), /superseded/);
+    }
+    assert.equal(results[19].status, 'fulfilled');
+    if (results[19].status === 'fulfilled') assert.match(results[19].value, /\+after/);
+    await assert.rejects(working('current', 'missing.txt'), /no longer exists/);
+    const independent = await Promise.all([working(), working('other')]);
+    assert.ok(independent.every((value) => value.includes('+after')));
+    const closed = working();
+    sessions.delete('current');
+    await assert.rejects(closed, /closed/);
+  } finally {
+    if (previousTrace === undefined) delete process.env.GIT_TRACE2_EVENT;
+    else process.env.GIT_TRACE2_EVENT = previousTrace;
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('background Git status does not rewrite the index when file timestamps change', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-status-index-'));
   try {

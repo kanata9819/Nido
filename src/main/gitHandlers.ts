@@ -30,6 +30,33 @@ export function registerGitHandlers({
   send: (event: NidoEvent) => void;
 }): void {
   const statusRequests = new Map<string, ReturnType<typeof gitStatus>>();
+  const previews = new WeakMap<Session, object>();
+  const pendingPreviews = new WeakMap<Session, Promise<string>>();
+  function preview(current: Session, read: () => Promise<string>): Promise<string> {
+    const request = {};
+    previews.set(current, request);
+    const pending = (pendingPreviews.get(current) || Promise.resolve())
+      .catch(() => {})
+      .then(() => {
+        if (previews.get(current) !== request) {
+          throw new Error('Git preview was superseded.');
+        }
+        if (sessions.get(current.workspace.id) !== current) {
+          throw new Error('Git preview session is closed.');
+        }
+        return read();
+      });
+    pendingPreviews.set(current, pending);
+    void pending
+      .finally(() => {
+        if (pendingPreviews.get(current) === pending) {
+          pendingPreviews.delete(current);
+          previews.delete(current);
+        }
+      })
+      .catch(() => {});
+    return pending;
+  }
   async function refreshGitState(selected: Iterable<Session> = sessions.values()): Promise<void> {
     for (const open of selected) {
       statusRequests.delete(open.workspace.root);
@@ -65,9 +92,12 @@ export function registerGitHandlers({
     return gitHistory(session(id).workspace.root, skip);
   });
   handle('gitCommitFiles', (id, hash) => gitCommitFiles(session(id).workspace.root, text(hash)));
-  handle('gitCommitDiff', (id, hash, path) =>
-    gitCommitDiff(session(id).workspace.root, text(hash), text(path))
-  );
+  handle('gitCommitDiff', (id, hash, path) => {
+    const current = session(id);
+    const commit = text(hash);
+    const file = text(path);
+    return preview(current, () => gitCommitDiff(current.workspace.root, commit, file));
+  });
   handle('gitBranches', (id) => gitBranches(session(id).workspace.root));
   handle('gitSwitch', async (id, name, create) => {
     const current = session(id);
@@ -116,10 +146,13 @@ export function registerGitHandlers({
       if (typeof staged !== 'boolean') {
         throw new Error('Invalid Git selection.');
       }
-      const result = await action(session(id).workspace.root, text(path), staged);
-      if (name === 'gitStage') {
-        await refreshGitState();
+      const current = session(id);
+      const file = text(path);
+      if (name === 'gitDiff') {
+        return preview(current, () => action(current.workspace.root, file, staged));
       }
+      const result = await action(current.workspace.root, file, staged);
+      await refreshGitState();
       return result;
     });
   }

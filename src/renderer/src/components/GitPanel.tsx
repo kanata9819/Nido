@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n';
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { GitChange, GitStatus } from '../../../shared/types';
 import { Check, GitBranch, RefreshCw } from 'lucide-react';
 import styles from '../assets/GitPanel.module.css';
@@ -35,7 +35,10 @@ export default function GitPanel({
   const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const locked = useRef(false);
-  const changes = [...(status?.changes || [])].sort((a, b) => Number(b.staged) - Number(a.staged));
+  const changes = useMemo(
+    () => [...(status?.changes || [])].sort((a, b) => Number(b.staged) - Number(a.staged)),
+    [status]
+  );
   const current = changes.find((change) => key(change) === selected);
   const stagedCount = changes.filter((change) => change.staged).length;
   const unstagedCount = changes.length - stagedCount;

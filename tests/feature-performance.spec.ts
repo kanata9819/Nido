@@ -99,6 +99,46 @@ async function open(page: Page, view: string, deferred: string): Promise<void> {
   await page.clock.pauseAt(new Date(Date.now() + 1000));
 }
 
+test('Git changes reuse status ordering while navigating and entering commit messages', async ({
+  page
+}) => {
+  await open(page, 'git', 'gitStatus,gitDiff');
+  await page.evaluate(() => {
+    const metrics = { sorts: 0 };
+    Object.assign(window, { gitOrderingMetrics: metrics });
+    const sort = Array.prototype.sort;
+    Array.prototype.sort = function (...args) {
+      if (this.length === 1000 && this[0]?.path?.startsWith('src/file-')) metrics.sorts++;
+      return sort.apply(this, args);
+    };
+    window.rendererTest.settle('gitStatus', 0, {
+      root: '/alpha',
+      branch: 'main',
+      changes: Array.from({ length: 1000 }, (_, index) => ({
+        path: `src/file-${index}.txt`,
+        status: 'M',
+        staged: index % 2 === 0
+      }))
+    });
+  });
+  const list = page.getByRole('listbox', { name: 'Changed files' });
+  await expect(list.getByRole('option')).toHaveCount(1000);
+  await page.evaluate(() => {
+    (window as unknown as { gitOrderingMetrics: { sorts: number } }).gitOrderingMetrics.sorts = 0;
+  });
+  for (let index = 0; index < 20; index++) await list.press('j');
+  await expect(list.getByRole('option', { selected: true })).toHaveAccessibleName(
+    'src/file-40.txt'
+  );
+  await page.getByRole('textbox', { name: 'Commit message' }).fill('Update files');
+  const sorts = await page.evaluate(
+    () => (window as unknown as { gitOrderingMetrics: { sorts: number } }).gitOrderingMetrics.sorts
+  );
+  console.log(JSON.stringify({ changedFiles: 1000, selectionMoves: 20, sorts }));
+  expect(sorts, 'Unchanged Git data must keep its prepared ordering').toBe(0);
+  await expect(page.getByRole('button', { name: /Commit staged/ })).toBeEnabled();
+});
+
 test('Explorer navigation reuses row indices and batches state writes while flushing on close', async ({
   page
 }) => {

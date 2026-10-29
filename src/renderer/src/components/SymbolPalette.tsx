@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { DocumentSymbolList } from '../../../shared/types';
 import { filterItems } from '../commands';
 import { useFocusGuard } from '../hooks/useFocusGuard';
@@ -47,35 +47,39 @@ export default function SymbolPalette({
       ? symbols
       : undefined;
   const loading = !failure && (!current || current.loading);
-  const items =
-    !loading && !failure
-      ? (current?.items || []).map((symbol, index) => ({
-          key: t(symbol.kind),
-          title: symbol.name,
-          detail: [symbol.container, t('Line {line}', { line: symbol.line })]
-            .filter(Boolean)
-            .join(' · '),
-          run: () => {
-            const canFocus = captureFocus();
-            void window.nido
-              .openSymbol(workspaceId, index + 1, current!.version)
-              .then(() => {
-                if (canFocus()) {
-                  focusEditor();
-                }
-              })
-              .catch((error) => {
-                if (canFocus()) {
-                  setFailure(String(error));
-                }
-              });
-          }
-        }))
-      : [];
+  const items = useMemo(
+    () =>
+      !loading && !failure
+        ? (current?.items || []).map((symbol, index) => ({
+            key: t(symbol.kind),
+            title: symbol.name,
+            detail: [symbol.container, t('Line {line}', { line: symbol.line })]
+              .filter(Boolean)
+              .join(' · '),
+            run: () => {
+              const canFocus = captureFocus();
+              void window.nido
+                .openSymbol(workspaceId, index + 1, current!.version)
+                .then(() => {
+                  if (canFocus()) {
+                    focusEditor();
+                  }
+                })
+                .catch((error) => {
+                  if (canFocus()) {
+                    setFailure(String(error));
+                  }
+                });
+            }
+          }))
+        : [],
+    [loading, failure, current, t, captureFocus, workspaceId, focusEditor]
+  );
+  const filtered = useMemo(() => filterItems(items, query).slice(0, 100), [items, query]);
   return (
     <PaletteItems
       panel="symbols"
-      filtered={filterItems(items, query).slice(0, 100)}
+      filtered={filtered}
       selection={selection}
       query={query}
       loading={loading}

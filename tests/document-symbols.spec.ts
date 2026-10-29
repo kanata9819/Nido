@@ -156,6 +156,58 @@ test('file symbols filter names and containers and keyboard selection opens the 
   await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
 });
 
+test('large symbol palettes reuse prepared items while selecting and filtering', async ({
+  page
+}) => {
+  await open(page);
+  await page.keyboard.press('Control+Shift+o');
+  const palette = page.getByRole('dialog', { name: 'symbols palette' });
+  const filter = palette.getByRole('combobox', { name: 'Filter items' });
+  await expect(filter).toBeFocused();
+  await expect.poll(() => calls(page, 'findSymbols')).toEqual([['alpha']]);
+  await page.evaluate(() => {
+    const metrics = { names: 0 };
+    Object.assign(window, { symbolMetrics: metrics });
+    window.rendererTest.emit({
+      type: 'statePatch',
+      id: 'alpha',
+      state: {
+        symbols: {
+          version: 1,
+          buffer: 1,
+          loading: false,
+          error: '',
+          items: Array.from({ length: 10000 }, (_, index) => ({
+            get name() {
+              metrics.names++;
+              return `function_${index}`;
+            },
+            kind: 'Function',
+            container: 'Module',
+            line: index + 1,
+            column: 1
+          }))
+        }
+      }
+    });
+  });
+  await expect(palette.getByRole('option')).toHaveCount(100);
+  await page.evaluate(() => {
+    (window as unknown as { symbolMetrics: { names: number } }).symbolMetrics.names = 0;
+  });
+  for (let index = 0; index < 20; index++) await filter.press('ArrowDown');
+  await expect(filter).toHaveAttribute('aria-activedescendant', 'symbol-20');
+  await filter.fill('function_9999');
+  await expect(palette.getByRole('option')).toHaveCount(1);
+  const names = await page.evaluate(
+    () => (window as unknown as { symbolMetrics: { names: number } }).symbolMetrics.names
+  );
+  console.log(JSON.stringify({ symbols: 10000, selectionMoves: 20, preparedNameReads: names }));
+  expect(names, 'Selection and query changes must reuse the prepared symbol items').toBe(0);
+  await filter.press('Enter');
+  await expect.poll(() => calls(page, 'openSymbol')).toEqual([['alpha', 10000, 1]]);
+});
+
 test('a partial symbol response keeps valid results selectable beside its warning', async ({
   page
 }) => {
