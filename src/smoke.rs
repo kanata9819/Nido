@@ -479,7 +479,16 @@ fn language_and_debug(root: &Path) -> Result<()> {
         project.join("src/main.rs"),
         "fn double(x: i32) -> i32 {\n    x * 2\n}\nfn main() {\n    let number = 21;\n    let answer = double(number);\n    println!(\"answer={answer}\");\n}\n",
     )?;
-    let mut c = Client::start(&project, &root.join("debug-data"), false, None)?;
+    let mut c = Client::start(
+        &project.join("src/.."),
+        &root.join("debug-data"),
+        false,
+        None,
+    )?;
+    ensure!(
+        c.session.root == crate::files::normal_path(project.clone()),
+        "Debugger workspace root was not canonicalized"
+    );
     c.call("open", json!(["src/main.rs", 6, 5]))?;
     c.call("debug", json!(["breakpoint", 0]))?;
     c.call("debug", json!(["start", 0]))?;

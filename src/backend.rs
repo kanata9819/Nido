@@ -69,7 +69,7 @@ impl Session {
     ) -> Self {
         let session = Self {
             id: uuid::Uuid::new_v4().to_string(),
-            root,
+            root: files::normal_path(root),
             terminal,
             queue: Arc::new((Mutex::new(VecDeque::new()), Condvar::new())),
         };
