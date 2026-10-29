@@ -297,6 +297,63 @@ test('prefetch strips preserve visible row bitmaps and repaint actual content ch
 
 for (const scale of [1, 1.25, 1.5, 2]) {
   for (const opacity of [1, 0.5]) {
+    test(`current line borders survive busy save frames at ${scale * 100}% scale and ${opacity} opacity`, async ({
+      browser
+    }) => {
+      const context = await browser.newContext({ deviceScaleFactor: scale });
+      try {
+        const page = await context.newPage();
+        await page.route('**/save-line-probe', (route) =>
+          route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+        );
+        await page.goto(`${origin}save-line-probe`);
+        const result = await page.evaluate(
+          async ({ moduleUrl, opacity }) => {
+            const { Grid } = await import(moduleUrl);
+            const grid = new Grid();
+            grid.backgroundOpacity = opacity;
+            grid.cursorOpacity = 0;
+            grid.apply([['grid_resize', [1, 20, 5]], ['grid_cursor_goto', [1, 1, 5]], ['flush']]);
+            const canvas = document.createElement('canvas');
+            const paint = (focused = true): number[] => {
+              grid.draw(canvas, 200, 100, 15, 'monospace', focused, undefined, 20);
+              return Array.from(
+                canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data
+              );
+            };
+            const difference = (a: number[], b: number[]): number =>
+              a.reduce((count, value, i) => count + Number(value !== b[i]), 0);
+            const samples: { during: number; after: number }[] = [];
+            let baseline: number[] = [];
+            for (const mode of ['normal', 'insert', 'replace', 'visual']) {
+              grid.apply([['mode_change', [mode, 0]], ['flush']]);
+              const before = paint();
+              baseline = before;
+              grid.apply([['busy_start'], ['flush']]);
+              const during = paint();
+              grid.apply([['busy_stop'], ['flush']]);
+              samples.push({
+                during: difference(during, before),
+                after: difference(paint(), before)
+              });
+            }
+            return { samples, blurred: difference(paint(false), baseline) };
+          },
+          {
+            moduleUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+            opacity
+          }
+        );
+        for (const sample of result.samples) {
+          expect(sample.during).toBe(0);
+          expect(sample.after).toBe(0);
+        }
+        expect(result.blurred).toBeGreaterThan(0);
+      } finally {
+        await context.close();
+      }
+    });
+
     test(`distant cursor and edit damage skip unchanged intervening rows at ${scale * 100}% scale and ${opacity} opacity`, async ({
       browser
     }) => {

@@ -776,7 +776,6 @@ export class GridCanvas {
       }
       if (
         focused &&
-        !this.grid.busy &&
         /^(normal|insert|replace|visual)/.test(this.grid.mode) &&
         cursor.row >= 0 &&
         cursor.row < this.grid.rows &&

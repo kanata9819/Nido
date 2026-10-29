@@ -248,12 +248,13 @@ for (const scale of [1, 1.25, 1.5]) {
           ]);
           const canvas = document.createElement('canvas');
           document.body.append(canvas);
+          // Keep the current-line indicator out of the initial glyph-color samples.
           const draw = (position?: {
             row: number;
             column: number;
             width?: number;
           }): { cellWidth: number; cellHeight: number } =>
-            grid.draw(canvas, 400, 150, 14, 'monospace', true, position, 24);
+            grid.draw(canvas, 400, 150, 14, 'monospace', !grid.busy, position, 24);
           const { cellWidth } = draw();
           const ctx = canvas.getContext('2d')!;
           const dpr = devicePixelRatio;

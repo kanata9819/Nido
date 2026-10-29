@@ -60,7 +60,7 @@ jobs:
           NIDO_TEST_SOFTWARE_GPU: '1'
         run: >-
           pnpm test:renderer
-          --grep "slow touchpad scrolling|fractional text preserves|dense touchpad scrolling|relative line numbers reuse canvases|paint bands bound|distant cursor and edit damage|WebGL is"
+          --grep "slow touchpad scrolling|fractional text preserves|dense touchpad scrolling|relative line numbers reuse canvases|paint bands bound|distant cursor and edit damage|current line borders|WebGL is"
           --output=test-results/renderer-webgl
       - name: Repeat renderer timer checks
         if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
