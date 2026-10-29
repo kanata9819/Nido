@@ -1,0 +1,22 @@
+[package]
+name = "nido-backend"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+nido-core.workspace = true
+anyhow.workspace = true
+ignore.workspace = true
+notify.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+rmpv.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+similar.workspace = true
+trash.workspace = true
+uuid.workspace = true

@@ -18,6 +18,8 @@ MSVC C++ビルドツール、Windows SDK、Node.js/npmが必要です。
 Rustは`rust-toolchain.toml`で1.99.1、GPUIは0.2.2に固定しています。
 Node.jsはTypeScript言語サーバーの取得・実行に使います。
 
+Cargo workspaceの構成・各クレートの責務は[ソース構成](docs/rust-workspace.md)にまとめています。
+
 ```powershell
 ./scripts/prepare-runtime.ps1
 cargo run --locked
@@ -33,8 +35,8 @@ cargo run --locked -- C:\dev\project
 
 ```powershell
 cargo fmt --all -- --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked
+cargo clippy --workspace --locked --all-targets -- -D warnings
+cargo test --workspace --locked
 cargo run --locked -- --smoke-test
 cargo run --locked -- --ui-smoke-test
 # NSISのmakensis.exeが必要

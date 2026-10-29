@@ -3552,24 +3552,46 @@ dependencies = [
  "async-channel 2.5.0",
  "fontdb 0.23.0",
  "gpui",
- "ignore",
- "notify",
+ "nido-backend",
+ "nido-core",
  "pulldown-cmark",
  "raw-window-handle",
- "regex",
- "reqwest",
  "rfd",
- "rmpv",
- "rusty-leveldb",
- "serde",
  "serde_json",
- "sha2 0.10.9",
  "similar",
- "trash",
  "unicode-segmentation",
  "uuid",
  "windows 0.62.2",
  "winresource",
+]
+
+[[package]]
+name = "nido-backend"
+version = "0.4.0"
+dependencies = [
+ "anyhow",
+ "ignore",
+ "nido-core",
+ "notify",
+ "regex",
+ "reqwest",
+ "rmpv",
+ "serde_json",
+ "sha2 0.10.9",
+ "similar",
+ "trash",
+ "uuid",
+]
+
+[[package]]
+name = "nido-core"
+version = "0.4.0"
+dependencies = [
+ "anyhow",
+ "rusty-leveldb",
+ "serde",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]

@@ -12,16 +12,18 @@ Neovim、Luaによる編集機能、言語サーバー、CodeLLDBは引き続き
 
 | 担当 | 実装 |
 | --- | --- |
-| ワークスペース状態、操作、未保存確認、復元 | `src/app.rs`のModel |
-| ウィンドウ、タイトルバー、各パネル、フォーカス | `src/ui.rs`、GPUI |
-| Neovimのセル、補完、Sticky Scrollの描画、エディターIME | `src/grid.rs`、`src/grid_view.rs`、GPUI / Direct3D |
-| パレットなどのテキスト入力、選択、IME | `src/text_input.rs` |
-| Windows UI Automation | `src/accessibility.rs`、AccessKit |
-| アイコン | `src/assets.rs`、`resources/nido/icons` |
-| Neovim、ターミナル、MessagePack-RPC | `src/backend.rs`、`src/rpc.rs` |
-| ファイル、監視、検索、一括置換、Git | `src/files.rs`、`src/git.rs`、notify |
-| 設定、保存、お気に入り、Time Machine、拡張 | `src/settings.rs`、`src/persistence.rs`、`src/history.rs`、`src/packs.rs` |
-| WSL、更新 | `src/wsl.rs`、`src/updater.rs` |
+| 設定、保存、お気に入り、パス検証 | `crates/nido-core/src` |
+| Neovim、ターミナル、MessagePack-RPC | `crates/nido-backend/src/session`、`rpc.rs` |
+| ファイル、検索、一括置換、Git | `crates/nido-backend/src/files`、`git.rs` |
+| Time Machine、拡張、WSL、更新 | `crates/nido-backend/src`の各モジュール |
+| ワークスペース状態、操作、未保存確認、復元 | `crates/nido/src/app`のModelと各責務のモジュール |
+| ウィンドウ、タイトルバー、各パネル、フォーカス | `crates/nido/src/app/ui`、`ui/panels`、GPUI |
+| Neovimのセル、描画、エディターIME | `crates/nido/src/grid`、`app/ui/grid_view`、GPUI / Direct3D |
+| パレットなどのテキスト入力、選択、IME | `crates/nido/src/text_input` |
+| Windows UI Automation | `crates/nido/src/accessibility.rs`、AccessKit |
+| アイコン | `crates/nido/src/assets.rs`、`resources/nido/icons` |
+
+依存の向き、モジュールの探し方、検証対象は[ソース構成](rust-workspace.md)を参照してください。
 
 TS版を基準に、配色、余白、ワークスペースタブ、ファイルタブ、ナビゲーション、
 エクスプローラー、ステータスバー、パレット、パネル、アイコンを再実装しています。
@@ -67,8 +69,8 @@ Windows x64向けです。開発・起動手順はルートのREADMEを参照し
 
 ```powershell
 cargo fmt --all -- --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked
+cargo clippy --workspace --locked --all-targets -- -D warnings
+cargo test --workspace --locked
 cargo run --locked -- --smoke-test
 cargo run --locked -- --ui-smoke-test
 ./scripts/package-windows.ps1

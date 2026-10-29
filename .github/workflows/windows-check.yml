@@ -31,9 +31,9 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check Rust without warnings
-        run: cargo clippy --locked --all-targets -- -D warnings
+        run: cargo clippy --workspace --locked --all-targets -- -D warnings
       - name: Test parsers and data protection
-        run: cargo test --locked
+        run: cargo test --workspace --locked
       - name: Test Neovim integration and native UI state
         run: |
           New-Item -ItemType Directory -Force reports | Out-Null

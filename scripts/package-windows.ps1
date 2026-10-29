@@ -8,7 +8,7 @@ try {
         try {
             # Include the C runtime so Nido starts without a separate VC++ redistributable.
             $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS = "$nidoOldFlags -C target-feature=+crt-static".Trim()
-            & cargo build --release --locked --target x86_64-pc-windows-msvc
+            & cargo build -p nido --release --locked --target x86_64-pc-windows-msvc
             if ($LASTEXITCODE -ne 0) { throw 'Native release build failed.' }
         } finally { $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS = $nidoOldFlags }
     }
