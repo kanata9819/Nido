@@ -80,14 +80,7 @@ export function useGitFileStatus(
           });
         }
       } catch {
-        // Git is optional: ordinary folders and unavailable repositories have no badges.
-        if (!cancelled) {
-          setResult((previous) =>
-            previous?.workspaceId === workspaceId && !Object.keys(previous.decorations).length
-              ? previous
-              : { workspaceId, decorations: emptyDecorations }
-          );
-        }
+        // A failed refresh says nothing about file status; keep the last successful snapshot.
       } finally {
         pending = false;
         if (queued) {

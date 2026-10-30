@@ -2267,6 +2267,43 @@ test('Extensions separates language packs from other extensions and supports key
   await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
 });
 
+test('saving an overflowing file tab preserves its width and scroll position', async ({ page }) => {
+  await page.goto(`${origin}?view=app`);
+  const buffers = Array.from({ length: 8 }, (_, index) => ({
+    id: index + 1,
+    name: `/alpha/source-file-${index + 1}.rs`,
+    modified: index === 7
+  }));
+  const publish = async (modified: boolean): Promise<void> => {
+    await page.evaluate(
+      (buffers) =>
+        window.rendererTest.emit({
+          type: 'state',
+          id: 'alpha',
+          state: { buffers, current: 8, mode: 'n', line: 1, column: 1, filetype: 'rust' }
+        }),
+      buffers.map((buffer) => ({ ...buffer, modified: buffer.id === 8 && modified }))
+    );
+  };
+  const tabs = page.getByRole('tablist', { name: 'Files', exact: true });
+  const selected = tabs.getByRole('tab', { name: 'source-file-8.rs', exact: false });
+  await publish(true);
+  await expect(selected).toHaveAttribute('aria-selected', 'true');
+  await expect(selected.getByLabel('Unsaved')).toBeVisible();
+  const layout = (): Promise<unknown> =>
+    tabs.evaluate((list) => ({
+      scrollLeft: list.scrollLeft,
+      tabs: Array.from(list.children, (tab) => {
+        const { x, width } = tab.getBoundingClientRect();
+        return { x, width };
+      })
+    }));
+  const before = await layout();
+  await publish(false);
+  await expect(selected.getByLabel('Unsaved')).not.toBeVisible();
+  expect(await layout()).toEqual(before);
+});
+
 test('compact mode keeps every session visible and fixes bar heights during hover and keyboard navigation', async ({
   page
 }) => {
@@ -4373,6 +4410,35 @@ test('unchanged Git polls avoid commits while changed and removed badges still u
     },
     { ...status, changes: [] }
   );
+  await expect(badges).toHaveText('{}');
+});
+
+test('failed Git refreshes preserve badges until a successful status replaces them', async ({
+  page
+}) => {
+  await page.goto(`${origin}?view=badges&defer=gitStatus`);
+  await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+  await page.evaluate(() =>
+    window.rendererTest.settle('gitStatus', 0, {
+      root: '/alpha',
+      branch: 'main',
+      changes: [{ path: 'first.ts', status: 'M', staged: false }]
+    })
+  );
+  const badges = page.getByRole('status');
+  await expect(badges).toContainText('Modified');
+  const commits = await badges.getAttribute('data-commits');
+  await page.evaluate(() => {
+    window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
+    window.rendererTest.settle('gitStatus', 0, 'Git temporarily unavailable', true);
+  });
+  await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(0);
+  await expect(badges).toContainText('Modified');
+  await expect(badges).toHaveAttribute('data-commits', commits!);
+  await page.evaluate(() => {
+    window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
+    window.rendererTest.settle('gitStatus', 0, { root: '/alpha', branch: 'main', changes: [] });
+  });
   await expect(badges).toHaveText('{}');
 });
 

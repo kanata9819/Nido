@@ -79,7 +79,11 @@ function FileHeader({
                     {decoration.code}
                   </span>
                 )}
-                {buffer.modified && <span className={styles.unsaved} aria-label={t('Unsaved')} />}
+                <span
+                  className={styles.unsaved}
+                  aria-label={buffer.modified ? t('Unsaved') : undefined}
+                  style={{ visibility: buffer.modified ? 'visible' : 'hidden' }}
+                />
               </button>
               <button
                 className={styles.tabClose}

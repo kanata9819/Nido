@@ -9,6 +9,145 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+test('Ctrl+S preserves inline diagnostics, file tabs and Git badges throughout saving', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-save-display-'));
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  await mkdir(join(root, 'src'));
+  await writeFile(join(root, '.gitignore'), '/target/\n/profile/\n');
+  await writeFile(
+    join(root, 'Cargo.toml'),
+    '[package]\nname="save_display"\nversion="0.1.0"\nedition="2021"\n'
+  );
+  await writeFile(join(root, 'src/main.rs'), 'fn main() {}\n');
+  const git = (...args: string[]): void => {
+    execFileSync('git', args, { cwd: root, windowsHide: true, stdio: 'pipe' });
+  };
+  git('init');
+  git('add', '.');
+  git(
+    '-c',
+    'user.name=Nido test',
+    '-c',
+    'user.email=test@example.invalid',
+    'commit',
+    '-m',
+    'fixture'
+  );
+  await writeFile(join(root, 'src/main.rs'), 'fn main() { let unused = 42; }\n');
+  const running = await electron.launch({
+    args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+    env
+  });
+  try {
+    const page = await running.firstWindow();
+    await page.evaluate(() => localStorage.setItem('nido.formatOnSave', 'true'));
+    await page.reload();
+    await recordEditorDiagnostics(page);
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, root);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    const id = await page.evaluate(
+      () => (window as Window & { editorDiagnostics: { id: string } }).editorDiagnostics.id
+    );
+    await page.evaluate(async (id) => {
+      await window.nido.openFile(id, 'Cargo.toml');
+      await window.nido.openFile(id, 'src/main.rs');
+    }, id);
+    const canvas = page.locator('canvas[aria-label="Neovim editor display"]');
+    await expect(canvas).toHaveAttribute('aria-description', /WARN.*unused variable/, {
+      timeout: 30000
+    });
+    const tabs = page.getByRole('tablist', { name: 'Files', exact: true });
+    await expect(tabs.getByRole('tab')).toHaveCount(2);
+    await expect(tabs.locator('[data-status="M"]').filter({ hasText: /^M$/ })).toHaveCount(1);
+    await page.screenshot({ path: 'test-results/save-display-before.png' });
+    await page.evaluate(() => {
+      const samples: {
+        tabs: string[];
+        selected: string | null;
+        badges: number;
+        diagnosticPixels: number;
+        diagnosticTextPixels: number;
+      }[] = [];
+      const observe = (): void => {
+        const list = document.querySelector('[role="tablist"][aria-label="Files"]')!;
+        const surface = document.querySelector<HTMLCanvasElement>(
+          'canvas[aria-label="Neovim editor display"]'
+        )!;
+        const pixels = surface
+          .getContext('2d')!
+          .getImageData(0, 0, surface.width, Math.min(surface.height, 200)).data;
+        let diagnosticPixels = 0;
+        let diagnosticTextPixels = 0;
+        for (let i = 0; i < pixels.length; i += 4) {
+          if (pixels[i] === 37 && pixels[i + 1] === 34 && pixels[i + 2] === 26) diagnosticPixels++;
+          if (pixels[i] === 203 && pixels[i + 1] === 195 && pixels[i + 2] === 173)
+            diagnosticTextPixels++;
+        }
+        samples.push({
+          tabs: Array.from(
+            list.querySelectorAll('[role="tab"]'),
+            (tab) => tab.getAttribute('title') || ''
+          ),
+          selected: list.querySelector('[aria-selected="true"]')?.getAttribute('title') || null,
+          badges: Array.from(list.querySelectorAll('[data-status="M"]')).filter(
+            (node) => node.textContent === 'M'
+          ).length,
+          diagnosticPixels,
+          diagnosticTextPixels
+        });
+        if (samples.length < 240) requestAnimationFrame(observe);
+      };
+      (window as Window & { saveDisplaySamples?: typeof samples }).saveDisplaySamples = samples;
+      requestAnimationFrame(observe);
+    });
+    for (let i = 0; i < 3; i++) {
+      await page.keyboard.type('A ');
+      if (i !== 1) await page.keyboard.press('Escape');
+      await page.keyboard.press('Control+s');
+      await page.waitForTimeout(500);
+      if (i === 1) await page.keyboard.press('Escape');
+    }
+    await page.waitForTimeout(1500);
+    const samples = await page.evaluate(
+      () =>
+        (
+          window as Window & {
+            saveDisplaySamples: {
+              tabs: string[];
+              selected: string | null;
+              badges: number;
+              diagnosticPixels: number;
+              diagnosticTextPixels: number;
+            }[];
+          }
+        ).saveDisplaySamples
+    );
+    const info = test.info();
+    await info.attach('save-display-frames', {
+      body: JSON.stringify(samples),
+      contentType: 'application/json'
+    });
+    expect(samples.length).toBeGreaterThan(30);
+    expect(
+      samples.filter(
+        (sample) =>
+          sample.tabs.length !== 2 ||
+          !sample.selected?.endsWith('main.rs') ||
+          sample.badges !== 1 ||
+          !sample.diagnosticPixels ||
+          !sample.diagnosticTextPixels
+      )
+    ).toEqual([]);
+    await page.screenshot({ path: 'test-results/save-display-after.png' });
+  } finally {
+    await running.evaluate(({ app }) => app.exit(0));
+    await running.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('favorite workspaces support keyboard access, existing tabs, restart and missing folders', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-favorites-ui-'));
   const alpha = join(root, 'Alpha');
