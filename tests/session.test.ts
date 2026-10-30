@@ -1518,6 +1518,66 @@ test('saving keeps the grid cursor still and viewport progress updates without V
   }
 });
 
+test('saving keeps the active file tab stable with multiple open buffers', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-save-tabs-'));
+  let session: Session | undefined;
+  const currents: number[] = [];
+  try {
+    await writeFile(join(root, 'other.rs'), 'fn other() {}\n');
+    await writeFile(join(root, 'draft.rs'), 'fn main() {}\n');
+    session = await Session.create(root, (event) => {
+      if (
+        (event.type === 'state' || event.type === 'statePatch') &&
+        event.state.current !== undefined
+      ) {
+        currents.push(event.state.current);
+      }
+    });
+    await session.attach(80, 24);
+    await session.openFile('other.rs');
+    const other = (await session.client.request('nvim_eval', ['bufnr()'])) as number;
+    await session.openFile('draft.rs');
+    await session.inputMode();
+    const current = session.state.current;
+    currents.length = 0;
+    for (let i = 0; i < 3; i++) {
+      await session.input('A <Esc>');
+      await session.save(false);
+      await new Promise((done) => setTimeout(done, 100));
+    }
+    await session.client.request('nvim_exec_lua', [
+      `local other = ...
+vim.lsp.get_clients = function(opts)
+  return opts and opts.method == 'textDocument/formatting' and {{}} or {}
+end
+vim.lsp.buf.format = function()
+  vim.api.nvim_buf_call(other, function()
+    vim.api.nvim_exec_autocmds('CursorMoved', {})
+    vim.wait(60, function() return false end, 1)
+  end)
+end`,
+      [other]
+    ]);
+    await session.save(true);
+    await new Promise((done) => setTimeout(done, 100));
+    assert.ok(currents.length > 0);
+    assert.ok(
+      currents.every((buffer) => buffer === current),
+      JSON.stringify(currents)
+    );
+    assert.equal(session.state.buffers.find((buffer) => buffer.id === current)?.modified, false);
+    await session.client.request('nvim_exec_lua', ['vim.bo.readonly = true', []]);
+    await assert.rejects(session.save(false), /readonly|E45/);
+    await session.selectBuffer(other);
+    await new Promise((done) => setTimeout(done, 100));
+    assert.equal(session.state.current, other);
+    assert.equal(currents.at(-1), other, 'failed saves must not suppress subsequent tab changes');
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('save formats before writing only when enabled and a formatter is available', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nido-format-save-'));
   let session: Session | undefined;

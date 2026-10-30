@@ -213,6 +213,8 @@ publish = function()
   pending = true
   vim.schedule(function()
     pending = false
+    -- Formatters can yield inside a temporary buffer context while saving.
+    if vim.g.nido_saving then return end
     refresh_diagnostics()
     local changed_buffers = buffers_dirty
     if changed_buffers then
@@ -304,6 +306,6 @@ vim.api.nvim_create_autocmd({
   'ModeChanged', 'CursorMoved', 'CursorMovedI', 'FileType', 'TextChanged', 'TextChangedI', 'CmdlineLeave',
   'WinEnter', 'WinClosed', 'WinScrolled', 'WinResized', 'LspAttach', 'LspDetach',
 }, { callback = publish })
-vim.api.nvim_create_autocmd('User', { pattern = { 'NidoLineEndings', 'NidoScroll', 'NidoSearch' }, callback = publish })
+vim.api.nvim_create_autocmd('User', { pattern = { 'NidoLineEndings', 'NidoScroll', 'NidoSearch', 'NidoSaved' }, callback = publish })
 vim.api.nvim_create_autocmd('OptionSet', { pattern = { 'fileformat', 'endofline' }, callback = publish })
 publish()

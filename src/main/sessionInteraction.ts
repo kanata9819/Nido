@@ -334,6 +334,8 @@ export class SessionInteraction {
           `local command, format = ...
 local buffer = vim.api.nvim_get_current_buf()
 local formatting_failed = false
+local saving = vim.g.nido_saving
+vim.g.nido_saving = true
 local ok, err = pcall(function()
   if format and #vim.lsp.get_clients({bufnr=buffer, method='textDocument/formatting'}) > 0 then
     -- Formatting is optional: its failure must not discard a requested save.
@@ -348,6 +350,8 @@ local ok, err = pcall(function()
     vim.cmd({cmd=command, mods={silent=true}})
   end
 end)
+vim.g.nido_saving = saving
+vim.api.nvim_exec_autocmds('User', {pattern='NidoSaved'})
 if ok and formatting_failed then
   vim.notify('Formatting failed. Your edits were saved without formatting.', vim.log.levels.WARN, {title='Format on save'})
 end
