@@ -454,6 +454,15 @@ for (const scale of [1, 1.25, 1.5]) {
               ['flush']
             ]);
             let roundedShapes = 0;
+            const textStyles: Record<string, { font: string; baseline: number }> = {};
+            const fillText = CanvasRenderingContext2D.prototype.fillText;
+            CanvasRenderingContext2D.prototype.fillText = function (...args) {
+              const [text, , y] = args;
+              if (text === 'f' || text === 'E') {
+                textStyles[text] = { font: this.font, baseline: y };
+              }
+              fillText.apply(this, args);
+            };
             const roundRect = CanvasRenderingContext2D.prototype.roundRect;
             CanvasRenderingContext2D.prototype.roundRect = function (...args) {
               roundedShapes++;
@@ -493,7 +502,7 @@ for (const scale of [1, 1.25, 1.5]) {
             ]);
             draw();
             const erased = pixel(left + 5, 12);
-            return { corner, background, accent, firstShapes, cachedShapes, erased };
+            return { corner, background, accent, firstShapes, cachedShapes, erased, textStyles };
           },
           {
             moduleUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
@@ -507,6 +516,8 @@ for (const scale of [1, 1.25, 1.5]) {
         expect(result.firstShapes).toBe(2);
         expect(result.cachedShapes).toBe(result.firstShapes);
         expect(result.erased).toEqual([18, 18, 18]);
+        expect(result.textStyles.E.font).toBe(result.textStyles.f.font);
+        expect(result.textStyles.E.baseline).toBe(result.textStyles.f.baseline);
       } finally {
         await context.close();
       }

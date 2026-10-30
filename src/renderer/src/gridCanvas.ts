@@ -238,7 +238,7 @@ export class GridCanvas {
       let style = cellStyles.get(id);
       if (!style) {
         const h = this.grid.highlights.get(id) || {};
-        const textSize = h.codeLens ? fontSize * 0.8 : h.diagnostic ? fontSize * 0.9 : fontSize;
+        const textSize = h.codeLens ? fontSize * 0.8 : fontSize;
         style = {
           highlight: h,
           background: cellBackground(h, this.grid.background, this.grid.foreground),
