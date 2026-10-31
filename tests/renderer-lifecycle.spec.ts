@@ -54,6 +54,53 @@ test.beforeAll(async () => {
   origin = server.resolvedUrls!.local[0];
 });
 
+test('font family migrates the previous default while preserving custom settings', async ({
+  page
+}) => {
+  const previousDefault = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
+  const currentDefault = '"Cascadia Code", "Consolas", "Meiryo", "Yu Gothic UI", monospace';
+  const cases = [
+    { saved: null, expected: currentDefault },
+    { saved: previousDefault, expected: currentDefault },
+    {
+      saved: '"Cascadia Code", "Yu Gothic UI", monospace',
+      expected: '"Cascadia Code", "Yu Gothic UI", monospace'
+    },
+    { saved: 'Consolas', expected: 'Consolas' },
+    { saved: '', expected: '' }
+  ];
+
+  await page.goto(origin);
+  for (const { saved, expected } of cases) {
+    await page.evaluate((family) => {
+      localStorage.clear();
+      localStorage.setItem('nido.language', 'en');
+      if (family !== null) localStorage.setItem('nido.fontFamily', family);
+    }, saved);
+    await page.goto(`${origin}?view=app`);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const input = page.getByRole('textbox', { name: 'Font family', exact: true });
+    await expect(input).toHaveValue(expected);
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem('nido.fontFamily')))
+      .toBe(expected);
+
+    await page.reload();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(input).toHaveValue(expected);
+  }
+
+  // After migration, explicitly selecting the former default must stick.
+  const input = page.getByRole('textbox', { name: 'Font family', exact: true });
+  await input.fill(previousDefault);
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('nido.fontFamily')))
+    .toBe(previousDefault);
+  await page.reload();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(input).toHaveValue(previousDefault);
+});
+
 for (const [scale, size, family] of [
   [1, 15, '"Cascadia Code", monospace'],
   [1.25, 18, '"Cascadia Code", monospace'],

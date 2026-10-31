@@ -2,7 +2,8 @@ import { terminalShells, uiThemes, type TerminalShell, type UITheme } from '../.
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { parseLanguage, type Language } from '../../../shared/i18n';
 
-export const defaultFontFamily = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
+const previousDefaultFontFamily = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
+export const defaultFontFamily = '"Cascadia Code", "Consolas", "Meiryo", "Yu Gothic UI", monospace';
 export const defaultFontWeight = 350;
 export type ActivityBarPosition = 'left' | 'top';
 
@@ -111,12 +112,17 @@ export function useEditorSettings(): EditorSettings {
   useEffect(() => {
     localStorage.setItem('nido.clipboardSharing', String(clipboardSharing));
   }, [clipboardSharing]);
-  const [fontFamily, setFontFamily] = useState(
-    () => localStorage.getItem('nido.fontFamily') ?? defaultFontFamily
-  );
+  const [fontFamily, setFontFamily] = useState(() => {
+    const saved = localStorage.getItem('nido.fontFamily');
+    const migrated = localStorage.getItem('nido.fontFamily.meiryoMigration') === 'true';
+    return saved === null || (!migrated && saved === previousDefaultFontFamily)
+      ? defaultFontFamily
+      : saved;
+  });
 
   useEffect(() => {
     localStorage.setItem('nido.fontFamily', fontFamily);
+    localStorage.setItem('nido.fontFamily.meiryoMigration', 'true');
   }, [fontFamily]);
 
   const [fontWeight, setFontWeight] = useState(() => {
