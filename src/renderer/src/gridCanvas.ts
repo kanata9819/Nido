@@ -689,6 +689,16 @@ export class GridCanvas {
               if (start < image.height) {
                 ctx.fillRect(left, start / dpr, 1 / dpr, (image.height - start) / dpr);
               }
+            } else if (h.gitSign && cell.text === '▎') {
+              // Git change bars cover the full row, including line spacing.
+              // Use the row image's physical height so fractional DPI leaves no gaps.
+              const left = Math.round(x * dpr);
+              ctx.fillRect(
+                left / dpr,
+                0,
+                Math.max(1, Math.round(2 * dpr)) / dpr,
+                image.height / dpr
+              );
             } else if (cell.text === '│') {
               // Box-drawing lines must span the cell, including the line spacing.
               ctx.fillRect(Math.round(x + cellWidth / 2), y, 1, rowHeight);
@@ -783,9 +793,29 @@ export class GridCanvas {
         cursorTops[0] + cellHeight > paintTop
       ) {
         const y = this.grid.rowY(cursor.row);
+        // Do not let the current-line border break Git change bars.
+        const signs: number[] = [];
+        this.grid.cells[cursor.row]?.forEach((cell, column) => {
+          if (cell.text === '▎' && this.grid.highlights.get(cell.highlight)?.gitSign) {
+            signs.push(column);
+          }
+        });
+        if (signs.length) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(0, 0, width, height);
+          for (const column of signs) {
+            const left = Math.round(column * cellWidth * dpr);
+            ctx.rect(left / dpr, 0, Math.max(1, Math.round(2 * dpr)) / dpr, height);
+          }
+          ctx.clip('evenodd');
+        }
         ctx.fillStyle = '#46515c';
         ctx.fillRect(0, y, width, 1);
         ctx.fillRect(0, y + cellHeight - 1, width, 1);
+        if (signs.length) {
+          ctx.restore();
+        }
       }
       if (cursorTops[1] < paintBottom && cursorTops[1] + cellHeight > paintTop) {
         this.drawCursor(ctx, cellWidth, cellHeight, focused, cursorPosition);

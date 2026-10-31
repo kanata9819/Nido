@@ -54,6 +54,88 @@ test.beforeAll(async () => {
   origin = server.resolvedUrls!.local[0];
 });
 
+for (const scale of [1, 1.25, 1.5, 2]) {
+  test(`Git change bars cover the line spacing at ${scale * 100}% scale`, async ({ browser }) => {
+    const context = await browser.newContext({ deviceScaleFactor: scale });
+    try {
+      const page = await context.newPage();
+      await page.route('**/git-sign-probe', (route) =>
+        route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+      );
+      await page.goto(`${origin}git-sign-probe`);
+      const results = await page.evaluate(
+        async (url) => {
+          const { Grid } = await import(url);
+          return [18, 23].map((lineHeight) => {
+            const grid = new Grid();
+            grid.background = '#121212';
+            grid.busy = true;
+            grid.apply([
+              ['grid_resize', [1, 20, 8]],
+              [
+                'hl_attr_define',
+                [1, { foreground: 0x2ea043 }, {}, [{ hi_name: 'NidoGitAdded' }]],
+                [2, { foreground: 0x0078d4 }, {}, [{ hi_name: 'NidoGitChanged' }]],
+                [3, { foreground: 0xf85149 }, {}, [{ hi_name: 'NidoGitDeleted' }]]
+              ],
+              [
+                'grid_line',
+                ...[1, 1, 1, 2, 2, 3].map((id, row) => [
+                  1,
+                  row,
+                  0,
+                  [
+                    [' ', 0, 2],
+                    [id === 3 ? '▸' : '▎', id]
+                  ]
+                ])
+              ],
+              ['flush']
+            ]);
+            const canvas = document.createElement('canvas');
+            const { cellWidth } = grid.draw(
+              canvas,
+              200,
+              lineHeight * 8,
+              14,
+              'monospace',
+              true,
+              undefined,
+              lineHeight
+            );
+            const ctx = canvas.getContext('2d')!;
+            const x = Math.round(2 * cellWidth * devicePixelRatio);
+            const pixels = ctx.getImageData(
+              x,
+              0,
+              1,
+              Math.round(lineHeight * 7 * devicePixelRatio)
+            ).data;
+            const rgb = (y: number): number[] => Array.from(pixels.slice(y * 4, y * 4 + 3));
+            const boundary = Math.round(lineHeight * 3 * devicePixelRatio);
+            const blueEnd = Math.round(lineHeight * 5 * devicePixelRatio);
+            return {
+              added: Array.from({ length: boundary }, (_, y) => rgb(y)),
+              changed: Array.from({ length: blueEnd - boundary }, (_, y) => rgb(boundary + y)),
+              deletedTop: rgb(blueEnd),
+              blank: rgb(Math.round(lineHeight * 6.5 * devicePixelRatio))
+            };
+          });
+        },
+        `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
+      );
+      for (const result of results) {
+        expect(result.added.every((pixel) => pixel.join() === '46,160,67')).toBe(true);
+        expect(result.changed.every((pixel) => pixel.join() === '0,120,212')).toBe(true);
+        expect(result.deletedTop).toEqual([18, 18, 18]);
+        expect(result.blank).toEqual([18, 18, 18]);
+      }
+    } finally {
+      await context.close();
+    }
+  });
+}
+
 test('font family migrates the previous default while preserving custom settings', async ({
   page
 }) => {

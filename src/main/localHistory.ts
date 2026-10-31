@@ -162,7 +162,7 @@ export class LocalHistory {
         lines > historyLimits.lines + 1 ||
         content.text.includes('\0')
       ) {
-        throw new Error('Time Machine supports text files up to 1 MB and 20,000 lines.');
+        throw new Error('Time Machine supports text files up to 4 MiB and 100,000 lines.');
       }
       const data = await this.read(path);
       const previous = data.revisions[0];

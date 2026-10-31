@@ -33,7 +33,7 @@ export function registerHistoryHandlers({
       type: 'notification',
       id: s.workspace.id,
       title: 'Time Machine',
-      message: String(error),
+      message: error instanceof Error ? error.message : String(error),
       severity: 'error'
     });
   };

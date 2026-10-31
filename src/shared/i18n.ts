@@ -119,6 +119,12 @@ export const japanese: Record<string, string> = {
     '名前のあるテキストファイルを開くと、編集タイムマシンを使えます。',
   'Time Machine supports text files up to 1 MB and 20,000 lines.':
     '編集タイムマシンは1MB・20,000行までのテキストファイルに対応しています。',
+  'Time Machine supports text files up to 4 MiB and 100,000 lines.':
+    '編集タイムマシンは4 MiB・100,000行までのテキストファイルに対応しています。',
+  'This unsaved file exceeds the Time Machine limit (4 MiB or 100,000 lines) and cannot be recovered after an unexpected exit. Save it to keep your changes.':
+    'この未保存ファイルは編集タイムマシンの上限（4 MiB・100,000行）を超えているため、予期しない終了後に復元できません。変更を残すには保存してください。',
+  'This unsaved file cannot be captured by Time Machine because it contains binary data. Save it to keep your changes.':
+    'この未保存ファイルにはバイナリデータが含まれているため、編集タイムマシンに記録できません。変更を残すには保存してください。',
   'The file changed. Refresh the preview before restoring.':
     'ファイルが変更されています。差分を更新してから復元してください。',
   'The active file changed. Reopen Time Machine.':
@@ -784,6 +790,8 @@ export const japanese: Record<string, string> = {
   'Type a choice to continue': '選択肢のキーを入力してください',
   'Nido update': 'Nidoの更新',
   'Workspace recovery': 'ワークスペースの復元',
+  'Workspace recovery supports up to 100 untitled buffers, 8 MiB each and 16 MiB total. Save large untitled buffers to resume checkpoints.':
+    'ワークスペースの復元は、無名バッファ100件、1件8 MiB、合計16 MiBまで対応しています。大きな無名バッファを保存すると、復元用の保存を再開できます。',
   'Formatting failed. Your edits were saved without formatting.':
     '自動整形に失敗しました。編集内容は整形せずに保存しました。',
   'Version restored. History could not be updated; your previous edits are preserved.':

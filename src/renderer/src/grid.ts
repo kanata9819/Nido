@@ -516,6 +516,7 @@ export class Grid {
                 (item) => item.hi_name === 'NidoCodeLens' || item.hi_name === 'NidoCodeLensHint'
               ),
               indentGuide: info?.some((item) => /^NidoIndent\d+$/.test(item.hi_name || '')),
+              gitSign: info?.some((item) => /^NidoGit(Added|Changed)$/.test(item.hi_name || '')),
               bracketMatch: info?.some((item) => item.hi_name === 'NidoBracketMatch'),
               wordHighlight: info?.some((item) =>
                 /^LspReference(Text|Read|Write)$/.test(item.hi_name || '')

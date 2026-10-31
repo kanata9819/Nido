@@ -1,5 +1,9 @@
 local M = {}
-local max_bytes, max_lines = 1048576, 20000
+local max_bytes, max_lines = 4 * 1048576, 100000
+local limit_error = 'Time Machine supports text files up to 4 MiB and 100,000 lines.'
+local limit_warning = 'This unsaved file exceeds the Time Machine limit (4 MiB or 100,000 lines) and cannot be recovered after an unexpected exit. Save it to keep your changes.'
+local binary_warning = 'This unsaved file cannot be captured by Time Machine because it contains binary data. Save it to keep your changes.'
+local warned = {}
 
 local function snapshot(buffer, strict)
   if not vim.api.nvim_buf_is_loaded(buffer) or not vim.bo[buffer].buflisted
@@ -9,26 +13,26 @@ local function snapshot(buffer, strict)
   end
   local count = vim.api.nvim_buf_line_count(buffer)
   if count > max_lines or vim.api.nvim_buf_get_offset(buffer, count) > max_bytes then
-    if strict then return { error = 'Time Machine supports text files up to 1 MB and 20,000 lines.' } end
-    return nil
+    if strict then return { error = limit_error } end
+    return nil, limit_warning
   end
   local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
   -- Neovim represents embedded NUL bytes as newlines inside a buffer line.
   for _, line in ipairs(lines) do
     if line:find('\n', 1, true) then
       if strict then return { error = 'Time Machine only supports text files.' } end
-      return nil
+      return nil, binary_warning
     end
   end
   local text = table.concat(lines, '\n')
   if vim.bo[buffer].endofline then text = text .. '\n' end
   if text:find('\0', 1, true) then
     if strict then return { error = 'Time Machine only supports text files.' } end
-    return nil
+    return nil, binary_warning
   end
   if #text > max_bytes then
-    if strict then return { error = 'Time Machine supports text files up to 1 MB and 20,000 lines.' } end
-    return nil
+    if strict then return { error = limit_error } end
+    return nil, limit_warning
   end
   return {
     path = vim.api.nvim_buf_get_name(buffer), buffer = buffer,
@@ -43,6 +47,11 @@ end
 
 function M.changed(tokens)
   local previous, result, bytes = {}, {}, 0
+  for buffer in pairs(warned) do
+    if not vim.api.nvim_buf_is_valid(buffer) or not vim.api.nvim_buf_is_loaded(buffer) then
+      warned[buffer] = nil
+    end
+  end
   for _, token in ipairs(tokens) do previous[token[1]] = token end
   -- Capture the active edit first even when many restored buffers fill the batch.
   local current = vim.api.nvim_get_current_buf()
@@ -55,7 +64,16 @@ function M.changed(tokens)
       local token = previous[buffer]
       if not token or token[2] ~= vim.api.nvim_buf_get_changedtick(buffer)
           or token[3] ~= vim.bo[buffer].fileformat or token[4] ~= vim.bo[buffer].endofline then
-        local value = snapshot(buffer, false)
+        local value, warning = snapshot(buffer, false)
+        if warning and vim.bo[buffer].modified then
+          if warned[buffer] ~= warning and vim.g.nido_channel then
+            warned[buffer] = warning
+            vim.rpcnotify(vim.g.nido_channel, 'nido:message', warning, 3,
+              'Time Machine: ' .. vim.api.nvim_buf_get_name(buffer))
+          end
+        else
+          warned[buffer] = nil
+        end
         if value then
           table.insert(result, value)
           bytes = bytes + #value.text

@@ -6,6 +6,7 @@ export interface Cell {
 export interface Highlight {
   codeLens?: boolean;
   indentGuide?: boolean;
+  gitSign?: boolean;
   bracketMatch?: boolean;
   wordHighlight?: boolean;
   diagnostic?: boolean;

@@ -6,7 +6,13 @@ import { join } from 'node:path';
 import { LocalHistory } from '../src/main/localHistory';
 import { HistoryService } from '../src/main/historyService';
 import { Session } from '../src/main/session';
-import type { HistoryContent, HistoryToken, HistoryVersion } from '../src/shared/history';
+import {
+  historyLimits,
+  type HistoryContent,
+  type HistoryToken,
+  type HistoryVersion
+} from '../src/shared/history';
+import type { NidoEvent } from '../src/shared/types';
 
 const content = (text: string): HistoryContent => ({
   text,
@@ -193,7 +199,7 @@ test('history retention serializes large revisions once while discarding the old
   const root = await fixture(context);
   const directory = join(root, 'history');
   const file = join(root, 'large.txt');
-  const store = new LocalHistory(directory);
+  const store = new LocalHistory(directory, { ...historyLimits, historyBytes: 8 * 1024 * 1024 });
   const versions: HistoryVersion[] = [];
   for (let i = 0; i < 8; i++) {
     versions.push(await store.record(file, content(`${i}${'x'.repeat(800_000)}`), 'draft'));
@@ -285,6 +291,36 @@ test('unsaved drafts survive a new Neovim session and restore without writing th
     await session.input('u');
     await session.inputMode();
     assert.equal(await session.client.request('nvim_get_current_line', []), 'original');
+  } finally {
+    await session.stop();
+  }
+});
+
+test('a draft larger than the former limit can be recovered after restarting', async (context) => {
+  const root = await fixture(context);
+  const file = join(root, 'large.txt');
+  const original = `original\n${`${'x'.repeat(1024)}\n`.repeat(1100)}`;
+  await writeFile(file, original);
+  const directory = join(root, 'history');
+  let session = await Session.create(root, () => {});
+  let service = new HistoryService(new LocalHistory(directory));
+  try {
+    await session.openFile('large.txt');
+    await session.input('gg0iDRAFT <Esc>');
+    await session.inputMode();
+    await service.capture(session);
+    const draft = (await service.store.list(file)).find((version) => version.kind === 'draft')!;
+    assert.ok(draft);
+    assert.ok(draft.bytes > 1024 * 1024);
+    await session.stop();
+    session = await Session.create(root, () => {});
+    service = new HistoryService(new LocalHistory(directory));
+    await session.openFile('large.txt');
+    const preview = await service.preview(session, file, draft.id);
+    await service.restore(session, file, draft.id, preview.token);
+    const restored = (await session.historyCurrent()).text;
+    assert.equal(restored, `DRAFT ${original}`);
+    assert.equal(await readFile(file, 'utf8'), original);
   } finally {
     await session.stop();
   }
@@ -401,7 +437,10 @@ test('unchanged history transfers no text and oversized buffers stay outside the
   const root = await fixture(context);
   await writeFile(join(root, 'notes.txt'), 'small\n');
   await writeFile(join(root, 'binary.dat'), Buffer.from('head\0tail\n'));
-  const session = await Session.create(root, () => {});
+  const notices: Extract<NidoEvent, { type: 'notification' }>[] = [];
+  const session = await Session.create(root, (event) => {
+    if (event.type === 'notification') notices.push(event);
+  });
   try {
     await session.openFile('notes.txt');
     const initial = await session.historySnapshots([]);
@@ -414,11 +453,47 @@ test('unchanged history transfers no text and oversized buffers stay outside the
     ]);
     assert.deepEqual(await session.historySnapshots(tokens), []);
     await session.client.request('nvim_exec_lua', [
-      "vim.api.nvim_buf_set_lines(0, 0, -1, false, {string.rep('x', 1048577)})",
+      "vim.api.nvim_buf_set_lines(0, 0, -1, false, {string.rep('x', 4194305)})",
       []
     ]);
     assert.deepEqual(await session.historySnapshots(tokens), []);
-    await assert.rejects(session.historyCurrent(), /1 MB and 20,000 lines/);
+    await assert.rejects(session.historyCurrent(), /4 MiB and 100,000 lines/);
+    assert.equal(
+      notices.filter((notice) => notice.message.includes('exceeds the Time Machine limit')).length,
+      1
+    );
+    await session.historySnapshots(tokens);
+    assert.equal(
+      notices.filter((notice) => notice.message.includes('exceeds the Time Machine limit')).length,
+      1
+    );
+    await session.client.request('nvim_exec_lua', [
+      "vim.api.nvim_buf_set_lines(0, 0, -1, false, {'small again'})",
+      []
+    ]);
+    await session.historySnapshots(tokens);
+    await session.client.request('nvim_exec_lua', [
+      "vim.api.nvim_buf_set_lines(0, 0, -1, false, {string.rep('x', 4194305)})",
+      []
+    ]);
+    await session.historySnapshots(tokens);
+    assert.equal(
+      notices.filter((notice) => notice.message.includes('exceeds the Time Machine limit')).length,
+      2
+    );
+    await session.client.request('nvim_exec_lua', [
+      `local b = vim.api.nvim_create_buf(true, false)
+       vim.api.nvim_buf_set_name(b, vim.fn.getcwd() .. '/second-large.txt')
+       vim.api.nvim_buf_set_lines(b, 0, -1, false, {string.rep('x', 4194305)})
+       vim.api.nvim_set_current_buf(b)`,
+      []
+    ]);
+    await session.historySnapshots(tokens);
+    const warnings = notices.filter((notice) =>
+      notice.message.includes('exceeds the Time Machine limit')
+    );
+    assert.equal(warnings.length, 3);
+    assert.match(warnings[2].title, /second-large\.txt/);
     await session.openFile('binary.dat');
     await assert.rejects(session.historyCurrent(), /only supports text files/);
     await session.client.request('nvim_exec_lua', [

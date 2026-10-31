@@ -51,6 +51,15 @@ export interface SavedWorkspace {
   root: string;
   files: { path: string; line: number; column: number }[];
   current: string;
+  untitled?: {
+    id?: string;
+    lines: string[];
+    endOfLine: boolean;
+    fileformat: 'unix' | 'dos' | 'mac';
+    line: number;
+    column: number;
+  }[];
+  currentUntitled?: number;
 }
 export interface BufferInfo {
   id: number;

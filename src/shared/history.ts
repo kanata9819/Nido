@@ -1,9 +1,9 @@
 export const historyLimits = {
-  fileBytes: 1024 * 1024,
-  lines: 20000,
+  fileBytes: 4 * 1024 * 1024,
+  lines: 100000,
   versions: 20,
-  historyBytes: 8 * 1024 * 1024,
-  totalBytes: 64 * 1024 * 1024,
+  historyBytes: 32 * 1024 * 1024,
+  totalBytes: 128 * 1024 * 1024,
   files: 200
 } as const;
 

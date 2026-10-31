@@ -265,3 +265,95 @@ test('background snapshots preserve detached scrolling while saving the editing 
     await session.stop();
   }
 });
+
+test('workspace recovery preserves multiple untitled drafts and the active cursor', async (context) => {
+  const root = await temporaryRoot(context);
+  const path = join(root, 'workspaces.json');
+  await writeFile(join(root, 'notes.txt'), 'unchanged on disk\n');
+  const first = await Session.create(root, () => {});
+  const restored = await Session.create(root, () => {});
+  try {
+    await first.openFile('notes.txt');
+    await first.client.request('nvim_exec_lua', [
+      `vim.cmd('enew')
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, {'first 日本語', 'second', 'NUL' .. string.char(0) .. 'tail'})
+      vim.bo.modified = true
+      vim.cmd('enew')
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, {'another draft'})
+      vim.bo.endofline = false
+      vim.bo.modified = true
+      vim.api.nvim_win_set_cursor(0, {1, 4})`,
+      []
+    ]);
+    const snapshot = await first.snapshot();
+    assert.equal(snapshot.untitled?.length, 2);
+    assert.equal(snapshot.untitled?.[0].lines[2], 'NUL\0tail');
+    assert.equal(snapshot.currentUntitled, 1);
+    await writeLayout(path, { version: 1, active: 0, workspaces: [snapshot] });
+    assert.deepEqual(await restored.restore((await readLayout(path)).workspaces[0]), []);
+    const recovered = await restored.snapshot();
+    assert.deepEqual(recovered.untitled, snapshot.untitled);
+    assert.equal(recovered.currentUntitled, 1);
+    assert.equal(await restored.modified(), true);
+    assert.equal(await readFile(join(root, 'notes.txt'), 'utf8'), 'unchanged on disk\n');
+    assert.equal((await restored.snapshot({ includeUntitled: false })).untitled, undefined);
+    await first.openFile('notes.txt');
+    const fileActive = await first.snapshot();
+    const recoveredFileActive = await Session.create(root, () => {});
+    try {
+      await recoveredFileActive.restore(fileActive);
+      const active = await recoveredFileActive.snapshot();
+      assert.equal(active.current, fileActive.current);
+      assert.equal(active.currentUntitled, undefined);
+      assert.deepEqual(active.untitled, fileActive.untitled);
+    } finally {
+      await recoveredFileActive.stop();
+    }
+    await restored.client.request('nvim_exec_lua', [
+      `vim.api.nvim_buf_set_name(0, ...)
+      vim.cmd('write')`,
+      [join(root, 'saved.txt')]
+    ]);
+    const afterSave = await restored.snapshot();
+    assert.equal(afterSave.untitled?.length, 1);
+    assert.equal(afterSave.untitled?.[0].id, snapshot.untitled?.[0].id);
+    await writeLayout(path, { version: 1, active: 0, workspaces: [afterSave] });
+    await writeFile(path, '{corrupt');
+    const fromBackup = (await readLayout(path)).workspaces[0];
+    assert.deepEqual(fromBackup.untitled, [snapshot.untitled?.[0]]);
+    assert.equal(fromBackup.currentUntitled, undefined);
+    assert.match(await readFile(join(root, 'saved.txt'), 'utf8'), /^another draft(?:\r?\n)?$/);
+  } finally {
+    await Promise.all([first.stop(), restored.stop()]);
+  }
+});
+
+test('oversized untitled drafts fail checkpoints rather than silently losing recovery data', async (context) => {
+  const root = await temporaryRoot(context);
+  const session = await Session.create(root, () => {});
+  try {
+    await session.client.request('nvim_exec_lua', [
+      `vim.api.nvim_buf_set_lines(0, 0, -1, false, {string.rep('x', 8 * 1024 * 1024 + 1)})
+      vim.bo.modified = true`,
+      []
+    ]);
+    await assert.rejects(session.snapshot(), /Workspace recovery supports up to 100/);
+    assert.equal((await session.snapshot({ includeUntitled: false })).untitled, undefined);
+  } finally {
+    await session.stop();
+  }
+});
+
+test('explicit discard removes untitled drafts from the backup layout', async (context) => {
+  const root = await temporaryRoot(context);
+  const path = join(root, 'workspaces.json');
+  const withDraft = layoutFor(root);
+  withDraft.workspaces[0].untitled = [
+    { lines: ['private draft'], endOfLine: true, fileformat: 'unix', line: 1, column: 0 }
+  ];
+  withDraft.workspaces[0].currentUntitled = 0;
+  await writeLayout(path, withDraft);
+  await writeLayout(path, layoutFor(root), { replaceBackup: true });
+  await writeFile(path, '{corrupt');
+  assert.deepEqual(await readLayout(path), layoutFor(root));
+});

@@ -4,7 +4,7 @@ import { readSavedFile } from './helpers/files';
 import { attachEditorDiagnostics, recordEditorDiagnostics } from './helpers/editor-diagnostics';
 import { installRowImageProbe } from './helpers/row-image-probe';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -4649,6 +4649,28 @@ test('stage all keeps HEAD gutter marks until commit and preserves unsaved edits
     await page.keyboard.press('Enter');
     const canvas = page.locator('canvas:visible');
     await expect(canvas).toHaveAttribute('aria-description', /▎.*changed/);
+    // The actual Neovim sign highlight must paint the entire row, including spacing.
+    await expect
+      .poll(() =>
+        canvas.evaluate((element: HTMLCanvasElement) => {
+          const ctx = element.getContext('2d')!;
+          const height = Math.round(18 * devicePixelRatio);
+          const { data, width } = ctx.getImageData(0, 0, element.width, height);
+          for (let x = 0; x < width; x++) {
+            let continuous = true;
+            for (let y = 0; y < height; y++) {
+              const index = (y * width + x) * 4;
+              if (data[index] !== 0 || data[index + 1] !== 120 || data[index + 2] !== 212) {
+                continuous = false;
+                break;
+              }
+            }
+            if (continuous) return true;
+          }
+          return false;
+        })
+      )
+      .toBe(true);
     await page.keyboard.type('A unsaved');
     await page.keyboard.press('Escape');
     await expect(canvas).toHaveAttribute('aria-description', /changed unsaved/);
@@ -4681,6 +4703,151 @@ test('stage all keeps HEAD gutter marks until commit and preserves unsaved edits
   } finally {
     await running.evaluate(({ app }) => app.exit(0));
     await running.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+test('an untitled draft returns after an abrupt exit without writing a file', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-untitled-recovery-'));
+  const workspace = join(root, 'workspace');
+  const profile = join(root, 'profile');
+  await mkdir(workspace);
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  try {
+    const launch = (): ReturnType<typeof electron.launch> =>
+      electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
+    running = await launch();
+    let page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, workspace);
+    const input = page.getByRole('textbox', { name: 'Neovim input' });
+    await expect(input).toBeFocused();
+    await page.keyboard.type('i');
+    await page.keyboard.insertText('untitled 日本語 draft');
+    await page.keyboard.press('Escape');
+    const layout = join(profile, 'workspaces.json');
+    await expect
+      .poll(
+        async () => {
+          const saved = await readSavedFile(layout);
+          if (!saved) return false;
+          const data = JSON.parse(saved) as {
+            workspaces: { untitled?: { lines: string[] }[] }[];
+          };
+          return data.workspaces.some((item) =>
+            item.untitled?.some((draft) => draft.lines.join('\n') === 'untitled 日本語 draft')
+          );
+        },
+        { timeout: 20000 }
+      )
+      .toBe(true);
+    await running.evaluate(({ app }) => app.exit(0));
+    await running.close();
+    running = await launch();
+    page = await running.firstWindow();
+    expect(await readdir(workspace)).toEqual([]);
+    const canvas = page.locator('canvas[aria-label="Neovim editor display"]:visible');
+    await expect(canvas).toHaveAttribute('aria-description', /untitled 日本語 draft/);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    expect(await readFile(layout, 'utf8')).toContain('untitled 日本語 draft');
+  } finally {
+    if (running) {
+      await running.evaluate(({ app }) => app.exit(0)).catch(() => {});
+      await running.close().catch(() => {});
+    }
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+test('oversized untitled drafts show a localized recovery warning', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-untitled-limit-'));
+  const workspace = join(root, 'workspace');
+  await mkdir(workspace);
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const running = await electron.launch({
+    args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+    env
+  });
+  try {
+    const page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, workspace);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('ja');
+    await page.keyboard.press('Escape');
+    const input = page.getByRole('textbox', { name: 'Neovim入力' });
+    await expect(input).toBeFocused();
+    await page.keyboard.type(
+      ":lua vim.api.nvim_buf_set_lines(0, 0, -1, false, {string.rep('x', 8 * 1024 * 1024 + 1)})"
+    );
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('alert', { name: 'ワークスペースの復元' })).toContainText(
+      '無名バッファ100件、1件8 MiB、合計16 MiBまで対応しています',
+      { timeout: 20000 }
+    );
+  } finally {
+    await running.evaluate(({ app }) => app.exit(0)).catch(() => {});
+    await running.close().catch(() => {});
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+test('disabled automatic history excludes untitled drafts from workspace checkpoints', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-untitled-paused-'));
+  const workspace = join(root, 'workspace');
+  const profile = join(root, 'profile');
+  await mkdir(workspace);
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
+  try {
+    const page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, workspace);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const automatic = page.getByRole('checkbox', { name: 'Automatic edit history' });
+    await automatic.uncheck();
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem('nido.historyEnabled')))
+      .toBe('false');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.type('iprivate draft while paused');
+    await page.keyboard.press('Escape');
+    await expect(
+      page.locator('canvas[aria-label="Neovim editor display"]:visible')
+    ).toHaveAttribute('aria-description', /private draft while paused/);
+    // A new window size proves the checkpoint was taken after the edit.
+    const bounds = await running.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      window.unmaximize();
+      window.setSize(1000, 700);
+      return window.getNormalBounds();
+    });
+    const layout = join(profile, 'workspaces.json');
+    await expect
+      .poll(
+        async () => {
+          const saved = await readSavedFile(layout);
+          if (!saved) return false;
+          const data = JSON.parse(saved) as { window?: { width: number; height: number } };
+          return data.window?.width === bounds.width && data.window.height === bounds.height;
+        },
+        { timeout: 20000 }
+      )
+      .toBe(true);
+    const saved = await readFile(layout, 'utf8');
+    expect(saved).not.toContain('private draft while paused');
+    expect(JSON.parse(saved).workspaces[0].untitled).toBeUndefined();
+  } finally {
+    await running.evaluate(({ app }) => app.exit(0)).catch(() => {});
+    await running.close().catch(() => {});
     await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });

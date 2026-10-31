@@ -10,6 +10,7 @@ import { createTranslator } from '../shared/i18n';
 import { parseWslPath } from '../shared/wsl';
 import { resolveWslFolder, wslDistributions } from './wsl';
 import type { LanguagePacks } from './languagePacks';
+import { untitledRecoveryLimitMessage } from '../shared/recovery';
 
 export function registerWorkspaceHandlers({
   window,
@@ -34,6 +35,7 @@ export function registerWorkspaceHandlers({
   const favoritesPath = join(app.getPath('userData'), 'favorites.json');
   const layoutPath = join(app.getPath('userData'), 'workspaces.json');
   let checkpointReady = false;
+  let replaceBackup = false;
   const orderedIds = (): string[] => [
     ...state.order.filter((id) => sessions.has(id)),
     ...[...sessions.keys()].filter((id) => !state.order.includes(id))
@@ -59,7 +61,9 @@ export function registerWorkspaceHandlers({
         return;
       }
       const workspaces = await Promise.all(
-        current.map((s) => s.snapshot({ restoreScroll: false }))
+        current.map((s) =>
+          s.snapshot({ restoreScroll: false, includeUntitled: state.historyEnabled !== false })
+        )
       );
       if (
         !canCheckpoint() ||
@@ -75,13 +79,21 @@ export function registerWorkspaceHandlers({
         active: Math.max(0, ids.indexOf(active))
       };
     },
-    (layout) => writeLayout(layoutPath, layout),
+    async (layout) => {
+      const replace = replaceBackup;
+      await writeLayout(layoutPath, layout, { replaceBackup: replace });
+      if (replace) {
+        replaceBackup = false;
+      }
+    },
     (error) =>
       send({
         type: 'notification',
         id: state.active,
         title: 'Workspace recovery',
-        message: String(error),
+        message: String(error).includes(untitledRecoveryLimitMessage)
+          ? untitledRecoveryLimitMessage
+          : String(error),
         severity: 'error'
       })
   );
@@ -177,12 +189,18 @@ export function registerWorkspaceHandlers({
       // A background write must finish before the final shutdown snapshot replaces it.
       await checkpoints.idle();
       const ids = orderedIds();
-      await writeLayout(layoutPath, {
-        version: 1,
-        window: windowLayout(),
-        workspaces: await Promise.all(ids.map((id) => session(id).snapshot())),
-        active: Math.max(0, ids.indexOf(state.active))
-      });
+      await writeLayout(
+        layoutPath,
+        {
+          version: 1,
+          window: windowLayout(),
+          workspaces: await Promise.all(
+            ids.map((id) => session(id).snapshot({ includeUntitled: false }))
+          ),
+          active: Math.max(0, ids.indexOf(state.active))
+        },
+        { replaceBackup: true }
+      );
       await Promise.all([...sessions.values()].map((s) => s.stop()));
       state.closing = true;
       return true;
@@ -343,6 +361,9 @@ export function registerWorkspaceHandlers({
     await s.stop();
     sessions.delete(s.workspace.id);
     send({ type: 'exit', id: s.workspace.id });
+    // Do not revive explicitly closed or discarded drafts from a stale checkpoint.
+    replaceBackup = true;
+    await checkpoints.save();
     return true;
   });
   return prepareToQuit;
