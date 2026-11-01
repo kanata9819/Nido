@@ -1,51 +1,9 @@
 import type { Grid } from './grid';
-import type { Cell, Highlight } from './gridTypes';
-import { color } from './gridColors';
+import type { Cell } from './gridTypes';
 import { LinearRowImages } from './linearRowImage';
-
-interface CellStyle {
-  highlight: Highlight;
-  background: string;
-  foreground: string;
-  font: string;
-  textSize: number;
-  special?: string;
-  accent?: string;
-}
-
-function cellBackground(h: Highlight, background: string, foreground: string): string {
-  if (h.reverse) {
-    if (h.foreground === undefined) {
-      return foreground;
-    }
-    return color(h.foreground);
-  }
-  if (h.background === undefined) {
-    return background;
-  }
-  if (h.wordHighlight && h.background === 0xffffff) {
-    return (
-      '#ffffff' +
-      Math.round(255 * (1 - (h.blend ?? 88) / 100))
-        .toString(16)
-        .padStart(2, '0')
-    );
-  }
-  return color(h.background);
-}
-
-function cellForeground(h: Highlight, background: string, foreground: string): string {
-  if (h.reverse) {
-    if (h.background === undefined) {
-      return background;
-    }
-    return color(h.background);
-  }
-  if (h.foreground === undefined) {
-    return foreground;
-  }
-  return color(h.foreground);
-}
+import { createGridGuides } from './gridGuides';
+import { gridDamageBands } from './gridDamage';
+import { gridCellStyles } from './gridCellStyles';
 
 /** Paint grid snapshots, reusing rasterized row images until their content changes. */
 export class GridCanvas {
@@ -206,7 +164,6 @@ export class GridCanvas {
     const family = fontFamily;
     // Resolve shared highlights once per paint; the next paint sees fresh
     // definitions, theme colors and font settings without invalidation state.
-    const cellStyles = new Map<number, CellStyle>();
     const digitBounds = new Map<string, { left: number; right: number }>();
     const measure = (
       context: CanvasRenderingContext2D,
@@ -234,26 +191,14 @@ export class GridCanvas {
       }
       return metrics;
     };
-    const cellStyle = (id: number): CellStyle => {
-      let style = cellStyles.get(id);
-      if (!style) {
-        const h = this.grid.highlights.get(id) || {};
-        const textSize = h.codeLens ? fontSize * 0.8 : fontSize;
-        style = {
-          highlight: h,
-          background: cellBackground(h, this.grid.background, this.grid.foreground),
-          foreground: cellForeground(h, this.grid.background, this.grid.foreground),
-          font: h.codeLens
-            ? `${fontWeight} ${textSize}px ${family}`
-            : `${h.italic ? 'italic ' : ''}${h.bold ? Math.max(700, fontWeight) : fontWeight} ${textSize}px ${family}`,
-          textSize,
-          special: h.special === undefined ? undefined : color(h.special),
-          accent: h.diagnostic ? color(h.special ?? h.foreground ?? 0xcccccc) : undefined
-        };
-        cellStyles.set(id, style);
-      }
-      return style;
-    };
+    const cellStyle = gridCellStyles(
+      this.grid.highlights,
+      this.grid.background,
+      this.grid.foreground,
+      fontSize,
+      fontFamily,
+      fontWeight
+    );
     ctx.font = `${fontWeight} ${fontSize}px ${family}`;
     // A fixed physical-pixel pitch keeps glyph spacing unchanged across horizontal rebases.
     const cellWidth = Math.ceil(ctx.measureText('M').width * dpr) / dpr;
@@ -294,34 +239,17 @@ export class GridCanvas {
     const position = cursorPosition ?? target;
     const cursorRows = [target.row, position.row];
     const cursorTops = cursorRows.map((row) => this.grid.rowY(row));
-    const damage = [...new Set([...cursorRows, ...this.previousCursorRows])].map((row) => ({
-      top: this.grid.rowY(Math.floor(row)),
-      bottom: this.grid.rowY(Math.ceil(row)) + cellHeight
-    }));
-    if (this.firstDirtyRow !== Infinity) {
-      damage.push({
-        top: this.grid.rowY(this.firstDirtyRow),
-        bottom: this.grid.rowY(this.lastDirtyRow) + cellHeight
-      });
-    }
-    // Keep distant damage separate; physical-pixel clips preserve acrylic and fractional DPI.
-    const candidates = this.paintDirty
-      ? [{ top: 0, bottom: canvas.height / dpr }]
-      : damage
-          .map(({ top, bottom }) => ({
-            top: Math.max(0, Math.floor((top - 1 / dpr) * dpr) / dpr),
-            bottom: Math.min(canvas.height / dpr, Math.ceil((bottom + 1 / dpr) * dpr) / dpr)
-          }))
-          .filter(({ top, bottom }) => top < bottom);
-    const bands: { top: number; bottom: number }[] = [];
-    for (const band of candidates.sort((a, b) => a.top - b.top)) {
-      const previous = bands[bands.length - 1];
-      if (previous && band.top <= previous.bottom) {
-        previous.bottom = Math.max(previous.bottom, band.bottom);
-      } else {
-        bands.push(band);
-      }
-    }
+    const bands = gridDamageBands(
+      this.grid,
+      cursorRows,
+      this.previousCursorRows,
+      this.firstDirtyRow,
+      this.lastDirtyRow,
+      cellHeight,
+      this.paintDirty,
+      canvas.height,
+      dpr
+    );
     this.previousCursorRows = cursorRows;
     // Separate rectangular clips retain native GPU antialiasing at fractional positions.
     for (const { top: paintTop, bottom: paintBottom } of bands) {
@@ -341,94 +269,7 @@ export class GridCanvas {
       const [firstRow, lastRow] = this.rowRange(paintTop, paintBottom, dpr);
       const commandRow = this.grid.rows - 1;
       const origin = this.grid.scrollOrigin;
-      const documentY = (row: number): number =>
-        (row === commandRow
-          ? this.grid.contentHeight + this.grid.scrollOffset + origin
-          : this.grid.rowTop(row) + origin) * dpr;
-      const guideRects: {
-        x: number;
-        top: number;
-        bottom: number;
-        width: number;
-        documentTop: number;
-        documentBottom: number;
-        color: string;
-        alpha: number;
-      }[] = [];
-      for (const guide of this.grid.bracketGuides) {
-        const snap = (value: number): number => Math.round(value * dpr) / dpr;
-        const first = guide.opening >= 0 ? guide.top + 1 : guide.top;
-        const last = guide.closing >= 0 ? guide.bottom + 1 : guide.bottom;
-        const inset = guide.opening >= 0 ? 1 : 0;
-        const endInset = guide.closing >= 0 ? 1 : 0;
-        const rect = {
-          x: snap(guide.column * cellWidth) - 1 / dpr,
-          top: this.grid.rowY(first) - inset / dpr,
-          bottom: this.grid.rowY(last) - endInset / dpr,
-          width: 1 / dpr,
-          documentTop: documentY(first) - inset,
-          documentBottom: documentY(last) - endInset,
-          color: guide.color,
-          alpha: guide.active ? 0.9 : 0.3
-        };
-        guideRects.push(rect);
-        if (guide.active) {
-          for (const [column, top, documentTop] of [
-            [guide.opening, rect.top, rect.documentTop],
-            [guide.closing, rect.bottom, rect.documentBottom]
-          ]) {
-            if (column >= 0) {
-              guideRects.push({
-                ...rect,
-                top,
-                bottom: top + 1 / dpr,
-                width: Math.max(1 / dpr, snap((column + 1) * cellWidth) - rect.x),
-                documentTop,
-                documentBottom: documentTop + 1
-              });
-            }
-          }
-        }
-      }
-      const coveredColumns = new Map<number, [number, number][]>();
-      const indentCuts = (column: number): [number, number][] => {
-        let cuts = coveredColumns.get(column);
-        if (!cuts) {
-          const left = Math.round(column * cellWidth * dpr) - 1;
-          const spans = guideRects
-            .filter(
-              (rect) =>
-                Math.round(rect.x * dpr) < left + 1 &&
-                Math.round((rect.x + rect.width) * dpr) > left
-            )
-            .map((rect): [number, number] => [rect.documentTop, rect.documentBottom])
-            .sort((a, b) => a[0] - b[0]);
-          cuts = [];
-          for (const span of spans) {
-            const previous = cuts[cuts.length - 1];
-            if (previous && span[0] <= previous[1]) {
-              previous[1] = Math.max(previous[1], span[1]);
-            } else {
-              cuts.push(span);
-            }
-          }
-          coveredColumns.set(column, cuts);
-        }
-        return cuts;
-      };
-      const rowCuts = (columns: number[], top: number, height: number): number[] => {
-        const cuts: number[] = [];
-        for (const column of columns) {
-          for (const [start, end] of indentCuts(column)) {
-            const first = Math.max(0, start - top);
-            const last = Math.min(height, end - top);
-            if (first < last) {
-              cuts.push(column, first, last);
-            }
-          }
-        }
-        return cuts;
-      };
+      const { guideRects, indentCuts, rowCuts } = createGridGuides(this.grid, cellWidth, dpr);
       for (
         let row = Math.min(firstRow, Math.max(0, commandRow));
         row < Math.max(lastRow, this.grid.rows);

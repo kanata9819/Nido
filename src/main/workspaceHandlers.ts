@@ -1,14 +1,13 @@
 import { app, dialog } from 'electron';
-import { basename, dirname, isAbsolute, join } from 'node:path';
-import { readdir, realpath, stat } from 'node:fs/promises';
+import { isAbsolute, join } from 'node:path';
 import { Session } from './session';
-import { readFavorites, readLayout, writeFavorites, writeLayout } from './persistence';
+import { readLayout, writeLayout } from './persistence';
 import { WorkspaceCheckpoints } from './workspaceCheckpoints';
+import { registerFavoriteHandlers } from './favoriteHandlers';
+import { registerFolderBrowserHandlers } from './folderBrowserHandlers';
 import type { TerminalShell } from '../shared/types';
 import type { HandlerDeps } from './handlers';
 import { createTranslator } from '../shared/i18n';
-import { parseWslPath } from '../shared/wsl';
-import { resolveWslFolder, wslDistributions } from './wsl';
 import type { LanguagePacks } from './languagePacks';
 import { untitledRecoveryLimitMessage } from '../shared/recovery';
 
@@ -32,7 +31,6 @@ export function registerWorkspaceHandlers({
   shellChoice: (value?: unknown) => TerminalShell;
   captureHistory: (session: Session) => Promise<void>;
 }): () => Promise<boolean> {
-  const favoritesPath = join(app.getPath('userData'), 'favorites.json');
   const layoutPath = join(app.getPath('userData'), 'workspaces.json');
   let checkpointReady = false;
   let replaceBackup = false;
@@ -103,43 +101,7 @@ export function registerWorkspaceHandlers({
     clearInterval(checkpointTimer);
     checkpoints.dispose();
   });
-  let favoriteWrite: Promise<unknown> = Promise.resolve();
-  handle('favorites', async () => {
-    await favoriteWrite;
-    return readFavorites(favoritesPath);
-  });
-  handle('favorite', (value, kind, enabled) => {
-    const path = text(value);
-    if (
-      !isAbsolute(path) ||
-      (kind !== 'editor' && kind !== 'terminal') ||
-      typeof enabled !== 'boolean'
-    ) {
-      throw new Error('Invalid favorite workspace.');
-    }
-    // Serialize read/modify/write so simultaneous requests cannot overwrite each other.
-    const update = favoriteWrite.then(async () => {
-      const remote = parseWslPath(path);
-      const root = enabled
-        ? remote
-          ? await resolveWslFolder(remote.distribution, remote.path)
-          : await realpath(path)
-        : path;
-      if (enabled && !(await stat(root)).isDirectory()) {
-        throw new Error('Choose a project folder.');
-      }
-      const favorites = (await readFavorites(favoritesPath)).filter(
-        (w) => w.root !== root || w.kind !== kind
-      );
-      if (enabled) {
-        favorites.push({ root, name: basename(root) || root, kind });
-      }
-      await writeFavorites(favoritesPath, favorites);
-      return favorites;
-    });
-    favoriteWrite = update.catch(() => {});
-    return update;
-  });
+  registerFavoriteHandlers({ handle, text });
 
   async function confirmClose(s: Session): Promise<boolean> {
     if (!(await s.modified())) {
@@ -291,33 +253,7 @@ export function registerWorkspaceHandlers({
     state.active = selected;
   });
 
-  handle('wslDistributions', () => wslDistributions());
-  handle('browseFolders', async (value, distribution) => {
-    const requested = value === undefined || value === '' ? app.getPath('home') : text(value);
-    const remote = parseWslPath(requested);
-    if (distribution === undefined && !isAbsolute(requested)) {
-      throw new Error('Enter an absolute folder path.');
-    }
-    const path =
-      distribution !== undefined
-        ? await resolveWslFolder(text(distribution), value === undefined ? '' : text(value))
-        : remote
-          ? await resolveWslFolder(remote.distribution, remote.path)
-          : await realpath(requested);
-    const entries = await readdir(path, { withFileTypes: true });
-    return {
-      path,
-      parent: dirname(path),
-      folders: entries
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => ({
-          name: entry.name,
-          path: join(path, entry.name),
-          directory: true
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
-    };
-  });
+  registerFolderBrowserHandlers({ handle, text });
 
   handle('create', async (path, kind = 'editor', shell) => {
     const selectedShell = shellChoice(shell);

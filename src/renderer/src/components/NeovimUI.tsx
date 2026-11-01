@@ -1,26 +1,18 @@
 import { onNidoEvent } from '../nidoEvents';
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type RefObject
-} from 'react';
-import { CircleAlert, History, MessageSquare, Search, Terminal, X } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { Search, Terminal, X } from 'lucide-react';
 import {
   emptyNeovimUI,
   patchNeovimUI,
   splitCommandContent,
-  type MessageChunk,
   type NeovimCommandLine
 } from '../../../shared/neovimUI';
 import { useI18n } from '../i18n';
-import { color } from '../gridColors';
 import { type Grid } from '../grid';
-import { vimKey } from '../keyboard';
 import styles from '../assets/NeovimUI.module.css';
 import OverlayPresence from './OverlayPresence';
+import Chunks from './NeovimUIChunks';
+import NeovimMessages from './NeovimMessages';
 
 const completionRowHeight = 30;
 const completionOverscan = 8;
@@ -50,27 +42,6 @@ function positionCommandInput(
   anchor.style.left = `${point.left - host.left}px`;
   anchor.style.top = `${point.top - host.top}px`;
   anchor.style.maxWidth = `${Math.max(2, host.right - point.left)}px`;
-}
-
-function Chunks({ content, grid }: { content: MessageChunk[]; grid: Grid }): React.JSX.Element {
-  return (
-    <>
-      {content.map(([id, text], index) => {
-        const highlight = grid.highlights.get(id);
-        const foreground = highlight?.reverse ? highlight.background : highlight?.foreground;
-        const style: CSSProperties = {
-          color: foreground === undefined ? undefined : color(foreground),
-          fontWeight: highlight?.bold ? 700 : undefined,
-          fontStyle: highlight?.italic ? 'italic' : undefined
-        };
-        return (
-          <span key={index} style={style}>
-            {text}
-          </span>
-        );
-      })}
-    </>
-  );
 }
 
 function CommandLine({
@@ -373,97 +344,18 @@ export default function NeovimUI({
           </div>
         ) : null}
       </OverlayPresence>
-      <OverlayPresence>
-        {showMessages ? (
-          <div
-            className={styles.messages}
-            data-neovim-ui
-            role="dialog"
-            aria-label={t(showHistory ? 'Message history' : 'Neovim messages')}
-            style={{ fontFamily }}
-          >
-            <div className={styles.header}>
-              {showHistory ? <History size={15} /> : <MessageSquare size={15} />}
-              <strong>{t(showHistory ? 'Message history' : 'Neovim messages')}</strong>
-              <span className={styles.count}>{messages.length}</span>
-              <span className={styles.hint}>
-                <kbd>Alt Shift M</kbd> {t('Focus')}
-              </span>
-              <button aria-label={t('Close messages')} onClick={closeMessages}>
-                <X size={16} />
-              </button>
-            </div>
-            <div
-              ref={messageBody}
-              className={styles.messageBody}
-              tabIndex={0}
-              aria-label={t('Message content')}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  event.preventDefault();
-                  closeMessages();
-                } else if (prompt && !event.ctrlKey && !event.metaKey && !event.altKey) {
-                  const key = vimKey(event.nativeEvent);
-                  if (key) {
-                    event.preventDefault();
-                    send(key);
-                  }
-                } else if (
-                  (event.ctrlKey && ['u', 'd'].includes(event.key)) ||
-                  (!event.ctrlKey && !event.altKey && ['j', 'k'].includes(event.key))
-                ) {
-                  event.preventDefault();
-                  const down = event.key === 'j' || event.key === 'd';
-                  event.currentTarget.scrollBy({
-                    top:
-                      (down ? 1 : -1) * (event.ctrlKey ? event.currentTarget.clientHeight / 2 : 32)
-                  });
-                }
-              }}
-            >
-              {messages.map((message, index) => (
-                <article
-                  key={index}
-                  data-kind={message.kind}
-                  data-severity={
-                    /emsg|echoerr|lua_error|rpc_error|shell_err/.test(message.kind)
-                      ? 'error'
-                      : message.kind === 'wmsg'
-                        ? 'warning'
-                        : 'info'
-                  }
-                >
-                  {/emsg|echoerr|lua_error|rpc_error|shell_err|wmsg/.test(message.kind) && (
-                    <CircleAlert size={14} aria-hidden="true" />
-                  )}
-                  <pre>
-                    <Chunks content={message.content} grid={grid.current} />
-                  </pre>
-                </article>
-              ))}
-              {showHistory && !messages.length && (
-                <p className={styles.empty}>{t('No messages')}</p>
-              )}
-            </div>
-            {prompt && (
-              <div className={styles.footer}>
-                {prompt.kind === 'return_prompt' ? (
-                  <button onClick={() => send('<CR>')}>
-                    <kbd>Enter</kbd> {t('Continue')}
-                  </button>
-                ) : (
-                  <button onClick={() => input.current?.focus()}>
-                    {t('Type a choice to continue')}
-                  </button>
-                )}
-                <button onClick={closeMessages}>
-                  <kbd>Esc</kbd> {t('Cancel')}
-                </button>
-              </div>
-            )}
-          </div>
-        ) : null}
-      </OverlayPresence>
+      <NeovimMessages
+        visible={showMessages}
+        showHistory={showHistory}
+        messages={messages}
+        prompt={prompt}
+        fontFamily={fontFamily}
+        messageBody={messageBody}
+        grid={grid}
+        input={input}
+        send={send}
+        closeMessages={closeMessages}
+      />
       <OverlayPresence>
         {!hidden && auxiliary.length > 0 ? (
           <div className={styles.auxiliary} data-neovim-ui role="status" style={{ fontFamily }}>

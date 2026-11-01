@@ -27,7 +27,9 @@ import type { LanguagePackConfiguration, LanguagePackRuntime } from '../shared/l
 import type { SearchOptions, ReplacementPreview, ReplacementResult } from '../shared/search';
 import { terminalShells, type TerminalShell } from '../shared/types';
 import { resolveTerminalShell } from './terminalShells';
-import { untitledRecoveryLimitMessage } from '../shared/recovery';
+import { SessionPersistence } from './sessionPersistence';
+import { SessionHistory } from './sessionHistory';
+import { SessionUI } from './sessionUI';
 
 export class Session {
   terminal?: Session;
@@ -47,10 +49,10 @@ export class Session {
   private stopped = false;
   private processClosed = false;
   private stopping?: Promise<void>;
-  private attached = false;
-  private uiQueue: Promise<void> = Promise.resolve();
-  private resizeGeneration = 0;
   private readonly interaction: SessionInteraction;
+  private readonly persistence: SessionPersistence;
+  private readonly history: SessionHistory;
+  private readonly ui: SessionUI;
 
   private constructor(
     root: string,
@@ -144,6 +146,19 @@ export class Session {
       this.workspace,
       () => this.stopped
     );
+    this.persistence = new SessionPersistence(
+      this.workspace,
+      this.client,
+      this.interaction,
+      () => !!this.terminal
+    );
+    this.history = new SessionHistory(
+      this.workspace,
+      this.client,
+      this.interaction,
+      () => this.stopped
+    );
+    this.ui = new SessionUI(this.client, this.events, this.workspace, (event) => this.emit(event));
     this.fileService = new SessionFiles(this.workspace.root, this.client);
     this.directoryWatcher = new DirectoryWatcher(
       (path) => this.fileService.path(path),
@@ -278,40 +293,8 @@ export class Session {
     ]) as Promise<LanguagePackRuntime[]>;
   }
 
-  async attach(columns: number, rows: number): Promise<void> {
-    const next = this.uiQueue.then(async () => {
-      if (this.attached) {
-        // A new renderer missed startup highlight definitions. Reattach the UI
-        // so Neovim resends all colors and grid state, not just changed cells.
-        await this.client.request('nvim_ui_detach', []);
-        this.attached = false;
-      }
-      try {
-        await this.client.request('nvim_ui_attach', [
-          columns,
-          rows,
-          {
-            rgb: true,
-            ext_linegrid: true,
-            ext_popupmenu: true,
-            ext_hlstate: true,
-            ext_messages: true,
-            ext_cmdline: true
-          }
-        ]);
-        // Preserve the viewport's bottom inset and pixel-scroll overscan. All
-        // command text and messages are external even with cmdheight=1.
-        await this.client.request('nvim_set_option_value', ['cmdheight', 1, {}]);
-        this.attached = true;
-        this.events.replayUI();
-        this.emit({ type: 'state', id: this.workspace.id, state: this.state });
-      } catch (error) {
-        this.attached = false;
-        throw error;
-      }
-    });
-    this.uiQueue = next.catch(() => {});
-    return next;
+  attach(columns: number, rows: number): Promise<void> {
+    return this.ui.attach(columns, rows);
   }
 
   async startTerminal(shell = 'auto'): Promise<void> {
@@ -375,15 +358,8 @@ export class Session {
     return this.terminalStarting;
   }
 
-  async resize(columns: number, rows: number): Promise<void> {
-    const generation = ++this.resizeGeneration;
-    const next = this.uiQueue.then(async () => {
-      if (this.attached && generation === this.resizeGeneration) {
-        await this.client.request('nvim_ui_try_resize', [columns, rows]);
-      }
-    });
-    this.uiQueue = next.catch(() => {});
-    return next;
+  resize(columns: number, rows: number): Promise<void> {
+    return this.ui.resize(columns, rows);
   }
 
   async setClipboardSharing(enabled: boolean): Promise<void> {
@@ -514,76 +490,10 @@ end`,
     );
   }
 
-  async snapshot(
+  snapshot(
     options: { restoreScroll?: boolean; includeUntitled?: boolean } = {}
   ): Promise<SavedWorkspace> {
-    if (options.restoreScroll !== false) {
-      await this.interaction.restoreScroll();
-    }
-    if (this.workspace.kind === 'terminal') {
-      return { root: this.workspace.root, kind: 'terminal', files: [], current: '' };
-    }
-    const data = (await this.client.request('nvim_exec_lua', [
-      `local include_untitled, recovery_scope = ...
-      local files, untitled, current_untitled, total = {}, {}, nil, 0
-      for _, b in ipairs(vim.api.nvim_list_bufs()) do
-        local name = vim.api.nvim_buf_get_name(b)
-        if vim.bo[b].buflisted and vim.bo[b].buftype == '' and name ~= '' then
-          local pos = vim.api.nvim_buf_get_mark(b, '"')
-          local wins = vim.fn.win_findbuf(b)
-          if #wins > 0 then
-            pos = vim.api.nvim_win_get_cursor(wins[1])
-            -- Background checkpoints preserve the detached viewport and the editing anchor.
-            if wins[1] == vim.api.nvim_get_current_win() then
-              pos = require('nido_scroll').cursor() or pos
-            end
-          end
-          table.insert(files, {path=name, line=math.max(1,pos[1]), column=pos[2]})
-        elseif include_untitled and vim.api.nvim_buf_is_loaded(b) and vim.bo[b].buflisted
-            and vim.bo[b].buftype == '' and name == '' and vim.bo[b].modified then
-          local count = vim.api.nvim_buf_line_count(b)
-          local bytes = vim.api.nvim_buf_get_offset(b, count)
-          total = total + bytes
-          if bytes > 8 * 1024 * 1024 or total > 16 * 1024 * 1024 or #untitled >= 100 then
-            error('${untitledRecoveryLimitMessage}')
-          end
-          local pos = vim.api.nvim_buf_get_mark(b, '"')
-          local wins = vim.fn.win_findbuf(b)
-          if #wins > 0 then
-            pos = vim.api.nvim_win_get_cursor(wins[1])
-            if wins[1] == vim.api.nvim_get_current_win() then
-              pos = require('nido_scroll').cursor() or pos
-            end
-          end
-          local id = vim.b[b].nido_recovery_id
-          if not id then
-            id = recovery_scope .. ':' .. b
-            vim.b[b].nido_recovery_id = id
-          end
-          table.insert(untitled, {id=id, lines=vim.api.nvim_buf_get_lines(b, 0, -1, false),
-            endOfLine=vim.bo[b].endofline, fileformat=vim.bo[b].fileformat,
-            line=math.max(1,pos[1]), column=pos[2]})
-          if b == vim.api.nvim_get_current_buf() then current_untitled = #untitled - 1 end
-        end
-      end
-      local result = {files=files, current=vim.api.nvim_buf_get_name(0)}
-      if #untitled > 0 then result.untitled = untitled end
-      if current_untitled then result.currentUntitled = current_untitled end
-      return result`,
-      [options.includeUntitled !== false, this.workspace.id]
-    ])) as Omit<SavedWorkspace, 'root'>;
-    return {
-      root: this.workspace.root,
-      terminal: !!this.terminal,
-      ...data,
-      current: hostPath(this.workspace.root, data.current),
-      files: Array.isArray(data.files)
-        ? data.files.map((file) => ({
-            ...file,
-            path: hostPath(this.workspace.root, file.path)
-          }))
-        : []
-    };
+    return this.persistence.snapshot(options);
   }
 
   async restore(saved: SavedWorkspace, shell = 'auto'): Promise<string[]> {
@@ -594,60 +504,7 @@ end`,
     if (saved.terminal) {
       await this.openTerminal(shell);
     }
-    const errors: string[] = [];
-    for (const file of saved.files) {
-      try {
-        if (!(await stat(file.path)).isFile()) {
-          throw new Error('File is unavailable.');
-        }
-        await this.client.request('nvim_exec_lua', [
-          `local path, line, column = ...
-          require('nido_eol').open(path)
-          line = math.min(line, vim.api.nvim_buf_line_count(0))
-          vim.api.nvim_win_set_cursor(0, {line, column})`,
-          [editorPath(this.workspace.root, file.path), file.line, file.column]
-        ]);
-      } catch (error) {
-        errors.push(`${file.path}: ${String(error)}`);
-      }
-    }
-    if (saved.untitled?.length) {
-      await this.client.request('nvim_exec_lua', [
-        `local drafts, active = ...
-        local buffers = {}
-        for _, draft in ipairs(drafts) do
-          local buffer = vim.api.nvim_create_buf(true, false)
-          if draft.id then vim.b[buffer].nido_recovery_id = draft.id end
-          vim.api.nvim_buf_set_lines(buffer, 0, -1, false, draft.lines)
-          vim.bo[buffer].endofline = draft.endOfLine
-          vim.bo[buffer].fileformat = draft.fileformat
-          vim.bo[buffer].modified = true
-          local line = math.min(draft.line, #draft.lines)
-          local column = math.min(draft.column, #draft.lines[line])
-          vim.api.nvim_buf_set_mark(buffer, '"', line, column, {})
-          table.insert(buffers, buffer)
-        end
-        if active ~= vim.NIL and active ~= nil then
-          local buffer = buffers[active + 1]
-          vim.api.nvim_set_current_buf(buffer)
-          local draft = drafts[active + 1]
-          local line = math.min(draft.line, #draft.lines)
-          vim.api.nvim_win_set_cursor(0, {line, math.min(draft.column, #draft.lines[line])})
-        end`,
-        [saved.untitled, saved.currentUntitled ?? null]
-      ]);
-    }
-    if (saved.currentUntitled !== undefined) {
-      return errors;
-    }
-    await this.client.request('nvim_exec_lua', [
-      `local b = vim.fn.bufnr(...)
-      if b > 0 then
-        vim.api.nvim_set_current_buf(b)
-      end`,
-      [editorPath(this.workspace.root, saved.current)]
-    ]);
-    return errors;
+    return this.persistence.restore(saved);
   }
 
   async refreshFiles(): Promise<void> {
@@ -816,64 +673,20 @@ return {highlight(before), highlight(after)}`,
     return this.stopped ? Promise.resolve() : this.directoryWatcher.set(paths);
   }
 
-  async historySnapshots(tokens: HistoryToken[]): Promise<HistorySnapshot[]> {
-    if (this.stopped || this.workspace.kind === 'terminal') {
-      return [];
-    }
-    const mode = (await this.client.request('nvim_get_mode', [])) as { blocking: boolean };
-    if (mode.blocking) {
-      return [];
-    }
-    const result = (await this.client.request('nvim_exec_lua', [
-      "return require('nido_history').changed(...)",
-      [tokens]
-    ])) as HistorySnapshot[];
-    return Array.isArray(result)
-      ? result.map((value) => ({
-          ...value,
-          path: hostPath(this.workspace.root, value.path)
-        }))
-      : [];
+  historySnapshots(tokens: HistoryToken[]): Promise<HistorySnapshot[]> {
+    return this.history.historySnapshots(tokens);
   }
 
   historyCurrent(): Promise<HistorySnapshot> {
-    return this.interaction.enqueue(async () => {
-      const mode = (await this.client.request('nvim_get_mode', [])) as { blocking: boolean };
-      if (mode.blocking) {
-        throw new Error('Finish the current Neovim command before opening Time Machine.');
-      }
-      return this.historyResult("return require('nido_history').current()", []);
-    });
+    return this.history.historyCurrent();
   }
 
   historyDiff(before: string, after: string): Promise<string> {
-    return this.client.request('nvim_exec_lua', [
-      "return require('nido_history').diff(...)",
-      [before, after]
-    ]);
+    return this.history.historyDiff(before, after);
   }
 
   historyRestore(path: string, token: string, content: HistoryContent): Promise<HistorySnapshot> {
-    return this.interaction.enqueue(async () => {
-      const mode = (await this.client.request('nvim_get_mode', [])) as { blocking: boolean };
-      if (mode.blocking) {
-        throw new Error('Finish the current Neovim command before restoring.');
-      }
-      return this.historyResult("return require('nido_history').restore(...)", [
-        editorPath(this.workspace.root, path),
-        token,
-        content
-      ]);
-    });
-  }
-
-  private async historyResult(code: string, args: unknown[]): Promise<HistorySnapshot> {
-    const result = (await this.client.request('nvim_exec_lua', [code, args])) as
-      HistorySnapshot | { error: string };
-    if ('error' in result) {
-      throw new Error(result.error);
-    }
-    return { ...result, path: hostPath(this.workspace.root, result.path) };
+    return this.history.historyRestore(path, token, content);
   }
 
   async findFiles(query = ''): Promise<FileEntry[]> {

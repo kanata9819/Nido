@@ -1,8 +1,7 @@
-import { onNidoEvent } from './nidoEvents';
 import { LanguageContext, useI18n } from './i18n';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-import type { FileEntry, SessionState } from '../../shared/types';
+import type { SessionState } from '../../shared/types';
 import type { Panel } from './types';
 import WorkspaceEditor from './components/WorkspaceEditor';
 import TerminalPanel from './components/TerminalPanel';
@@ -35,6 +34,8 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { usePointerVisibility } from './hooks/usePointerVisibility';
 import { useWorkspaceSessions } from './hooks/useWorkspaceSessions';
 import { useFocusGuard } from './hooks/useFocusGuard';
+import { useFileSearch } from './hooks/useFileSearch';
+import { useInitializedEditors } from './hooks/useInitializedEditors';
 import styles from './assets/Nido.module.css';
 import notificationStyles from './assets/Notification.module.css';
 import { useNotificationDismissal } from './hooks/useNotificationDismissal';
@@ -71,8 +72,6 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
   const [leader, setLeader] = useState(false);
   const [query, setQuery] = useState('');
   const [selection, setSelection] = useState(0);
-  const [fileList, setFileList] = useState<FileEntry[]>([]);
-  const [loading, setLoading] = useState(false);
   const [errorNotice, setErrorNotice] = useState<{ message: string }>();
   const error = errorNotice?.message || '';
   const setError = useCallback(
@@ -88,28 +87,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 
   const { workspaces, setWorkspaces, active, setActive, states, mode, restoring } =
     useWorkspaceSessions(report);
-  const [initializedEditors, setInitializedEditors] = useState<ReadonlySet<string>>(
-    () => new Set()
-  );
-  const finishEditorLoading = useCallback((id: string): void => {
-    setInitializedEditors((old) => (old.has(id) ? old : new Set([...old, id])));
-  }, []);
-  useEffect(
-    () =>
-      onNidoEvent((event) => {
-        if (event.type === 'exit') {
-          setInitializedEditors((old) => {
-            if (!old.has(event.id)) {
-              return old;
-            }
-            const next = new Set(old);
-            next.delete(event.id);
-            return next;
-          });
-        }
-      }),
-    []
-  );
+  const { initializedEditors, finishEditorLoading } = useInitializedEditors();
   const {
     favorites,
     ready: favoritesReady,
@@ -228,48 +206,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     run
   });
 
-  useEffect(() => {
-    if (panel !== 'files' || !active) {
-      return;
-    }
-    let cancelled = false;
-    let generation = 0;
-    const refresh = (): void => {
-      const current = ++generation;
-      setLoading(true);
-      window.nido
-        .findFiles(active, query)
-        .then((files) => {
-          if (!cancelled && current === generation) {
-            setFileList(files);
-          }
-        })
-        .catch((e) => {
-          if (!cancelled && current === generation) {
-            report(String(e));
-          }
-        })
-        .finally(() => {
-          if (!cancelled && current === generation) {
-            setLoading(false);
-          }
-        });
-    };
-    const timer = window.setTimeout(refresh, 75);
-    const unsubscribe = onNidoEvent((event) => {
-      if (event.type === 'filesChanged' && event.id === active) {
-        refresh();
-      }
-    });
-    window.addEventListener('focus', refresh);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-      unsubscribe();
-      window.removeEventListener('focus', refresh);
-      void window.nido.cancelFindFiles(active).catch(() => {});
-    };
-  }, [panel, active, query, report]);
+  const { fileList, loading, reset: resetFileSearch } = useFileSearch(panel, active, query, report);
 
   const openFile = useCallback(
     (path: string): void => {
@@ -285,23 +222,25 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     [active, run, focusEditor, captureFocus]
   );
 
-  const showPanel = useCallback((value: Panel): void => {
-    setLeader(false);
-    setQuery('');
-    setSelection(0);
-    if (value === 'markdown') {
-      setMarkdownVisible((visible) => !visible);
-      setPanel(null);
-      setFocusTick((value) => value + 1);
-      return;
-    }
-    setPanel(value);
+  const showPanel = useCallback(
+    (value: Panel): void => {
+      setLeader(false);
+      setQuery('');
+      setSelection(0);
+      if (value === 'markdown') {
+        setMarkdownVisible((visible) => !visible);
+        setPanel(null);
+        setFocusTick((value) => value + 1);
+        return;
+      }
+      setPanel(value);
 
-    if (value === 'files') {
-      setLoading(true);
-      setFileList([]);
-    }
-  }, []);
+      if (value === 'files') {
+        resetFileSearch();
+      }
+    },
+    [resetFileSearch]
+  );
   const openFiles = useCallback((): void => showPanel('files'), [showPanel]);
 
   const showExplorer = (): void => {
@@ -620,8 +559,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         setQuery={(value) => {
           setQuery(value);
           if (panel === 'files') {
-            setLoading(true);
-            setFileList([]);
+            resetFileSearch();
           }
         }}
         setSelection={setSelection}

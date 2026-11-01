@@ -4,6 +4,8 @@ import { color } from './gridColors';
 import type { Cell, Highlight, BracketGuide } from './gridTypes';
 import { GridCanvas } from './gridCanvas';
 import { GridRowLayout } from './gridRowLayout';
+import { gridHighlight } from './gridHighlight';
+import { scrollGridCells } from './gridCellScroll';
 export type { Cell } from './gridTypes';
 
 export class Grid {
@@ -463,41 +465,15 @@ export class Grid {
             }
             this.layoutDirty = true;
             this.canvas.invalidatePaint();
-            const [, top, bottom, left, right, rows, columns] = args as number[];
-            if (left === 0 && right === this.columns && columns === 0) {
-              const old = this.cells.slice();
-              for (let row = top; row < bottom; row++) {
-                const source = row + rows;
-                this.cells[row] =
-                  source >= top && source < bottom
-                    ? old[source]
-                    : Array.from({ length: this.columns }, () => ({
-                        text: ' ',
-                        highlight: 0
-                      }));
-              }
-              break;
-            }
-            // Partial scrolls only read their rectangle, not the entire viewport.
-            const old = this.cells.slice(top, bottom).map((row) => row.slice(left, right));
-            for (let row = top; row < bottom; row++) {
-              if (retainedRows?.has(this.cells[row])) {
-                const before = this.cells[row];
-                this.cells[row] = before.slice();
-                this.canvas.moveRowImage(before, this.cells[row]);
-              }
-              this.canvas.invalidate(row);
-              this.rowLayout.invalidate(this.cells[row]);
-              this.rowText.delete(this.cells[row]);
-              for (let col = left; col < right; col++) {
-                const sourceRow = row + rows;
-                const sourceCol = col + columns;
-                this.cells[row][col] =
-                  sourceRow >= top && sourceRow < bottom && sourceCol >= left && sourceCol < right
-                    ? old[sourceRow - top][sourceCol - left]
-                    : { text: ' ', highlight: 0 };
-              }
-            }
+            scrollGridCells(
+              this.cells,
+              this.columns,
+              args as number[],
+              retainedRows,
+              this.canvas,
+              this.rowLayout,
+              this.rowText
+            );
             break;
           }
           case 'hl_attr_define': {
@@ -509,22 +485,7 @@ export class Grid {
               this.rowLayout.invalidate();
               this.canvas.invalidate();
             }
-            const info = args[3] as { hi_name?: string }[] | undefined;
-            this.highlights.set(Number(args[0]), {
-              ...(args[1] as Highlight),
-              codeLens: info?.some(
-                (item) => item.hi_name === 'NidoCodeLens' || item.hi_name === 'NidoCodeLensHint'
-              ),
-              indentGuide: info?.some((item) => /^NidoIndent\d+$/.test(item.hi_name || '')),
-              gitSign: info?.some((item) => /^NidoGit(Added|Changed)$/.test(item.hi_name || '')),
-              bracketMatch: info?.some((item) => item.hi_name === 'NidoBracketMatch'),
-              wordHighlight: info?.some((item) =>
-                /^LspReference(Text|Read|Write)$/.test(item.hi_name || '')
-              ),
-              diagnostic: info?.some((item) =>
-                /^DiagnosticVirtualText(Error|Warn|Info|Hint)$/.test(item.hi_name || '')
-              )
-            });
+            this.highlights.set(Number(args[0]), gridHighlight(args));
             break;
           }
           case 'default_colors_set': {

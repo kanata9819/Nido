@@ -4,6 +4,8 @@ import type { Grid } from '../grid';
 import { scrollOffset } from '../scroll';
 import { EditorScroll } from '../editorScroll';
 import { alignCanvasSurface } from '../canvasSurface';
+import { positionEditorInput } from '../editorInputPosition';
+import { createEditorResizer } from '../editorResizer';
 import { EditorCursor } from '../editorCursor';
 import { paintEditorMotion, type FrameMotion } from '../editorMotion';
 
@@ -98,9 +100,6 @@ export function useEditorRendering({
     let hasFrame = grid.rows > 0 && grid.columns > 0;
     let ready = false;
     let preparingMotion = false;
-    let lastColumns = 0;
-    let lastRows = 0;
-    let resizePending = false;
     let cellWidth = 0;
     const input = inputRef.current!;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -129,23 +128,7 @@ export function useEditorRendering({
     let paintedCursorVisible = true;
     let paintedCursorOpacity = 1;
 
-    const resize = (columns: number, rows: number): void => {
-      resizePending = true;
-      void window.nido
-        .resize(id, columns, rows)
-        .catch((error) => {
-          if (!disposed) {
-            errorRef.current(String(error));
-          }
-        })
-        .finally(() => {
-          resizePending = false;
-          // Intermediate window sizes need no IPC while Neovim is still resizing.
-          if (!disposed && (columns !== lastColumns || rows !== lastRows)) {
-            resize(lastColumns, lastRows);
-          }
-        });
-    };
+    const resizer = createEditorResizer(id, attachedRef, errorRef, () => disposed);
 
     const stopMotion = (): void => {
       deferredScroll = undefined;
@@ -313,24 +296,7 @@ export function useEditorRendering({
         descriptionDirty = false;
       }
 
-      if (inputRef.current && !inputRef.current.hasAttribute('data-nvim-command-active')) {
-        const left =
-          bounds.left +
-          grid.cursor.column * metrics.cellWidth +
-          (grid.cursor.column >= grid.horizontalGutter ? grid.horizontalOffset : 0);
-        const top = bounds.top + grid.rowY(grid.cursor.row);
-        const maxWidth = `${Math.max(2, bounds.left + bounds.width - left)}px`;
-        if (inputRef.current.style.maxWidth !== maxWidth) {
-          inputRef.current.style.maxWidth = maxWidth;
-        }
-        // Unchanged styles wake popup observers and force layout during cursor blinking.
-        if (!(Math.abs(parseFloat(inputRef.current.style.left) - left) * dpr < 0.01)) {
-          inputRef.current.style.left = `${left}px`;
-        }
-        if (!(Math.abs(parseFloat(inputRef.current.style.top) - top) * dpr < 0.01)) {
-          inputRef.current.style.top = `${top}px`;
-        }
-      }
+      positionEditorInput(inputRef.current, bounds, grid, metrics.cellWidth, dpr);
       if (hasFrame && !ready) {
         ready = true;
         onReady?.(id);
@@ -347,22 +313,7 @@ export function useEditorRendering({
         ) +
         grid.extraRows +
         (pixelScroll ? 2 : 0);
-      if (!attachedRef.current) {
-        attachedRef.current = true;
-        lastColumns = columns;
-        lastRows = rows;
-        void window.nido.attach(id, columns, rows).catch((e) => {
-          if (!disposed) {
-            errorRef.current(String(e));
-          }
-        });
-      } else if (columns !== lastColumns || rows !== lastRows) {
-        lastColumns = columns;
-        lastRows = rows;
-        if (!resizePending) {
-          resize(columns, rows);
-        }
-      }
+      resizer.update(columns, rows);
       if (
         cursor.animating ||
         (motion && motion.offsetX === undefined) ||

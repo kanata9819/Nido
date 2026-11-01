@@ -4,6 +4,9 @@ import { defaultSearchOptions, type ReplacementPreview } from '../../../shared/s
 import { useI18n } from '../i18n';
 import styles from '../assets/WorkspaceSearch.module.css';
 import { useFocusGuard } from '../hooks/useFocusGuard';
+import { navigateSearchList as navigate } from './workspaceSearchNavigation';
+import ReplacementPreviewPanel from './ReplacementPreviewPanel';
+import WorkspaceSearchResults from './WorkspaceSearchResults';
 
 export default function WorkspaceSearch({
   workspaceId,
@@ -235,16 +238,6 @@ export default function WorkspaceSearch({
       }
     }
   };
-  const toggle = (index: number): void =>
-    setExcluded((old) => {
-      const next = new Set(old);
-      if (next.has(index)) {
-        next.delete(index);
-      } else {
-        next.add(index);
-      }
-      return next;
-    });
   const rows = useMemo(
     () =>
       result.matches.map((match, index) => ({
@@ -254,36 +247,6 @@ export default function WorkspaceSearch({
       })),
     [result]
   );
-  const navigate = (
-    event: KeyboardEvent,
-    count: number,
-    move: (value: React.SetStateAction<number>) => void
-  ): boolean => {
-    const key = event.key;
-    if (
-      !['j', 'k', 'g', 'G', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(key) ||
-      event.altKey ||
-      event.metaKey ||
-      (event.ctrlKey && !['j', 'k'].includes(key))
-    ) {
-      return false;
-    }
-    event.preventDefault();
-    move((index) =>
-      Math.max(
-        0,
-        Math.min(
-          count - 1,
-          ['g', 'Home'].includes(key)
-            ? 0
-            : ['G', 'End'].includes(key)
-              ? count - 1
-              : index + (['j', 'ArrowDown'].includes(key) ? 1 : -1)
-        )
-      )
-    );
-    return true;
-  };
   const keyboard = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.nativeEvent.isComposing || event.keyCode === 229) {
       return;
@@ -471,177 +434,32 @@ export default function WorkspaceSearch({
       )}
       <div className={styles.body}>
         {preview ? (
-          <>
-            <div
-              ref={files}
-              className={styles.list}
-              tabIndex={0}
-              role="listbox"
-              aria-label={t('Replacement files')}
-              aria-activedescendant={preview.files[file] ? `replace-file-${file}` : undefined}
-              onKeyDown={(event) => {
-                if (
-                  event.nativeEvent.isComposing ||
-                  event.keyCode === 229 ||
-                  navigate(event, preview.files.length, setFile)
-                ) {
-                  return;
-                }
-                if (event.key === 'Enter' || event.key === 'l') {
-                  event.preventDefault();
-                  diff.current?.focus();
-                }
-              }}
-            >
-              {preview.files.map((entry, index) => (
-                <div
-                  key={entry.path}
-                  id={`replace-file-${index}`}
-                  role="option"
-                  aria-selected={index === file}
-                  className={index === file ? styles.selected : ''}
-                  onClick={() => setFile(index)}
-                >
-                  <strong>{entry.path}</strong>
-                  <small>{t('{count} replacements', { count: entry.count })}</small>
-                </div>
-              ))}
-              {!preview.files.length && <p>{t('Replacement would not change any files.')}</p>}
-            </div>
-            <div
-              ref={diff}
-              className={styles.diff}
-              tabIndex={0}
-              role="region"
-              aria-label={t('Replacement diff')}
-              onKeyDown={(event) => {
-                if (event.nativeEvent.isComposing || event.keyCode === 229) {
-                  return;
-                }
-                if (event.key === 'h' && !event.ctrlKey) {
-                  event.preventDefault();
-                  if (event.currentTarget.scrollLeft > 0) {
-                    event.currentTarget.scrollLeft = Math.max(
-                      0,
-                      event.currentTarget.scrollLeft - 80
-                    );
-                  } else {
-                    files.current?.focus();
-                  }
-                } else if (['j', 'k', 'h', 'l', 'd', 'u', 'g', 'G'].includes(event.key)) {
-                  event.preventDefault();
-                  if (event.key === 'l') {
-                    event.currentTarget.scrollLeft += 80;
-                  } else if (event.key === 'g') {
-                    event.currentTarget.scrollTop = 0;
-                  } else if (event.key === 'G') {
-                    event.currentTarget.scrollTop = event.currentTarget.scrollHeight;
-                  } else {
-                    event.currentTarget.scrollTop +=
-                      (['j', 'd'].includes(event.key) ? 1 : -1) *
-                      (event.ctrlKey ? event.currentTarget.clientHeight / 2 : 40);
-                  }
-                }
-              }}
-            >
-              {preview.files[file] && (
-                <>
-                  <h3>{t('Before')}</h3>
-                  <pre aria-label={t('Before replacement')}>{preview.files[file].before}</pre>
-                  <h3>{t('After')}</h3>
-                  <pre aria-label={t('After replacement')}>{preview.files[file].after}</pre>
-                </>
-              )}
-            </div>
-          </>
+          <ReplacementPreviewPanel
+            preview={preview}
+            file={file}
+            setFile={setFile}
+            files={files}
+            diff={diff}
+          />
         ) : (
-          <div
-            ref={results}
-            className={styles.list}
-            tabIndex={0}
-            role="listbox"
-            aria-label={t('Search results')}
-            aria-activedescendant={rows[selection] ? `search-result-${selection}` : undefined}
-            onKeyDown={(event) => {
-              if (
-                event.nativeEvent.isComposing ||
-                event.keyCode === 229 ||
-                navigate(event, rows.length, setSelection)
-              ) {
-                return;
-              }
-              if (event.ctrlKey || event.altKey || event.metaKey) {
-                return;
-              }
-              if (event.key === '/') {
-                event.preventDefault();
-                queryInput.current?.focus();
-              } else if (event.key === 'r') {
-                event.preventDefault();
-                if (replaceInput.current) {
-                  replaceInput.current.focus();
-                } else {
-                  setReplace(true);
-                  focus('replace');
-                }
-              } else if (event.key === 'f') {
-                event.preventDefault();
-                folderInput.current?.focus();
-              } else if (replace && event.key === ' ') {
-                event.preventDefault();
-                toggle(selection);
-              } else if (replace && event.key === 'a') {
-                event.preventDefault();
-                setExcluded((old) =>
-                  old.size ? new Set() : new Set(rows.map((row) => row.index))
-                );
-              } else if (event.key === 'Enter') {
-                event.preventDefault();
-                open(selection);
-              }
-            }}
-          >
-            {rows.map((row) => (
-              <div
-                key={`${row.path}:${row.line}`}
-                id={`search-result-${row.index}`}
-                role="option"
-                aria-selected={row.index === selection}
-                className={`${row.index === selection ? styles.selected : ''} ${replace && excluded.has(row.index) ? styles.excluded : ''}`}
-                onClick={() => {
-                  if (locked.current) {
-                    return;
-                  }
-                  if (!replace) {
-                    open(row.index);
-                    return;
-                  }
-                  setSelection(row.index);
-                  results.current?.focus();
-                }}
-                onDoubleClick={() => open(row.index)}
-              >
-                {replace && (
-                  <span aria-label={t(excluded.has(row.index) ? 'Excluded' : 'Included')}>
-                    {excluded.has(row.index) ? '☐' : '☑'}
-                  </span>
-                )}
-                <span>
-                  <strong>{row.title}</strong>
-                  <small>{row.text}</small>
-                </span>
-              </div>
-            ))}
-            {!rows.length && (
-              <p>
-                {loading
-                  ? t('Looking through your project…')
-                  : query
-                    ? t('No matching lines.')
-                    : t('Enter text to search this workspace.')}
-              </p>
-            )}
-          </div>
+          <WorkspaceSearchResults
+            rows={rows}
+            selection={selection}
+            setSelection={setSelection}
+            excluded={excluded}
+            setExcluded={setExcluded}
+            results={results}
+            queryInput={queryInput}
+            replaceInput={replaceInput}
+            folderInput={folderInput}
+            locked={locked}
+            replace={replace}
+            setReplace={setReplace}
+            focus={focus}
+            open={open}
+            loading={loading}
+            query={query}
+          />
         )}
       </div>
       <div className={styles.footer} role="status">

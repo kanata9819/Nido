@@ -1,5 +1,5 @@
 import { useI18n } from './i18n';
-import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { memo, useRef, type CSSProperties } from 'react';
 import { ChevronDown, ChevronRight, RefreshCw, Command } from 'lucide-react';
 import ExplorerCommands from './components/ExplorerCommands';
 import FileIcon from './components/FileIcon';
@@ -7,6 +7,7 @@ import FolderIcon from './components/FolderIcon';
 import DiagnosticBadges from './components/DiagnosticBadges';
 import type { Workspace } from '../../shared/types';
 import { useExplorer } from './hooks/useExplorer';
+import { explorerRowHeight as rowHeight, useExplorerViewport } from './hooks/useExplorerViewport';
 import { toggle } from './sidebarToggle';
 import { createExplorerKeyHandler } from './sidebarKeyboard';
 import styles from './assets/Nido.module.css';
@@ -22,9 +23,6 @@ interface Props {
   onOpen: (path: string) => void;
   onError: (message: string) => void;
 }
-
-const rowHeight = 26;
-const overscan = 8;
 
 // Hidden trees keep their DOM and local state; refresh parent props when activated.
 export default memo(
@@ -74,68 +72,17 @@ function Sidebar({
     closeOperation,
     onDone
   } = useExplorer({ workspace, active, currentFile, onError });
-  const [top, setTop] = useState(initialScrollTop);
-  const viewport = useRef(initialScrollTop);
-  const restored = useRef(false);
-  const previousSelection = useRef(selected);
-  const previousReveal = useRef(0);
-  const [height, setHeight] = useState(200);
-  const first = Math.max(
-    0,
-    Math.min(visible.length - 1, Math.floor(Math.max(0, top - 5) / rowHeight) - overscan)
-  );
-  const last = Math.min(visible.length, Math.ceil((top + height) / rowHeight) + overscan);
-  const indices = Array.from({ length: Math.max(0, last - first) }, (_, index) => first + index);
-  if (selectedIndex >= 0 && selectedIndex < first) {
-    indices.unshift(selectedIndex);
-  } else if (selectedIndex >= last) {
-    indices.push(selectedIndex);
-  }
-  useLayoutEffect(() => {
-    const node = tree.current;
-    if (!active) {
-      restored.current = false;
-    }
-    if (!node || !active || !ready) {
-      return;
-    }
-    setHeight(node.clientHeight);
-    if (!restored.current) {
-      node.scrollTo({ top: viewport.current });
-      restored.current = true;
-      previousSelection.current = selected;
-      rememberScroll(node.scrollTop);
-    }
-    if (
-      (selected !== previousSelection.current || reveal !== previousReveal.current) &&
-      selectedIndex >= 0
-    ) {
-      const rowTop = selectedIndex * rowHeight + 5;
-      if (rowTop < node.scrollTop) {
-        node.scrollTo({ top: rowTop });
-      } else if (rowTop + rowHeight > node.scrollTop + node.clientHeight) {
-        node.scrollTo({ top: rowTop + rowHeight - node.clientHeight });
-      }
-    }
-    if (selectedIndex >= 0 || !selected) {
-      previousSelection.current = selected;
-      previousReveal.current = reveal;
-    }
-    viewport.current = node.scrollTop;
-    setTop(node.scrollTop);
-  }, [selected, selectedIndex, reveal, visible, active, ready, tree, rememberScroll]);
-  useEffect(() => {
-    const node = tree.current;
-    if (!node) {
-      return;
-    }
-    const observer = new ResizeObserver(() => {
-      setHeight(node.clientHeight);
-      setTop(node.scrollTop);
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [tree]);
+  const { indices, onScroll } = useExplorerViewport({
+    initialScrollTop,
+    selected,
+    selectedIndex,
+    reveal,
+    visible,
+    active,
+    ready,
+    tree,
+    rememberScroll
+  });
   const rootDecoration = gitFiles[gitFileKey(workspace.root).replace(/\/$/, '')];
 
   return (
@@ -239,14 +186,7 @@ function Sidebar({
         )}
         aria-activedescendant={selectedIndex >= 0 ? `file-${workspace.id}-${selected}` : undefined}
         aria-busy={!ready}
-        onScroll={(event) => {
-          const top = event.currentTarget.scrollTop;
-          setTop(top);
-          if (active && restored.current) {
-            viewport.current = top;
-            rememberScroll(top);
-          }
-        }}
+        onScroll={onScroll}
         onBlur={() => {
           centerPrefix.current = false;
         }}

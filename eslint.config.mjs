@@ -12,6 +12,7 @@ export default defineConfig(
       '**/dist',
       '**/out',
       '.downloads/**',
+      'logs/**',
       'resources/debug/**',
       'resources/nvim-win64/**',
       'test-results/**',
