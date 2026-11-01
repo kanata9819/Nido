@@ -1,25 +1,67 @@
 # Nido
 
-Neovimベースの、キーボードで操作するコードエディタ。
+[English](README.md) | [日本語](README.ja.md)
 
-![Rustコードを編集するNido（フォントサイズ10）](docs/images/nido-rust.png)
+**A keyboard-first code editor powered by Neovim.**
 
-## 思想
+Nido is an open-source desktop editor built with Electron, React, TypeScript, and Neovim. The goal is a comfortable, keyboard-driven development workflow: edit code, navigate files, search, work with Git, and use a terminal without constantly switching to the mouse.
 
-**キーボードですべての操作が完結する。**
+**Nido is under active development, and contributors are welcome!** Whether you are interested in editors, Neovim, Electron, UI, testing, or documentation, we'd love to collaborate.
 
-Vimの操作を土台に、編集・検索・ファイル操作・ターミナルまで、キーボードから手を離さずに。
+![Nido editing Rust code](docs/images/nido-rust.png)
 
-## 対応OS
+## Design philosophy
 
-Windows（x64）
+**Keep your hands on the keyboard.**
 
-## 表示設定
+Nido builds on Vim-style editing and brings common development tasks into a single desktop application with a keyboard-focused interface.
 
-設定（`Space ,`）の「アクティビティバーの位置」で、ファイルやGitなどのアイコンを「左端」または「エクスプローラーの上部」に配置できます。変更はすぐに反映され、再起動後も保持されます。
+## Current functionality
 
-## 編集内容の復旧
+- Neovim-powered code editing.
+- File navigation, search, Git tools, and an integrated terminal.
+- Configurable Activity Bar placement: on the left edge or above the Explorer. Open Settings with `Space ,` to change it.
+- Editing recovery: local history for named files and workspace restoration of modified unnamed buffers. Recovery has size limits and intervals; changes immediately before a crash may not be captured.
 
-自動編集履歴が有効なとき、名前のあるファイルの編集中の内容は編集タイムマシンに記録されます。異常終了後はファイルを開き、`Ctrl+Shift+H` から履歴を確認して復元できます。名前のない変更済みバッファは、ワークスペースの復元時に未保存のまま開きます。
+## Platform support
 
-履歴の対象は1ファイルあたり4 MiB・100,000行までです。名前のないバッファの復旧は1件8 MiB、合計16 MiB・100件までです。上限を超えた場合は通知します。記録には間隔があるため、異常終了の直前の変更が含まれない場合があります。自動編集履歴を無効にすると、新しい復旧用の内容も記録されません。
+- **Windows x64** is the currently documented supported platform.
+- macOS and Linux support should not be assumed from the presence of build scripts.
+
+## Development quick start
+
+On **Windows x64**, install Git, Node.js, and pnpm, then run:
+
+```powershell
+git clone https://github.com/kanata9819/Nido.git
+cd Nido
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+The development command prepares bundled Neovim and debugger dependencies using PowerShell scripts. The first run may download external archives and requires network access.
+
+To run checks:
+
+```powershell
+pnpm typecheck
+pnpm lint
+pnpm test
+```
+
+For contribution guidelines, troubleshooting expectations, and the code layout, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Join the project
+
+Nido is a community-friendly work in progress. Feedback, bug reports, documentation improvements, testing, and code contributions are welcome.
+
+- [Explore or open issues](https://github.com/kanata9819/Nido/issues) to discuss bugs and ideas.
+- Check [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+- For substantial changes, please start with an issue so we can discuss the approach together.
+- Japanese and English contributions are both welcome.
+
+**Want to help build a keyboard-first editor? Join us!**
+
+## License
+
+Nido is licensed under the [MIT License](LICENCE). Third-party components may have separate license notices.
