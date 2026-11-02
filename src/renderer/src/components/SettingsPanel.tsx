@@ -1,19 +1,12 @@
 import { useI18n } from '../i18n';
-import type { TerminalShell, UITheme } from '../../../shared/types';
+import type { UITheme } from '../../../shared/types';
 import type { ActivityBarPosition, EditorSettings } from '../hooks/useEditorSettings';
 import styles from '../assets/SettingsPanel.module.css';
 import type { Language } from '../../../shared/i18n';
-import { useEffect, useState } from 'react';
+import { settingsKeyDown } from '../settingsKeyboard';
+import TerminalSettings from './TerminalSettings';
 
 export type SettingsPanelProps = Omit<EditorSettings, 'sidebarWidth' | 'resizeSidebar'>;
-
-const shellLabels: Record<TerminalShell, string> = {
-  auto: 'Auto (installed shell)',
-  pwsh: 'PowerShell 7 (pwsh)',
-  'powershell.exe': 'Windows PowerShell',
-  'cmd.exe': 'Command Prompt (cmd)',
-  'wsl.exe': 'WSL'
-};
 
 export default function SettingsPanel({
   historyEnabled,
@@ -64,67 +57,8 @@ export default function SettingsPanel({
   setLineHeight
 }: SettingsPanelProps): React.JSX.Element {
   const t = useI18n();
-  const [installedShells, setInstalledShells] = useState<TerminalShell[]>();
-  const [shellError, setShellError] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    void window.nido
-      .availableTerminalShells()
-      .then((shells) => {
-        if (!cancelled) {
-          setInstalledShells(shells);
-          setTerminalShell((current) => (shells.includes(current) ? current : 'auto'));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setShellError(true);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [setTerminalShell]);
-  const shellChoices: TerminalShell[] = installedShells ?? ['auto'];
   return (
-    <div
-      className={styles.settings}
-      onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing || event.altKey || event.metaKey) {
-          return;
-        }
-        const target = event.target as HTMLInputElement | HTMLSelectElement;
-        const key = event.key.toLowerCase();
-        const down = event.ctrlKey && key === 'd';
-        const up = event.ctrlKey && key === 'u';
-        if (target.tagName === 'SELECT' && !event.ctrlKey) {
-          return;
-        }
-        if (
-          target.type === 'number' &&
-          !event.ctrlKey &&
-          ['ArrowUp', 'ArrowDown'].includes(event.key)
-        ) {
-          return;
-        }
-        const text = target.type === 'text';
-        const next = down || event.key === 'ArrowDown' || ((!text || event.ctrlKey) && key === 'j');
-        const previous = up || event.key === 'ArrowUp' || ((!text || event.ctrlKey) && key === 'k');
-        if (next || previous) {
-          event.preventDefault();
-          const inputs = [
-            ...event.currentTarget.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
-              'input:not(:disabled), select:not(:disabled)'
-            )
-          ];
-          const index = inputs.indexOf(target);
-          inputs[(index + (next ? 1 : -1) + inputs.length) % inputs.length]?.focus();
-        } else if (event.key === 'Enter' && target.type === 'checkbox') {
-          event.preventDefault();
-          target.click();
-        }
-      }}
-    >
+    <div className={styles.settings} onKeyDown={settingsKeyDown}>
       <section aria-labelledby="settings-general">
         <h3 id="settings-general">{t('General and layout')}</h3>
         <label>
@@ -389,33 +323,7 @@ export default function SettingsPanel({
           )}
         </small>
       </section>
-      <section aria-labelledby="settings-terminal">
-        <h3 id="settings-terminal">{t('Terminal')}</h3>
-        <label>
-          {t('Shell')}
-          <select
-            value={installedShells?.includes(terminalShell) ? terminalShell : 'auto'}
-            disabled={!installedShells}
-            aria-busy={!installedShells && !shellError}
-            aria-describedby="settings-shell-status"
-            onChange={(event) => setTerminalShell(event.target.value as TerminalShell)}
-          >
-            {shellChoices.map((shell) => (
-              <option key={shell} value={shell}>
-                {t(shellLabels[shell])}
-              </option>
-            ))}
-          </select>
-        </label>
-        <small id="settings-shell-status" role="status">
-          {shellError
-            ? t('Could not check installed shells.')
-            : !installedShells
-              ? t('Checking installed shells…')
-              : t('Only installed shells are shown.')}
-        </small>
-        <small>{t('Applies to new terminals and Restart Shell. The selection is saved.')}</small>
-      </section>
+      <TerminalSettings terminalShell={terminalShell} setTerminalShell={setTerminalShell} />
       <p>
         {t('Tab / ↑ ↓ / j k: Move · ← →: Adjust · Space / Enter: Toggle · Esc: Close')}
         <br />

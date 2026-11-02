@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import type { SearchResults } from '../../../shared/types';
-import { defaultSearchOptions, type ReplacementPreview } from '../../../shared/search';
+import { defaultSearchOptions } from '../../../shared/search';
 import { useI18n } from '../i18n';
 import styles from '../assets/WorkspaceSearch.module.css';
 import { useFocusGuard } from '../hooks/useFocusGuard';
+import { useWorkspaceSearch } from '../hooks/useWorkspaceSearch';
 import { navigateSearchList as navigate } from './workspaceSearchNavigation';
 import ReplacementPreviewPanel from './ReplacementPreviewPanel';
 import WorkspaceSearchResults from './WorkspaceSearchResults';
@@ -21,15 +21,6 @@ export default function WorkspaceSearch({
   const [replacement, setReplacement] = useState('');
   const [replace, setReplace] = useState(false);
   const [options, setOptions] = useState(defaultSearchOptions);
-  const [selection, setSelection] = useState(0);
-  const [excluded, setExcluded] = useState(new Set<number>());
-  const [loading, setLoading] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const [result, setResult] = useState<SearchResults>({ matches: [], truncated: false });
-  const [preview, setPreview] = useState<ReplacementPreview>();
-  const [file, setFile] = useState(0);
   const queryInput = useRef<HTMLInputElement>(null);
   const replaceInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
@@ -37,14 +28,33 @@ export default function WorkspaceSearch({
   const files = useRef<HTMLDivElement>(null);
   const diff = useRef<HTMLDivElement>(null);
   const applyButton = useRef<HTMLButtonElement>(null);
-  const request = useRef(0);
-  const alive = useRef(true);
-  const locked = useRef(false);
   const pendingEnter = useRef<string | undefined>(undefined);
   const focusTarget = useRef<'results' | 'files' | 'replace' | undefined>(undefined);
   const focus = (target: 'results' | 'files' | 'replace'): void => {
     focusTarget.current = target;
   };
+  const {
+    selection,
+    setSelection,
+    excluded,
+    setExcluded,
+    loading,
+    setLoading,
+    busy,
+    locked,
+    error,
+    notice,
+    result,
+    preview,
+    setPreview,
+    file,
+    setFile,
+    failure,
+    invalidate: invalidateSearch,
+    reset,
+    prepare,
+    apply
+  } = useWorkspaceSearch({ workspaceId, query, options, replacement, focus });
   useLayoutEffect(() => {
     const target = focusTarget.current;
     const element =
@@ -61,13 +71,6 @@ export default function WorkspaceSearch({
     }
   });
 
-  const failure = (value: unknown): void => {
-    const message = String(value).replace(
-      /^Error: (?:Error invoking remote method '[^']+': Error: )?/,
-      ''
-    );
-    setError(t(message));
-  };
   const open = (index: number): void => {
     const match = result.matches[index];
     if (!match) {
@@ -83,45 +86,6 @@ export default function WorkspaceSearch({
       })
       .catch(failure);
   };
-
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      void window.nido
-        .searchText(workspaceId, query, options)
-        .then((result) => {
-          if (!cancelled) {
-            setResult(result);
-            setExcluded(new Set());
-            setSelection(0);
-          }
-        })
-        .catch((error) => {
-          if (!cancelled) {
-            failure(error);
-          }
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setLoading(false);
-          }
-        });
-    }, 100);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-      void window.nido.cancelFindFiles(workspaceId).catch(() => {});
-    };
-    // Translation changes do not restart a search or invalidate its preview.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, query, options]);
 
   useEffect(() => {
     if (!loading && pendingEnter.current === query) {
@@ -148,17 +112,12 @@ export default function WorkspaceSearch({
     ) {
       focus('results');
     }
-    request.current++;
-    setPreview(undefined);
-    setError('');
-    setNotice('');
+    invalidateSearch();
   };
   const searchChanged = (): void => {
     invalidate();
     pendingEnter.current = undefined;
-    setResult({ matches: [], truncated: false });
-    setSelection(0);
-    setLoading(!!query);
+    reset();
   };
   const changeOption = (key: 'caseSensitive' | 'regex' | 'wholeWord'): void => {
     if (locked.current) {
@@ -166,77 +125,6 @@ export default function WorkspaceSearch({
     }
     searchChanged();
     setOptions((options) => ({ ...options, [key]: !options[key] }));
-  };
-  const prepare = async (): Promise<void> => {
-    if (locked.current || loading || !result.token) {
-      return;
-    }
-    const selected = result.matches.flatMap((_, index) => (excluded.has(index) ? [] : [index]));
-    if (!selected.length) {
-      return;
-    }
-    const generation = ++request.current;
-    locked.current = true;
-    setBusy(true);
-    setError('');
-    try {
-      const value = await window.nido.previewReplacement(
-        workspaceId,
-        result.token,
-        replacement,
-        selected
-      );
-      if (!alive.current || generation !== request.current) {
-        return;
-      }
-      setPreview(value);
-      setFile(0);
-      focus('files');
-    } catch (error) {
-      if (alive.current && generation === request.current) {
-        failure(error);
-      }
-    } finally {
-      locked.current = false;
-      if (alive.current) {
-        setBusy(false);
-      }
-    }
-  };
-  const apply = async (): Promise<void> => {
-    if (locked.current || !preview?.count) {
-      return;
-    }
-    const generation = ++request.current;
-    locked.current = true;
-    setBusy(true);
-    setError('');
-    try {
-      const value = await window.nido.applyReplacement(workspaceId, preview.token);
-      if (!alive.current || generation !== request.current) {
-        return;
-      }
-      setPreview(undefined);
-      setResult({ matches: [], truncated: false });
-      setNotice(
-        t(
-          'Replaced {count} occurrences in {files} files. Unsaved edits · :wall to save all · u to undo in each file.',
-          { ...value }
-        )
-      );
-      focus('results');
-    } catch (error) {
-      if (alive.current && generation === request.current) {
-        failure(error);
-        setPreview(undefined);
-        focus('results');
-      }
-    } finally {
-      locked.current = false;
-      if (alive.current) {
-        setBusy(false);
-      }
-    }
   };
   const rows = useMemo(
     () =>
