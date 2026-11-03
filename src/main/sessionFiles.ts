@@ -45,7 +45,7 @@ export class SessionFiles {
     }
     await this.client.request('nvim_exec_lua', [
       `local path, line, column = ...
-local buffer = vim.fn.bufnr(path)
+local buffer = require('nido_buffers').find(path)
 if line > 0 then require('nido_scroll').restore() end
 -- Search navigation must preserve edits already held in an open buffer.
 if line > 0 and buffer > 0 and vim.api.nvim_buf_is_loaded(buffer) then

@@ -124,6 +124,42 @@ test('reopening tabs preserves live edits, retries missing files and never resto
   }
 });
 
+test('literal file names open, reopen and restore without selecting a pattern match', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-literal-buffer-')));
+  const name = 'file[1].txt';
+  let session: Session | undefined;
+  let restored: Session | undefined;
+  try {
+    await writeFile(join(root, name), 'literal first\nliteral second\n');
+    await writeFile(join(root, 'file1.txt'), 'other first\nother second\n');
+    session = await Session.create(root, () => {});
+    await session.openFile('file1.txt');
+    await session.client.request('nvim_buf_set_lines', [0, 0, -1, false, ['keep this draft']]);
+    await session.openFile(name, 2, 3);
+    assert.equal(await session.client.request('nvim_buf_get_name', [0]), join(root, name));
+    assert.equal(await session.client.request('nvim_get_current_line', []), 'literal second');
+    await session.client.request('nvim_buf_set_lines', [0, 1, 2, false, ['literal edit']]);
+    await session.openFile(name, 2, 3);
+    assert.equal(await session.client.request('nvim_get_current_line', []), 'literal edit');
+    await session.save();
+    const buffer = (await session.client.request('nvim_eval', ['bufnr()'])) as number;
+    await session.closeBuffer(buffer);
+    await session.reopenBuffer();
+    assert.equal(await session.client.request('nvim_buf_get_name', [0]), join(root, name));
+    assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), [2, 2]);
+    const snapshot = await session.snapshot();
+    restored = await Session.create(root, () => {});
+    assert.deepEqual(await restored.restore(snapshot), []);
+    assert.equal(await restored.client.request('nvim_buf_get_name', [0]), join(root, name));
+    await session.openFile('file1.txt');
+    assert.equal(await session.client.request('nvim_get_current_line', []), 'keep this draft');
+    assert.equal(await readFile(join(root, 'file1.txt'), 'utf8'), 'other first\nother second\n');
+  } finally {
+    await Promise.all([session?.stop(), restored?.stop()]);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 for (const navigation of ['selectBuffer', 'openFile', 'openReference', 'openProblem'] as const) {
   test(`${navigation} cannot redirect pending input or line-ending changes into another file`, async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-tab-input-order-'));

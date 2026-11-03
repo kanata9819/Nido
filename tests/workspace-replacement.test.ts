@@ -108,6 +108,22 @@ test('regex captures, Unicode word boundaries, case and folder options respect G
     assert.equal(end.matches.length, 1, 'a final newline must not add a phantom row');
   }));
 
+test('replacement edits literal bracketed file names without changing a similarly named buffer', () =>
+  fixture(async (session, root) => {
+    const name = 'file[1].txt';
+    await writeFile(join(root, name), 'needle\n');
+    await writeFile(join(root, 'file1.txt'), 'needle\n');
+    await session.openFile('file1.txt');
+    const result = await session.searchText('needle', defaultSearchOptions);
+    const index = result.matches.findIndex((match) => match.path === name);
+    assert(index >= 0);
+    const preview = await session.previewReplacement(result.token!, 'changed', [index]);
+    await session.applyReplacement(preview.token);
+    await session.saveAll();
+    assert.equal(await readFile(join(root, name), 'utf8'), 'changed\n');
+    assert.equal(await readFile(join(root, 'file1.txt'), 'utf8'), 'needle\n');
+  }));
+
 test('replacement rejects unsaved or externally changed targets before touching any file', () =>
   fixture(async (session, root) => {
     await writeFile(join(root, 'a.txt'), 'needle\n');

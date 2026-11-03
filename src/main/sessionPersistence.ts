@@ -149,7 +149,7 @@ export class SessionPersistence {
       return errors;
     }
     await this.client.request('nvim_exec_lua', [
-      `local b = vim.fn.bufnr(...)
+      `local b = require('nido_buffers').find(...)
       if b > 0 then
         vim.api.nvim_set_current_buf(b)
       end`,
