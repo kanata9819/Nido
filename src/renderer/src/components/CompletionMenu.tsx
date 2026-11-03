@@ -34,7 +34,9 @@ interface Menu {
   pending?: boolean;
 }
 
-const rowHeight = 28;
+const rowHeight = 22;
+// Eight rows keep the menu close to the cursor without hiding much of the buffer.
+const visibleRows = 8;
 const overscan = 8;
 
 const kindIcons: Record<string, LucideIcon> = {
@@ -82,7 +84,7 @@ export default function CompletionMenu({
 }): React.JSX.Element | null {
   const t = useI18n();
   const [menu, setMenu] = useState<Menu>();
-  const [viewport, setViewport] = useState({ top: 0, height: 280 });
+  const [viewport, setViewport] = useState({ top: 0, height: visibleRows * rowHeight });
   const card = useRef<HTMLDivElement>(null);
   const refreshing = useRef(false);
   const currentMenu = useRef(menu);
@@ -273,7 +275,7 @@ export default function CompletionMenu({
         onMouseDown={(event) => event.preventDefault()}
       >
         <div className={styles.heading}>
-          <Braces size={14} /> {t('Completion')}{' '}
+          <Braces size={12} /> {t('Completion')}{' '}
           <span>
             {menu.items.length} {t('candidates')}
           </span>
@@ -322,7 +324,7 @@ export default function CompletionMenu({
                     aria-label={t(kind || 'Text')}
                     title={t(kind || 'Text')}
                   >
-                    <Icon size={16} aria-hidden="true" />
+                    <Icon size={14} aria-hidden="true" />
                   </span>
                   <span className={styles.word}>{word}</span>
                   <span className={styles.detail}>{detail}</span>
