@@ -98,7 +98,7 @@ test('history lists read existing revisions once and still detect external chang
   });
   const listed = await service.list(session);
   mocked.mock.restore();
-  assert.equal(parsed, 1, 'opening history must parse the existing history only once');
+  assert.equal(parsed, 0, 'history this store just wrote must be reused without parsing');
   assert.equal(listed.versions.length, 2);
   assert.equal((await stat(historyPath)).mtimeMs, before.mtimeMs);
   assert.ok(listed.versions.every((version) => !('text' in version)));
@@ -115,6 +115,44 @@ test('history lists read existing revisions once and still detect external chang
   assert.equal(await readFile(historyPath, 'utf8'), '{interrupted');
   await writeFile(historyPath, valid);
   assert.equal((await service.list(session)).versions.length, 4);
+});
+
+test('repeated captures reuse validated history and re-encode only the new revision', async (context) => {
+  const root = await fixture(context);
+  const directory = join(root, 'history');
+  const file = join(root, 'large.txt');
+  const store = new LocalHistory(directory);
+  const base = 'x'.repeat(200_000);
+  for (let i = 0; i < 10; i++) await store.record(file, content(`${i}${base}`), 'draft');
+  let parsed = 0;
+  let encodedBytes = 0;
+  const parse = JSON.parse;
+  const stringify = JSON.stringify;
+  try {
+    JSON.parse = (...args: Parameters<typeof JSON.parse>) => {
+      parsed++;
+      return parse(...args);
+    };
+    JSON.stringify = (value, replacer, space) => {
+      const result = stringify(value, replacer as never, space);
+      if (typeof result === 'string') encodedBytes += result.length;
+      return result;
+    };
+    for (let i = 0; i < 5; i++) await store.record(file, content(`edit ${i}${base}`), 'draft');
+  } finally {
+    JSON.parse = parse;
+    JSON.stringify = stringify;
+  }
+  assert.equal(parsed, 0, 'captures must not re-read history this store wrote');
+  assert.ok(encodedBytes < 6 * base.length, `encoded ${encodedBytes} characters for 5 captures`);
+
+  // Another writer changes the file: the next capture must see its revision.
+  const external = await new LocalHistory(directory).record(file, content('external\n'), 'saved');
+  await store.record(file, content('after\n'), 'draft');
+  const ids = (await store.list(file)).map(({ id }) => id);
+  assert.ok(ids.includes(external.id));
+  assert.equal(ids.length, 17);
+  assert.deepEqual(await new LocalHistory(directory).list(file), await store.list(file));
 });
 
 test('a failed history list write preserves committed revisions and permits retry', async (context) => {
