@@ -547,12 +547,20 @@ return false`,
   async closeBuffer(buffer: number, force = false): Promise<void> {
     this.interaction.cancelPrefetch();
     await this.interaction.command(() =>
-      this.client.request('nvim_exec_lua', [
-        `local buffer, force = ...
-if not force and vim.bo[buffer].modified then error('Buffer has unsaved changes.') end
-vim.api.nvim_buf_delete(buffer, {force=force})`,
-        [buffer, force]
-      ])
+      this.client.request('nvim_exec_lua', ["require('nido_buffers').close(...)", [buffer, force]])
+    );
+  }
+
+  async moveBuffer(buffer: number, target: number): Promise<void> {
+    await this.interaction.command(() =>
+      this.client.request('nvim_exec_lua', ["require('nido_buffers').move(...)", [buffer, target]])
+    );
+  }
+
+  async reopenBuffer(): Promise<void> {
+    this.interaction.cancelPrefetch();
+    await this.interaction.command(() =>
+      this.client.request('nvim_exec_lua', ["require('nido_buffers').reopen()", []])
     );
   }
 

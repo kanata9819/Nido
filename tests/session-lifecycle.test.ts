@@ -29,6 +29,101 @@ vim.lsp.get_clients = original`,
   assert.equal(session.state.references?.items.length, 1);
 }
 
+test('file tabs reorder, reopen in their original positions and retain their cursor', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-tab-order-'));
+  let session: Session | undefined;
+  try {
+    for (const name of ['first.txt', 'second.txt', 'third.txt']) {
+      await writeFile(join(root, name), 'first line\nsecond line\nthird line\n');
+    }
+    session = await Session.create(root, () => {});
+    const buffers: number[] = [];
+    for (const name of ['first.txt', 'second.txt', 'third.txt']) {
+      await session.openFile(name);
+      buffers.push((await session.client.request('nvim_eval', ['bufnr()'])) as number);
+    }
+    const [first, second, third] = buffers;
+    await session.moveBuffer(third, first);
+    await session.client.request('nvim_eval', ['1']);
+    assert.deepEqual(
+      session.state.buffers.map((buffer) => buffer.id),
+      [third, first, second]
+    );
+    assert.deepEqual(
+      (await session.snapshot()).files.map((file) => file.path),
+      ['third.txt', 'first.txt', 'second.txt'].map((name) => join(root, name))
+    );
+    await assert.rejects(session.moveBuffer(first, 999999), /Invalid target buffer/);
+    await assert.rejects(session.moveBuffer(999999, first), /Invalid buffer/);
+    await session.selectBuffer(first);
+    await session.client.request('nvim_win_set_cursor', [0, [3, 4]]);
+    await session.closeBuffer(first);
+    await session.reopenBuffer();
+    await session.client.request('nvim_eval', ['1']);
+    assert.deepEqual(
+      session.state.buffers.map((buffer) => buffer.name),
+      ['third.txt', 'first.txt', 'second.txt'].map((name) => join(root, name))
+    );
+    assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), [3, 4]);
+    const reopened = (await session.client.request('nvim_eval', ['bufnr()'])) as number;
+    await session.closeBuffer(third);
+    await session.closeBuffer(reopened);
+    await session.reopenBuffer();
+    assert.equal(await session.client.request('nvim_buf_get_name', [0]), join(root, 'first.txt'));
+    await session.reopenBuffer();
+    assert.equal(await session.client.request('nvim_buf_get_name', [0]), join(root, 'third.txt'));
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('reopening tabs preserves live edits, retries missing files and never restores discarded edits', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-reopen-tab-'));
+  let session: Session | undefined;
+  try {
+    const path = join(root, 'notes.txt');
+    await writeFile(path, 'saved text\nsecond line\n');
+    session = await Session.create(root, () => {});
+    await session.openFile('notes.txt');
+    let buffer = (await session.client.request('nvim_eval', ['bufnr()'])) as number;
+    await session.client.request('nvim_buf_set_lines', [buffer, 0, -1, false, ['discard me']]);
+    await assert.rejects(session.closeBuffer(buffer), /unsaved changes/);
+    await session.reopenBuffer();
+    assert.deepEqual(await session.client.request('nvim_buf_get_lines', [0, 0, -1, false]), [
+      'discard me'
+    ]);
+    await session.closeBuffer(buffer, true);
+    await rm(path);
+    await assert.rejects(session.reopenBuffer(), /File is unavailable/);
+    await writeFile(path, 'new disk text\n');
+    await session.reopenBuffer();
+    assert.deepEqual(await session.client.request('nvim_buf_get_lines', [0, 0, -1, false]), [
+      'new disk text'
+    ]);
+    buffer = (await session.client.request('nvim_eval', ['bufnr()'])) as number;
+    await session.closeBuffer(buffer);
+    await session.openFile('notes.txt');
+    const existing = (await session.client.request('nvim_eval', ['bufnr()'])) as number;
+    await session.client.request('nvim_buf_set_lines', [
+      existing,
+      0,
+      -1,
+      false,
+      ['keep live edits']
+    ]);
+    await session.reopenBuffer();
+    assert.equal(await session.client.request('nvim_eval', ['bufnr()']), existing);
+    assert.deepEqual(await session.client.request('nvim_buf_get_lines', [0, 0, -1, false]), [
+      'keep live edits'
+    ]);
+    assert.equal((await session.snapshot()).files.length, 1);
+  } finally {
+    await session?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 for (const navigation of ['selectBuffer', 'openFile', 'openReference', 'openProblem'] as const) {
   test(`${navigation} cannot redirect pending input or line-ending changes into another file`, async () => {
     const root = await mkdtemp(join(tmpdir(), 'nido-tab-input-order-'));

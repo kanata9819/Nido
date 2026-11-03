@@ -220,7 +220,7 @@ publish = function()
     if changed_buffers then
       buffers_dirty = false
       buffers = {}
-      for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+      for _, buffer in ipairs(require('nido_buffers').list()) do
         if vim.api.nvim_buf_is_valid(buffer) and vim.bo[buffer].buflisted then
           table.insert(buffers, {
             id = buffer,
@@ -300,6 +300,9 @@ vim.api.nvim_create_autocmd({
 }, {callback=function() buffers_dirty = true; publish() end})
 vim.api.nvim_create_autocmd('OptionSet', {
   pattern={'buflisted', 'modified'}, callback=function() buffers_dirty = true; publish() end,
+})
+vim.api.nvim_create_autocmd('User', {
+  pattern='NidoBuffers', callback=function() buffers_dirty = true; publish() end,
 })
 vim.api.nvim_create_autocmd({
   'BufEnter', 'BufAdd', 'BufDelete', 'BufModifiedSet', 'BufFilePost', 'BufWritePost',

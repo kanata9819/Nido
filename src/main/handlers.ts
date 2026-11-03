@@ -234,6 +234,10 @@ export function registerHandlers({
     session(id).previewReference(integer(index), integer(version))
   );
   handle('selectBuffer', (id, buffer) => session(id).selectBuffer(integer(buffer)));
+  handle('moveBuffer', (id, buffer, target) =>
+    session(id).moveBuffer(integer(buffer), integer(target))
+  );
+  handle('reopenBuffer', (id) => session(id).reopenBuffer());
 
   handle('closeBuffer', async (id, value) => {
     const s = session(id);

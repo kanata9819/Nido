@@ -450,6 +450,14 @@
   gap: 10px;
   padding: 0 10px 0 17px;
   min-width: 0;
+  cursor: grab;
+}
+.fileTab > button:first-child:active {
+  cursor: grabbing;
+}
+.fileTab[data-drop-target] {
+  outline: 1px solid var(--ui-accent, #a3cc94);
+  outline-offset: -2px;
 }
 .fileTab > button:first-child > span {
   overflow: hidden;

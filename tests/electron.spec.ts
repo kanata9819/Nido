@@ -4851,3 +4851,57 @@ test('disabled automatic history excludes untitled drafts from workspace checkpo
     await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
+
+test('file tabs retain reordered positions and the reopened cursor across restart', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nido-file-tabs-'));
+  const workspace = join(root, 'workspace');
+  await mkdir(workspace);
+  const files = ['first.txt', 'second.txt', 'third.txt'];
+  await Promise.all(
+    files.map((file) => writeFile(join(workspace, file), 'line one\nline two\nline three\n'))
+  );
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const options = { args: ['.', `--user-data-dir=${join(root, 'profile')}`], env };
+  let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  try {
+    running = await electron.launch(options);
+    let page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, workspace);
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    let tabs = page.getByRole('tablist', { name: 'Files', exact: true });
+    for (const file of files) {
+      await page.keyboard.type(`:edit ${file}`);
+      await page.keyboard.press('Enter');
+      await expect(tabs.getByRole('tab', { selected: true })).toHaveText(file);
+    }
+    await page.keyboard.type('3G4l');
+    await expect(page.getByText('Ln 3, Col 5', { exact: true })).toBeVisible();
+    await tabs
+      .getByRole('tab', { name: 'first.txt', exact: true })
+      .dragTo(tabs.getByRole('tab', { name: 'third.txt', exact: true }));
+    const reordered = ['second.txt', 'third.txt', 'first.txt'];
+    await expect(tabs.getByRole('tab')).toHaveText(reordered);
+    await page.getByRole('button', { name: 'Close file third.txt', exact: true }).click();
+    await expect(tabs.getByRole('tab')).toHaveText(['second.txt', 'first.txt']);
+    await page.keyboard.press('Control+Shift+t');
+    await expect(tabs.getByRole('tab')).toHaveText(reordered);
+    await expect(tabs.getByRole('tab', { selected: true })).toHaveText('third.txt');
+    await expect(page.getByText('Ln 3, Col 5', { exact: true })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+
+    await running.close();
+    running = await electron.launch(options);
+    page = await running.firstWindow();
+    tabs = page.getByRole('tablist', { name: 'Files', exact: true });
+    await expect(tabs.getByRole('tab')).toHaveText(reordered);
+    await expect(tabs.getByRole('tab', { selected: true })).toHaveText('third.txt');
+    await expect(page.getByText('Ln 3, Col 5', { exact: true })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+  } finally {
+    await running?.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});

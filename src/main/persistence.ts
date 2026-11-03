@@ -51,6 +51,8 @@ function parseLayout(content: string): SavedLayout {
                 draft &&
                 (draft.id === undefined ||
                   (typeof draft.id === 'string' && /^[a-f0-9-]{36}:\d+$/.test(draft.id))) &&
+                (draft.index === undefined ||
+                  (Number.isSafeInteger(draft.index) && draft.index > 0)) &&
                 Array.isArray(draft.lines) &&
                 draft.lines.length > 0 &&
                 draft.lines.every((line) => typeof line === 'string' && !line.includes('\n')) &&
@@ -138,12 +140,27 @@ function retainExistingDrafts(previous: SavedLayout, current: SavedLayout): Save
           ? undefined
           : workspace.untitled[workspace.currentUntitled];
       const currentUntitled = active ? retained.indexOf(active) : -1;
+      const removedPositions = workspace.untitled.flatMap((draft) =>
+        !retained.includes(draft) && draft.index !== undefined ? [draft.index] : []
+      );
       const rest = { ...workspace };
       delete rest.untitled;
       delete rest.currentUntitled;
       return {
         ...rest,
-        ...(retained.length ? { untitled: retained } : {}),
+        ...(retained.length
+          ? {
+              untitled: retained.map((draft) => {
+                const index = draft.index;
+                return index === undefined
+                  ? draft
+                  : {
+                      ...draft,
+                      index: index - removedPositions.filter((position) => position < index).length
+                    };
+              })
+            }
+          : {}),
         ...(currentUntitled >= 0 ? { currentUntitled } : {})
       };
     })
