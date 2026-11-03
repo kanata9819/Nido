@@ -299,8 +299,11 @@ function Editor({
             scroll.current(
               Number.isFinite(pixels) ? pixels / height : 0,
               scrollFollowCursor,
-              // Fine pixel deltas already describe smooth touchpad motion.
-              event.deltaMode !== 0 || Math.abs(pixels) >= height,
+              // Fine pixel deltas already describe smooth touchpad motion; wheel notches
+              // (including Shift+wheel and tilt) move several lines or columns at once.
+              event.deltaMode !== 0 ||
+                Math.abs(pixels) >= height ||
+                Math.abs(horizontalPixels) >= 3 * width,
               Number.isFinite(columns) ? columns : 0
             );
           }

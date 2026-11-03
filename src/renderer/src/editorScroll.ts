@@ -30,6 +30,14 @@ export class EditorScroll {
     follow: boolean;
     duration: number;
   };
+  // Eased sideways wheel movement, in columns, advanced on animation frames.
+  private horizontalMotion?: {
+    distance: number;
+    remaining: number;
+    start: number;
+    follow: boolean;
+    duration: number;
+  };
 
   constructor(private readonly options: Options) {}
 
@@ -55,7 +63,17 @@ export class EditorScroll {
     }
   }
 
+  /** Apply the rest of an eased sideways gesture now, e.g. before switching axes. */
+  finishHorizontalMotion(): void {
+    const motion = this.horizontalMotion;
+    this.horizontalMotion = undefined;
+    if (motion?.remaining) {
+      this.shiftHorizontal(motion.remaining, motion.follow, true, Math.abs(motion.distance) / 4);
+    }
+  }
+
   stopHorizontal(): void {
+    this.horizontalMotion = undefined;
     this.horizontal.stop(this.queue.pendingColumns);
     this.queue.cancelHorizontal();
   }
@@ -85,7 +103,7 @@ export class EditorScroll {
   }
 
   get animating(): boolean {
-    return this.wheelMotion !== undefined;
+    return this.wheelMotion !== undefined || this.horizontalMotion !== undefined;
   }
 
   get needsPrefetch(): boolean {
@@ -118,6 +136,7 @@ export class EditorScroll {
     if (!this.options.enabled()) {
       this.paused = true;
       this.wheelMotion = undefined;
+      this.horizontalMotion = undefined;
       this.queue.cancelQueued();
       this.horizontal.stop(this.queue.pendingColumns, true);
       this.options.grid.scrollPreview = 0;
@@ -131,6 +150,7 @@ export class EditorScroll {
 
   stop(preserveHorizontal = false): void {
     this.wheelMotion = undefined;
+    this.horizontalMotion = undefined;
     this.queue.cancelQueued();
     this.horizontal.stop(this.queue.pendingColumns, preserveHorizontal);
     this.options.grid.scrollPreview = 0;
@@ -192,6 +212,22 @@ export class EditorScroll {
   }
 
   advance(now: number, animate: boolean): void {
+    const sideways = this.horizontalMotion;
+    if (sideways) {
+      const offset = animate
+        ? scrollOffset(sideways.distance, now - sideways.start, sideways.duration)
+        : 0;
+      const remaining = Math.abs(offset) < 0.001 ? 0 : offset;
+      const columns = sideways.remaining - remaining;
+      sideways.remaining = remaining;
+      if (!remaining) {
+        this.horizontalMotion = undefined;
+      }
+      if (columns) {
+        // Size the native lookahead by the whole gesture, not this frame's sliver.
+        this.shiftHorizontal(columns, sideways.follow, true, Math.abs(sideways.distance) / 4);
+      }
+    }
     const motion = this.wheelMotion;
     if (!motion) {
       return;
@@ -248,7 +284,38 @@ export class EditorScroll {
     return low + (target - top) / (grid.rowTop(low + 1) - top) - position;
   }
 
-  requestHorizontal(columns: number, follow: boolean, preview = true): void {
+  requestHorizontal(
+    columns: number,
+    follow: boolean,
+    preview = true,
+    duration = 0,
+    now = performance.now()
+  ): void {
+    if (!duration || !preview) {
+      this.horizontalMotion = undefined;
+      this.shiftHorizontal(columns, follow, preview);
+      return;
+    }
+    // Retarget from the eased position, like vertical wheel bursts.
+    const motion = this.horizontalMotion;
+    const offset = motion ? scrollOffset(motion.distance, now - motion.start, motion.duration) : 0;
+    this.horizontalMotion = {
+      distance: offset + columns,
+      remaining: (motion?.remaining ?? 0) + columns,
+      start: now,
+      follow,
+      duration
+    };
+    this.deferSettle();
+    this.options.schedule();
+  }
+
+  private shiftHorizontal(
+    columns: number,
+    follow: boolean,
+    preview: boolean,
+    speed = Math.abs(columns)
+  ): void {
     this.deferSettle();
     // Keep both cached edges overlapping when a fast gesture reverses.
     const maxAhead = Math.max(
@@ -256,8 +323,8 @@ export class EditorScroll {
       Math.floor((this.options.grid.columns - this.options.grid.horizontalGutter - 1) / 2)
     );
     const ahead =
-      !follow && preview && !this.animating && !this.queue.verticalPending
-        ? Math.min(maxAhead, 32, Math.max(8, Math.ceil(Math.abs(columns) * 4)))
+      !follow && preview && !this.wheelMotion && !this.queue.verticalPending
+        ? Math.min(maxAhead, 32, Math.max(8, Math.ceil(speed * 4)))
         : 1;
     const movement = this.horizontal.request(columns, ahead);
     if (movement) {
@@ -341,6 +408,7 @@ export class EditorScroll {
           this.queue.fail();
           this.horizontal.stop();
           this.wheelMotion = undefined;
+          this.horizontalMotion = undefined;
           grid.scrollPreview = 0;
           onError(error);
           schedule();
@@ -391,6 +459,7 @@ export class EditorScroll {
   dispose(): void {
     this.disposed = true;
     this.wheelMotion = undefined;
+    this.horizontalMotion = undefined;
     clearTimeout(this.settleTimer);
     this.settleTimer = undefined;
     this.options.grid.scrollPreview = 0;

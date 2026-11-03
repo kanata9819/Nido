@@ -172,23 +172,23 @@ export function useEditorRendering({
         return;
       }
       // Finish horizontal lookahead before vertical movement replaces its cached frames.
+      if (lines) {
+        scrolling.finishHorizontalMotion();
+      }
       if (lines && scrolling.alignHorizontal()) {
         deferredScroll = { lines, columns, follow, discrete };
         schedule();
         return;
       }
       directScroll = true;
+      const duration = animationsRef.current && !reducedMotion.matches ? (discrete ? 120 : 40) : 0;
       if (lines) {
         motion = undefined;
         scrolling.stopHorizontal();
-        scrolling.request(
-          lines,
-          follow,
-          animationsRef.current && !reducedMotion.matches ? (discrete ? 120 : 40) : 0
-        );
+        scrolling.request(lines, follow, duration);
       }
       if (columns) {
-        scrolling.requestHorizontal(columns, follow, !lines);
+        scrolling.requestHorizontal(columns, follow, !lines, duration);
       }
     };
 

@@ -455,3 +455,42 @@ test('horizontal input awaiting a vertical redraw uses a one-column native edge'
     });
   }
 });
+
+test('eased wheel input spreads sideways movement over frames without losing distance', async () => {
+  await withEditorScroll(async ({ scroll, calls, completions }) => {
+    const start = 1000;
+    scroll.requestHorizontal(6, false, true, 120, start);
+    assert.equal(calls.length, 0, 'eased input waits for an animation frame');
+    assert.equal(scroll.animating, true);
+    const positions: number[] = [];
+    for (let now = start + 16; scroll.animating; now += 16) {
+      scroll.advance(now, true);
+      for (const call of calls.splice(0)) {
+        scroll.acknowledge(true, scroll.horizontalColumn + call.columns);
+        call.resolve();
+      }
+      await Promise.all(completions);
+      positions.push(scroll.horizontalColumn - scroll.horizontalOffset);
+    }
+    assert.ok(positions.length >= 6, `moved over ${positions.length} frames`);
+    assert.ok(positions[0] > 0 && positions[0] < 6, 'the first frame shows part of the notch');
+    assert.ok(
+      positions.every((position, i) => i === 0 || position >= positions[i - 1]),
+      JSON.stringify(positions)
+    );
+    assert.equal(positions.at(-1), 6);
+  });
+});
+
+test('a vertical gesture applies the rest of an eased sideways gesture at once', async () => {
+  await withEditorScroll(async ({ scroll, calls }) => {
+    scroll.requestHorizontal(3, false, true, 120, 1000);
+    scroll.advance(1016, true);
+    assert.equal(calls.length, 1);
+    assert.ok(scroll.horizontalColumn - scroll.horizontalOffset < 3);
+    scroll.finishHorizontalMotion();
+    assert.equal(scroll.animating, false);
+    // The whole notch is the desired position before the axis switch realigns the view.
+    assert.equal(scroll.horizontalColumn - scroll.horizontalOffset, 3);
+  });
+});
