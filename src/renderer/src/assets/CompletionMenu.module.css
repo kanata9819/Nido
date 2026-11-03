@@ -119,3 +119,20 @@
   border: 1px solid #465348;
   border-radius: 3px;
 }
+
+:global(:root[data-theme='neon']) .card {
+  border-color: var(--neon-rim-border);
+  box-shadow: var(--neon-rim);
+}
+:global(:root[data-theme='neon']) .item[aria-selected='true'] {
+  background: var(--neon-row);
+  outline: 0;
+  box-shadow: inset 2px 0 var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .footer {
+  border-top-color: var(--ui-border);
+}
+:global(:root[data-theme='neon']) .footer kbd {
+  color: #9fefff;
+  border-color: #4ee6ff2e;
+}

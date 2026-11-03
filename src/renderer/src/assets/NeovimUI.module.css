@@ -219,3 +219,22 @@
     margin-left: auto;
   }
 }
+
+:global(:root[data-theme='neon']) .messages,
+:global(:root[data-theme='neon']) .command {
+  border-color: var(--neon-rim-border);
+  box-shadow: var(--neon-rim);
+}
+:global(:root[data-theme='neon']) .caret {
+  background: var(--ui-accent);
+  color: #04121a;
+  box-shadow: 0 0 10px #4ee6ff80;
+}
+:global(:root[data-theme='neon']) .completionItems > div[aria-selected='true'] {
+  background: var(--neon-row);
+  color: #e6f8ff;
+  box-shadow: inset 2px 0 var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .messageBody article {
+  border-left-color: #4ee6ff59;
+}

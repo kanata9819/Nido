@@ -133,3 +133,27 @@
   margin: 0;
   flex: 1;
 }
+
+:global(:root[data-theme='neon']) .debugPanel:focus-within {
+  box-shadow: 0 -1px 14px -6px var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .debugToolbar button {
+  color: #9fefff;
+}
+:global(:root[data-theme='neon']) .debugPanel button:focus-visible {
+  background: #4ee6ff1f;
+}
+:global(:root[data-theme='neon']) .debugHeading,
+:global(:root[data-theme='neon']) .debugScope {
+  background: #ffffff08;
+}
+:global(:root[data-theme='neon']) .debugConsole {
+  border-color: var(--ui-border);
+}
+:global(:root[data-theme='neon']) .debugVariable {
+  border-bottom-color: var(--ui-border);
+}
+:global(:root[data-theme='neon']) .debugVariable[aria-selected='true']:focus {
+  background: var(--neon-row);
+  box-shadow: inset 2px 0 var(--ui-accent);
+}

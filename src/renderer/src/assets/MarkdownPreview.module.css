@@ -53,3 +53,7 @@
   border-radius: 8px;
   font-size: 13px;
 }
+
+:global(:root[data-theme='neon']) .markdownPreview {
+  background: var(--surface-editor);
+}

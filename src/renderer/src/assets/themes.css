@@ -73,3 +73,9 @@
 :root[data-theme='neon'] ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(#4ee6ff8c, #b48cff8c);
 }
+:root[data-theme='neon'] {
+  --neon-rim-border: #4ee6ff38;
+  --neon-rim:
+    0 0 0 1px #b48cff14, 0 24px 70px #000000cc, 0 0 60px -24px #4ee6ff66, inset 0 1px 0 #ffffff12;
+  --neon-row: linear-gradient(90deg, #4ee6ff24, #b48cff0d 70%, transparent);
+}

@@ -261,3 +261,17 @@
     display: none;
   }
 }
+
+:global(:root[data-theme='neon']) .tabs button[aria-selected='true'] {
+  border-bottom-color: transparent;
+  border-image: var(--neon-gradient) 1;
+  color: #ffffff;
+}
+:global(:root[data-theme='neon']) .card:hover {
+  border-color: var(--neon-rim-border);
+  box-shadow: 0 0 40px -18px #4ee6ff73;
+}
+:global(:root[data-theme='neon']) .search:focus-within {
+  border-color: var(--ui-accent);
+  box-shadow: 0 0 0 3px #4ee6ff1f;
+}

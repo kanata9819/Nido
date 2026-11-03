@@ -169,3 +169,8 @@
   color: #7f8d98;
   font-size: 10px;
 }
+
+:global(:root[data-theme='neon']) .card {
+  border-color: var(--neon-rim-border);
+  box-shadow: var(--neon-rim);
+}

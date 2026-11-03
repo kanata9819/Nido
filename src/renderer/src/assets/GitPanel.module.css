@@ -532,3 +532,85 @@
 .shortcuts p {
   margin: 6px 0;
 }
+
+:global(:root[data-theme='neon']) .toolbar,
+:global(:root[data-theme='neon']) .composer,
+:global(:root[data-theme='neon']) .diffHeading {
+  border-bottom-color: var(--ui-border);
+}
+:global(:root[data-theme='neon']) .commit {
+  border-top-color: var(--ui-border);
+}
+:global(:root[data-theme='neon']) .sidebar,
+:global(:root[data-theme='neon']) .list,
+:global(:root[data-theme='neon']) .diffPane:first-child {
+  border-right-color: var(--ui-border);
+}
+:global(:root[data-theme='neon']) .panel button,
+:global(:root[data-theme='neon']) .commit input,
+:global(:root[data-theme='neon']) .composer textarea {
+  border-color: var(--ui-border-strong);
+}
+:global(:root[data-theme='neon']) .commit input,
+:global(:root[data-theme='neon']) .composer textarea,
+:global(:root[data-theme='neon']) .preview {
+  background: #07080bcc;
+}
+:global(:root[data-theme='neon']) .composer textarea:focus-visible {
+  border-color: var(--ui-accent);
+  box-shadow: 0 0 0 3px #4ee6ff1f;
+}
+:global(:root[data-theme='neon']) .panel button[aria-current='page'] {
+  color: var(--ui-accent);
+  background: var(--ui-accent-soft);
+}
+:global(:root[data-theme='neon']) .panel .commitButton {
+  background: var(--neon-gradient);
+  border-color: transparent;
+  color: #04121a;
+  box-shadow: 0 0 18px -4px #4ee6ff80;
+}
+:global(:root[data-theme='neon']) .panel .commitButton:not(:disabled):hover {
+  background: var(--neon-gradient);
+  filter: brightness(1.12);
+}
+:global(:root[data-theme='neon']) .change[aria-selected='true'] {
+  background: var(--neon-row);
+  box-shadow: inset 2px 0 var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .list h3,
+:global(:root[data-theme='neon']) .change b,
+:global(:root[data-theme='neon']) .summaryLabel {
+  color: var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .hashBadge,
+:global(:root[data-theme='neon']) .commitDetails code {
+  color: #9fefff;
+}
+:global(:root[data-theme='neon']) .currentBadge {
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .commitDetails {
+  background: #ffffff05;
+  border-color: var(--ui-border);
+}
+:global(:root[data-theme='neon']) .commitSummary:focus-visible,
+:global(:root[data-theme='neon']) .list:focus-visible {
+  outline-color: var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .lineNumber {
+  background: #0a0b0f;
+}
+:global(:root[data-theme='neon']) .diffLine[data-diff-active='true'] {
+  box-shadow: inset 0 2px var(--neon-violet);
+}
+:global(:root[data-theme='neon']) .hunk {
+  color: var(--neon-violet);
+}
+:global(:root[data-theme='neon']) .shortcuts > div {
+  border-color: var(--neon-rim-border);
+  box-shadow: var(--neon-rim);
+  background: var(--surface-popover);
+  backdrop-filter: var(--glass-blur);
+}

@@ -150,3 +150,14 @@
   white-space: nowrap;
   color: #cbd2d8;
 }
+
+:global(:root[data-theme='neon']) .referencePreview {
+  border-color: var(--neon-rim-border);
+  box-shadow: var(--neon-rim);
+}
+:global(:root[data-theme='neon']) .referenceRow[aria-selected='true'] {
+  background: var(--neon-row);
+}
+:global(:root[data-theme='neon']) .referencesPanel:focus-within {
+  box-shadow: 0 -1px 14px -6px var(--ui-accent);
+}

@@ -85,3 +85,32 @@
   flex-shrink: 0;
   background: var(--ui-accent, #a3cc94);
 }
+
+:global(:root[data-theme='neon']) .welcomeMark {
+  border-color: var(--neon-rim-border);
+  box-shadow:
+    0 0 50px -12px #4ee6ff80,
+    inset 0 0 24px -8px #b48cff59;
+}
+:global(:root[data-theme='neon']) .welcomeMark svg {
+  filter: drop-shadow(0 0 8px #4ee6ffb3);
+}
+:global(:root[data-theme='neon']) .eyebrow {
+  color: #86def0 !important;
+  text-shadow: 0 0 10px #4ee6ff73;
+}
+:global(:root[data-theme='neon']) .welcome h1 {
+  background: linear-gradient(90deg, #ffffff, #c9f6ff 45%, #d9c6ff);
+  background-clip: text;
+  color: transparent;
+}
+:global(:root[data-theme='neon']) .primary {
+  background: var(--neon-gradient);
+  border-color: transparent;
+  color: #04121a;
+  box-shadow: 0 0 24px -4px #4ee6ff80;
+}
+:global(:root[data-theme='neon']) .primary:hover {
+  background: var(--neon-gradient);
+  filter: brightness(1.12);
+}
