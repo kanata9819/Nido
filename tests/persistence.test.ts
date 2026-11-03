@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readLayout, writeLayout, type SavedLayout } from '../src/main/persistence';
@@ -329,7 +329,7 @@ test('workspace recovery preserves multiple untitled drafts and the active curso
 });
 
 test('workspace recovery preserves reordered named tabs with an untitled draft between them', async (context) => {
-  const root = await temporaryRoot(context);
+  const root = await realpath(await temporaryRoot(context));
   const path = join(root, 'workspaces.json');
   await writeFile(join(root, 'first.txt'), 'first\n');
   await writeFile(join(root, 'second.txt'), 'second\n');

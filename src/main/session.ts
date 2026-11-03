@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -20,8 +20,8 @@ import { SessionEvents } from './sessionEvents';
 import { SessionClient } from './sessionClient';
 import { SessionInteraction } from './sessionInteraction';
 import type { HistoryContent, HistorySnapshot, HistoryToken } from '../shared/history';
-import { editorPath, hostPath, parseWslPath } from '../shared/wsl';
-import { prepareWsl, resolveWslFolder, trashWslFile, wslArguments } from './wsl';
+import { hostPath, parseWslPath } from '../shared/wsl';
+import { prepareWsl, resolveWslFolder, trashWslFile } from './wsl';
 import { discoverLanguagePacks } from './languagePacks';
 import type { LanguagePackConfiguration, LanguagePackRuntime } from '../shared/languagePacks';
 import type { SearchOptions, ReplacementPreview, ReplacementResult } from '../shared/search';
@@ -30,6 +30,10 @@ import { resolveTerminalShell } from './terminalShells';
 import { SessionPersistence } from './sessionPersistence';
 import { SessionHistory } from './sessionHistory';
 import { SessionUI } from './sessionUI';
+import { SessionOptions } from './sessionOptions';
+import { SessionBuffers } from './sessionBuffers';
+import { SessionNavigation } from './sessionNavigation';
+import { spawnNeovim } from './neovimProcess';
 
 export class Session {
   terminal?: Session;
@@ -53,6 +57,9 @@ export class Session {
   private readonly persistence: SessionPersistence;
   private readonly history: SessionHistory;
   private readonly ui: SessionUI;
+  private readonly options: SessionOptions;
+  private readonly buffers: SessionBuffers;
+  private readonly navigation: SessionNavigation;
 
   private constructor(
     root: string,
@@ -72,65 +79,7 @@ export class Session {
       emit,
       remote ? (path) => hostPath(root, path) : undefined
     );
-    const args = [
-      '--embed',
-      '--noplugin',
-      // Time Machine owns recovery; an embedded startup cannot answer swap prompts.
-      '-n',
-      '-i',
-      'NONE',
-      '-u',
-      runtime ? `${runtime.resources}/nido/init.lua` : resolve(resources, 'nido/init.lua'),
-      '--cmd',
-      // Keep bundled parser DLLs discoverable while excluding personal config.
-      "lua vim.opt.runtimepath = {vim.env.VIMRUNTIME, vim.fn.fnamemodify(vim.v.progpath, ':h:h') .. '/lib/nvim'}; vim.opt.packpath = {}"
-    ];
-    this.process = spawn(
-      runtime && remote ? 'wsl.exe' : resolve(resources, 'nvim-win64/bin/nvim.exe'),
-      runtime && remote
-        ? wslArguments(remote.distribution, remote.path, [
-            'env',
-            '-u',
-            'VIMRUNTIME',
-            '-u',
-            'VIMINIT',
-            '-u',
-            'EXINIT',
-            '-u',
-            'NVIM',
-            '-u',
-            'NVIM_LISTEN_ADDRESS',
-            '-u',
-            'NODE_OPTIONS',
-            '-u',
-            'NIDO_LSP_CONFIG',
-            'NVIM_APPNAME=nido',
-            'NIDO_WSL=1',
-            `NIDO_WORKSPACE_ROOT=${remote.path}`,
-            `NIDO_NODE=${runtime.node}`,
-            `NIDO_LANGUAGES=${runtime.resources}/languages`,
-            runtime.nvim,
-            ...args
-          ])
-        : args,
-      {
-        cwd: runtime ? resources : root,
-        env: runtime
-          ? process.env
-          : {
-              ...process.env,
-              NVIM_APPNAME: 'nido',
-              NIDO_WORKSPACE_ROOT: root,
-              NIDO_NODE: process.execPath,
-              NIDO_LANGUAGES: resolve(resources, 'languages'),
-              VIMRUNTIME: resolve(resources, 'nvim-win64/share/nvim/runtime'),
-              VIMINIT: '',
-              EXINIT: ''
-            },
-        windowsHide: true,
-        stdio: 'pipe'
-      }
-    );
+    this.process = spawnNeovim(root, resources, remote, runtime);
     this.client = new SessionClient(this.process, (error) => {
       if (!this.stopped) {
         this.emit({
@@ -159,6 +108,14 @@ export class Session {
       () => this.stopped
     );
     this.ui = new SessionUI(this.client, this.events, this.workspace, (event) => this.emit(event));
+    this.options = new SessionOptions(this.client, this.workspace);
+    this.buffers = new SessionBuffers(this.client, this.interaction, this.workspace);
+    this.navigation = new SessionNavigation(
+      this.client,
+      this.interaction,
+      this.events,
+      this.workspace
+    );
     this.fileService = new SessionFiles(this.workspace.root, this.client);
     this.directoryWatcher = new DirectoryWatcher(
       (path) => this.fileService.path(path),
@@ -362,81 +319,28 @@ export class Session {
     return this.ui.resize(columns, rows);
   }
 
-  async setClipboardSharing(enabled: boolean): Promise<void> {
-    await this.client.request('nvim_set_option_value', [
-      'clipboard',
-      enabled ? 'unnamedplus' : '',
-      {}
-    ]);
+  setClipboardSharing(enabled: boolean): Promise<void> {
+    return this.options.setClipboardSharing(enabled);
   }
 
-  async markdownPreview(known = ''): Promise<MarkdownSnapshot> {
-    const snapshot = (await this.client.request('nvim_exec_lua', [
-      `if vim.bo.filetype ~= 'markdown' then
-  error('Open a Markdown file to preview.')
-end
-local known = ...
-local buffer = vim.api.nvim_get_current_buf()
-local token = buffer .. ':' .. vim.api.nvim_buf_get_changedtick(buffer)
-return {token=token, path=vim.api.nvim_buf_get_name(buffer),
-  text=token ~= known and table.concat(vim.api.nvim_buf_get_lines(buffer, 0, -1, false), '\\n') or nil}`,
-      [known]
-    ])) as MarkdownSnapshot;
-    return { ...snapshot, path: hostPath(this.workspace.root, snapshot.path) };
+  markdownPreview(known = ''): Promise<MarkdownSnapshot> {
+    return this.buffers.markdownPreview(known);
   }
 
-  async setRelativeLineNumbers(enabled: boolean): Promise<void> {
-    if (this.workspace.kind === 'terminal') {
-      return;
-    }
-    await this.client.request('nvim_exec_lua', [
-      `local enabled = ...
-vim.go.relativenumber = enabled
-for _, win in ipairs(vim.api.nvim_list_wins()) do
-  if vim.api.nvim_win_get_config(win).relative == '' then
-    vim.api.nvim_set_option_value('relativenumber', enabled, {win=win})
-  end
-end`,
-      [enabled]
-    ]);
+  setRelativeLineNumbers(enabled: boolean): Promise<void> {
+    return this.options.setRelativeLineNumbers(enabled);
   }
 
-  async setMethodSeparators(enabled: boolean): Promise<void> {
-    if (this.workspace.kind === 'terminal') {
-      return;
-    }
-    await this.client.request('nvim_exec_lua', [
-      "require('nido_sticky').set_method_separators(...)",
-      [enabled]
-    ]);
+  setMethodSeparators(enabled: boolean): Promise<void> {
+    return this.options.setMethodSeparators(enabled);
   }
 
-  async setWordWrap(enabled: boolean): Promise<void> {
-    if (this.workspace.kind === 'terminal') {
-      return;
-    }
-    await this.client.request('nvim_exec_lua', [
-      `local enabled = ...
-vim.go.wrap = enabled
-for _, win in ipairs(vim.api.nvim_list_wins()) do
-  local buf = vim.api.nvim_win_get_buf(win)
-  if vim.api.nvim_win_get_config(win).relative == ''
-      and vim.bo[buf].buftype == '' then
-    vim.api.nvim_set_option_value('wrap', enabled, {win=win})
-  end
-end`,
-      [enabled]
-    ]);
+  setWordWrap(enabled: boolean): Promise<void> {
+    return this.options.setWordWrap(enabled);
   }
 
-  async setEditorConfig(enabled: boolean): Promise<void> {
-    if (this.workspace.kind === 'terminal') {
-      return;
-    }
-    await this.client.request('nvim_exec_lua', [
-      "require('nido_editorconfig').set_enabled(...)",
-      [enabled]
-    ]);
+  setEditorConfig(enabled: boolean): Promise<void> {
+    return this.options.setEditorConfig(enabled);
   }
 
   input(keys: string): Promise<void> {
@@ -484,10 +388,8 @@ end`,
     ]);
   }
 
-  async setLineEnding(format: 'LF' | 'CRLF'): Promise<void> {
-    await this.interaction.command(() =>
-      this.client.request('nvim_exec_lua', ["require('nido_eol').convert(...)", [format]])
-    );
+  setLineEnding(format: 'LF' | 'CRLF'): Promise<void> {
+    return this.buffers.setLineEnding(format);
   }
 
   snapshot(
@@ -521,53 +423,32 @@ end`,
     ]);
   }
 
-  async modified(): Promise<boolean> {
-    return (await this.interaction.command(() =>
-      this.client.request('nvim_exec_lua', [
-        `for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
-  if (vim.bo[buffer].buftype == '' or vim.bo[buffer].buftype == 'acwrite') and vim.bo[buffer].modified then
-    return true
-  end
-end
-return false`,
-        []
-      ])
-    )) as boolean;
+  modified(): Promise<boolean> {
+    return this.buffers.modified();
   }
 
   async saveAll(): Promise<void> {
     await this.interaction.write('wall');
   }
 
-  async selectBuffer(buffer: number): Promise<void> {
-    this.interaction.cancelPrefetch();
-    await this.interaction.command(() => this.client.request('nvim_set_current_buf', [buffer]));
+  selectBuffer(buffer: number): Promise<void> {
+    return this.buffers.selectBuffer(buffer);
   }
 
-  async closeBuffer(buffer: number, force = false): Promise<void> {
-    this.interaction.cancelPrefetch();
-    await this.interaction.command(() =>
-      this.client.request('nvim_exec_lua', ["require('nido_buffers').close(...)", [buffer, force]])
-    );
+  closeBuffer(buffer: number, force = false): Promise<void> {
+    return this.buffers.closeBuffer(buffer, force);
   }
 
-  async moveBuffer(buffer: number, target: number): Promise<void> {
-    await this.interaction.command(() =>
-      this.client.request('nvim_exec_lua', ["require('nido_buffers').move(...)", [buffer, target]])
-    );
+  moveBuffer(buffer: number, target: number): Promise<void> {
+    return this.buffers.moveBuffer(buffer, target);
   }
 
-  async reopenBuffer(): Promise<void> {
-    this.interaction.cancelPrefetch();
-    await this.interaction.command(() =>
-      this.client.request('nvim_exec_lua', ["require('nido_buffers').reopen()", []])
-    );
+  reopenBuffer(): Promise<void> {
+    return this.buffers.reopenBuffer();
   }
 
-  async bufferModified(buffer: number): Promise<boolean> {
-    return (await this.interaction.command(() =>
-      this.client.request('nvim_get_option_value', ['modified', { buf: buffer }])
-    )) as boolean;
+  bufferModified(buffer: number): Promise<boolean> {
+    return this.buffers.bufferModified(buffer);
   }
 
   async path(relativePath: string): Promise<string> {
@@ -598,78 +479,32 @@ return false`,
     );
   }
 
-  async openReference(index: number, version: number): Promise<void> {
-    this.interaction.cancelPrefetch();
-    await this.interaction.command(async () => {
-      await this.interaction.restoreScroll();
-      await this.client.request('nvim_exec_lua', [
-        "require('nido_references').open(...)",
-        [index, version]
-      ]);
-    });
+  openReference(index: number, version: number): Promise<void> {
+    return this.navigation.openReference(index, version);
   }
 
-  async findSymbols(): Promise<number> {
-    return this.client.request('nvim_exec_lua', ["return require('nido_symbols').find()", []]);
+  findSymbols(): Promise<number> {
+    return this.navigation.findSymbols();
   }
 
-  async openSymbol(index: number, version: number): Promise<void> {
-    this.interaction.cancelPrefetch();
-    await this.interaction.command(() =>
-      this.client.request('nvim_exec_lua', ["require('nido_symbols').open(...)", [index, version]])
-    );
+  openSymbol(index: number, version: number): Promise<void> {
+    return this.navigation.openSymbol(index, version);
   }
 
-  async openProblem(index: number, version: number): Promise<void> {
-    this.interaction.cancelPrefetch();
-    await this.interaction.command(async () => {
-      const problem = this.state.problems?.[index - 1];
-      if (!problem || version !== this.state.diagnosticsVersion) {
-        throw new Error('Problems have changed. Select the item again.');
-      }
-      await this.interaction.restoreScroll();
-      await this.client.request('nvim_exec_lua', [
-        `local path, line, column = ...
-vim.cmd("normal! m'")
-require('nido_eol').open(path)
-line = math.min(line, vim.api.nvim_buf_line_count(0))
-local text = vim.api.nvim_buf_get_lines(0, line-1, line, false)[1] or ''
-vim.api.nvim_win_set_cursor(0, {line, math.min(column-1, #text)})
-vim.cmd('normal! zv')
-require('nido_scroll').center()`,
-        [editorPath(this.workspace.root, problem.path), problem.line, problem.column]
-      ]);
-    });
+  openProblem(index: number, version: number): Promise<void> {
+    return this.navigation.openProblem(index, version);
   }
 
-  async previewReference(index: number, version: number): Promise<ReferencePreview> {
-    return this.client.request('nvim_exec_lua', [
-      "return require('nido_references').preview(...)",
-      [index, version]
-    ]);
+  previewReference(index: number, version: number): Promise<ReferencePreview> {
+    return this.navigation.previewReference(index, version);
   }
 
-  async highlightSources(
+  highlightSources(
     path: string,
     before: string,
     after: string
   ): Promise<ReferencePreview['lines'][]> {
-    // Large previews remain readable without monopolizing Neovim's input thread.
-    if (before.length + after.length > 128000) {
-      return [[], []];
-    }
-    return this.client.request('nvim_exec_lua', [
-      `local path, before, after = ...
-local language = vim.filetype.match({filename=path})
-local function highlight(source)
-  if source == '' then
-    return {}
-  end
-  return require('nido_references').highlight_text(vim.split(source, '\\n', {plain=true}), language)
-end
-return {highlight(before), highlight(after)}`,
-      [editorPath(this.workspace.root, path), before, after]
-    ]);
+    return this.navigation.highlightSources(path, before, after);
   }
 
   async files(relativePath: string): Promise<FileEntry[]> {
