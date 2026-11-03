@@ -141,7 +141,7 @@ export class SessionSearch {
           .reverse()
           .map(async (directory) => {
             try {
-              return await this.files(directory, false);
+              return await this.directoryEntries(directory);
             } catch (error) {
               if (
                 directory &&
@@ -313,24 +313,7 @@ export class SessionSearch {
       const directory = directories.pop()!;
       let entries: FileEntry[];
       try {
-        const info = await stat(await this.path(directory));
-        const cached = this.searchDirectories.get(directory);
-        entries =
-          cached && cached.mtime === info.mtimeMs && Date.now() - cached.checked < 2000
-            ? cached.entries
-            : await this.files(directory, false);
-        this.searchDirectories.delete(directory);
-        // shortcut: retain at most 64 small directories; use an index for larger workspaces.
-        if (entries.length <= 2000) {
-          if (this.searchDirectories.size >= 64) {
-            this.searchDirectories.delete(this.searchDirectories.keys().next().value!);
-          }
-          this.searchDirectories.set(directory, {
-            mtime: info.mtimeMs,
-            checked: cached?.entries === entries ? cached.checked : Date.now(),
-            entries
-          });
-        }
+        entries = await this.directoryEntries(directory);
       } catch (error) {
         if (
           directory &&
@@ -372,5 +355,27 @@ export class SessionSearch {
       }
     }
     return result;
+  }
+
+  private async directoryEntries(directory: string): Promise<FileEntry[]> {
+    const info = await stat(await this.path(directory));
+    const cached = this.searchDirectories.get(directory);
+    const entries =
+      cached && cached.mtime === info.mtimeMs && Date.now() - cached.checked < 2000
+        ? cached.entries
+        : await this.files(directory, false);
+    this.searchDirectories.delete(directory);
+    // shortcut: retain at most 64 small directories; use an index for larger workspaces.
+    if (entries.length <= 2000) {
+      if (this.searchDirectories.size >= 64) {
+        this.searchDirectories.delete(this.searchDirectories.keys().next().value!);
+      }
+      this.searchDirectories.set(directory, {
+        mtime: info.mtimeMs,
+        checked: cached?.entries === entries ? cached.checked : Date.now(),
+        entries
+      });
+    }
+    return entries;
   }
 }

@@ -44,6 +44,10 @@ parentPort.on('message', ({ id, source, flags, text, replacement, selected, rege
   }
 });`;
 
+// Keep one healthy idle worker for consecutive searches; never retain a busy regex.
+let idleWorker: Worker | undefined;
+let idleTimer: NodeJS.Timeout | undefined;
+
 export class SearchMatcher {
   private worker?: Worker;
   private sequence = 0;
@@ -77,7 +81,11 @@ export class SearchMatcher {
       return Promise.reject(new Error('Search cancelled.'));
     }
     if (!this.worker) {
-      this.worker = new Worker(matcherWorker, { eval: true });
+      clearTimeout(idleTimer);
+      this.worker = idleWorker ?? new Worker(matcherWorker, { eval: true });
+      idleWorker = undefined;
+      this.worker.removeAllListeners();
+      this.worker.ref();
       this.worker.on('message', ({ id, value, error }) => {
         const pending = this.pending.get(id);
         if (!pending) {
@@ -92,7 +100,7 @@ export class SearchMatcher {
         }
       });
       this.worker.on('error', (error) => this.close(error));
-      this.worker.on('exit', () => this.close());
+      this.worker.on('exit', () => this.close(new Error('Search worker exited.')));
     }
     const id = ++this.sequence;
     return new Promise<T>((resolve, reject) => {
@@ -123,15 +131,40 @@ export class SearchMatcher {
     return this.request({ text, selected, replacement });
   }
 
-  close(error = new Error('Search cancelled.')): void {
+  close(error?: Error): void {
+    if (this.closed) {
+      return;
+    }
     this.closed = true;
     const worker = this.worker;
     this.worker = undefined;
+    worker?.removeAllListeners();
+    const reusable = worker && !error && this.pending.size === 0;
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
-      pending.reject(error);
+      pending.reject(error ?? new Error('Search cancelled.'));
     }
     this.pending.clear();
-    void worker?.terminate();
+    if (reusable) {
+      clearTimeout(idleTimer);
+      void idleWorker?.terminate();
+      worker.unref();
+      idleWorker = worker;
+      const discard = (): void => {
+        if (idleWorker === worker) {
+          clearTimeout(idleTimer);
+          idleWorker = undefined;
+        }
+      };
+      worker.on('error', discard);
+      worker.on('exit', discard);
+      idleTimer = setTimeout(() => {
+        void idleWorker?.terminate();
+        idleWorker = undefined;
+      }, 10_000);
+      idleTimer.unref();
+    } else {
+      void worker?.terminate();
+    }
   }
 }

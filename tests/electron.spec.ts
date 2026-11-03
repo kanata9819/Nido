@@ -61,6 +61,8 @@ test('Ctrl+S preserves inline diagnostics, file tabs and Git badges throughout s
     const tabs = page.getByRole('tablist', { name: 'Files', exact: true });
     await expect(tabs.getByRole('tab')).toHaveCount(2);
     await expect(tabs.locator('[data-status="M"]').filter({ hasText: /^M$/ })).toHaveCount(1);
+    const selectedTitle = await tabs.getByRole('tab', { selected: true }).getAttribute('title');
+    expect(selectedTitle).toContain('main.rs');
     await page.screenshot({ path: 'test-results/save-display-before.png' });
     await page.evaluate(() => {
       const samples: {
@@ -134,7 +136,7 @@ test('Ctrl+S preserves inline diagnostics, file tabs and Git badges throughout s
       samples.filter(
         (sample) =>
           sample.tabs.length !== 2 ||
-          !sample.selected?.endsWith('main.rs') ||
+          sample.selected !== selectedTitle ||
           sample.badges !== 1 ||
           !sample.diagnosticPixels ||
           !sample.diagnosticTextPixels

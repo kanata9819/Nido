@@ -8,6 +8,61 @@ import { Session } from '../src/main/session';
 import { SessionFiles } from '../src/main/sessionFiles';
 import { HistoryService } from '../src/main/historyService';
 import type { LocalHistory } from '../src/main/localHistory';
+import { SearchMatcher } from '../src/main/searchMatcher';
+import { defaultSearchOptions } from '../src/shared/search';
+
+test('consecutive searches reuse directory listings but read current contents and ignore rules', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-search-cache-')));
+  try {
+    execFileSync('git', ['init', '-q', root], { windowsHide: true });
+    await writeFile(join(root, 'sample.txt'), 'first needle');
+    const service = new SessionFiles(root, {} as Session['client']);
+    const files = service.files.bind(service);
+    let listings = 0;
+    service.files = async (...args) => {
+      listings++;
+      return files(...args);
+    };
+    await service.searchText('needle');
+    await writeFile(join(root, 'sample.txt'), 'second needle');
+    const result = await service.searchText('needle');
+    assert.equal(listings, 1, 'unchanged directories should be listed only once');
+    assert.equal(result.matches[0].text, 'second needle');
+    await writeFile(join(root, '.gitignore'), 'sample.txt\n');
+    assert.equal((await service.searchText('needle')).matches.length, 0);
+    await writeFile(join(root, 'new.txt'), 'new needle');
+    const stamp = new Date(Date.now() + 2000);
+    await utimes(root, stamp, stamp);
+    assert.equal((await service.searchText('needle')).matches[0].path, 'new.txt');
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+test('search workers are reused after success and replaced after cancellation', async () => {
+  const first = new SearchMatcher('needle', defaultSearchOptions);
+  await first.find('needle');
+  const worker = Reflect.get(first, 'worker');
+  first.close();
+  const second = new SearchMatcher('猫', defaultSearchOptions);
+  assert.equal((await second.find('猫'))[0].text, '猫');
+  assert.equal(Reflect.get(second, 'worker'), worker);
+  second.close();
+  const slow = new SearchMatcher('(a+)+$', { ...defaultSearchOptions, regex: true });
+  const running = slow.find('a'.repeat(80) + '!');
+  slow.close();
+  await assert.rejects(running, /cancelled/);
+  const next = new SearchMatcher('fresh', defaultSearchOptions);
+  try {
+    assert.equal((await next.find('fresh'))[0].text, 'fresh');
+    assert.notEqual(Reflect.get(next, 'worker'), worker);
+  } finally {
+    first.close();
+    second.close();
+    slow.close();
+    next.close();
+  }
+});
 
 async function withSession(check: (session: Session) => Promise<void>): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'nido-feature-performance-'));

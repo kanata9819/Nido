@@ -4666,6 +4666,54 @@ test('cursor-only patches preserve completion and a normal-mode patch dismisses 
   await expect(menu).toHaveCount(0);
 });
 
+test('Git badge polling backs off while idle and refreshes immediately on activity', async ({
+  page
+}) => {
+  await page.clock.install();
+  await page.clock.pauseAt(new Date(Date.now() + 1000));
+  await page.goto(`${origin}?view=badges&defer=gitStatus`);
+  const calls = (): Promise<number> =>
+    page.evaluate(
+      () => window.rendererTest.calls.filter((call) => call.method === 'gitStatus').length
+    );
+  const settle = async (): Promise<void> => {
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+    await page.evaluate(() =>
+      window.rendererTest.settle('gitStatus', 0, { root: '/alpha', branch: 'main', changes: [] })
+    );
+    await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(0);
+  };
+  await page.clock.runFor(250);
+  await settle();
+  await page.clock.runFor(3000);
+  await settle();
+  expect(await calls()).toBe(2);
+  await page.clock.runFor(3000);
+  expect(await calls()).toBe(2);
+  await page.clock.runFor(3000);
+  await settle();
+  expect(await calls()).toBe(3);
+  await page.evaluate(() =>
+    window.rendererTest.emit({ type: 'filesChanged', id: 'alpha', paths: [''] })
+  );
+  await settle();
+  expect(await calls()).toBe(4);
+  await page.clock.runFor(3000);
+  await settle();
+  expect(await calls()).toBe(5);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await settle();
+  expect(await calls()).toBe(6);
+  let expected = 6;
+  for (const delay of [3000, 6000, 12000, 24000, 30000, 30000]) {
+    await page.clock.runFor(delay - 1);
+    expect(await calls()).toBe(expected);
+    await page.clock.runFor(1);
+    await settle();
+    expect(await calls()).toBe(++expected);
+  }
+});
+
 test('Git badges clear immediately when switching workspaces', async ({ page }) => {
   await page.goto(`${origin}?view=badges&defer=gitStatus`);
   await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
