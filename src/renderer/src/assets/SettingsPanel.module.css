@@ -120,3 +120,14 @@
 :global(:root[data-theme='comfort']) .settings small {
   color: var(--ui-text-secondary);
 }
+
+:global(:root[data-theme='neon']) .settings h3 {
+  width: fit-content;
+  background: var(--neon-gradient);
+  background-clip: text;
+  color: transparent;
+  letter-spacing: 0.4px;
+}
+:global(:root[data-theme='neon']) .settings small {
+  color: var(--ui-text-secondary);
+}

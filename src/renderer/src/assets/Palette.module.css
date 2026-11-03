@@ -243,3 +243,30 @@
 :global(:root[data-theme='comfort']) .noResults {
   color: var(--ui-text-secondary);
 }
+
+:global(:root[data-theme='neon']) .palette {
+  border-color: #4ee6ff38;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px #b48cff14,
+    0 30px 90px #000000d9,
+    0 0 70px -24px #4ee6ff66,
+    var(--glass-highlight);
+}
+:global(:root[data-theme='neon']) .paletteInput:focus {
+  border-color: var(--ui-accent);
+  box-shadow: 0 0 0 3px #4ee6ff1f;
+}
+:global(:root[data-theme='neon']) .selectedItem {
+  background: linear-gradient(90deg, #4ee6ff24, #b48cff0d 70%, transparent);
+  box-shadow: inset 2px 0 var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .paletteFooter {
+  font-size: 11px;
+  color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='neon']) .paletteItems small,
+:global(:root[data-theme='neon']) .folderSection,
+:global(:root[data-theme='neon']) .noResults {
+  color: var(--ui-text-secondary);
+}

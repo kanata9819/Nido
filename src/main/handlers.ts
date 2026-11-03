@@ -323,7 +323,7 @@ export function registerHandlers({
       nativeTheme.themeSource = 'dark';
       window.setBackgroundMaterial(acrylic ? 'acrylic' : 'none');
     }
-    window.setBackgroundColor(acrylic ? '#00000000' : '#141414');
+    window.setBackgroundColor(acrylic ? '#00000000' : value === 'neon' ? '#07080b' : '#141414');
   });
 
   handle('windowState', () => ({ maximized: window.isMaximized() }));

@@ -7,7 +7,7 @@ import type { SearchOptions, ReplacementPreview, ReplacementResult } from './sea
 export const terminalShells = ['auto', 'pwsh', 'powershell.exe', 'cmd.exe', 'wsl.exe'] as const;
 export type TerminalShell = (typeof terminalShells)[number];
 
-export const uiThemes = ['dark', 'acrylic', 'comfort'] as const;
+export const uiThemes = ['dark', 'acrylic', 'comfort', 'neon'] as const;
 export type UITheme = (typeof uiThemes)[number];
 
 export interface WindowState {

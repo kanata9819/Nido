@@ -274,8 +274,9 @@ export const japanese: Record<string, string> = {
   'Dark Modern': 'ダークモダン',
   'Dark Modern (Acrylic)': 'ダークモダン（アクリル）',
   'Dark Comfort': 'ダークコンフォート',
-  'Dark Modern colors, with frosted surfaces or Comfort’s layered panels and clearer secondary text. The selection is saved.':
-    'ダークモダンの配色に、すりガラス効果、またはパネルの階層と補助テキストを見やすくしたコンフォートを選べます。選択は保存されます。',
+  'Neon Noir': 'ネオンノワール',
+  'Dark Modern colors with frosted surfaces or Comfort’s clearer panels, or Neon Noir’s glowing cyan-to-violet look. The selection is saved.':
+    'ダークモダンの配色に、すりガラス効果、またはパネルの階層と補助テキストを見やすくしたコンフォートを選べます。ネオンノワールは、シアンからバイオレットへ光るデザインです。選択は保存されます。',
   'Editor font size': 'エディターの文字サイズ',
   'Editor line height': 'エディターの行の高さ',
   'Editor font weight': 'エディターの文字の太さ',

@@ -646,3 +646,99 @@
 :global(:root[data-theme='comfort']) .activeFile {
   color: #f0f1f4;
 }
+
+/* Neon Noir: gradient signature lines, glow on active items and a gradient wordmark. */
+:global(:root[data-theme='neon']) .titlebar {
+  border-bottom: 1px solid transparent;
+  border-image: var(--neon-line) 1;
+}
+:global(:root[data-theme='neon']) .brand svg {
+  color: var(--ui-accent);
+  fill: #4ee6ff22;
+  filter: drop-shadow(0 0 6px #4ee6ffa6);
+}
+:global(:root[data-theme='neon']) .brand span {
+  background: var(--neon-gradient);
+  background-clip: text;
+  color: transparent;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+:global(:root[data-theme='neon']) .activeWorkspace {
+  background: linear-gradient(180deg, #4ee6ff17, transparent 75%), var(--surface-active);
+  box-shadow:
+    inset 0 2px var(--ui-accent),
+    0 -10px 24px -14px var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .workspaceDot,
+:global(:root[data-theme='neon']) .liveDot,
+:global(:root[data-theme='neon']) .unsaved {
+  box-shadow: 0 0 8px var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .titlebarActions button,
+:global(:root[data-theme='neon']) .rail button,
+:global(:root[data-theme='neon']) .sidebarHeading button,
+:global(:root[data-theme='neon']) .emptyTree,
+:global(:root[data-theme='neon']) .breadcrumb {
+  color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='neon']) .rail .railActive {
+  color: var(--ui-accent);
+  background: var(--ui-accent-soft);
+}
+:global(:root[data-theme='neon']) .rail .railActive svg {
+  filter: drop-shadow(0 0 5px #4ee6ffb3);
+}
+:global(:root[data-theme='neon']) .railActive::before {
+  background: linear-gradient(180deg, var(--ui-accent), var(--neon-violet));
+  box-shadow: 0 0 10px var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .sidebarHeading {
+  letter-spacing: 2.4px;
+  color: #e4ebf7;
+}
+:global(:root[data-theme='neon']) .treeItem {
+  border-radius: 6px;
+}
+:global(:root[data-theme='neon']) .treeSelected {
+  background: linear-gradient(90deg, #4ee6ff29, #b48cff0f 70%, transparent) !important;
+  box-shadow: inset 2px 0 var(--ui-accent);
+  color: #ffffff;
+}
+:global(:root[data-theme='neon']) .currentFile {
+  color: #e6f8ff;
+}
+:global(:root[data-theme='neon']) .fileTab {
+  border-right-color: transparent;
+  color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='neon']) .fileTab:hover {
+  color: #e8eef7;
+}
+:global(:root[data-theme='neon']) .activeFile {
+  border-top-color: transparent;
+  color: #ffffff;
+  background:
+    var(--neon-gradient) top / 100% 2px no-repeat border-box,
+    linear-gradient(180deg, #4ee6ff12, transparent 70%) border-box,
+    var(--surface-editor);
+}
+:global(:root[data-theme='neon']) .breadcrumbHint {
+  letter-spacing: 2px;
+  color: #86def0;
+  text-shadow: 0 0 10px #4ee6ff73;
+}
+:global(:root[data-theme='neon']) .sidebarFooter {
+  font-size: 11px;
+  color: var(--ui-text-secondary);
+  border-top-color: var(--ui-border);
+}
+:global(:root[data-theme='neon']) .sidebarFooter kbd {
+  font-size: 10px;
+}
+:global(:root[data-theme='neon']) .terminalPanel:focus-within {
+  box-shadow: 0 -1px 14px -6px var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .main {
+  background: var(--surface-editor);
+}

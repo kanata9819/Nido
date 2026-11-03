@@ -135,3 +135,30 @@
 :global(:root[data-theme='comfort']) .sessionCount {
   color: var(--ui-text-secondary);
 }
+
+:global(:root[data-theme='neon']) .statusbar {
+  background: var(--surface-title);
+  border-top: 1px solid transparent;
+  border-image: var(--neon-line) 1;
+}
+:global(:root[data-theme='neon']) .mode {
+  background: var(--neon-gradient);
+  color: #04121a;
+  letter-spacing: 1.2px;
+  box-shadow: 0 0 14px #4ee6ff59;
+}
+:global(:root[data-theme='neon']) .mode[data-mode='INSERT'] {
+  background: linear-gradient(90deg, #b48cff, #ff7ad9);
+  box-shadow: 0 0 14px #b48cff66;
+}
+:global(:root[data-theme='neon']) .mode[data-mode='VISUAL'] {
+  background: linear-gradient(90deg, #ffb86b, #ff7ad9);
+  box-shadow: 0 0 14px #ff9ab066;
+}
+:global(:root[data-theme='neon']) .sessionCount {
+  color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='neon']) .mode[data-mode='COMMAND'] {
+  background: linear-gradient(90deg, #ffd36b, #ffb86b);
+  box-shadow: 0 0 14px #ffc46b59;
+}

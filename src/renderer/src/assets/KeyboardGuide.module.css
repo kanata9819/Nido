@@ -67,3 +67,30 @@
 :global(:root[data-theme='comfort']) .leaderTitle > button {
   color: var(--ui-text-secondary);
 }
+
+:global(:root[data-theme='neon']) .leader {
+  border-color: #4ee6ff38;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px #b48cff14,
+    0 24px 70px #000000cc,
+    0 0 60px -24px #4ee6ff66,
+    var(--glass-highlight);
+}
+:global(:root[data-theme='neon']) .leaderTitle > kbd {
+  color: #04121a;
+  background: var(--neon-gradient);
+  border-color: transparent;
+  box-shadow: 0 0 12px #4ee6ff59;
+}
+:global(:root[data-theme='neon']) .leaderGrid kbd {
+  color: #9fefff;
+  border-color: #4ee6ff2e;
+}
+:global(:root[data-theme='neon']) .leader footer,
+:global(:root[data-theme='neon']) .leaderTitle > button {
+  color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='neon']) .leader footer {
+  font-size: 11px;
+}

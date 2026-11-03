@@ -237,6 +237,32 @@ test('acrylic switches live without losing edits and persists across restarts', 
     await expect
       .poll(() => restored.evaluate(() => localStorage.getItem('nido.theme')))
       .toBe('comfort');
+    // Neon Noir is opaque too, with a matching dark window backing and glass overlays.
+    await restoredTheme.selectOption('neon');
+    await expect(restored.locator('html')).toHaveAttribute('data-theme', 'neon');
+    await expect(restored.getByRole('dialog', { name: 'Settings' })).toHaveCSS(
+      'backdrop-filter',
+      'blur(22px) saturate(1.5)'
+    );
+    await expect
+      .poll(() =>
+        running.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows()[0].getBackgroundColor()
+        )
+      )
+      .toBe('#07080B');
+    await expect
+      .poll(() =>
+        restored
+          .locator('canvas:visible')
+          .evaluate(
+            (node: HTMLCanvasElement) => node.getContext('2d')!.getContextAttributes().alpha
+          )
+      )
+      .toBe(false);
+    await expect
+      .poll(() => restored.evaluate(() => localStorage.getItem('nido.theme')))
+      .toBe('neon');
     await restored.evaluate(() => localStorage.setItem('nido.theme', 'retired-theme'));
     await running.close();
     running = await launch();

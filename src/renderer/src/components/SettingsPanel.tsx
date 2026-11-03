@@ -79,11 +79,12 @@ export default function SettingsPanel({
             <option value="dark">{t('Dark Modern')}</option>
             <option value="acrylic">{t('Dark Modern (Acrylic)')}</option>
             <option value="comfort">{t('Dark Comfort')}</option>
+            <option value="neon">{t('Neon Noir')}</option>
           </select>
         </label>
         <small>
           {t(
-            'Dark Modern colors, with frosted surfaces or Comfort’s layered panels and clearer secondary text. The selection is saved.'
+            'Dark Modern colors with frosted surfaces or Comfort’s clearer panels, or Neon Noir’s glowing cyan-to-violet look. The selection is saved.'
           )}
         </small>
         <label>

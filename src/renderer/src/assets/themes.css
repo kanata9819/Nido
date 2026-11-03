@@ -38,3 +38,38 @@
   /* Secondary text that stays at or above WCAG AA on every chrome surface. */
   --ui-text-secondary: #a0abb6;
 }
+
+/* Neon Noir puts looks first: near-black chrome, a cyan-to-violet signature
+   gradient, soft glows on what is active and frosted glass overlays. */
+:root[data-theme='neon'] {
+  color-scheme: dark;
+  --window-background: #07080b;
+  --app-background: #07080b;
+  --surface-title: #050608;
+  --surface-rail: #050608;
+  --surface-panel: #0a0b0f;
+  --surface-tabs: #0a0b0f;
+  --surface-active: #ffffff0a;
+  --surface-popover: #0f1118d9;
+  --surface-input: #06070acc;
+  --surface-editor: #121212;
+  --ui-accent: #4ee6ff;
+  --ui-accent-hover: #93f1ff;
+  --ui-accent-soft: #4ee6ff1a;
+  --ui-focus: #4ee6ff66;
+  --ui-border: #8fa8ff14;
+  --ui-border-strong: #8fa8ff2b;
+  --ui-selection: #4ee6ff2e;
+  --ui-text-secondary: #9ba9be;
+  --neon-violet: #b48cff;
+  --neon-gradient: linear-gradient(90deg, #4ee6ff, #b48cff);
+  --neon-line: linear-gradient(90deg, transparent, #4ee6ff59 20%, #b48cff59 80%, transparent);
+  --glass-blur: blur(22px) saturate(150%);
+  --glass-highlight: inset 0 1px 0 #ffffff12;
+}
+:root[data-theme='neon'] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(#4ee6ff4d, #b48cff4d);
+}
+:root[data-theme='neon'] ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(#4ee6ff8c, #b48cff8c);
+}
