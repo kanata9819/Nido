@@ -20,6 +20,7 @@ Nido builds on Vim-style editing and brings common development tasks into a sing
 
 - Neovim-powered code editing.
 - File navigation, search, Git tools, and an integrated terminal.
+- Reorder file tabs by dragging or with `Ctrl+Shift+PageUp` / `PageDown`. Reopen closed files with `Ctrl+Shift+T`.
 - Configurable Activity Bar placement: on the left edge or above the Explorer. Open Settings with `Space ,` to change it.
 - Editing recovery: local history for named files and workspace restoration of modified unnamed buffers. Recovery has size limits and intervals; changes immediately before a crash may not be captured.
 

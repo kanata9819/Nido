@@ -328,6 +328,63 @@ test('workspace recovery preserves multiple untitled drafts and the active curso
   }
 });
 
+test('workspace recovery preserves reordered named tabs with an untitled draft between them', async (context) => {
+  const root = await temporaryRoot(context);
+  const path = join(root, 'workspaces.json');
+  await writeFile(join(root, 'first.txt'), 'first\n');
+  await writeFile(join(root, 'second.txt'), 'second\n');
+  const first = await Session.create(root, () => {});
+  const restored = await Session.create(root, () => {});
+  try {
+    await first.openFile('first.txt');
+    const firstBuffer = (await first.client.request('nvim_eval', ['bufnr()'])) as number;
+    await first.openFile('second.txt');
+    const secondBuffer = (await first.client.request('nvim_eval', ['bufnr()'])) as number;
+    await first.moveBuffer(secondBuffer, firstBuffer);
+    const draft = (await first.client.request('nvim_exec_lua', [
+      `vim.cmd('enew')
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, {'draft'})
+      vim.bo.modified = true
+      return vim.api.nvim_get_current_buf()`,
+      []
+    ])) as number;
+    await first.moveBuffer(draft, firstBuffer);
+    const snapshot = await first.snapshot();
+    assert.deepEqual(
+      snapshot.files.map((file) => file.path),
+      ['second.txt', 'first.txt'].map((name) => join(root, name))
+    );
+    assert.equal(snapshot.untitled?.[0].index, 2);
+    await writeLayout(path, { version: 1, active: 0, workspaces: [snapshot] });
+    const layout = await readLayout(path);
+    assert.deepEqual(await restored.restore(layout.workspaces[0]), []);
+    await restored.client.request('nvim_eval', ['1']);
+    assert.deepEqual(
+      restored.state.buffers.map((buffer) => buffer.name),
+      [join(root, 'second.txt'), '', join(root, 'first.txt')]
+    );
+    assert.deepEqual((await restored.snapshot()).untitled, snapshot.untitled);
+    layout.workspaces[0].untitled![0].index = 0;
+    await assert.rejects(writeLayout(path, layout), /Invalid saved workspace/);
+    await rm(join(root, 'second.txt'));
+    const missing = await Session.create(root, () => {});
+    try {
+      assert.equal((await missing.restore(snapshot)).length, 1);
+      await missing.client.request('nvim_eval', ['1']);
+      assert.deepEqual(
+        missing.state.buffers.map((buffer) => buffer.name),
+        ['', join(root, 'first.txt')]
+      );
+      assert.equal((await missing.snapshot()).untitled?.[0].index, 1);
+      assert.equal(snapshot.untitled?.[0].index, 2);
+    } finally {
+      await missing.stop();
+    }
+  } finally {
+    await Promise.all([first.stop(), restored.stop()]);
+  }
+});
+
 test('oversized untitled drafts fail checkpoints rather than silently losing recovery data', async (context) => {
   const root = await temporaryRoot(context);
   const session = await Session.create(root, () => {});
@@ -356,4 +413,39 @@ test('explicit discard removes untitled drafts from the backup layout', async (c
   await writeLayout(path, layoutFor(root), { replaceBackup: true });
   await writeFile(path, '{corrupt');
   assert.deepEqual(await readLayout(path), layoutFor(root));
+});
+
+test('backup layouts keep draft positions when earlier discarded drafts are removed', async (context) => {
+  const root = await temporaryRoot(context);
+  const path = join(root, 'workspaces.json');
+  const previous = layoutFor(root);
+  const id = '00000000-0000-0000-0000-000000000000';
+  previous.workspaces[0].untitled = [
+    {
+      id: `${id}:1`,
+      index: 1,
+      lines: ['discard'],
+      endOfLine: true,
+      fileformat: 'unix',
+      line: 1,
+      column: 0
+    },
+    {
+      id: `${id}:2`,
+      index: 3,
+      lines: ['keep'],
+      endOfLine: true,
+      fileformat: 'unix',
+      line: 1,
+      column: 0
+    }
+  ];
+  previous.workspaces[0].currentUntitled = 1;
+  const current = layoutFor(root);
+  current.workspaces[0].untitled = [{ ...previous.workspaces[0].untitled[1], index: 2 }];
+  current.workspaces[0].currentUntitled = 0;
+  await writeLayout(path, previous);
+  await writeLayout(path, current);
+  await writeFile(path, '{corrupt');
+  assert.deepEqual(await readLayout(path), current);
 });

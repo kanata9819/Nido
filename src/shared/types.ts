@@ -53,6 +53,7 @@ export interface SavedWorkspace {
   current: string;
   untitled?: {
     id?: string;
+    index?: number;
     lines: string[];
     endOfLine: boolean;
     fileformat: 'unix' | 'dos' | 'mac';
@@ -333,6 +334,8 @@ export interface NidoAPI {
   previewReference(id: string, index: number, version: number): Promise<ReferencePreview>;
   selectBuffer(id: string, buffer: number): Promise<void>;
   closeBuffer(id: string, buffer: number): Promise<boolean>;
+  moveBuffer(id: string, buffer: number, target: number): Promise<void>;
+  reopenBuffer(id: string): Promise<void>;
   save(id: string, format?: boolean): Promise<void>;
   debug(id: string, action: DebugAction, target?: number): Promise<void>;
   setLineEnding(id: string, format: 'LF' | 'CRLF'): Promise<void>;

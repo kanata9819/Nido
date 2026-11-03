@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n';
-import { memo, useLayoutEffect, useRef } from 'react';
+import { memo, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronRight, X } from 'lucide-react';
 import type { Workspace, SessionState } from '../../../shared/types';
 import { gitFileKey, type Decoration } from '../fileDecorations';
@@ -29,11 +29,14 @@ function FileHeader({
 }: FileHeaderProps): React.JSX.Element {
   const t = useI18n();
   const active = workspace.id;
-  const current = buffers.find((buffer) => buffer.id === currentId);
+  const currentIndex = buffers.findIndex((buffer) => buffer.id === currentId);
+  const current = buffers[currentIndex];
   const selectedTab = useRef<HTMLDivElement>(null);
+  const draggedTab = useRef<{ workspace: string; buffer: number } | null>(null);
+  const [dropTarget, setDropTarget] = useState<number | null>(null);
   useLayoutEffect(() => {
     selectedTab.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [active, current?.id]);
+  }, [active, current?.id, currentIndex]);
   return (
     <>
       {' '}
@@ -50,11 +53,49 @@ function FileHeader({
               key={buffer.id}
               ref={currentId === buffer.id ? selectedTab : undefined}
               className={`${styles.fileTab} ${currentId === buffer.id ? styles.activeFile : ''}`}
+              data-drop-target={dropTarget === buffer.id || undefined}
+              onDragOver={(event) => {
+                if (draggedTab.current?.workspace !== active) {
+                  return;
+                }
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'move';
+                setDropTarget(draggedTab.current.buffer === buffer.id ? null : buffer.id);
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setDropTarget(null);
+                }
+              }}
+              onDrop={(event) => {
+                const dragged = draggedTab.current;
+                draggedTab.current = null;
+                setDropTarget(null);
+                if (dragged?.workspace !== active) {
+                  return;
+                }
+                event.preventDefault();
+                if (dragged.buffer !== buffer.id) {
+                  run(window.nido.moveBuffer(active, dragged.buffer, buffer.id));
+                }
+                focusEditor();
+              }}
             >
               <button
                 role="tab"
                 aria-selected={currentId === buffer.id}
-                title={buffer.name}
+                aria-keyshortcuts="Control+Shift+PageUp Control+Shift+PageDown"
+                title={`${buffer.name || t('[Untitled]')} · ${t('Drag to reorder · Ctrl+Shift+PageUp / PageDown')}`}
+                draggable
+                onDragStart={(event) => {
+                  draggedTab.current = { workspace: active, buffer: buffer.id };
+                  event.dataTransfer.effectAllowed = 'move';
+                  event.dataTransfer.setData('text/plain', buffer.name);
+                }}
+                onDragEnd={() => {
+                  draggedTab.current = null;
+                  setDropTarget(null);
+                }}
                 onClick={() => {
                   run(window.nido.selectBuffer(active, buffer.id));
                   focusEditor();

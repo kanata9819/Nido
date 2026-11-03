@@ -122,6 +122,35 @@ export function buildCommands(
                   }
                 })),
                 {
+                  key: '',
+                  title: 'Reopen closed file',
+                  detail: 'Restore the last closed file and cursor · Ctrl+Shift+T',
+                  run: () => {
+                    run(window.nido.reopenBuffer(active));
+                    focusEditor();
+                  }
+                },
+                ...([-1, 1] as const).flatMap((offset) => {
+                  const index = state.buffers.findIndex((buffer) => buffer.id === state.current);
+                  const target = state.buffers[index + offset];
+                  return index >= 0 && target
+                    ? [
+                        {
+                          key: '',
+                          title: offset < 0 ? 'Move file tab left' : 'Move file tab right',
+                          detail:
+                            offset < 0
+                              ? 'Reorder file tabs · Ctrl+Shift+PageUp'
+                              : 'Reorder file tabs · Ctrl+Shift+PageDown',
+                          run: () => {
+                            run(window.nido.moveBuffer(active, state.current, target.id));
+                            focusEditor();
+                          }
+                        }
+                      ]
+                    : [];
+                }),
+                {
                   key: 'D',
                   title: 'Open debug panel',
                   detail: 'Focus debugger · Space then Shift+D',

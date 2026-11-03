@@ -1,18 +1,16 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } from 'electron';
 import { release } from 'node:os';
-import { isAbsolute, sep } from 'node:path';
-import { workspaceRelative as relative } from './workspacePaths';
 import { Session } from './session';
+import { registerFileHandlers } from './fileHandlers';
 import { registerGitHandlers } from './gitHandlers';
 import { registerWorkspaceHandlers } from './workspaceHandlers';
 import { registerHistoryHandlers } from './historyHandlers';
 import { registerLanguagePackHandlers } from './languagePackHandlers';
 import { terminalShells, uiThemes, type TerminalShell, type UITheme } from '../shared/types';
-import type { DebugAction, FileAction, NidoEvent, Workspace } from '../shared/types';
+import type { DebugAction, NidoEvent, Workspace } from '../shared/types';
 import type { Updates } from './updater';
 import { translate, type Language } from '../shared/i18n';
 import { LanguagePacks } from './languagePacks';
-import type { SearchOptions } from '../shared/search';
 import { availableTerminalShells } from './terminalShells';
 
 export interface AppState {
@@ -209,84 +207,19 @@ export function registerHandlers({
   });
   handle('paste', (id, value) => session(id).paste(text(value)));
   handle('pasteClipboard', (id) => session(id).paste(() => clipboard.readText()));
-  handle('files', (id, path) => session(id).files(text(path)));
-  handle('watchDirectories', (id, paths) => {
-    if (
-      !Array.isArray(paths) ||
-      paths.some((path) => typeof path !== 'string' || path.length > 4096)
-    ) {
-      throw new Error('Invalid directory selection.');
-    }
-    return session(id).watchDirectories(paths);
+  registerFileHandlers({
+    handle,
+    session,
+    text,
+    integer,
+    sessions,
+    send,
+    trash: (file) => shell.trashItem(file)
   });
   handle('highlightSources', (id, path, before, after) =>
     session(id).highlightSources(text(path), text(before), text(after))
   );
   registerGitHandlers({ handle, session, text, sessions, send });
-  handle('findFiles', (id, query) => session(id).findFiles(query === undefined ? '' : text(query)));
-  handle('cancelFindFiles', (id) => session(id).cancelFindFiles());
-  handle('searchText', (id, query, options) => {
-    if (
-      options !== undefined &&
-      (!options || typeof options !== 'object' || Array.isArray(options))
-    ) {
-      throw new Error('Invalid search options.');
-    }
-    return session(id).searchText(text(query), options as SearchOptions | undefined);
-  });
-  handle('previewReplacement', (id, token, replacement, selected) => {
-    if (!Array.isArray(selected)) {
-      throw new Error('Choose matching lines to replace.');
-    }
-    return session(id).previewReplacement(text(token), text(replacement), selected);
-  });
-  handle('applyReplacement', (id, token) => session(id).applyReplacement(text(token)));
-  handle('openFile', (id, path, line, column) =>
-    session(id).openFile(
-      text(path),
-      line === undefined ? undefined : integer(line, 2_000_000),
-      column === undefined ? undefined : integer(column, 2_000_000)
-    )
-  );
-  handle('fileAction', async (id, action, path, target) => {
-    if (
-      typeof action !== 'string' ||
-      !['createFile', 'createDirectory', 'rename', 'copy', 'delete'].includes(action)
-    ) {
-      throw new Error('Invalid file action.');
-    }
-    const current = session(id);
-    if (action === 'rename' || action === 'delete' || action === 'copy') {
-      const source = await current.path(text(path));
-      for (const open of sessions.values()) {
-        if (open === current) {
-          continue;
-        }
-        if (
-          open.state.buffers.some((buffer) => {
-            if (!buffer.name) {
-              return false;
-            }
-            const child = relative(source, buffer.name);
-            return child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child);
-          })
-        ) {
-          throw new Error('Close this file or folder in the other workspace session first.');
-        }
-      }
-    }
-    await current.fileAction(
-      action as FileAction,
-      text(path),
-      target === undefined ? '' : text(target),
-      (file) => shell.trashItem(file)
-    );
-    for (const open of sessions.values()) {
-      if (open.workspace.root === current.workspace.root) {
-        send({ type: 'filesChanged', id: open.workspace.id });
-      }
-    }
-  });
   handle('findSymbols', (id) => session(id).findSymbols());
   handle('openSymbol', (id, index, version) =>
     session(id).openSymbol(integer(index), integer(version))
@@ -301,6 +234,10 @@ export function registerHandlers({
     session(id).previewReference(integer(index), integer(version))
   );
   handle('selectBuffer', (id, buffer) => session(id).selectBuffer(integer(buffer)));
+  handle('moveBuffer', (id, buffer, target) =>
+    session(id).moveBuffer(integer(buffer), integer(target))
+  );
+  handle('reopenBuffer', (id) => session(id).reopenBuffer());
 
   handle('closeBuffer', async (id, value) => {
     const s = session(id);

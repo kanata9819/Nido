@@ -80,6 +80,8 @@ const api: NidoAPI = {
     ipcRenderer.invoke('nido:previewReference', id, index, version),
   selectBuffer: (id, buffer) => ipcRenderer.invoke('nido:selectBuffer', id, buffer),
   closeBuffer: (id, buffer) => ipcRenderer.invoke('nido:closeBuffer', id, buffer),
+  moveBuffer: (id, buffer, target) => ipcRenderer.invoke('nido:moveBuffer', id, buffer, target),
+  reopenBuffer: (id) => ipcRenderer.invoke('nido:reopenBuffer', id),
   save: (id, format) => ipcRenderer.invoke('nido:save', id, format),
   debug: (id, action, target) => ipcRenderer.invoke('nido:debug', id, action, target),
   setLineEnding: (id, format) => ipcRenderer.invoke('nido:setLineEnding', id, format),

@@ -439,6 +439,14 @@ end`,
     return this.buffers.closeBuffer(buffer, force);
   }
 
+  moveBuffer(buffer: number, target: number): Promise<void> {
+    return this.buffers.moveBuffer(buffer, target);
+  }
+
+  reopenBuffer(): Promise<void> {
+    return this.buffers.reopenBuffer();
+  }
+
   bufferModified(buffer: number): Promise<boolean> {
     return this.buffers.bufferModified(buffer);
   }

@@ -11,6 +11,15 @@ export const japanese: Record<string, string> = {
   'Toggle line comments': '行コメントを切り替え',
   Undo: '元に戻す',
   Redo: 'やり直す',
+  'Reopen closed file': '閉じたファイルを開き直す',
+  'Restore the last closed file and cursor · Ctrl+Shift+T':
+    '直前に閉じたファイルとカーソル位置を復元 · Ctrl+Shift+T',
+  'Move file tab left': 'ファイルタブを左へ移動',
+  'Move file tab right': 'ファイルタブを右へ移動',
+  'Reorder file tabs · Ctrl+Shift+PageUp': 'ファイルタブを並び替え · Ctrl+Shift+PageUp',
+  'Reorder file tabs · Ctrl+Shift+PageDown': 'ファイルタブを並び替え · Ctrl+Shift+PageDown',
+  'Drag to reorder · Ctrl+Shift+PageUp / PageDown':
+    'ドラッグで並び替え · Ctrl+Shift+PageUp / PageDown',
   Connection: '接続先',
   'This computer': 'このPC',
   'WSL unavailable': 'WSLを利用できません',

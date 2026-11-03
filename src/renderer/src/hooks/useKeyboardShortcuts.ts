@@ -269,6 +269,31 @@ export function useKeyboardShortcuts({
     if (
       active &&
       !terminalFocused &&
+      workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal' &&
+      event.ctrlKey &&
+      event.shiftKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      ['t', 'pageup', 'pagedown'].includes(event.key.toLowerCase())
+    ) {
+      consume();
+      if (!event.repeat) {
+        if (event.key.toLowerCase() === 't') {
+          run(window.nido.reopenBuffer(active));
+        } else {
+          const index = state.buffers.findIndex((buffer) => buffer.id === state.current);
+          const target = state.buffers[index + (event.key.toLowerCase() === 'pageup' ? -1 : 1)];
+          if (index >= 0 && target) {
+            run(window.nido.moveBuffer(active, state.current, target.id));
+          }
+        }
+        focusEditor();
+      }
+      return;
+    }
+    if (
+      active &&
+      !terminalFocused &&
       !event.ctrlKey &&
       !event.altKey &&
       !event.metaKey &&
