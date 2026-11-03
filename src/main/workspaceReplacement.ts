@@ -221,14 +221,14 @@ local edits = {}
 -- Check every target before editing any buffer. Do not switch the active file,
 -- write to disk, or overwrite an existing unsaved buffer.
 for _, item in ipairs(files) do
-  local buf = vim.fn.bufnr(item.path)
+  local buf = require('nido_buffers').find(item.path)
   if apply and (buf < 0 or not api.nvim_buf_is_loaded(buf)) then
     buf = vim.fn.bufadd(item.path)
     vim.fn.bufload(buf)
   end
 end
 for _, item in ipairs(files) do
-  local buf = vim.fn.bufnr(item.path)
+  local buf = require('nido_buffers').find(item.path)
   if buf > 0 and api.nvim_buf_is_loaded(buf) then
     local bo = vim.bo[buf]
     assert(not bo.modified, 'Save unsaved target files before replacing.')

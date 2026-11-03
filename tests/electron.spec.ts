@@ -4905,3 +4905,53 @@ test('file tabs retain reordered positions and the reopened cursor across restar
     await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
+
+test('Explorer opens and reopens literal bracketed file names while preserving other drafts', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-literal-files-')));
+  const workspace = join(root, 'workspace');
+  await mkdir(workspace);
+  await writeFile(join(workspace, 'file[1].txt'), 'literal\n');
+  await writeFile(join(workspace, 'file1.txt'), 'other\n');
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const running = await electron.launch({
+    args: ['.', `--user-data-dir=${join(root, 'profile')}`],
+    env
+  });
+  try {
+    const page = await running.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
+    await page.keyboard.press('Control+Shift+n');
+    await chooseWorkspace(page, workspace);
+    const tree = page.getByRole('tree', { name: 'Project files' });
+    const tabs = page.getByRole('tablist', { name: 'Files', exact: true });
+    await tree.getByRole('treeitem', { name: 'file1.txt', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+    await page.keyboard.type('A draft');
+    await page.keyboard.press('Escape');
+    await tree.getByRole('treeitem', { name: 'file[1].txt', exact: true }).click();
+    await expect(tabs.getByRole('tab', { selected: true })).toHaveText('file[1].txt');
+    await expect(page.locator('canvas[aria-label="Neovim editor display"]')).toHaveAttribute(
+      'aria-description',
+      /literal/
+    );
+    await page.keyboard.type('A!');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+s');
+    await expect.poll(() => readFile(join(workspace, 'file[1].txt'), 'utf8')).toBe('literal!\n');
+    expect(await readFile(join(workspace, 'file1.txt'), 'utf8')).toBe('other\n');
+    await page.getByRole('button', { name: 'Close file file[1].txt', exact: true }).click();
+    await expect(tabs.getByRole('tab')).toHaveCount(1);
+    await page.keyboard.press('Control+Shift+t');
+    await expect(tabs.getByRole('tab', { selected: true })).toHaveText('file[1].txt');
+    await tree.getByRole('treeitem', { name: 'file1.txt', exact: true }).click();
+    await expect(page.locator('canvas[aria-label="Neovim editor display"]')).toHaveAttribute(
+      'aria-description',
+      /other draft/
+    );
+  } finally {
+    await running.evaluate(({ app }) => app.exit(0)).catch(() => {});
+    await running.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});

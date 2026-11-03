@@ -118,7 +118,7 @@ export class SessionSearch {
       throw new Error('Enter a single-line search up to 1,000 characters.');
     }
     // shortcut: search saved UTF-8 files up to 1 MiB and return 200 lines; use a search index for larger projects.
-    const buffers = Array.from({ length: 8 }, () => Buffer.alloc(1024 * 1024 + 1));
+    const buffers = Array.from({ length: 8 }, () => Buffer.allocUnsafe(1024 * 1024 + 1));
     const directories = [options.folder];
     const checkIgnored = await gitRoot(this.root).then(
       () => true,

@@ -50,6 +50,39 @@ test('workspace grep skips line inspection in large nonmatching files', async ()
   }
 });
 
+test('workspace search avoids clearing scratch buffers and inspects only bytes read from disk', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-search-scratch-')));
+  const allocate = Buffer.alloc;
+  const allocateUnsafe = Buffer.allocUnsafe;
+  let cleared = 0;
+  try {
+    await writeFile(join(root, 'match.txt'), '日本語 needle\n');
+    await writeFile(join(root, 'binary.txt'), Buffer.from('needle\0'));
+    await writeFile(join(root, 'invalid.txt'), Buffer.from([0xff, ...Buffer.from('needle')]));
+    await writeFile(join(root, 'empty.txt'), '');
+    Buffer.alloc = (size, ...args) => {
+      if (size === 1024 * 1024 + 1) cleared += size;
+      return allocate(size, ...args);
+    };
+    Buffer.allocUnsafe = (size) => {
+      const buffer = allocateUnsafe(size);
+      if (size === 1024 * 1024 + 1) buffer.fill(0xff);
+      return buffer;
+    };
+    const files = new SessionFiles(root, {} as Session['client']);
+    const result = await files.searchText('needle');
+    assert.deepEqual(result, {
+      matches: [{ path: 'match.txt', line: 1, column: 11, text: '日本語 needle' }],
+      truncated: false
+    });
+    assert.equal(cleared, 0, 'search must not zero-fill 8 MiB of scratch space per query');
+  } finally {
+    Buffer.alloc = allocate;
+    Buffer.allocUnsafe = allocateUnsafe;
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('workspace grep batches directory ignores, bounds parallel reads and cancels in-flight searches', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-grep-batches-')));
   try {

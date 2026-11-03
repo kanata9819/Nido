@@ -3,6 +3,11 @@ local M = {}
 local order, closed = {}, {}
 local api = vim.api
 
+function M.find(path)
+  -- bufnr() treats names as patterns; check existence before exact lookup without creating a buffer.
+  return vim.fn.bufexists(path) == 1 and vim.fn.bufadd(path) or -1
+end
+
 function M.list()
   local available, result = {}, {}
   local buffers = api.nvim_list_bufs()
@@ -64,7 +69,7 @@ end
 function M.reopen()
   local entry = closed[#closed]
   if not entry then return end
-  local buffer = vim.fn.bufnr(entry.path)
+  local buffer = M.find(entry.path)
   if buffer > 0 and api.nvim_buf_is_loaded(buffer) then
     require('nido_scroll').restore()
     vim.bo[buffer].buflisted = true

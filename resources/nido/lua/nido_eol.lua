@@ -48,13 +48,24 @@ local function track(buffer)
 end
 
 function M.open(path)
-  local buffer = vim.fn.bufnr(path)
-  if buffer > 0 and api.nvim_buf_is_loaded(buffer) and vim.bo[buffer].modified then
+  local buffer = require('nido_buffers').find(path)
+  if buffer < 0 then
+    -- Name the empty placeholder without rename hooks; apply settings after reading the file.
+    if vim.bo.buftype == '' and not vim.bo.modified and api.nvim_buf_get_name(0) == ''
+        and api.nvim_buf_line_count(0) == 1 and api.nvim_get_current_line() == '' then
+      api.nvim_cmd({cmd='file', args={path}, magic={file=false}, mods={noautocmd=true, silent=true}}, {})
+      buffer = api.nvim_get_current_buf()
+    else
+      buffer = vim.fn.bufadd(path)
+    end
+  end
+  assert(buffer > 0, 'Could not open file.')
+  if api.nvim_buf_is_loaded(buffer) and vim.bo[buffer].modified then
     vim.cmd.buffer(buffer)
     return
   end
-  -- GUI navigation opens text files; inherited binary mode bypasses CRLF detection.
-  vim.cmd('edit ++nobin ' .. vim.fn.fnameescape(path))
+  -- Buffer references avoid filename expansion; text mode preserves CRLF detection.
+  vim.cmd('edit ++nobin #' .. buffer)
 end
 
 function M.detect()

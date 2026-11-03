@@ -15,6 +15,7 @@ import { HistoryService } from '../src/main/historyService';
 import { gitIgnored, gitStatus } from '../src/main/git';
 import { gitFileKey } from '../src/renderer/src/fileDecorations';
 import type { NidoEvent } from '../src/shared/types';
+import { defaultSearchOptions } from '../src/shared/search';
 
 const exec = promisify(execFile);
 const distribution = process.env.NIDO_TEST_WSL_DISTRO;
@@ -168,6 +169,36 @@ test(
       assert.equal(await session.client.request('nvim_get_current_line', []), 'upper');
       await session.openFile('case.txt');
       assert.equal(await session.client.request('nvim_get_current_line', []), 'lower');
+      await writeFile(join(root, 'file[1].txt'), 'literal needle\nsecond\n');
+      await writeFile(join(root, 'file1.txt'), 'other needle\n');
+      await session.openFile('file1.txt');
+      await session.input('ggA draft<Esc>');
+      await session.openFile('file[1].txt', 2, 2);
+      assert.equal(
+        await session.client.request('nvim_buf_get_name', [0]),
+        `${linuxRoot}/file[1].txt`
+      );
+      const literalBuffer = (await session.client.request('nvim_eval', ['bufnr()'])) as number;
+      await session.closeBuffer(literalBuffer);
+      await session.reopenBuffer();
+      assert.equal(
+        await session.client.request('nvim_buf_get_name', [0]),
+        `${linuxRoot}/file[1].txt`
+      );
+      assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), [2, 1]);
+      const literalSearch = await session.searchText('literal needle', defaultSearchOptions);
+      assert.equal(literalSearch.matches.length, 1);
+      const literalPreview = await session.previewReplacement(
+        literalSearch.token!,
+        'changed literal',
+        [0]
+      );
+      await session.applyReplacement(literalPreview.token);
+      await session.save();
+      assert.equal(await readFile(join(root, 'file[1].txt'), 'utf8'), 'changed literal\nsecond\n');
+      await session.openFile('file1.txt');
+      assert.equal(await session.client.request('nvim_get_current_line', []), 'other needle draft');
+      assert.equal(await readFile(join(root, 'file1.txt'), 'utf8'), 'other needle\n');
       await exec('wsl.exe', wslArguments(distro, linuxRoot, ['ln', '-s', '/etc', 'escape']), {
         windowsHide: true
       });
