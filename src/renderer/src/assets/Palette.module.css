@@ -233,3 +233,13 @@
   padding: 20px;
   color: #84939e;
 }
+
+:global(:root[data-theme='comfort']) .paletteFooter {
+  font-size: 11px;
+  color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='comfort']) .paletteItems small,
+:global(:root[data-theme='comfort']) .folderSection,
+:global(:root[data-theme='comfort']) .noResults {
+  color: var(--ui-text-secondary);
+}

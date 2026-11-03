@@ -273,8 +273,9 @@ export const japanese: Record<string, string> = {
   Theme: 'テーマ',
   'Dark Modern': 'ダークモダン',
   'Dark Modern (Acrylic)': 'ダークモダン（アクリル）',
-  'Dark Modern colors, with optional frosted surfaces. The selection is saved.':
-    'ダークモダンの配色に、すりガラス効果を追加できます。選択は保存されます。',
+  'Dark Comfort': 'ダークコンフォート',
+  'Dark Modern colors, with frosted surfaces or Comfort’s layered panels and clearer secondary text. The selection is saved.':
+    'ダークモダンの配色に、すりガラス効果、またはパネルの階層と補助テキストを見やすくしたコンフォートを選べます。選択は保存されます。',
   'Editor font size': 'エディターの文字サイズ',
   'Editor line height': 'エディターの行の高さ',
   'Editor font weight': 'エディターの文字の太さ',

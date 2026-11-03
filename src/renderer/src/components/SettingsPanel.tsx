@@ -78,10 +78,13 @@ export default function SettingsPanel({
           <select value={theme} onChange={(event) => setTheme(event.target.value as UITheme)}>
             <option value="dark">{t('Dark Modern')}</option>
             <option value="acrylic">{t('Dark Modern (Acrylic)')}</option>
+            <option value="comfort">{t('Dark Comfort')}</option>
           </select>
         </label>
         <small>
-          {t('Dark Modern colors, with optional frosted surfaces. The selection is saved.')}
+          {t(
+            'Dark Modern colors, with frosted surfaces or Comfort’s layered panels and clearer secondary text. The selection is saved.'
+          )}
         </small>
         <label>
           {t('Show file explorer')}{' '}

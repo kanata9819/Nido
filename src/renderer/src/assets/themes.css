@@ -16,3 +16,25 @@
   --glass-blur: blur(24px);
   --glass-highlight: inset 0 1px 0 #ffffff0e;
 }
+
+/* Comfort keeps Dark Modern's palette but layers the chrome around the editor,
+   softens divider lines and tints selection with the accent. */
+:root[data-theme='comfort'] {
+  color-scheme: dark;
+  --window-background: #141414;
+  --app-background: #141414;
+  --surface-title: #0c0d0f;
+  --surface-rail: #0c0d0f;
+  --surface-panel: #181a1d;
+  --surface-tabs: #181a1d;
+  --surface-active: #212428;
+  --surface-popover: #1d2024;
+  --surface-input: #111315;
+  --surface-editor: #141414;
+  --ui-border: #ffffff10;
+  --ui-border-strong: #ffffff1f;
+  --ui-selection: #a3cc9429;
+  --ui-accent-soft: #a3cc941f;
+  /* Secondary text that stays at or above WCAG AA on every chrome surface. */
+  --ui-text-secondary: #a0abb6;
+}

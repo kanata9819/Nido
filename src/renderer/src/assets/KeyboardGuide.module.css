@@ -59,3 +59,11 @@
   font-size: 10px;
   color: #7c8a96;
 }
+
+:global(:root[data-theme='comfort']) .leader footer {
+  font-size: 11px;
+  color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='comfort']) .leaderTitle > button {
+  color: var(--ui-text-secondary);
+}

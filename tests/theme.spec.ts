@@ -221,6 +221,22 @@ test('acrylic switches live without losing edits and persists across restarts', 
     await expect
       .poll(() => restored.evaluate(() => localStorage.getItem('nido.theme')))
       .toBe('dark');
+    // Comfort stays opaque like Dark Modern and only restyles the chrome.
+    await restoredTheme.selectOption('comfort');
+    await expect(restored.locator('html')).toHaveAttribute('data-theme', 'comfort');
+    await expect(
+      restored.getByRole('dialog', { name: 'Settings' }).locator('small').first()
+    ).toHaveCSS('color', 'rgb(160, 171, 182)');
+    await expect
+      .poll(() =>
+        running.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows()[0].getBackgroundColor()
+        )
+      )
+      .toBe('#141414');
+    await expect
+      .poll(() => restored.evaluate(() => localStorage.getItem('nido.theme')))
+      .toBe('comfort');
     await restored.evaluate(() => localStorage.setItem('nido.theme', 'retired-theme'));
     await running.close();
     running = await launch();

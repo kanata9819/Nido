@@ -606,3 +606,43 @@
     inset 0 2px var(--ui-accent, #a3cc94),
     var(--glass-highlight);
 }
+
+/* Comfort: readable secondary text, quieter tab dividers and accent-led selection. */
+:global(:root[data-theme='comfort']) .titlebarActions button,
+:global(:root[data-theme='comfort']) .rail button,
+:global(:root[data-theme='comfort']) .sidebarHeading button,
+:global(:root[data-theme='comfort']) .emptyTree,
+:global(:root[data-theme='comfort']) .breadcrumb {
+  color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='comfort']) .rail .railActive {
+  color: var(--ui-accent, #a3cc94);
+}
+:global(:root[data-theme='comfort']) .breadcrumbHint {
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='comfort']) .sidebarFooter {
+  font-size: 11px;
+  color: var(--ui-text-secondary);
+  border-top-color: var(--ui-border);
+}
+:global(:root[data-theme='comfort']) .sidebarFooter kbd {
+  font-size: 10px;
+}
+:global(:root[data-theme='comfort']) .treeItem {
+  border-radius: 5px;
+}
+:global(:root[data-theme='comfort']) .treeSelected {
+  box-shadow: inset 2px 0 var(--ui-accent, #a3cc94);
+  color: #f3f5f7;
+}
+:global(:root[data-theme='comfort']) .fileTab {
+  border-right-color: transparent;
+  color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='comfort']) .fileTab:hover,
+:global(:root[data-theme='comfort']) .activeFile {
+  color: #f0f1f4;
+}

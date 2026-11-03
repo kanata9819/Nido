@@ -116,3 +116,7 @@
   border-top: 1px solid var(--ui-border, #354049);
   padding-top: 19px;
 }
+
+:global(:root[data-theme='comfort']) .settings small {
+  color: var(--ui-text-secondary);
+}

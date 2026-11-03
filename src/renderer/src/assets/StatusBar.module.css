@@ -131,3 +131,7 @@
 :global(:root[data-theme='acrylic']) .statusbar {
   box-shadow: var(--glass-highlight);
 }
+
+:global(:root[data-theme='comfort']) .sessionCount {
+  color: var(--ui-text-secondary);
+}
