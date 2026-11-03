@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -30,7 +30,7 @@ vim.lsp.get_clients = original`,
 }
 
 test('file tabs reorder, reopen in their original positions and retain their cursor', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'nido-tab-order-'));
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-tab-order-')));
   let session: Session | undefined;
   try {
     for (const name of ['first.txt', 'second.txt', 'third.txt']) {
