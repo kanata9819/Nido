@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { readSavedFile } from './helpers/files';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { electron } from './helpers/electron';
@@ -66,7 +67,7 @@ test('connect to WSL from the picker, edit with the keyboard and restore after r
     await page.keyboard.press('Escape');
     await page.keyboard.press('Control+s');
     await expect
-      .poll(() => readFile(join(root, 'notes.txt'), 'utf8'))
+      .poll(() => readSavedFile(join(root, 'notes.txt')))
       .toBe('WSL edit: Hello from Linux\n');
     await page
       .getByRole('button', { name: 'Favorite workspace 日本語 Project', exact: true })

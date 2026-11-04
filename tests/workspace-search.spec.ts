@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { electron } from './helpers/electron';
+import { readSavedFile } from './helpers/files';
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -66,11 +67,11 @@ test('Vim-key replacement previews two files, saves with :wall and supports undo
     await expect(input).toBeFocused();
     await page.keyboard.type(':wall');
     await page.keyboard.press('Enter');
-    await expect.poll(() => readFile(first, 'utf8')).toBe('\uFEFF日本語 交換 交換\r\n');
-    await expect.poll(() => readFile(second, 'utf8')).toBe('交換 without final newline');
+    await expect.poll(() => readSavedFile(first)).toBe('\uFEFF日本語 交換 交換\r\n');
+    await expect.poll(() => readSavedFile(second)).toBe('交換 without final newline');
     await page.keyboard.press('u');
     await page.keyboard.press('Control+s');
-    await expect.poll(() => readFile(first, 'utf8')).toBe(original);
+    await expect.poll(() => readSavedFile(first)).toBe(original);
   } finally {
     await running.close();
     await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -130,7 +131,7 @@ test('Ctrl+Shift+F searches and jumps; F2 renames related symbols from Insert mo
     await page.keyboard.press('Escape');
     await page.keyboard.press('Control+s');
     await expect
-      .poll(() => readFile(join(root, 'notes.txt'), 'utf8'))
+      .poll(() => readSavedFile(join(root, 'notes.txt')))
       .toBe('intro\n日本語 Xneedle.*\nlast\n');
     await page.keyboard.press('Control+Shift+f');
     await expect(query).toBeFocused();
@@ -184,9 +185,9 @@ test('Ctrl+Shift+F searches and jumps; F2 renames related symbols from Insert mo
     await page.keyboard.press('Escape');
     await page.keyboard.type(':wall');
     await page.keyboard.press('Enter');
-    await expect.poll(() => readFile(file, 'utf8')).toContain('console.log(renamed)');
+    await expect.poll(() => readSavedFile(file)).toContain('console.log(renamed)');
     await expect
-      .poll(() => readFile(join(root, 'lib.ts'), 'utf8'))
+      .poll(() => readSavedFile(join(root, 'lib.ts')))
       .toBe("export const renamed = 42;\nexport const text = 'original';\n");
     await expect(input).toBeFocused();
   } finally {

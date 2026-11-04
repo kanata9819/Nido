@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { readSavedFile } from './helpers/files';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { electron } from './helpers/electron';
@@ -105,7 +106,7 @@ test('language packs install from the manager, run, toggle without losing edits 
     await page.keyboard.type('ggI# edited ');
     await page.keyboard.press('Escape');
     await page.keyboard.press('Control+s');
-    await expect.poll(() => readFile(join(project, 'sample.py'), 'utf8')).toMatch(/^# edited /);
+    await expect.poll(() => readSavedFile(join(project, 'sample.py'))).toMatch(/^# edited /);
     await running.close();
     running = await electron.launch(options);
     page = await running.firstWindow();

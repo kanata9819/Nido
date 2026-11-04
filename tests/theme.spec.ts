@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { electron } from './helpers/electron';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { readSavedFile } from './helpers/files';
 import { tmpdir, release } from 'node:os';
 import { join } from 'node:path';
 
@@ -187,7 +188,7 @@ test('acrylic switches live without losing edits and persists across restarts', 
       await page.screenshot({ path: process.env.NIDO_THEME_SCREENSHOT });
     }
     await page.keyboard.press('Control+s');
-    await expect.poll(() => readFile(file, 'utf8')).toContain('// unsaved idea');
+    await expect.poll(() => readSavedFile(file)).toContain('// unsaved idea');
     expect(errors).toEqual([]);
     await running.close();
     running = await launch();

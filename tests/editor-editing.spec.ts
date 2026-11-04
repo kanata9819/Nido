@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { electron } from './helpers/electron';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { readSavedFile } from './helpers/files';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -27,7 +28,7 @@ test('basic editing shortcuts indent, comment, undo and redo without leaving ins
     await expect(input).toBeFocused();
     const save = async (expected: string): Promise<void> => {
       await page.keyboard.press('Control+s');
-      await expect.poll(() => readFile(file, 'utf8')).toBe(expected);
+      await expect.poll(() => readSavedFile(file)).toBe(expected);
     };
     await page.keyboard.press('i');
     await page.keyboard.press('Tab');

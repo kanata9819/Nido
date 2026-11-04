@@ -4940,7 +4940,7 @@ test('Explorer opens and reopens literal bracketed file names while preserving o
     await page.keyboard.type('A!');
     await page.keyboard.press('Escape');
     await page.keyboard.press('Control+s');
-    await expect.poll(() => readFile(join(workspace, 'file[1].txt'), 'utf8')).toBe('literal!\n');
+    await expect.poll(() => readSavedFile(join(workspace, 'file[1].txt'))).toBe('literal!\n');
     expect(await readFile(join(workspace, 'file1.txt'), 'utf8')).toBe('other\n');
     await page.getByRole('button', { name: 'Close file file[1].txt', exact: true }).click();
     await expect(tabs.getByRole('tab')).toHaveCount(1);
