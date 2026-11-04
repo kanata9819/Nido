@@ -264,25 +264,24 @@ function Editor({
             !event.shiftKey &&
             delta !== 0 &&
             (event.deltaMode !== 0 || Math.abs(event.deltaY) * 4 >= Math.abs(horizontal));
-          const width = grid.current.cellWidth;
+          const cellWidth = grid.current.cellWidth;
           const result =
-            width && diagonal
+            cellWidth && diagonal
               ? accumulateScroll(
                   now - horizontalWheel.current.time > 200 ? 0 : horizontalWheel.current.remainder,
                   horizontal * 0.5,
                   event.deltaMode,
-                  width,
+                  cellWidth,
                   event.currentTarget.clientWidth
                 )
               : { lines: 0, remainder: 0 };
           if (horizontal) {
             horizontalWheel.current = { remainder: diagonal ? result.remainder : 0, time: now };
           }
-          const height = lineHeight;
           const pixels =
             (diagonal ? delta : 0) *
             (event.deltaMode === 1
-              ? height
+              ? lineHeight
               : event.deltaMode === 2
                 ? event.currentTarget.clientHeight
                 : 1);
@@ -290,20 +289,20 @@ function Editor({
             horizontal *
             0.5 *
             (event.deltaMode === 1
-              ? width
+              ? cellWidth
               : event.deltaMode === 2
                 ? event.currentTarget.clientWidth
                 : 1);
-          const columns = pixels ? result.lines : horizontalPixels / width;
+          const columns = pixels ? result.lines : horizontalPixels / cellWidth;
           if ((Number.isFinite(pixels) && pixels) || (Number.isFinite(columns) && columns)) {
             scroll.current(
-              Number.isFinite(pixels) ? pixels / height : 0,
+              Number.isFinite(pixels) ? pixels / lineHeight : 0,
               scrollFollowCursor,
               // Fine pixel deltas already describe smooth touchpad motion; wheel notches
               // (including Shift+wheel and tilt) move several lines or columns at once.
               event.deltaMode !== 0 ||
-                Math.abs(pixels) >= height ||
-                Math.abs(horizontalPixels) >= 3 * width,
+                Math.abs(pixels) >= lineHeight ||
+                Math.abs(horizontalPixels) >= 3 * cellWidth,
               Number.isFinite(columns) ? columns : 0
             );
           }
