@@ -8,6 +8,34 @@ import { gridHighlight } from './gridHighlight';
 import { scrollGridCells } from './gridCellScroll';
 export type { Cell } from './gridTypes';
 
+/** State shared by the calls of one redraw batch. */
+interface RedrawBatch {
+  /** The batch refills scroll caches through `nido_scroll_cache`. */
+  prefetched: boolean;
+  /** Neovim moved the viewport by repainting rows rather than with grid_scroll. */
+  repaintedScroll: boolean;
+  /** Every viewport move in the batch was sideways. */
+  sideways: boolean;
+  /** Row arrays referenced before the batch, which must be copied before editing. */
+  retainedRows?: Set<Cell[]>;
+  retainedView?: Cell[][];
+  retainedUpper: Cell[][];
+  retainedLower: Cell[][];
+  /** Rows gathered by a prefetch, keyed by their offset from the real viewport. */
+  cacheRows?: Map<number, Cell[]>;
+  cacheOffset: number;
+  cacheBottom: number;
+  cacheAtStart: boolean;
+  cacheAtEnd: boolean;
+  /** The viewport reached the start of the file. */
+  atStart?: boolean;
+  /** Total rows the viewport moved, for full-width vertical moves outside a prefetch. */
+  shift: number;
+  /** The batch includes a direct pixel-scroll reply. */
+  pixelScroll: boolean;
+  outgoingHeight: number;
+}
+
 export class Grid {
   // Keep enough history for fast gestures while a refill spans several display frames.
   private static readonly cacheRowLimit = 256;
@@ -165,17 +193,40 @@ export class Grid {
     return members.has(row);
   }
 
+  /** Apply one redraw batch. Returns true when it ended with `flush`. */
   apply(events: Redraw): boolean {
+    this.resetForBatch(events);
+    const batch = this.beginBatch(events);
+    let flush = false;
+    for (const [name, ...calls] of events) {
+      switch (name) {
+        case 'flush':
+          flush = true;
+          break;
+        case 'busy_start':
+          this.busy = true;
+          break;
+        case 'busy_stop':
+          this.busy = false;
+          break;
+      }
+      for (const args of calls) {
+        this.applyCall(name, args, batch);
+      }
+    }
+    this.finishBatch(batch);
+    return flush;
+  }
+
+  /** Drop scroll caches and preview state that cannot survive this batch. */
+  private resetForBatch(events: Redraw): void {
     if (
       events.some(([name]) =>
         ['nido_buffer', 'nido_edit', 'grid_clear', 'grid_resize'].includes(name)
       )
     ) {
       this.scrollOrigin = 0;
-      this.upperRows = [];
-      this.upperRowsAtStart = false;
-      this.lowerRows = [];
-      this.lowerRowsAtEnd = false;
+      this.clearScrollCaches();
     }
     if (events.some(([name]) => name === 'nido_buffer')) {
       this.scrollFraction = 0;
@@ -185,397 +236,433 @@ export class Grid {
       this.layoutDirty = true;
       this.canvas.invalidatePaint();
     }
+  }
+
+  private clearScrollCaches(): void {
+    this.upperRows = [];
+    this.upperRowsAtStart = false;
+    this.lowerRows = [];
+    this.lowerRowsAtEnd = false;
+  }
+
+  /** A `nido_scroll` of the whole main grid width that moves rows only. */
+  private isFullWidthVerticalScroll(args: unknown[]): boolean {
+    return (
+      args[0] === 1 && args[1] === 0 && args[3] === 0 && args[4] === this.columns && args[6] === 0
+    );
+  }
+
+  /** Capture what the batch needs from the grid as it was before any call applies. */
+  private beginBatch(events: Redraw): RedrawBatch {
     // Neovim can repaint wrapped rows instead of emitting grid_scroll. Keep
     // rasterized rows at their new positions when the returned cells still match.
     const viewportMoves = events.flatMap(([name, ...calls]) =>
       name === 'nido_scroll' ? calls : []
     );
     const prefetched = events.some(([name]) => name === 'nido_scroll_cache');
-    const repaintedScroll =
-      viewportMoves.length > 0 && !events.some(([name]) => name === 'grid_scroll');
-    // Sideways moves keep every row in place; their images can shift instead of rasterizing.
-    const sideways = viewportMoves.length > 0 && viewportMoves.every((args) => args[5] === 0);
+    const verticalOnly = viewportMoves.every((args) => this.isFullWidthVerticalScroll(args));
     const retainedRows =
       prefetched || viewportMoves.length
         ? new Set([...this.upperRows, ...this.cells, ...this.lowerRows])
         : undefined;
-    const retainedView = retainedRows ? this.cells.slice() : undefined;
-    const retainedUpper = retainedRows ? this.upperRows.slice() : [];
-    const retainedLower = retainedRows ? this.lowerRows.slice() : [];
     // A refill visits only its uncached strip. Retain the intervening rows
     // while Neovim jumps to that strip and back to the real viewport.
-    const cacheRows =
-      prefetched &&
-      viewportMoves.every(
-        (args) =>
-          args[0] === 1 &&
-          args[1] === 0 &&
-          args[3] === 0 &&
-          args[4] === this.columns &&
-          args[6] === 0
-      )
-        ? new Map<number, Cell[]>()
-        : undefined;
-    let cacheOffset = 0;
-    let cacheBottom = this.rows - 1;
-    let cacheAtStart = this.upperRowsAtStart;
-    let cacheAtEnd = this.lowerRowsAtEnd;
+    const cacheRows = prefetched && verticalOnly ? new Map<number, Cell[]>() : undefined;
+    const cacheBottom = this.rows - 1;
     if (cacheRows) {
       this.upperRows.forEach((row, i) => cacheRows.set(i - this.upperRows.length, row));
       this.lowerRows.forEach((row, i) => cacheRows.set(cacheBottom + i, row));
     }
-    const rememberCacheRows = (): void => {
-      if (cacheRows) {
-        for (let row = 0; row < cacheBottom; row++) {
-          const cells = this.cells[row];
-          if (cells) {
-            // Prepare newly fetched row geometry in the redraw handler,
-            // so animation frames only read the cached counts.
-            this.rowLayout.compact(cells);
-            cacheRows.set(cacheOffset + row, cells);
-            retainedRows?.add(cells);
-          }
-        }
-      }
-    };
     const shift =
-      !prefetched &&
-      viewportMoves.every(
-        (args) =>
-          args[0] === 1 &&
-          args[1] === 0 &&
-          args[3] === 0 &&
-          args[4] === this.columns &&
-          args[6] === 0
-      )
+      !prefetched && verticalOnly
         ? viewportMoves.reduce((total, args) => total + Number(args[5]), 0)
         : 0;
     const pixelScroll = events.some(
       ([name, ...calls]) => name === 'nido_pixel_scroll' && calls.some((args) => args[1] === true)
     );
-    const outgoingHeight = shift > 0 ? this.scrollHeight(shift) : 0;
     if (viewportMoves.length && !prefetched && !pixelScroll) {
       this.scrollOrigin = 0;
     }
-    let flush = false;
-    let atStart: boolean | undefined;
-    for (const [name, ...calls] of events) {
-      switch (name) {
-        case 'flush': {
-          flush = true;
-          break;
+    return {
+      prefetched,
+      repaintedScroll: viewportMoves.length > 0 && !events.some(([name]) => name === 'grid_scroll'),
+      // Sideways moves keep every row in place; their images can shift instead of rasterizing.
+      sideways: viewportMoves.length > 0 && viewportMoves.every((args) => args[5] === 0),
+      retainedRows,
+      retainedView: retainedRows ? this.cells.slice() : undefined,
+      retainedUpper: retainedRows ? this.upperRows.slice() : [],
+      retainedLower: retainedRows ? this.lowerRows.slice() : [],
+      cacheRows,
+      cacheOffset: 0,
+      cacheBottom,
+      cacheAtStart: this.upperRowsAtStart,
+      cacheAtEnd: this.lowerRowsAtEnd,
+      shift,
+      pixelScroll,
+      outgoingHeight: shift > 0 ? this.scrollHeight(shift) : 0
+    };
+  }
+
+  private applyCall(name: string, args: unknown[], batch: RedrawBatch): void {
+    switch (name) {
+      case 'nido_sticky_scroll':
+        this.setStickyScroll(args[0] as StickyScrollState);
+        break;
+      case 'nido_scroll':
+        this.moveViewport(args, batch);
+        break;
+      case 'nido_scroll_cache':
+        if (typeof args[0] === 'boolean') {
+          batch.cacheAtStart = this.upperRowsAtStart = args[0];
         }
-        case 'busy_start': {
-          this.busy = true;
-          break;
+        if (typeof args[2] === 'boolean') {
+          batch.cacheAtEnd = this.lowerRowsAtEnd = args[2];
         }
-        case 'busy_stop': {
-          this.busy = false;
-          break;
+        if (typeof args[1] === 'boolean') {
+          batch.atStart = args[1];
         }
+        break;
+      case 'nido_pixel_scroll':
+        if (typeof args[3] === 'boolean') {
+          batch.atStart = args[3];
+        }
+        break;
+      case 'nido_bracket_guides':
+        this.setBracketGuides(Array.isArray(args[0]) ? (args[0] as BracketGuide[]) : []);
+        break;
+      case 'grid_resize':
+        if (args[0] === 1) {
+          this.resize(Number(args[1]), Number(args[2]));
+        }
+        break;
+      case 'grid_clear':
+        if (args[0] === 1) {
+          this.clear();
+        }
+        break;
+      case 'grid_line':
+        if (args[0] === 1) {
+          this.writeLine(
+            Number(args[1]),
+            Number(args[2]),
+            args[3] as [string, number?, number?][],
+            batch
+          );
+        }
+        break;
+      case 'grid_scroll':
+        if (args[0] === 1) {
+          this.layoutDirty = true;
+          this.canvas.invalidatePaint();
+          scrollGridCells(
+            this.cells,
+            this.columns,
+            args as number[],
+            batch.retainedRows,
+            this.canvas,
+            this.rowLayout,
+            this.rowText
+          );
+        }
+        break;
+      case 'hl_attr_define':
+        this.defineHighlight(args);
+        break;
+      case 'default_colors_set':
+        this.canvas.invalidate();
+        if (Number(args[0]) >= 0) {
+          this.foreground = color(Number(args[0]));
+        }
+        if (Number(args[1]) >= 0) {
+          this.background = color(Number(args[1]));
+        }
+        break;
+      case 'grid_cursor_goto':
+        if (args[0] === 1) {
+          this.cursor = { row: Number(args[1]), column: Number(args[2]) };
+        }
+        break;
+      case 'mode_change':
+        this.mode = String(args[0]);
+        break;
+    }
+  }
+
+  private setStickyScroll(state: StickyScrollState): void {
+    const separators = Array.isArray(state.separators) ? state.separators : [];
+    const previous = this.stickyScroll;
+    const before = previous?.separators ?? [];
+    if (
+      (separators.length || before.length) &&
+      (separators.length !== before.length ||
+        separators.some(
+          (item, i) => item.row !== before[i]?.row || item.line !== before[i]?.line
+        ) ||
+        state.left !== previous?.left ||
+        state.gutter !== previous?.gutter ||
+        state.width !== previous?.width)
+    ) {
+      this.canvas.invalidatePaint();
+    }
+    this.stickyScroll = {
+      ...state,
+      separators,
+      scopes: Array.isArray(state.scopes) ? state.scopes : []
+    };
+  }
+
+  private setBracketGuides(guides: BracketGuide[]): void {
+    if (
+      guides.length !== this.bracketGuides.length ||
+      guides.some((guide, index) =>
+        (Object.keys(guide) as (keyof BracketGuide)[]).some(
+          (key) => guide[key] !== this.bracketGuides[index]?.[key]
+        )
+      )
+    ) {
+      this.bracketGuides = guides;
+      this.canvas.invalidatePaint();
+    }
+  }
+
+  /**
+   * A viewport move reported by Neovim. grid_scroll can also move decorations inside a
+   * stationary viewport, so only these moves feed the scroll preview caches.
+   */
+  private moveViewport(args: unknown[], batch: RedrawBatch): void {
+    const [grid, top, bottom, left, right, rows, columns] = args as number[];
+    if (grid === 1 && rows === 0 && columns !== 0 && typeof args[8] === 'number') {
+      // Sideways moves report the text area after line numbers and signs.
+      this.horizontalView = { top, bottom, left, right, leftcol: args[8] };
+    }
+    if (typeof args[7] === 'boolean') {
+      // Virtual-line changes can move the grid at BOF without a wheel reply.
+      batch.atStart = args[7];
+    }
+    if (!this.isFullWidthVerticalScroll(args)) {
+      this.clearScrollCaches();
+      return;
+    }
+    batch.cacheBottom = bottom;
+    this.rememberCacheRows(batch);
+    batch.cacheOffset += rows;
+    this.shiftScrollCaches(rows, bottom - top, bottom);
+  }
+
+  /** Move rows that left the viewport into the matching cache, and trim the other one. */
+  private shiftScrollCaches(rows: number, height: number, bottom: number): void {
+    if (rows > 0 && (rows >= height || this.upperRows.length + rows > Grid.cacheRowLimit)) {
+      this.upperRowsAtStart = false;
+    }
+    // Upward page-sized moves can still reuse the prefetched history.
+    // Downward page jumps skip rows we have never received.
+    this.upperRows =
+      rows > 0
+        ? rows >= height
+          ? []
+          : [...this.upperRows, ...this.cells.slice(0, rows)].slice(-Grid.cacheRowLimit)
+        : this.upperRows.slice(0, Math.max(0, this.upperRows.length + rows));
+    if (rows < 0 && (-rows >= height || this.lowerRows.length - rows > Grid.cacheRowLimit)) {
+      this.lowerRowsAtEnd = false;
+    }
+    this.lowerRows =
+      rows < 0
+        ? -rows >= height
+          ? []
+          : [...this.cells.slice(bottom + rows, bottom), ...this.lowerRows].slice(
+              0,
+              Grid.cacheRowLimit
+            )
+        : this.lowerRows.slice(rows);
+  }
+
+  /** Record the current viewport rows at their document offset within a prefetch. */
+  private rememberCacheRows(batch: RedrawBatch): void {
+    if (!batch.cacheRows) {
+      return;
+    }
+    for (let row = 0; row < batch.cacheBottom; row++) {
+      const cells = this.cells[row];
+      if (cells) {
+        // Prepare newly fetched row geometry in the redraw handler,
+        // so animation frames only read the cached counts.
+        this.rowLayout.compact(cells);
+        batch.cacheRows.set(batch.cacheOffset + row, cells);
+        batch.retainedRows?.add(cells);
       }
+    }
+  }
 
-      for (const args of calls) {
-        if (name === 'nido_sticky_scroll') {
-          const state = args[0] as StickyScrollState;
-          const separators = Array.isArray(state.separators) ? state.separators : [];
-          const previous = this.stickyScroll;
-          const before = previous?.separators ?? [];
-          if (
-            (separators.length || before.length) &&
-            (separators.length !== before.length ||
-              separators.some(
-                (item, i) => item.row !== before[i]?.row || item.line !== before[i]?.line
-              ) ||
-              state.left !== previous?.left ||
-              state.gutter !== previous?.gutter ||
-              state.width !== previous?.width)
-          ) {
-            this.canvas.invalidatePaint();
-          }
-          this.stickyScroll = {
-            ...state,
-            separators,
-            scopes: Array.isArray(state.scopes) ? state.scopes : []
-          };
-          continue;
-        }
-        // grid_scroll can also move decorations inside a stationary viewport.
-        // Only actual viewport movement contributes to the preview history.
-        if (name === 'nido_scroll') {
-          const [grid, top, bottom, left, right, rows, columns] = args as number[];
-          if (grid === 1 && rows === 0 && columns !== 0 && typeof args[8] === 'number') {
-            // Sideways moves report the text area after line numbers and signs.
-            this.horizontalView = { top, bottom, left, right, leftcol: args[8] };
-          }
-          if (typeof args[7] === 'boolean') {
-            // Virtual-line changes can move the grid at BOF without a wheel reply.
-            atStart = args[7];
-          }
-          if (grid === 1 && top === 0 && left === 0 && right === this.columns && columns === 0) {
-            cacheBottom = bottom;
-            rememberCacheRows();
-            cacheOffset += rows;
-            if (
-              rows > 0 &&
-              (rows >= bottom - top || this.upperRows.length + rows > Grid.cacheRowLimit)
-            ) {
-              this.upperRowsAtStart = false;
-            }
-            // Upward page-sized moves can still reuse the prefetched history.
-            // Downward page jumps skip rows we have never received.
-            this.upperRows =
-              rows > 0
-                ? rows >= bottom - top
-                  ? []
-                  : [...this.upperRows, ...this.cells.slice(0, rows)].slice(-Grid.cacheRowLimit)
-                : this.upperRows.slice(0, Math.max(0, this.upperRows.length + rows));
-            if (
-              rows < 0 &&
-              (-rows >= bottom - top || this.lowerRows.length - rows > Grid.cacheRowLimit)
-            ) {
-              this.lowerRowsAtEnd = false;
-            }
-            this.lowerRows =
-              rows < 0
-                ? -rows >= bottom - top
-                  ? []
-                  : [...this.cells.slice(bottom + rows, bottom), ...this.lowerRows].slice(
-                      0,
-                      Grid.cacheRowLimit
-                    )
-                : this.lowerRows.slice(rows);
-          } else {
-            this.upperRows = [];
-            this.upperRowsAtStart = false;
-            this.lowerRows = [];
-            this.lowerRowsAtEnd = false;
-          }
-        }
-        switch (name) {
-          case 'nido_scroll_cache': {
-            if (typeof args[0] === 'boolean') {
-              cacheAtStart = this.upperRowsAtStart = args[0];
-            }
-            if (typeof args[2] === 'boolean') {
-              cacheAtEnd = this.lowerRowsAtEnd = args[2];
-            }
-            if (typeof args[1] === 'boolean') {
-              atStart = args[1];
-            }
-            break;
-          }
-          case 'nido_pixel_scroll': {
-            if (typeof args[3] === 'boolean') {
-              atStart = args[3];
-            }
-            break;
-          }
-          case 'nido_bracket_guides': {
-            const guides = Array.isArray(args[0]) ? (args[0] as BracketGuide[]) : [];
-            if (
-              guides.length !== this.bracketGuides.length ||
-              guides.some((guide, index) =>
-                (Object.keys(guide) as (keyof BracketGuide)[]).some(
-                  (key) => guide[key] !== this.bracketGuides[index]?.[key]
-                )
-              )
-            ) {
-              this.bracketGuides = guides;
-              this.canvas.invalidatePaint();
-            }
-            break;
-          }
-          case 'grid_resize': {
-            if (args[0] !== 1) {
-              break;
-            }
-            this.layoutDirty = true;
-            this.canvas.invalidatePaint();
-            this.columns = Number(args[1]);
-            this.rows = Number(args[2]);
-            this.cells = Array.from({ length: this.rows }, (_, row) =>
-              Array.from(
-                { length: this.columns },
-                (_, col) => this.cells[row]?.[col] || { text: ' ', highlight: 0 }
-              )
-            );
-            break;
-          }
-          case 'grid_clear': {
-            if (args[0] !== 1) {
-              break;
-            }
-            this.layoutDirty = true;
-            this.canvas.invalidatePaint();
-            this.cells = Array.from({ length: this.rows }, () =>
-              Array.from({ length: this.columns }, () => ({
-                text: ' ',
-                highlight: 0
-              }))
-            );
-            break;
-          }
-          case 'grid_line': {
-            if (args[0] !== 1) {
-              break;
-            }
-            let row = this.cells[Number(args[1])];
-            let changed = false;
-            let column = Number(args[2]);
-            let highlight = 0;
-            for (const cell of args[3] as [string, number?, number?][]) {
-              if (cell[1] !== undefined) {
-                highlight = cell[1];
-              }
-              for (let i = 0; i < (cell[2] ?? 1); i++) {
-                if (row && column < this.columns) {
-                  if (row[column]?.text !== cell[0] || row[column]?.highlight !== highlight) {
-                    if (!changed) {
-                      this.layoutDirty = true;
-                      if (
-                        retainedRows?.has(row) ||
-                        this.cacheContains(this.upperRows, row) ||
-                        this.cacheContains(this.lowerRows, row)
-                      ) {
-                        const previous = row;
-                        row = this.cells[Number(args[1])] = row.slice();
-                        // Prefetch and wrapped redraws restore retained cells after applying the frame.
-                        if (!prefetched && (!repaintedScroll || sideways)) {
-                          this.canvas.moveRowImage(previous, row);
-                        }
-                        this.rowLayout.clone(previous, row);
-                        const text = this.rowText.get(previous);
-                        if (text !== undefined) {
-                          this.rowText.set(row, text);
-                        }
-                      }
-                      changed = true;
-                    }
-                    const next = { text: cell[0], highlight };
-                    this.canvas.invalidate(Number(args[1]), column, row[column], next);
-                    if (row[column]?.text !== next.text) {
-                      this.rowText.delete(row);
-                    }
-                    this.rowLayout.replace(row, row[column], next);
-                    row[column] = next;
-                  }
-                }
+  private resize(columns: number, rows: number): void {
+    this.layoutDirty = true;
+    this.canvas.invalidatePaint();
+    this.columns = columns;
+    this.rows = rows;
+    this.cells = Array.from({ length: this.rows }, (_, row) =>
+      Array.from(
+        { length: this.columns },
+        (_, col) => this.cells[row]?.[col] || { text: ' ', highlight: 0 }
+      )
+    );
+  }
 
-                column++;
-              }
-            }
-            break;
-          }
-          case 'grid_scroll': {
-            if (args[0] !== 1) {
-              break;
-            }
-            this.layoutDirty = true;
-            this.canvas.invalidatePaint();
-            scrollGridCells(
-              this.cells,
-              this.columns,
-              args as number[],
-              retainedRows,
-              this.canvas,
-              this.rowLayout,
-              this.rowText
-            );
-            break;
-          }
-          case 'hl_attr_define': {
-            // New IDs cannot affect previously laid out or rasterized rows.
-            if (this.highlights.has(Number(args[0]))) {
+  private clear(): void {
+    this.layoutDirty = true;
+    this.canvas.invalidatePaint();
+    this.cells = Array.from({ length: this.rows }, () =>
+      Array.from({ length: this.columns }, () => ({
+        text: ' ',
+        highlight: 0
+      }))
+    );
+  }
+
+  private writeLine(
+    rowIndex: number,
+    startColumn: number,
+    line: [string, number?, number?][],
+    batch: RedrawBatch
+  ): void {
+    let row = this.cells[rowIndex];
+    let changed = false;
+    let column = startColumn;
+    let highlight = 0;
+    for (const cell of line) {
+      if (cell[1] !== undefined) {
+        highlight = cell[1];
+      }
+      for (let i = 0; i < (cell[2] ?? 1); i++) {
+        if (row && column < this.columns) {
+          if (row[column]?.text !== cell[0] || row[column]?.highlight !== highlight) {
+            if (!changed) {
               this.layoutDirty = true;
-              this.upperLayout = undefined;
-              this.lowerLayout = undefined;
-              this.rowLayout.invalidate();
-              this.canvas.invalidate();
+              if (this.isShared(row, batch)) {
+                row = this.detachRow(rowIndex, row, batch);
+              }
+              changed = true;
             }
-            this.highlights.set(Number(args[0]), gridHighlight(args));
-            break;
-          }
-          case 'default_colors_set': {
-            this.canvas.invalidate();
-            if (Number(args[0]) >= 0) {
-              this.foreground = color(Number(args[0]));
+            const next = { text: cell[0], highlight };
+            this.canvas.invalidate(rowIndex, column, row[column], next);
+            if (row[column]?.text !== next.text) {
+              this.rowText.delete(row);
             }
-            if (Number(args[1]) >= 0) {
-              this.background = color(Number(args[1]));
-            }
-            break;
-          }
-          case 'grid_cursor_goto': {
-            if (args[0] !== 1) {
-              break;
-            }
-            this.cursor = { row: Number(args[1]), column: Number(args[2]) };
-            break;
-          }
-          case 'mode_change': {
-            this.mode = String(args[0]);
-            break;
+            this.rowLayout.replace(row, row[column], next);
+            row[column] = next;
           }
         }
+        column++;
       }
     }
-    if (cacheRows && cacheOffset === 0) {
-      rememberCacheRows();
-      this.upperRows = [];
-      this.lowerRows = [];
-      for (let i = -1; i >= -Grid.cacheRowLimit && cacheRows.has(i); i--) {
-        this.upperRows.push(cacheRows.get(i)!);
-      }
-      this.upperRows.reverse();
-      for (let i = cacheBottom; i < cacheBottom + Grid.cacheRowLimit && cacheRows.has(i); i++) {
-        this.lowerRows.push(cacheRows.get(i)!);
-      }
-      this.upperRowsAtStart = cacheAtStart;
-      this.lowerRowsAtEnd = cacheAtEnd;
+  }
+
+  /** Whether a scroll cache or a retained frame still references this row array. */
+  private isShared(row: Cell[], batch: RedrawBatch): boolean {
+    return (
+      !!batch.retainedRows?.has(row) ||
+      this.cacheContains(this.upperRows, row) ||
+      this.cacheContains(this.lowerRows, row)
+    );
+  }
+
+  /** Copy a shared row before editing it, carrying its cached image, layout and text. */
+  private detachRow(rowIndex: number, previous: Cell[], batch: RedrawBatch): Cell[] {
+    const row = (this.cells[rowIndex] = previous.slice());
+    // Prefetch and wrapped redraws restore retained cells after applying the frame.
+    if (!batch.prefetched && (!batch.repaintedScroll || batch.sideways)) {
+      this.canvas.moveRowImage(previous, row);
     }
-    if (atStart) {
+    this.rowLayout.clone(previous, row);
+    const text = this.rowText.get(previous);
+    if (text !== undefined) {
+      this.rowText.set(row, text);
+    }
+    return row;
+  }
+
+  private defineHighlight(args: unknown[]): void {
+    // New IDs cannot affect previously laid out or rasterized rows.
+    if (this.highlights.has(Number(args[0]))) {
+      this.layoutDirty = true;
+      this.upperLayout = undefined;
+      this.lowerLayout = undefined;
+      this.rowLayout.invalidate();
+      this.canvas.invalidate();
+    }
+    this.highlights.set(Number(args[0]), gridHighlight(args));
+  }
+
+  private finishBatch(batch: RedrawBatch): void {
+    if (batch.cacheRows && batch.cacheOffset === 0) {
+      this.restorePrefetchedCaches(batch, batch.cacheRows);
+    }
+    if (batch.atStart) {
       // Decoration redraws can emit grid_scroll without moving the viewport.
       // At BOF none of those outgoing rows belong above the current view.
       this.upperRows = [];
       this.upperRowsAtStart = true;
     }
-    if (retainedView) {
-      this.canvas.invalidatePaint();
-      for (let row = 0; row < this.rows; row++) {
-        const source = row < this.rows - 1 ? row + shift : row;
-        const before =
-          source < 0
-            ? retainedUpper[retainedUpper.length + source]
-            : row < this.rows - 1 && source >= this.rows - 1
-              ? retainedLower[source - (this.rows - 1)]
-              : retainedView[source];
-        const after = this.cells[row];
-        if (
-          before !== after &&
-          before &&
-          after &&
-          before.length === after.length &&
-          before.every(
-            (cell, col) => cell.text === after[col].text && cell.highlight === after[col].highlight
-          )
-        ) {
-          this.cells[row] = before;
-        }
+    if (batch.retainedView) {
+      this.restoreRetainedRows(batch, batch.retainedView);
+    }
+    if (batch.pixelScroll && batch.shift) {
+      this.scrollOrigin +=
+        batch.shift > 0 ? batch.outgoingHeight : -this.scrollHeight(-batch.shift);
+    }
+  }
+
+  /** After a prefetch returns to the real viewport, rebuild both caches around it. */
+  private restorePrefetchedCaches(batch: RedrawBatch, cacheRows: Map<number, Cell[]>): void {
+    this.rememberCacheRows(batch);
+    this.upperRows = [];
+    this.lowerRows = [];
+    for (let i = -1; i >= -Grid.cacheRowLimit && cacheRows.has(i); i--) {
+      this.upperRows.push(cacheRows.get(i)!);
+    }
+    this.upperRows.reverse();
+    const bottom = batch.cacheBottom;
+    for (let i = bottom; i < bottom + Grid.cacheRowLimit && cacheRows.has(i); i++) {
+      this.lowerRows.push(cacheRows.get(i)!);
+    }
+    this.upperRowsAtStart = batch.cacheAtStart;
+    this.lowerRowsAtEnd = batch.cacheAtEnd;
+  }
+
+  /** Reuse row arrays (and their rasters) whose cells came back unchanged after a move. */
+  private restoreRetainedRows(batch: RedrawBatch, retainedView: Cell[][]): void {
+    this.canvas.invalidatePaint();
+    const { shift, retainedUpper, retainedLower } = batch;
+    for (let row = 0; row < this.rows; row++) {
+      const source = row < this.rows - 1 ? row + shift : row;
+      const before =
+        source < 0
+          ? retainedUpper[retainedUpper.length + source]
+          : row < this.rows - 1 && source >= this.rows - 1
+            ? retainedLower[source - (this.rows - 1)]
+            : retainedView[source];
+      const after = this.cells[row];
+      if (
+        before !== after &&
+        before &&
+        after &&
+        before.length === after.length &&
+        before.every(
+          (cell, col) => cell.text === after[col].text && cell.highlight === after[col].highlight
+        )
+      ) {
+        this.cells[row] = before;
       }
     }
-    if (pixelScroll && shift) {
-      this.scrollOrigin += shift > 0 ? outgoingHeight : -this.scrollHeight(-shift);
-    }
-    return flush;
+  }
+
+  /** CodeLens-only rows are compact and take 70% of a line. */
+  private rowHeight(cells: Cell[], cellHeight: number): number {
+    return this.rowLayout.compact(cells) ? Math.ceil(cellHeight * 0.7) : cellHeight;
   }
 
   private scrollHeight(rows: number): number {
     let height = rows * this.cellHeight;
     for (let row = 0; row < Math.min(rows, this.rows - 1); row++) {
-      if (this.rowLayout.compact(this.cells[row])) {
-        height -= this.cellHeight - Math.ceil(this.cellHeight * 0.7);
-      }
+      height -= this.cellHeight - this.rowHeight(this.cells[row], this.cellHeight);
     }
     return height;
   }
@@ -627,8 +714,10 @@ export class Grid {
       this.rowTops = [0];
       for (let row = 0; row < this.rows; row++) {
         const cells = this.cells[row];
-        const compact = row < this.rows - 1 && this.rowLayout.compact(cells);
-        this.rowTops.push(this.rowTops[row] + (compact ? Math.ceil(cellHeight * 0.7) : cellHeight));
+        // The last row is the command line, which never compacts.
+        this.rowTops.push(
+          this.rowTops[row] + (row < this.rows - 1 ? this.rowHeight(cells, cellHeight) : cellHeight)
+        );
         // Compact rows shift every row below them.
         if (this.rowTops[row + 1] !== previousTops[row + 1]) {
           this.canvas.invalidatePaint();
@@ -646,10 +735,8 @@ export class Grid {
       this.upperTops = new Array(this.upperRows.length + 1);
       this.upperTops[this.upperRows.length] = 0;
       for (let index = this.upperRows.length - 1; index >= 0; index--) {
-        const cells = this.upperRows[index];
-        const compact = this.rowLayout.compact(cells);
         this.upperTops[index] =
-          this.upperTops[index + 1] - (compact ? Math.ceil(cellHeight * 0.7) : cellHeight);
+          this.upperTops[index + 1] - this.rowHeight(this.upperRows[index], cellHeight);
       }
       this.upperLayout = this.upperRows;
       this.upperFontHeight = cellHeight;
@@ -658,8 +745,7 @@ export class Grid {
       this.lowerTops = [0];
       for (const cells of this.lowerRows) {
         this.lowerTops.push(
-          this.lowerTops[this.lowerTops.length - 1] +
-            (this.rowLayout.compact(cells) ? Math.ceil(cellHeight * 0.7) : cellHeight)
+          this.lowerTops[this.lowerTops.length - 1] + this.rowHeight(cells, cellHeight)
         );
       }
       this.lowerLayout = this.lowerRows;
