@@ -116,6 +116,11 @@ export class GridCanvas {
     if (!shift || Math.abs(shift) >= right - left || right > columns) {
       return undefined;
     }
+    // A grid wider than the row image (e.g. before a resize reaches Neovim) would copy
+    // from past the image edge, and the copy operator would clear what it cannot read.
+    if (Math.round(right * cellWidth * dpr) > image.width) {
+      return undefined;
+    }
     // Neighbouring cells are drawn again inside each clip so overhanging ink matches.
     const margin = Math.ceil(overhang / cellWidth) + 1;
     const stale: number[] = [];
