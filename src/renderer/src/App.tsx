@@ -1,8 +1,6 @@
 import { LanguageContext, useI18n } from './i18n';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { SessionState } from '../../shared/types';
-import type { Panel } from './types';
 import WorkspaceEditor from './components/WorkspaceEditor';
 import TerminalPanel from './components/TerminalPanel';
 import Notification from './components/Notification';
@@ -34,13 +32,13 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { usePointerVisibility } from './hooks/usePointerVisibility';
 import { useWorkspaceSessions } from './hooks/useWorkspaceSessions';
 import { useFocusGuard } from './hooks/useFocusGuard';
-import { useFileSearch } from './hooks/useFileSearch';
 import { useInitializedEditors } from './hooks/useInitializedEditors';
 import styles from './assets/Nido.module.css';
-import notificationStyles from './assets/Notification.module.css';
-import { useNotificationDismissal } from './hooks/useNotificationDismissal';
 import { OverlayMotionContext, useReducedMotion } from './overlayMotion';
-import OverlayPresence from './components/OverlayPresence';
+import ErrorToast from './components/ErrorToast';
+import { useErrorNotice } from './hooks/useErrorNotice';
+import { useNativePreferences } from './hooks/useNativePreferences';
+import { usePalette } from './hooks/usePalette';
 
 const defaultState: SessionState = {
   buffers: [],
@@ -66,24 +64,20 @@ export default function App(): React.JSX.Element {
 function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Element {
   const t = useI18n();
   const pointerHidden = usePointerVisibility();
-  const [panel, setPanel] = useState<Panel>(null);
-  const [folderKind, setFolderKind] = useState<'editor' | 'terminal'>('editor');
   const [markdownVisible, setMarkdownVisible] = useState(false);
   const [leader, setLeader] = useState(false);
-  const [query, setQuery] = useState('');
-  const [selection, setSelection] = useState(0);
-  const [errorNotice, setErrorNotice] = useState<{ message: string }>();
-  const error = errorNotice?.message || '';
-  const setError = useCallback(
-    (message: string): void => setErrorNotice(message ? { message } : undefined),
-    []
-  );
-  const dismissError = useCallback(() => setError(''), [setError]);
-  const report = useCallback(
-    (message: string): void =>
-      setError(message.replace(/^Error: Error invoking remote method '[^']+': Error: /, '')),
-    [setError]
-  );
+  const [focusTick, setFocusTick] = useState(0);
+  const { notice: errorNotice, error, dismissError, report } = useErrorNotice();
+  const requestEditorFocus = useCallback(() => setFocusTick((n) => n + 1), []);
+  const dismissLeader = useCallback(() => setLeader(false), []);
+  const closeError = useCallback((): void => {
+    dismissError();
+    requestEditorFocus();
+  }, [dismissError, requestEditorFocus]);
+  const toggleMarkdown = useCallback((): void => {
+    setMarkdownVisible((visible) => !visible);
+    requestEditorFocus();
+  }, [requestEditorFocus]);
 
   const { workspaces, setWorkspaces, active, setActive, states, mode, restoring } =
     useWorkspaceSessions(report);
@@ -94,7 +88,6 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     busy: savingFavorite,
     toggleFavorite
   } = useFavoriteWorkspaces(report);
-  const [focusTick, setFocusTick] = useState(0);
   const {
     theme,
     sidebar,
@@ -111,21 +104,10 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     sidebarWidth,
     resizeSidebar
   } = settings;
-  useLayoutEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    void window.nido.setTheme(theme).catch((error) => report(String(error)));
-  }, [theme, report]);
-  useLayoutEffect(() => {
-    document.documentElement.lang = settings.language;
-    void window.nido.setLanguage(settings.language).catch((error) => report(String(error)));
-  }, [settings.language, report]);
-  const errorFading = useNotificationDismissal(errorNotice, animations, dismissError);
+  useNativePreferences(settings, report);
   useSessionSettings(workspaces, settings, report);
-  useEffect(() => {
-    void window.nido
-      .setHistoryEnabled(settings.historyEnabled)
-      .catch((error) => report(String(error)));
-  }, [settings.historyEnabled, report]);
+  const palette = usePalette({ active, report, onShow: dismissLeader, toggleMarkdown });
+  const { panel, closePanel, showPanel, query, fileList } = palette;
 
   const modal = useRef<HTMLDivElement>(null);
   const state = states[active] || defaultState;
@@ -138,15 +120,15 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     [workspace?.root, gitFiles, state.diagnostics, state.problems]
   );
   const focusEditor = useCallback((): void => {
-    setPanel(null);
+    closePanel();
     setLeader(false);
-    setFocusTick((n) => n + 1);
+    requestEditorFocus();
     if (panel === 'extensions' && !active) {
       requestAnimationFrame(() =>
         document.querySelector<HTMLElement>('[data-extensions-trigger]')?.focus()
       );
     }
-  }, [panel, active]);
+  }, [panel, active, closePanel, requestEditorFocus]);
   const closeMarkdown = useCallback((): void => {
     setMarkdownVisible(false);
     focusEditor();
@@ -158,6 +140,20 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     },
     [report]
   );
+  /** Runs a session request, then returns focus to the editor if nothing stole it meanwhile. */
+  const runThenFocus = useCallback(
+    (request: () => Promise<unknown>): void => {
+      const canFocus = captureFocus();
+      run(
+        request().then(() => {
+          if (canFocus()) {
+            focusEditor();
+          }
+        })
+      );
+    },
+    [captureFocus, run, focusEditor]
+  );
 
   const panels = useBottomPanels({
     active,
@@ -167,10 +163,10 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     setWorkspaces,
     focusEditor,
     captureFocus,
-    dismissLeader: () => setLeader(false),
+    dismissLeader,
     closeOverlay: () => {
       setLeader(false);
-      setPanel(null);
+      closePanel();
     },
     run
   });
@@ -194,52 +190,18 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     setWorkspaces,
     setActive,
     focusEditor,
-    requestEditorFocus: () => setFocusTick((value) => value + 1),
+    requestEditorFocus,
     captureFocus,
-    dismissLeader: () => setLeader(false),
-    showFolders: (kind) => {
-      setFolderKind(kind);
-      setPanel('folders');
-    },
-    closeOverlay: () => setPanel(null),
+    dismissLeader,
+    showFolders: palette.showFolders,
+    closeOverlay: closePanel,
     report,
     run
   });
 
-  const { fileList, loading, reset: resetFileSearch } = useFileSearch(panel, active, query, report);
-
   const openFile = useCallback(
-    (path: string): void => {
-      const canFocus = captureFocus();
-      run(
-        window.nido.openFile(active, path).then(() => {
-          if (canFocus()) {
-            focusEditor();
-          }
-        })
-      );
-    },
-    [active, run, focusEditor, captureFocus]
-  );
-
-  const showPanel = useCallback(
-    (value: Panel): void => {
-      setLeader(false);
-      setQuery('');
-      setSelection(0);
-      if (value === 'markdown') {
-        setMarkdownVisible((visible) => !visible);
-        setPanel(null);
-        setFocusTick((value) => value + 1);
-        return;
-      }
-      setPanel(value);
-
-      if (value === 'files') {
-        resetFileSearch();
-      }
-    },
-    [resetFileSearch]
+    (path: string): void => runThenFocus(() => window.nido.openFile(active, path)),
+    [active, runThenFocus]
   );
   const openFiles = useCallback((): void => showPanel('files'), [showPanel]);
 
@@ -249,7 +211,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
       return;
     }
     setLeader(false);
-    setPanel(null);
+    closePanel();
     setSidebar(true);
     requestAnimationFrame(() =>
       document.querySelector<HTMLElement>('aside:not([hidden]) [role="tree"]')?.focus()
@@ -258,17 +220,9 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 
   const save = (): void => run(window.nido.save(active, formatOnSave));
   const openProblem = useCallback(
-    (index: number): void => {
-      const canFocus = captureFocus();
-      run(
-        window.nido.openProblem(active, index + 1, state.diagnosticsVersion!).then(() => {
-          if (canFocus()) {
-            focusEditor();
-          }
-        })
-      );
-    },
-    [active, state.diagnosticsVersion, captureFocus, run, focusEditor]
+    (index: number): void =>
+      runThenFocus(() => window.nido.openProblem(active, index + 1, state.diagnosticsVersion!)),
+    [active, state.diagnosticsVersion, runThenFocus]
   );
   const problemItems = useMemo(
     () => (panel === 'problems' ? buildProblemItems(state.problems, openProblem, t) : []),
@@ -323,8 +277,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     panel,
     leader,
     error,
-    setError,
-    setFocusTick,
+    dismissError: closeError,
     focusEditor,
     modal,
     mode,
@@ -515,34 +468,19 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         }}
       />
       <Notification workspaceId={active} animations={animations} />
-      <OverlayPresence>
-        {error ? (
-          <div
-            className={`${styles.error} ${notificationStyles.dismissal}`}
-            data-animations={animations}
-            data-fading={errorFading}
-            role="alert"
-          >
-            <span>{error}</span>
-            <button
-              aria-label={t('Dismiss error')}
-              onClick={() => {
-                setError('');
-                setFocusTick((n) => n + 1);
-              }}
-            >
-              <X size={16} />
-            </button>
-          </div>
-        ) : null}
-      </OverlayPresence>
+      <ErrorToast
+        notice={errorNotice}
+        animations={animations}
+        dismiss={dismissError}
+        onClose={closeError}
+      />
       <PanelComponent
         settings={settings}
         workspaceId={active}
         buffer={state.current}
         symbols={state.symbols}
         initialFolder={workspace?.root || ''}
-        folderKind={folderKind}
+        folderKind={palette.folderKind}
         favorites={favorites}
         favoriteBusy={!favoritesReady || savingFavorite}
         openFavorite={openFavorite}
@@ -551,18 +489,13 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         openWorkspace={openWorkspace}
         panel={panel}
         filtered={filtered}
-        selection={selection}
+        selection={palette.selection}
         query={query}
-        loading={loading}
+        loading={palette.loading}
         modal={modal}
         focusEditor={focusEditor}
-        setQuery={(value) => {
-          setQuery(value);
-          if (panel === 'files') {
-            resetFileSearch();
-          }
-        }}
-        setSelection={setSelection}
+        setQuery={palette.setQuery}
+        setSelection={palette.setSelection}
       />
     </div>
   );

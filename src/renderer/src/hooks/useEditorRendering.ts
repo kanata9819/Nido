@@ -8,6 +8,14 @@ import { positionEditorInput } from '../editorInputPosition';
 import { createEditorResizer } from '../editorResizer';
 import { EditorCursor } from '../editorCursor';
 import { paintEditorMotion, type FrameMotion } from '../editorMotion';
+import {
+  editorGridSize,
+  horizontalMotion,
+  isAnimatableScroll,
+  isHorizontalStep,
+  scrollMotion,
+  summarizeRedraw
+} from '../editorRedraw';
 
 interface UseEditorRenderingOptions {
   backgroundOpacity: number;
@@ -302,18 +310,8 @@ export function useEditorRendering({
         onReady?.(id);
       }
 
-      const columns = Math.max(20, Math.floor(bounds.width / metrics.cellWidth));
-      // External command UI needs no visible slot; retain a document row for scroll overscan.
-      const rows =
-        Math.max(
-          4,
-          pixelScroll
-            ? Math.ceil(bounds.height / metrics.cellHeight)
-            : Math.floor(bounds.height / metrics.cellHeight)
-        ) +
-        grid.extraRows +
-        (pixelScroll ? 2 : 0);
-      resizer.update(columns, rows);
+      const size = editorGridSize(bounds, metrics, pixelScroll, grid.extraRows);
+      resizer.update(size.columns, size.rows);
       if (
         cursor.animating ||
         (motion && motion.offsetX === undefined) ||
@@ -334,6 +332,22 @@ export function useEditorRendering({
     };
 
     paintRef.current = schedule;
+    /** Sizes the snapshot canvas to the surface and returns a context that overwrites it. */
+    const snapshotContext = (): CanvasRenderingContext2D => {
+      if (previousFrame.width !== surface.width || previousFrame.height !== surface.height) {
+        previousFrame.width = surface.width;
+        previousFrame.height = surface.height;
+      }
+      const context = previousFrame.getContext('2d')!;
+      context.globalCompositeOperation = 'copy';
+      return context;
+    };
+    /** Paints the pre-scroll frame synchronously so motion can start from it. */
+    const renderBeforeMotion = (): void => {
+      preparingMotion = true;
+      render();
+      preparingMotion = false;
+    };
     const pointerDown = (event: PointerEvent): void => {
       if (event.button !== 0) {
         return;
@@ -352,71 +366,40 @@ export function useEditorRendering({
     input.addEventListener('blur', pauseMotion);
     const unsubscribe = onNidoEvent((event) => {
       if (event.type === 'redraw' && event.id === id) {
+        const redraw = summarizeRedraw(event.events);
         // Editing can shift grid rows without scrolling the viewport.
-        const edited = event.events.some(([name]) => name === 'nido_edit');
-        const bufferChanged = event.events.some(([name]) => name === 'nido_buffer');
+        const { edited, bufferChanged, scroll } = redraw;
         if (bufferChanged) {
           deferredScroll = undefined;
           motion = undefined;
           lastScrollTime = undefined;
           directScroll = false;
           scrolling.reset();
-          const buffer = event.events.find(([name]) => name === 'nido_buffer')?.[1];
-          if (typeof buffer?.[2] === 'number') {
-            scrolling.observeHorizontal(buffer[2]);
+          if (redraw.bufferColumn !== undefined) {
+            scrolling.observeHorizontal(redraw.bufferColumn);
           }
           cursor.resetPosition();
         }
         if (edited) {
           stopMotion();
         }
-        const pixelOffsets = event.events.flatMap(([name, ...calls]) =>
-          name === 'nido_pixel_scroll' ? calls : []
-        );
-        for (const args of pixelOffsets) {
+        for (const args of redraw.pixelOffsets) {
           grid.scrollFraction = Number(args[0]);
           grid.scrollCursor = args[2] as { row: number; column: number } | undefined;
           directScroll = args[1] === true;
           scrolling.acknowledge(directScroll, typeof args[4] === 'number' ? args[4] : undefined);
         }
-        const viewportScrolls = event.events.flatMap(([name, ...calls]) =>
-          name === 'nido_scroll' ? calls : []
-        );
-        // Grid row shifts also describe edits and decorations, not viewport movement.
-        const scroll = viewportScrolls.length === 1 ? (viewportScrolls[0] as number[]) : undefined;
-        const gridShifted = event.events.some(([name]) => name === 'grid_scroll');
-        if (!pixelOffsets.length) {
-          const last = viewportScrolls.at(-1);
-          if (typeof last?.[8] === 'number') {
-            scrolling.observeHorizontal(last[8]);
-          }
+        if (!redraw.pixelOffsets.length && redraw.lastScrollColumn !== undefined) {
+          scrolling.observeHorizontal(redraw.lastScrollColumn);
         }
-        if (
-          viewportScrolls.length ||
-          gridShifted ||
-          event.events.some(
-            ([name]) => name === 'grid_resize' || name === 'grid_clear' || name === 'mode_change'
-          )
-        ) {
+        if (redraw.cursorJumped) {
           cursor.resetPosition();
         }
         const now = performance.now();
-        if (
-          scroll &&
-          scroll[5] === 0 &&
-          scroll[6] &&
-          directScroll &&
-          scrolling.horizontalActive &&
-          Math.abs(scroll[6]) < scroll[4] - scroll[3]
-        ) {
+        if (scroll && isHorizontalStep(scroll) && directScroll && scrolling.horizontalActive) {
           cancelAnimationFrame(frame);
           frame = 0;
-          if (previousFrame.width !== surface.width || previousFrame.height !== surface.height) {
-            previousFrame.width = surface.width;
-            previousFrame.height = surface.height;
-          }
-          const previousContext = previousFrame.getContext('2d')!;
-          previousContext.globalCompositeOperation = 'copy';
+          const previousContext = snapshotContext();
           if (
             motion?.offsetX !== undefined &&
             motion.targetReady &&
@@ -427,23 +410,10 @@ export function useEditorRendering({
           } else {
             motion = undefined;
             grid.invalidatePaint();
-            preparingMotion = true;
-            render();
-            preparingMotion = false;
+            renderBeforeMotion();
             previousContext.drawImage(surface, 0, 0);
           }
-          motion = {
-            top: scroll[1],
-            bottom: scroll[2],
-            left: scroll[3],
-            right: scroll[4],
-            distance: 0,
-            distanceX: scroll[6] * cellWidth,
-            incomingRows: 0,
-            start: now,
-            duration: 0,
-            offsetX: scrolling.horizontalOffset * cellWidth
-          };
+          motion = horizontalMotion(scroll, cellWidth, scrolling.horizontalOffset * cellWidth, now);
         } else if (
           scroll &&
           !bufferChanged &&
@@ -452,55 +422,24 @@ export function useEditorRendering({
           animationsRef.current &&
           !reducedMotion.matches &&
           !element.hidden &&
-          scroll[0] === 1 &&
-          scroll[2] > scroll[1] &&
-          scroll[4] > scroll[3] &&
-          (scroll[5] !== 0 || scroll[6] !== 0)
+          isAnimatableScroll(scroll)
         ) {
-          const remaining = motion
-            ? scrollOffset(motion.distance, now - motion.start, motion.duration)
-            : 0;
-          const remainingX = motion
-            ? scrollOffset(motion.distanceX, now - motion.start, motion.duration)
-            : 0;
-          cancelAnimationFrame(frame);
-          preparingMotion = true;
-          render();
-          preparingMotion = false;
-          if (previousFrame.width !== surface.width || previousFrame.height !== surface.height) {
-            previousFrame.width = surface.width;
-            previousFrame.height = surface.height;
-          }
-          const previousContext = previousFrame.getContext('2d')!;
-          previousContext.globalCompositeOperation = 'copy';
-          previousContext.drawImage(surface, 0, 0);
-          const height = grid.rowTop(scroll[2]) - grid.rowTop(scroll[1]);
-          const distance = grid.rowTop(scroll[1] + scroll[5]) - grid.rowTop(scroll[1]);
-          const width = (scroll[4] - scroll[3]) * cellWidth;
-          motion = {
-            top: scroll[1],
-            bottom: scroll[2],
-            left: scroll[3],
-            right: scroll[4],
-            // Large jumps use at most one viewport so the animation never exposes an empty gap.
-            distance:
-              scroll[5] < 0 ? remaining : Math.max(-height, Math.min(height, distance + remaining)),
-            incomingRows: Math.max(0, -scroll[5]),
-            distanceX:
-              scroll[5] === 0
-                ? Math.max(-width, Math.min(width, scroll[6] * cellWidth + remainingX))
-                : 0,
-            start: now,
-            duration: Math.max(1, Math.min(120, now - (lastScrollTime ?? now - 120)))
+          const remaining = {
+            y: motion ? scrollOffset(motion.distance, now - motion.start, motion.duration) : 0,
+            x: motion ? scrollOffset(motion.distanceX, now - motion.start, motion.duration) : 0
           };
+          cancelAnimationFrame(frame);
+          renderBeforeMotion();
+          snapshotContext().drawImage(surface, 0, 0);
+          motion = scrollMotion(scroll, grid, cellWidth, remaining, now, lastScrollTime);
           lastScrollTime = now;
         } else if (
-          viewportScrolls.length ||
-          gridShifted ||
+          redraw.viewportScrolls.length ||
+          redraw.gridShifted ||
           (directScroll && motion?.offsetX === undefined)
         ) {
           motion = undefined;
-          if (scroll && directScroll && Math.abs(scroll[6]) >= scroll[4] - scroll[3]) {
+          if (scroll && directScroll && Math.abs(scroll.columns) >= scroll.right - scroll.left) {
             // shortcut: viewport-sized jumps snap, until horizontal overscan supplies the missing edge.
             scrolling.discardHorizontalFrame();
           }
@@ -516,22 +455,13 @@ export function useEditorRendering({
           descriptionDirty ||= !ready;
           if (
             !scrolling.prefetchPending &&
-            (event.events.some(([name]) => name === 'grid_clear' || name === 'grid_resize') ||
-              (!grid.hasUpperRows &&
-                grid.needsUpperRows &&
-                event.events.some(([name]) => name === 'nido_scroll' || name === 'grid_scroll')) ||
-              (directScroll && scroll && scroll[5] < 0 && grid.needsUpperRows))
+            (redraw.layoutReset ||
+              (!grid.hasUpperRows && grid.needsUpperRows && redraw.viewportMoved) ||
+              (directScroll && scroll && scroll.rows < 0 && grid.needsUpperRows))
           ) {
             scrolling.invalidatePrefetch();
           }
-          descriptionDirty ||= event.events.some(
-            ([name]) =>
-              name === 'grid_line' ||
-              name === 'grid_scroll' ||
-              name === 'grid_resize' ||
-              name === 'grid_clear' ||
-              name === 'nido_buffer'
-          );
+          descriptionDirty ||= redraw.descriptionChanged;
           schedule();
         }
 
