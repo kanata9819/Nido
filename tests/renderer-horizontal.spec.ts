@@ -250,5 +250,138 @@ for (const scale of [1, 1.25, 1.5, 2]) {
         await context.close();
       }
     });
+
+    // 1200px fits all 96 columns even when Consolas falls back to a wider font; 600px
+    // leaves the grid wider than its row images, which must fall back to full rasters.
+    for (const width of [1200, 600]) {
+      test(`sideways leftcol moves shift row images to match fresh rasters at ${scale * 100}% scale, ${opacity} opacity and ${width}px width`, async ({
+        browser
+      }) => {
+        const context = await browser.newContext({ deviceScaleFactor: scale });
+        try {
+          const page = await context.newPage();
+          await page.route('**/horizontal-shift-probe', (route) =>
+            route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+          );
+          await page.goto(`${origin}/horizontal-shift-probe`);
+          const result = await page.evaluate(
+            async ({ opacity, width, moduleUrl }) => {
+              const { Grid } = await import(moduleUrl);
+              const native = CanvasRenderingContext2D.prototype.fillText;
+              const counts = [0, 0];
+              let drawing = 0;
+              CanvasRenderingContext2D.prototype.fillText = function (...args) {
+                counts[drawing]++;
+                native.apply(this, args);
+              };
+              try {
+                const grids = [new Grid(), new Grid()];
+                const canvases = grids.map(() => document.createElement('canvas'));
+                const columns = 96;
+                const rows = 16;
+                const gutter = 6;
+                const source =
+                  '    if (value) { WM[]()lI|\\/fox_09 : 日本語 Console::trace(args); } '.repeat(
+                    12
+                  );
+                // Wide glyphs occupy two cells, the second one empty, as Neovim sends them.
+                const line = (row: number, leftcol: number): [string, number][] => {
+                  const cells: [string, number][] = [];
+                  for (const char of Array.from(source.slice(row * 3))) {
+                    const indent = char === ' ' && cells.length % 16 === 0;
+                    cells.push([char, indent ? 4 : cells.length % 5 < 2 ? 3 : 2]);
+                    if (char.charCodeAt(0) > 0xff) cells.push(['', 2]);
+                  }
+                  return Array.from({ length: columns }, (_, col) =>
+                    col < gutter
+                      ? [`${row + 1}`.padStart(gutter - 1).concat(' ')[col], 1]
+                      : (cells[col - gutter + leftcol] ?? [' ', 0])
+                  );
+                };
+                for (const grid of grids) {
+                  grid.backgroundOpacity = opacity;
+                  grid.cursorVisible = false;
+                  grid.apply([
+                    ['grid_resize', [1, columns, rows]],
+                    ['hl_attr_define', [1, { foreground: 0x858585 }, {}, []]],
+                    ['hl_attr_define', [2, { foreground: 0xd4d4d4 }, {}, []]],
+                    ['hl_attr_define', [3, { foreground: 0xf0ae81, italic: true }, {}, []]],
+                    [
+                      'hl_attr_define',
+                      [4, { foreground: 0x404040 }, {}, [{ kind: 'ui', hi_name: 'NidoIndent1' }]]
+                    ],
+                    ...Array.from({ length: rows - 1 }, (_, row) => [
+                      'grid_line',
+                      [1, row, 0, line(row, 0)]
+                    ]),
+                    ['flush']
+                  ]);
+                }
+                let leftcol = 0;
+                let mismatches = 0;
+                const differences: unknown[] = [];
+                for (const step of [1, 3, 8, -2, -5, 12, 1, -17, 9]) {
+                  leftcol += step;
+                  for (const [index, grid] of grids.entries()) {
+                    drawing = index;
+                    grid.apply([
+                      ['nido_scroll', [1, 0, rows - 1, gutter, columns, 0, step, false, leftcol]],
+                      ...Array.from({ length: rows - 1 }, (_, row) => [
+                        'grid_line',
+                        [1, row, 0, line(row, leftcol)]
+                      ]),
+                      ['flush']
+                    ]);
+                    if (index === 1) {
+                      Reflect.get(grid, 'canvas').invalidate();
+                    }
+                    grid.draw(
+                      canvases[index],
+                      width,
+                      352,
+                      15.3,
+                      'Consolas, monospace',
+                      false,
+                      undefined,
+                      22
+                    );
+                  }
+                  const pixels = canvases.map(
+                    (canvas) =>
+                      canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data
+                  );
+                  for (let pixel = 0; pixel < pixels[0].length; pixel++) {
+                    if (pixels[0][pixel] !== pixels[1][pixel]) {
+                      mismatches++;
+                      if (differences.length < 8) {
+                        differences.push({
+                          step,
+                          pixel,
+                          actual: pixels[0][pixel],
+                          expected: pixels[1][pixel]
+                        });
+                      }
+                    }
+                  }
+                }
+                return { counts, mismatches, differences };
+              } finally {
+                CanvasRenderingContext2D.prototype.fillText = native;
+              }
+            },
+            { opacity, width, moduleUrl: '/src/grid.ts' }
+          );
+          expect(result.mismatches, JSON.stringify(result.differences)).toBe(0);
+          if (width === 1200) {
+            // Shifted rows draw only their new edge and guide columns.
+            expect(result.counts[0], JSON.stringify(result.counts)).toBeLessThan(
+              result.counts[1] / 2
+            );
+          }
+        } finally {
+          await context.close();
+        }
+      });
+    }
   }
 }

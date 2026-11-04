@@ -31,6 +31,8 @@ export class Grid {
   horizontalOffset = 0;
   horizontalGutter = 0;
   horizontalColumn = 0;
+  /** Text area and leftcol of the window that last scrolled sideways, for row image reuse. */
+  horizontalView?: { top: number; bottom: number; left: number; right: number; leftcol: number };
   // Preserve the document's raster phase when Neovim rebases the viewport.
   scrollOrigin = 0;
   cellWidth = 0;
@@ -191,6 +193,8 @@ export class Grid {
     const prefetched = events.some(([name]) => name === 'nido_scroll_cache');
     const repaintedScroll =
       viewportMoves.length > 0 && !events.some(([name]) => name === 'grid_scroll');
+    // Sideways moves keep every row in place; their images can shift instead of rasterizing.
+    const sideways = viewportMoves.length > 0 && viewportMoves.every((args) => args[5] === 0);
     const retainedRows =
       prefetched || viewportMoves.length
         ? new Set([...this.upperRows, ...this.cells, ...this.lowerRows])
@@ -300,6 +304,10 @@ export class Grid {
         // Only actual viewport movement contributes to the preview history.
         if (name === 'nido_scroll') {
           const [grid, top, bottom, left, right, rows, columns] = args as number[];
+          if (grid === 1 && rows === 0 && columns !== 0 && typeof args[8] === 'number') {
+            // Sideways moves report the text area after line numbers and signs.
+            this.horizontalView = { top, bottom, left, right, leftcol: args[8] };
+          }
           if (typeof args[7] === 'boolean') {
             // Virtual-line changes can move the grid at BOF without a wheel reply.
             atStart = args[7];
@@ -433,7 +441,7 @@ export class Grid {
                         const previous = row;
                         row = this.cells[Number(args[1])] = row.slice();
                         // Prefetch and wrapped redraws restore retained cells after applying the frame.
-                        if (!prefetched && !repaintedScroll) {
+                        if (!prefetched && (!repaintedScroll || sideways)) {
                           this.canvas.moveRowImage(previous, row);
                         }
                         this.rowLayout.clone(previous, row);

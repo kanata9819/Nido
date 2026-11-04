@@ -1,11 +1,11 @@
 .card {
   position: absolute;
   z-index: 15;
-  width: 480px;
+  width: 400px;
   max-width: calc(100% - 12px);
   overflow: hidden;
   border: 1px solid var(--ui-border-strong, #39454c);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--surface-popover, #1b2025);
   backdrop-filter: var(--glass-blur, none);
   color: #dce3e8;
@@ -24,8 +24,9 @@
 .footer {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 9px 12px;
+  gap: 7px;
+  padding: 5px 10px;
+  font-size: 11px;
   color: var(--ui-accent, #a3cc94);
   background: var(--surface-tabs, #20272c);
 }
@@ -35,9 +36,10 @@
   font-size: 10px;
 }
 .list {
-  max-height: 280px;
+  /* Eight 22px rows plus padding; keep in sync with visibleRows. */
+  max-height: 184px;
   overflow-y: auto;
-  padding: 5px;
+  padding: 4px;
 }
 .item {
   position: absolute;
@@ -45,10 +47,10 @@
   right: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 28px;
-  padding: 3px 8px;
-  border-radius: 5px;
+  gap: 8px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 4px;
   cursor: pointer;
 }
 .items {
@@ -70,7 +72,7 @@
   align-items: center;
   justify-content: center;
   color: #c5c5c5;
-  width: 18px;
+  width: 16px;
   flex-shrink: 0;
 }
 .kind[data-kind='Method'],
@@ -115,7 +117,7 @@
 .footer kbd {
   color: #d6e2d2;
   font: inherit;
-  padding: 2px 4px;
+  padding: 1px 4px;
   border: 1px solid #465348;
   border-radius: 3px;
 }

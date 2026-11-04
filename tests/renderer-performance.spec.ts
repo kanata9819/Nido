@@ -1179,7 +1179,7 @@ test('large completion lists bound DOM work while preserving distant selection, 
   await select(0);
   await expect(page.locator('#completion-alpha-0')).toBeInViewport();
   await list.evaluate((node) => {
-    node.scrollTop = 2500 * 28;
+    node.scrollTop = 2500 * 22;
   });
   await expect(page.locator('#completion-alpha-2500')).toBeInViewport();
   await expect(page.locator('#completion-alpha-0')).toHaveCount(1);
