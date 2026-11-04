@@ -533,3 +533,17 @@ test(
     }
   }
 );
+
+test('prestarted workspace events wait for the renderer and keep their order', async () => {
+  const { bufferedEmitter } = await import('../src/main/workspaceHandlers');
+  const delivered: string[] = [];
+  const events = bufferedEmitter((event) => delivered.push(event.type));
+  events.emit({ type: 'notification', id: 'a', title: '', message: 'first', severity: 'info' });
+  events.emit({ type: 'exit', id: 'a' });
+  assert.deepEqual(delivered, []);
+  events.release();
+  assert.deepEqual(delivered, ['notification', 'exit']);
+  events.emit({ type: 'exit', id: 'b' });
+  events.release();
+  assert.deepEqual(delivered, ['notification', 'exit', 'exit']);
+});

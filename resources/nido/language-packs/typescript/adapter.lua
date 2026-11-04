@@ -65,7 +65,7 @@ function M.setup()
     end
     if not command and not tsserver and mode ~= 'legacy' then
       for _, bin in ipairs({'tsc', 'tsgo'}) do
-        if vim.fn.executable(bin) == 1 then
+        if require('nido_language_packs').executable(bin) == 1 then
           local result = vim.system({bin, '--version'}, {text=true, env=environment}):wait(2000)
           local major = tonumber((result.stdout or ''):match('(%d+)%.')) or 0
           if result.code == 0 and major >= 7 then
