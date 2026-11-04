@@ -67,9 +67,13 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
   const [markdownVisible, setMarkdownVisible] = useState(false);
   const [leader, setLeader] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
-  const { notice: errorNotice, error, setError, dismissError, report } = useErrorNotice();
+  const { notice: errorNotice, error, dismissError, report } = useErrorNotice();
   const requestEditorFocus = useCallback(() => setFocusTick((n) => n + 1), []);
   const dismissLeader = useCallback(() => setLeader(false), []);
+  const closeError = useCallback((): void => {
+    dismissError();
+    requestEditorFocus();
+  }, [dismissError, requestEditorFocus]);
   const toggleMarkdown = useCallback((): void => {
     setMarkdownVisible((visible) => !visible);
     requestEditorFocus();
@@ -273,8 +277,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     panel,
     leader,
     error,
-    setError,
-    setFocusTick,
+    dismissError: closeError,
     focusEditor,
     modal,
     mode,
@@ -469,10 +472,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
         notice={errorNotice}
         animations={animations}
         dismiss={dismissError}
-        onClose={() => {
-          dismissError();
-          requestEditorFocus();
-        }}
+        onClose={closeError}
       />
       <PanelComponent
         settings={settings}

@@ -5,7 +5,6 @@ const remoteErrorPrefix = /^Error: Error invoking remote method '[^']+': Error: 
 export interface ErrorNotice {
   notice: { message: string } | undefined;
   error: string;
-  setError: (message: string) => void;
   dismissError: () => void;
   report: (message: string) => void;
 }
@@ -22,5 +21,5 @@ export function useErrorNotice(): ErrorNotice {
     (message: string): void => setError(message.replace(remoteErrorPrefix, '')),
     [setError]
   );
-  return { notice, error: notice?.message || '', setError, dismissError, report };
+  return { notice, error: notice?.message || '', dismissError, report };
 }

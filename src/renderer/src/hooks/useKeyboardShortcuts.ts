@@ -1,6 +1,15 @@
 import type { Panel, Item } from '../types';
-import type { DebugAction, Workspace } from '../../../shared/types';
+import type { Workspace } from '../../../shared/types';
 import { isAltGraph } from '../keyboard';
+import {
+  debugActionFor,
+  debugKeys,
+  isCtrl,
+  isCtrlShift,
+  isOwnedByFocusedElement,
+  isUnmodified,
+  trapTabFocus
+} from '../shortcutKeys';
 import { useKeyboardModeQueue } from './useKeyboardModeQueue';
 
 interface UseKeyboardShortcutsParams {
@@ -8,8 +17,8 @@ interface UseKeyboardShortcutsParams {
   panel: Panel;
   leader: boolean;
   error: string;
-  setError: (value: string) => void;
-  setFocusTick: React.Dispatch<React.SetStateAction<number>>;
+  /** Clears the error notice and hands focus back to the editor. */
+  dismissError: () => void;
   focusEditor: () => void;
   modal: React.RefObject<HTMLDivElement | null>;
   mode: React.MutableRefObject<Record<string, string>>;
@@ -35,8 +44,7 @@ export function useKeyboardShortcuts({
   panel,
   leader,
   error,
-  setError,
-  setFocusTick,
+  dismissError,
   focusEditor,
   modal,
   mode,
@@ -58,36 +66,25 @@ export function useKeyboardShortcuts({
 }: UseKeyboardShortcutsParams): (event: KeyboardEvent) => void {
   const { checkingMode, defer } = useKeyboardModeQueue({ active, panel, leader, mode, run });
 
+  const currentBufferIndex = (): number =>
+    state.buffers.findIndex((buffer) => buffer.id === state.current);
+  /** Moves the current tab one place left or right, stopping at the ends. */
+  const moveCurrentBuffer = (offset: -1 | 1): void => {
+    const index = currentBufferIndex();
+    const target = state.buffers[index + offset];
+    if (index >= 0 && target) {
+      run(window.nido.moveBuffer(active, state.current, target.id));
+    }
+  };
+  /** Selects the previous or next tab, wrapping around. */
+  const selectAdjacentBuffer = (offset: -1 | 1): void => {
+    const count = state.buffers.length;
+    const next = state.buffers[(currentBufferIndex() + offset + count) % count];
+    run(window.nido.selectBuffer(active, next.id));
+  };
+
   const keydown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && document.activeElement?.closest('[data-workspace-search]')) {
-      return;
-    }
-    if (
-      document.activeElement?.closest('[data-markdown-preview]') &&
-      (event.key === 'Escape' || (event.ctrlKey && event.key.toLowerCase() === 'j'))
-    ) {
-      return;
-    }
-    if (
-      document.activeElement?.closest(
-        '[data-type-information], [data-diagnostic-information], [data-explorer-commands], [data-neovim-ui]'
-      )
-    ) {
-      return;
-    }
-    // Deferring command text for Normal-mode shortcuts lets Unicode overtake spaces.
-    // Ctrl+P still checks the actual mode: the command card can outlive queued Enter input.
-    if (
-      !checkingMode.current &&
-      document.activeElement?.hasAttribute('data-nvim-command-active') &&
-      !event.ctrlKey &&
-      !event.altKey &&
-      !event.metaKey &&
-      event.key.length === 1
-    ) {
-      return;
-    }
-    if (event.isComposing || event.keyCode === 229) {
+    if (isOwnedByFocusedElement(event, checkingMode.current)) {
       return;
     }
     if (isAltGraph(event) && !checkingMode.current) {
@@ -106,15 +103,19 @@ export function useKeyboardShortcuts({
     if (isAltGraph(event)) {
       return;
     }
+    const key = event.key.toLowerCase();
     const isNormalMode = (mode.current[active] || 'normal') === 'normal';
-    if (
-      focusedInput === 'editor' &&
-      isNormalMode &&
-      event.ctrlKey &&
-      !event.altKey &&
-      !event.metaKey &&
-      ['*', '#'].includes(event.key)
-    ) {
+    const editorWorkspace =
+      workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal';
+    const togglePanel = (value: Exclude<Panel, null>): void => {
+      if (panel === value) {
+        focusEditor();
+      } else {
+        showPanel(value);
+      }
+    };
+
+    if (focusedInput === 'editor' && isNormalMode && isCtrl(event, '*', '#')) {
       consume();
       run(window.nido.input(active, event.key));
       return;
@@ -134,8 +135,7 @@ export function useKeyboardShortcuts({
       }
       if (error) {
         consume();
-        setError('');
-        setFocusTick((n) => n + 1);
+        dismissError();
         return;
       }
 
@@ -145,102 +145,46 @@ export function useKeyboardShortcuts({
         return;
       }
     }
-    if (
-      active &&
-      event.ctrlKey &&
-      event.shiftKey &&
-      !event.altKey &&
-      !event.metaKey &&
-      event.key.toLowerCase() === 'm'
-    ) {
+
+    // Panel toggles: these work even while another panel is open.
+    if (active && isCtrlShift(event, 'm')) {
       consume();
-      if (panel === 'problems') {
-        focusEditor();
-      } else {
-        showPanel('problems');
-      }
+      togglePanel('problems');
       return;
     }
     if (
       active &&
       !terminalFocused &&
       state.filetype === 'markdown' &&
-      event.ctrlKey &&
-      event.shiftKey &&
-      !event.altKey &&
-      !event.metaKey &&
-      event.key.toLowerCase() === 'v' &&
+      isCtrlShift(event, 'v') &&
       (!panel || panel === 'markdown')
     ) {
       consume();
-      if (panel === 'markdown') {
-        focusEditor();
-      } else {
-        showPanel('markdown');
-      }
+      togglePanel('markdown');
       return;
     }
-    if (
-      event.ctrlKey &&
-      event.shiftKey &&
-      !event.altKey &&
-      !event.metaKey &&
-      event.key.toLowerCase() === 'x'
-    ) {
+    if (isCtrlShift(event, 'x')) {
       consume();
       if (!event.repeat) {
-        if (panel === 'extensions') {
-          focusEditor();
-        } else {
-          showPanel('extensions');
-        }
+        togglePanel('extensions');
       }
       return;
     }
-    if (
-      active &&
-      !terminalFocused &&
-      event.ctrlKey &&
-      event.shiftKey &&
-      !event.altKey &&
-      !event.metaKey &&
-      event.key.toLowerCase() === 'h'
-    ) {
+    if (active && !terminalFocused && isCtrlShift(event, 'h')) {
       consume();
       if (!event.repeat) {
-        if (panel === 'history') {
-          focusEditor();
-        } else {
-          showPanel('history');
-        }
+        togglePanel('history');
       }
       return;
     }
-    if (
-      active &&
-      workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal' &&
-      event.ctrlKey &&
-      event.shiftKey &&
-      !event.altKey &&
-      !event.metaKey &&
-      event.key.toLowerCase() === 'f'
-    ) {
+    if (active && editorWorkspace && isCtrlShift(event, 'f')) {
       consume();
       if (!event.repeat) {
         showPanel('search');
       }
       return;
     }
-    if (
-      active &&
-      !terminalFocused &&
-      workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal' &&
-      event.ctrlKey &&
-      event.shiftKey &&
-      !event.altKey &&
-      !event.metaKey &&
-      event.key.toLowerCase() === 'o'
-    ) {
+    if (active && !terminalFocused && editorWorkspace && isCtrlShift(event, 'o')) {
       consume();
       if (!event.repeat) {
         showPanel('symbols');
@@ -248,69 +192,32 @@ export function useKeyboardShortcuts({
       return;
     }
     if (panel) {
-      if (event.key === 'Tab' && modal.current) {
-        const nodes = [
-          ...modal.current.querySelectorAll<HTMLElement>(
-            'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]'
-          )
-        ];
-        const first = nodes[0];
-        const last = nodes[nodes.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
-          consume();
-          last?.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          consume();
-          first?.focus();
-        }
+      if (modal.current && trapTabFocus(modal.current, event)) {
+        consume();
       }
       return;
     }
+
     if (
       active &&
       !terminalFocused &&
-      workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal' &&
-      event.ctrlKey &&
-      event.shiftKey &&
-      !event.altKey &&
-      !event.metaKey &&
-      ['t', 'pageup', 'pagedown'].includes(event.key.toLowerCase())
+      editorWorkspace &&
+      isCtrlShift(event, 't', 'pageup', 'pagedown')
     ) {
       consume();
       if (!event.repeat) {
-        if (event.key.toLowerCase() === 't') {
+        if (key === 't') {
           run(window.nido.reopenBuffer(active));
         } else {
-          const index = state.buffers.findIndex((buffer) => buffer.id === state.current);
-          const target = state.buffers[index + (event.key.toLowerCase() === 'pageup' ? -1 : 1)];
-          if (index >= 0 && target) {
-            run(window.nido.moveBuffer(active, state.current, target.id));
-          }
+          moveCurrentBuffer(key === 'pageup' ? -1 : 1);
         }
         focusEditor();
       }
       return;
     }
-    if (
-      active &&
-      !terminalFocused &&
-      !event.ctrlKey &&
-      !event.altKey &&
-      !event.metaKey &&
-      ['F5', 'F9', 'F10', 'F11'].includes(event.key)
-    ) {
+    if (active && !terminalFocused && isUnmodified(event) && debugKeys.includes(event.key)) {
       consume();
-      let action: DebugAction = 'start';
-      if (event.key === 'F9') {
-        action = 'breakpoint';
-      } else if (event.key === 'F10') {
-        action = 'over';
-      } else if (event.key === 'F11') {
-        action = event.shiftKey ? 'out' : 'into';
-      } else if (event.shiftKey) {
-        action = 'stop';
-      }
-      run(window.nido.debug(active, action));
+      run(window.nido.debug(active, debugActionFor(event)));
       if (!document.activeElement?.closest('[data-debug-panel]')) {
         focusEditor();
       }
@@ -321,13 +228,7 @@ export function useKeyboardShortcuts({
       nextWorkspace(event.shiftKey ? -1 : 1);
       return;
     }
-    if (
-      active &&
-      event.ctrlKey &&
-      !event.altKey &&
-      !event.metaKey &&
-      ['@', '`'].includes(event.key)
-    ) {
+    if (active && isCtrl(event, '@', '`')) {
       consume();
       toggleTerminal();
       return;
@@ -335,16 +236,16 @@ export function useKeyboardShortcuts({
     if (
       active &&
       event.ctrlKey &&
+      !event.shiftKey &&
       !event.altKey &&
       !event.metaKey &&
-      !event.shiftKey &&
-      ['h', 'j', 'k', 'l'].includes(event.key.toLowerCase()) &&
-      !(event.key.toLowerCase() === 'k' && focusedInput === 'editor')
+      ['h', 'j', 'k', 'l'].includes(key) &&
+      !(key === 'k' && focusedInput === 'editor')
     ) {
       consume();
-      if (event.key.toLowerCase() === 'h') {
+      if (key === 'h') {
         showExplorer();
-      } else if (event.key.toLowerCase() === 'j') {
+      } else if (key === 'j') {
         showDebugger();
       } else {
         focusEditor();
@@ -359,36 +260,23 @@ export function useKeyboardShortcuts({
       }
       return;
     }
-    if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'n') {
+    if (event.ctrlKey && event.shiftKey && key === 'n') {
       consume();
       void create();
       return;
     }
-    if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'p') {
+    if (event.ctrlKey && event.shiftKey && key === 'p') {
       consume();
       showPanel('commands');
       return;
     }
-    if (
-      active &&
-      event.ctrlKey &&
-      event.shiftKey &&
-      !event.altKey &&
-      !event.metaKey &&
-      event.key.toLowerCase() === 'g'
-    ) {
+    if (active && isCtrlShift(event, 'g')) {
       consume();
       showPanel('git');
       return;
     }
     if (terminalFocused) {
-      if (
-        event.ctrlKey &&
-        event.shiftKey &&
-        !event.altKey &&
-        !event.metaKey &&
-        event.key.toLowerCase() === 'r'
-      ) {
+      if (isCtrlShift(event, 'r')) {
         consume();
         if (!event.repeat) {
           restartShell();
@@ -396,9 +284,11 @@ export function useKeyboardShortcuts({
       }
       return;
     }
+
+    // Editor-only shortcuts below.
     if (
       event.ctrlKey &&
-      event.key.toLowerCase() === 'p' &&
+      key === 'p' &&
       active &&
       !mode.current[active]?.startsWith('insert') &&
       !mode.current[active]?.startsWith('c')
@@ -407,7 +297,7 @@ export function useKeyboardShortcuts({
       showPanel('files');
       return;
     }
-    if (event.ctrlKey && event.key.toLowerCase() === 's' && active) {
+    if (event.ctrlKey && key === 's' && active) {
       consume();
       save();
       return;
@@ -423,19 +313,14 @@ export function useKeyboardShortcuts({
     }
     if (
       event.shiftKey &&
-      !event.ctrlKey &&
-      !event.altKey &&
-      !event.metaKey &&
+      isUnmodified(event) &&
       ['H', 'L'].includes(event.key) &&
       focusedInput === 'editor' &&
       isNormalMode &&
       state.buffers.length > 0
     ) {
       consume();
-      const index = state.buffers.findIndex((buffer) => buffer.id === state.current);
-      const offset = event.key === 'H' ? -1 : 1;
-      const next = state.buffers[(index + offset + state.buffers.length) % state.buffers.length];
-      run(window.nido.selectBuffer(active, next.id));
+      selectAdjacentBuffer(event.key === 'H' ? -1 : 1);
       return;
     }
     if (
