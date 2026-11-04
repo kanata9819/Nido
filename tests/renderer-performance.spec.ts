@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createServer, type ViteDevServer } from 'vite';
 import { resolve } from 'node:path';
+import { viteFsUrl } from './helpers/vite-fs-url';
 import react from '@vitejs/plugin-react';
 import type { Grid as EditorGrid } from '../src/renderer/src/grid';
 import type { FrameMotion } from '../src/renderer/src/editorMotion';
@@ -19,73 +20,70 @@ test('wrapped row redraws retain the bitmaps of unchanged shifted text', async (
         route.fulfill({ contentType: 'text/html', body: '<body></body>' })
       );
       await page.goto(`${origin}wrapped-cache-probe`);
-      const result = await page.evaluate(
-        async (moduleUrl) => {
-          const { Grid } = await import(moduleUrl);
-          const grid = new Grid();
-          grid.busy = true;
-          grid.pixelScrollEnabled = true;
-          const cells = (line: number): [string, number][] =>
-            Array.from(`ROW_${line} const value = example(argument);`.padEnd(64), (text) => [
-              text,
-              0
+      const result = await page.evaluate(async (moduleUrl) => {
+        const { Grid } = await import(moduleUrl);
+        const grid = new Grid();
+        grid.busy = true;
+        grid.pixelScrollEnabled = true;
+        const cells = (line: number): [string, number][] =>
+          Array.from(`ROW_${line} const value = example(argument);`.padEnd(64), (text) => [
+            text,
+            0
+          ]);
+        const setup = [
+          ['grid_resize', [1, 64, 9]],
+          ...Array.from({ length: 8 }, (_, row) => ['grid_line', [1, row, 0, cells(row)]]),
+          ['flush']
+        ];
+        grid.apply(setup);
+        const canvas = document.createElement('canvas');
+        const paint = (value: EditorGrid, target: HTMLCanvasElement): Uint8ClampedArray => {
+          value.draw(target, 640, 152, 15, 'monospace', false, undefined, 19);
+          return target.getContext('2d')!.getImageData(0, 0, target.width, target.height).data;
+        };
+        paint(grid, canvas);
+        const fillText = CanvasRenderingContext2D.prototype.fillText;
+        let glyphs = 0;
+        CanvasRenderingContext2D.prototype.fillText = function (...args) {
+          glyphs++;
+          return fillText.apply(this, args);
+        };
+        let first = 0;
+        let mismatches = 0;
+        const redrawGlyphs: number[] = [];
+        try {
+          for (const direction of [-2, -2, 2, 2]) {
+            first += direction;
+            grid.apply([
+              ['nido_scroll', [1, 0, 8, 0, 64, direction, 0]],
+              ...Array.from({ length: 8 }, (_, row) => [
+                'grid_line',
+                [1, row, 0, cells(first + row)]
+              ]),
+              ['flush']
             ]);
-          const setup = [
-            ['grid_resize', [1, 64, 9]],
-            ...Array.from({ length: 8 }, (_, row) => ['grid_line', [1, row, 0, cells(row)]]),
-            ['flush']
-          ];
-          grid.apply(setup);
-          const canvas = document.createElement('canvas');
-          const paint = (value: EditorGrid, target: HTMLCanvasElement): Uint8ClampedArray => {
-            value.draw(target, 640, 152, 15, 'monospace', false, undefined, 19);
-            return target.getContext('2d')!.getImageData(0, 0, target.width, target.height).data;
-          };
-          paint(grid, canvas);
-          const fillText = CanvasRenderingContext2D.prototype.fillText;
-          let glyphs = 0;
-          CanvasRenderingContext2D.prototype.fillText = function (...args) {
-            glyphs++;
-            return fillText.apply(this, args);
-          };
-          let first = 0;
-          let mismatches = 0;
-          const redrawGlyphs: number[] = [];
-          try {
-            for (const direction of [-2, -2, 2, 2]) {
-              first += direction;
-              grid.apply([
-                ['nido_scroll', [1, 0, 8, 0, 64, direction, 0]],
-                ...Array.from({ length: 8 }, (_, row) => [
-                  'grid_line',
-                  [1, row, 0, cells(first + row)]
-                ]),
-                ['flush']
-              ]);
-              glyphs = 0;
-              const actual = paint(grid, canvas);
-              redrawGlyphs.push(glyphs);
-              const reference = new Grid();
-              reference.busy = true;
-              reference.pixelScrollEnabled = true;
-              reference.apply([
-                ['grid_resize', [1, 64, 9]],
-                ...Array.from({ length: 8 }, (_, row) => [
-                  'grid_line',
-                  [1, row, 0, cells(first + row)]
-                ]),
-                ['flush']
-              ]);
-              const expected = paint(reference, document.createElement('canvas'));
-              mismatches += expected.filter((value, index) => value !== actual[index]).length;
-            }
-            return { redrawGlyphs, mismatches };
-          } finally {
-            CanvasRenderingContext2D.prototype.fillText = fillText;
+            glyphs = 0;
+            const actual = paint(grid, canvas);
+            redrawGlyphs.push(glyphs);
+            const reference = new Grid();
+            reference.busy = true;
+            reference.pixelScrollEnabled = true;
+            reference.apply([
+              ['grid_resize', [1, 64, 9]],
+              ...Array.from({ length: 8 }, (_, row) => [
+                'grid_line',
+                [1, row, 0, cells(first + row)]
+              ]),
+              ['flush']
+            ]);
+            const expected = paint(reference, document.createElement('canvas'));
+            mismatches += expected.filter((value, index) => value !== actual[index]).length;
           }
-        },
-        `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
-      );
+          return { redrawGlyphs, mismatches };
+        } finally {
+          CanvasRenderingContext2D.prototype.fillText = fillText;
+        }
+      }, viteFsUrl('src/renderer/src/grid.ts'));
       console.log('wrapped-row-cache', JSON.stringify({ scale, ...result }));
       expect(result.mismatches).toBe(0);
       for (const glyphs of result.redrawGlyphs) expect(glyphs).toBeLessThanOrEqual(2 * 64);
@@ -106,57 +104,51 @@ for (const scale of [1, 1.25, 1.5]) {
         route.fulfill({ contentType: 'text/html', body: '<body></body>' })
       );
       await page.goto(`${origin}bottom-probe`);
-      const results = await page.evaluate(
-        async (url) => {
-          const { Grid } = await import(url);
-          const results: {
-            height: number;
-            compact: boolean;
-            fraction: number;
-            bottom: number[];
-            row: number;
-          }[] = [];
-          for (const availableHeight of [180, 187.2]) {
-            const height = Math.floor(availableHeight * devicePixelRatio) / devicePixelRatio;
-            for (const compact of [false, true]) {
-              const grid = new Grid();
-              grid.pixelScrollEnabled = true;
-              grid.cursorVisible = false;
-              const rows = Math.ceil(height / 18) + 2 + (compact ? 1 : 0);
-              grid.apply([
-                ['grid_resize', [1, 20, rows]],
-                ['hl_attr_define', [1, { background: 0x204060 }, {}, []]],
-                [
-                  'hl_attr_define',
-                  [2, { background: 0x204060 }, {}, [{ hi_name: 'NidoCodeLens' }]]
-                ],
-                ...Array.from({ length: rows - 1 }, (_, row) => [
-                  'grid_line',
-                  [1, row, 0, [[' ', 1, 20]]]
-                ]),
-                ...(compact ? [['grid_line', [1, 3, 0, [['Run', 2]]]]] : []),
-                ['flush']
-              ]);
-              const canvas = document.createElement('canvas');
-              for (const fraction of [0, 0.5, 0.9]) {
-                grid.scrollFraction = fraction;
-                grid.draw(canvas, 160, height, 14, 'monospace', false, undefined, 18);
-                results.push({
-                  height,
-                  compact,
-                  fraction,
-                  bottom: Array.from(
-                    canvas.getContext('2d')!.getImageData(100, canvas.height - 1, 1, 1).data
-                  ),
-                  row: grid.rowAt(height - 0.01)
-                });
-              }
+      const results = await page.evaluate(async (url) => {
+        const { Grid } = await import(url);
+        const results: {
+          height: number;
+          compact: boolean;
+          fraction: number;
+          bottom: number[];
+          row: number;
+        }[] = [];
+        for (const availableHeight of [180, 187.2]) {
+          const height = Math.floor(availableHeight * devicePixelRatio) / devicePixelRatio;
+          for (const compact of [false, true]) {
+            const grid = new Grid();
+            grid.pixelScrollEnabled = true;
+            grid.cursorVisible = false;
+            const rows = Math.ceil(height / 18) + 2 + (compact ? 1 : 0);
+            grid.apply([
+              ['grid_resize', [1, 20, rows]],
+              ['hl_attr_define', [1, { background: 0x204060 }, {}, []]],
+              ['hl_attr_define', [2, { background: 0x204060 }, {}, [{ hi_name: 'NidoCodeLens' }]]],
+              ...Array.from({ length: rows - 1 }, (_, row) => [
+                'grid_line',
+                [1, row, 0, [[' ', 1, 20]]]
+              ]),
+              ...(compact ? [['grid_line', [1, 3, 0, [['Run', 2]]]]] : []),
+              ['flush']
+            ]);
+            const canvas = document.createElement('canvas');
+            for (const fraction of [0, 0.5, 0.9]) {
+              grid.scrollFraction = fraction;
+              grid.draw(canvas, 160, height, 14, 'monospace', false, undefined, 18);
+              results.push({
+                height,
+                compact,
+                fraction,
+                bottom: Array.from(
+                  canvas.getContext('2d')!.getImageData(100, canvas.height - 1, 1, 1).data
+                ),
+                row: grid.rowAt(height - 0.01)
+              });
             }
           }
-          return results;
-        },
-        `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
-      );
+        }
+        return results;
+      }, viteFsUrl('src/renderer/src/grid.ts'));
       for (const result of results) {
         // Windows CI rounds RGB readback by up to two levels; an unpainted row differs far more.
         for (const [channel, expected] of [32, 64, 96].entries()) {
@@ -204,89 +196,86 @@ test('prefetch strips preserve visible row bitmaps and repaint actual content ch
     route.fulfill({ contentType: 'text/html', body: '<body></body>' })
   );
   await page.goto(`${origin}prefetch-cache-probe`);
-  const result = await page.evaluate(
-    async (moduleUrl) => {
-      const { Grid } = await import(moduleUrl);
-      const grid = new Grid();
-      grid.busy = true;
-      grid.pixelScrollEnabled = true;
-      const cells = (line: number, row: number): [string, number][] =>
-        Array.from(
-          `${String(row + 1).padStart(3)} const value${line} = example(${line});`.padEnd(60),
-          (text) => [text, 1]
-        );
-      const setup = [
-        ['grid_resize', [1, 60, 8]],
-        ['hl_attr_define', [1, { foreground: 0x60a0ff }, {}, []]],
-        ...Array.from({ length: 7 }, (_, row) => ['grid_line', [1, row, 0, cells(row, row)]]),
-        ['flush']
-      ];
-      grid.apply(setup);
-      const canvas = document.createElement('canvas');
-      const paint = (): Uint8ClampedArray => {
-        grid.draw(canvas, 560, 152, 15, 'monospace', false, undefined, 19);
-        const sample = document.createElement('canvas');
-        sample.width = canvas.width;
-        sample.height = canvas.height;
-        const context = sample.getContext('2d')!;
-        context.drawImage(canvas, 0, 0);
-        return context.getImageData(0, 0, sample.width, sample.height).data;
-      };
-      const original = paint();
-      const visible = grid.cells.slice();
-      const text = CanvasRenderingContext2D.prototype.fillText;
-      let glyphs = 0;
-      CanvasRenderingContext2D.prototype.fillText = function (...args) {
-        glyphs++;
-        return text.apply(this, args);
-      };
-      const roundTrip = (direction: number): unknown[][] => [
-        ['nido_scroll', [1, 0, 7, 0, 60, direction, 0]],
-        ['grid_scroll', [1, 0, 7, 0, 60, direction, 0]],
-        ...Array.from({ length: 7 }, (_, row) => [
-          'grid_line',
-          [1, row, 0, cells(row + direction, row)]
-        ]),
-        ['nido_scroll', [1, 0, 7, 0, 60, -direction, 0]],
-        ['grid_scroll', [1, 0, 7, 0, 60, -direction, 0]],
-        ...Array.from({ length: 7 }, (_, row) => ['grid_line', [1, row, 0, cells(row, row)]]),
-        ['nido_scroll_cache', [false, false, false, true]]
-      ];
-      try {
-        let unchanged = true;
-        let retained = true;
-        for (const direction of [-2, -2, 2, 2]) {
-          grid.apply([...roundTrip(direction), ['flush']]);
-          const pixels = paint();
-          unchanged &&= original.every((value, index) => value === pixels[index]);
-          retained &&= visible.every((row, index) => row === grid.cells[index]);
-        }
-        const prefetchGlyphs = glyphs;
-        const edited = cells(99, 3);
-        grid.apply([...roundTrip(2), ['grid_line', [1, 3, 0, edited]], ['flush']]);
-        const changed = paint();
-        const changedGlyphs = glyphs - prefetchGlyphs;
-        const reference = new Grid();
-        reference.busy = true;
-        reference.pixelScrollEnabled = true;
-        reference.apply([...setup, ['grid_line', [1, 3, 0, edited]], ['flush']]);
-        const fresh = document.createElement('canvas');
-        reference.draw(fresh, 560, 152, 15, 'monospace', false, undefined, 19);
-        const expected = fresh.getContext('2d')!.getImageData(0, 0, fresh.width, fresh.height).data;
-        return {
-          prefetchGlyphs,
-          changedGlyphs,
-          unchanged,
-          retained,
-          changed: original.some((value, index) => value !== changed[index]),
-          matchesFresh: changed.every((value, index) => value === expected[index])
-        };
-      } finally {
-        CanvasRenderingContext2D.prototype.fillText = text;
+  const result = await page.evaluate(async (moduleUrl) => {
+    const { Grid } = await import(moduleUrl);
+    const grid = new Grid();
+    grid.busy = true;
+    grid.pixelScrollEnabled = true;
+    const cells = (line: number, row: number): [string, number][] =>
+      Array.from(
+        `${String(row + 1).padStart(3)} const value${line} = example(${line});`.padEnd(60),
+        (text) => [text, 1]
+      );
+    const setup = [
+      ['grid_resize', [1, 60, 8]],
+      ['hl_attr_define', [1, { foreground: 0x60a0ff }, {}, []]],
+      ...Array.from({ length: 7 }, (_, row) => ['grid_line', [1, row, 0, cells(row, row)]]),
+      ['flush']
+    ];
+    grid.apply(setup);
+    const canvas = document.createElement('canvas');
+    const paint = (): Uint8ClampedArray => {
+      grid.draw(canvas, 560, 152, 15, 'monospace', false, undefined, 19);
+      const sample = document.createElement('canvas');
+      sample.width = canvas.width;
+      sample.height = canvas.height;
+      const context = sample.getContext('2d')!;
+      context.drawImage(canvas, 0, 0);
+      return context.getImageData(0, 0, sample.width, sample.height).data;
+    };
+    const original = paint();
+    const visible = grid.cells.slice();
+    const text = CanvasRenderingContext2D.prototype.fillText;
+    let glyphs = 0;
+    CanvasRenderingContext2D.prototype.fillText = function (...args) {
+      glyphs++;
+      return text.apply(this, args);
+    };
+    const roundTrip = (direction: number): unknown[][] => [
+      ['nido_scroll', [1, 0, 7, 0, 60, direction, 0]],
+      ['grid_scroll', [1, 0, 7, 0, 60, direction, 0]],
+      ...Array.from({ length: 7 }, (_, row) => [
+        'grid_line',
+        [1, row, 0, cells(row + direction, row)]
+      ]),
+      ['nido_scroll', [1, 0, 7, 0, 60, -direction, 0]],
+      ['grid_scroll', [1, 0, 7, 0, 60, -direction, 0]],
+      ...Array.from({ length: 7 }, (_, row) => ['grid_line', [1, row, 0, cells(row, row)]]),
+      ['nido_scroll_cache', [false, false, false, true]]
+    ];
+    try {
+      let unchanged = true;
+      let retained = true;
+      for (const direction of [-2, -2, 2, 2]) {
+        grid.apply([...roundTrip(direction), ['flush']]);
+        const pixels = paint();
+        unchanged &&= original.every((value, index) => value === pixels[index]);
+        retained &&= visible.every((row, index) => row === grid.cells[index]);
       }
-    },
-    `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
-  );
+      const prefetchGlyphs = glyphs;
+      const edited = cells(99, 3);
+      grid.apply([...roundTrip(2), ['grid_line', [1, 3, 0, edited]], ['flush']]);
+      const changed = paint();
+      const changedGlyphs = glyphs - prefetchGlyphs;
+      const reference = new Grid();
+      reference.busy = true;
+      reference.pixelScrollEnabled = true;
+      reference.apply([...setup, ['grid_line', [1, 3, 0, edited]], ['flush']]);
+      const fresh = document.createElement('canvas');
+      reference.draw(fresh, 560, 152, 15, 'monospace', false, undefined, 19);
+      const expected = fresh.getContext('2d')!.getImageData(0, 0, fresh.width, fresh.height).data;
+      return {
+        prefetchGlyphs,
+        changedGlyphs,
+        unchanged,
+        retained,
+        changed: original.some((value, index) => value !== changed[index]),
+        matchesFresh: changed.every((value, index) => value === expected[index])
+      };
+    } finally {
+      CanvasRenderingContext2D.prototype.fillText = text;
+    }
+  }, viteFsUrl('src/renderer/src/grid.ts'));
   expect(result.prefetchGlyphs).toBe(0);
   expect(result.unchanged).toBe(true);
   expect(result.retained).toBe(true);
@@ -340,7 +329,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
             return { samples, blurred: difference(paint(false), baseline) };
           },
           {
-            moduleUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+            moduleUrl: viteFsUrl('src/renderer/src/grid.ts'),
             opacity
           }
         );
@@ -446,7 +435,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
             return { work, mismatches };
           },
           {
-            moduleUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+            moduleUrl: viteFsUrl('src/renderer/src/grid.ts'),
             opacity
           }
         );
@@ -577,8 +566,8 @@ for (const scale of [1, 1.25, 1.5, 2]) {
             return { mismatches, cachedPaints, referencePaints };
           },
           {
-            gridUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
-            motionUrl: `/@fs/${resolve('src/renderer/src/editorMotion.ts').replaceAll('\\', '/')}`,
+            gridUrl: viteFsUrl('src/renderer/src/grid.ts'),
+            motionUrl: viteFsUrl('src/renderer/src/editorMotion.ts'),
             opacity
           }
         );
@@ -603,50 +592,47 @@ test('edits and decoration row shifts paint their final positions without a scro
   await page.goto(`${origin}?view=app`);
   await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
   await page.clock.runFor(32);
-  await page.evaluate(
-    async (url) => {
-      const { Grid } = await import(url);
-      const original = Grid.prototype.draw;
-      const probe = { grid: undefined as EditorGrid | undefined };
-      let arguments_: Parameters<EditorGrid['draw']>;
-      Grid.prototype.draw = function (...args) {
-        probe.grid = this;
-        arguments_ = args;
-        return original.apply(this, args);
-      };
-      Object.assign(window, {
-        editMotionProbe: {
-          mismatches: (): number => {
-            const [surface, ...rest] = arguments_;
-            const pixels = surface
-              .getContext('2d')!
-              .getImageData(0, 0, surface.width, surface.height);
-            const reference = document.createElement('canvas');
-            probe.grid!.invalidatePaint();
-            original.call(probe.grid!, reference, ...rest);
-            const expected = reference
-              .getContext('2d')!
-              .getImageData(0, 0, reference.width, reference.height);
-            return pixels.data.filter((value, index) => value !== expected.data[index]).length;
-          }
+  await page.evaluate(async (url) => {
+    const { Grid } = await import(url);
+    const original = Grid.prototype.draw;
+    const probe = { grid: undefined as EditorGrid | undefined };
+    let arguments_: Parameters<EditorGrid['draw']>;
+    Grid.prototype.draw = function (...args) {
+      probe.grid = this;
+      arguments_ = args;
+      return original.apply(this, args);
+    };
+    Object.assign(window, {
+      editMotionProbe: {
+        mismatches: (): number => {
+          const [surface, ...rest] = arguments_;
+          const pixels = surface
+            .getContext('2d')!
+            .getImageData(0, 0, surface.width, surface.height);
+          const reference = document.createElement('canvas');
+          probe.grid!.invalidatePaint();
+          original.call(probe.grid!, reference, ...rest);
+          const expected = reference
+            .getContext('2d')!
+            .getImageData(0, 0, reference.width, reference.height);
+          return pixels.data.filter((value, index) => value !== expected.data[index]).length;
         }
-      });
-      window.rendererTest.emit({
-        type: 'redraw',
-        id: 'alpha',
-        events: [
-          ['grid_resize', [1, 60, 8]],
-          ...Array.from({ length: 7 }, (_, row) => [
-            'grid_line',
-            [1, row, 0, Array.from(`row ${row} 日本語 text`, (text) => [text, 0])]
-          ]),
-          ['grid_cursor_goto', [1, 2, 0]],
-          ['flush']
-        ]
-      });
-    },
-    `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
-  );
+      }
+    });
+    window.rendererTest.emit({
+      type: 'redraw',
+      id: 'alpha',
+      events: [
+        ['grid_resize', [1, 60, 8]],
+        ...Array.from({ length: 7 }, (_, row) => [
+          'grid_line',
+          [1, row, 0, Array.from(`row ${row} 日本語 text`, (text) => [text, 0])]
+        ]),
+        ['grid_cursor_goto', [1, 2, 0]],
+        ['flush']
+      ]
+    });
+  }, viteFsUrl('src/renderer/src/grid.ts'));
   await page.clock.runFor(32);
   for (const change of [
     { name: 'dd', edited: true, viewport: false, rows: 1 },
@@ -691,20 +677,17 @@ test('j/k viewport scrolling reuses frames until a redraw, while editing interru
   const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
   await expect(input).toBeFocused();
   await page.clock.runFor(32);
-  await page.evaluate(
-    async (url) => {
-      const { Grid } = await import(url);
-      const original = Grid.prototype.draw;
-      const probe = { draws: 0, grid: undefined as EditorGrid | undefined };
-      Object.assign(window, { viewportProbe: probe });
-      Grid.prototype.draw = function (...args) {
-        probe.draws++;
-        probe.grid = this;
-        return original.apply(this, args);
-      };
-    },
-    `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
-  );
+  await page.evaluate(async (url) => {
+    const { Grid } = await import(url);
+    const original = Grid.prototype.draw;
+    const probe = { draws: 0, grid: undefined as EditorGrid | undefined };
+    Object.assign(window, { viewportProbe: probe });
+    Grid.prototype.draw = function (...args) {
+      probe.draws++;
+      probe.grid = this;
+      return original.apply(this, args);
+    };
+  }, viteFsUrl('src/renderer/src/grid.ts'));
   await input.press('j');
   await page.clock.runFor(32);
   const scroll = async (): Promise<void> => {
@@ -1050,8 +1033,8 @@ test('direct horizontal frames retain fractional positions and fixed gutters thr
       return results;
     },
     {
-      gridUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
-      motionUrl: `/@fs/${resolve('src/renderer/src/editorMotion.ts').replaceAll('\\', '/')}`
+      gridUrl: viteFsUrl('src/renderer/src/grid.ts'),
+      motionUrl: viteFsUrl('src/renderer/src/editorMotion.ts')
     }
   );
   expect(results).toEqual(Array(16).fill(0));
@@ -1248,110 +1231,107 @@ test('row text reuses styles without leaking CodeLens, bold, italic or underline
     route.fulfill({ contentType: 'text/html', body: '<body></body>' })
   );
   await page.goto(`${origin}row-style-probe`);
-  const result = await page.evaluate(
-    async (moduleUrl) => {
-      const { Grid } = await import(moduleUrl);
-      const grid = new Grid();
-      grid.busy = true;
+  const result = await page.evaluate(async (moduleUrl) => {
+    const { Grid } = await import(moduleUrl);
+    const grid = new Grid();
+    grid.busy = true;
+    grid.apply([
+      ['grid_resize', [1, 80, 5]],
+      [
+        'hl_attr_define',
+        [1, { foreground: 0xd4d4d4 }, {}, []],
+        [2, { foreground: 0xff0000, bold: true }, {}, []],
+        [3, { foreground: 0x00ff00, italic: true, underline: true, special: 0x0000ff }, {}, []],
+        [4, { foreground: 0xeedd00 }, {}, [{ hi_name: 'NidoCodeLens' }]],
+        [5, { foreground: 0xffffff, background: 0x303030, reverse: true }, {}, []]
+      ],
+      [
+        'grid_line',
+        [1, 0, 0, [['a', 1, 70]]],
+        [
+          1,
+          1,
+          0,
+          [
+            ['L', 4],
+            ['b', 2],
+            ['i', 3],
+            ['n', 1],
+            ['日', 1],
+            ['', 1],
+            ['e\u0301', 1],
+            ['🙂', 1],
+            ['', 1],
+            ['r', 5]
+          ]
+        ]
+      ],
+      ['flush']
+    ]);
+    const canvas = document.createElement('canvas');
+    const proto = CanvasRenderingContext2D.prototype;
+    const font = Object.getOwnPropertyDescriptor(proto, 'font')!;
+    const fill = Object.getOwnPropertyDescriptor(proto, 'fillStyle')!;
+    const text = proto.fillText;
+    const numberToString = Number.prototype.toString;
+    const styles: Record<string, { font: string; color: string }> = {};
+    let fonts = 0,
+      colors = 0,
+      conversions = 0,
+      glyphs = 0;
+    Number.prototype.toString = function (this: number, radix?: number): string {
+      if (radix === 16) conversions++;
+      return numberToString.call(this, radix);
+    };
+    Object.defineProperty(proto, 'font', {
+      ...font,
+      set(value) {
+        fonts++;
+        font.set!.call(this, value);
+      }
+    });
+    Object.defineProperty(proto, 'fillStyle', {
+      ...fill,
+      set(value) {
+        colors++;
+        fill.set!.call(this, value);
+      }
+    });
+    proto.fillText = function (value, ...args): void {
+      glyphs++;
+      styles[value] = { font: this.font, color: String(this.fillStyle) };
+      return Reflect.apply(text, this, [value, ...args]);
+    };
+    try {
+      const draw = (): void =>
+        grid.draw(canvas, 720, 100, 15, 'monospace', false, undefined, 19, 400);
+      draw();
+      const initialStyles = { ...styles };
+      const cold = { fonts, colors, conversions, glyphs };
+      fonts = colors = conversions = glyphs = 0;
+      for (let i = 0; i < 20; i++) {
+        grid.apply([['grid_line', [1, 0, 10, [[String(i % 10), 1]]]], ['flush']]);
+        draw();
+      }
+      const work = { fonts, colors, conversions, glyphs };
       grid.apply([
-        ['grid_resize', [1, 80, 5]],
+        ['default_colors_set', [0xaabbcc, 0x112233]],
         [
           'hl_attr_define',
-          [1, { foreground: 0xd4d4d4 }, {}, []],
-          [2, { foreground: 0xff0000, bold: true }, {}, []],
-          [3, { foreground: 0x00ff00, italic: true, underline: true, special: 0x0000ff }, {}, []],
-          [4, { foreground: 0xeedd00 }, {}, [{ hi_name: 'NidoCodeLens' }]],
-          [5, { foreground: 0xffffff, background: 0x303030, reverse: true }, {}, []]
-        ],
-        [
-          'grid_line',
-          [1, 0, 0, [['a', 1, 70]]],
-          [
-            1,
-            1,
-            0,
-            [
-              ['L', 4],
-              ['b', 2],
-              ['i', 3],
-              ['n', 1],
-              ['日', 1],
-              ['', 1],
-              ['e\u0301', 1],
-              ['🙂', 1],
-              ['', 1],
-              ['r', 5]
-            ]
-          ]
+          [1, { foreground: 0x123456, italic: true }, {}, []],
+          [5, { reverse: true }, {}, []]
         ],
         ['flush']
       ]);
-      const canvas = document.createElement('canvas');
-      const proto = CanvasRenderingContext2D.prototype;
-      const font = Object.getOwnPropertyDescriptor(proto, 'font')!;
-      const fill = Object.getOwnPropertyDescriptor(proto, 'fillStyle')!;
-      const text = proto.fillText;
-      const numberToString = Number.prototype.toString;
-      const styles: Record<string, { font: string; color: string }> = {};
-      let fonts = 0,
-        colors = 0,
-        conversions = 0,
-        glyphs = 0;
-      Number.prototype.toString = function (this: number, radix?: number): string {
-        if (radix === 16) conversions++;
-        return numberToString.call(this, radix);
-      };
-      Object.defineProperty(proto, 'font', {
-        ...font,
-        set(value) {
-          fonts++;
-          font.set!.call(this, value);
-        }
-      });
-      Object.defineProperty(proto, 'fillStyle', {
-        ...fill,
-        set(value) {
-          colors++;
-          fill.set!.call(this, value);
-        }
-      });
-      proto.fillText = function (value, ...args): void {
-        glyphs++;
-        styles[value] = { font: this.font, color: String(this.fillStyle) };
-        return Reflect.apply(text, this, [value, ...args]);
-      };
-      try {
-        const draw = (): void =>
-          grid.draw(canvas, 720, 100, 15, 'monospace', false, undefined, 19, 400);
-        draw();
-        const initialStyles = { ...styles };
-        const cold = { fonts, colors, conversions, glyphs };
-        fonts = colors = conversions = glyphs = 0;
-        for (let i = 0; i < 20; i++) {
-          grid.apply([['grid_line', [1, 0, 10, [[String(i % 10), 1]]]], ['flush']]);
-          draw();
-        }
-        const work = { fonts, colors, conversions, glyphs };
-        grid.apply([
-          ['default_colors_set', [0xaabbcc, 0x112233]],
-          [
-            'hl_attr_define',
-            [1, { foreground: 0x123456, italic: true }, {}, []],
-            [5, { reverse: true }, {}, []]
-          ],
-          ['flush']
-        ]);
-        grid.draw(canvas, 720, 100, 18, 'serif', false, undefined, 23, 500);
-        return { styles: initialStyles, updated: { ...styles }, cold, ...work };
-      } finally {
-        Object.defineProperty(proto, 'font', font);
-        Object.defineProperty(proto, 'fillStyle', fill);
-        proto.fillText = text;
-        Number.prototype.toString = numberToString;
-      }
-    },
-    `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
-  );
+      grid.draw(canvas, 720, 100, 18, 'serif', false, undefined, 23, 500);
+      return { styles: initialStyles, updated: { ...styles }, cold, ...work };
+    } finally {
+      Object.defineProperty(proto, 'font', font);
+      Object.defineProperty(proto, 'fillStyle', fill);
+      proto.fillText = text;
+      Number.prototype.toString = numberToString;
+    }
+  }, viteFsUrl('src/renderer/src/grid.ts'));
   expect(result.styles.L.font).toContain('12px');
   expect(result.styles.b.font).toMatch(/bold|700/);
   expect(result.styles.b.color).toBe('#ff0000');
@@ -1391,116 +1371,113 @@ for (const scale of [1, 1.25, 1.5, 2]) {
       await page.goto(`${origin}scroll-work-probe`);
       const softwareGpu = process.env.NIDO_TEST_SOFTWARE_GPU === '1';
       if (softwareGpu) await requireWebGLCorrection(page);
-      const work = await page.evaluate(
-        async (moduleUrl) => {
-          const { Grid } = await import(moduleUrl);
-          const grid = new Grid();
-          grid.busy = true;
-          grid.pixelScrollEnabled = true;
-          grid.scrolling = true;
-          const line = (row: number, revision: number): [string, number][] =>
-            Array.from(
-              `ROW_${row}_${revision} ${'const result = example(argument); '.repeat(4)}`,
-              (text, column) => [text, 1 + (column % 2)]
+      const work = await page.evaluate(async (moduleUrl) => {
+        const { Grid } = await import(moduleUrl);
+        const grid = new Grid();
+        grid.busy = true;
+        grid.pixelScrollEnabled = true;
+        grid.scrolling = true;
+        const line = (row: number, revision: number): [string, number][] =>
+          Array.from(
+            `ROW_${row}_${revision} ${'const result = example(argument); '.repeat(4)}`,
+            (text, column) => [text, 1 + (column % 2)]
+          );
+        grid.apply([
+          ['grid_resize', [1, 160, 50]],
+          [
+            'hl_attr_define',
+            [1, { foreground: 0xd4d4d4 }, {}, []],
+            [2, { foreground: 0x4ec9b0 }, {}, []]
+          ],
+          ...Array.from({ length: 49 }, (_, row) => ['grid_line', [1, row, 0, line(row, 0)]]),
+          ['flush']
+        ]);
+        const canvas = document.createElement('canvas');
+        document.body.append(canvas);
+        const prototype = CanvasRenderingContext2D.prototype;
+        const read = prototype.getImageData;
+        const write = prototype.putImageData;
+        const text = prototype.fillText;
+        const gpu = WebGL2RenderingContext.prototype;
+        const upload = gpu.texImage2D;
+        const work = {
+          reads: 0,
+          writes: 0,
+          glyphs: 0,
+          cachedGlyphs: 0,
+          editedGlyphs: 0,
+          uploads: 0,
+          cachedUploads: 0,
+          editedUploads: 0
+        };
+        prototype.getImageData = function (...args) {
+          work.reads++;
+          return read.apply(this, args);
+        };
+        prototype.putImageData = function (...args) {
+          work.writes++;
+          return Reflect.apply(write, this, args);
+        };
+        prototype.fillText = function (...args) {
+          work.glyphs++;
+          return text.apply(this, args);
+        };
+        gpu.texImage2D = function (...args) {
+          work.uploads++;
+          return Reflect.apply(upload, this, args);
+        };
+        const durations: number[] = [];
+        let coldMs = 0;
+        try {
+          for (let frame = 0; frame < 33; frame++) {
+            // Include a cold viewport, cached motion and newly changed rows.
+            // A warmed static viewport alone misses expensive row preparation.
+            if (frame) await new Promise(requestAnimationFrame);
+            const edited = frame > 0 && frame % 8 === 0;
+            if (edited) {
+              grid.apply([['grid_line', [1, frame, 0, line(frame, frame)]], ['flush']]);
+            }
+            grid.scrollFraction = ((frame + 1) * 0.25) / (19 * devicePixelRatio);
+            const glyphs = work.glyphs;
+            const uploads = work.uploads;
+            const start = performance.now();
+            grid.draw(
+              canvas,
+              1500,
+              950,
+              15,
+              '"Cascadia Code", monospace',
+              false,
+              undefined,
+              19,
+              350
             );
-          grid.apply([
-            ['grid_resize', [1, 160, 50]],
-            [
-              'hl_attr_define',
-              [1, { foreground: 0xd4d4d4 }, {}, []],
-              [2, { foreground: 0x4ec9b0 }, {}, []]
-            ],
-            ...Array.from({ length: 49 }, (_, row) => ['grid_line', [1, row, 0, line(row, 0)]]),
-            ['flush']
-          ]);
-          const canvas = document.createElement('canvas');
-          document.body.append(canvas);
-          const prototype = CanvasRenderingContext2D.prototype;
-          const read = prototype.getImageData;
-          const write = prototype.putImageData;
-          const text = prototype.fillText;
-          const gpu = WebGL2RenderingContext.prototype;
-          const upload = gpu.texImage2D;
-          const work = {
-            reads: 0,
-            writes: 0,
-            glyphs: 0,
-            cachedGlyphs: 0,
-            editedGlyphs: 0,
-            uploads: 0,
-            cachedUploads: 0,
-            editedUploads: 0
-          };
-          prototype.getImageData = function (...args) {
-            work.reads++;
-            return read.apply(this, args);
-          };
-          prototype.putImageData = function (...args) {
-            work.writes++;
-            return Reflect.apply(write, this, args);
-          };
-          prototype.fillText = function (...args) {
-            work.glyphs++;
-            return text.apply(this, args);
-          };
-          gpu.texImage2D = function (...args) {
-            work.uploads++;
-            return Reflect.apply(upload, this, args);
-          };
-          const durations: number[] = [];
-          let coldMs = 0;
-          try {
-            for (let frame = 0; frame < 33; frame++) {
-              // Include a cold viewport, cached motion and newly changed rows.
-              // A warmed static viewport alone misses expensive row preparation.
-              if (frame) await new Promise(requestAnimationFrame);
-              const edited = frame > 0 && frame % 8 === 0;
+            const duration = performance.now() - start;
+            if (frame === 0) coldMs = duration;
+            else {
+              durations.push(duration);
               if (edited) {
-                grid.apply([['grid_line', [1, frame, 0, line(frame, frame)]], ['flush']]);
-              }
-              grid.scrollFraction = ((frame + 1) * 0.25) / (19 * devicePixelRatio);
-              const glyphs = work.glyphs;
-              const uploads = work.uploads;
-              const start = performance.now();
-              grid.draw(
-                canvas,
-                1500,
-                950,
-                15,
-                '"Cascadia Code", monospace',
-                false,
-                undefined,
-                19,
-                350
-              );
-              const duration = performance.now() - start;
-              if (frame === 0) coldMs = duration;
-              else {
-                durations.push(duration);
-                if (edited) {
-                  work.editedGlyphs += work.glyphs - glyphs;
-                  work.editedUploads += work.uploads - uploads;
-                } else {
-                  work.cachedGlyphs += work.glyphs - glyphs;
-                  work.cachedUploads += work.uploads - uploads;
-                }
+                work.editedGlyphs += work.glyphs - glyphs;
+                work.editedUploads += work.uploads - uploads;
+              } else {
+                work.cachedGlyphs += work.glyphs - glyphs;
+                work.cachedUploads += work.uploads - uploads;
               }
             }
-          } finally {
-            prototype.getImageData = read;
-            prototype.putImageData = write;
-            prototype.fillText = text;
-            gpu.texImage2D = upload;
           }
-          durations.sort((a, b) => a - b);
-          return {
-            ...work,
-            coldMs,
-            p95Ms: durations[Math.floor(durations.length * 0.95)]
-          };
-        },
-        `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
-      );
+        } finally {
+          prototype.getImageData = read;
+          prototype.putImageData = write;
+          prototype.fillText = text;
+          gpu.texImage2D = upload;
+        }
+        durations.sort((a, b) => a - b);
+        return {
+          ...work,
+          coldMs,
+          p95Ms: durations[Math.floor(durations.length * 0.95)]
+        };
+      }, viteFsUrl('src/renderer/src/grid.ts'));
       const metrics = { scale, softwareGpu, ...work };
       console.log('dense-scroll-work', metrics);
       await test.info().attach('dense-scroll-work', {
@@ -1536,116 +1513,113 @@ test('row rasterization preserves native dark and light text pixels', async ({ b
         route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
       );
       await page.goto(`${origin}native-row-probe`);
-      const reports = await page.evaluate(
-        async (moduleUrl) => {
-          const { Grid } = await import(moduleUrl);
-          const reports: {
-            foreground: string;
-            weight: number;
-            partialClip: boolean;
-            mismatches: number;
-          }[] = [];
-          for (const [foreground, background] of [
-            ['#d4d4d4', '#121212'],
-            ['#202020', '#f5f5f5']
-          ]) {
-            for (const weight of [350, 400]) {
-              const grid = new Grid();
-              grid.busy = true;
-              grid.background = background;
-              grid.foreground = foreground;
-              grid.pixelScrollEnabled = true;
-              const cells: [string, number][] = [
-                ...Array.from('0001', (text): [string, number] => [text, 0]),
-                ['j', 2],
-                ['日', 0],
-                ['', 0],
-                ['M', 1],
-                ...Array.from(' Il1|[](){}MWmw __ fn(value)', (text): [string, number] => [text, 0])
-              ];
-              grid.apply([
-                ['grid_resize', [1, 40, 4]],
-                ['hl_attr_define', [1, { bold: true }, {}, []]],
-                ['hl_attr_define', [2, { italic: true }, {}, []]],
-                ['grid_line', [1, 1, 0, cells]],
-                ['flush']
-              ]);
-              const rows = new Set<HTMLCanvasElement>();
-              const fillText = CanvasRenderingContext2D.prototype.fillText;
-              const rect = CanvasRenderingContext2D.prototype.rect;
-              const clips: { canvas: HTMLCanvasElement; width: number }[] = [];
-              CanvasRenderingContext2D.prototype.fillText = function (...args) {
-                rows.add(this.canvas);
-                return fillText.apply(this, args);
-              };
-              CanvasRenderingContext2D.prototype.rect = function (...args) {
-                clips.push({ canvas: this.canvas, width: args[2] });
-                return rect.apply(this, args);
-              };
-              let cellWidth: number;
-              const canvas = document.createElement('canvas');
-              const paint = (): void => {
-                ({ cellWidth } = grid.draw(
-                  canvas,
-                  400,
-                  76,
-                  15,
-                  '"Cascadia Code", monospace',
-                  false,
-                  undefined,
-                  19,
-                  weight
-                ));
-              };
-              try {
-                paint();
-                const prefix = Array.from('0099', (text): [string, number] => [text, 0]);
-                grid.apply([['grid_line', [1, 1, 0, prefix]], ['flush']]);
-                cells.splice(0, 4, ...prefix);
-                paint();
-              } finally {
-                CanvasRenderingContext2D.prototype.fillText = fillText;
-                CanvasRenderingContext2D.prototype.rect = rect;
-              }
-              const row = [...rows][0];
-              const native = document.createElement('canvas');
-              native.width = row.width;
-              native.height = row.height;
-              const ctx = native.getContext('2d', { alpha: false })!;
-              ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-              ctx.fillStyle = background;
-              ctx.fillRect(0, 0, native.width, native.height);
-              ctx.textBaseline = 'alphabetic';
-              ctx.fillStyle = foreground;
-              cells.forEach(([text, highlight], column) => {
-                if (text && text !== ' ') {
-                  ctx.font = `${highlight === 2 ? 'italic ' : ''}${highlight === 1 ? Math.max(700, weight) : weight} 15px "Cascadia Code", monospace`;
-                  ctx.fillText(
-                    text,
-                    Math.round(column * cellWidth * devicePixelRatio) / devicePixelRatio,
-                    Math.round(14 * devicePixelRatio) / devicePixelRatio
-                  );
-                }
-              });
-              const actual = row.getContext('2d')!.getImageData(0, 0, row.width, row.height).data;
-              const expected = ctx.getImageData(0, 0, native.width, native.height).data;
-              reports.push({
-                foreground,
-                weight,
-                partialClip: clips.some(
-                  ({ canvas, width }) => canvas === row && width > 0 && width < row.width
-                ),
-                mismatches: actual.reduce(
-                  (count, value, index) => count + Number(value !== expected[index]),
-                  0
-                )
-              });
+      const reports = await page.evaluate(async (moduleUrl) => {
+        const { Grid } = await import(moduleUrl);
+        const reports: {
+          foreground: string;
+          weight: number;
+          partialClip: boolean;
+          mismatches: number;
+        }[] = [];
+        for (const [foreground, background] of [
+          ['#d4d4d4', '#121212'],
+          ['#202020', '#f5f5f5']
+        ]) {
+          for (const weight of [350, 400]) {
+            const grid = new Grid();
+            grid.busy = true;
+            grid.background = background;
+            grid.foreground = foreground;
+            grid.pixelScrollEnabled = true;
+            const cells: [string, number][] = [
+              ...Array.from('0001', (text): [string, number] => [text, 0]),
+              ['j', 2],
+              ['日', 0],
+              ['', 0],
+              ['M', 1],
+              ...Array.from(' Il1|[](){}MWmw __ fn(value)', (text): [string, number] => [text, 0])
+            ];
+            grid.apply([
+              ['grid_resize', [1, 40, 4]],
+              ['hl_attr_define', [1, { bold: true }, {}, []]],
+              ['hl_attr_define', [2, { italic: true }, {}, []]],
+              ['grid_line', [1, 1, 0, cells]],
+              ['flush']
+            ]);
+            const rows = new Set<HTMLCanvasElement>();
+            const fillText = CanvasRenderingContext2D.prototype.fillText;
+            const rect = CanvasRenderingContext2D.prototype.rect;
+            const clips: { canvas: HTMLCanvasElement; width: number }[] = [];
+            CanvasRenderingContext2D.prototype.fillText = function (...args) {
+              rows.add(this.canvas);
+              return fillText.apply(this, args);
+            };
+            CanvasRenderingContext2D.prototype.rect = function (...args) {
+              clips.push({ canvas: this.canvas, width: args[2] });
+              return rect.apply(this, args);
+            };
+            let cellWidth: number;
+            const canvas = document.createElement('canvas');
+            const paint = (): void => {
+              ({ cellWidth } = grid.draw(
+                canvas,
+                400,
+                76,
+                15,
+                '"Cascadia Code", monospace',
+                false,
+                undefined,
+                19,
+                weight
+              ));
+            };
+            try {
+              paint();
+              const prefix = Array.from('0099', (text): [string, number] => [text, 0]);
+              grid.apply([['grid_line', [1, 1, 0, prefix]], ['flush']]);
+              cells.splice(0, 4, ...prefix);
+              paint();
+            } finally {
+              CanvasRenderingContext2D.prototype.fillText = fillText;
+              CanvasRenderingContext2D.prototype.rect = rect;
             }
+            const row = [...rows][0];
+            const native = document.createElement('canvas');
+            native.width = row.width;
+            native.height = row.height;
+            const ctx = native.getContext('2d', { alpha: false })!;
+            ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+            ctx.fillStyle = background;
+            ctx.fillRect(0, 0, native.width, native.height);
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillStyle = foreground;
+            cells.forEach(([text, highlight], column) => {
+              if (text && text !== ' ') {
+                ctx.font = `${highlight === 2 ? 'italic ' : ''}${highlight === 1 ? Math.max(700, weight) : weight} 15px "Cascadia Code", monospace`;
+                ctx.fillText(
+                  text,
+                  Math.round(column * cellWidth * devicePixelRatio) / devicePixelRatio,
+                  Math.round(14 * devicePixelRatio) / devicePixelRatio
+                );
+              }
+            });
+            const actual = row.getContext('2d')!.getImageData(0, 0, row.width, row.height).data;
+            const expected = ctx.getImageData(0, 0, native.width, native.height).data;
+            reports.push({
+              foreground,
+              weight,
+              partialClip: clips.some(
+                ({ canvas, width }) => canvas === row && width > 0 && width < row.width
+              ),
+              mismatches: actual.reduce(
+                (count, value, index) => count + Number(value !== expected[index]),
+                0
+              )
+            });
           }
-          return reports;
-        },
-        `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
-      );
+        }
+        return reports;
+      }, viteFsUrl('src/renderer/src/grid.ts'));
       console.log('native-row-pixels', JSON.stringify({ scale, reports }));
       for (const report of reports) {
         expect(report.partialClip).toBe(true);
@@ -1664,55 +1638,52 @@ test('new highlight IDs preserve cached rows while existing highlight changes re
     route.fulfill({ contentType: 'text/html', body: '<body></body>' })
   );
   await page.goto(`${origin}highlight-cache-probe`);
-  const result = await page.evaluate(
-    async (moduleUrl) => {
-      const { Grid } = await import(moduleUrl);
-      const grid = new Grid();
-      grid.busy = true;
-      grid.apply([
-        ['grid_resize', [1, 80, 5]],
-        ['hl_attr_define', [1, { foreground: 0x60a0ff }, {}, []]],
-        ...Array.from({ length: 4 }, (_, row) => [
-          'grid_line',
-          [1, row, 0, Array.from(`const value${row} = example(42);`, (text) => [text, 1])]
-        ]),
-        ['flush']
-      ]);
-      const canvas = document.createElement('canvas');
-      const paint = (): Uint8ClampedArray => {
-        grid.draw(canvas, 640, 95, 15, 'monospace', false, undefined, 19);
-        const sample = document.createElement('canvas');
-        sample.width = canvas.width;
-        sample.height = canvas.height;
-        const context = sample.getContext('2d')!;
-        context.drawImage(canvas, 0, 0);
-        return context.getImageData(0, 0, sample.width, sample.height).data;
+  const result = await page.evaluate(async (moduleUrl) => {
+    const { Grid } = await import(moduleUrl);
+    const grid = new Grid();
+    grid.busy = true;
+    grid.apply([
+      ['grid_resize', [1, 80, 5]],
+      ['hl_attr_define', [1, { foreground: 0x60a0ff }, {}, []]],
+      ...Array.from({ length: 4 }, (_, row) => [
+        'grid_line',
+        [1, row, 0, Array.from(`const value${row} = example(42);`, (text) => [text, 1])]
+      ]),
+      ['flush']
+    ]);
+    const canvas = document.createElement('canvas');
+    const paint = (): Uint8ClampedArray => {
+      grid.draw(canvas, 640, 95, 15, 'monospace', false, undefined, 19);
+      const sample = document.createElement('canvas');
+      sample.width = canvas.width;
+      sample.height = canvas.height;
+      const context = sample.getContext('2d')!;
+      context.drawImage(canvas, 0, 0);
+      return context.getImageData(0, 0, sample.width, sample.height).data;
+    };
+    const original = paint();
+    const text = CanvasRenderingContext2D.prototype.fillText;
+    let glyphs = 0;
+    CanvasRenderingContext2D.prototype.fillText = function (...args) {
+      glyphs++;
+      return text.apply(this, args);
+    };
+    try {
+      grid.apply([['hl_attr_define', [2, { foreground: 0xffd700 }, {}, []]], ['flush']]);
+      const added = paint();
+      const newIdGlyphs = glyphs;
+      grid.apply([['hl_attr_define', [1, { foreground: 0xff6040 }, {}, []]], ['flush']]);
+      const changed = paint();
+      return {
+        newIdGlyphs,
+        changedIdGlyphs: glyphs - newIdGlyphs,
+        unchanged: original.every((value, index) => value === added[index]),
+        changed: original.some((value, index) => value !== changed[index])
       };
-      const original = paint();
-      const text = CanvasRenderingContext2D.prototype.fillText;
-      let glyphs = 0;
-      CanvasRenderingContext2D.prototype.fillText = function (...args) {
-        glyphs++;
-        return text.apply(this, args);
-      };
-      try {
-        grid.apply([['hl_attr_define', [2, { foreground: 0xffd700 }, {}, []]], ['flush']]);
-        const added = paint();
-        const newIdGlyphs = glyphs;
-        grid.apply([['hl_attr_define', [1, { foreground: 0xff6040 }, {}, []]], ['flush']]);
-        const changed = paint();
-        return {
-          newIdGlyphs,
-          changedIdGlyphs: glyphs - newIdGlyphs,
-          unchanged: original.every((value, index) => value === added[index]),
-          changed: original.some((value, index) => value !== changed[index])
-        };
-      } finally {
-        CanvasRenderingContext2D.prototype.fillText = text;
-      }
-    },
-    `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
-  );
+    } finally {
+      CanvasRenderingContext2D.prototype.fillText = text;
+    }
+  }, viteFsUrl('src/renderer/src/grid.ts'));
   expect(result.newIdGlyphs).toBe(0);
   expect(result.unchanged).toBe(true);
   expect(result.changedIdGlyphs).toBeGreaterThan(0);
@@ -1914,7 +1885,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
             return { failures, warmGlyphs, compared };
           },
           {
-            moduleUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+            moduleUrl: viteFsUrl('src/renderer/src/grid.ts'),
             opacity
           }
         );
@@ -1939,98 +1910,95 @@ test('numeric row damage preserves overhanging text and decorations across repea
         route.fulfill({ contentType: 'text/html', body: '<body></body>' })
       );
       await page.goto(`${origin}numeric-damage-probe`);
-      const failures = await page.evaluate(
-        async (moduleUrl) => {
-          const { Grid } = await import(moduleUrl);
-          const failures: string[] = [];
-          for (const family of ['monospace', 'serif']) {
-            for (const opacity of [1, 0.8]) {
-              const cells: [string, number][] = [
-                ...Array.from('0001', (text): [string, number] => [text, 0]),
-                ['j\u0301\u0338', 1],
-                ['\u0361\u0488', 1],
-                ['日', 0],
-                ['', 0],
-                ...Array.from(' lens42 ', (text): [string, number] => [text, 2]),
-                ['\u0301\u0338', 1],
-                [' ', 0],
-                [' ', 0],
-                ...Array.from(' warning ', (text): [string, number] => [text, 3]),
-                ['(', 4],
-                ['│', 5],
-                ['x', 6],
-                ['│', 0]
-              ];
-              const setup = (): EditorGrid => {
-                const grid = new Grid();
-                grid.busy = true;
-                grid.backgroundOpacity = opacity;
-                grid.pixelScrollEnabled = true;
-                grid.apply([
-                  ['grid_resize', [1, 40, 4]],
-                  ['hl_attr_define', [1, { italic: true }, {}, []]],
-                  ['hl_attr_define', [2, {}, {}, [{ hi_name: 'NidoCodeLens' }]]],
+      const failures = await page.evaluate(async (moduleUrl) => {
+        const { Grid } = await import(moduleUrl);
+        const failures: string[] = [];
+        for (const family of ['monospace', 'serif']) {
+          for (const opacity of [1, 0.8]) {
+            const cells: [string, number][] = [
+              ...Array.from('0001', (text): [string, number] => [text, 0]),
+              ['j\u0301\u0338', 1],
+              ['\u0361\u0488', 1],
+              ['日', 0],
+              ['', 0],
+              ...Array.from(' lens42 ', (text): [string, number] => [text, 2]),
+              ['\u0301\u0338', 1],
+              [' ', 0],
+              [' ', 0],
+              ...Array.from(' warning ', (text): [string, number] => [text, 3]),
+              ['(', 4],
+              ['│', 5],
+              ['x', 6],
+              ['│', 0]
+            ];
+            const setup = (): EditorGrid => {
+              const grid = new Grid();
+              grid.busy = true;
+              grid.backgroundOpacity = opacity;
+              grid.pixelScrollEnabled = true;
+              grid.apply([
+                ['grid_resize', [1, 40, 4]],
+                ['hl_attr_define', [1, { italic: true }, {}, []]],
+                ['hl_attr_define', [2, {}, {}, [{ hi_name: 'NidoCodeLens' }]]],
+                [
+                  'hl_attr_define',
                   [
-                    'hl_attr_define',
-                    [
-                      3,
-                      { background: 0x302020, special: 0xff7777 },
-                      {},
-                      [{ hi_name: 'DiagnosticVirtualTextError' }]
-                    ]
-                  ],
-                  ['hl_attr_define', [4, {}, {}, [{ hi_name: 'NidoBracketMatch' }]]],
-                  ['hl_attr_define', [5, {}, {}, [{ hi_name: 'NidoIndent1' }]]],
-                  ['hl_attr_define', [6, { underline: true, strikethrough: true }, {}, []]],
-                  ['grid_line', [1, 1, 0, cells]],
-                  ['flush']
-                ]);
-                return grid;
-              };
-              const canvas = document.createElement('canvas');
-              const grid = setup();
-              const paint = (grid: EditorGrid, canvas: HTMLCanvasElement): Uint8ClampedArray => {
-                grid.draw(canvas, 600, 76, 15, family, false, undefined, 19, 350);
-                // Read a copy so the probe cannot change the renderer's Canvas backing.
-                const sample = document.createElement('canvas');
-                sample.width = canvas.width;
-                sample.height = canvas.height;
-                const ctx = sample.getContext('2d')!;
-                ctx.drawImage(canvas, 0, 0);
-                return ctx.getImageData(0, 0, sample.width, sample.height).data;
-              };
-              paint(grid, canvas);
-              for (const [column, text, fractional = true] of [
-                [3, '9'],
-                [17, '8'],
-                [3, '2'],
-                // Follow a full repaint with another numeric edit before fractional motion.
-                [4, 'f\u0301\u0338', false],
-                [3, '7'],
-                [17, ' ']
-              ] as const) {
-                cells[column] = [text, cells[column][1]];
-                grid.apply([['grid_line', [1, 1, column, [cells[column]]]], ['flush']]);
-                for (const phase of fractional ? [0, 0.25] : [0]) {
-                  grid.scrollFraction = phase / (19 * devicePixelRatio);
-                  const reference = setup();
-                  reference.scrollFraction = grid.scrollFraction;
-                  const actual = paint(grid, canvas);
-                  const expected = paint(reference, document.createElement('canvas'));
-                  const mismatch = actual.findIndex((value, index) => value !== expected[index]);
-                  if (mismatch >= 0) {
-                    failures.push(
-                      `${family}, opacity ${opacity}, column ${column}, phase ${phase}, pixel ${Math.floor(mismatch / 4) % canvas.width},${Math.floor(mismatch / 4 / canvas.width)}`
-                    );
-                  }
+                    3,
+                    { background: 0x302020, special: 0xff7777 },
+                    {},
+                    [{ hi_name: 'DiagnosticVirtualTextError' }]
+                  ]
+                ],
+                ['hl_attr_define', [4, {}, {}, [{ hi_name: 'NidoBracketMatch' }]]],
+                ['hl_attr_define', [5, {}, {}, [{ hi_name: 'NidoIndent1' }]]],
+                ['hl_attr_define', [6, { underline: true, strikethrough: true }, {}, []]],
+                ['grid_line', [1, 1, 0, cells]],
+                ['flush']
+              ]);
+              return grid;
+            };
+            const canvas = document.createElement('canvas');
+            const grid = setup();
+            const paint = (grid: EditorGrid, canvas: HTMLCanvasElement): Uint8ClampedArray => {
+              grid.draw(canvas, 600, 76, 15, family, false, undefined, 19, 350);
+              // Read a copy so the probe cannot change the renderer's Canvas backing.
+              const sample = document.createElement('canvas');
+              sample.width = canvas.width;
+              sample.height = canvas.height;
+              const ctx = sample.getContext('2d')!;
+              ctx.drawImage(canvas, 0, 0);
+              return ctx.getImageData(0, 0, sample.width, sample.height).data;
+            };
+            paint(grid, canvas);
+            for (const [column, text, fractional = true] of [
+              [3, '9'],
+              [17, '8'],
+              [3, '2'],
+              // Follow a full repaint with another numeric edit before fractional motion.
+              [4, 'f\u0301\u0338', false],
+              [3, '7'],
+              [17, ' ']
+            ] as const) {
+              cells[column] = [text, cells[column][1]];
+              grid.apply([['grid_line', [1, 1, column, [cells[column]]]], ['flush']]);
+              for (const phase of fractional ? [0, 0.25] : [0]) {
+                grid.scrollFraction = phase / (19 * devicePixelRatio);
+                const reference = setup();
+                reference.scrollFraction = grid.scrollFraction;
+                const actual = paint(grid, canvas);
+                const expected = paint(reference, document.createElement('canvas'));
+                const mismatch = actual.findIndex((value, index) => value !== expected[index]);
+                if (mismatch >= 0) {
+                  failures.push(
+                    `${family}, opacity ${opacity}, column ${column}, phase ${phase}, pixel ${Math.floor(mismatch / 4) % canvas.width},${Math.floor(mismatch / 4 / canvas.width)}`
+                  );
                 }
               }
             }
           }
-          return failures;
-        },
-        `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
-      );
+        }
+        return failures;
+      }, viteFsUrl('src/renderer/src/grid.ts'));
       expect(failures, `numeric damage at ${scale * 100}% scale`).toEqual([]);
     } finally {
       await context.close();
@@ -2192,7 +2160,7 @@ for (const rows of [4, 8]) {
             return reports;
           },
           {
-            moduleUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+            moduleUrl: viteFsUrl('src/renderer/src/grid.ts'),
             rows,
             direction
           }
@@ -2240,152 +2208,149 @@ for (const scale of [1, 1.25, 1.5, 2]) {
       );
       await page.goto(`${origin}stationary-work-probe`);
       await requireWebGLCorrection(page);
-      const work = await page.evaluate(
-        async (moduleUrl) => {
-          const { Grid } = await import(moduleUrl);
-          const grid = new Grid();
-          grid.pixelScrollEnabled = true;
-          grid.cursor = { row: 17, column: 10 };
-          grid.apply([
-            ['grid_resize', [1, 140, 40]],
-            ...Array.from({ length: 39 }, (_, row) => [
-              'grid_line',
-              [
-                1,
-                row,
-                0,
-                Array.from(`ROW_${row} 日本語 const value = example();`, (text) => [text, 0])
-              ]
-            ]),
-            ['flush']
-          ]);
-          const canvas = document.createElement('canvas');
-          const paint = (): void => {
-            grid.draw(canvas, 1120, 760, 15, 'monospace', true, undefined, 19, 350);
-          };
-          const gpu = WebGL2RenderingContext.prototype;
-          const clear = gpu.clear;
-          const program = gpu.useProgram;
-          const upload = gpu.texImage2D;
-          const remove = gpu.deleteTexture;
-          const context = HTMLCanvasElement.prototype.getContext;
-          const rowCanvases = new Set<HTMLCanvasElement>();
-          HTMLCanvasElement.prototype.getContext = function (...args) {
-            if (args[0] === '2d' && this !== canvas) rowCanvases.add(this);
-            return Reflect.apply(context, this, args);
-          };
-          const calls = { clears: 0, programs: 0, uploads: 0, liveTextures: 0 };
-          gpu.clear = function (...args) {
-            calls.clears++;
-            return clear.apply(this, args);
-          };
-          gpu.useProgram = function (...args) {
-            calls.programs++;
-            return program.apply(this, args);
-          };
-          gpu.texImage2D = function (...args) {
-            calls.uploads++;
-            calls.liveTextures++;
-            return Reflect.apply(upload, this, args);
-          };
-          gpu.deleteTexture = function (...args) {
-            calls.liveTextures--;
-            return remove.apply(this, args);
-          };
-          try {
+      const work = await page.evaluate(async (moduleUrl) => {
+        const { Grid } = await import(moduleUrl);
+        const grid = new Grid();
+        grid.pixelScrollEnabled = true;
+        grid.cursor = { row: 17, column: 10 };
+        grid.apply([
+          ['grid_resize', [1, 140, 40]],
+          ...Array.from({ length: 39 }, (_, row) => [
+            'grid_line',
+            [
+              1,
+              row,
+              0,
+              Array.from(`ROW_${row} 日本語 const value = example();`, (text) => [text, 0])
+            ]
+          ]),
+          ['flush']
+        ]);
+        const canvas = document.createElement('canvas');
+        const paint = (): void => {
+          grid.draw(canvas, 1120, 760, 15, 'monospace', true, undefined, 19, 350);
+        };
+        const gpu = WebGL2RenderingContext.prototype;
+        const clear = gpu.clear;
+        const program = gpu.useProgram;
+        const upload = gpu.texImage2D;
+        const remove = gpu.deleteTexture;
+        const context = HTMLCanvasElement.prototype.getContext;
+        const rowCanvases = new Set<HTMLCanvasElement>();
+        HTMLCanvasElement.prototype.getContext = function (...args) {
+          if (args[0] === '2d' && this !== canvas) rowCanvases.add(this);
+          return Reflect.apply(context, this, args);
+        };
+        const calls = { clears: 0, programs: 0, uploads: 0, liveTextures: 0 };
+        gpu.clear = function (...args) {
+          calls.clears++;
+          return clear.apply(this, args);
+        };
+        gpu.useProgram = function (...args) {
+          calls.programs++;
+          return program.apply(this, args);
+        };
+        gpu.texImage2D = function (...args) {
+          calls.uploads++;
+          calls.liveTextures++;
+          return Reflect.apply(upload, this, args);
+        };
+        gpu.deleteTexture = function (...args) {
+          calls.liveTextures--;
+          return remove.apply(this, args);
+        };
+        try {
+          paint();
+          const initialTextures = calls.liveTextures;
+          calls.clears = calls.programs = calls.uploads = 0;
+          const cursorTimes: number[] = [];
+          for (let frame = 0; frame < 160; frame++) {
+            grid.cursorOpacity = frame % 2;
+            grid.cursor.column = 10 + (frame % 10);
+            const start = performance.now();
             paint();
-            const initialTextures = calls.liveTextures;
-            calls.clears = calls.programs = calls.uploads = 0;
-            const cursorTimes: number[] = [];
-            for (let frame = 0; frame < 160; frame++) {
-              grid.cursorOpacity = frame % 2;
-              grid.cursor.column = 10 + (frame % 10);
-              const start = performance.now();
-              paint();
-              cursorTimes.push(performance.now() - start);
-            }
-            const editTimes: number[] = [];
-            for (let frame = 0; frame < 160; frame++) {
-              const start = performance.now();
-              grid.apply([['grid_line', [1, 17, 10, [[String(frame % 10), 0]]]], ['flush']]);
-              paint();
-              editTimes.push(performance.now() - start);
-            }
-            const native = { ...calls };
-            const initialImages = rowCanvases.size;
-            const scrollTimes: number[] = [];
-            for (let frame = 0; frame < 80; frame++) {
-              const start = performance.now();
-              const rows = frame < 40 ? 1 : -1;
-              grid.apply([
-                ['nido_scroll', [1, 0, 39, 0, 140, rows, 0]],
-                ['grid_scroll', [1, 0, 39, 0, 140, rows, 0]],
-                [
-                  'grid_line',
-                  [
-                    1,
-                    rows > 0 ? 38 : 0,
-                    5,
-                    Array.from(`fn value_${frame}() { 日本語 }`, (text) => [text, 0])
-                  ]
-                ],
-                ...Array.from({ length: 39 }, (_, row) => [
-                  'grid_line',
-                  [
-                    1,
-                    row,
-                    0,
-                    Array.from(String(Math.abs(row - (frame % 39))).padStart(4) + ' ', (text) => [
-                      text,
-                      0
-                    ])
-                  ]
-                ]),
-                ['flush']
-              ]);
-              paint();
-              scrollTimes.push(performance.now() - start);
-            }
-            const relativeUploads = calls.uploads - native.uploads;
-            const createdImages = rowCanvases.size - initialImages;
-            grid.scrollFraction = 0.25 / (19 * devicePixelRatio);
-            const uploads = calls.uploads;
-            paint();
-            const scrollUploads = calls.uploads - uploads;
-            const fractionalClears = calls.clears - native.clears;
-            const warmUploads = calls.uploads;
-            grid.scrollFraction = 0.75 / (19 * devicePixelRatio);
-            paint();
-            const cachedUploads = calls.uploads - warmUploads;
-            cursorTimes.sort((a, b) => a - b);
-            editTimes.sort((a, b) => a - b);
-            scrollTimes.sort((a, b) => a - b);
-            return {
-              initialTextures,
-              native,
-              createdImages,
-              relativeUploads,
-              scrollUploads,
-              cachedUploads,
-              fractionalClears,
-              cursorP50: cursorTimes[80],
-              cursorP95: cursorTimes[152],
-              editP50: editTimes[80],
-              editP95: editTimes[152],
-              scrollP50: scrollTimes[40],
-              scrollP95: scrollTimes[76],
-              scrollMax: scrollTimes[79]
-            };
-          } finally {
-            gpu.clear = clear;
-            gpu.useProgram = program;
-            gpu.texImage2D = upload;
-            gpu.deleteTexture = remove;
-            HTMLCanvasElement.prototype.getContext = context;
+            cursorTimes.push(performance.now() - start);
           }
-        },
-        `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`
-      );
+          const editTimes: number[] = [];
+          for (let frame = 0; frame < 160; frame++) {
+            const start = performance.now();
+            grid.apply([['grid_line', [1, 17, 10, [[String(frame % 10), 0]]]], ['flush']]);
+            paint();
+            editTimes.push(performance.now() - start);
+          }
+          const native = { ...calls };
+          const initialImages = rowCanvases.size;
+          const scrollTimes: number[] = [];
+          for (let frame = 0; frame < 80; frame++) {
+            const start = performance.now();
+            const rows = frame < 40 ? 1 : -1;
+            grid.apply([
+              ['nido_scroll', [1, 0, 39, 0, 140, rows, 0]],
+              ['grid_scroll', [1, 0, 39, 0, 140, rows, 0]],
+              [
+                'grid_line',
+                [
+                  1,
+                  rows > 0 ? 38 : 0,
+                  5,
+                  Array.from(`fn value_${frame}() { 日本語 }`, (text) => [text, 0])
+                ]
+              ],
+              ...Array.from({ length: 39 }, (_, row) => [
+                'grid_line',
+                [
+                  1,
+                  row,
+                  0,
+                  Array.from(String(Math.abs(row - (frame % 39))).padStart(4) + ' ', (text) => [
+                    text,
+                    0
+                  ])
+                ]
+              ]),
+              ['flush']
+            ]);
+            paint();
+            scrollTimes.push(performance.now() - start);
+          }
+          const relativeUploads = calls.uploads - native.uploads;
+          const createdImages = rowCanvases.size - initialImages;
+          grid.scrollFraction = 0.25 / (19 * devicePixelRatio);
+          const uploads = calls.uploads;
+          paint();
+          const scrollUploads = calls.uploads - uploads;
+          const fractionalClears = calls.clears - native.clears;
+          const warmUploads = calls.uploads;
+          grid.scrollFraction = 0.75 / (19 * devicePixelRatio);
+          paint();
+          const cachedUploads = calls.uploads - warmUploads;
+          cursorTimes.sort((a, b) => a - b);
+          editTimes.sort((a, b) => a - b);
+          scrollTimes.sort((a, b) => a - b);
+          return {
+            initialTextures,
+            native,
+            createdImages,
+            relativeUploads,
+            scrollUploads,
+            cachedUploads,
+            fractionalClears,
+            cursorP50: cursorTimes[80],
+            cursorP95: cursorTimes[152],
+            editP50: editTimes[80],
+            editP95: editTimes[152],
+            scrollP50: scrollTimes[40],
+            scrollP95: scrollTimes[76],
+            scrollMax: scrollTimes[79]
+          };
+        } finally {
+          gpu.clear = clear;
+          gpu.useProgram = program;
+          gpu.texImage2D = upload;
+          gpu.deleteTexture = remove;
+          HTMLCanvasElement.prototype.getContext = context;
+        }
+      }, viteFsUrl('src/renderer/src/grid.ts'));
       console.log('stationary-editor-work', JSON.stringify({ scale, ...work }));
       await test.info().attach('stationary-editor-work', {
         body: JSON.stringify({ scale, ...work }, null, 2),
@@ -3063,7 +3028,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
             };
           },
           {
-            moduleUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+            moduleUrl: viteFsUrl('src/renderer/src/grid.ts'),
             opacity
           }
         );
@@ -3257,9 +3222,9 @@ for (const scale of [1, 1.25, 1.5, 2]) {
             return { geometryReads, mismatches, comparisons, mismatchCases };
           },
           {
-            moduleUrl: `/@fs/${resolve('src/renderer/src/grid.ts').replaceAll('\\', '/')}`,
+            moduleUrl: viteFsUrl('src/renderer/src/grid.ts'),
             referenceModuleUrl: process.env.NIDO_GRID_REFERENCE_MODULE
-              ? `/@fs/${resolve(process.env.NIDO_GRID_REFERENCE_MODULE).replaceAll('\\', '/')}`
+              ? viteFsUrl(process.env.NIDO_GRID_REFERENCE_MODULE)
               : undefined,
             baseline: process.env.NIDO_PERFORMANCE_BASELINE === '1',
             opacity
