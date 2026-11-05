@@ -73,7 +73,8 @@ function chunks(value: unknown): MessageChunk[] {
 		: [];
 }
 
-export function applyNeovimUI(state: NeovimUIState, name: string, args: unknown[]): NeovimUIState {
+/** The completion popup menu (ext_popupmenu). */
+function applyPopupmenu(state: NeovimUIState, name: string, args: unknown[]): NeovimUIState {
 	switch (name) {
 		case 'popupmenu_show':
 			return Number(args[4]) === -1
@@ -93,6 +94,14 @@ export function applyNeovimUI(state: NeovimUIState, name: string, args: unknown[
 				: state;
 		case 'popupmenu_hide':
 			return state.completion ? { ...state, completion: null } : state;
+		default:
+			return state;
+	}
+}
+
+/** Command lines, including nested ones, and command blocks (ext_cmdline). */
+function applyCommandLine(state: NeovimUIState, name: string, args: unknown[]): NeovimUIState {
+	switch (name) {
 		case 'cmdline_show': {
 			const level = Number(args[5]);
 			return {
@@ -142,6 +151,14 @@ export function applyNeovimUI(state: NeovimUIState, name: string, args: unknown[
 			return { ...state, block: [...state.block, chunks(args[0])] };
 		case 'cmdline_block_hide':
 			return { ...state, block: [] };
+		default:
+			return state;
+	}
+}
+
+/** Messages, mode and ruler text, and message history (ext_messages). */
+function applyMessages(state: NeovimUIState, name: string, args: unknown[]): NeovimUIState {
+	switch (name) {
 		case 'msg_show': {
 			const message = { kind: String(args[0]), content: chunks(args[1]) };
 			const messages = args[2] === true ? state.messages.slice(0, -1) : state.messages;
@@ -175,6 +192,20 @@ export function applyNeovimUI(state: NeovimUIState, name: string, args: unknown[
 		default:
 			return state;
 	}
+}
+
+/** Apply one external UI event from Neovim's redraw notifications. See :help ui-ext-options. */
+export function applyNeovimUI(state: NeovimUIState, name: string, args: unknown[]): NeovimUIState {
+	if (name.startsWith('popupmenu_')) {
+		return applyPopupmenu(state, name, args);
+	}
+	if (name.startsWith('cmdline_')) {
+		return applyCommandLine(state, name, args);
+	}
+	if (name.startsWith('msg_')) {
+		return applyMessages(state, name, args);
+	}
+	return state;
 }
 
 // Neovim positions are UTF-8 byte offsets; DOM text uses UTF-16 indices.
