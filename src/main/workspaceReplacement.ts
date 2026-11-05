@@ -37,14 +37,47 @@ function context(text: string, selected: number[]): string {
 		.join('\n');
 }
 
+/** The search that a replacement applies to, with each matched file's content hash. */
+interface SearchSnapshot {
+	token: string;
+	query: string;
+	options: SearchOptions;
+	matches: SearchMatch[];
+	hashes: Map<string, string>;
+}
+
+function checkReplacement(replacement: string, selected: number[], matches: SearchMatch[]): void {
+	if (
+		typeof replacement !== 'string' ||
+		replacement.length > 1000 ||
+		/[\r\n\0]/.test(replacement)
+	) {
+		throw new Error('Enter a single-line replacement up to 1,000 characters.');
+	}
+	if (
+		!Array.isArray(selected) ||
+		!selected.length ||
+		selected.length > 200 ||
+		selected.some((index) => !Number.isInteger(index) || !matches[index])
+	) {
+		throw new Error('Choose matching lines to replace.');
+	}
+}
+
+/** The selected match lines, grouped by file. */
+function linesByFile(selected: number[], matches: SearchMatch[]): Map<string, number[]> {
+	const groups = new Map<string, number[]>();
+	for (const index of new Set(selected)) {
+		const { path, line } = matches[index];
+		const lines = groups.get(path) || [];
+		lines.push(line);
+		groups.set(path, lines);
+	}
+	return groups;
+}
+
 export class WorkspaceReplacement {
-	private snapshot?: {
-		token: string;
-		query: string;
-		options: SearchOptions;
-		matches: SearchMatch[];
-		hashes: Map<string, string>;
-	};
+	private snapshot?: SearchSnapshot;
 	private preview?: { token: string; files: ReplacementFile[] };
 	private generation = 0;
 	private matcher?: SearchMatcher;
@@ -100,6 +133,10 @@ export class WorkspaceReplacement {
 		}
 	}
 
+	/**
+	 * Replace the selected matches in memory and show the result in the open buffers without
+	 * saving. Returns a preview whose token apply() accepts.
+	 */
 	async prepare(
 		token: string,
 		replacement: string,
@@ -109,64 +146,19 @@ export class WorkspaceReplacement {
 		if (!snapshot || snapshot.token !== token) {
 			throw new Error(stale);
 		}
-		if (
-			typeof replacement !== 'string' ||
-			replacement.length > 1000 ||
-			/[\r\n\0]/.test(replacement)
-		) {
-			throw new Error('Enter a single-line replacement up to 1,000 characters.');
-		}
-		if (
-			!Array.isArray(selected) ||
-			!selected.length ||
-			selected.length > 200 ||
-			selected.some((index) => !Number.isInteger(index) || !snapshot.matches[index])
-		) {
-			throw new Error('Choose matching lines to replace.');
-		}
+		checkReplacement(replacement, selected, snapshot.matches);
 		const generation = ++this.generation;
 		this.preview = undefined;
 		this.matcher?.close();
 		const matcher = new SearchMatcher(snapshot.query, snapshot.options);
 		this.matcher = matcher;
-		const groups = new Map<string, number[]>();
-		for (const index of new Set(selected)) {
-			const { path, line } = snapshot.matches[index];
-			const lines = groups.get(path) || [];
-			lines.push(line);
-			groups.set(path, lines);
-		}
-		const files: ReplacementFile[] = [];
-		const previews: ReplacementPreview['files'] = [];
-		let bytes = 0;
 		try {
-			for (const [path, lines] of groups) {
-				const original = await this.read(path);
-				if (digest(original.text) !== snapshot.hashes.get(path)) {
-					throw new Error(stale);
-				}
-				const changed = await matcher.replace(original.text, lines, replacement);
-				bytes += Buffer.byteLength(original.text) + Buffer.byteLength(changed.text);
-				if (bytes > 8 * 1024 * 1024) {
-					throw new Error('Replacement preview is too large. Narrow the search.');
-				}
-				if (changed.text === original.text) {
-					continue;
-				}
-				files.push({
-					path,
-					original: original.text,
-					changed: changed.text,
-					hash: original.hash,
-					count: changed.count
-				});
-				previews.push({
-					path,
-					count: changed.count,
-					before: context(original.text, lines),
-					after: context(changed.text, lines)
-				});
-			}
+			const { files, previews } = await this.replaceInFiles(
+				linesByFile(selected, snapshot.matches),
+				matcher,
+				replacement,
+				snapshot.hashes
+			);
 			if (generation !== this.generation) {
 				throw new Error(stale);
 			}
@@ -187,6 +179,49 @@ export class WorkspaceReplacement {
 				this.matcher = undefined;
 			}
 		}
+	}
+
+	/**
+	 * Apply the replacement to each file's current text. Files that changed since the search
+	 * make the whole replacement stale; files left unchanged are omitted.
+	 */
+	private async replaceInFiles(
+		groups: Map<string, number[]>,
+		matcher: SearchMatcher,
+		replacement: string,
+		hashes: Map<string, string>
+	): Promise<{ files: ReplacementFile[]; previews: ReplacementPreview['files'] }> {
+		const files: ReplacementFile[] = [];
+		const previews: ReplacementPreview['files'] = [];
+		let bytes = 0;
+		for (const [path, lines] of groups) {
+			const original = await this.read(path);
+			if (digest(original.text) !== hashes.get(path)) {
+				throw new Error(stale);
+			}
+			const changed = await matcher.replace(original.text, lines, replacement);
+			bytes += Buffer.byteLength(original.text) + Buffer.byteLength(changed.text);
+			if (bytes > 8 * 1024 * 1024) {
+				throw new Error('Replacement preview is too large. Narrow the search.');
+			}
+			if (changed.text === original.text) {
+				continue;
+			}
+			files.push({
+				path,
+				original: original.text,
+				changed: changed.text,
+				hash: original.hash,
+				count: changed.count
+			});
+			previews.push({
+				path,
+				count: changed.count,
+				before: context(original.text, lines),
+				after: context(changed.text, lines)
+			});
+		}
+		return { files, previews };
 	}
 
 	async apply(token: string): Promise<ReplacementResult> {

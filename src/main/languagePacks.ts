@@ -10,52 +10,52 @@ function object(value: unknown): value is Record<string, unknown> {
 	return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function validateLanguagePack(value: unknown, bundled = false): LanguagePackManifest {
-	const fail = (): never => {
-		throw new Error(
-			'Invalid language pack. Check schemaVersion, id, version, filetypes and command.'
-		);
-	};
-	if (!object(value)) {
-		return fail();
-	}
-	const text = (value: unknown): value is string =>
+function text(value: unknown): value is string {
+	return (
 		typeof value === 'string' &&
 		value.length > 0 &&
 		value.length <= 4000 &&
-		!value.includes('\0');
-	const strings = (value: unknown): value is string[] =>
-		Array.isArray(value) && value.length > 0 && value.length <= 100 && value.every(text);
-	if (
-		value.schemaVersion !== 1 ||
-		!text(value.id) ||
-		!/^[a-z][a-z0-9-]{0,63}$/.test(value.id) ||
-		!text(value.version) ||
-		!/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(value.version) ||
-		!text(value.title) ||
-		!text(value.description) ||
-		!strings(value.filetypes) ||
-		!value.filetypes.every((type) => /^[\w-]+$/.test(type)) ||
-		!text(value.serverName) ||
-		!/^[a-zA-Z][\w-]{0,63}$/.test(value.serverName)
-	) {
-		return fail();
-	}
-	if (
-		value.category !== undefined &&
-		value.category !== 'language' &&
-		value.category !== 'other'
-	) {
-		return fail();
-	}
+		!value.includes('\0')
+	);
+}
+
+function strings(value: unknown): value is string[] {
+	return Array.isArray(value) && value.length > 0 && value.length <= 100 && value.every(text);
+}
+
+/** schemaVersion, id, version, title, description, filetypes and serverName. */
+function hasValidIdentity(value: Record<string, unknown>): boolean {
+	return (
+		value.schemaVersion === 1 &&
+		text(value.id) &&
+		/^[a-z][a-z0-9-]{0,63}$/.test(value.id) &&
+		text(value.version) &&
+		/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(value.version) &&
+		text(value.title) &&
+		text(value.description) &&
+		strings(value.filetypes) &&
+		value.filetypes.every((type) => /^[\w-]+$/.test(type)) &&
+		text(value.serverName) &&
+		/^[a-zA-Z][\w-]{0,63}$/.test(value.serverName) &&
+		(value.category === undefined ||
+			value.category === 'language' ||
+			value.category === 'other')
+	);
+}
+
+/**
+ * A pack starts its server with `command`, per-platform `commands`, or a Lua adapter. Only
+ * bundled packs can select an adapter.
+ */
+function hasValidServerCommand(value: Record<string, unknown>, bundled: boolean): boolean {
 	if (
 		value.adapter !== undefined &&
 		(!bundled || !['typescript', 'deno', 'rust'].includes(String(value.adapter)))
 	) {
-		return fail();
+		return false;
 	}
 	if (value.command !== undefined && !strings(value.command)) {
-		return fail();
+		return false;
 	}
 	if (
 		value.commands !== undefined &&
@@ -64,65 +64,83 @@ export function validateLanguagePack(value: unknown, bundled = false): LanguageP
 				([platform, args]) => !['win32', 'linux'].includes(platform) || !strings(args)
 			))
 	) {
-		return fail();
+		return false;
 	}
-	if (!value.adapter && !value.command && !value.commands) {
-		return fail();
-	}
+	return !!(value.adapter || value.command || value.commands);
+}
+
+/** rootMarkers, settings, initOptions and setup. */
+function hasValidOptions(value: Record<string, unknown>): boolean {
 	if (
 		value.rootMarkers !== undefined &&
 		(!strings(value.rootMarkers) ||
 			value.rootMarkers.some((marker) => /[/\\]/.test(marker) || marker === '..'))
 	) {
-		return fail();
-	}
-	for (const key of ['settings', 'initOptions']) {
-		if (value[key] !== undefined && !object(value[key])) {
-			return fail();
-		}
-	}
-	if (value.setup !== undefined && !text(value.setup)) {
-		return fail();
+		return false;
 	}
 	if (
-		value.languages !== undefined &&
-		(!Array.isArray(value.languages) ||
-			value.languages.length > 30 ||
-			value.languages.some(
+		['settings', 'initOptions'].some((key) => value[key] !== undefined && !object(value[key]))
+	) {
+		return false;
+	}
+	return value.setup === undefined || text(value.setup);
+}
+
+/** The optional list of languages that the Extensions page shows for the pack. */
+function hasValidLanguages(value: Record<string, unknown>): boolean {
+	return (
+		value.languages === undefined ||
+		(Array.isArray(value.languages) &&
+			value.languages.length <= 30 &&
+			value.languages.every(
 				(language) =>
-					!object(language) ||
-					!['tools', 'runtimes'].includes(String(language.category)) ||
-					['id', 'title', 'mark', 'extensions', 'description'].some(
-						(key) => !text(language[key])
-					) ||
-					['keywords', 'requirement', 'setup', 'command'].some(
-						(key) => language[key] !== undefined && !text(language[key])
+					object(language) &&
+					['tools', 'runtimes'].includes(String(language.category)) &&
+					['id', 'title', 'mark', 'extensions', 'description'].every((key) =>
+						text(language[key])
+					) &&
+					['keywords', 'requirement', 'setup', 'command'].every(
+						(key) => language[key] === undefined || text(language[key])
 					)
 			))
+	);
+}
+
+const manifestKeys = [
+	'schemaVersion',
+	'id',
+	'version',
+	'title',
+	'description',
+	'category',
+	'filetypes',
+	'serverName',
+	'command',
+	'commands',
+	'rootMarkers',
+	'settings',
+	'initOptions',
+	'setup',
+	'languages',
+	'adapter'
+];
+
+export function validateLanguagePack(value: unknown, bundled = false): LanguagePackManifest {
+	if (
+		!object(value) ||
+		!hasValidIdentity(value) ||
+		!hasValidServerCommand(value, bundled) ||
+		!hasValidOptions(value) ||
+		!hasValidLanguages(value)
 	) {
-		return fail();
+		throw new Error(
+			'Invalid language pack. Check schemaVersion, id, version, filetypes and command.'
+		);
 	}
-	// Additional packs contribute configuration; only bundled packs can select a Lua adapter.
-	const keys = [
-		'schemaVersion',
-		'id',
-		'version',
-		'title',
-		'description',
-		'category',
-		'filetypes',
-		'serverName',
-		'command',
-		'commands',
-		'rootMarkers',
-		'settings',
-		'initOptions',
-		'setup',
-		'languages',
-		'adapter'
-	];
+	// Keep only known keys. Additional packs contribute configuration; only bundled packs can
+	// select a Lua adapter.
 	return Object.fromEntries(
-		keys.filter((key) => value[key] !== undefined).map((key) => [key, value[key]])
+		manifestKeys.filter((key) => value[key] !== undefined).map((key) => [key, value[key]])
 	) as unknown as LanguagePackManifest;
 }
 

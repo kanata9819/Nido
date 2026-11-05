@@ -9,6 +9,18 @@ import type { SearchOptions } from '../shared/search';
 import { SessionSearch } from './sessionSearch';
 import { WorkspaceReplacement } from './workspaceReplacement';
 
+interface OpenBuffer {
+	id: number;
+	name: string;
+	modified: boolean;
+}
+
+/** Whether `path` is `parent` itself or inside it. */
+function isWithin(parent: string, path: string): boolean {
+	const rel = relative(parent, path);
+	return !isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`);
+}
+
 export class SessionFiles {
 	readonly replacements: WorkspaceReplacement;
 	private mutations: Promise<void> = Promise.resolve();
@@ -90,38 +102,9 @@ end`,
 		target: string,
 		trash: (path: string) => Promise<void>
 	): Promise<void> {
-		const validate = (value: string): void => {
-			const rel = relative(this.root, resolve(this.root, value));
-			if (
-				!value ||
-				isAbsolute(value) ||
-				!rel ||
-				rel === '..' ||
-				rel.startsWith(`..${sep}`) ||
-				isAbsolute(rel) ||
-				value.split(/[\\/]/).some((part) => part.toLowerCase() === '.git')
-			) {
-				throw new Error('Choose a path inside this workspace, outside .git.');
-			}
-		};
-		validate(path);
-		const destination = async (value: string): Promise<string> => {
-			validate(value);
-			const parent = await this.path(dirname(value));
-			const result = resolve(parent, basename(value));
-			validate(relative(this.root, result));
-			try {
-				await lstat(result);
-			} catch (error) {
-				if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-					return result;
-				}
-				throw error;
-			}
-			throw new Error('A file or folder already exists at that path.');
-		};
+		this.validate(path);
 		if (action === 'createFile' || action === 'createDirectory') {
-			const result = await destination(path);
+			const result = await this.destination(path);
 			if (action === 'createFile') {
 				await writeFile(result, '', { flag: 'wx' });
 			} else {
@@ -130,25 +113,10 @@ end`,
 			return;
 		}
 		const source = await this.path(path);
-		validate(relative(this.root, source));
-		const buffers = (await this.client.request('nvim_exec_lua', [
-			`local result = {}
-for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-  table.insert(result, {id=buf, name=vim.api.nvim_buf_get_name(buf), modified=vim.bo[buf].modified})
-end
-return result`,
-			[]
-		])) as { id: number; name: string; modified: boolean }[];
-		for (const buffer of buffers) {
-			buffer.name = hostPath(this.root, buffer.name);
-		}
-		const affected = buffers.filter((buf) => {
-			if (!buf.name) {
-				return false;
-			}
-			const rel = relative(source, buf.name);
-			return !isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`);
-		});
+		this.validate(relative(this.root, source));
+		const buffers = await this.buffers();
+		// Buffers showing the file, or files inside the folder, that is being changed.
+		const affected = buffers.filter((buf) => buf.name && isWithin(source, buf.name));
 		if (affected.some((buf) => buf.modified)) {
 			throw new Error('Save unsaved changes in this file or folder first.');
 		}
@@ -160,30 +128,94 @@ return result`,
 			}
 			return;
 		}
-		const result = await destination(target);
-		const child = relative(source, result);
-		if (!isAbsolute(child) && child !== '..' && !child.startsWith(`..${sep}`)) {
+		const result = await this.destination(target);
+		if (isWithin(source, result)) {
 			throw new Error('Cannot place a folder inside itself.');
 		}
 		if (action === 'copy') {
 			await cp(source, result, { recursive: true, force: false, errorOnExist: true });
 		} else if (action === 'rename') {
-			const renamed = affected.map((buf) => ({
-				id: buf.id,
-				name: resolve(result, relative(source, buf.name))
-			}));
-			if (
-				buffers.some(
-					(buf) =>
-						!affected.includes(buf) &&
-						renamed.some((item) => relative(item.name, buf.name) === '')
-				)
-			) {
-				throw new Error('Close the destination file tab first.');
+			await this.move(source, result, buffers, affected);
+		} else {
+			throw new Error('Unknown file action.');
+		}
+	}
+
+	/** Reject paths outside the workspace, the workspace itself, and anything in .git. */
+	private validate(value: string): void {
+		const rel = relative(this.root, resolve(this.root, value));
+		if (
+			!value ||
+			isAbsolute(value) ||
+			!rel ||
+			rel === '..' ||
+			rel.startsWith(`..${sep}`) ||
+			isAbsolute(rel) ||
+			value.split(/[\\/]/).some((part) => part.toLowerCase() === '.git')
+		) {
+			throw new Error('Choose a path inside this workspace, outside .git.');
+		}
+	}
+
+	/** Resolve a new path whose parent exists and which is not taken yet. */
+	private async destination(value: string): Promise<string> {
+		this.validate(value);
+		const parent = await this.path(dirname(value));
+		const result = resolve(parent, basename(value));
+		this.validate(relative(this.root, result));
+		try {
+			await lstat(result);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+				return result;
 			}
-			await rename(source, result);
-			const edited = await this.client.request('nvim_exec_lua', [
-				`local renamed = ...
+			throw error;
+		}
+		throw new Error('A file or folder already exists at that path.');
+	}
+
+	/** Every Neovim buffer, with its name as a host path. */
+	private async buffers(): Promise<OpenBuffer[]> {
+		const buffers = (await this.client.request('nvim_exec_lua', [
+			`local result = {}
+for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+  table.insert(result, {id=buf, name=vim.api.nvim_buf_get_name(buf), modified=vim.bo[buf].modified})
+end
+return result`,
+			[]
+		])) as OpenBuffer[];
+		for (const buffer of buffers) {
+			buffer.name = hostPath(this.root, buffer.name);
+		}
+		return buffers;
+	}
+
+	/**
+	 * Move a file or folder on disk, then point its open buffers at the new location. If a buffer
+	 * was edited in the meantime, the move is undone.
+	 */
+	private async move(
+		source: string,
+		result: string,
+		buffers: OpenBuffer[],
+		affected: OpenBuffer[]
+	): Promise<void> {
+		const renamed = affected.map((buf) => ({
+			id: buf.id,
+			name: resolve(result, relative(source, buf.name))
+		}));
+		if (
+			buffers.some(
+				(buf) =>
+					!affected.includes(buf) &&
+					renamed.some((item) => relative(item.name, buf.name) === '')
+			)
+		) {
+			throw new Error('Close the destination file tab first.');
+		}
+		await rename(source, result);
+		const edited = await this.client.request('nvim_exec_lua', [
+			`local renamed = ...
 for _, item in ipairs(renamed) do
   if vim.api.nvim_buf_is_valid(item.id) and vim.bo[item.id].modified then
     return true
@@ -199,18 +231,15 @@ for _, item in ipairs(renamed) do
   end
 end
 return false`,
-				[renamed.map((item) => ({ ...item, name: editorPath(this.root, item.name) }))]
-			]);
-			if (edited) {
-				// Undo the disk move before touching buffer names; never overwrite a new source.
-				await destination(relative(this.root, source));
-				await rename(result, source);
-				throw new Error(
-					'File changed during the move. The move was cancelled; save and try again.'
-				);
-			}
-		} else {
-			throw new Error('Unknown file action.');
+			[renamed.map((item) => ({ ...item, name: editorPath(this.root, item.name) }))]
+		]);
+		if (edited) {
+			// Undo the disk move before touching buffer names; never overwrite a new source.
+			await this.destination(relative(this.root, source));
+			await rename(result, source);
+			throw new Error(
+				'File changed during the move. The move was cancelled; save and try again.'
+			);
 		}
 	}
 

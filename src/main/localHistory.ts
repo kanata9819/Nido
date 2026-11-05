@@ -17,6 +17,26 @@ interface CachedHistory {
 	encoded: Map<string, { json: string; bytes: number }>;
 }
 
+interface EncodedHistory {
+	serialized: string;
+	/** Bytes of `serialized`, counted while encoding. */
+	bytes: number;
+	encodings: CachedHistory['encoded'];
+}
+
+/** The line count of text that Time Machine can record; throws for larger or binary text. */
+function checkedLineCount(content: HistoryContent): number {
+	const lines = content.text.split('\n').length;
+	if (
+		Buffer.byteLength(content.text) > historyLimits.fileBytes ||
+		lines > historyLimits.lines + 1 ||
+		content.text.includes('\0')
+	) {
+		throw new Error('Time Machine supports text files up to 4 MiB and 100,000 lines.');
+	}
+	return lines;
+}
+
 const cachedFiles = 3;
 // Parsed revisions and their encodings roughly double a file in memory.
 const cachedBytes = 48 * 1024 * 1024;
@@ -193,6 +213,10 @@ export class LocalHistory {
 		return this.commit(path, content, kind, (_revision, revisions) => this.versions(revisions));
 	}
 
+	/**
+	 * Add a revision unless it matches the latest one, write the history file, and prune the
+	 * oldest files beyond the storage limits. Writes are queued so they never interleave.
+	 */
 	private commit<T>(
 		path: string,
 		content: HistoryContent,
@@ -200,14 +224,7 @@ export class LocalHistory {
 		result: (revision: Revision, revisions: Revision[]) => T
 	): Promise<T> {
 		const writing = this.pending.then(async () => {
-			const lines = content.text.split('\n').length;
-			if (
-				Buffer.byteLength(content.text) > historyLimits.fileBytes ||
-				lines > historyLimits.lines + 1 ||
-				content.text.includes('\0')
-			) {
-				throw new Error('Time Machine supports text files up to 4 MiB and 100,000 lines.');
-			}
+			const lines = checkedLineCount(content);
 			const data = await this.read(path);
 			const previous = data.revisions[0];
 			if (
@@ -230,66 +247,87 @@ export class LocalHistory {
 			};
 			data.revisions.unshift(revision);
 			data.revisions.length = Math.min(data.revisions.length, this.limits.versions);
-			const budget = Math.min(this.limits.historyBytes, this.limits.totalBytes);
-			const prefix =
-				JSON.stringify({ version: data.version, path: data.path }).slice(0, -1) +
-				',"revisions":[';
-			let bytes = Buffer.byteLength(prefix) + 2;
 			const name = `${this.key(path)}.json`;
-			const known = this.cache.get(name)?.encoded;
-			const encodings: CachedHistory['encoded'] = new Map();
-			const revisions: string[] = [];
-			// Encode each revision once; repeatedly encoding the whole history stalls the main process.
-			// Count escaped JSON bytes, including UTF-8 paths and separators, before joining the result.
-			for (const item of data.revisions) {
-				let encoded = known?.get(item.id);
-				if (!encoded) {
-					const json = JSON.stringify(item);
-					encoded = { json, bytes: Buffer.byteLength(json) };
-				}
-				const nextBytes = bytes + Number(revisions.length > 0) + encoded.bytes;
-				if (nextBytes > budget) {
-					if (!revisions.length) {
-						throw new Error('Local history storage is full.');
-					}
-					break;
-				}
-				revisions.push(encoded.json);
-				encodings.set(item.id, encoded);
-				bytes = nextBytes;
-			}
-			data.revisions.length = revisions.length;
-			const serialized = prefix + revisions.join(',') + ']}';
-			const destination = join(this.directory, name);
-			this.cache.delete(name);
-			// An interrupted write leaves the previously committed history intact.
-			await writeFile(`${destination}.tmp`, serialized, { encoding: 'utf8', mode: 0o600 });
-			await rename(`${destination}.tmp`, destination);
-			const written = await stat(destination);
-			this.remember(name, {
-				size: written.size,
-				mtimeMs: written.mtimeMs,
-				data: { ...data, revisions: [...data.revisions] },
-				encoded: encodings
-			});
-			this.entries.set(name, { bytes, time: Date.now() });
-			let total = [...this.entries.values()].reduce((sum, entry) => sum + entry.bytes, 0);
-			const oldest = [...this.entries]
-				.filter(([file]) => file !== name)
-				.sort((a, b) => a[1].time - b[1].time);
-			for (const [file, entry] of oldest) {
-				if (total <= this.limits.totalBytes && this.entries.size <= this.limits.files) {
-					break;
-				}
-				// Only hash-named files discovered in this dedicated history directory are pruned.
-				await rm(join(this.directory, file));
-				this.entries.delete(file);
-				this.cache.delete(file);
-				total -= entry.bytes;
-			}
+			const encoded = this.encode(name, data);
+			await this.write(name, data, encoded);
+			await this.prune(name);
 			return result(revision, data.revisions);
 		});
 		this.pending = writing.catch(() => {});
 		return writing;
+	}
+
+	/**
+	 * Serialize the newest revisions that fit the per-file budget, dropping older ones from
+	 * `data`. Each revision is encoded once; repeatedly encoding the whole history stalls the
+	 * main process.
+	 */
+	private encode(name: string, data: HistoryFile): EncodedHistory {
+		const budget = Math.min(this.limits.historyBytes, this.limits.totalBytes);
+		const prefix =
+			JSON.stringify({ version: data.version, path: data.path }).slice(0, -1) +
+			',"revisions":[';
+		let bytes = Buffer.byteLength(prefix) + 2;
+		const known = this.cache.get(name)?.encoded;
+		const encodings: CachedHistory['encoded'] = new Map();
+		const revisions: string[] = [];
+		// Count escaped JSON bytes, including UTF-8 paths and separators, before joining the result.
+		for (const item of data.revisions) {
+			let encoded = known?.get(item.id);
+			if (!encoded) {
+				const json = JSON.stringify(item);
+				encoded = { json, bytes: Buffer.byteLength(json) };
+			}
+			const nextBytes = bytes + Number(revisions.length > 0) + encoded.bytes;
+			if (nextBytes > budget) {
+				if (!revisions.length) {
+					throw new Error('Local history storage is full.');
+				}
+				break;
+			}
+			revisions.push(encoded.json);
+			encodings.set(item.id, encoded);
+			bytes = nextBytes;
+		}
+		data.revisions.length = revisions.length;
+		return { serialized: prefix + revisions.join(',') + ']}', bytes, encodings };
+	}
+
+	/** Replace the history file and remember it in the cache and the size index. */
+	private async write(name: string, data: HistoryFile, encoded: EncodedHistory): Promise<void> {
+		const destination = join(this.directory, name);
+		this.cache.delete(name);
+		// An interrupted write leaves the previously committed history intact.
+		await writeFile(`${destination}.tmp`, encoded.serialized, {
+			encoding: 'utf8',
+			mode: 0o600
+		});
+		await rename(`${destination}.tmp`, destination);
+		const written = await stat(destination);
+		this.remember(name, {
+			size: written.size,
+			mtimeMs: written.mtimeMs,
+			data: { ...data, revisions: [...data.revisions] },
+			encoded: encoded.encodings
+		});
+		this.entries.set(name, { bytes: encoded.bytes, time: Date.now() });
+	}
+
+	/** Delete the least recently written files, other than `kept`, until within the limits. */
+	private async prune(kept: string): Promise<void> {
+		let total = [...this.entries.values()].reduce((sum, entry) => sum + entry.bytes, 0);
+		const oldest = [...this.entries]
+			.filter(([file]) => file !== kept)
+			.sort((a, b) => a[1].time - b[1].time);
+		for (const [file, entry] of oldest) {
+			if (total <= this.limits.totalBytes && this.entries.size <= this.limits.files) {
+				break;
+			}
+			// Only hash-named files discovered in this dedicated history directory are pruned.
+			await rm(join(this.directory, file));
+			this.entries.delete(file);
+			this.cache.delete(file);
+			total -= entry.bytes;
+		}
 	}
 }
