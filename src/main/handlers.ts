@@ -1,6 +1,7 @@
-// レンダラーから呼ばれるIPCの窓口（`nido:◯◯`）をまとめて登録するファイル。
-// レンダラーの window.nido.input() → preload が 'nido:input' を送る → ここの handle('input') が受け取る、という流れ。
-// 分野ごとの窓口は fileHandlers.ts・gitHandlers.ts・workspaceHandlers.ts などに分かれている。
+// Registers the IPC handlers (`nido:<name>`) that the renderer calls.
+// For example, window.nido.input() in the renderer makes preload send 'nido:input',
+// which handle('input') below receives. Feature-specific handlers live in
+// fileHandlers.ts, gitHandlers.ts, workspaceHandlers.ts and similar files.
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } from 'electron';
 import { release } from 'node:os';
 import { Session } from './session';
@@ -16,7 +17,7 @@ import { translate, type Language } from '../shared/i18n';
 import { LanguagePacks } from './languagePacks';
 import { availableTerminalShells } from './terminalShells';
 
-/** アプリ全体の状態。index.ts で作り、各窓口で共有する。 */
+/** Application-wide state, created in index.ts and shared by every handler. */
 export interface AppState {
   language?: Language;
   order: string[];
@@ -27,7 +28,7 @@ export interface AppState {
   historyEnabled?: boolean;
 }
 
-/** 窓口の登録に必要なもの。分野ごとの register◯◯Handlers にも渡す。 */
+/** Dependencies for registering handlers, also passed to each register*Handlers. */
 export interface HandlerDeps {
   window: BrowserWindow;
   sessions: Map<string, Session>;
@@ -44,7 +45,7 @@ export function registerHandlers({
   send,
   updates
 }: HandlerDeps & { updates: Updates }): () => Promise<boolean> {
-  // ワークスペースIDから Session を探す。ターミナルのIDが来たときは、そのターミナルを返す。
+  // Find the Session for a workspace ID. A terminal ID resolves to that terminal's Session.
   function session(id: unknown): Session {
     const found =
       typeof id === 'string'
@@ -64,7 +65,7 @@ export function registerHandlers({
     return value as TerminalShell;
   }
 
-  // レンダラーから届いた値は信用せず、ここで型と大きさを確かめてから使う。
+  // Values from the renderer are untrusted: check their type and size before use.
   function text(value: unknown): string {
     if (typeof value !== 'string' || value.length > 4_000_000) {
       throw new Error('Invalid text.');
@@ -79,8 +80,7 @@ export function registerHandlers({
     return Number(value);
   }
 
-  // 窓口を1つ登録する。Nido自身の画面以外から呼ばれたら拒否する。
-  // Only the application renderer may invoke the explicit API below.
+  // Register one handler. Only the application renderer may invoke the explicit API below.
   const handle = (name: string, fn: (...args: unknown[]) => unknown): void => {
     ipcMain.handle(`nido:${name}`, (event, ...args: unknown[]) => {
       if (

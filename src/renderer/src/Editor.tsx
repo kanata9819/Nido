@@ -1,7 +1,6 @@
-// エディター1つ分のコンポーネント（ワークスペースごとに1つ）。
-// 文字はHTMLではなく <canvas> に自前で描いている。描く内容は Grid（grid.ts）が持っている。
-// キー入力は、画面には見えない <textarea> で受け取る（日本語入力のため）。処理は hooks/useEditorInput.ts。
-// Neovimからのイベントを受け取って描き直す処理は hooks/useEditorRendering.ts。
+// One editor per workspace. Text is painted on a <canvas> from the Grid (grid.ts).
+// Keys arrive through a hidden <textarea> so IME composition works (hooks/useEditorInput.ts).
+// hooks/useEditorRendering.ts applies Neovim events and repaints.
 import { useI18n } from './i18n';
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Grid } from './grid';
@@ -66,7 +65,6 @@ function Editor({
   const host = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
-  // Neovimの画面の中身（マス目）。このエディターが消えるまで同じものを使う。
   const [editorGrid] = useState(() => new Grid());
   const grid = useRef(editorGrid);
   const composing = useRef(false);
