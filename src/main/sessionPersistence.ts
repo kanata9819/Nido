@@ -6,24 +6,24 @@ import type { SessionClient } from './sessionClient';
 import type { SessionInteraction } from './sessionInteraction';
 
 export class SessionPersistence {
-  constructor(
-    private readonly workspace: Workspace,
-    private readonly client: SessionClient,
-    private readonly interaction: SessionInteraction,
-    private readonly hasTerminal: () => boolean
-  ) {}
+	constructor(
+		private readonly workspace: Workspace,
+		private readonly client: SessionClient,
+		private readonly interaction: SessionInteraction,
+		private readonly hasTerminal: () => boolean
+	) {}
 
-  async snapshot(
-    options: { restoreScroll?: boolean; includeUntitled?: boolean } = {}
-  ): Promise<SavedWorkspace> {
-    if (options.restoreScroll !== false) {
-      await this.interaction.restoreScroll();
-    }
-    if (this.workspace.kind === 'terminal') {
-      return { root: this.workspace.root, kind: 'terminal', files: [], current: '' };
-    }
-    const data = (await this.client.request('nvim_exec_lua', [
-      `local include_untitled, recovery_scope = ...
+	async snapshot(
+		options: { restoreScroll?: boolean; includeUntitled?: boolean } = {}
+	): Promise<SavedWorkspace> {
+		if (options.restoreScroll !== false) {
+			await this.interaction.restoreScroll();
+		}
+		if (this.workspace.kind === 'terminal') {
+			return { root: this.workspace.root, kind: 'terminal', files: [], current: '' };
+		}
+		const data = (await this.client.request('nvim_exec_lua', [
+			`local include_untitled, recovery_scope = ...
       local files, untitled, current_untitled, total = {}, {}, nil, 0
       for _, b in ipairs(require('nido_buffers').list()) do
         local name = vim.api.nvim_buf_get_name(b)
@@ -70,45 +70,45 @@ export class SessionPersistence {
       if #untitled > 0 then result.untitled = untitled end
       if current_untitled then result.currentUntitled = current_untitled end
       return result`,
-      [options.includeUntitled !== false, this.workspace.id]
-    ])) as Omit<SavedWorkspace, 'root'>;
-    return {
-      root: this.workspace.root,
-      terminal: this.hasTerminal(),
-      ...data,
-      current: hostPath(this.workspace.root, data.current),
-      files: Array.isArray(data.files)
-        ? data.files.map((file) => ({
-            ...file,
-            path: hostPath(this.workspace.root, file.path)
-          }))
-        : []
-    };
-  }
+			[options.includeUntitled !== false, this.workspace.id]
+		])) as Omit<SavedWorkspace, 'root'>;
+		return {
+			root: this.workspace.root,
+			terminal: this.hasTerminal(),
+			...data,
+			current: hostPath(this.workspace.root, data.current),
+			files: Array.isArray(data.files)
+				? data.files.map((file) => ({
+						...file,
+						path: hostPath(this.workspace.root, file.path)
+					}))
+				: []
+		};
+	}
 
-  async restore(saved: SavedWorkspace): Promise<string[]> {
-    const errors: string[] = [];
-    const failedFiles: number[] = [];
-    for (const [index, file] of saved.files.entries()) {
-      try {
-        if (!(await stat(file.path)).isFile()) {
-          throw new Error('File is unavailable.');
-        }
-        await this.client.request('nvim_exec_lua', [
-          `local path, line, column = ...
+	async restore(saved: SavedWorkspace): Promise<string[]> {
+		const errors: string[] = [];
+		const failedFiles: number[] = [];
+		for (const [index, file] of saved.files.entries()) {
+			try {
+				if (!(await stat(file.path)).isFile()) {
+					throw new Error('File is unavailable.');
+				}
+				await this.client.request('nvim_exec_lua', [
+					`local path, line, column = ...
           require('nido_eol').open(path)
           line = math.min(line, vim.api.nvim_buf_line_count(0))
           vim.api.nvim_win_set_cursor(0, {line, column})`,
-          [editorPath(this.workspace.root, file.path), file.line, file.column]
-        ]);
-      } catch (error) {
-        failedFiles.push(index + 1);
-        errors.push(`${file.path}: ${String(error)}`);
-      }
-    }
-    if (saved.untitled?.length) {
-      await this.client.request('nvim_exec_lua', [
-        `local drafts, active = ...
+					[editorPath(this.workspace.root, file.path), file.line, file.column]
+				]);
+			} catch (error) {
+				failedFiles.push(index + 1);
+				errors.push(`${file.path}: ${String(error)}`);
+			}
+		}
+		if (saved.untitled?.length) {
+			await this.client.request('nvim_exec_lua', [
+				`local drafts, active = ...
         local buffers = {}
         for _, draft in ipairs(drafts) do
           local buffer = vim.api.nvim_create_buf(true, false)
@@ -130,31 +130,33 @@ export class SessionPersistence {
           local line = math.min(draft.line, #draft.lines)
           vim.api.nvim_win_set_cursor(0, {line, math.min(draft.column, #draft.lines[line])})
         end`,
-        [
-          saved.untitled.map((draft, index) => {
-            const position = draft.index;
-            return position === undefined
-              ? draft
-              : {
-                  ...draft,
-                  index:
-                    position - failedFiles.filter((file) => file <= position - index - 1).length
-                };
-          }),
-          saved.currentUntitled ?? null
-        ]
-      ]);
-    }
-    if (saved.currentUntitled !== undefined) {
-      return errors;
-    }
-    await this.client.request('nvim_exec_lua', [
-      `local b = require('nido_buffers').find(...)
+				[
+					saved.untitled.map((draft, index) => {
+						const position = draft.index;
+						return position === undefined
+							? draft
+							: {
+									...draft,
+									index:
+										position -
+										failedFiles.filter((file) => file <= position - index - 1)
+											.length
+								};
+					}),
+					saved.currentUntitled ?? null
+				]
+			]);
+		}
+		if (saved.currentUntitled !== undefined) {
+			return errors;
+		}
+		await this.client.request('nvim_exec_lua', [
+			`local b = require('nido_buffers').find(...)
       if b > 0 then
         vim.api.nvim_set_current_buf(b)
       end`,
-      [editorPath(this.workspace.root, saved.current)]
-    ]);
-    return errors;
-  }
+			[editorPath(this.workspace.root, saved.current)]
+		]);
+		return errors;
+	}
 }

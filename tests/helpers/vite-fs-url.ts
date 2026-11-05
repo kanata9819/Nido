@@ -9,5 +9,5 @@ import { resolve } from 'node:path';
  * so prototype patches never reach the instance the app imported.
  */
 export function viteFsUrl(path: string): string {
-  return `/@fs/${resolve(path).replaceAll('\\', '/').replace(/^\/+/, '')}`;
+	return `/@fs/${resolve(path).replaceAll('\\', '/').replace(/^\/+/, '')}`;
 }
