@@ -649,12 +649,12 @@ test('editor wheel motion separates touchpad pixels, wheel notches and sideways 
   const surface = { clientWidth: 800, clientHeight: 400 };
   const view = { surface, lineHeight: 20, cellWidth: 10 };
   const idle = { remainder: 0, time: 0 };
-  const wheel = (deltaX: number, deltaY: number, deltaMode = 0, shiftKey = false) => ({
-    deltaX,
-    deltaY,
-    deltaMode,
-    shiftKey
-  });
+  const wheel = (
+    deltaX: number,
+    deltaY: number,
+    deltaMode = 0,
+    shiftKey = false
+  ): Parameters<typeof editorWheelMotion>[0] => ({ deltaX, deltaY, deltaMode, shiftKey });
 
   // Touchpad pixels move by fractional rows without counting as a notch.
   assert.deepEqual(editorWheelMotion(wheel(0, 10), view, idle, 1000), {
