@@ -8,6 +8,82 @@ import { defaultSearchOptions, type SearchOptions } from '../shared/search';
 import { SearchMatcher } from './searchMatcher';
 import { WorkspaceReplacement } from './workspaceReplacement';
 
+/** Folders of dependencies and build output that text search never enters. */
+const skippedDirectories = ['node_modules', 'dist', 'out', 'build', 'target', '.next'];
+
+function hasErrorCode(error: unknown, ...codes: string[]): boolean {
+  return codes.includes((error as NodeJS.ErrnoException).code || '');
+}
+
+/**
+ * Read a UTF-8 text file into `buffer`. Returns undefined for files that are missing, locked,
+ * too large for the buffer, binary (contain NUL) or not valid UTF-8. Resolving the path counts
+ * as reading, so a file that disappears meanwhile is skipped.
+ */
+async function readTextFile(
+  path: () => Promise<string>,
+  buffer: Buffer
+): Promise<string | undefined> {
+  try {
+    const file = await open(await path(), 'r');
+    try {
+      const info = await file.stat();
+      if (!info.isFile() || info.size >= buffer.length) {
+        return undefined;
+      }
+      let length = 0;
+      while (length < buffer.length) {
+        const { bytesRead } = await file.read(buffer, length, buffer.length - length, null);
+        if (!bytesRead) {
+          break;
+        }
+        length += bytesRead;
+      }
+      const data = buffer.subarray(0, length);
+      if (length === buffer.length || data.includes(0) || !isUtf8(data)) {
+        return undefined;
+      }
+      return data.toString('utf8').replace(/^\uFEFF/, '');
+    } finally {
+      await file.close();
+    }
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT', 'ENOTDIR', 'EACCES', 'EPERM', 'EBUSY')) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Plain case-sensitive search, used by the quick search without options. Returns the first
+ * match on each line, up to 201 lines so the caller can tell that results were truncated.
+ */
+function literalMatches(path: string, text: string, query: string): SearchResults['matches'] {
+  if (!text.includes(query)) {
+    return [];
+  }
+  const found: SearchResults['matches'] = [];
+  const lines = text.split(/\r\n|\n|\r/);
+  for (let index = 0; index < lines.length; index++) {
+    const column = lines[index].indexOf(query);
+    if (column < 0) {
+      continue;
+    }
+    found.push({
+      path,
+      line: index + 1,
+      // Columns are UTF-8 byte offsets for Neovim, including wide characters.
+      column: Buffer.byteLength(lines[index].slice(0, column)) + 1,
+      text: lines[index].slice(Math.max(0, column - 80), column + 220).trim()
+    });
+    if (found.length === 201) {
+      break;
+    }
+  }
+  return found;
+}
+
 export class SessionSearch {
   private searchMatcher?: SearchMatcher;
   private searchGeneration = 0;
@@ -111,6 +187,7 @@ export class SessionSearch {
     generation: number
   ): Promise<SearchResults> {
     const result: SearchResults = { matches: [], truncated: false };
+    const cancelled = (): boolean => generation !== this.searchGeneration;
     if (!query) {
       return result;
     }
@@ -131,174 +208,128 @@ export class SessionSearch {
     ) {
       return result;
     }
+    // Walk the folder breadth-first, up to 16 directories at a time.
     while (directories.length) {
-      if (generation !== this.searchGeneration) {
+      if (cancelled()) {
         return { matches: [], truncated: false };
       }
       const listings = await Promise.all(
         directories
           .splice(-16)
           .reverse()
-          .map(async (directory) => {
-            try {
-              return await this.directoryEntries(directory);
-            } catch (error) {
-              if (
-                directory &&
-                ['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM'].includes(
-                  (error as NodeJS.ErrnoException).code || ''
-                )
-              ) {
-                return [];
-              }
-              throw error;
-            }
-          })
+          .map((directory) => this.searchableEntries(directory))
       );
-      let ignored = new Set<string>();
-      if (checkIgnored) {
-        ignored = await gitIgnored(
-          this.root,
-          listings.flat().map((entry) => entry.path)
-        )
-          // A submodule can reject one group; keep unrelated groups' ignore rules.
-          .catch(
-            async () =>
-              new Set(
-                (
-                  await Promise.all(
-                    listings.map((entries) =>
-                      gitIgnored(
-                        this.root,
-                        entries.map((entry) => entry.path)
-                      ).catch(() => new Set<string>())
-                    )
-                  )
-                ).flatMap((paths) => [...paths])
-              )
-          );
-      }
-      if (generation !== this.searchGeneration) {
+      const ignored = checkIgnored ? await this.ignoredEntries(listings) : new Set<string>();
+      if (cancelled()) {
         return { matches: [], truncated: false };
       }
       const files: FileEntry[] = [];
-      for (const entries of listings) {
-        for (const entry of entries) {
-          if (ignored.has(entry.path)) {
-            continue;
-          }
-          if (entry.directory) {
-            if (!['node_modules', 'dist', 'out', 'build', 'target', '.next'].includes(entry.name)) {
-              directories.push(entry.path);
-            }
-            continue;
-          }
+      for (const entry of listings.flat()) {
+        if (ignored.has(entry.path)) {
+          continue;
+        }
+        if (!entry.directory) {
           files.push(entry);
+        } else if (!skippedDirectories.includes(entry.name)) {
+          directories.push(entry.path);
         }
       }
+      // Read one file per buffer at a time.
       for (let first = 0; first < files.length; first += buffers.length) {
-        if (generation !== this.searchGeneration) {
+        if (cancelled()) {
           return { matches: [], truncated: false };
         }
         const matches = await Promise.all(
-          files.slice(first, first + buffers.length).map(async (entry, slot) => {
-            const buffer = buffers[slot];
-            let text: string;
-            try {
-              const file = await open(await this.path(entry.path), 'r');
-              try {
-                const info = await file.stat();
-                if (!info.isFile() || info.size >= buffer.length) {
-                  return [];
-                }
-                let length = 0;
-                while (length < buffer.length) {
-                  const { bytesRead } = await file.read(
-                    buffer,
-                    length,
-                    buffer.length - length,
-                    null
-                  );
-                  if (!bytesRead) {
-                    break;
-                  }
-                  length += bytesRead;
-                }
-                const data = buffer.subarray(0, length);
-                if (length === buffer.length || data.includes(0) || !isUtf8(data)) {
-                  return [];
-                }
-                text = data.toString('utf8').replace(/^\uFEFF/, '');
-              } finally {
-                await file.close();
-              }
-            } catch (error) {
-              if (
-                ['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM', 'EBUSY'].includes(
-                  (error as NodeJS.ErrnoException).code || ''
-                )
-              ) {
-                return [];
-              }
-              throw error;
-            }
-            if (generation !== this.searchGeneration) {
-              return [];
-            }
-            if (matcher) {
-              if (!options.regex && options.caseSensitive && !text.includes(query)) {
-                return [];
-              }
-              const found = await matcher.find(text);
-              if (found.length) {
-                hashes.set(entry.path, WorkspaceReplacement.hash(text));
-              }
-              // Columns are UTF-8 byte offsets for Neovim, including wide characters.
-              const lines = found.length ? text.split(/\r\n|\n|\r/) : [];
-              return found.map((match) => ({
-                path: entry.path,
-                line: match.line,
-                column: Buffer.byteLength(lines[match.line - 1].slice(0, match.index)) + 1,
-                text: match.text
-              }));
-            }
-            if (!text.includes(query)) {
-              return [];
-            }
-            const found: SearchResults['matches'] = [];
-            const lines = text.split(/\r\n|\n|\r/);
-            for (let index = 0; index < lines.length; index++) {
-              const column = lines[index].indexOf(query);
-              if (column < 0) {
-                continue;
-              }
-              found.push({
-                path: entry.path,
-                line: index + 1,
-                column: Buffer.byteLength(lines[index].slice(0, column)) + 1,
-                text: lines[index].slice(Math.max(0, column - 80), column + 220).trim()
-              });
-              if (found.length === 201) {
-                break;
-              }
-            }
-            return found;
-          })
+          files
+            .slice(first, first + buffers.length)
+            .map((entry, slot) =>
+              this.searchFile(entry, buffers[slot], query, options, matcher, hashes, cancelled)
+            )
         );
-        if (generation !== this.searchGeneration) {
+        if (cancelled()) {
           return { matches: [], truncated: false };
         }
-        for (const found of matches) {
-          for (const match of found) {
-            if (result.matches.length === 200) {
-              return { ...result, truncated: true };
-            }
-            result.matches.push(match);
+        for (const match of matches.flat()) {
+          if (result.matches.length === 200) {
+            return { ...result, truncated: true };
           }
+          result.matches.push(match);
         }
       }
     }
-    return generation === this.searchGeneration ? result : { matches: [], truncated: false };
+    return cancelled() ? { matches: [], truncated: false } : result;
+  }
+
+  /** List a directory to search. A subfolder that disappears or cannot be read is skipped. */
+  private async searchableEntries(directory: string): Promise<FileEntry[]> {
+    try {
+      return await this.directoryEntries(directory);
+    } catch (error) {
+      if (directory && hasErrorCode(error, 'ENOENT', 'ENOTDIR', 'EACCES', 'EPERM')) {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  /** Paths that Git ignores among the listed entries. */
+  private ignoredEntries(listings: FileEntry[][]): Promise<Set<string>> {
+    return (
+      gitIgnored(
+        this.root,
+        listings.flat().map((entry) => entry.path)
+      )
+        // A submodule can reject one group; keep unrelated groups' ignore rules.
+        .catch(
+          async () =>
+            new Set(
+              (
+                await Promise.all(
+                  listings.map((entries) =>
+                    gitIgnored(
+                      this.root,
+                      entries.map((entry) => entry.path)
+                    ).catch(() => new Set<string>())
+                  )
+                )
+              ).flatMap((paths) => [...paths])
+            )
+        )
+    );
+  }
+
+  /** Search one file, using `buffer` to read it. Unreadable and non-text files have no matches. */
+  private async searchFile(
+    entry: FileEntry,
+    buffer: Buffer,
+    query: string,
+    options: SearchOptions,
+    matcher: SearchMatcher | undefined,
+    hashes: Map<string, string>,
+    cancelled: () => boolean
+  ): Promise<SearchResults['matches']> {
+    const text = await readTextFile(() => this.path(entry.path), buffer);
+    if (text === undefined || cancelled()) {
+      return [];
+    }
+    if (!matcher) {
+      return literalMatches(entry.path, text, query);
+    }
+    if (!options.regex && options.caseSensitive && !text.includes(query)) {
+      return [];
+    }
+    const found = await matcher.find(text);
+    if (found.length) {
+      hashes.set(entry.path, WorkspaceReplacement.hash(text));
+    }
+    // Columns are UTF-8 byte offsets for Neovim, including wide characters.
+    const lines = found.length ? text.split(/\r\n|\n|\r/) : [];
+    return found.map((match) => ({
+      path: entry.path,
+      line: match.line,
+      column: Buffer.byteLength(lines[match.line - 1].slice(0, match.index)) + 1,
+      text: match.text
+    }));
   }
 
   async findFiles(query = ''): Promise<FileEntry[]> {
