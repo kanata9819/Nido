@@ -1,3 +1,7 @@
+// Neovimの画面を、行×列のマス目（cells）として持つクラス。
+// メインプロセスから届いた 'redraw' イベントを apply() で反映し、draw() で <canvas> に描く。
+// 描く処理そのものは gridCanvas.ts にある。
+// なめらかなスクロールのために、画面の上下にはみ出した行（upperRows / lowerRows）も少し覚えておく。
 import type { Redraw, StickyScrollState } from '../../shared/types';
 import { color } from './gridColors';
 
@@ -193,6 +197,8 @@ export class Grid {
     return members.has(row);
   }
 
+  // redrawイベントのまとまりを1つ反映する。イベントの種類ごとの処理は applyCall() から呼ばれる。
+  // 最後に flush があれば true を返す。そのときに画面を描き直せばよい。
   /** Apply one redraw batch. Returns true when it ended with `flush`. */
   apply(events: Redraw): boolean {
     this.resetForBatch(events);
@@ -682,6 +688,7 @@ export class Grid {
     this.canvas.invalidatePaint();
   }
 
+  // マス目を <canvas> に描く。実際の処理は GridCanvas（gridCanvas.ts）にある。
   draw(
     canvas: HTMLCanvasElement,
     width: number,

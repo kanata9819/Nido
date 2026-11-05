@@ -1,3 +1,11 @@
+// 1つのワークスペース（＝1つのNeovimプロセス）を管理する Session クラス。
+// レンダラーからの操作（入力、ファイルを開く、保存など）は、最終的にこのクラスのメソッドに届く。
+// このクラス自身は窓口で、実際の処理は session◯◯.ts の各クラスに分担している。
+//   - SessionInteraction：キー入力・クリック・スクロールなど、操作をNeovimに伝える
+//   - SessionEvents：Neovimからの通知を受け取り、レンダラーに送る
+//   - SessionFiles / SessionBuffers：ファイルとタブ（バッファ）の操作
+//   - SessionPersistence / SessionHistory：状態の保存・復元と編集履歴
+//   - SessionUI / SessionOptions / SessionNavigation：画面の接続、設定、定義へのジャンプなど
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
@@ -36,6 +44,7 @@ import { SessionNavigation } from './sessionNavigation';
 import { spawnNeovim } from './neovimProcess';
 
 export class Session {
+  // このワークスペースに付いているターミナル。ターミナルも別のNeovimで動くので、別の Session になる。
   terminal?: Session;
   private terminalStarting?: Promise<Session>;
   readonly workspace: Workspace;
@@ -61,6 +70,7 @@ export class Session {
   private readonly buffers: SessionBuffers;
   private readonly navigation: SessionNavigation;
 
+  // new Session() は直接使わず、Session.create() を使う（起動の完了まで待てるように）。
   private constructor(
     root: string,
     private emit: (event: NidoEvent) => void,
@@ -79,6 +89,7 @@ export class Session {
       emit,
       remote ? (path) => hostPath(root, path) : undefined
     );
+    // Neovimを起動して、RPCでつなぐ。
     this.process = spawnNeovim(root, resources, remote, runtime);
     this.client = new SessionClient(this.process, (error) => {
       if (!this.stopped) {
@@ -122,6 +133,7 @@ export class Session {
       (paths) => this.emit({ type: 'directoryChanged', id: this.workspace.id, paths }),
       this.workspace.root.startsWith('\\\\')
     );
+    // Neovimからの通知（画面の再描画 'redraw' や、session.lua が送る 'nido:◯◯'）を受け取る。
     this.client.on('notification', (method: string, args: unknown[]) => {
       if (method === 'nido:terminal_exit') {
         void this.stop();
@@ -146,6 +158,7 @@ export class Session {
     this.process.stderr.on('data', (data: Buffer) => {
       stderr = (stderr + data.toString()).slice(-4000);
     });
+    // Neovimが終了したら、後片付けをしてレンダラーに 'exit' を知らせる。
     this.process.on('exit', () => {
       if (!this.stopped && stderr.trim()) {
         this.emit({ type: 'error', id: this.workspace.id, message: stderr.trim() });
@@ -164,6 +177,14 @@ export class Session {
     );
   }
 
+  /**
+   * ワークスペースのNeovimを起動して、使える状態になるまで待つ。
+   * 1. フォルダーと同梱ファイルがそろっているか確かめる
+   * 2. Neovimを起動し、session.lua を実行する
+   * 3. 仮の大きさ（80×24）で画面をつなぎ、init.lua の読み込みが終わるのを待つ
+   * 4. 言語パックを適用する
+   * 12秒以内に終わらなければ失敗にして、Neovimを止める。
+   */
   static async create(
     root: string,
     emit: (event: NidoEvent) => void,
@@ -236,6 +257,7 @@ export class Session {
     }
   }
 
+  // 言語パックの設定をNeovimに渡す。中身は resources/nido/lua/nido_language_packs.lua の apply()。
   async reloadLanguagePacks(config: LanguagePackConfiguration): Promise<void> {
     await this.client.request('nvim_exec_lua', [
       "require('nido_language_packs').apply(vim.json.decode(...))",
@@ -250,6 +272,9 @@ export class Session {
     ]) as Promise<LanguagePackRuntime[]>;
   }
 
+  // ここから下のメソッドの多くは、担当のクラスに処理を渡すだけ。
+
+  // Neovimの画面（UI）をつなぐ。つなぐと Neovim が 'redraw' 通知を送ってくるようになる。
   attach(columns: number, rows: number): Promise<void> {
     return this.ui.attach(columns, rows);
   }
@@ -279,6 +304,7 @@ export class Session {
     });
   }
 
+  // ターミナルを開く。すでに開いていればそれを返す。開いている途中なら、その完了を待つ。
   async openTerminal(shell = 'auto'): Promise<Session> {
     if (this.stopped) {
       throw new Error('Workspace was closed.');
@@ -559,6 +585,8 @@ end`,
     this.fileService.cancelFindFiles();
   }
 
+  // Neovimを止める。何度呼ばれても、止める処理は1回だけ行う。
+  // まず :qa! で終了を頼み、2秒たっても終わらなければ強制終了する。
   stop(): Promise<void> {
     if (this.stopping) {
       return this.stopping;

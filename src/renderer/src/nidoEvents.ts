@@ -1,5 +1,8 @@
 import type { NidoEvent } from '../../shared/types';
 
+// メインプロセスからのイベントを、画面の部品に配るしくみ。
+// window.nido.onEvent（preload）での受け取りは1回だけにして、ここから登録された部品すべてに配る。
+// 使う側は onNidoEvent(関数) で登録し、戻り値の関数を呼ぶと登録をやめる。
 const listeners = new Set<(event: NidoEvent) => void>();
 let unsubscribe: (() => void) | undefined;
 
