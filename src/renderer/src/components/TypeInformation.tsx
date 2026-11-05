@@ -195,7 +195,7 @@ export default function TypeInformation({
 				}}
 			>
 				<header>
-					<Braces size={17} />
+					<Braces size={15} />
 					<strong>{t('Type information')}</strong>
 					<span>{info.filetype}</span>
 					<button
@@ -203,7 +203,7 @@ export default function TypeInformation({
 						title={t('Close (Esc / Ctrl+C)')}
 						onClick={close}
 					>
-						<X size={16} />
+						<X size={14} />
 					</button>
 				</header>
 				<div

@@ -239,7 +239,7 @@ export default function DiagnosticInformation({
 				}}
 			>
 				<header className={styles.header}>
-					<CircleAlert size={16} />
+					<CircleAlert size={15} />
 					<strong>{t('Diagnostics')}</strong>
 					<span className={styles.count}>
 						{t('{count} on this line', { count: info.items.length })}
@@ -250,21 +250,21 @@ export default function DiagnosticInformation({
 							title={`${t('Previous diagnostic')} ([d)`}
 							onClick={() => jump('[d')}
 						>
-							<ChevronUp size={16} />
+							<ChevronUp size={14} />
 						</button>
 						<button
 							aria-label={t('Next diagnostic')}
 							title={`${t('Next diagnostic')} (]d)`}
 							onClick={() => jump(']d')}
 						>
-							<ChevronDown size={16} />
+							<ChevronDown size={14} />
 						</button>
 						<button
 							aria-label={t('Close diagnostics')}
 							title={t('Close (Esc / Ctrl+C)')}
 							onClick={close}
 						>
-							<X size={16} />
+							<X size={14} />
 						</button>
 					</div>
 				</header>
@@ -292,7 +292,7 @@ export default function DiagnosticInformation({
 							>
 								<div className={styles.metadata}>
 									<span className={styles.severity}>
-										<Icon size={14} />
+										<Icon size={13} />
 										{t(severity.label)}
 									</span>
 									{item.source && <span>{item.source}</span>}
