@@ -65,7 +65,7 @@
 }
 .paletteHeading {
 	flex-shrink: 0;
-	padding: 16px 19px;
+	padding: 9px 10px 9px 15px;
 	display: flex;
 	align-items: center;
 	gap: 10px;
@@ -130,11 +130,11 @@
 .paletteInput {
 	background: var(--surface-input, #121416);
 	color: #e0e7eb;
-	margin: 0 12px 10px;
-	padding: 13px 14px;
+	margin: 0 10px 8px;
+	padding: 9px 12px;
 	border: 1px solid var(--ui-border-strong, #3f5145);
 	border-radius: 6px;
-	font-size: 14px;
+	font-size: 13.5px;
 	outline: none;
 }
 .paletteItems {
@@ -145,10 +145,10 @@
 .paletteItems > button {
 	display: flex;
 	align-items: center;
-	gap: 13px;
+	gap: 11px;
 	width: 100%;
 	text-align: left;
-	padding: 11px 13px;
+	padding: 7px 11px;
 	border-radius: 6px;
 }
 .paletteItems > button > span:nth-child(2) {
@@ -163,7 +163,7 @@
 	display: block;
 	color: #82919d;
 	font-size: 11px;
-	margin-top: 4px;
+	margin-top: 2px;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -216,12 +216,16 @@
 .favoriteChoice > button {
 	padding: 6px;
 }
+/* Icons stay quiet so the selected row, which lights its icon, stands out. */
 .itemIcon {
-	color: var(--ui-accent, #a3bb9b);
+	color: var(--ui-text-secondary, #8e9aa5);
 	flex-shrink: 0;
 }
+.selectedItem .itemIcon {
+	color: var(--ui-accent, #a3bb9b);
+}
 .paletteFooter {
-	padding: 12px 18px;
+	padding: 7px 15px;
 	display: flex;
 	justify-content: space-between;
 	color: #7a8a96;
