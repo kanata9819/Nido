@@ -12,6 +12,21 @@ import {
 } from '../shortcutKeys';
 import { useKeyboardModeQueue } from './useKeyboardModeQueue';
 
+/** One key press and the focus state that decides which shortcut it triggers. */
+interface Shortcut {
+	event: KeyboardEvent;
+	/** The key in lower case. */
+	key: string;
+	/** Stop the key from reaching Neovim or the browser. */
+	consume: () => void;
+	/** 'editor' or 'terminal' when Neovim's input has focus. */
+	focusedInput: string | null | undefined;
+	terminalFocused: boolean;
+	isNormalMode: boolean;
+	/** The active workspace is an editor rather than a standalone terminal. */
+	editorWorkspace: boolean;
+}
+
 interface UseKeyboardShortcutsParams {
 	save: () => void;
 	panel: Panel;
@@ -83,30 +98,39 @@ export function useKeyboardShortcuts({
 		run(window.nido.selectBuffer(active, next.id));
 	};
 
-	const keydown = (event: KeyboardEvent): void => {
-		if (isOwnedByFocusedElement(event, checkingMode.current)) {
-			return;
+	/** Escape closes or leaves whatever has focus. Returns whether to stop handling the key. */
+	const handleEscape = (shortcut: Shortcut): boolean => {
+		const { event, consume, focusedInput, terminalFocused } = shortcut;
+		if (event.key !== 'Escape') {
+			return false;
 		}
-		if (isAltGraph(event) && !checkingMode.current) {
-			return;
+		if (panel === 'git') {
+			return true;
 		}
+		if (terminalFocused && !panel) {
+			return true;
+		}
+		if (document.activeElement?.closest('[data-references-panel]')) {
+			consume();
+			closeReferences();
+			return true;
+		}
+		if (error) {
+			consume();
+			dismissError();
+			return true;
+		}
+		if (panel || leader || focusedInput !== 'editor') {
+			consume();
+			focusEditor();
+			return true;
+		}
+		return false;
+	};
 
-		const consume = (): void => {
-			event.preventDefault();
-			event.stopPropagation();
-		};
-		const focusedInput = document.activeElement?.getAttribute('data-editor-input');
-		const terminalFocused = focusedInput === 'terminal';
-		if (defer(event, focusedInput)) {
-			return;
-		}
-		if (isAltGraph(event)) {
-			return;
-		}
-		const key = event.key.toLowerCase();
-		const isNormalMode = (mode.current[active] || 'normal') === 'normal';
-		const editorWorkspace =
-			workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal';
+	/** Panel toggles work even while another panel is open. Returns whether the key was handled. */
+	const handlePanelToggles = (shortcut: Shortcut): boolean => {
+		const { event, consume, terminalFocused, editorWorkspace } = shortcut;
 		const togglePanel = (value: Exclude<Panel, null>): void => {
 			if (panel === value) {
 				focusEditor();
@@ -114,43 +138,10 @@ export function useKeyboardShortcuts({
 				showPanel(value);
 			}
 		};
-
-		if (focusedInput === 'editor' && isNormalMode && isCtrl(event, '*', '#')) {
-			consume();
-			run(window.nido.input(active, event.key));
-			return;
-		}
-
-		if (event.key === 'Escape') {
-			if (panel === 'git') {
-				return;
-			}
-			if (terminalFocused && !panel) {
-				return;
-			}
-			if (document.activeElement?.closest('[data-references-panel]')) {
-				consume();
-				closeReferences();
-				return;
-			}
-			if (error) {
-				consume();
-				dismissError();
-				return;
-			}
-
-			if (panel || leader || focusedInput !== 'editor') {
-				consume();
-				focusEditor();
-				return;
-			}
-		}
-
-		// Panel toggles: these work even while another panel is open.
 		if (active && isCtrlShift(event, 'm')) {
 			consume();
 			togglePanel('problems');
-			return;
+			return true;
 		}
 		if (
 			active &&
@@ -161,43 +152,45 @@ export function useKeyboardShortcuts({
 		) {
 			consume();
 			togglePanel('markdown');
-			return;
+			return true;
 		}
 		if (isCtrlShift(event, 'x')) {
 			consume();
 			if (!event.repeat) {
 				togglePanel('extensions');
 			}
-			return;
+			return true;
 		}
 		if (active && !terminalFocused && isCtrlShift(event, 'h')) {
 			consume();
 			if (!event.repeat) {
 				togglePanel('history');
 			}
-			return;
+			return true;
 		}
 		if (active && editorWorkspace && isCtrlShift(event, 'f')) {
 			consume();
 			if (!event.repeat) {
 				showPanel('search');
 			}
-			return;
+			return true;
 		}
 		if (active && !terminalFocused && editorWorkspace && isCtrlShift(event, 'o')) {
 			consume();
 			if (!event.repeat) {
 				showPanel('symbols');
 			}
-			return;
+			return true;
 		}
-		if (panel) {
-			if (modal.current && trapTabFocus(modal.current, event)) {
-				consume();
-			}
-			return;
-		}
+		return false;
+	};
 
+	/**
+	 * Shortcuts for tabs, the debugger, workspaces, the terminal and the main panels, available in
+	 * editors and terminals alike. Returns whether the key was handled.
+	 */
+	const handleWorkspaceShortcuts = (shortcut: Shortcut): boolean => {
+		const { event, key, consume, focusedInput, terminalFocused, editorWorkspace } = shortcut;
 		if (
 			active &&
 			!terminalFocused &&
@@ -213,7 +206,7 @@ export function useKeyboardShortcuts({
 				}
 				focusEditor();
 			}
-			return;
+			return true;
 		}
 		if (active && !terminalFocused && isUnmodified(event) && debugKeys.includes(event.key)) {
 			consume();
@@ -221,18 +214,19 @@ export function useKeyboardShortcuts({
 			if (!document.activeElement?.closest('[data-debug-panel]')) {
 				focusEditor();
 			}
-			return;
+			return true;
 		}
 		if (event.ctrlKey && event.key === 'Tab') {
 			consume();
 			nextWorkspace(event.shiftKey ? -1 : 1);
-			return;
+			return true;
 		}
 		if (active && isCtrl(event, '@', '`')) {
 			consume();
 			toggleTerminal();
-			return;
+			return true;
 		}
+		// Ctrl+H/J/K/L move between the Explorer, the debugger and the editor.
 		if (
 			active &&
 			event.ctrlKey &&
@@ -250,7 +244,7 @@ export function useKeyboardShortcuts({
 			} else {
 				focusEditor();
 			}
-			return;
+			return true;
 		}
 		if (event.altKey && /^[1-9]$/.test(event.key)) {
 			consume();
@@ -258,34 +252,29 @@ export function useKeyboardShortcuts({
 			if (w) {
 				activate(w.id);
 			}
-			return;
+			return true;
 		}
 		if (event.ctrlKey && event.shiftKey && key === 'n') {
 			consume();
 			void create();
-			return;
+			return true;
 		}
 		if (event.ctrlKey && event.shiftKey && key === 'p') {
 			consume();
 			showPanel('commands');
-			return;
+			return true;
 		}
 		if (active && isCtrlShift(event, 'g')) {
 			consume();
 			showPanel('git');
-			return;
+			return true;
 		}
-		if (terminalFocused) {
-			if (isCtrlShift(event, 'r')) {
-				consume();
-				if (!event.repeat) {
-					restartShell();
-				}
-			}
-			return;
-		}
+		return false;
+	};
 
-		// Editor-only shortcuts below.
+	/** Shortcuts while an editor, not a terminal, has focus. */
+	const handleEditorShortcuts = (shortcut: Shortcut): void => {
+		const { event, key, consume, focusedInput, isNormalMode } = shortcut;
 		if (
 			event.ctrlKey &&
 			key === 'p' &&
@@ -302,6 +291,7 @@ export function useKeyboardShortcuts({
 			save();
 			return;
 		}
+		// After Space, the next key runs the command bound to it.
 		if (leader) {
 			consume();
 			if (event.key === ' ') {
@@ -333,6 +323,65 @@ export function useKeyboardShortcuts({
 			consume();
 			setLeader(true);
 		}
+	};
+
+	const keydown = (event: KeyboardEvent): void => {
+		if (isOwnedByFocusedElement(event, checkingMode.current)) {
+			return;
+		}
+		if (isAltGraph(event) && !checkingMode.current) {
+			return;
+		}
+		const focusedInput = document.activeElement?.getAttribute('data-editor-input');
+		if (defer(event, focusedInput)) {
+			return;
+		}
+		if (isAltGraph(event)) {
+			return;
+		}
+		const shortcut: Shortcut = {
+			event,
+			key: event.key.toLowerCase(),
+			consume: () => {
+				event.preventDefault();
+				event.stopPropagation();
+			},
+			focusedInput,
+			terminalFocused: focusedInput === 'terminal',
+			isNormalMode: (mode.current[active] || 'normal') === 'normal',
+			editorWorkspace:
+				workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal'
+		};
+
+		// Ctrl+* and Ctrl+# reach Neovim as plain * and # in Normal mode.
+		if (focusedInput === 'editor' && shortcut.isNormalMode && isCtrl(event, '*', '#')) {
+			shortcut.consume();
+			run(window.nido.input(active, event.key));
+			return;
+		}
+		if (handleEscape(shortcut) || handlePanelToggles(shortcut)) {
+			return;
+		}
+		// While a panel is open, Tab stays inside it and other shortcuts are left to the panel.
+		if (panel) {
+			if (modal.current && trapTabFocus(modal.current, event)) {
+				shortcut.consume();
+			}
+			return;
+		}
+		if (handleWorkspaceShortcuts(shortcut)) {
+			return;
+		}
+		if (shortcut.terminalFocused) {
+			if (isCtrlShift(event, 'r')) {
+				shortcut.consume();
+				if (!event.repeat) {
+					restartShell();
+				}
+			}
+			return;
+		}
+		handleEditorShortcuts(shortcut);
 	};
 
 	return keydown;

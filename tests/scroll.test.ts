@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ScrollQueue, scrollOffset } from '../src/renderer/src/scroll';
+import { ScrollQueue, editorWheelMotion, scrollOffset } from '../src/renderer/src/scroll';
 import { EditorScroll } from '../src/renderer/src/editorScroll';
 import { Grid } from '../src/renderer/src/grid';
 
@@ -658,4 +658,79 @@ test('a failed command clears its preview and allows the next gesture without a 
 	assert.equal(queue.finish(), true);
 	queue.enqueue(-0.5, false);
 	assert.deepEqual(queue.start(), { lines: -0.5, follow: false });
+});
+
+test('editor wheel motion separates touchpad pixels, wheel notches and sideways gestures', () => {
+	const surface = { clientWidth: 800, clientHeight: 400 };
+	const view = { surface, lineHeight: 20, cellWidth: 10 };
+	const idle = { remainder: 0, time: 0 };
+	const wheel = (
+		deltaX: number,
+		deltaY: number,
+		deltaMode = 0,
+		shiftKey = false
+	): Parameters<typeof editorWheelMotion>[0] => ({ deltaX, deltaY, deltaMode, shiftKey });
+
+	// Touchpad pixels move by fractional rows without counting as a notch.
+	assert.deepEqual(editorWheelMotion(wheel(0, 10), view, idle, 1000), {
+		horizontalWheel: idle,
+		motion: { lines: 0.25, columns: 0, discrete: false }
+	});
+	// A line-mode notch moves whole rows at once.
+	assert.deepEqual(editorWheelMotion(wheel(0, 3, 1), view, idle, 1000).motion, {
+		lines: 1.5,
+		columns: 0,
+		discrete: true
+	});
+	// Shift+wheel scrolls sideways by columns.
+	assert.deepEqual(editorWheelMotion(wheel(0, 100, 0, true), view, idle, 1000), {
+		horizontalWheel: { remainder: 0, time: 1000 },
+		motion: { lines: 0, columns: 5, discrete: true }
+	});
+	// Mostly vertical diagonal gestures carry their sideways remainder to the next event.
+	const diagonal = editorWheelMotion(wheel(12, 40), view, idle, 1000);
+	assert.deepEqual(diagonal.horizontalWheel, { remainder: 6, time: 1000 });
+	assert.equal(diagonal.motion?.lines, 1);
+	assert.equal(diagonal.motion?.columns, 0);
+	assert.equal(
+		editorWheelMotion(wheel(12, 40), view, diagonal.horizontalWheel, 1100).motion?.columns,
+		1
+	);
+	// The remainder is dropped after 200ms without wheel input.
+	assert.equal(
+		editorWheelMotion(wheel(12, 40), view, diagonal.horizontalWheel, 1300).motion?.columns,
+		0
+	);
+	// A zero delta moves nothing.
+	assert.equal(editorWheelMotion(wheel(0, 0), view, idle, 1000).motion, undefined);
+});
+
+test('editor wheel motion reads the surface size only for page deltas', () => {
+	let reads = 0;
+	const surface = {
+		get clientWidth() {
+			reads++;
+			return 800;
+		},
+		get clientHeight() {
+			reads++;
+			return 400;
+		}
+	};
+	const view = { surface, lineHeight: 20, cellWidth: 10 };
+	editorWheelMotion(
+		{ deltaX: 0, deltaY: 10, deltaMode: 0, shiftKey: false },
+		view,
+		{ remainder: 0, time: 0 },
+		0
+	);
+	assert.equal(reads, 1, 'only the horizontal accumulator reads the width for pixel deltas');
+	reads = 0;
+	editorWheelMotion(
+		{ deltaX: 0, deltaY: 1, deltaMode: 2, shiftKey: false },
+		view,
+		{ remainder: 0, time: 0 },
+		0
+	);
+	assert.equal(reads, 3);
 });

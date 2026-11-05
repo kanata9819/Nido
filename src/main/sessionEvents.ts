@@ -137,8 +137,12 @@ export class SessionEvents {
 		}
 	}
 
+	/**
+	 * Route one notification from Neovim. Redraw events and the nido:* notifications sent by
+	 * resources/nido/session.lua either join the pending frame, go to the renderer at once, or
+	 * update the session state.
+	 */
 	receiveNotification(method: string, args: unknown[]): void {
-		const filePath = this.filePath;
 		switch (method) {
 			case 'nido:sticky_scroll': {
 				this.pendingRedraw.push(['nido_sticky_scroll', args]);
@@ -179,12 +183,7 @@ export class SessionEvents {
 					id: this.workspaceId,
 					focus: args[1] === true,
 					items: Array.isArray(args[0])
-						? filePath
-							? (args[0] as DiagnosticDetails[]).map((item) => ({
-									...item,
-									path: filePath(item.path)
-								}))
-							: (args[0] as DiagnosticDetails[])
+						? this.hostPaths(args[0] as DiagnosticDetails[])
 						: []
 				});
 				break;
@@ -232,95 +231,15 @@ export class SessionEvents {
 				break;
 			}
 			case 'nido:message': {
-				const level = args[1];
-				if (typeof level === 'number') {
-					// Neovim log levels: TRACE=0, DEBUG=1, INFO=2, WARN=3, ERROR=4.
-					if (level < 2) {
-						break;
-					}
-					this.sendToRenderer({
-						type: 'notification',
-						id: this.workspaceId,
-						message: String(args[0]),
-						title: typeof args[2] === 'string' ? args[2] : 'Nido',
-						severity: level >= 4 ? 'error' : level === 3 ? 'warning' : 'info'
-					});
-					break;
-				}
-				this.sendToRenderer({
-					type: 'error',
-					id: this.workspaceId,
-					message: String(args[0])
-				});
+				this.receiveMessage(args);
 				break;
 			}
 			case 'redraw': {
-				// Other events can contain Neovim Window handles, which cannot cross Electron IPC.
-				for (const event of args as Redraw) {
-					if (/^(cmdline_|msg_|popupmenu_)/.test(event[0])) {
-						for (const args of event.slice(1) as unknown[][]) {
-							const next = applyNeovimUI(this.neovimUI, event[0], args);
-							if (next !== this.neovimUI) {
-								this.neovimUI = next;
-								this.pendingUI = true;
-							}
-						}
-					}
-					if (!rendererGridEvents.has(event[0])) {
-						continue;
-					}
-					this.pendingRedraw.push(event);
-					// A repaint can span several RPC notifications. Never expose a partial frame.
-					if (event[0] === 'flush' && !this.isBatchingScroll) {
-						this.publishPendingRedraw();
-					}
-				}
+				this.receiveRedraw(args as Redraw);
 				break;
 			}
 			case 'nido:state': {
-				const update = { ...(args[0] as Partial<SessionState>) };
-				if (filePath && Array.isArray(update.buffers)) {
-					update.buffers = update.buffers.map((buffer) => ({
-						...buffer,
-						name: filePath(buffer.name)
-					}));
-				}
-				if (filePath && Array.isArray(update.problems)) {
-					update.problems = update.problems.map((problem) => ({
-						...problem,
-						path: filePath(problem.path)
-					}));
-				}
-				if (filePath && update.diagnostics) {
-					update.diagnostics = Object.fromEntries(
-						Object.entries(update.diagnostics).map(([path, severity]) => [
-							filePath(path),
-							severity
-						])
-					);
-				}
-				this.state = {
-					...this.state,
-					...update,
-					debug: this.state.debug,
-					references: this.state.references,
-					symbols: this.state.symbols
-				};
-				// MessagePack nil explicitly clears optional values in partial updates.
-				if (this.state.scrollCursor === null) {
-					this.state.scrollCursor = undefined;
-				}
-				if (this.state.lineEnding === null) {
-					this.state.lineEnding = undefined;
-				}
-				// Lua encodes an empty table as a map rather than an array.
-				if (!Array.isArray(this.state.buffers)) {
-					this.state.buffers = [];
-				}
-				if (!Array.isArray(this.state.problems)) {
-					this.state.problems = [];
-				}
-				this.publishState();
+				this.receiveState(args[0] as Partial<SessionState>);
 				break;
 			}
 			case 'nido:references': {
@@ -328,12 +247,7 @@ export class SessionEvents {
 				if (!Array.isArray(references.items)) {
 					references.items = [];
 				}
-				if (filePath) {
-					references.items = references.items.map((item) => ({
-						...item,
-						path: filePath(item.path)
-					}));
-				}
+				references.items = this.hostPaths(references.items);
 				this.state = { ...this.state, references };
 				this.publishState();
 				break;
@@ -360,5 +274,103 @@ export class SessionEvents {
 				break;
 			}
 		}
+	}
+
+	/** Convert WSL paths in items to Windows host paths. */
+	private hostPaths<T extends { path: string }>(items: T[]): T[] {
+		const filePath = this.filePath;
+		return filePath ? items.map((item) => ({ ...item, path: filePath(item.path) })) : items;
+	}
+
+	/** vim.notify messages become notifications; anything without a log level is an error. */
+	private receiveMessage(args: unknown[]): void {
+		const level = args[1];
+		if (typeof level !== 'number') {
+			this.sendToRenderer({ type: 'error', id: this.workspaceId, message: String(args[0]) });
+			return;
+		}
+		// Neovim log levels: TRACE=0, DEBUG=1, INFO=2, WARN=3, ERROR=4.
+		if (level < 2) {
+			return;
+		}
+		this.sendToRenderer({
+			type: 'notification',
+			id: this.workspaceId,
+			message: String(args[0]),
+			title: typeof args[2] === 'string' ? args[2] : 'Nido',
+			severity: level >= 4 ? 'error' : level === 3 ? 'warning' : 'info'
+		});
+	}
+
+	/**
+	 * Command line, message and popup menu events update the native Nido UI. Grid events wait in
+	 * the pending frame, which is published at flush.
+	 */
+	private receiveRedraw(events: Redraw): void {
+		// Other events can contain Neovim Window handles, which cannot cross Electron IPC.
+		for (const event of events) {
+			if (/^(cmdline_|msg_|popupmenu_)/.test(event[0])) {
+				for (const args of event.slice(1) as unknown[][]) {
+					const next = applyNeovimUI(this.neovimUI, event[0], args);
+					if (next !== this.neovimUI) {
+						this.neovimUI = next;
+						this.pendingUI = true;
+					}
+				}
+			}
+			if (!rendererGridEvents.has(event[0])) {
+				continue;
+			}
+			this.pendingRedraw.push(event);
+			// A repaint can span several RPC notifications. Never expose a partial frame.
+			if (event[0] === 'flush' && !this.isBatchingScroll) {
+				this.publishPendingRedraw();
+			}
+		}
+	}
+
+	/** Merge a partial state update from session.lua and publish it. */
+	private receiveState(partial: Partial<SessionState>): void {
+		const update = { ...partial };
+		const filePath = this.filePath;
+		if (filePath && Array.isArray(update.buffers)) {
+			update.buffers = update.buffers.map((buffer) => ({
+				...buffer,
+				name: filePath(buffer.name)
+			}));
+		}
+		if (Array.isArray(update.problems)) {
+			update.problems = this.hostPaths(update.problems);
+		}
+		if (filePath && update.diagnostics) {
+			update.diagnostics = Object.fromEntries(
+				Object.entries(update.diagnostics).map(([path, severity]) => [
+					filePath(path),
+					severity
+				])
+			);
+		}
+		this.state = {
+			...this.state,
+			...update,
+			debug: this.state.debug,
+			references: this.state.references,
+			symbols: this.state.symbols
+		};
+		// MessagePack nil explicitly clears optional values in partial updates.
+		if (this.state.scrollCursor === null) {
+			this.state.scrollCursor = undefined;
+		}
+		if (this.state.lineEnding === null) {
+			this.state.lineEnding = undefined;
+		}
+		// Lua encodes an empty table as a map rather than an array.
+		if (!Array.isArray(this.state.buffers)) {
+			this.state.buffers = [];
+		}
+		if (!Array.isArray(this.state.problems)) {
+			this.state.problems = [];
+		}
+		this.publishState();
 	}
 }

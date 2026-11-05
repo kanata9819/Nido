@@ -4,7 +4,7 @@
 import { useI18n } from './i18n';
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Grid } from './grid';
-import { accumulateScroll } from './scroll';
+import { accumulateScroll, editorWheelMotion } from './scroll';
 import { useEditorRendering } from './hooks/useEditorRendering';
 import { useEditorInput } from './hooks/useEditorInput';
 import styles from './assets/Editor.module.css';
@@ -153,6 +153,35 @@ function Editor({
 		void promise.catch((e) => error.current(String(e)));
 	};
 
+	/** Editors scroll smoothly by pixels and sideways by columns. */
+	const scrollEditor = (event: React.WheelEvent<HTMLDivElement>): void => {
+		const { horizontalWheel: nextWheel, motion } = editorWheelMotion(
+			event,
+			{ surface: event.currentTarget, lineHeight, cellWidth: grid.current.cellWidth },
+			horizontalWheel.current,
+			performance.now()
+		);
+		horizontalWheel.current = nextWheel;
+		if (motion) {
+			scroll.current(motion.lines, scrollFollowCursor, motion.discrete, motion.columns);
+		}
+	};
+
+	/** Terminals scroll by whole lines, carrying the remainder between nearby events. */
+	const scrollTerminal = (event: React.WheelEvent<HTMLDivElement>): void => {
+		const now = performance.now();
+		const result = accumulateScroll(
+			now - wheel.current.time > 200 ? 0 : wheel.current.remainder,
+			event.deltaY * 0.5,
+			event.deltaMode,
+			lineHeight,
+			event.currentTarget.clientHeight
+		);
+		wheel.current = { remainder: result.remainder, time: now };
+		if (result.lines) {
+			send(window.nido.scroll(id, Math.max(-1000, Math.min(1000, result.lines)), true));
+		}
+	};
 	return (
 		<div
 			ref={host}
@@ -273,88 +302,10 @@ function Editor({
 				) {
 					return;
 				}
-
-				const delta = event.deltaY * 0.5;
-				if (!terminal) {
-					const now = performance.now();
-					const horizontal = event.deltaX || (event.shiftKey ? event.deltaY : 0);
-					// Precision touchpads add small vertical deltas during horizontal gestures.
-					const diagonal =
-						!event.shiftKey &&
-						delta !== 0 &&
-						(event.deltaMode !== 0 ||
-							Math.abs(event.deltaY) * 4 >= Math.abs(horizontal));
-					const cellWidth = grid.current.cellWidth;
-					const result =
-						cellWidth && diagonal
-							? accumulateScroll(
-									now - horizontalWheel.current.time > 200
-										? 0
-										: horizontalWheel.current.remainder,
-									horizontal * 0.5,
-									event.deltaMode,
-									cellWidth,
-									event.currentTarget.clientWidth
-								)
-							: { lines: 0, remainder: 0 };
-					if (horizontal) {
-						horizontalWheel.current = {
-							remainder: diagonal ? result.remainder : 0,
-							time: now
-						};
-					}
-					const pixels =
-						(diagonal ? delta : 0) *
-						(event.deltaMode === 1
-							? lineHeight
-							: event.deltaMode === 2
-								? event.currentTarget.clientHeight
-								: 1);
-					const horizontalPixels =
-						horizontal *
-						0.5 *
-						(event.deltaMode === 1
-							? cellWidth
-							: event.deltaMode === 2
-								? event.currentTarget.clientWidth
-								: 1);
-					const columns = pixels ? result.lines : horizontalPixels / cellWidth;
-					if (
-						(Number.isFinite(pixels) && pixels) ||
-						(Number.isFinite(columns) && columns)
-					) {
-						scroll.current(
-							Number.isFinite(pixels) ? pixels / lineHeight : 0,
-							scrollFollowCursor,
-							// Fine pixel deltas already describe smooth touchpad motion; wheel notches
-							// (including Shift+wheel and tilt) move several lines or columns at once.
-							event.deltaMode !== 0 ||
-								Math.abs(pixels) >= lineHeight ||
-								Math.abs(horizontalPixels) >= 3 * cellWidth,
-							Number.isFinite(columns) ? columns : 0
-						);
-					}
-					return;
-				}
-
-				const now = performance.now();
-				const result = accumulateScroll(
-					now - wheel.current.time > 200 ? 0 : wheel.current.remainder,
-					delta,
-					event.deltaMode,
-					lineHeight,
-					event.currentTarget.clientHeight
-				);
-
-				wheel.current = { remainder: result.remainder, time: now };
-				if (result.lines) {
-					send(
-						window.nido.scroll(
-							id,
-							Math.max(-1000, Math.min(1000, result.lines)),
-							terminal || scrollFollowCursor
-						)
-					);
+				if (terminal) {
+					scrollTerminal(event);
+				} else {
+					scrollEditor(event);
 				}
 			}}
 		>
