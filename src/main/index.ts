@@ -1,6 +1,5 @@
-// メインプロセスの入口。Electronが起動すると最初にこのファイルが実行される。
-// ウィンドウを作り、IPCの窓口（handlers.ts）を登録して、画面（レンダラー）を読み込む。
-// 全体の流れは docs/architecture.ja.md を参照。
+// Entry point of the Electron main process. It creates the window, registers the IPC
+// handlers (handlers.ts) and loads the renderer.
 import { app, BrowserWindow, Menu, screen } from 'electron';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
@@ -11,12 +10,12 @@ import { registerHandlers, type AppState } from './handlers';
 import type { NidoEvent } from '../shared/types';
 import { readLayout } from './persistence';
 
-// 起動中のワークスペースの一覧。キーはワークスペースID、値はそのNeovimを管理するSession。
+// Running workspaces, keyed by workspace ID. Each Session owns one Neovim process.
 const sessions = new Map<string, Session>();
-// 同梱のNeovimや言語パックが置いてある場所。配布版と開発中で場所が違う。
+// Bundled Neovim and language packs live in different places when packaged and in development.
 const neovimResources = app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources');
 let window: BrowserWindow;
-// アプリ全体の状態（タブの並び順、表示中のワークスペースなど）。各IPCの窓口で共有する。
+// Application state such as workspace order and the active workspace, shared by the handlers.
 const state: AppState = {
   order: [],
   active: '',
@@ -24,7 +23,7 @@ const state: AppState = {
   prompting: false,
   closing: false
 };
-// メインプロセスからレンダラーへイベントを送る。レンダラー側では nidoEvents.ts が受け取る。
+// Send an event to the renderer, where nidoEvents.ts receives it.
 const send = (event: NidoEvent): void => {
   if (window && !window.isDestroyed()) {
     window.webContents.send('nido:event', event);
@@ -35,13 +34,12 @@ const send = (event: NidoEvent): void => {
 };
 
 app.setName('Nido');
-// Electronの準備ができたら、ウィンドウを作る。
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   const saved = await readLayout(join(app.getPath('userData'), 'workspaces.json'))
     .then((layout) => layout.window)
     .catch(() => undefined); // Workspace restoration reports invalid saved data to the user.
-  // 前回のウィンドウの大きさを、画面に収まる範囲で使う。保存がなければ 1440×940。
+  // Reuse the saved window size within the work area, or default to 1440×940.
   const area = screen.getPrimaryDisplay().workAreaSize;
   const validSize =
     saved &&
@@ -63,8 +61,7 @@ app.whenReady().then(async () => {
     backgroundColor: '#141414',
     frame: false,
     show: false,
-    // 安全のため、レンダラーからNode.jsを直接使えないようにする。
-    // レンダラーが使えるのは preload（src/preload/index.ts）が用意した window.nido だけ。
+    // The renderer cannot use Node.js directly; it only gets window.nido from src/preload/index.ts.
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -72,7 +69,7 @@ app.whenReady().then(async () => {
       nodeIntegration: false
     }
   });
-  // 新しいウィンドウを開く、別のページへ移動する、カメラなどの権限を求める、をすべて禁止する。
+  // Block new windows, navigation and permission requests such as the camera.
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event) => event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) =>
@@ -105,7 +102,7 @@ app.whenReady().then(async () => {
     process.platform === 'win32' &&
     app.isPackaged &&
     existsSync(join(dirname(process.execPath), 'Uninstall nido.exe'));
-  // 自動アップデートは、インストーラーで入れたWindows版のときだけ有効にする。
+  // Automatic updates apply only to Windows builds installed by the installer.
   const updates = new Updates(autoUpdater, {
     currentVersion: app.getVersion(),
     enabled: installed,
@@ -129,7 +126,6 @@ app.whenReady().then(async () => {
       window.reload();
     }
   });
-  // レンダラーから呼ばれるIPCの窓口をすべて登録する。
   prepareToQuit = registerHandlers({ window, sessions, state, neovimResources, send, updates });
   window.webContents.once('did-finish-load', () => {
     if (installed) {
@@ -137,7 +133,7 @@ app.whenReady().then(async () => {
       window.once('closed', () => clearTimeout(timer));
     }
   });
-  // 開発中はViteの開発サーバーから、配布版はビルド済みのファイルから画面を読み込む。
+  // Load the renderer from the Vite dev server in development, or from the built files.
   if (process.env.ELECTRON_RENDERER_URL) {
     void window.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
@@ -145,7 +141,7 @@ app.whenReady().then(async () => {
   }
 });
 app.on('window-all-closed', () => app.quit());
-// 終了するときは、ワークスペースのNeovimとターミナルをすべて止める。
+// Stop every workspace's Neovim and terminal on quit.
 app.on('will-quit', () => {
   for (const s of sessions.values()) {
     s.terminal?.process.kill();

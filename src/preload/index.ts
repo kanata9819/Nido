@@ -1,7 +1,7 @@
-// preload：レンダラー（画面）とメインプロセスをつなぐ窓口。
-// レンダラーはNode.jsやElectronを直接使えないので、ここで用意した関数（window.nido.◯◯）だけを使う。
-// 各関数は 'nido:◯◯' というIPCをメインプロセスに送り、src/main/handlers.ts などの handle('◯◯') が受け取る。
-// 引数や戻り値の型は src/shared/types.ts の NidoAPI に書いてある。
+// Bridge between the renderer and the main process. The renderer cannot use Node.js or
+// Electron directly, so it calls window.nido.<name>, which sends the 'nido:<name>' IPC that
+// handle('<name>') in src/main/handlers.ts and related files receives. Types: NidoAPI in
+// src/shared/types.ts.
 import { contextBridge, ipcRenderer } from 'electron';
 import type { NidoAPI, NidoEvent } from '../shared/types';
 
@@ -95,13 +95,12 @@ const api: NidoAPI = {
   updateAction: (action) => ipcRenderer.invoke('nido:updateAction', action),
   windowState: () => ipcRenderer.invoke('nido:windowState'),
   windowAction: (action) => ipcRenderer.invoke('nido:window', action),
-  // メインプロセスからのイベント（画面の再描画、通知など）を受け取る。
-  // 戻り値の関数を呼ぶと受け取りをやめる。レンダラーでは nidoEvents.ts がこれを使う。
+  // Receive main-process events such as redraws and notifications. Call the returned
+  // function to stop. The renderer subscribes once, in nidoEvents.ts.
   onEvent: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, event: NidoEvent): void => callback(event);
     ipcRenderer.on('nido:event', listener);
     return () => ipcRenderer.removeListener('nido:event', listener);
   }
 };
-// レンダラーから window.nido として使えるようにする。
 contextBridge.exposeInMainWorld('nido', api);

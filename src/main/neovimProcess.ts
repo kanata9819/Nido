@@ -6,11 +6,9 @@ import { wslArguments, type prepareWsl } from './wsl';
 type WslRemote = ReturnType<typeof parseWslPath>;
 type WslRuntime = Awaited<ReturnType<typeof prepareWsl>>;
 
-// ワークスペース用のNeovimを起動する。
-// --embed は「画面を持たず、標準入出力でプログラムから操作する」モード。Nidoはこの入出力でRPCを送る。
-// Windowsのフォルダーなら同梱の nvim.exe を、WSLのフォルダーなら wsl.exe 経由でLinux側のNeovimを起動する。
 // Starts the embedded Neovim for a workspace, either the bundled Windows build or
-// the one prepared inside a WSL distribution.
+// the one prepared inside a WSL distribution. --embed runs Neovim without its own UI;
+// Nido drives it with RPC over stdin and stdout.
 export function spawnNeovim(
   root: string,
   resources: string,
@@ -19,7 +17,7 @@ export function spawnNeovim(
 ): ChildProcessWithoutNullStreams {
   const args = [
     '--embed',
-    // プラグインを自動で読み込まない。設定ファイルは下の -u で Nido 専用の init.lua を指定する。
+    // Skip plugin loading; -u below selects Nido's own init.lua.
     '--noplugin',
     // Time Machine owns recovery; an embedded startup cannot answer swap prompts.
     '-n',
@@ -61,7 +59,7 @@ export function spawnNeovim(
       : args,
     {
       cwd: runtime ? resources : root,
-      // Neovim側のLuaが使う環境変数。NIDO_◯◯ は resources/nido の Lua から参照される。
+      // The NIDO_* variables are read by the Lua in resources/nido.
       env: runtime
         ? process.env
         : {
