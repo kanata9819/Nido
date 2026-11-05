@@ -8,6 +8,9 @@ import type {
 } from '../shared/types';
 import { applyNeovimUI, emptyNeovimUI, type NeovimUIPatch } from '../shared/neovimUI';
 
+// Neovimの 'redraw' 通知のうち、レンダラーの Grid（src/renderer/src/grid.ts）が使うもの。
+// grid_line は「この行のこの位置から、この文字をこの色で」、grid_scroll は「この範囲をn行ずらす」、
+// flush は「1フレーム分がそろった」という意味。詳しくはNeovimの :help ui を参照。
 const rendererGridEvents = new Set([
   'popupmenu_show',
   'popupmenu_select',
@@ -25,6 +28,9 @@ const rendererGridEvents = new Set([
   'flush'
 ]);
 
+// Neovimからの通知を受け取り、レンダラーへ送るクラス。
+// redraw は flush が来るまでためておき、1フレーム分をまとめて送る（描きかけの画面を見せないため）。
+// カーソル位置やタブの一覧などの状態（SessionState）も、ここでまとめてレンダラーに知らせる。
 // Own Neovim notifications and publish only complete redraw frames.
 export class SessionEvents {
   state: SessionState = { buffers: [], current: 0, mode: 'n', line: 1, column: 1, filetype: '' };

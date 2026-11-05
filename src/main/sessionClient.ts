@@ -1,6 +1,13 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { NeovimClient } from 'neovim';
 
+/**
+ * Neovimと通信するクライアント。npmの `neovim` パッケージの NeovimClient を拡張している。
+ * request('nvim_◯◯', 引数) で、Neovimの関数を呼んで結果を待てる。
+ *
+ * 元の NeovimClient は、Neovimが途中で終了すると呼び出しが返らないまま待ち続けてしまう。
+ * そこで、待っている呼び出しを覚えておき、終了やエラーのときにまとめて失敗させる。
+ */
 /** Settle RPC callers when the child disconnects; neovim's transport leaves them pending. */
 export class SessionClient extends NeovimClient {
   private failure?: Error;
@@ -26,6 +33,7 @@ export class SessionClient extends NeovimClient {
     this.attach({ reader: process.stdout, writer: process.stdin });
   }
 
+  // RPCを1つ送る。返事が来るまで pending に入れておき、Neovimが落ちたら cancelRequests で失敗させる。
   override asyncRequest(name: string, args: unknown[] = []): ReturnType<NeovimClient['request']> {
     if (this.failure) {
       return Promise.reject(this.failure);
@@ -62,6 +70,7 @@ export class SessionClient extends NeovimClient {
     super.notify(name, args);
   }
 
+  // 待っている呼び出しをすべて失敗させる。これ以降の呼び出しもすぐ失敗するようになる。
   cancelRequests(error = new Error('Neovim session is closed.')): void {
     this.failure ??= error;
     for (const reject of this.pending) {
@@ -70,6 +79,7 @@ export class SessionClient extends NeovimClient {
     this.pending.clear();
   }
 
+  // Neovimに終了（:qa!）を伝える。
   quit(): void {
     // Shutdown is the sole write allowed after cancelling regular RPC requests.
     if (

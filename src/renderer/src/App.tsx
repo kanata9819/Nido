@@ -1,3 +1,7 @@
+// 画面全体を組み立てる、いちばん外側のReactコンポーネント。
+// タイトルバー・サイドバー・エディター・下のパネル・ステータスバーなどを並べ、
+// どのワークスペースを表示しているか（active）や、開いているパネルなどの状態を持つ。
+// 細かい処理の多くは hooks/ のフック（useWorkspaceSessions、useKeyboardShortcuts など）に分けてある。
 import { LanguageContext, useI18n } from './i18n';
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { SessionState } from '../../shared/types';
@@ -49,6 +53,7 @@ const defaultState: SessionState = {
   filetype: ''
 };
 
+// 表示言語とアニメーションの設定を、下の部品すべてが使えるようにしてから AppContent を描く。
 export default function App(): React.JSX.Element {
   const settings = useEditorSettings();
   const reducedMotion = useReducedMotion();
@@ -79,6 +84,8 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
     requestEditorFocus();
   }, [requestEditorFocus]);
 
+  // 開いているワークスペースの一覧と、表示中のワークスペースのID（active）。
+  // states には、ワークスペースごとのカーソル位置やタブの一覧などが入る。
   const { workspaces, setWorkspaces, active, setActive, states, mode, restoring } =
     useWorkspaceSessions(report);
   const { initializedEditors, finishEditorLoading } = useInitializedEditors();
