@@ -130,3 +130,87 @@ export class ScrollQueue {
     return true;
   }
 }
+
+/**
+ * Convert a wheel delta to pixels. deltaMode 0 is pixels, 1 is lines and 2 is pages.
+ * The page size is read only for page deltas, because reading layout can force a reflow.
+ */
+function wheelPixels(delta: number, mode: number, line: number, page: () => number): number {
+  return delta * (mode === 1 ? line : mode === 2 ? page() : 1);
+}
+
+export interface WheelMotion {
+  /** Vertical distance in rows, which may be fractional. */
+  lines: number;
+  /** Horizontal distance in columns. */
+  columns: number;
+  /** Wheel notches move in steps; fine touchpad deltas move smoothly. */
+  discrete: boolean;
+}
+
+/**
+ * Turn an editor wheel event into vertical and horizontal motion. Horizontal touchpad motion
+ * accumulates in `horizontalWheel` across events less than 200ms apart; the returned
+ * `horizontalWheel` replaces it. `motion` is undefined when the event moves nothing.
+ */
+export function editorWheelMotion(
+  event: { deltaX: number; deltaY: number; deltaMode: number; shiftKey: boolean },
+  view: {
+    surface: { clientWidth: number; clientHeight: number };
+    lineHeight: number;
+    cellWidth: number;
+  },
+  horizontalWheel: { remainder: number; time: number },
+  now: number
+): { horizontalWheel: { remainder: number; time: number }; motion?: WheelMotion } {
+  const { surface, lineHeight, cellWidth } = view;
+  const delta = event.deltaY * 0.5;
+  const horizontal = event.deltaX || (event.shiftKey ? event.deltaY : 0);
+  // Precision touchpads add small vertical deltas during horizontal gestures.
+  const diagonal =
+    !event.shiftKey &&
+    delta !== 0 &&
+    (event.deltaMode !== 0 || Math.abs(event.deltaY) * 4 >= Math.abs(horizontal));
+  const result =
+    cellWidth && diagonal
+      ? accumulateScroll(
+          now - horizontalWheel.time > 200 ? 0 : horizontalWheel.remainder,
+          horizontal * 0.5,
+          event.deltaMode,
+          cellWidth,
+          surface.clientWidth
+        )
+      : { lines: 0, remainder: 0 };
+  const nextWheel = horizontal
+    ? { remainder: diagonal ? result.remainder : 0, time: now }
+    : horizontalWheel;
+  const pixels = wheelPixels(
+    diagonal ? delta : 0,
+    event.deltaMode,
+    lineHeight,
+    () => surface.clientHeight
+  );
+  const horizontalPixels = wheelPixels(
+    horizontal * 0.5,
+    event.deltaMode,
+    cellWidth,
+    () => surface.clientWidth
+  );
+  const columns = pixels ? result.lines : horizontalPixels / cellWidth;
+  if (!(Number.isFinite(pixels) && pixels) && !(Number.isFinite(columns) && columns)) {
+    return { horizontalWheel: nextWheel };
+  }
+  return {
+    horizontalWheel: nextWheel,
+    motion: {
+      lines: Number.isFinite(pixels) ? pixels / lineHeight : 0,
+      columns: Number.isFinite(columns) ? columns : 0,
+      // Fine pixel deltas already describe smooth touchpad motion; wheel notches
+      // (including Shift+wheel and tilt) move several lines or columns at once.
+      discrete:
+        event.deltaMode !== 0 ||
+        Math.abs(pixels) >= lineHeight ||
+        Math.abs(horizontalPixels) >= 3 * cellWidth
+    }
+  };
+}
