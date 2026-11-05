@@ -59,9 +59,13 @@ test('missing Deno warns once for Deno files and avoids misleading TypeScript di
 		await writeFile(join(root, 'main.ts'), 'Deno.cwd();\n');
 		session = await Session.create(root, () => {});
 		await session.client.request('nvim_exec_lua', [
-			`local exepath, executable, notify = vim.fn.exepath, vim.fn.executable, vim.notify
+			`local packs = require('nido_language_packs')
+local exepath, executable, notify = vim.fn.exepath, vim.fn.executable, vim.notify
+local packs_exepath = packs.exepath
 local warnings = {}
 vim.fn.exepath = function(name) return name == 'deno' and '' or exepath(name) end
+-- On Windows the adapter reads PATH itself instead of calling vim.fn.exepath.
+packs.exepath = function(name) return name == 'deno' and '' or packs_exepath(name) end
 vim.fn.executable = function(name)
   if name:match('deno%.exe$') or name:match('/deno$') then return 0 end
   return executable(name)
@@ -76,6 +80,7 @@ local ok, err = pcall(function()
   assert(#vim.lsp.get_clients({bufnr=0}) == 0, 'Deno files must not fall back to TypeScript')
 end)
 vim.fn.exepath, vim.fn.executable, vim.notify = exepath, executable, notify
+packs.exepath = packs_exepath
 assert(ok, err)`,
 			[]
 		]);

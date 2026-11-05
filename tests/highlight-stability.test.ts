@@ -9,7 +9,7 @@ import { Grid } from '../src/renderer/src/grid';
 for (const language of ['rust', 'typescript'] as const) {
 	test(
 		`ordinary ${language} editing keeps redraws error-free through incomplete syntax and cancellation`,
-		{ timeout: 60000 },
+		{ timeout: 90000 },
 		async () => {
 			const root = await mkdtemp(join(tmpdir(), 'nido-editing-stability-'));
 			const rust = language === 'rust';
@@ -105,11 +105,32 @@ for (const language of ['rust', 'typescript'] as const) {
 				};
 				await current.attach(100, 34);
 				await step('open', () => current.openFile(path));
-				await lua(`assert(vim.wait(20000, function()
+				// A cold rust-analyzer on a fresh CI runner can take close to 20s to initialize.
+				const initialized = await lua(`return vim.wait(45000, function()
         for _, client in ipairs(vim.lsp.get_clients({bufnr=0})) do
           if client.initialized then return true end
         end
-      end), 'The real language server must initialize')`);
+      end)`);
+				if (!initialized) {
+					const state = await lua(`local packs = require('nido_language_packs')
+        local lines = {}
+        local log = io.open(vim.lsp.log.get_filename(), 'r')
+        if log then
+          for line in log:lines() do lines[#lines + 1] = line end
+          log:close()
+        end
+        local server = ${JSON.stringify(rust ? 'rust-analyzer' : 'tsc')}
+        return vim.json.encode({
+          exepath = packs.exepath(server),
+          builtinExepath = vim.fn.exepath(server),
+          packs = packs.snapshot(),
+          clients = vim.tbl_map(function(client)
+            return {name = client.name, initialized = client.initialized, stopped = client:is_stopped()}
+          end, vim.lsp.get_clients()),
+          lspLog = vim.list_slice(lines, math.max(1, #lines - 40)),
+        })`);
+					assert.fail(`The real language server must initialize: ${String(state)}`);
+				}
 				await step('decorations', () =>
 					lua(
 						"require('nido_sticky').set_method_separators(true); vim.cmd('normal! 20Gzt')"

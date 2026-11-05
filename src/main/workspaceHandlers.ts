@@ -1,15 +1,36 @@
 import { app, dialog } from 'electron';
 import { isAbsolute, join } from 'node:path';
 import { Session } from './session';
-import { readLayout, writeLayout } from './persistence';
+import { readLayout, writeLayout, type SavedLayout } from './persistence';
 import { WorkspaceCheckpoints } from './workspaceCheckpoints';
 import { registerFavoriteHandlers } from './favoriteHandlers';
 import { registerFolderBrowserHandlers } from './folderBrowserHandlers';
-import type { TerminalShell } from '../shared/types';
+import type { NidoEvent, TerminalShell } from '../shared/types';
 import type { HandlerDeps } from './handlers';
 import { createTranslator } from '../shared/i18n';
 import type { LanguagePacks } from './languagePacks';
 import { untitledRecoveryLimitMessage } from '../shared/recovery';
+
+interface PrestartedLayout {
+	saved: SavedLayout;
+	starts: { created: Promise<Session>; claim: () => void }[];
+}
+
+/** Hold events until release, then deliver them in order and pass later ones through. */
+export function bufferedEmitter(send: (event: NidoEvent) => void): {
+	emit: (event: NidoEvent) => void;
+	release: () => void;
+} {
+	let held: NidoEvent[] | undefined = [];
+	return {
+		emit: (event) => (held ? held.push(event) : send(event)),
+		release: () => {
+			const events = held ?? [];
+			held = undefined;
+			events.forEach(send);
+		}
+	};
+}
 
 export function registerWorkspaceHandlers({
 	window,
@@ -191,23 +212,67 @@ export function registerWorkspaceHandlers({
 			);
 	});
 
+	// Start the saved workspaces' Neovim processes while the renderer is still loading.
+	// Their events wait until the renderer asks for the restoration and has subscribed.
+	let prestart: Promise<PrestartedLayout> | undefined = (async () => {
+		const saved = await readLayout(layoutPath);
+		return {
+			saved,
+			starts: saved.workspaces.map((workspace) => {
+				const events = bufferedEmitter(send);
+				const created = languagePacks
+					.load()
+					.then((packs) =>
+						Session.create(workspace.root, events.emit, neovimResources, packs)
+					);
+				// Restoration reports the failure; avoid an unhandled rejection before it claims this.
+				created.catch(() => {});
+				return { created, claim: events.release };
+			})
+		};
+	})();
+	prestart.catch(() => {});
+	window.once('closed', () => {
+		// Stop processes the renderer never claimed, such as when it failed to load.
+		const unclaimed = prestart;
+		prestart = undefined;
+		void unclaimed?.then(({ starts }) =>
+			starts.forEach(
+				({ created }) =>
+					void created.then(
+						(s) => s.stop(),
+						() => {}
+					)
+			)
+		);
+	});
+
 	handle('restore', (shell) => {
 		const selectedShell = shellChoice(shell);
 		state.restoration ??= (async () => {
 			const errors: string[] = [];
 			try {
-				const saved = await readLayout(layoutPath);
+				const early = prestart;
+				prestart = undefined;
+				const prestarted = early ? await early : undefined;
+				const saved = prestarted?.saved ?? (await readLayout(layoutPath));
 				// Independent sessions can start together; insert results in saved tab order.
 				const restored = await Promise.all(
 					saved.workspaces.map(async (workspace, index) => {
 						let s: Session | undefined;
 						try {
-							s = await Session.create(
-								workspace.root,
-								send,
-								neovimResources,
-								await languagePacks.load()
-							);
+							const start = prestarted?.starts[index];
+							if (start) {
+								start.claim();
+								s = await start.created;
+							} else {
+								s = await Session.create(
+									workspace.root,
+									send,
+									neovimResources,
+									await languagePacks.load()
+								);
+							}
 							errors.push(...(await s.restore(workspace, selectedShell)));
 							if (index === saved.active) {
 								state.active = s.workspace.id;

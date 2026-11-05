@@ -10,7 +10,7 @@ end
 
 function M.setup()
   local group = api.nvim_create_augroup('NidoDeno', {clear=true})
-  local command = vim.fn.exepath('deno')
+  local command = require('nido_language_packs').exepath('deno')
   if command == '' then
     local install = vim.env.DENO_INSTALL or vim.fs.joinpath(vim.fn.expand('~'), '.deno')
     local candidate = vim.fs.joinpath(install, 'bin', vim.fn.has('win32') == 1 and 'deno.exe' or 'deno')

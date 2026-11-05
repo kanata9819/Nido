@@ -2,6 +2,62 @@ local M = {}
 local api = vim.api
 local base = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':h:h')
 local adapters, states = {}, {}
+-- PATH directory listings, kept only while one configuration is applied.
+local listings
+
+local function names(dir)
+  local set = listings[dir]
+  if set == nil then
+    set = {}
+    local handle = vim.uv.fs_scandir(dir)
+    if handle then
+      while true do
+        local name, kind = vim.uv.fs_scandir_next(handle)
+        if not name then break end
+        if kind ~= 'directory' then set[name:lower()] = name end
+      end
+    end
+    listings[dir] = set
+  end
+  return set
+end
+
+--- Resolve a command on PATH like exepath(). On Windows, executable() and exepath()
+--- probe every PATH directory with every PATHEXT extension, which takes 15-40ms per
+--- lookup on a long PATH. Read each directory once instead.
+function M.exepath(name)
+  if vim.fn.has('win32') == 0 or name == '' or name:find('[/\\:]') then
+    return vim.fn.exepath(name)
+  end
+  local temporary = listings == nil
+  listings = listings or {}
+  local extensions, lower = {}, name:lower()
+  for extension in (vim.env.PATHEXT or '.COM;.EXE;.BAT;.CMD'):gmatch('[^;]+') do
+    if lower:sub(-#extension) == extension:lower() then
+      extensions = {''}
+      break
+    end
+    extensions[#extensions + 1] = extension
+  end
+  local found = ''
+  for dir in (vim.env.PATH or ''):gmatch('[^;]+') do
+    dir = dir:gsub('^"(.*)"$', '%1')
+    local set = names(dir)
+    for _, extension in ipairs(extensions) do
+      if set[lower .. extension:lower()] then
+        found = dir:gsub('[/\\]$', '') .. '\\' .. name .. extension
+        break
+      end
+    end
+    if found ~= '' then break end
+  end
+  if temporary then listings = nil end
+  return found
+end
+
+function M.executable(name)
+  return M.exepath(name) ~= '' and 1 or 0
+end
 
 function M.adapter(id)
   assert(id == 'typescript' or id == 'deno' or id == 'rust', 'Unknown built-in language adapter')
@@ -21,6 +77,14 @@ local function stop(state)
 end
 
 function M.apply(config)
+  -- A tool installed since the last apply must be found, so listings never outlive it.
+  listings = {}
+  local ok, err = pcall(M.apply_packs, config)
+  listings = nil
+  if not ok then error(err, 0) end
+end
+
+function M.apply_packs(config)
   local wanted = {}
   for _, pack in ipairs(config.packs or {}) do
     wanted[pack.id] = {pack=pack, enabled=not vim.tbl_contains(config.disabled or {}, pack.id)}
@@ -49,7 +113,7 @@ function M.apply(config)
             if arg:find('${node}', 1, true) then node = true end
             command[index] = arg:gsub('%${node}', function() return vim.env.NIDO_NODE or 'node' end)
           end
-          if vim.fn.executable(command[1]) == 0 then
+          if M.executable(command[1]) == 0 then
             state.message = command[1] .. ' is not installed or is not on PATH.'
             return false
           end
