@@ -133,9 +133,19 @@ export default function TypeInformation({
 					event.stopPropagation();
 					const key = event.key.toLowerCase();
 					const ctrl = event.ctrlKey && !event.altKey && !event.metaKey;
+					const plain =
+						!event.ctrlKey &&
+						!event.altKey &&
+						!event.metaKey &&
+						!event.nativeEvent.isComposing;
 					if (event.key === 'Escape' || (ctrl && ['c', 'k'].includes(key))) {
 						event.preventDefault();
 						close();
+					} else if (plain && ['h', 'j', 'k', 'l'].includes(event.key)) {
+						// Moving on in the editor dismisses the card, like leaving a hover.
+						event.preventDefault();
+						close();
+						void window.nido.input(id, event.key).catch(() => {});
 					} else if (ctrl && ['d', 'u', 'f', 'b'].includes(key)) {
 						event.preventDefault();
 						const content = body.current!;
@@ -148,7 +158,7 @@ export default function TypeInformation({
 						!event.altKey &&
 						!event.metaKey &&
 						!event.nativeEvent.isComposing &&
-						['h', 'l', 'ArrowLeft', 'ArrowRight'].includes(event.key)
+						['ArrowLeft', 'ArrowRight'].includes(event.key)
 					) {
 						event.preventDefault();
 						const bounds = body.current!.getBoundingClientRect();
@@ -163,9 +173,7 @@ export default function TypeInformation({
 							);
 						});
 						if (content) {
-							content.scrollLeft += ['l', 'ArrowRight'].includes(event.key)
-								? 48
-								: -48;
+							content.scrollLeft += event.key === 'ArrowRight' ? 48 : -48;
 						}
 					} else if (event.key === 'Tab') {
 						event.preventDefault();
@@ -180,7 +188,9 @@ export default function TypeInformation({
 					} else if (
 						!event.ctrlKey &&
 						!event.altKey &&
-						['j', 'k', 'PageDown', 'PageUp', 'Home', 'End'].includes(event.key)
+						['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'].includes(
+							event.key
+						)
 					) {
 						event.preventDefault();
 						const content = body.current!;
@@ -190,8 +200,8 @@ export default function TypeInformation({
 							content.scrollTop = content.scrollHeight;
 						} else {
 							content.scrollTop +=
-								(['j', 'PageDown'].includes(event.key) ? 1 : -1) *
-								(event.key.length === 1 ? 32 : content.clientHeight * 0.8);
+								(['ArrowDown', 'PageDown'].includes(event.key) ? 1 : -1) *
+								(event.key.startsWith('Arrow') ? 32 : content.clientHeight * 0.8);
 						}
 					}
 				}}
@@ -286,10 +296,10 @@ export default function TypeInformation({
 				<footer>
 					<span
 						title={t(
-							'h/l / ← →: horizontal · j/k: line · Ctrl+D/U: half page · Ctrl+F/B: page'
+							'← →: horizontal · ↑ ↓: line · Ctrl+D/U: half page · Ctrl+F/B: page · h/j/k/l: close and move'
 						)}
 					>
-						{t('h / l · Horizontal · Ctrl D / U · Scroll')}
+						{t('Arrows · Scroll · h j k l · Close')}
 					</span>
 					<span>{t('Esc / Ctrl C · Back to editor')}</span>
 				</footer>

@@ -5888,6 +5888,53 @@ test('file tab shortcuts leave a terminal session focused', async ({ page }) => 
 	).toEqual([]);
 });
 
+test('h, j, k and l close type information and move in the editor; arrows scroll', async ({
+	page
+}) => {
+	await page.addInitScript(() => localStorage.setItem('nido.animations', 'false'));
+	await page.goto(`${origin}?view=app`);
+	const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+	const card = page.getByRole('dialog', { name: 'Type information', exact: true });
+	const content = page.getByLabel('Type information content', { exact: true });
+	await expect(editor).toBeFocused();
+	const show = (): Promise<void> =>
+		page.evaluate(() =>
+			window.rendererTest.emit({
+				type: 'hover',
+				id: 'alpha',
+				markdown: Array.from({ length: 80 }, (_, line) => `Line ${line}`).join('\n\n'),
+				filetype: 'rust',
+				codeBlocks: []
+			})
+		);
+	const inputs = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'input')
+				.map((call) => call.args)
+		);
+	await show();
+	await expect(content).toBeFocused();
+	await page.keyboard.press('ArrowDown');
+	await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+	await page.keyboard.press('ArrowUp');
+	await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
+	expect(await inputs()).toEqual([]);
+	for (const key of ['h', 'j', 'k', 'l']) {
+		await show();
+		await expect(content).toBeFocused();
+		await page.keyboard.press(key);
+		await expect(card).toHaveCount(0);
+		await expect(editor).toBeFocused();
+	}
+	await expect.poll(inputs).toEqual([
+		['alpha', 'h'],
+		['alpha', 'j'],
+		['alpha', 'k'],
+		['alpha', 'l']
+	]);
+});
+
 test('type information code uses the editor font', async ({ page }) => {
 	await page.addInitScript(() => localStorage.setItem('nido.animations', 'false'));
 	await page.goto(`${origin}?view=app`);
