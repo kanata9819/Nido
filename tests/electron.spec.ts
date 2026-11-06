@@ -2375,8 +2375,9 @@ test('settings can be navigated and changed entirely with the keyboard', async (
 		await page.keyboard.press('Shift+Tab');
 		await expect(size).toBeFocused();
 		const initial = Number(await size.inputValue());
+		// The font size steps by half pixels.
 		await page.keyboard.press('ArrowUp');
-		await expect(size).toHaveValue(String(initial + 1));
+		await expect(size).toHaveValue(String(initial + 0.5));
 		await page.keyboard.press('j');
 		const weight = page.getByRole('spinbutton', { name: 'Editor font weight' });
 		await expect(weight).toBeFocused();
