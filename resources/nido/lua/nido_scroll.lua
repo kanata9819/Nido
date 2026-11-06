@@ -5,6 +5,8 @@ local anchor
 local fraction = 0
 local centered_view
 local mouse_scrolloff
+-- The horizontal position the user panned to, kept across vertical scrolling.
+local pan
 
 -- Buffer positions start below their virtual lines. topfill counts the extra
 -- screen rows still visible above that position, including CodeLens annotations.
@@ -97,6 +99,7 @@ function M.restore(keep_view)
   if not keep_view then
     fraction = 0
     centered_view = nil
+    pan = nil
   end
   local pos = M.cursor()
   local saved = anchor
@@ -157,6 +160,105 @@ function M.page(key, count)
   reveal_row(bottom - info.winrow + 1)
 end
 
+local function text_width(window)
+  return math.max(1, api.nvim_win_get_width(window) - vim.fn.getwininfo(window)[1].textoff)
+end
+
+-- Visible buffer lines and their display widths, skipping text inside closed folds.
+local function visible_lines()
+  local lines, longest = {}, 0
+  local line, last = vim.fn.line('w0'), vim.fn.line('w$')
+  while line <= last do
+    local length = vim.fn.strdisplaywidth(vim.fn.getline(line))
+    local folded = vim.fn.foldclosedend(line)
+    lines[#lines + 1] = {line=line, width=length, folded=folded >= 0}
+    if length > longest then longest = length end
+    line = folded >= 0 and folded + 1 or line + 1
+  end
+  return lines, longest
+end
+
+-- Show the view from `left` with the cursor on `lnum`, as close to `virtcol` as fits.
+local function place(window, view, left, lnum, virtcol, curswant)
+  local width = text_width(window)
+  local column = math.max(left + 1, math.min(left + width, virtcol))
+  view.lnum = lnum
+  view.col = math.max(0, vim.fn.virtcol2col(window, lnum, column) - 1)
+  local character = vim.fn.virtcol({lnum, view.col + 1}, true)
+  if character[1] - 1 < left then
+    view.col = math.max(0, vim.fn.virtcol2col(window, lnum, character[2] + 1) - 1)
+  end
+  view.leftcol, view.curswant = left, curswant or column - 1
+  if not mouse_scrolloff then
+    mouse_scrolloff = {window=window, value=vim.wo.scrolloff}
+  end
+  vim.wo.scrolloff = 0
+  vim.fn.winrestview(view)
+end
+
+-- The column the user panned to, which short visible lines may have clamped.
+local function wanted_leftcol(view)
+  if pan and pan.window == api.nvim_get_current_win()
+      and pan.buffer == api.nvim_get_current_buf() and pan.left == view.leftcol then
+    return pan.wanted
+  end
+  return view.leftcol
+end
+
+local function remember_leftcol(wanted)
+  pan = {window=api.nvim_get_current_win(), buffer=api.nvim_get_current_buf(),
+    wanted=wanted, left=vim.fn.winsaveview().leftcol}
+end
+
+-- Vertical scrolling moves the internal cursor; on a short line Neovim would
+-- scroll the view back to the left edge to show it. Keep the panned column
+-- by moving the cursor to the nearest visible line that reaches it instead.
+local function keep_leftcol(wanted)
+  local view = vim.fn.winsaveview()
+  if view.leftcol == wanted then
+    return
+  end
+  local window = api.nvim_get_current_win()
+  local lines, longest = visible_lines()
+  local left = wanted
+  if longest <= wanted then
+    -- Nothing visible reaches the column; show the ends of the visible lines until it does.
+    left = math.max(0, longest - text_width(window))
+  end
+  if left == view.leftcol then
+    return
+  end
+  local target, distance
+  for _, entry in ipairs(lines) do
+    if entry.width > left and not entry.folded then
+      local gap = math.abs(entry.line - view.lnum)
+      if not distance or gap < distance then
+        target, distance = entry.line, gap
+      end
+    end
+  end
+  if target then
+    place(window, view, left, target, math.min(view.curswant, 2147483646) + 1, view.curswant)
+  end
+end
+
+local function scroll_horizontal(columns)
+  local view = vim.fn.winsaveview()
+  local window = api.nvim_get_current_win()
+  local width = text_width(window)
+  local longest, longest_line = 0, view.lnum
+  for _, entry in ipairs((visible_lines())) do
+    if entry.width > longest then longest, longest_line = entry.width, entry.line end
+  end
+  local left = math.max(0, math.min(view.leftcol + columns, longest - width))
+  if left == view.leftcol then return false end
+  -- A short cursor line must not prevent panning to longer visible lines.
+  if vim.fn.virtcol({view.lnum, '$'}) - 1 <= left then view.lnum = longest_line end
+  place(window, view, left, view.lnum, vim.fn.virtcol('.'))
+  remember_leftcol(left)
+  return true
+end
+
 function M.prefetch(down, previous)
   if vim.bo.buftype ~= '' or api.nvim_win_get_config(0).relative ~= '' then
     return
@@ -179,7 +281,9 @@ function M.prefetch(down, previous)
   if cached >= 256 then
     return
   end
-  local scrolloff = vim.wo.scrolloff
+  local scrolloff, saved_mouse_scrolloff = vim.wo.scrolloff, mouse_scrolloff
+  -- Cached rows must be painted at the panned column the real scroll will keep.
+  local wanted = not vim.wo.wrap and wanted_leftcol(view)
   local step = math.max(1, height - 1)
   -- Visit only the next strip, then restore the real view before yielding to input.
   local views = {}
@@ -189,6 +293,7 @@ function M.prefetch(down, previous)
   local ok, err = pcall(function()
     if cached > 0 then
       vim.cmd.normal({args={cached .. string.char(down and 5 or 25)}, bang=true})
+      if wanted then keep_leftcol(wanted) end
     end
     while remaining > 0 do
       local before = vim.fn.winsaveview()
@@ -199,6 +304,7 @@ function M.prefetch(down, previous)
       views[#views + 1] = before
       local count = math.min(step, remaining)
       vim.cmd.normal({args={count .. string.char(down and 5 or 25)}, bang=true})
+      if wanted then keep_leftcol(wanted) end
       remaining = remaining - count
       local after = vim.fn.winsaveview()
       depth = math.abs(M.view_distance(0, view, after))
@@ -221,6 +327,7 @@ function M.prefetch(down, previous)
   vim.fn.winrestview(view)
   vim.cmd.redraw()
   vim.wo.scrolloff = scrolloff
+  mouse_scrolloff = saved_mouse_scrolloff
   if not ok then
     error(err)
   end
@@ -232,37 +339,6 @@ function M.prefetch(down, previous)
     return {buffer=buffer, window=window, tick=tick, height=height, width=width,
       view=view, depth=depth}
   end
-end
-
-local function scroll_horizontal(columns)
-  local view = vim.fn.winsaveview()
-  local window = api.nvim_get_current_win()
-  local width = math.max(1, api.nvim_win_get_width(window) - vim.fn.getwininfo(window)[1].textoff)
-  local longest, longest_line = 0, view.lnum
-  local line, last = vim.fn.line('w0'), vim.fn.line('w$')
-  while line <= last do
-    local length = vim.fn.strdisplaywidth(vim.fn.getline(line))
-    if length > longest then longest, longest_line = length, line end
-    local folded = vim.fn.foldclosedend(line)
-    line = folded >= 0 and folded + 1 or line + 1
-  end
-  local left = math.max(0, math.min(view.leftcol + columns, longest - width))
-  if left == view.leftcol then return false end
-  -- A short cursor line must not prevent panning to longer visible lines.
-  if vim.fn.virtcol({view.lnum, '$'}) - 1 <= left then view.lnum = longest_line end
-  local column = math.max(left + 1, math.min(left + width, vim.fn.virtcol('.')))
-  view.col = math.max(0, vim.fn.virtcol2col(window, view.lnum, column) - 1)
-  local character = vim.fn.virtcol({view.lnum, view.col + 1}, true)
-  if character[1] - 1 < left then
-    view.col = math.max(0, vim.fn.virtcol2col(window, view.lnum, character[2] + 1) - 1)
-  end
-  view.leftcol, view.curswant = left, column - 1
-  if not mouse_scrolloff then
-    mouse_scrolloff = {window=window, value=vim.wo.scrolloff}
-  end
-  vim.wo.scrolloff = 0
-  vim.fn.winrestview(view)
-  return true
 end
 
 function M.scroll(lines, follow, pixel, columns)
@@ -296,7 +372,12 @@ function M.scroll(lines, follow, pixel, columns)
   end
   local before = vim.fn.winsaveview()
   if lines ~= 0 then
+    local wanted = not vim.wo.wrap and wanted_leftcol(before)
     vim.cmd.normal({args={math.abs(lines) .. string.char(lines > 0 and 5 or 25)}, bang=true})
+    if wanted then
+      keep_leftcol(wanted)
+      remember_leftcol(wanted)
+    end
     local after = vim.fn.winsaveview()
     local moved = math.abs(M.view_distance(0, before, after))
     if moved < math.abs(lines) then
