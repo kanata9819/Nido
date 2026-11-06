@@ -52,6 +52,7 @@ test('translated command searches keep shortcut keys and actions, and preserve p
 		closeWorkspace: noop,
 		create: async (): Promise<void> => {},
 		createTerminal: async (): Promise<void> => {},
+		showFavorites: async (): Promise<void> => {},
 		showExplorer: noop,
 		openDebugger: noop,
 		openFile: noop,
