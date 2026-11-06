@@ -451,12 +451,15 @@ export const japanese: Record<string, string> = {
 	'Favorite {name} ({kind})': 'お気に入り {name}（{kind}）',
 	'Remove favorite {name} ({kind})': 'お気に入り {name}（{kind}）を解除',
 	'Remove favorite': 'お気に入りを解除',
-	'Browse folders': 'フォルダーを参照',
+	'No favorites yet.': 'お気に入りはまだありません。',
+	'Open favorite workspace': 'お気に入りのワークスペースを開く',
+	'Choose a saved project · Ctrl+F in the folder picker':
+		'登録したプロジェクトを選択 · フォルダー選択画面ではCtrl+F',
 	'Loading folders…': 'フォルダーを読み込み中…',
 	'No subfolders. Open this folder with Ctrl+Enter.':
 		'サブフォルダーがありません。Ctrl+Enterでこのフォルダーを開けます。',
-	'Tab / Shift+Tab Move focus · j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Esc Cancel':
-		'Tab / Shift+Tab：項目移動 · j/k：選択 · h/l：参照 · Enter：選択した項目を開く · Ctrl+Enter：現在のフォルダーを開く · Ctrl+L：パス · Esc：キャンセル',
+	'Tab / Shift+Tab Move focus · j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Ctrl+F Favorites · Esc Cancel':
+		'Tab / Shift+Tab：項目移動 · j/k：選択 · h/l：参照 · Enter：選択した項目を開く · Ctrl+Enter：現在のフォルダーを開く · Ctrl+L：パス · Ctrl+F：お気に入り · Esc：キャンセル',
 	'File explorer': 'ファイルエクスプローラー',
 	'Explorer width': 'エクスプローラーの幅',
 	'Drag to resize · Shift+H / L': 'ドラッグで幅を調整 · Shift+H / L',

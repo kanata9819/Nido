@@ -4278,6 +4278,9 @@ test('creation entry chooses the session kind and cancelling resets the next edi
 	await page.keyboard.press('Enter');
 	const picker = page.getByRole('dialog', { name: 'folders palette' });
 	await expect(picker).toContainText('New terminal session');
+	// Favorites stay hidden until requested.
+	await expect(picker.getByRole('option', { name: /^Favorite / })).toHaveCount(0);
+	await page.keyboard.press('Control+f');
 	await expect(
 		picker.getByRole('option', { name: 'Favorite Terminal project (terminal)' })
 	).toHaveCount(1);
@@ -4303,6 +4306,7 @@ test('creation entry chooses the session kind and cancelling resets the next edi
 	await page.keyboard.press('Escape');
 	await page.keyboard.press('Control+Shift+n');
 	await expect(picker).toContainText('Open a workspace');
+	await page.keyboard.press('Control+f');
 	await expect(
 		picker.getByRole('option', { name: 'Favorite Editor project (editor)' })
 	).toHaveCount(1);
@@ -4360,6 +4364,8 @@ test('Folder browsing cancels old results and clamps selection after favorites c
 		})
 	);
 	const list = page.getByRole('listbox', { name: 'Folders' });
+	await expect(list.getByRole('option')).toHaveCount(0);
+	await list.press('Control+f');
 	await expect(list.getByRole('option')).toHaveCount(2);
 	await list.press('j');
 	await expect(list).toHaveAttribute('aria-activedescendant', 'folder-choice-1');
@@ -4369,6 +4375,76 @@ test('Folder browsing cancels old results and clamps selection after favorites c
 		})
 	);
 	await expect(list).toHaveAttribute('aria-activedescendant', 'folder-choice-0');
+});
+
+test('Folder browsing keeps the current listing until the next one arrives', async ({ page }) => {
+	await page.goto(`${origin}?view=folders&defer=browseFolders`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('browseFolders', 0, {
+			path: '/alpha',
+			parent: '/',
+			folders: Array.from({ length: 40 }, (_, index) => ({
+				name: `folder${index}`,
+				path: `/alpha/folder${index}`,
+				directory: true
+			}))
+		})
+	);
+	const list = page.getByRole('listbox', { name: 'Folders' });
+	await expect(list.getByRole('option')).toHaveCount(40);
+	const parent = page.getByRole('button', { name: '↑ Parent' });
+	// The standalone harness does not bound the list height like the palette does.
+	await list.evaluate((element) => (element.style.maxHeight = '200px'));
+	await list.focus();
+	for (let index = 0; index < 30; index++) {
+		await list.press('j');
+	}
+	expect(await list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+	await list.press('l');
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	// No loading placeholder and no disabled controls while the next listing is pending.
+	await expect(list).toHaveAttribute('aria-busy', 'true');
+	await expect(list.getByRole('option')).toHaveCount(40);
+	await expect(list).not.toContainText('Loading folders…');
+	await expect(parent).toBeEnabled();
+	await page.evaluate(() =>
+		window.rendererTest.settle('browseFolders', 0, {
+			path: '/alpha/folder30',
+			parent: '/alpha',
+			folders: [{ name: 'child', path: '/alpha/folder30/child', directory: true }]
+		})
+	);
+	await expect(list.getByRole('option')).toHaveCount(1);
+	await expect(list).toHaveAttribute('aria-activedescendant', 'folder-choice-0');
+	expect(await list.evaluate((element) => element.scrollTop)).toBe(0);
+});
+
+test('Favorites open from the command palette and hide again with Ctrl+F', async ({ page }) => {
+	await page.goto(`${origin}?view=app&defer=favoriteWorkspaces`);
+	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('favoriteWorkspaces', 0, [
+			{ root: '/editor', name: 'Editor project', kind: 'editor' }
+		])
+	);
+	await page.keyboard.press('Control+Shift+p');
+	await page.keyboard.type('Open favorite workspace');
+	await page.keyboard.press('Enter');
+	const picker = page.getByRole('dialog', { name: 'folders palette' });
+	const favorite = picker.getByRole('option', { name: 'Favorite Editor project (editor)' });
+	await expect(favorite).toHaveCount(1);
+	await expect(picker.getByRole('button', { name: 'Favorites' })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	await page.keyboard.press('Control+f');
+	await expect(favorite).toHaveCount(0);
+	await picker.getByRole('button', { name: 'Favorites' }).click();
+	await expect(favorite).toHaveCount(1);
+	await page.keyboard.press('h');
+	await expect(favorite).toHaveCount(0);
 });
 
 test('Switching WSL connections ignores stale listings and displays Linux paths', async ({
@@ -5857,4 +5933,39 @@ test('h, j, k and l close type information and move in the editor; arrows scroll
 		['alpha', 'k'],
 		['alpha', 'l']
 	]);
+});
+
+test('type information code uses the editor font', async ({ page }) => {
+	await page.addInitScript(() => localStorage.setItem('nido.animations', 'false'));
+	await page.goto(`${origin}?view=app`);
+	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'hover',
+			id: 'alpha',
+			markdown: '```rust\npub fn row(&self) -> usize\n```\n\nReturns the `row`.',
+			filetype: 'rust',
+			codeBlocks: []
+		})
+	);
+	const card = page.getByRole('dialog', { name: 'Type information', exact: true });
+	await expect(card).toContainText('pub fn row');
+	const fonts = await card.evaluate((element) => ({
+		editor: getComputedStyle(element).getPropertyValue('--editor-font').trim(),
+		block: getComputedStyle(element.querySelector('pre code')!).fontFamily,
+		inline: getComputedStyle(element.querySelector('p code')!).fontFamily
+	}));
+	expect(fonts.editor).not.toBe('');
+	expect(fonts.block).not.toBe('monospace');
+	// Compare as the browser normalizes the font list.
+	const normalized = await page.evaluate((family) => {
+		const probe = document.createElement('span');
+		probe.style.fontFamily = family;
+		document.body.append(probe);
+		const value = getComputedStyle(probe).fontFamily;
+		probe.remove();
+		return value;
+	}, fonts.editor);
+	expect(fonts.block).toBe(normalized);
+	expect(fonts.inline).toBe(normalized);
 });

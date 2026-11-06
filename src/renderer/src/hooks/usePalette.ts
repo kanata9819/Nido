@@ -7,7 +7,9 @@ export interface PaletteState {
 	panel: Panel;
 	closePanel: () => void;
 	folderKind: 'editor' | 'terminal';
-	showFolders: (kind: 'editor' | 'terminal') => void;
+	/** Whether the folder picker opens on its favorites view. */
+	folderFavorites: boolean;
+	showFolders: (kind: 'editor' | 'terminal', favorites?: boolean) => void;
 	query: string;
 	setQuery: (value: string) => void;
 	selection: number;
@@ -36,6 +38,7 @@ export function usePalette({
 }): PaletteState {
 	const [panel, setPanel] = useState<Panel>(null);
 	const [folderKind, setFolderKind] = useState<'editor' | 'terminal'>('editor');
+	const [folderFavorites, setFolderFavorites] = useState(false);
 	const [query, setQueryState] = useState('');
 	const [selection, setSelection] = useState(0);
 	const {
@@ -62,8 +65,9 @@ export function usePalette({
 		},
 		[onShow, toggleMarkdown, resetFileSearch]
 	);
-	const showFolders = useCallback((kind: 'editor' | 'terminal'): void => {
+	const showFolders = useCallback((kind: 'editor' | 'terminal', favorites = false): void => {
 		setFolderKind(kind);
+		setFolderFavorites(favorites);
 		setPanel('folders');
 	}, []);
 	const setQuery = useCallback(
@@ -80,6 +84,7 @@ export function usePalette({
 		panel,
 		closePanel,
 		folderKind,
+		folderFavorites,
 		showFolders,
 		query,
 		setQuery,
