@@ -5922,3 +5922,51 @@ test('background workspaces sleep after five minutes and a failed wake stops loa
 	await expect(loading).toHaveCount(0);
 	await expect(beta).toHaveAccessibleDescription('Sleeping');
 });
+
+test('typing while a workspace wakes reaches that workspace, not the previous one', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,wakeWorkspace`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('restoreWorkspaces', 0, {
+			workspaces: [
+				{ id: 'alpha', root: '/alpha', name: 'Alpha' },
+				{ id: 'beta', root: '/beta', name: 'Beta', sleeping: true }
+			],
+			active: 'alpha',
+			errors: []
+		})
+	);
+	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+	const inputs = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'input')
+				.map((call) => call.args)
+		);
+	await page.keyboard.press('Alt+2');
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some((call) => call.method === 'wakeWorkspace')
+			)
+		)
+		.toBe(true);
+	await page.keyboard.type('4G');
+	expect(await inputs()).toEqual([]);
+	await page.evaluate(() =>
+		window.rendererTest.settle('wakeWorkspace', 0, {
+			workspace: { id: 'beta', root: '/beta', name: 'Beta' },
+			errors: []
+		})
+	);
+	await expect.poll(inputs).toEqual([['beta', '4G']]);
+	const editor = page.getByRole('textbox', { name: 'Neovim input' });
+	await expect(editor).toBeFocused();
+	await page.keyboard.type('j');
+	await expect.poll(inputs).toEqual([
+		['beta', '4G'],
+		['beta', 'j']
+	]);
+});

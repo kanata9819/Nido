@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { Workspace } from '../../../shared/types';
+import { vimKey } from '../keyboard';
 
 /** A background workspace sleeps after this long without being selected. */
 export const sleepDelay = 5 * 60 * 1000;
@@ -29,6 +30,9 @@ export function useWorkspaceSleep({
 	const lastSelected = useRef(new Map<string, number>());
 	const sleeping = useRef(new Set<string>());
 	const waking = useRef(new Set<string>());
+	// Keys typed while the selected workspace wakes, and the workspaces that just woke.
+	const pendingKeys = useRef(new Map<string, string[]>());
+	const awakened = useRef(new Set<string>());
 	const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
 	const previous = useRef(active);
 	const latest = useRef({ workspaces, active });
@@ -110,6 +114,7 @@ export function useWorkspaceSleep({
 		void window.nido
 			.wakeWorkspace(id)
 			.then(({ workspace, errors }) => {
+				awakened.current.add(id);
 				setWorkspaces((old) =>
 					old.map((w) => (w.id === id ? { ...w, ...workspace, sleeping: false } : w))
 				);
@@ -123,6 +128,48 @@ export function useWorkspaceSleep({
 			})
 			.finally(() => waking.current.delete(id));
 	}, [restoring, selectedSleeping, active, failed, setWorkspaces, report]);
+
+	// The previous workspace's editor input keeps focus until the woken editor mounts.
+	// Hold typing meanwhile and deliver it to the woken workspace, never the previous one.
+	useEffect(() => {
+		const id = active;
+		if (restoring || !selectedSleeping) {
+			return;
+		}
+		const pending = pendingKeys.current;
+		const woken = awakened.current;
+		const focused = document.activeElement;
+		if (focused instanceof HTMLTextAreaElement && focused.closest('[data-editor-input]')) {
+			focused.blur();
+		}
+		const keydown = (event: KeyboardEvent): void => {
+			const target = event.target instanceof Element ? event.target : null;
+			if (
+				event.defaultPrevented ||
+				event.isComposing ||
+				target?.closest(
+					'input, textarea, select, [contenteditable="true"], [role="dialog"]'
+				)
+			) {
+				return;
+			}
+			const key = vimKey(event);
+			if (key) {
+				event.preventDefault();
+				pending.set(id, [...(pending.get(id) ?? []), key]);
+			}
+		};
+		window.addEventListener('keydown', keydown);
+		return () => {
+			window.removeEventListener('keydown', keydown);
+			const keys = pending.get(id);
+			pending.delete(id);
+			// Runs before the woken editor mounts and takes focus, so typing stays in order.
+			if (woken.delete(id) && keys?.length) {
+				void window.nido.input(id, keys.join('')).catch((error) => report(String(error)));
+			}
+		};
+	}, [restoring, selectedSleeping, active, report]);
 
 	return failed;
 }
