@@ -7,6 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type {} from './renderer/harness';
 import { applyNeovimUI, emptyNeovimUI } from '../src/shared/neovimUI';
 import { requireWebGLCorrection } from './helpers/row-image-probe';
+import { waitForPendingCall, waitForRendererHarness } from './helpers/renderer-harness';
 
 let server: ViteDevServer;
 let origin: string;
@@ -3242,6 +3243,7 @@ for (const view of ['welcome', 'terminal'] as const) {
 			localStorage.setItem('nido.animations', 'false');
 		});
 		await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+		await waitForPendingCall(page, 'restoreWorkspaces');
 		await page.evaluate((view) => {
 			window.rendererTest.settle('restoreWorkspaces', 0, {
 				workspaces:
@@ -3639,6 +3641,7 @@ test('hidden editors discard late IME input while another workspace accepts typi
 	page
 }) => {
 	await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+	await waitForPendingCall(page, 'restoreWorkspaces');
 	await page.evaluate(() =>
 		window.rendererTest.settle('restoreWorkspaces', 0, {
 			workspaces: [
@@ -3983,6 +3986,7 @@ test('Git staging keeps the reviewed file selected and commits only staged chang
 
 test('Git commit failures preserve the draft and it survives switching views', async ({ page }) => {
 	await page.goto(`${origin}?view=git&defer=gitStatus,gitCommit`);
+	await waitForPendingCall(page, 'gitStatus');
 	await page.evaluate(() =>
 		window.rendererTest.settle('gitStatus', 0, {
 			root: '/alpha',
@@ -4473,6 +4477,7 @@ test('Notification replacement resets fading and cancels the previous dismissal'
 }) => {
 	await pauseRendererClock(page);
 	await page.goto(`${origin}?view=notification`);
+	await waitForRendererHarness(page);
 	await page.evaluate(() =>
 		window.rendererTest.emit({
 			type: 'notification',
@@ -4525,6 +4530,7 @@ test('state patches coalesce without dropping diagnostics, other sessions or opt
 }) => {
 	await pauseRendererClock(page);
 	await page.goto(`${origin}?view=session-updates`);
+	await waitForRendererHarness(page);
 	await page.evaluate(() => {
 		window.rendererTest.emit({
 			type: 'state',
@@ -4818,6 +4824,7 @@ test('cursor-only patches preserve completion and a normal-mode patch dismisses 
 	page
 }) => {
 	await page.goto(`${origin}?view=completion`);
+	await waitForRendererHarness(page);
 	await page.evaluate(() =>
 		window.rendererTest.emit({
 			type: 'redraw',
@@ -5028,6 +5035,7 @@ for (const dismiss of ['button', 'Escape', 'toggle'] as const) {
 		const errors: string[] = [];
 		page.on('pageerror', (error) => errors.push(error.message));
 		await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+		await waitForPendingCall(page, 'restoreWorkspaces');
 		await page.evaluate(() =>
 			window.rendererTest.settle('restoreWorkspaces', 0, {
 				workspaces: [
@@ -5262,6 +5270,7 @@ test('terminal startup in another workspace cannot take focus from the current e
 	page
 }) => {
 	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,openTerminal`);
+	await waitForPendingCall(page, 'restoreWorkspaces');
 	await page.evaluate(() =>
 		window.rendererTest.settle('restoreWorkspaces', 0, {
 			workspaces: [
@@ -5358,6 +5367,7 @@ test('a delayed shell restart cannot take focus after returning to the editor', 
 	page
 }) => {
 	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,restartTerminal`);
+	await waitForPendingCall(page, 'restoreWorkspaces');
 	await page.evaluate(() =>
 		window.rendererTest.settle('restoreWorkspaces', 0, {
 			workspaces: [{ id: 'alpha', root: '/alpha', name: 'Alpha', terminalId: 'shell' }],

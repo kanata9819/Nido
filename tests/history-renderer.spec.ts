@@ -3,6 +3,7 @@ import { createServer, type ViteDevServer } from 'vite';
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import type {} from './renderer/harness';
+import { waitForPendingCall, waitForRendererHarness } from './helpers/renderer-harness';
 
 let server: ViteDevServer;
 let origin: string;
@@ -31,6 +32,7 @@ test('Time Machine ignores late previews and keeps restore disabled until the se
 	const errors: string[] = [];
 	page.on('pageerror', (error) => errors.push(error.message));
 	await page.goto(`${origin}?view=history&defer=history,historyPreview,historyRestore`);
+	await waitForPendingCall(page, 'history');
 	await page.evaluate(
 		(versions) =>
 			window.rendererTest.settle('history', 0, { path: '/alpha/notes.txt', versions }),
@@ -120,6 +122,7 @@ test('ten thousand diff rows stay bounded in the DOM while scrolling and jumping
 }) => {
 	await page.setViewportSize({ width: 1280, height: 720 });
 	await page.goto(`${origin}?view=highlight`);
+	await waitForRendererHarness(page);
 	await page.evaluate(() =>
 		window.rendererTest.render({
 			diff:
@@ -175,6 +178,7 @@ test('diff syntax colors follow excerpt positions when a hunk starts far into th
 	page
 }) => {
 	await page.goto(`${origin}?view=highlight&defer=highlightSources`);
+	await waitForRendererHarness(page);
 	await page.evaluate(() =>
 		window.rendererTest.render({
 			diff: '@@ -50,2 +80,2 @@\n-const old = 1;\n+const next = 2;\n shared'

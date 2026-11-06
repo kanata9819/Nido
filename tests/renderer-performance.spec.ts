@@ -7,6 +7,7 @@ import type { Grid as EditorGrid } from '../src/renderer/src/grid';
 import type { FrameMotion } from '../src/renderer/src/editorMotion';
 import type {} from './renderer/harness';
 import { requireWebGLCorrection } from './helpers/row-image-probe';
+import { waitForPendingCall } from './helpers/renderer-harness';
 
 let server: ViteDevServer;
 let origin: string;
@@ -2887,6 +2888,7 @@ test('hidden editors keep their state without scheduling paints, and cursor blin
 	page
 }) => {
 	await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+	await waitForPendingCall(page, 'restoreWorkspaces');
 	await page.evaluate(() =>
 		window.rendererTest.settle('restoreWorkspaces', 0, {
 			workspaces: [

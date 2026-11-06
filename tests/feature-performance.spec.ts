@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import type {} from './renderer/harness';
 import rustPack from '../resources/nido/language-packs/rust/pack.json';
+import { waitForPendingCall, waitForRendererHarness } from './helpers/renderer-harness';
 
 declare global {
 	interface Window {
@@ -1270,6 +1271,7 @@ test('Enter during file search opens the arriving result, while closing cancels 
 
 test('Problems selection renders only the previous and next rows', async ({ page }) => {
 	await page.goto(`${origin}?view=palette`);
+	await waitForRendererHarness(page);
 	await page.evaluate(() => {
 		Object.assign(window, { paletteSeverityReads: 0 });
 		window.rendererTest.render({
@@ -1411,6 +1413,7 @@ test('Problems refresh data, versions, workspace targets and translated labels',
 		localStorage.setItem('nido.animations', 'false');
 	});
 	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,openProblem`);
+	await waitForPendingCall(page, 'restoreWorkspaces');
 	await page.evaluate(() =>
 		window.rendererTest.settle('restoreWorkspaces', 0, {
 			workspaces: [
