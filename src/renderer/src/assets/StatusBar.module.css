@@ -162,14 +162,3 @@
 	background: linear-gradient(90deg, #ffd36b, #ffb86b);
 	box-shadow: 0 0 14px #ffc46b59;
 }
-.indentation {
-	color: inherit;
-	font: inherit;
-	cursor: pointer;
-}
-.indentation:hover {
-	color: var(--ui-accent, #a8cf9e);
-}
-.indentation:focus-visible {
-	outline: 1px solid var(--ui-accent, #a8cf9e);
-}

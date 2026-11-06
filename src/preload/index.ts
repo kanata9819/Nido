@@ -90,8 +90,6 @@ const api: NidoAPI = {
 	save: (id, format) => ipcRenderer.invoke('nido:save', id, format),
 	debug: (id, action, target) => ipcRenderer.invoke('nido:debug', id, action, target),
 	setLineEnding: (id, format) => ipcRenderer.invoke('nido:setLineEnding', id, format),
-	setIndentation: (id, indentation, rewrite) =>
-		ipcRenderer.invoke('nido:setIndentation', id, indentation, rewrite),
 	setTheme: (theme) => ipcRenderer.invoke('nido:theme', theme),
 	setLanguage: (language) => ipcRenderer.invoke('nido:language', language),
 	updateState: () => ipcRenderer.invoke('nido:updateState'),

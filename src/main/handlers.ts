@@ -11,7 +11,7 @@ import { registerWorkspaceHandlers } from './workspaceHandlers';
 import { registerHistoryHandlers } from './historyHandlers';
 import { registerLanguagePackHandlers } from './languagePackHandlers';
 import { terminalShells, uiThemes, type TerminalShell, type UITheme } from '../shared/types';
-import type { DebugAction, Indentation, NidoEvent, Workspace } from '../shared/types';
+import type { DebugAction, NidoEvent, Workspace } from '../shared/types';
 import type { Updates } from './updater';
 import { translate, type Language } from '../shared/i18n';
 import { LanguagePacks } from './languagePacks';
@@ -318,24 +318,6 @@ export function registerHandlers({
 			throw new Error('Invalid line ending');
 		}
 		return session(id).setLineEnding(format);
-	});
-
-	handle('setIndentation', (id, indentation, rewrite) => {
-		const value = indentation as Partial<Indentation> | null;
-		if (
-			typeof value !== 'object' ||
-			value === null ||
-			typeof value.spaces !== 'boolean' ||
-			!Number.isInteger(value.size) ||
-			value.size! < 1 ||
-			value.size! > 16
-		) {
-			throw new Error('Invalid indentation');
-		}
-		return session(id).setIndentation(
-			{ spaces: value.spaces, size: value.size! },
-			rewrite === true
-		);
 	});
 
 	handle('theme', (value) => {

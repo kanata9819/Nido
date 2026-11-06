@@ -181,7 +181,6 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 		creating,
 		create,
 		createTerminal,
-		showFavorites,
 		activate,
 		openWorkspace,
 		openFavorite,
@@ -254,7 +253,6 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 			closeWorkspace,
 			create,
 			createTerminal,
-			showFavorites,
 			showExplorer,
 			openDebugger,
 			openFile,
@@ -486,11 +484,6 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 					run(window.nido.setLineEnding(active, format));
 					focusEditor();
 				}}
-				onIndentation={() => {
-					// The palette lists the indentation commands, so the keyboard reaches them too.
-					showPanel('commands');
-					palette.setQuery(t('Indentation'));
-				}}
 			/>
 			<Notification workspaceId={active} animations={animations} />
 			<ErrorToast
@@ -506,7 +499,6 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 				symbols={state.symbols}
 				initialFolder={workspace?.root || ''}
 				folderKind={palette.folderKind}
-				folderFavorites={palette.folderFavorites}
 				favorites={favorites}
 				favoriteBusy={!favoritesReady || savingFavorite}
 				openFavorite={openFavorite}

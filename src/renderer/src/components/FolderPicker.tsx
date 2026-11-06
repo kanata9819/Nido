@@ -1,6 +1,6 @@
 import sharedStyles from '../assets/Nido.module.css';
 import { useI18n } from '../i18n';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Star, X } from 'lucide-react';
 import type { FavoriteWorkspace, FileEntry } from '../../../shared/types';
 import styles from '../assets/Palette.module.css';
@@ -8,7 +8,6 @@ import { parseWslPath, wslHostPath } from '../../../shared/wsl';
 
 export default function FolderPicker({
 	initialPath,
-	initialFavorites = false,
 	favorites,
 	favoriteBusy,
 	onOpenFavorite,
@@ -17,8 +16,6 @@ export default function FolderPicker({
 	onOpen
 }: {
 	initialPath: string;
-	/** Start on the favorites view instead of the folder browser. */
-	initialFavorites?: boolean;
 	favorites: FavoriteWorkspace[];
 	favoriteBusy: boolean;
 	onOpenFavorite: (favorite: FavoriteWorkspace) => void;
@@ -44,11 +41,7 @@ export default function FolderPicker({
 	const list = useRef<HTMLDivElement>(null);
 	const address = useRef<HTMLInputElement>(null);
 	const request = useRef({ id: 0 });
-	// Favorites stay out of the way until requested (Ctrl+F or the Favorites button).
-	const [showFavorites, setShowFavorites] = useState(initialFavorites);
-	// Bumped per listing so the folder list starts at its top after each move.
-	const [listing, setListing] = useState(0);
-	const choiceCount = showFavorites ? favorites.length : folders.length;
+	const choiceCount = favorites.length + folders.length;
 	const [previousChoiceCount, setPreviousChoiceCount] = useState(choiceCount);
 	if (choiceCount !== previousChoiceCount) {
 		setPreviousChoiceCount(choiceCount);
@@ -70,7 +63,6 @@ export default function FolderPicker({
 			setParent(result.parent);
 			setFolders(result.folders);
 			setSelected(0);
-			setListing((value) => value + 1);
 		},
 		[]
 	);
@@ -156,27 +148,13 @@ export default function FolderPicker({
 			counter.id++;
 		};
 	}, [location, applyFolders]);
-	useLayoutEffect(() => {
-		if (list.current) {
-			list.current.scrollTop = 0;
-		}
-	}, [listing, showFavorites]);
 	useEffect(() => {
 		list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
-	}, [selected, showFavorites]);
-	function toggleFavorites(): void {
-		setShowFavorites((value) => !value);
-		setSelected(0);
-		list.current?.focus();
-	}
+	}, [selected]);
 	return (
 		<div
 			className={styles.folderPicker}
 			onKeyDown={(event) => {
-				if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'f') {
-					event.preventDefault();
-					toggleFavorites();
-				}
 				if (event.ctrlKey && event.key.toLowerCase() === 'l') {
 					event.preventDefault();
 					address.current?.focus();
@@ -241,22 +219,14 @@ export default function FolderPicker({
 				}}
 			/>
 			<div className={styles.folderActions}>
-				{/* Loading keeps these enabled; toggling their state on every move made them flash. */}
-				<button disabled={busy || parent === directory} onClick={() => void browse(parent)}>
+				<button
+					disabled={loading || busy || parent === directory}
+					onClick={() => void browse(parent)}
+				>
 					{t('↑ Parent')}
 				</button>
-				<button
-					disabled={busy || !directory}
-					onClick={() => {
-						if (!loading) {
-							onOpen(directory);
-						}
-					}}
-				>
+				<button disabled={loading || busy || !directory} onClick={() => onOpen(directory)}>
 					{busy ? t('Opening…') : t('Open current folder')}
-				</button>
-				<button aria-pressed={showFavorites} onClick={toggleFavorites}>
-					<Star size={13} className={sharedStyles.favoriteStar} /> {t('Favorites')}
 				</button>
 			</div>
 			{distribution && (
@@ -322,16 +292,14 @@ export default function FolderPicker({
 						case 'h':
 						case 'ArrowLeft':
 						case 'Backspace': {
-							if (showFavorites) {
-								toggleFavorites();
-							} else if (!loading) {
+							if (!loading) {
 								void browse(parent);
 							}
 							break;
 						}
 						default: {
-							const favorite = showFavorites ? favorites[selected] : undefined;
-							const folder = showFavorites ? undefined : folders[selected];
+							const favorite = favorites[selected];
+							const folder = folders[selected - favorites.length];
 							if (favorite) {
 								onOpenFavorite(favorite);
 							} else if (!loading && folder) {
@@ -346,88 +314,79 @@ export default function FolderPicker({
 					}
 				}}
 			>
-				{showFavorites ? (
-					<>
-						<p className={styles.folderSection}>{t('Favorites')}</p>
-						{favorites.map((favorite, index) => (
-							<div
-								key={`${favorite.root}:${favorite.kind}`}
-								id={`folder-choice-${index}`}
-								role="option"
-								aria-label={t('Favorite {name} ({kind})', {
-									name: favorite.name,
-									kind: t(favorite.kind)
-								})}
-								aria-selected={index === selected}
-								className={`${styles.folderChoice} ${styles.favoriteChoice} ${index === selected ? styles.selectedItem : ''}`}
-								onClick={() => {
-									if (!busy) {
-										onOpenFavorite(favorite);
-									}
-								}}
-								title={favorite.root}
-							>
-								<Star size={16} className={sharedStyles.favoriteStar} />
-								<span>
-									<strong>{favorite.name}</strong>
-									<small>
-										{favorite.root} · {t(favorite.kind)}
-									</small>
-								</span>
-								<button
-									aria-label={t('Remove favorite {name} ({kind})', {
-										name: favorite.name,
-										kind: t(favorite.kind)
-									})}
-									title={t('Remove favorite')}
-									disabled={favoriteBusy || busy}
-									onClick={(event) => {
-										event.stopPropagation();
-										onRemoveFavorite(favorite);
-										list.current?.focus();
-									}}
-								>
-									<X size={14} />
-								</button>
-							</div>
-						))}
-						{!favorites.length && <p>{t('No favorites yet.')}</p>}
-					</>
-				) : !folders.length && loading ? (
-					// Keep the previous listing on screen while the next one loads; replacing it
-					// with a placeholder for a frame made every move flicker.
+				{favorites.length > 0 && <p className={styles.folderSection}>{t('Favorites')}</p>}
+				{favorites.map((favorite, index) => (
+					<div
+						key={`${favorite.root}:${favorite.kind}`}
+						id={`folder-choice-${index}`}
+						role="option"
+						aria-label={t('Favorite {name} ({kind})', {
+							name: favorite.name,
+							kind: t(favorite.kind)
+						})}
+						aria-selected={index === selected}
+						className={`${styles.folderChoice} ${styles.favoriteChoice} ${index === selected ? styles.selectedItem : ''}`}
+						onClick={() => {
+							if (!busy) {
+								onOpenFavorite(favorite);
+							}
+						}}
+						title={favorite.root}
+					>
+						<Star size={16} className={sharedStyles.favoriteStar} />
+						<span>
+							<strong>{favorite.name}</strong>
+							<small>
+								{favorite.root} · {t(favorite.kind)}
+							</small>
+						</span>
+						<button
+							aria-label={t('Remove favorite {name} ({kind})', {
+								name: favorite.name,
+								kind: t(favorite.kind)
+							})}
+							title={t('Remove favorite')}
+							disabled={favoriteBusy || busy}
+							onClick={(event) => {
+								event.stopPropagation();
+								onRemoveFavorite(favorite);
+								list.current?.focus();
+							}}
+						>
+							<X size={14} />
+						</button>
+					</div>
+				))}
+				{favorites.length > 0 && (
+					<p className={styles.folderSection}>{t('Browse folders')}</p>
+				)}
+				{loading ? (
 					<p>{t('Loading folders…')}</p>
 				) : (
-					<>
-						{folders.map((folder, index) => (
-							<div
-								key={folder.path}
-								id={`folder-choice-${index}`}
-								role="option"
-								aria-selected={index === selected}
-								className={`${styles.folderChoice} ${index === selected ? styles.selectedItem : ''}`}
-								onClick={() => {
-									setSelected(index);
-									list.current?.focus();
-								}}
-								onDoubleClick={() => {
-									if (!loading) {
-										void browse(folder.path);
-									}
-								}}
-							>
-								▸ {folder.name}
-							</div>
-						))}
-						{!loading && !folders.length && (
-							<p>{t('No subfolders. Open this folder with Ctrl+Enter.')}</p>
-						)}
-					</>
+					folders.map((folder, index) => (
+						<div
+							key={folder.path}
+							id={`folder-choice-${index + favorites.length}`}
+							role="option"
+							aria-selected={index + favorites.length === selected}
+							className={`${styles.folderChoice} ${index + favorites.length === selected ? styles.selectedItem : ''}`}
+							onClick={() => {
+								setSelected(index + favorites.length);
+								list.current?.focus();
+							}}
+							onDoubleClick={() => void browse(folder.path)}
+						>
+							▸ {folder.name}
+						</div>
+					))
+				)}
+				{!loading && !folders.length && (
+					<p>{t('No subfolders. Open this folder with Ctrl+Enter.')}</p>
 				)}
 			</div>
 			<p className={styles.folderActions}>
 				{t(
-					'Tab / Shift+Tab Move focus · j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Ctrl+F Favorites · Esc Cancel'
+					'Tab / Shift+Tab Move focus · j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Esc Cancel'
 				)}
 			</p>
 		</div>

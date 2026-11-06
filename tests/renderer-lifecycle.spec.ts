@@ -4278,9 +4278,6 @@ test('creation entry chooses the session kind and cancelling resets the next edi
 	await page.keyboard.press('Enter');
 	const picker = page.getByRole('dialog', { name: 'folders palette' });
 	await expect(picker).toContainText('New terminal session');
-	// Favorites stay hidden until requested.
-	await expect(picker.getByRole('option', { name: /^Favorite / })).toHaveCount(0);
-	await page.keyboard.press('Control+f');
 	await expect(
 		picker.getByRole('option', { name: 'Favorite Terminal project (terminal)' })
 	).toHaveCount(1);
@@ -4306,7 +4303,6 @@ test('creation entry chooses the session kind and cancelling resets the next edi
 	await page.keyboard.press('Escape');
 	await page.keyboard.press('Control+Shift+n');
 	await expect(picker).toContainText('Open a workspace');
-	await page.keyboard.press('Control+f');
 	await expect(
 		picker.getByRole('option', { name: 'Favorite Editor project (editor)' })
 	).toHaveCount(1);
@@ -4364,8 +4360,6 @@ test('Folder browsing cancels old results and clamps selection after favorites c
 		})
 	);
 	const list = page.getByRole('listbox', { name: 'Folders' });
-	await expect(list.getByRole('option')).toHaveCount(0);
-	await list.press('Control+f');
 	await expect(list.getByRole('option')).toHaveCount(2);
 	await list.press('j');
 	await expect(list).toHaveAttribute('aria-activedescendant', 'folder-choice-1');
@@ -4375,76 +4369,6 @@ test('Folder browsing cancels old results and clamps selection after favorites c
 		})
 	);
 	await expect(list).toHaveAttribute('aria-activedescendant', 'folder-choice-0');
-});
-
-test('Folder browsing keeps the current listing until the next one arrives', async ({ page }) => {
-	await page.goto(`${origin}?view=folders&defer=browseFolders`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
-	await page.evaluate(() =>
-		window.rendererTest.settle('browseFolders', 0, {
-			path: '/alpha',
-			parent: '/',
-			folders: Array.from({ length: 40 }, (_, index) => ({
-				name: `folder${index}`,
-				path: `/alpha/folder${index}`,
-				directory: true
-			}))
-		})
-	);
-	const list = page.getByRole('listbox', { name: 'Folders' });
-	await expect(list.getByRole('option')).toHaveCount(40);
-	const parent = page.getByRole('button', { name: '↑ Parent' });
-	// The standalone harness does not bound the list height like the palette does.
-	await list.evaluate((element) => (element.style.maxHeight = '200px'));
-	await list.focus();
-	for (let index = 0; index < 30; index++) {
-		await list.press('j');
-	}
-	expect(await list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-	await list.press('l');
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
-	// No loading placeholder and no disabled controls while the next listing is pending.
-	await expect(list).toHaveAttribute('aria-busy', 'true');
-	await expect(list.getByRole('option')).toHaveCount(40);
-	await expect(list).not.toContainText('Loading folders…');
-	await expect(parent).toBeEnabled();
-	await page.evaluate(() =>
-		window.rendererTest.settle('browseFolders', 0, {
-			path: '/alpha/folder30',
-			parent: '/alpha',
-			folders: [{ name: 'child', path: '/alpha/folder30/child', directory: true }]
-		})
-	);
-	await expect(list.getByRole('option')).toHaveCount(1);
-	await expect(list).toHaveAttribute('aria-activedescendant', 'folder-choice-0');
-	expect(await list.evaluate((element) => element.scrollTop)).toBe(0);
-});
-
-test('Favorites open from the command palette and hide again with Ctrl+F', async ({ page }) => {
-	await page.goto(`${origin}?view=app&defer=favoriteWorkspaces`);
-	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
-	await page.evaluate(() =>
-		window.rendererTest.settle('favoriteWorkspaces', 0, [
-			{ root: '/editor', name: 'Editor project', kind: 'editor' }
-		])
-	);
-	await page.keyboard.press('Control+Shift+p');
-	await page.keyboard.type('Open favorite workspace');
-	await page.keyboard.press('Enter');
-	const picker = page.getByRole('dialog', { name: 'folders palette' });
-	const favorite = picker.getByRole('option', { name: 'Favorite Editor project (editor)' });
-	await expect(favorite).toHaveCount(1);
-	await expect(picker.getByRole('button', { name: 'Favorites' })).toHaveAttribute(
-		'aria-pressed',
-		'true'
-	);
-	await page.keyboard.press('Control+f');
-	await expect(favorite).toHaveCount(0);
-	await picker.getByRole('button', { name: 'Favorites' }).click();
-	await expect(favorite).toHaveCount(1);
-	await page.keyboard.press('h');
-	await expect(favorite).toHaveCount(0);
 });
 
 test('Switching WSL connections ignores stale listings and displays Linux paths', async ({
@@ -5886,65 +5810,4 @@ test('file tab shortcuts leave a terminal session focused', async ({ page }) => 
 			)
 		)
 	).toEqual([]);
-});
-
-test('Indentation shows in the status bar and changes from the palette by mouse or keyboard', async ({
-	page
-}) => {
-	await page.goto(`${origin}?view=app`);
-	await expect(page.getByRole('tab', { name: 'Workspace Alpha', exact: true })).toBeVisible();
-	await page.evaluate(() =>
-		window.rendererTest.emit({
-			type: 'state',
-			id: 'alpha',
-			state: {
-				buffers: [{ id: 1, name: '/alpha/main.rs', modified: false }],
-				current: 1,
-				mode: 'n',
-				line: 1,
-				column: 1,
-				filetype: 'rust',
-				indentation: { spaces: true, size: 4 }
-			}
-		})
-	);
-	const status = page.getByRole('button', { name: 'Indentation: Spaces: 4' });
-	await expect(status).toHaveText('Spaces: 4');
-	const setIndentation = (): Promise<unknown[][]> =>
-		page.evaluate(() =>
-			window.rendererTest.calls
-				.filter((call) => call.method === 'setIndentation')
-				.map((call) => call.args)
-		);
-
-	// The status item opens the palette filtered to the indentation commands.
-	await status.click();
-	const palette = page.getByRole('dialog', { name: 'commands palette' });
-	await expect(palette.getByRole('textbox')).toHaveValue('Indentation');
-	await expect(palette.getByText('Indent using tabs', { exact: true })).toBeVisible();
-	await expect(palette.getByText('Quit Nido', { exact: true })).toHaveCount(0);
-	await palette.getByText('Indent using tabs', { exact: true }).click();
-	await expect.poll(setIndentation).toEqual([['alpha', { spaces: false, size: 4 }, false]]);
-
-	// Every command is reachable from the keyboard alone.
-	await page.keyboard.press('Control+Shift+p');
-	await page.keyboard.type('Indent width 2');
-	await page.keyboard.press('Enter');
-	await page.keyboard.press('Control+Shift+p');
-	await page.keyboard.type('Convert indentation to tabs');
-	await page.keyboard.press('Enter');
-	await expect.poll(setIndentation).toEqual([
-		['alpha', { spaces: false, size: 4 }, false],
-		['alpha', { spaces: true, size: 2 }, false],
-		['alpha', { spaces: false, size: 4 }, true]
-	]);
-
-	await page.evaluate(() =>
-		window.rendererTest.emit({
-			type: 'statePatch',
-			id: 'alpha',
-			state: { indentation: { spaces: false, size: 8 } }
-		})
-	);
-	await expect(page.getByRole('button', { name: 'Indentation: Tab size: 8' })).toBeVisible();
 });

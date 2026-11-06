@@ -190,8 +190,6 @@ test('favorite workspaces support keyboard access, existing tabs, restart and mi
 		await page.keyboard.press('Control+Shift+n');
 		const choices = page.getByRole('listbox', { name: 'Folders' });
 		await expect(choices).toBeFocused();
-		await expect(choices.getByRole('option', { name: /^Favorite / })).toHaveCount(0);
-		await page.keyboard.press('Control+f');
 		await expect(choices.getByRole('option', { name: /^Favorite / })).toHaveCount(2);
 		await page.keyboard.press('j');
 		await expect(
@@ -207,7 +205,6 @@ test('favorite workspaces support keyboard access, existing tabs, restart and mi
 		await page.getByRole('button', { name: 'Close workspace Alpha', exact: true }).click();
 		await expect(page.getByRole('tab', { name: /^Workspace / })).toHaveCount(1);
 		await page.keyboard.press('Control+Shift+n');
-		await page.keyboard.press('Control+f');
 		await expect(
 			choices.getByRole('option', { name: 'Favorite Alpha (editor)', exact: true })
 		).toBeVisible();
@@ -236,7 +233,6 @@ test('favorite workspaces support keyboard access, existing tabs, restart and mi
 		await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
 		await page.keyboard.press('Control+Shift+n');
 		await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
-		await page.keyboard.press('Control+f');
 		await page.keyboard.press('Enter');
 		await expect(page.getByRole('tab', { name: 'Workspace Alpha', exact: true })).toBeVisible();
 		await expect(
@@ -247,7 +243,6 @@ test('favorite workspaces support keyboard access, existing tabs, restart and mi
 		await rm(alpha, { recursive: true, force: true });
 		await page.keyboard.press('Control+Shift+n');
 		await expect(page.getByRole('listbox', { name: 'Folders' })).toBeFocused();
-		await page.keyboard.press('Control+f');
 		await page.keyboard.press('Enter');
 		await expect(page.getByText(/ENOENT/)).toBeVisible();
 		await expect(page.getByRole('tab', { name: /^Workspace / })).toHaveCount(0);

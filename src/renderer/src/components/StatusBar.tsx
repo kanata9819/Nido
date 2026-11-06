@@ -3,7 +3,6 @@ import { useI18n } from '../i18n';
 import { Code2, Search, ChevronUp, ChevronDown, X, SquareTerminal } from 'lucide-react';
 import type { Workspace, SessionState } from '../../../shared/types';
 import styles from '../assets/StatusBar.module.css';
-import { indentationLabel } from '../commandItems';
 
 interface StatusBarProps {
 	active: string;
@@ -15,7 +14,6 @@ interface StatusBarProps {
 	onToggleDebugger: () => void;
 	onToggleReferences: () => void;
 	onLineEnding: (format: 'LF' | 'CRLF') => void;
-	onIndentation: () => void;
 	onSearch: (key: 'n' | 'N' | '<Esc>') => void;
 }
 
@@ -44,7 +42,6 @@ export default function StatusBar({
 	onToggleDebugger,
 	onToggleReferences,
 	onLineEnding,
-	onIndentation,
 	onSearch
 }: StatusBarProps): React.JSX.Element {
 	const t = useI18n();
@@ -137,18 +134,6 @@ export default function StatusBar({
 				<span title={t('Rust language server connection')}>
 					{state.lsp || t('Rust LSP: not connected')}
 				</span>
-			)}
-			{active && workspace?.kind !== 'terminal' && state.indentation && (
-				<button
-					className={styles.indentation}
-					aria-label={t('Indentation: {current}', {
-						current: indentationLabel(state.indentation, t)
-					})}
-					title={t('Change indentation')}
-					onClick={onIndentation}
-				>
-					{indentationLabel(state.indentation, t)}
-				</button>
 			)}
 			<span>UTF-8</span>
 			{active && workspace?.kind !== 'terminal' && state.lineEnding && (
