@@ -2713,6 +2713,63 @@ test('EditorConfig reads CRLF files cleanly when the project requests LF', async
 	}
 });
 
+test('indentation is published and converts only leading whitespace', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-indentation-'));
+	let session: Session | undefined;
+	try {
+		const original = 'fn main() {\n\tlet a = "\t";\n\t\tb();\n  \tc();\n}\n';
+		await writeFile(join(root, 'main.rs'), original);
+		session = await Session.create(root, () => {});
+		const lua = (code: string): Promise<unknown> =>
+			session!.client.request('nvim_exec_lua', [code, []]);
+		await session.openFile('main.rs');
+		await lua('vim.bo.expandtab = false; vim.bo.tabstop = 4; vim.bo.shiftwidth = 0');
+		assert.deepEqual(await lua("return require('nido_indentation').detect()"), {
+			spaces: false,
+			size: 4
+		});
+
+		await session.setIndentation({ spaces: true, size: 2 });
+		assert.equal(await lua('return vim.bo.expandtab'), true);
+		assert.equal(await lua('return vim.fn.shiftwidth()'), 2);
+		assert.equal(await session.modified(), false, 'Changing settings leaves the text alone');
+		const expected = { spaces: true, size: 2 };
+		const signal = AbortSignal.timeout(5000);
+		try {
+			// The state notification is scheduled after the RPC response.
+			while (!isDeepStrictEqual(session.state.indentation, expected)) {
+				await once(session.client, 'notification', { signal });
+			}
+		} catch (error) {
+			if (!signal.aborted) throw error;
+			assert.deepEqual(session.state.indentation, expected, 'Indentation was not published');
+		}
+
+		// Tabs expand at the previous tab width; the tab inside the string stays.
+		await session.setIndentation({ spaces: true, size: 4 }, true);
+		assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)'), [
+			'fn main() {',
+			'    let a = "\t";',
+			'        b();',
+			'    c();',
+			'}'
+		]);
+		await session.setIndentation({ spaces: false, size: 4 }, true);
+		assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)'), [
+			'fn main() {',
+			'\tlet a = "\t";',
+			'\t\tb();',
+			'\tc();',
+			'}'
+		]);
+		assert.equal(await lua('return vim.bo.tabstop'), 4);
+		await assert.rejects(session.setIndentation({ spaces: true, size: 0 }));
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('EditorConfig toggles existing buffers, indentation guides and save rules', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-editorconfig-'));
 	const grid = new Grid();

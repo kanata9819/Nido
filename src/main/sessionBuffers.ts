@@ -1,4 +1,4 @@
-import type { MarkdownSnapshot, Workspace } from '../shared/types';
+import type { Indentation, MarkdownSnapshot, Workspace } from '../shared/types';
 import { hostPath } from '../shared/wsl';
 import type { SessionClient } from './sessionClient';
 import type { SessionInteraction } from './sessionInteraction';
@@ -29,6 +29,15 @@ return {token=token, path=vim.api.nvim_buf_get_name(buffer),
 	async setLineEnding(format: 'LF' | 'CRLF'): Promise<void> {
 		await this.interaction.command(() =>
 			this.client.request('nvim_exec_lua', ["require('nido_eol').convert(...)", [format]])
+		);
+	}
+
+	async setIndentation(indentation: Indentation, rewrite = false): Promise<void> {
+		await this.interaction.command(() =>
+			this.client.request('nvim_exec_lua', [
+				"require('nido_indentation').set(...)",
+				[indentation.spaces, indentation.size, rewrite]
+			])
 		);
 	}
 

@@ -364,6 +364,9 @@ export class SessionEvents {
 		if (this.state.lineEnding === null) {
 			this.state.lineEnding = undefined;
 		}
+		if (this.state.indentation === null) {
+			this.state.indentation = undefined;
+		}
 		// Lua encodes an empty table as a map rather than an array.
 		if (!Array.isArray(this.state.buffers)) {
 			this.state.buffers = [];

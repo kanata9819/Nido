@@ -1,5 +1,5 @@
 import type { Panel, Item } from './types';
-import type { DebugAction, SessionState, Workspace } from '../../shared/types';
+import type { DebugAction, Indentation, SessionState, Workspace } from '../../shared/types';
 import type { Translator } from '../../shared/i18n';
 
 export interface CommandsCallbacks {
@@ -18,6 +18,62 @@ export interface CommandsCallbacks {
 	activate: (id: string) => void;
 	toggleFavorite: () => void;
 	isFavorite: boolean;
+}
+
+/** Status bar label for an indentation, e.g. "Spaces: 4". */
+export function indentationLabel(indentation: Indentation, t: Translator): string {
+	return t(indentation.spaces ? 'Spaces: {size}' : 'Tab size: {size}', {
+		size: indentation.size
+	});
+}
+
+function indentationCommands(
+	active: string,
+	indentation: Indentation,
+	run: (promise: Promise<unknown>) => void,
+	focusEditor: () => void,
+	t: Translator
+): Item[] {
+	// Every detail starts with "Indentation" so the status bar can filter to these commands.
+	const detail = t('Indentation · Current: {current}', {
+		current: indentationLabel(indentation, t)
+	});
+	const apply = (next: Indentation, rewrite = false): void => {
+		run(window.nido.setIndentation(active, next, rewrite));
+		focusEditor();
+	};
+	return [
+		{
+			key: '',
+			title: 'Indent using spaces',
+			detail,
+			run: () => apply({ ...indentation, spaces: true })
+		},
+		{
+			key: '',
+			title: 'Indent using tabs',
+			detail,
+			run: () => apply({ ...indentation, spaces: false })
+		},
+		...[2, 4, 8].map((size) => ({
+			key: '',
+			title: t('Indent width {size}', { size }),
+			detail,
+			run: () => apply({ ...indentation, size })
+		})),
+		{
+			key: '',
+			title: 'Convert indentation to spaces',
+			detail: t('Indentation · Rewrite leading whitespace in this file'),
+			run: () => apply({ ...indentation, spaces: true }, true)
+		},
+		{
+			key: '',
+			title: 'Convert indentation to tabs',
+			detail: t('Indentation · Rewrite leading whitespace in this file'),
+			run: () => apply({ ...indentation, spaces: false }, true)
+		}
+	];
 }
 
 export function buildCommands(
@@ -198,6 +254,10 @@ export function buildCommands(
 							focusEditor();
 						}
 					})),
+					...(state.indentation &&
+					workspaces.find((workspace) => workspace.id === active)?.kind !== 'terminal'
+						? indentationCommands(active, state.indentation, run, focusEditor, t)
+						: []),
 					...(['LF', 'CRLF'] as const).map((format) => ({
 						key: '',
 						title: t('Convert line endings to {format}', { format }),
