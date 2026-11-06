@@ -39,6 +39,8 @@ export interface Workspace {
 	id: string;
 	root: string;
 	name: string;
+	/** Neovim is stopped to save resources; waking restores the saved files and cursors. */
+	sleeping?: boolean;
 }
 export interface FavoriteWorkspace {
 	root: string;
@@ -290,6 +292,10 @@ export interface NidoAPI {
 		distribution?: string
 	): Promise<{ path: string; parent: string; folders: FileEntry[] }>;
 	closeWorkspace(id: string): Promise<boolean>;
+	/** Stop a background workspace's Neovim if nothing would be lost. Resolves whether it slept. */
+	sleepWorkspace(id: string): Promise<boolean>;
+	/** Restart a sleeping workspace's Neovim and restore its files. */
+	wakeWorkspace(id: string): Promise<{ workspace: Workspace; errors: string[] }>;
 	attach(id: string, columns: number, rows: number): Promise<void>;
 	resize(id: string, columns: number, rows: number): Promise<void>;
 	input(id: string, keys: string): Promise<void>;

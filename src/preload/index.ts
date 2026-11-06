@@ -43,6 +43,8 @@ const api: NidoAPI = {
 	browseFolders: (path, distribution) =>
 		ipcRenderer.invoke('nido:browseFolders', path, distribution),
 	closeWorkspace: (id) => ipcRenderer.invoke('nido:close', id),
+	sleepWorkspace: (id) => ipcRenderer.invoke('nido:sleep', id),
+	wakeWorkspace: (id) => ipcRenderer.invoke('nido:wake', id),
 	attach: (id, columns, rows) => ipcRenderer.invoke('nido:attach', id, columns, rows),
 	resize: (id, columns, rows) => ipcRenderer.invoke('nido:resize', id, columns, rows),
 	input: (id, keys) => ipcRenderer.invoke('nido:input', id, keys),

@@ -1,11 +1,13 @@
 import { app, dialog } from 'electron';
-import { isAbsolute, join } from 'node:path';
+import { basename, isAbsolute, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { Session } from './session';
 import { readLayout, writeLayout, type SavedLayout } from './persistence';
 import { WorkspaceCheckpoints } from './workspaceCheckpoints';
 import { registerFavoriteHandlers } from './favoriteHandlers';
 import { registerFolderBrowserHandlers } from './folderBrowserHandlers';
-import type { NidoEvent, TerminalShell } from '../shared/types';
+import type { NidoEvent, SavedWorkspace, TerminalShell, Workspace } from '../shared/types';
+import { parseWslPath } from '../shared/wsl';
 import type { HandlerDeps } from './handlers';
 import { createTranslator } from '../shared/i18n';
 import type { LanguagePacks } from './languagePacks';
@@ -13,7 +15,17 @@ import { untitledRecoveryLimitMessage } from '../shared/recovery';
 
 interface PrestartedLayout {
 	saved: SavedLayout;
-	starts: { created: Promise<Session>; claim: () => void }[];
+	starts: ({ created: Promise<Session>; claim: () => void } | undefined)[];
+}
+
+/**
+ * Whether a saved workspace can start asleep: anything but the selected tab, unless it
+ * runs a shell or carries unsaved untitled text that only a running Neovim holds.
+ */
+export function startsAsleep(saved: SavedWorkspace, index: number, active: number): boolean {
+	return (
+		index !== active && saved.kind !== 'terminal' && !saved.terminal && !saved.untitled?.length
+	);
 }
 
 /** Hold events until release, then deliver them in order and pass later ones through. */
@@ -55,10 +67,54 @@ export function registerWorkspaceHandlers({
 	const layoutPath = join(app.getPath('userData'), 'workspaces.json');
 	let checkpointReady = false;
 	let replaceBackup = false;
+	// Sleeping workspaces keep their tab and a snapshot, but no Neovim process.
+	const sleeping = new Map<string, { workspace: Workspace; saved: SavedWorkspace }>();
+	// A sleeping workspace's Neovim exits quietly; the renderer keeps its tab.
+	const muted = new Set<string>();
+	const quiet =
+		(emit: (event: NidoEvent) => void) =>
+		(event: NidoEvent): void => {
+			const target = 'id' in event ? event.id : undefined;
+			if (!target || !muted.has(target)) {
+				emit(event);
+			}
+		};
+	const sessionSend = quiet(send);
+	// Sleep and wake of one workspace run one after another.
+	const transitions = new Map<string, Promise<unknown>>();
+	const exclusive = <T>(id: string, task: () => Promise<T>): Promise<T> => {
+		const next = (transitions.get(id) ?? Promise.resolve()).catch(() => {}).then(task);
+		transitions.set(id, next);
+		void next
+			.finally(() => {
+				if (transitions.get(id) === next) {
+					transitions.delete(id);
+				}
+			})
+			.catch(() => {});
+		return next;
+	};
+	const known = (id: string): boolean => sessions.has(id) || sleeping.has(id);
 	const orderedIds = (): string[] => [
-		...state.order.filter((id) => sessions.has(id)),
-		...[...sessions.keys()].filter((id) => !state.order.includes(id))
+		...state.order.filter(known),
+		...[...sessions.keys(), ...sleeping.keys()].filter((id) => !state.order.includes(id))
 	];
+	const snapshotOf = (
+		id: string,
+		options: { restoreScroll?: boolean; includeUntitled?: boolean }
+	): Promise<SavedWorkspace> => {
+		const asleep = sleeping.get(id);
+		return asleep ? Promise.resolve(asleep.saved) : session(id).snapshot(options);
+	};
+	const sleepingWorkspace = (saved: SavedWorkspace): Workspace => {
+		const remote = parseWslPath(saved.root);
+		return {
+			id: randomUUID(),
+			root: saved.root,
+			name: basename(saved.root) || saved.root,
+			...(remote ? { wsl: remote.distribution } : {})
+		};
+	};
 	const windowLayout = (): { width: number; height: number; maximized: boolean } => ({
 		width: window.getNormalBounds().width,
 		height: window.getNormalBounds().height,
@@ -73,7 +129,7 @@ export function registerWorkspaceHandlers({
 			}
 			const ids = orderedIds();
 			const active = state.active;
-			const current = ids.map((id) => session(id));
+			const current = ids.filter((id) => sessions.has(id)).map((id) => session(id));
 			// Fast mode queries remain available while Vim waits for a prompt or a key.
 			const modes = await Promise.all(
 				current.map((s) => s.client.request('nvim_get_mode', []))
@@ -82,8 +138,8 @@ export function registerWorkspaceHandlers({
 				return;
 			}
 			const workspaces = await Promise.all(
-				current.map((s) =>
-					s.snapshot({
+				ids.map((id) =>
+					snapshotOf(id, {
 						restoreScroll: false,
 						includeUntitled: state.historyEnabled !== false
 					})
@@ -183,7 +239,7 @@ export function registerWorkspaceHandlers({
 					version: 1,
 					window: windowLayout(),
 					workspaces: await Promise.all(
-						ids.map((id) => session(id).snapshot({ includeUntitled: false }))
+						ids.map((id) => snapshotOf(id, { includeUntitled: false }))
 					),
 					active: Math.max(0, ids.indexOf(state.active))
 				},
@@ -218,8 +274,11 @@ export function registerWorkspaceHandlers({
 		const saved = await readLayout(layoutPath);
 		return {
 			saved,
-			starts: saved.workspaces.map((workspace) => {
-				const events = bufferedEmitter(send);
+			starts: saved.workspaces.map((workspace, index) => {
+				if (startsAsleep(workspace, index, saved.active)) {
+					return undefined;
+				}
+				const events = bufferedEmitter(sessionSend);
 				const created = languagePacks
 					.load()
 					.then((packs) =>
@@ -238,8 +297,8 @@ export function registerWorkspaceHandlers({
 		prestart = undefined;
 		void unclaimed?.then(({ starts }) =>
 			starts.forEach(
-				({ created }) =>
-					void created.then(
+				(start) =>
+					void start?.created.then(
 						(s) => s.stop(),
 						() => {}
 					)
@@ -256,9 +315,15 @@ export function registerWorkspaceHandlers({
 				prestart = undefined;
 				const prestarted = early ? await early : undefined;
 				const saved = prestarted?.saved ?? (await readLayout(layoutPath));
+				sleeping.clear();
 				// Independent sessions can start together; insert results in saved tab order.
 				const restored = await Promise.all(
 					saved.workspaces.map(async (workspace, index) => {
+						if (startsAsleep(workspace, index, saved.active)) {
+							const asleep = sleepingWorkspace(workspace);
+							sleeping.set(asleep.id, { workspace: asleep, saved: workspace });
+							return asleep.id;
+						}
 						let s: Session | undefined;
 						try {
 							const start = prestarted?.starts[index];
@@ -268,7 +333,7 @@ export function registerWorkspaceHandlers({
 							} else {
 								s = await Session.create(
 									workspace.root,
-									send,
+									sessionSend,
 									neovimResources,
 									await languagePacks.load()
 								);
@@ -277,7 +342,8 @@ export function registerWorkspaceHandlers({
 							if (index === saved.active) {
 								state.active = s.workspace.id;
 							}
-							return s;
+							sessions.set(s.workspace.id, s);
+							return s.workspace.id;
 						} catch (error) {
 							await s?.stop();
 							errors.push(`${workspace.root}: ${String(error)}`);
@@ -285,23 +351,29 @@ export function registerWorkspaceHandlers({
 						}
 					})
 				);
-				for (const s of restored) {
-					if (s) {
-						sessions.set(s.workspace.id, s);
-					}
-				}
 				// A preference may change while independent sessions are starting.
 				// Register first so subsequent updates also include these sessions.
 				const currentPacks = await languagePacks.load();
-				await Promise.all(restored.map((s) => s?.reloadLanguagePacks(currentPacks)));
+				await Promise.all(
+					restored.map((id) =>
+						id && sessions.has(id)
+							? sessions.get(id)!.reloadLanguagePacks(currentPacks)
+							: undefined
+					)
+				);
+				state.order = restored.filter((id): id is string => !!id);
 				checkpointReady = true;
 			} catch (error) {
 				errors.push(`Workspace restore failed: ${String(error)}`);
 			}
-			state.order = [...sessions.keys()];
+			state.order = orderedIds();
 			state.active ||= state.order[0] || '';
 			return {
-				workspaces: [...sessions.values()].map((s) => s.workspace),
+				workspaces: state.order.map((id) =>
+					sessions.has(id)
+						? session(id).workspace
+						: { ...sleeping.get(id)!.workspace, sleeping: true }
+				),
 				active: state.active,
 				errors
 			};
@@ -312,7 +384,7 @@ export function registerWorkspaceHandlers({
 	handle('layout', (ids, selected) => {
 		if (
 			!Array.isArray(ids) ||
-			!ids.every((id) => typeof id === 'string' && sessions.has(id)) ||
+			!ids.every((id) => typeof id === 'string' && known(id)) ||
 			new Set(ids).size !== ids.length ||
 			typeof selected !== 'string' ||
 			(selected !== '' && !ids.includes(selected))
@@ -334,7 +406,12 @@ export function registerWorkspaceHandlers({
 		if (!isAbsolute(root)) {
 			throw new Error('Enter an absolute folder path.');
 		}
-		const s = await Session.create(root, send, neovimResources, await languagePacks.load());
+		const s = await Session.create(
+			root,
+			sessionSend,
+			neovimResources,
+			await languagePacks.load()
+		);
 		try {
 			if (kind === 'terminal') {
 				await s.startTerminal(selectedShell);
@@ -358,7 +435,83 @@ export function registerWorkspaceHandlers({
 		return s.workspace;
 	});
 
+	// Stop a background workspace's Neovim, keeping its tab and a snapshot to wake from.
+	handle('sleep', (id) => {
+		const key = text(id);
+		return exclusive(key, async () => {
+			const s = sessions.get(key);
+			if (
+				!s ||
+				key === state.active ||
+				state.prompting ||
+				state.closing ||
+				!(await s.canSleep())
+			) {
+				return false;
+			}
+			const saved = await s.snapshot({ includeUntitled: true });
+			if (key === state.active || state.prompting || state.closing || !sessions.has(key)) {
+				return false;
+			}
+			await captureHistory(s);
+			muted.add(key);
+			sessions.delete(key);
+			sleeping.set(key, { workspace: { ...s.workspace }, saved });
+			await s.stop();
+			return true;
+		});
+	});
+
+	// Start a sleeping workspace's Neovim again under the same ID and restore its snapshot.
+	handle('wake', (id) => {
+		const key = text(id);
+		return exclusive(key, async () => {
+			const asleep = sleeping.get(key);
+			if (!asleep) {
+				return { workspace: session(key).workspace, errors: [] };
+			}
+			if (state.prompting || state.closing || window.isDestroyed()) {
+				throw new Error('The window is closing.');
+			}
+			// Hold startup events until the workspace is registered; a failed start stays quiet.
+			const events = bufferedEmitter(sessionSend);
+			const s = await Session.create(
+				asleep.workspace.root,
+				events.emit,
+				neovimResources,
+				await languagePacks.load(),
+				key
+			);
+			let errors: string[];
+			try {
+				errors = await s.restore(asleep.saved);
+				if (state.prompting || state.closing || window.isDestroyed()) {
+					throw new Error('The window is closing.');
+				}
+			} catch (error) {
+				await s.stop();
+				throw error;
+			}
+			sleeping.delete(key);
+			muted.delete(key);
+			sessions.set(key, s);
+			events.release();
+			return { workspace: s.workspace, errors };
+		});
+	});
+
 	handle('close', async (id) => {
+		const asleep = typeof id === 'string' ? sleeping.get(id) : undefined;
+		if (asleep) {
+			return exclusive(asleep.workspace.id, async () => {
+				sleeping.delete(asleep.workspace.id);
+				muted.delete(asleep.workspace.id);
+				send({ type: 'exit', id: asleep.workspace.id });
+				replaceBackup = true;
+				await checkpoints.save();
+				return true;
+			});
+		}
 		const s = session(id);
 		if (!(await confirmClose(s))) {
 			return false;

@@ -451,6 +451,8 @@ export const japanese: Record<string, string> = {
 	'Favorite {name} ({kind})': 'お気に入り {name}（{kind}）',
 	'Remove favorite {name} ({kind})': 'お気に入り {name}（{kind}）を解除',
 	'Remove favorite': 'お気に入りを解除',
+	Sleeping: 'スリープ中',
+	'Sleeping · Opens when selected': 'スリープ中 · 選択すると再開します',
 	'No favorites yet.': 'お気に入りはまだありません。',
 	'Open favorite workspace': 'お気に入りのワークスペースを開く',
 	'Choose a saved project · Ctrl+F in the folder picker':
