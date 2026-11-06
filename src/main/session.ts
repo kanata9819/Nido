@@ -33,6 +33,7 @@ import { discoverLanguagePacks } from './languagePacks';
 import type { LanguagePackConfiguration, LanguagePackRuntime } from '../shared/languagePacks';
 import type { SearchOptions, ReplacementPreview, ReplacementResult } from '../shared/search';
 import { terminalShells, type TerminalShell } from '../shared/types';
+import type { Indentation } from '../shared/types';
 import { resolveTerminalShell } from './terminalShells';
 import { SessionPersistence } from './sessionPersistence';
 import { SessionHistory } from './sessionHistory';
@@ -422,6 +423,10 @@ export class Session {
 
 	setLineEnding(format: 'LF' | 'CRLF'): Promise<void> {
 		return this.buffers.setLineEnding(format);
+	}
+
+	setIndentation(indentation: Indentation, rewrite = false): Promise<void> {
+		return this.buffers.setIndentation(indentation, rewrite);
 	}
 
 	snapshot(

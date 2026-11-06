@@ -69,6 +69,10 @@ export interface BufferInfo {
 	name: string;
 	modified: boolean;
 }
+export interface Indentation {
+	spaces: boolean;
+	size: number;
+}
 export interface SessionState {
 	search?: false | { pattern: string; current: number; total: number; incomplete: number };
 	problems?: {
@@ -87,6 +91,8 @@ export interface SessionState {
 	symbols?: DocumentSymbolList;
 	debug?: DebugState;
 	lineEnding?: 'LF' | 'CRLF' | 'Mixed' | 'CR';
+	/** Indentation of the current file: spaces or tabs, and the indent width. */
+	indentation?: Indentation;
 	lsp?: string;
 	lspProgress?: string;
 	empty?: boolean;
@@ -346,6 +352,8 @@ export interface NidoAPI {
 	save(id: string, format?: boolean): Promise<void>;
 	debug(id: string, action: DebugAction, target?: number): Promise<void>;
 	setLineEnding(id: string, format: 'LF' | 'CRLF'): Promise<void>;
+	/** Change the current file's indentation; `rewrite` also converts existing leading whitespace. */
+	setIndentation(id: string, indentation: Indentation, rewrite?: boolean): Promise<void>;
 	setTheme(theme: UITheme): Promise<void>;
 	setLanguage(language: Language): Promise<void>;
 	updateState(): Promise<UpdateState>;

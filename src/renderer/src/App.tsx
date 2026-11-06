@@ -498,6 +498,11 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 					run(window.nido.setLineEnding(active, format));
 					focusEditor();
 				}}
+				onIndentation={() => {
+					// The palette lists the indentation commands, so the keyboard reaches them too.
+					showPanel('commands');
+					palette.setQuery(t('Indentation'));
+				}}
 			/>
 			<Notification workspaceId={active} animations={animations} />
 			<ErrorToast

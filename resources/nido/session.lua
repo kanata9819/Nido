@@ -251,6 +251,7 @@ publish = function()
         / math.max(1, vim.api.nvim_buf_line_count(0) - (vim.fn.line('w$') - vim.fn.line('w0') + 1)) + 0.5)),
       current = vim.api.nvim_get_current_buf(),
       lineEnding = ending or vim.NIL,
+      indentation = vim.g.nido and require('nido_indentation').detect() or vim.NIL,
       lsp = clients,
       lspProgress = tasks,
       empty = empty,
@@ -309,6 +310,9 @@ vim.api.nvim_create_autocmd({
   'ModeChanged', 'CursorMoved', 'CursorMovedI', 'FileType', 'TextChanged', 'TextChangedI', 'CmdlineLeave',
   'WinEnter', 'WinClosed', 'WinScrolled', 'WinResized', 'LspAttach', 'LspDetach',
 }, { callback = publish })
-vim.api.nvim_create_autocmd('User', { pattern = { 'NidoLineEndings', 'NidoScroll', 'NidoSearch', 'NidoSaved' }, callback = publish })
-vim.api.nvim_create_autocmd('OptionSet', { pattern = { 'fileformat', 'endofline' }, callback = publish })
+vim.api.nvim_create_autocmd('User', { pattern = { 'NidoLineEndings', 'NidoIndentation', 'NidoScroll', 'NidoSearch', 'NidoSaved' }, callback = publish })
+vim.api.nvim_create_autocmd('OptionSet', {
+  pattern = { 'fileformat', 'endofline', 'expandtab', 'shiftwidth', 'tabstop' },
+  callback = publish,
+})
 publish()
