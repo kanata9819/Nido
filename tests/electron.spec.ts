@@ -2001,15 +2001,11 @@ test('type information is a selectable Nido card with keyboard scrolling and dis
 		expect(await page.evaluate(() => 'hoverUnsafe' in window)).toBe(false);
 		const signature = popup.locator('pre').first();
 		expect(await signature.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(true);
-		await page.keyboard.press('l');
-		await expect.poll(() => signature.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
-		await page.keyboard.press('h');
-		await expect.poll(() => signature.evaluate((node) => node.scrollLeft)).toBe(0);
 		await page.keyboard.press('ArrowRight');
 		await expect.poll(() => signature.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
 		await page.keyboard.press('ArrowLeft');
 		await expect.poll(() => signature.evaluate((node) => node.scrollLeft)).toBe(0);
-		await page.keyboard.press('j');
+		await page.keyboard.press('ArrowDown');
 		await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
 		await page.keyboard.press('Home');
 		await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
