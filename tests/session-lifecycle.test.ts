@@ -575,3 +575,63 @@ test('prestarted workspace events wait for the renderer and keep their order', a
 	events.release();
 	assert.deepEqual(delivered, ['notification', 'exit', 'exit']);
 });
+
+test('only background editors without shells or untitled drafts start asleep', async () => {
+	const { startsAsleep } = await import('../src/main/workspaceHandlers');
+	const editor = { root: '/project', files: [], current: '' };
+	assert.equal(startsAsleep(editor, 1, 0), true);
+	assert.equal(startsAsleep(editor, 0, 0), false, 'The selected workspace starts');
+	assert.equal(startsAsleep({ ...editor, kind: 'terminal' }, 1, 0), false);
+	assert.equal(startsAsleep({ ...editor, terminal: true }, 1, 0), false);
+	assert.equal(
+		startsAsleep(
+			{
+				...editor,
+				untitled: [
+					{ lines: ['draft'], endOfLine: true, fileformat: 'unix', line: 1, column: 0 }
+				]
+			},
+			1,
+			0
+		),
+		false
+	);
+});
+
+test(
+	'a workspace sleeps only when stopping it loses nothing, and wakes under its ID',
+	{ timeout: 30000 },
+	async () => {
+		const root = await mkdtemp(join(tmpdir(), 'nido-sleep-'));
+		await writeFile(join(root, 'a.txt'), 'first\nsecond\n');
+		let session = await Session.create(root, () => {});
+		try {
+			await session.openFile('a.txt', 2, 3);
+			assert.equal(await session.canSleep(), true);
+			await session.input('ix');
+			await session.inputMode();
+			assert.equal(await session.canSleep(), false, 'Insert mode is still editing');
+			await session.input('<Esc>');
+			assert.equal(await session.canSleep(), false, 'Unsaved edits need the running Neovim');
+			await session.input('u');
+			await session.inputMode();
+			assert.equal(await session.canSleep(), true);
+			const saved = await session.snapshot({ includeUntitled: true });
+			const id = session.workspace.id;
+			await session.stop();
+			session = await Session.create(root, () => {}, undefined, undefined, id);
+			assert.equal(session.workspace.id, id);
+			assert.deepEqual(await session.restore(saved), []);
+			assert.deepEqual(
+				await session.client.request('nvim_exec_lua', [
+					"return {vim.fn.expand('%:t'), vim.fn.line('.')}",
+					[]
+				]),
+				['a.txt', 2]
+			);
+		} finally {
+			await session.stop();
+			await rm(root, { recursive: true, force: true });
+		}
+	}
+);

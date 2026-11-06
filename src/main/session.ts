@@ -75,11 +75,12 @@ export class Session {
 		root: string,
 		private emit: (event: NidoEvent) => void,
 		private resources: string,
-		runtime?: Awaited<ReturnType<typeof prepareWsl>>
+		runtime?: Awaited<ReturnType<typeof prepareWsl>>,
+		id: string = randomUUID()
 	) {
 		const remote = parseWslPath(root);
 		this.workspace = {
-			id: randomUUID(),
+			id,
 			root,
 			name: basename(root) || root,
 			...(remote ? { wsl: remote.distribution } : {})
@@ -190,7 +191,9 @@ export class Session {
 		root: string,
 		emit: (event: NidoEvent) => void,
 		resources = resolve(__dirname, '../../resources'),
-		languagePacks?: LanguagePackConfiguration
+		languagePacks?: LanguagePackConfiguration,
+		/** Reuse a workspace ID, e.g. when waking a sleeping workspace. */
+		id?: string
 	): Promise<Session> {
 		const remote = parseWslPath(root);
 		const actual = remote
@@ -216,7 +219,7 @@ export class Session {
 		}
 		const setup = await readFile(resolve(resources, 'nido/session.lua'), 'utf8');
 		const runtime = remote ? await prepareWsl(remote.distribution, resources) : undefined;
-		const session = new Session(actual, emit, resources, runtime);
+		const session = new Session(actual, emit, resources, runtime, id);
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		try {
 			await Promise.race([
@@ -459,6 +462,28 @@ end`,
 
 	modified(): Promise<boolean> {
 		return this.buffers.modified();
+	}
+
+	/**
+	 * Whether stopping Neovim now and restoring a snapshot later loses nothing: no unsaved
+	 * edits, shells, debug sessions or pending prompts.
+	 */
+	async canSleep(): Promise<boolean> {
+		if (this.stopped || this.workspace.kind === 'terminal' || this.terminal) {
+			return false;
+		}
+		const debug = this.state.debug?.status;
+		if (debug && !['idle', 'finished', 'error'].includes(debug)) {
+			return false;
+		}
+		const mode = (await this.client.request('nvim_get_mode', [])) as {
+			mode: string;
+			blocking: boolean;
+		};
+		if (mode.blocking || mode.mode !== 'n') {
+			return false;
+		}
+		return !(await this.modified());
 	}
 
 	async saveAll(): Promise<void> {

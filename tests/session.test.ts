@@ -3262,6 +3262,57 @@ test('horizontal panning preserves the vertical viewport and ignores text inside
 	}
 });
 
+test('vertical scrolling keeps the panned column when the cursor reaches short lines', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-vertical-leftcol-'));
+	let session: Session | undefined;
+	try {
+		// Long lines first, then a block of short lines, then long lines again.
+		const long = (index: number): string => `ROW_${index + 1} ` + 'x'.repeat(300);
+		const source = Array.from({ length: 200 }, (_, index) =>
+			index >= 60 && index < 140 && index % 3 ? 'short' : long(index)
+		).join('\n');
+		await writeFile(join(root, 'wide.txt'), source);
+		session = await Session.create(root, () => {});
+		await session.openFile('wide.txt');
+		await session.attach(70, 20);
+		await session.setWordWrap(false);
+		const view = (): Promise<{ leftcol: number; topline: number }> =>
+			session!.client.request('nvim_exec_lua', [
+				'return vim.fn.winsaveview()',
+				[]
+			]) as Promise<{
+				leftcol: number;
+				topline: number;
+			}>;
+		for (const follow of [false, true]) {
+			await session.input('<Esc>gg0');
+			await session.client.request('nvim_eval', ['1']);
+			await session.scroll(0, follow, true, 100);
+			assert.equal((await view()).leftcol, 100);
+			// Small touchpad-sized steps push the cursor through every line, short ones included.
+			for (let step = 0; step < 120; step++) {
+				await session.scroll(0.75, follow, true);
+				assert.equal(
+					(await view()).leftcol,
+					100,
+					`Vertical scrolling must not return to the left edge (step ${step})`
+				);
+			}
+			for (let step = 0; step < 120; step++) {
+				await session.scroll(-1.5, follow, true);
+				assert.equal((await view()).leftcol, 100);
+			}
+			await session.prefetchScroll(true);
+			assert.equal((await view()).leftcol, 100, 'Prefetching restores the panned view');
+		}
+		assert.equal(await session.modified(), false);
+		assert.equal(await readFile(join(root, 'wide.txt'), 'utf8'), source);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('scroll follows pixel distance and preserves insert mode and file contents', async () => {
 	assert.equal(scrollOffset(100, 0), 100);
 	assert.equal(scrollOffset(100, 60), 12.5);

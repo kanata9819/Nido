@@ -4,6 +4,7 @@ import { onNidoEvent } from '../nidoEvents';
 export function useInitializedEditors(): {
 	initializedEditors: ReadonlySet<string>;
 	finishEditorLoading: (id: string) => void;
+	forgetEditor: (id: string) => void;
 } {
 	const [initializedEditors, setInitializedEditors] = useState<ReadonlySet<string>>(
 		() => new Set()
@@ -11,21 +12,24 @@ export function useInitializedEditors(): {
 	const finishEditorLoading = useCallback((id: string): void => {
 		setInitializedEditors((old) => (old.has(id) ? old : new Set([...old, id])));
 	}, []);
+	const forgetEditor = useCallback((id: string): void => {
+		setInitializedEditors((old) => {
+			if (!old.has(id)) {
+				return old;
+			}
+			const next = new Set(old);
+			next.delete(id);
+			return next;
+		});
+	}, []);
 	useEffect(
 		() =>
 			onNidoEvent((event) => {
 				if (event.type === 'exit') {
-					setInitializedEditors((old) => {
-						if (!old.has(event.id)) {
-							return old;
-						}
-						const next = new Set(old);
-						next.delete(event.id);
-						return next;
-					});
+					forgetEditor(event.id);
 				}
 			}),
-		[]
+		[forgetEditor]
 	);
-	return { initializedEditors, finishEditorLoading };
+	return { initializedEditors, finishEditorLoading, forgetEditor };
 }

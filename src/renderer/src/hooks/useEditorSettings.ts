@@ -163,7 +163,8 @@ export function useEditorSettings(): EditorSettings {
 
 	const [fontSize, setFontSize] = useState(() => {
 		const value = Number(localStorage.getItem('nido.fontSize'));
-		return value >= 8 && value <= 24 ? value : 15;
+		// Half sizes allow finer tuning, e.g. 9.5px between two whole sizes.
+		return value >= 8 && value <= 24 && Number.isInteger(value * 2) ? value : 15;
 	});
 
 	useEffect(() => {

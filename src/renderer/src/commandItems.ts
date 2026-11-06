@@ -12,6 +12,7 @@ export interface CommandsCallbacks {
 	closeWorkspace: (id: string) => void;
 	create: () => Promise<void>;
 	createTerminal: () => Promise<void>;
+	showFavorites: () => Promise<void>;
 	showExplorer: () => void;
 	openDebugger: () => void;
 	openFile: (path: string) => void;
@@ -117,6 +118,12 @@ export function buildCommands(
 			title: 'Open workspace',
 			detail: 'Choose a project folder · Ctrl+Shift+N',
 			run: () => void create()
+		},
+		{
+			key: '',
+			title: 'Open favorite workspace',
+			detail: 'Choose a saved project · Ctrl+F in the folder picker',
+			run: () => void callbacks.showFavorites()
 		},
 		{
 			key: '',

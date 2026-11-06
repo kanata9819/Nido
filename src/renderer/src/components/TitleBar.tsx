@@ -112,12 +112,20 @@ export default function TitleBar({
 						key={w.id}
 						ref={active === w.id ? selectedTab : undefined}
 						className={`${styles.workspaceTab} ${active === w.id ? styles.activeWorkspace : ''}`}
+						data-sleeping={w.sleeping || undefined}
 					>
 						<button
 							role="tab"
 							aria-selected={active === w.id}
 							aria-label={t('Workspace {name}', { name: w.name })}
-							title={compact ? t('Session tabs (Alt+Shift+W)') : undefined}
+							aria-description={w.sleeping ? t('Sleeping') : undefined}
+							title={
+								compact
+									? t('Session tabs (Alt+Shift+W)')
+									: w.sleeping
+										? t('Sleeping · Opens when selected')
+										: undefined
+							}
 							onClick={() => activate(w.id)}
 						>
 							<span

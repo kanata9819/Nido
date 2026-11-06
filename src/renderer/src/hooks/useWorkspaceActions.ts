@@ -12,7 +12,7 @@ interface Options {
 	requestEditorFocus: () => void;
 	captureFocus: () => () => boolean;
 	dismissLeader: () => void;
-	showFolders: (kind: 'editor' | 'terminal') => void;
+	showFolders: (kind: 'editor' | 'terminal', favorites?: boolean) => void;
 	closeOverlay: () => void;
 	report: (message: string) => void;
 	run: (promise: Promise<unknown>) => void;
@@ -22,6 +22,8 @@ interface WorkspaceActions {
 	creating: boolean;
 	create: () => Promise<void>;
 	createTerminal: () => Promise<void>;
+	/** Open the folder picker on its favorites view. */
+	showFavorites: () => Promise<void>;
 	activate: (id: string) => void;
 	openWorkspace: (path: string, kind: 'editor' | 'terminal') => Promise<void>;
 	openFavorite: (favorite: FavoriteWorkspace) => Promise<void>;
@@ -52,12 +54,15 @@ export function useWorkspaceActions({
 		setActive(id);
 		focusEditor();
 	};
-	const create = async (kind: 'editor' | 'terminal' = 'editor'): Promise<void> => {
+	const create = async (
+		kind: 'editor' | 'terminal' = 'editor',
+		favorites = false
+	): Promise<void> => {
 		if (creating) {
 			return;
 		}
 		dismissLeader();
-		showFolders(kind);
+		showFolders(kind, favorites);
 	};
 	const openWorkspace = async (path: string, kind: 'editor' | 'terminal'): Promise<void> => {
 		if (creating || restoring) {
@@ -131,6 +136,7 @@ export function useWorkspaceActions({
 		creating,
 		create,
 		createTerminal: () => create('terminal'),
+		showFavorites: () => create('editor', true),
 		activate,
 		openWorkspace,
 		openFavorite,

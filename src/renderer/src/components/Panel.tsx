@@ -20,6 +20,7 @@ interface PanelProps {
 	symbols?: DocumentSymbolList;
 	initialFolder: string;
 	folderKind: 'editor' | 'terminal';
+	folderFavorites: boolean;
 	favorites: FavoriteWorkspace[];
 	favoriteBusy: boolean;
 	openFavorite: (favorite: FavoriteWorkspace) => Promise<void>;
@@ -59,6 +60,7 @@ export function Panel({
 	symbols,
 	initialFolder,
 	folderKind,
+	folderFavorites,
 	favorites,
 	favoriteBusy,
 	openFavorite,
@@ -121,6 +123,7 @@ export function Panel({
 			content = (
 				<FolderPicker
 					initialPath={initialFolder}
+					initialFavorites={folderFavorites}
 					favorites={favorites.filter((favorite) => favorite.kind === folderKind)}
 					favoriteBusy={favoriteBusy}
 					onOpenFavorite={(favorite) => void openFavorite(favorite)}

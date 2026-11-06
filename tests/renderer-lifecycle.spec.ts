@@ -4278,6 +4278,9 @@ test('creation entry chooses the session kind and cancelling resets the next edi
 	await page.keyboard.press('Enter');
 	const picker = page.getByRole('dialog', { name: 'folders palette' });
 	await expect(picker).toContainText('New terminal session');
+	// Favorites stay hidden until requested.
+	await expect(picker.getByRole('option', { name: /^Favorite / })).toHaveCount(0);
+	await page.keyboard.press('Control+f');
 	await expect(
 		picker.getByRole('option', { name: 'Favorite Terminal project (terminal)' })
 	).toHaveCount(1);
@@ -4303,6 +4306,7 @@ test('creation entry chooses the session kind and cancelling resets the next edi
 	await page.keyboard.press('Escape');
 	await page.keyboard.press('Control+Shift+n');
 	await expect(picker).toContainText('Open a workspace');
+	await page.keyboard.press('Control+f');
 	await expect(
 		picker.getByRole('option', { name: 'Favorite Editor project (editor)' })
 	).toHaveCount(1);
@@ -4360,6 +4364,8 @@ test('Folder browsing cancels old results and clamps selection after favorites c
 		})
 	);
 	const list = page.getByRole('listbox', { name: 'Folders' });
+	await expect(list.getByRole('option')).toHaveCount(0);
+	await list.press('Control+f');
 	await expect(list.getByRole('option')).toHaveCount(2);
 	await list.press('j');
 	await expect(list).toHaveAttribute('aria-activedescendant', 'folder-choice-1');
@@ -4369,6 +4375,76 @@ test('Folder browsing cancels old results and clamps selection after favorites c
 		})
 	);
 	await expect(list).toHaveAttribute('aria-activedescendant', 'folder-choice-0');
+});
+
+test('Folder browsing keeps the current listing until the next one arrives', async ({ page }) => {
+	await page.goto(`${origin}?view=folders&defer=browseFolders`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('browseFolders', 0, {
+			path: '/alpha',
+			parent: '/',
+			folders: Array.from({ length: 40 }, (_, index) => ({
+				name: `folder${index}`,
+				path: `/alpha/folder${index}`,
+				directory: true
+			}))
+		})
+	);
+	const list = page.getByRole('listbox', { name: 'Folders' });
+	await expect(list.getByRole('option')).toHaveCount(40);
+	const parent = page.getByRole('button', { name: '↑ Parent' });
+	// The standalone harness does not bound the list height like the palette does.
+	await list.evaluate((element) => (element.style.maxHeight = '200px'));
+	await list.focus();
+	for (let index = 0; index < 30; index++) {
+		await list.press('j');
+	}
+	expect(await list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+	await list.press('l');
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	// No loading placeholder and no disabled controls while the next listing is pending.
+	await expect(list).toHaveAttribute('aria-busy', 'true');
+	await expect(list.getByRole('option')).toHaveCount(40);
+	await expect(list).not.toContainText('Loading folders…');
+	await expect(parent).toBeEnabled();
+	await page.evaluate(() =>
+		window.rendererTest.settle('browseFolders', 0, {
+			path: '/alpha/folder30',
+			parent: '/alpha',
+			folders: [{ name: 'child', path: '/alpha/folder30/child', directory: true }]
+		})
+	);
+	await expect(list.getByRole('option')).toHaveCount(1);
+	await expect(list).toHaveAttribute('aria-activedescendant', 'folder-choice-0');
+	expect(await list.evaluate((element) => element.scrollTop)).toBe(0);
+});
+
+test('Favorites open from the command palette and hide again with Ctrl+F', async ({ page }) => {
+	await page.goto(`${origin}?view=app&defer=favoriteWorkspaces`);
+	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('favoriteWorkspaces', 0, [
+			{ root: '/editor', name: 'Editor project', kind: 'editor' }
+		])
+	);
+	await page.keyboard.press('Control+Shift+p');
+	await page.keyboard.type('Open favorite workspace');
+	await page.keyboard.press('Enter');
+	const picker = page.getByRole('dialog', { name: 'folders palette' });
+	const favorite = picker.getByRole('option', { name: 'Favorite Editor project (editor)' });
+	await expect(favorite).toHaveCount(1);
+	await expect(picker.getByRole('button', { name: 'Favorites' })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	await page.keyboard.press('Control+f');
+	await expect(favorite).toHaveCount(0);
+	await picker.getByRole('button', { name: 'Favorites' }).click();
+	await expect(favorite).toHaveCount(1);
+	await page.keyboard.press('h');
+	await expect(favorite).toHaveCount(0);
 });
 
 test('Switching WSL connections ignores stale listings and displays Linux paths', async ({
@@ -5810,6 +5886,270 @@ test('file tab shortcuts leave a terminal session focused', async ({ page }) => 
 			)
 		)
 	).toEqual([]);
+});
+
+test('editor font size accepts half sizes and keeps the last valid one', async ({ page }) => {
+	await page.addInitScript(() => {
+		if (!sessionStorage.getItem('nido.test.reloaded')) {
+			localStorage.setItem('nido.fontSize', '9.25');
+		}
+	});
+	await page.goto(`${origin}?view=app`);
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	const size = page.getByRole('spinbutton', { name: 'Editor font size' });
+	// A stored size that is not a whole or half size falls back to the default.
+	await expect(size).toHaveValue('15');
+	await size.fill('9.5');
+	await expect.poll(() => page.evaluate(() => localStorage.getItem('nido.fontSize'))).toBe('9.5');
+	await size.fill('9.3');
+	await size.blur();
+	await expect(size).toHaveValue('9.5');
+	await page.keyboard.press('Escape');
+	await page.evaluate(() => sessionStorage.setItem('nido.test.reloaded', '1'));
+	await page.reload();
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	await expect(page.getByRole('spinbutton', { name: 'Editor font size' })).toHaveValue('9.5');
+});
+
+test('h, j, k and l close type information and move in the editor; arrows scroll', async ({
+	page
+}) => {
+	await page.addInitScript(() => localStorage.setItem('nido.animations', 'false'));
+	await page.goto(`${origin}?view=app`);
+	const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+	const card = page.getByRole('dialog', { name: 'Type information', exact: true });
+	const content = page.getByLabel('Type information content', { exact: true });
+	await expect(editor).toBeFocused();
+	const show = (): Promise<void> =>
+		page.evaluate(() =>
+			window.rendererTest.emit({
+				type: 'hover',
+				id: 'alpha',
+				markdown: Array.from({ length: 80 }, (_, line) => `Line ${line}`).join('\n\n'),
+				filetype: 'rust',
+				codeBlocks: []
+			})
+		);
+	const inputs = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'input')
+				.map((call) => call.args)
+		);
+	await show();
+	await expect(content).toBeFocused();
+	await page.keyboard.press('ArrowDown');
+	await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+	await page.keyboard.press('ArrowUp');
+	await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
+	expect(await inputs()).toEqual([]);
+	for (const key of ['h', 'j', 'k', 'l']) {
+		await show();
+		await expect(content).toBeFocused();
+		await page.keyboard.press(key);
+		await expect(card).toHaveCount(0);
+		await expect(editor).toBeFocused();
+	}
+	await expect.poll(inputs).toEqual([
+		['alpha', 'h'],
+		['alpha', 'j'],
+		['alpha', 'k'],
+		['alpha', 'l']
+	]);
+});
+
+test('type information code uses the editor font', async ({ page }) => {
+	await page.addInitScript(() => localStorage.setItem('nido.animations', 'false'));
+	await page.goto(`${origin}?view=app`);
+	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'hover',
+			id: 'alpha',
+			markdown: '```rust\npub fn row(&self) -> usize\n```\n\nReturns the `row`.',
+			filetype: 'rust',
+			codeBlocks: []
+		})
+	);
+	const card = page.getByRole('dialog', { name: 'Type information', exact: true });
+	await expect(card).toContainText('pub fn row');
+	const fonts = await card.evaluate((element) => ({
+		editor: getComputedStyle(element).getPropertyValue('--editor-font').trim(),
+		block: getComputedStyle(element.querySelector('pre code')!).fontFamily,
+		inline: getComputedStyle(element.querySelector('p code')!).fontFamily
+	}));
+	expect(fonts.editor).not.toBe('');
+	expect(fonts.block).not.toBe('monospace');
+	// Compare as the browser normalizes the font list.
+	const normalized = await page.evaluate((family) => {
+		const probe = document.createElement('span');
+		probe.style.fontFamily = family;
+		document.body.append(probe);
+		const value = getComputedStyle(probe).fontFamily;
+		probe.remove();
+		return value;
+	}, fonts.editor);
+	expect(fonts.block).toBe(normalized);
+	expect(fonts.inline).toBe(normalized);
+});
+
+test('sleeping workspaces start nothing until selected, then load behind the indicator', async ({
+	page
+}) => {
+	await pauseRendererClock(page);
+	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,wakeWorkspace`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('restoreWorkspaces', 0, {
+			workspaces: [
+				{ id: 'alpha', root: '/alpha', name: 'Alpha' },
+				{ id: 'beta', root: '/beta', name: 'Beta', sleeping: true }
+			],
+			active: 'alpha',
+			errors: []
+		})
+	);
+	const beta = page.getByRole('tab', { name: 'Workspace Beta', exact: true });
+	await expect(beta).toHaveAccessibleDescription('Sleeping');
+	await page.clock.runFor(1000);
+	const betaCalls = (): Promise<string[]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.args[0] === 'beta')
+				.map((call) => call.method)
+		);
+	// No editor, explorer or settings requests reach a workspace without Neovim.
+	expect(await betaCalls()).toEqual([]);
+
+	await beta.click();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.filter((call) => call.method === 'wakeWorkspace')
+			)
+		)
+		.toHaveLength(1);
+	const loading = page.getByRole('status', { name: 'Loading workspaces…' });
+	await page.clock.runFor(300);
+	await expect(loading).toBeVisible();
+	expect(await betaCalls()).toEqual(['wakeWorkspace']);
+	await page.evaluate(() =>
+		window.rendererTest.settle('wakeWorkspace', 0, {
+			workspace: { id: 'beta', root: '/beta', name: 'Beta' },
+			errors: []
+		})
+	);
+	await expect(beta).not.toHaveAccessibleDescription('Sleeping');
+	await expect
+		.poll(async () => {
+			await page.clock.runFor(50);
+			return betaCalls();
+		})
+		.toContain('attach');
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'redraw',
+			id: 'beta',
+			events: [
+				['grid_resize', [1, 40, 10]],
+				['grid_line', [1, 0, 0, Array.from('beta', (text) => [text, 0])]],
+				['flush']
+			]
+		})
+	);
+	await page.clock.runFor(50);
+	await expect(loading).toHaveCount(0);
+});
+
+test('background workspaces sleep after five minutes and a failed wake stops loading', async ({
+	page
+}) => {
+	await pauseRendererClock(page);
+	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,sleepWorkspace,wakeWorkspace`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('restoreWorkspaces', 0, {
+			workspaces: [
+				{ id: 'alpha', root: '/alpha', name: 'Alpha' },
+				{ id: 'beta', root: '/beta', name: 'Beta' }
+			],
+			active: 'alpha',
+			errors: []
+		})
+	);
+	const sleeps = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'sleepWorkspace')
+				.map((call) => call.args)
+		);
+	await page.clock.runFor(4 * 60 * 1000);
+	expect(await sleeps()).toEqual([]);
+	await page.clock.runFor(90 * 1000);
+	// Only the background workspace is asked to sleep.
+	await expect.poll(sleeps).toEqual([['beta']]);
+	await page.evaluate(() => window.rendererTest.settle('sleepWorkspace', 0, true));
+	const beta = page.getByRole('tab', { name: 'Workspace Beta', exact: true });
+	await expect(beta).toHaveAccessibleDescription('Sleeping');
+
+	await beta.click();
+	const loading = page.getByRole('status', { name: 'Loading workspaces…' });
+	await page.clock.runFor(300);
+	await expect(loading).toBeVisible();
+	await page.evaluate(() =>
+		window.rendererTest.settle('wakeWorkspace', 0, 'Choose a project folder.', true)
+	);
+	await page.clock.runFor(50);
+	await expect(loading).toHaveCount(0);
+	await expect(beta).toHaveAccessibleDescription('Sleeping');
+});
+
+test('typing while a workspace wakes reaches that workspace, not the previous one', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,wakeWorkspace`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('restoreWorkspaces', 0, {
+			workspaces: [
+				{ id: 'alpha', root: '/alpha', name: 'Alpha' },
+				{ id: 'beta', root: '/beta', name: 'Beta', sleeping: true }
+			],
+			active: 'alpha',
+			errors: []
+		})
+	);
+	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+	const inputs = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'input')
+				.map((call) => call.args)
+		);
+	await page.keyboard.press('Alt+2');
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some((call) => call.method === 'wakeWorkspace')
+			)
+		)
+		.toBe(true);
+	await page.keyboard.type('4G');
+	expect(await inputs()).toEqual([]);
+	await page.evaluate(() =>
+		window.rendererTest.settle('wakeWorkspace', 0, {
+			workspace: { id: 'beta', root: '/beta', name: 'Beta' },
+			errors: []
+		})
+	);
+	await expect.poll(inputs).toEqual([['beta', '4G']]);
+	const editor = page.getByRole('textbox', { name: 'Neovim input' });
+	await expect(editor).toBeFocused();
+	await page.keyboard.type('j');
+	await expect.poll(inputs).toEqual([
+		['beta', '4G'],
+		['beta', 'j']
+	]);
 });
 
 test('Indentation shows in the status bar and changes from the palette by mouse or keyboard', async ({
