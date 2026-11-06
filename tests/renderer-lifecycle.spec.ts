@@ -5887,3 +5887,64 @@ test('file tab shortcuts leave a terminal session focused', async ({ page }) => 
 		)
 	).toEqual([]);
 });
+
+test('Indentation shows in the status bar and changes from the palette by mouse or keyboard', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=app`);
+	await expect(page.getByRole('tab', { name: 'Workspace Alpha', exact: true })).toBeVisible();
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'state',
+			id: 'alpha',
+			state: {
+				buffers: [{ id: 1, name: '/alpha/main.rs', modified: false }],
+				current: 1,
+				mode: 'n',
+				line: 1,
+				column: 1,
+				filetype: 'rust',
+				indentation: { spaces: true, size: 4 }
+			}
+		})
+	);
+	const status = page.getByRole('button', { name: 'Indentation: Spaces: 4' });
+	await expect(status).toHaveText('Spaces: 4');
+	const setIndentation = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'setIndentation')
+				.map((call) => call.args)
+		);
+
+	// The status item opens the palette filtered to the indentation commands.
+	await status.click();
+	const palette = page.getByRole('dialog', { name: 'commands palette' });
+	await expect(palette.getByRole('textbox')).toHaveValue('Indentation');
+	await expect(palette.getByText('Indent using tabs', { exact: true })).toBeVisible();
+	await expect(palette.getByText('Quit Nido', { exact: true })).toHaveCount(0);
+	await palette.getByText('Indent using tabs', { exact: true }).click();
+	await expect.poll(setIndentation).toEqual([['alpha', { spaces: false, size: 4 }, false]]);
+
+	// Every command is reachable from the keyboard alone.
+	await page.keyboard.press('Control+Shift+p');
+	await page.keyboard.type('Indent width 2');
+	await page.keyboard.press('Enter');
+	await page.keyboard.press('Control+Shift+p');
+	await page.keyboard.type('Convert indentation to tabs');
+	await page.keyboard.press('Enter');
+	await expect.poll(setIndentation).toEqual([
+		['alpha', { spaces: false, size: 4 }, false],
+		['alpha', { spaces: true, size: 2 }, false],
+		['alpha', { spaces: false, size: 4 }, true]
+	]);
+
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'statePatch',
+			id: 'alpha',
+			state: { indentation: { spaces: false, size: 8 } }
+		})
+	);
+	await expect(page.getByRole('button', { name: 'Indentation: Tab size: 8' })).toBeVisible();
+});
