@@ -5811,3 +5811,38 @@ test('file tab shortcuts leave a terminal session focused', async ({ page }) => 
 		)
 	).toEqual([]);
 });
+
+test('type information code uses the editor font', async ({ page }) => {
+	await page.addInitScript(() => localStorage.setItem('nido.animations', 'false'));
+	await page.goto(`${origin}?view=app`);
+	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'hover',
+			id: 'alpha',
+			markdown: '```rust\npub fn row(&self) -> usize\n```\n\nReturns the `row`.',
+			filetype: 'rust',
+			codeBlocks: []
+		})
+	);
+	const card = page.getByRole('dialog', { name: 'Type information', exact: true });
+	await expect(card).toContainText('pub fn row');
+	const fonts = await card.evaluate((element) => ({
+		editor: getComputedStyle(element).getPropertyValue('--editor-font').trim(),
+		block: getComputedStyle(element.querySelector('pre code')!).fontFamily,
+		inline: getComputedStyle(element.querySelector('p code')!).fontFamily
+	}));
+	expect(fonts.editor).not.toBe('');
+	expect(fonts.block).not.toBe('monospace');
+	// Compare as the browser normalizes the font list.
+	const normalized = await page.evaluate((family) => {
+		const probe = document.createElement('span');
+		probe.style.fontFamily = family;
+		document.body.append(probe);
+		const value = getComputedStyle(probe).fontFamily;
+		probe.remove();
+		return value;
+	}, fonts.editor);
+	expect(fonts.block).toBe(normalized);
+	expect(fonts.inline).toBe(normalized);
+});

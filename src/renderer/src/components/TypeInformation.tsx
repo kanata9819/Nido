@@ -122,6 +122,8 @@ export default function TypeInformation({
 			<div
 				ref={card}
 				className={styles.card}
+				// Code blocks and inline code follow the editor font setting.
+				style={{ '--editor-font': fontFamily } as React.CSSProperties}
 				role="dialog"
 				aria-label={t('Type information')}
 				data-type-information
@@ -248,7 +250,7 @@ export default function TypeInformation({
 									);
 									return (
 										<section className={styles.code}>
-											<pre style={{ fontFamily }}>
+											<pre>
 												{lines?.length ? (
 													<code>
 														{lines.map((line, row) => (
