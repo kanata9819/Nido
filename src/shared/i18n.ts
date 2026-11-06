@@ -451,6 +451,8 @@ export const japanese: Record<string, string> = {
 	'Favorite {name} ({kind})': 'お気に入り {name}（{kind}）',
 	'Remove favorite {name} ({kind})': 'お気に入り {name}（{kind}）を解除',
 	'Remove favorite': 'お気に入りを解除',
+	Sleeping: 'スリープ中',
+	'Sleeping · Opens when selected': 'スリープ中 · 選択すると再開します',
 	'Browse folders': 'フォルダーを参照',
 	'Loading folders…': 'フォルダーを読み込み中…',
 	'No subfolders. Open this folder with Ctrl+Enter.':

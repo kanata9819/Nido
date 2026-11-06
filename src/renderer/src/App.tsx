@@ -36,6 +36,7 @@ import { usePointerVisibility } from './hooks/usePointerVisibility';
 import { useWorkspaceSessions } from './hooks/useWorkspaceSessions';
 import { useFocusGuard } from './hooks/useFocusGuard';
 import { useInitializedEditors } from './hooks/useInitializedEditors';
+import { useWorkspaceSleep } from './hooks/useWorkspaceSleep';
 import styles from './assets/Nido.module.css';
 import { OverlayMotionContext, useReducedMotion } from './overlayMotion';
 import ErrorToast from './components/ErrorToast';
@@ -86,7 +87,17 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 	// Open workspaces, the active workspace ID, and per-workspace state such as the cursor and buffers.
 	const { workspaces, setWorkspaces, active, setActive, states, mode, restoring } =
 		useWorkspaceSessions(report);
-	const { initializedEditors, finishEditorLoading } = useInitializedEditors();
+	const { initializedEditors, finishEditorLoading, forgetEditor } = useInitializedEditors();
+	const wakeFailed = useWorkspaceSleep({
+		workspaces,
+		setWorkspaces,
+		active,
+		restoring,
+		forgetEditor,
+		report
+	});
+	// Sleeping workspaces have no Neovim, so they get no editor, explorer or settings yet.
+	const awakeWorkspaces = useMemo(() => workspaces.filter((w) => !w.sleeping), [workspaces]);
 	const {
 		favorites,
 		ready: favoritesReady,
@@ -110,14 +121,14 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 		resizeSidebar
 	} = settings;
 	useNativePreferences(settings, report);
-	useSessionSettings(workspaces, settings, report);
+	useSessionSettings(awakeWorkspaces, settings, report);
 	const palette = usePalette({ active, report, onShow: dismissLeader, toggleMarkdown });
 	const { panel, closePanel, showPanel, query, fileList } = palette;
 
 	const modal = useRef<HTMLDivElement>(null);
 	const state = states[active] || defaultState;
-	const gitFiles = useGitFileStatus(active, state.buffers);
 	const workspace = workspaces.find((w) => w.id === active);
+	const gitFiles = useGitFileStatus(workspace?.sleeping ? '' : active, state.buffers);
 	const explorerVisible = sidebar && !!workspace && workspace.kind !== 'terminal';
 	const captureFocus = useFocusGuard(active);
 	const decorations = useMemo(
@@ -348,7 +359,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 				/>
 				{sidebar &&
 					workspace?.kind !== 'terminal' &&
-					workspaces.map((w) => (
+					awakeWorkspaces.map((w) => (
 						<Sidebar
 							gitFiles={w.id === active ? decorations : {}}
 							width={sidebarWidth}
@@ -385,7 +396,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 							) : !restoring ? (
 								<Welcome creating={creating} create={create} />
 							) : null}
-							{workspaces.map((w) => (
+							{awakeWorkspaces.map((w) => (
 								<WorkspaceEditor
 									key={w.id}
 									theme={theme}
@@ -414,15 +425,16 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 									onOpenFiles={openFiles}
 								/>
 							))}
-							{(restoring || (!!workspace && !initializedEditors.has(active))) && (
-								<WorkspaceLoading />
-							)}
+							{(restoring ||
+								(!!workspace &&
+									!initializedEditors.has(active) &&
+									!wakeFailed.has(active))) && <WorkspaceLoading />}
 							<KeyboardGuide
 								visible={leader}
 								commands={commands}
 								focusEditor={focusEditor}
 							/>
-							{workspaces
+							{awakeWorkspaces
 								.filter((w) => w.terminalId)
 								.map((w) => (
 									<TerminalPanel

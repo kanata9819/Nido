@@ -5811,3 +5811,114 @@ test('file tab shortcuts leave a terminal session focused', async ({ page }) => 
 		)
 	).toEqual([]);
 });
+
+test('sleeping workspaces start nothing until selected, then load behind the indicator', async ({
+	page
+}) => {
+	await pauseRendererClock(page);
+	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,wakeWorkspace`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('restoreWorkspaces', 0, {
+			workspaces: [
+				{ id: 'alpha', root: '/alpha', name: 'Alpha' },
+				{ id: 'beta', root: '/beta', name: 'Beta', sleeping: true }
+			],
+			active: 'alpha',
+			errors: []
+		})
+	);
+	const beta = page.getByRole('tab', { name: 'Workspace Beta', exact: true });
+	await expect(beta).toHaveAccessibleDescription('Sleeping');
+	await page.clock.runFor(1000);
+	const betaCalls = (): Promise<string[]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.args[0] === 'beta')
+				.map((call) => call.method)
+		);
+	// No editor, explorer or settings requests reach a workspace without Neovim.
+	expect(await betaCalls()).toEqual([]);
+
+	await beta.click();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.filter((call) => call.method === 'wakeWorkspace')
+			)
+		)
+		.toHaveLength(1);
+	const loading = page.getByRole('status', { name: 'Loading workspaces…' });
+	await page.clock.runFor(300);
+	await expect(loading).toBeVisible();
+	expect(await betaCalls()).toEqual(['wakeWorkspace']);
+	await page.evaluate(() =>
+		window.rendererTest.settle('wakeWorkspace', 0, {
+			workspace: { id: 'beta', root: '/beta', name: 'Beta' },
+			errors: []
+		})
+	);
+	await expect(beta).not.toHaveAccessibleDescription('Sleeping');
+	await expect
+		.poll(async () => {
+			await page.clock.runFor(50);
+			return betaCalls();
+		})
+		.toContain('attach');
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'redraw',
+			id: 'beta',
+			events: [
+				['grid_resize', [1, 40, 10]],
+				['grid_line', [1, 0, 0, Array.from('beta', (text) => [text, 0])]],
+				['flush']
+			]
+		})
+	);
+	await page.clock.runFor(50);
+	await expect(loading).toHaveCount(0);
+});
+
+test('background workspaces sleep after five minutes and a failed wake stops loading', async ({
+	page
+}) => {
+	await pauseRendererClock(page);
+	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,sleepWorkspace,wakeWorkspace`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('restoreWorkspaces', 0, {
+			workspaces: [
+				{ id: 'alpha', root: '/alpha', name: 'Alpha' },
+				{ id: 'beta', root: '/beta', name: 'Beta' }
+			],
+			active: 'alpha',
+			errors: []
+		})
+	);
+	const sleeps = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'sleepWorkspace')
+				.map((call) => call.args)
+		);
+	await page.clock.runFor(4 * 60 * 1000);
+	expect(await sleeps()).toEqual([]);
+	await page.clock.runFor(90 * 1000);
+	// Only the background workspace is asked to sleep.
+	await expect.poll(sleeps).toEqual([['beta']]);
+	await page.evaluate(() => window.rendererTest.settle('sleepWorkspace', 0, true));
+	const beta = page.getByRole('tab', { name: 'Workspace Beta', exact: true });
+	await expect(beta).toHaveAccessibleDescription('Sleeping');
+
+	await beta.click();
+	const loading = page.getByRole('status', { name: 'Loading workspaces…' });
+	await page.clock.runFor(300);
+	await expect(loading).toBeVisible();
+	await page.evaluate(() =>
+		window.rendererTest.settle('wakeWorkspace', 0, 'Choose a project folder.', true)
+	);
+	await page.clock.runFor(50);
+	await expect(loading).toHaveCount(0);
+	await expect(beta).toHaveAccessibleDescription('Sleeping');
+});
