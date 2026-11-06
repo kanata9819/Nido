@@ -192,6 +192,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 		creating,
 		create,
 		createTerminal,
+		showFavorites,
 		activate,
 		openWorkspace,
 		openFavorite,
@@ -264,6 +265,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 			closeWorkspace,
 			create,
 			createTerminal,
+			showFavorites,
 			showExplorer,
 			openDebugger,
 			openFile,
@@ -511,6 +513,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 				symbols={state.symbols}
 				initialFolder={workspace?.root || ''}
 				folderKind={palette.folderKind}
+				folderFavorites={palette.folderFavorites}
 				favorites={favorites}
 				favoriteBusy={!favoritesReady || savingFavorite}
 				openFavorite={openFavorite}

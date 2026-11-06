@@ -453,12 +453,15 @@ export const japanese: Record<string, string> = {
 	'Remove favorite': 'お気に入りを解除',
 	Sleeping: 'スリープ中',
 	'Sleeping · Opens when selected': 'スリープ中 · 選択すると再開します',
-	'Browse folders': 'フォルダーを参照',
+	'No favorites yet.': 'お気に入りはまだありません。',
+	'Open favorite workspace': 'お気に入りのワークスペースを開く',
+	'Choose a saved project · Ctrl+F in the folder picker':
+		'登録したプロジェクトを選択 · フォルダー選択画面ではCtrl+F',
 	'Loading folders…': 'フォルダーを読み込み中…',
 	'No subfolders. Open this folder with Ctrl+Enter.':
 		'サブフォルダーがありません。Ctrl+Enterでこのフォルダーを開けます。',
-	'Tab / Shift+Tab Move focus · j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Esc Cancel':
-		'Tab / Shift+Tab：項目移動 · j/k：選択 · h/l：参照 · Enter：選択した項目を開く · Ctrl+Enter：現在のフォルダーを開く · Ctrl+L：パス · Esc：キャンセル',
+	'Tab / Shift+Tab Move focus · j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Ctrl+F Favorites · Esc Cancel':
+		'Tab / Shift+Tab：項目移動 · j/k：選択 · h/l：参照 · Enter：選択した項目を開く · Ctrl+Enter：現在のフォルダーを開く · Ctrl+L：パス · Ctrl+F：お気に入り · Esc：キャンセル',
 	'File explorer': 'ファイルエクスプローラー',
 	'Explorer width': 'エクスプローラーの幅',
 	'Drag to resize · Shift+H / L': 'ドラッグで幅を調整 · Shift+H / L',
@@ -616,9 +619,9 @@ export const japanese: Record<string, string> = {
 	'Close type information': '型情報を閉じる',
 	'Close (Esc / Ctrl+C)': '閉じる（Esc / Ctrl+C）',
 	'Type information content': '型情報の内容',
-	'h/l / ← →: horizontal · j/k: line · Ctrl+D/U: half page · Ctrl+F/B: page':
-		'h/l / ← →：横移動 · j/k：行 · Ctrl+D/U：半ページ · Ctrl+F/B：ページ',
-	'h / l · Horizontal · Ctrl D / U · Scroll': 'h / l：横移動 · Ctrl D / U：スクロール',
+	'← →: horizontal · ↑ ↓: line · Ctrl+D/U: half page · Ctrl+F/B: page · h/j/k/l: close and move':
+		'← →：横移動 · ↑ ↓：行 · Ctrl+D/U：半ページ · Ctrl+F/B：ページ · h/j/k/l：閉じて移動',
+	'Arrows · Scroll · h j k l · Close': '矢印：スクロール · h j k l：閉じる',
 	'Esc / Ctrl C · Back to editor': 'Esc / Ctrl C：エディターに戻る',
 	Completion: '補完',
 	candidates: '件の候補',
