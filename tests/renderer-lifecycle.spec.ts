@@ -5811,3 +5811,26 @@ test('file tab shortcuts leave a terminal session focused', async ({ page }) => 
 		)
 	).toEqual([]);
 });
+
+test('editor font size accepts half sizes and keeps the last valid one', async ({ page }) => {
+	await page.addInitScript(() => {
+		if (!sessionStorage.getItem('nido.test.reloaded')) {
+			localStorage.setItem('nido.fontSize', '9.25');
+		}
+	});
+	await page.goto(`${origin}?view=app`);
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	const size = page.getByRole('spinbutton', { name: 'Editor font size' });
+	// A stored size that is not a whole or half size falls back to the default.
+	await expect(size).toHaveValue('15');
+	await size.fill('9.5');
+	await expect.poll(() => page.evaluate(() => localStorage.getItem('nido.fontSize'))).toBe('9.5');
+	await size.fill('9.3');
+	await size.blur();
+	await expect(size).toHaveValue('9.5');
+	await page.keyboard.press('Escape');
+	await page.evaluate(() => sessionStorage.setItem('nido.test.reloaded', '1'));
+	await page.reload();
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	await expect(page.getByRole('spinbutton', { name: 'Editor font size' })).toHaveValue('9.5');
+});

@@ -154,7 +154,7 @@ export default function SettingsPanel({
 						type="number"
 						min="8"
 						max="24"
-						step="1"
+						step="0.5"
 						defaultValue={fontSize}
 						onChange={(event) => {
 							if (event.target.value && event.target.validity.valid) {
