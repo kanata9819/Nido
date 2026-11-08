@@ -149,7 +149,7 @@ export default function TypeInformation({
 						!event.altKey &&
 						!event.metaKey &&
 						!event.nativeEvent.isComposing &&
-						['ArrowLeft', 'ArrowRight'].includes(event.key)
+						['h', 'l', 'ArrowLeft', 'ArrowRight'].includes(event.key)
 					) {
 						event.preventDefault();
 						const bounds = body.current!.getBoundingClientRect();
@@ -164,7 +164,9 @@ export default function TypeInformation({
 							);
 						});
 						if (content) {
-							content.scrollLeft += event.key === 'ArrowRight' ? 48 : -48;
+							content.scrollLeft += ['l', 'ArrowRight'].includes(event.key)
+								? 48
+								: -48;
 						}
 					} else if (event.key === 'Tab') {
 						event.preventDefault();
@@ -179,9 +181,16 @@ export default function TypeInformation({
 					} else if (
 						!event.ctrlKey &&
 						!event.altKey &&
-						['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'].includes(
-							event.key
-						)
+						[
+							'j',
+							'k',
+							'ArrowDown',
+							'ArrowUp',
+							'PageDown',
+							'PageUp',
+							'Home',
+							'End'
+						].includes(event.key)
 					) {
 						event.preventDefault();
 						const content = body.current!;
@@ -191,8 +200,8 @@ export default function TypeInformation({
 							content.scrollTop = content.scrollHeight;
 						} else {
 							content.scrollTop +=
-								(['ArrowDown', 'PageDown'].includes(event.key) ? 1 : -1) *
-								(event.key.startsWith('Arrow') ? 32 : content.clientHeight * 0.8);
+								(['j', 'ArrowDown', 'PageDown'].includes(event.key) ? 1 : -1) *
+								(event.key.startsWith('Page') ? content.clientHeight * 0.8 : 32);
 						}
 					} else if (
 						!event.defaultPrevented &&
@@ -304,10 +313,10 @@ export default function TypeInformation({
 				<footer>
 					<span
 						title={t(
-							'← →: horizontal · ↑ ↓: line · Ctrl+D/U: half page · Ctrl+F/B: page · Other keys: close and continue in the editor'
+							'h/l / ← →: horizontal · j/k / ↑ ↓: line · Ctrl+D/U: half page · Ctrl+F/B: page · Other keys: close and continue in the editor'
 						)}
 					>
-						{t('Arrows · Scroll · Other keys · Close')}
+						{t('h j k l · Scroll · Other keys · Close')}
 					</span>
 					<span>{t('Esc / Ctrl C · Back to editor')}</span>
 				</footer>
