@@ -6192,7 +6192,10 @@ test('typing while a workspace wakes reaches that workspace, not the previous on
 			)
 		)
 		.toBe(true);
-	await page.keyboard.type('4G');
+	// Escape belongs to the typing too: it must leave Insert mode in the woken workspace.
+	await page.keyboard.type('4Gix');
+	await page.keyboard.press('Escape');
+	await page.keyboard.type('j');
 	expect(await inputs()).toEqual([]);
 	await page.evaluate(() =>
 		window.rendererTest.settle('wakeWorkspace', 0, {
@@ -6200,13 +6203,13 @@ test('typing while a workspace wakes reaches that workspace, not the previous on
 			errors: []
 		})
 	);
-	await expect.poll(inputs).toEqual([['beta', '4G']]);
+	await expect.poll(inputs).toEqual([['beta', '4Gix<Esc>j']]);
 	const editor = page.getByRole('textbox', { name: 'Neovim input' });
 	await expect(editor).toBeFocused();
-	await page.keyboard.type('j');
+	await page.keyboard.type('k');
 	await expect.poll(inputs).toEqual([
-		['beta', '4G'],
-		['beta', 'j']
+		['beta', '4Gix<Esc>j'],
+		['beta', 'k']
 	]);
 });
 

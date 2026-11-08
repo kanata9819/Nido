@@ -98,6 +98,8 @@ export function useKeyboardShortcuts({
 		run(window.nido.selectBuffer(active, next.id));
 	};
 
+	const waking = !!workspaces.find((workspace) => workspace.id === active)?.sleeping;
+
 	/** Escape closes or leaves whatever has focus. Returns whether to stop handling the key. */
 	const handleEscape = (shortcut: Shortcut): boolean => {
 		const { event, consume, focusedInput, terminalFocused } = shortcut;
@@ -118,6 +120,14 @@ export function useKeyboardShortcuts({
 		if (error) {
 			consume();
 			dismissError();
+			return true;
+		}
+		// While the selected workspace wakes, nothing has focus and its typing waits for it:
+		// Escape is part of that typing, as in `ifoo<Esc>`.
+		const idle =
+			document.activeElement === document.body ||
+			document.activeElement === document.documentElement;
+		if (!panel && !leader && idle && waking) {
 			return true;
 		}
 		if (panel || leader || focusedInput !== 'editor') {
