@@ -43,5 +43,6 @@ export const windowsBaselineCases = [
 	'CodeLens rows keep touchpad positions continuous at 125% scale',
 	'CodeLens rows keep touchpad positions continuous at 150% scale',
 	'background checkpoints restore workspace order, active tab and cursors after an abrupt exit',
-	'Time Machine recovers an unsaved draft after an abrupt exit, supports undo and respects paused capture'
+	'Time Machine recovers an unsaved draft after an abrupt exit, supports undo and respects paused capture',
+	'closing a workspace while it wakes stops its Neovim and keeps it closed'
 ] as const;
