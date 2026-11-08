@@ -4052,7 +4052,11 @@ for (const command of ['save', 'saveAll'] as const) {
 							);
 						})
 					]);
-					await session.client.request('nvim_eval', ['1']);
+					// The reply is typed input, and the prompt closes on the next completed redraw:
+					// a single request can return first, so wait for it as for the prompt opening.
+					for (let attempt = 0; attempt < 200 && hasPrompt(); attempt++) {
+						await new Promise((done) => setTimeout(done, 10));
+					}
 					assert.ok(!hasPrompt(), 'answering or cancelling closes the prompt');
 					const accepted = reply === 'y<CR>';
 					if (accepted) assert.equal(error, '');
