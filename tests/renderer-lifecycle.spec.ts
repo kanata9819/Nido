@@ -6077,7 +6077,7 @@ test('sleeping workspaces start nothing until selected, then load behind the ind
 	await expect(loading).toHaveCount(0);
 });
 
-test('background workspaces sleep after five minutes and a failed wake stops loading', async ({
+test('background workspaces sleep after five minutes, and a failed wake offers a retry', async ({
 	page
 }) => {
 	await pauseRendererClock(page);
@@ -6113,11 +6113,53 @@ test('background workspaces sleep after five minutes and a failed wake stops loa
 	await page.clock.runFor(300);
 	await expect(loading).toBeVisible();
 	await page.evaluate(() =>
-		window.rendererTest.settle('wakeWorkspace', 0, 'Choose a project folder.', true)
+		window.rendererTest.settle(
+			'wakeWorkspace',
+			0,
+			new Error("Error invoking remote method 'nido:wake': Error: Choose a project folder."),
+			true
+		)
 	);
 	await page.clock.runFor(50);
 	await expect(loading).toHaveCount(0);
 	await expect(beta).toHaveAccessibleDescription('Sleeping');
+	const failure = page.getByRole('alert', { name: 'Could not reopen Beta' });
+	await expect(failure).toContainText('Choose a project folder.');
+	await expect(failure).not.toContainText('invoking remote method');
+	// Retry is focused, so Enter tries again.
+	await expect(failure.getByRole('button', { name: 'Retry' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(failure).toHaveCount(0);
+	await page.clock.runFor(300);
+	await expect(loading).toBeVisible();
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					window.rendererTest.calls.filter((call) => call.method === 'wakeWorkspace')
+						.length
+			)
+		)
+		.toBe(2);
+	await page.evaluate(() =>
+		window.rendererTest.settle('wakeWorkspace', 0, new Error('Still missing'), true)
+	);
+	await expect(page.getByRole('alert', { name: 'Could not reopen Beta' })).toContainText(
+		'Still missing'
+	);
+	await page
+		.getByRole('alert', { name: 'Could not reopen Beta' })
+		.getByRole('button', { name: 'Close workspace' })
+		.click();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.calls
+					.filter((call) => call.method === 'closeWorkspace')
+					.map((call) => call.args)
+			)
+		)
+		.toEqual([['beta']]);
 });
 
 test('typing while a workspace wakes reaches that workspace, not the previous one', async ({
