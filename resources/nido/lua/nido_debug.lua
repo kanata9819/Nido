@@ -69,7 +69,13 @@ local expanded, nodes, previous, current = {}, {}, {}, {}
 local epoch, next_id = 0, 0
 local function reset_variables(new_run)
   epoch = epoch + 1
-  previous = new_run and {} or current
+  if new_run then
+    previous = {}
+  else
+    -- Keep each value as last seen. An expanded child that had not been fetched again
+    -- before this stop (a quick step) still compares against its earlier value.
+    for key, value in pairs(current) do previous[key] = value end
+  end
   current, nodes = {}, {}
   if new_run then
     expanded = {}
