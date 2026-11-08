@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import styles from '../assets/TypeInformation.module.css';
 import type { NidoEvent } from '../../../shared/types';
 import OverlayPresence from './OverlayPresence';
+import { vimKey } from '../keyboard';
 
 export default function TypeInformation({
 	id,
@@ -133,19 +134,9 @@ export default function TypeInformation({
 					event.stopPropagation();
 					const key = event.key.toLowerCase();
 					const ctrl = event.ctrlKey && !event.altKey && !event.metaKey;
-					const plain =
-						!event.ctrlKey &&
-						!event.altKey &&
-						!event.metaKey &&
-						!event.nativeEvent.isComposing;
 					if (event.key === 'Escape' || (ctrl && ['c', 'k'].includes(key))) {
 						event.preventDefault();
 						close();
-					} else if (plain && ['h', 'j', 'k', 'l'].includes(event.key)) {
-						// Moving on in the editor dismisses the card, like leaving a hover.
-						event.preventDefault();
-						close();
-						void window.nido.input(id, event.key).catch(() => {});
 					} else if (ctrl && ['d', 'u', 'f', 'b'].includes(key)) {
 						event.preventDefault();
 						const content = body.current!;
@@ -202,6 +193,23 @@ export default function TypeInformation({
 							content.scrollTop +=
 								(['ArrowDown', 'PageDown'].includes(event.key) ? 1 : -1) *
 								(event.key.startsWith('Arrow') ? 32 : content.clientHeight * 0.8);
+						}
+					} else if (
+						!event.defaultPrevented &&
+						!event.nativeEvent.isComposing &&
+						event.nativeEvent.keyCode !== 229 &&
+						// Enter and Space still activate a focused link or the close button.
+						!(
+							['Enter', ' '].includes(event.key) &&
+							(event.target as HTMLElement).closest('a[href], button')
+						)
+					) {
+						// Any other key goes back to the editor, like moving away from a hover.
+						const keys = vimKey(event.nativeEvent);
+						if (keys) {
+							event.preventDefault();
+							close();
+							void window.nido.input(id, keys).catch(() => {});
 						}
 					}
 				}}
@@ -296,10 +304,10 @@ export default function TypeInformation({
 				<footer>
 					<span
 						title={t(
-							'← →: horizontal · ↑ ↓: line · Ctrl+D/U: half page · Ctrl+F/B: page · h/j/k/l: close and move'
+							'← →: horizontal · ↑ ↓: line · Ctrl+D/U: half page · Ctrl+F/B: page · Other keys: close and continue in the editor'
 						)}
 					>
-						{t('Arrows · Scroll · h j k l · Close')}
+						{t('Arrows · Scroll · Other keys · Close')}
 					</span>
 					<span>{t('Esc / Ctrl C · Back to editor')}</span>
 				</footer>
