@@ -13,6 +13,7 @@ import type { NidoEvent } from '../../../shared/types';
 import { useI18n } from '../i18n';
 import styles from '../assets/DiagnosticInformation.module.css';
 import OverlayPresence from './OverlayPresence';
+import { vimKey } from '../keyboard';
 
 const severities = [
 	{ label: 'Error', name: 'error', icon: CircleAlert },
@@ -122,7 +123,9 @@ export default function DiagnosticInformation({
 		};
 		position();
 		body.current!.scrollTop = 0;
-		if (info.focus) {
+		// Jumps with [d / ]d come from the editor, so the card can take its keys too;
+		// focus elsewhere, such as in a panel, is left alone.
+		if (info.focus || document.activeElement === anchor) {
 			body.current?.focus();
 		}
 		const observer = new ResizeObserver(position);
@@ -193,6 +196,7 @@ export default function DiagnosticInformation({
 						event.preventDefault();
 						jump(keys.current + 'd');
 					} else {
+						const pending = keys.current;
 						keys.current = '';
 						const content = body.current!;
 						if (ctrl && ['d', 'u', 'f', 'b'].includes(key)) {
@@ -211,6 +215,10 @@ export default function DiagnosticInformation({
 							nodes[
 								(index + (event.shiftKey ? -1 : 1) + nodes.length) % nodes.length
 							]?.focus();
+						} else if (plain && ['h', 'l', 'arrowleft', 'arrowright'].includes(key)) {
+							// Long messages wrap; a wide code span can still scroll sideways.
+							event.preventDefault();
+							content.scrollLeft += ['l', 'arrowright'].includes(key) ? 48 : -48;
 						} else if (
 							plain &&
 							[
@@ -233,6 +241,24 @@ export default function DiagnosticInformation({
 								content.scrollTop +=
 									(['j', 'arrowdown', 'pagedown'].includes(key) ? 1 : -1) *
 									(key.startsWith('page') ? content.clientHeight * 0.8 : 32);
+							}
+						} else if (
+							!event.defaultPrevented &&
+							event.nativeEvent.keyCode !== 229 &&
+							// Ctrl+C with a selection copies the selected message text.
+							!(ctrl && key === 'c') &&
+							// Enter and Space still press a focused button.
+							!(
+								['Enter', ' '].includes(event.key) &&
+								(event.target as HTMLElement).closest('button')
+							)
+						) {
+							// Any other key goes back to the editor, with a pending count or bracket.
+							const typed = vimKey(event.nativeEvent);
+							if (typed) {
+								event.preventDefault();
+								close();
+								jump(pending + typed);
 							}
 						}
 					}
@@ -318,8 +344,8 @@ export default function DiagnosticInformation({
 				</div>
 				<footer className={styles.footer}>
 					<span>{t('[d / ]d · Previous / Next')}</span>
-					<span>{t('gl · Read · j / k · Scroll')}</span>
-					<span>{t('Esc / Ctrl C · Back to editor')}</span>
+					<span>{t('h j k l · Scroll')}</span>
+					<span>{t('Other keys · Back to editor')}</span>
 				</footer>
 			</div>
 		</OverlayPresence>
