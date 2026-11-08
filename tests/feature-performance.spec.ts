@@ -70,6 +70,19 @@ test.afterEach(async ({ page }, testInfo) => {
 			body: JSON.stringify({ ...diagnostics, snapshot }, null, 2),
 			contentType: 'application/json'
 		});
+		// The report is only in a CI artifact; the log is readable without downloading it.
+		console.log(
+			'renderer-runtime-diagnostics',
+			JSON.stringify({
+				...diagnostics,
+				snapshot: {
+					...snapshot,
+					rootHTML:
+						'rootHTML' in snapshot ? snapshot.rootHTML?.slice(0, 2000) : undefined,
+					calls: 'calls' in snapshot ? snapshot.calls?.slice(-20) : undefined
+				}
+			})
+		);
 	}
 	expect(diagnostics.pageErrors, 'Renderer must not report uncaught browser errors').toEqual([]);
 });
