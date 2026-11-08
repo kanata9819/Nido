@@ -473,3 +473,46 @@ test(windowsBaselineCases[2], async () => {
 		await stop(running, root);
 	}
 });
+
+test('closing a workspace while it wakes stops its Neovim and keeps it closed', async () => {
+	const root = realpathSync.native(await mkdtemp(join(tmpdir(), 'nido-windows-close-wake-')));
+	const alpha = join(root, 'Alpha');
+	const beta = join(root, 'Beta');
+	const filename = 'notes.txt';
+	let running: ElectronApplication | undefined;
+	try {
+		await mkdir(alpha);
+		await mkdir(beta);
+		await writeFile(join(alpha, filename), 'alpha\n');
+		await writeFile(join(beta, filename), 'beta\n');
+		const profile = await profileFor(root, [alpha, beta], filename);
+		running = await launch(profile);
+		const page = await running.firstWindow();
+		await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+		// Beta starts asleep in the background. Close it while a wake is still starting it.
+		const closed = await page.evaluate(async () => {
+			const { workspaces } = await window.nido.restoreWorkspaces();
+			const asleep = workspaces.find((workspace) => workspace.sleeping);
+			if (!asleep) throw new Error('No workspace started asleep.');
+			const waking = window.nido.wakeWorkspace(asleep.id);
+			const closing = window.nido.closeWorkspace(asleep.id);
+			await waking;
+			return closing;
+		});
+		expect(closed).toBe(true);
+		await expect(page.getByRole('tab', { name: 'Workspace Beta', exact: true })).toHaveCount(0);
+		await expect(page.getByRole('tab', { name: 'Workspace Alpha', exact: true })).toBeVisible();
+		// A Neovim left running would return with the next checkpoint and on the next start.
+		const roots = async (): Promise<string[] | null> => {
+			const content = await readSavedFile(join(profile, 'workspaces.json'));
+			return content
+				? (JSON.parse(content) as { workspaces: { root: string }[] }).workspaces.map(
+						(workspace) => workspace.root
+					)
+				: null;
+		};
+		await expect.poll(roots, { timeout: 15000 }).toEqual([alpha]);
+	} finally {
+		await stop(running, root);
+	}
+});

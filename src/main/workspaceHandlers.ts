@@ -500,30 +500,31 @@ export function registerWorkspaceHandlers({
 		});
 	});
 
-	handle('close', async (id) => {
-		const asleep = typeof id === 'string' ? sleeping.get(id) : undefined;
-		if (asleep) {
-			return exclusive(asleep.workspace.id, async () => {
-				sleeping.delete(asleep.workspace.id);
-				muted.delete(asleep.workspace.id);
-				send({ type: 'exit', id: asleep.workspace.id });
+	// Wait for a sleep or wake of the same workspace first: whether it is asleep is only
+	// known once that finishes, and a wake that ends meanwhile starts a Neovim to stop.
+	handle('close', (id) => {
+		const key = text(id);
+		return exclusive(key, async () => {
+			if (sleeping.delete(key)) {
+				muted.delete(key);
+				send({ type: 'exit', id: key });
 				replaceBackup = true;
 				await checkpoints.save();
 				return true;
-			});
-		}
-		const s = session(id);
-		if (!(await confirmClose(s))) {
-			return false;
-		}
-		await captureHistory(s);
-		await s.stop();
-		sessions.delete(s.workspace.id);
-		send({ type: 'exit', id: s.workspace.id });
-		// Do not revive explicitly closed or discarded drafts from a stale checkpoint.
-		replaceBackup = true;
-		await checkpoints.save();
-		return true;
+			}
+			const s = session(key);
+			if (!(await confirmClose(s))) {
+				return false;
+			}
+			await captureHistory(s);
+			await s.stop();
+			sessions.delete(s.workspace.id);
+			send({ type: 'exit', id: s.workspace.id });
+			// Do not revive explicitly closed or discarded drafts from a stale checkpoint.
+			replaceBackup = true;
+			await checkpoints.save();
+			return true;
+		});
 	});
 	return prepareToQuit;
 }
