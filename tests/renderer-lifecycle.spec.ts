@@ -5917,7 +5917,7 @@ test('editor font size accepts half sizes and keeps the last valid one', async (
 	await expect(page.getByRole('spinbutton', { name: 'Editor font size' })).toHaveValue('9.5');
 });
 
-test('h, j, k and l close type information and move in the editor; arrows scroll', async ({
+test('scroll keys move type information and any other key closes it and continues in the editor', async ({
 	page
 }) => {
 	await page.addInitScript(() => localStorage.setItem('nido.animations', 'false'));
@@ -5948,20 +5948,29 @@ test('h, j, k and l close type information and move in the editor; arrows scroll
 	await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
 	await page.keyboard.press('ArrowUp');
 	await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
+	await page.keyboard.press('j');
+	await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+	await page.keyboard.press('k');
+	await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
+	await page.keyboard.press('h');
+	await page.keyboard.press('l');
+	await page.keyboard.press('Control+d');
+	await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+	// Shift alone and Tab stay in the card.
+	await page.keyboard.press('Shift');
+	await page.keyboard.press('Tab');
+	await expect(card).toBeVisible();
 	expect(await inputs()).toEqual([]);
-	for (const key of ['h', 'j', 'k', 'l']) {
+	for (const key of ['w', 'e', 'b', 'Shift+G', 'i', 'Enter', 'Control+o', ':']) {
 		await show();
 		await expect(content).toBeFocused();
 		await page.keyboard.press(key);
 		await expect(card).toHaveCount(0);
 		await expect(editor).toBeFocused();
 	}
-	await expect.poll(inputs).toEqual([
-		['alpha', 'h'],
-		['alpha', 'j'],
-		['alpha', 'k'],
-		['alpha', 'l']
-	]);
+	await expect
+		.poll(inputs)
+		.toEqual(['w', 'e', 'b', 'G', 'i', '<CR>', '<C-o>', ':'].map((key) => ['alpha', key]));
 });
 
 test('type information code uses the editor font', async ({ page }) => {

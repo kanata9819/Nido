@@ -633,9 +633,9 @@ export const japanese: Record<string, string> = {
 	'Close type information': '型情報を閉じる',
 	'Close (Esc / Ctrl+C)': '閉じる（Esc / Ctrl+C）',
 	'Type information content': '型情報の内容',
-	'← →: horizontal · ↑ ↓: line · Ctrl+D/U: half page · Ctrl+F/B: page · h/j/k/l: close and move':
-		'← →：横移動 · ↑ ↓：行 · Ctrl+D/U：半ページ · Ctrl+F/B：ページ · h/j/k/l：閉じて移動',
-	'Arrows · Scroll · h j k l · Close': '矢印：スクロール · h j k l：閉じる',
+	'h/l / ← →: horizontal · j/k / ↑ ↓: line · Ctrl+D/U: half page · Ctrl+F/B: page · Other keys: close and continue in the editor':
+		'h/l / ← →：横移動 · j/k / ↑ ↓：行 · Ctrl+D/U：半ページ · Ctrl+F/B：ページ · その他のキー：閉じてエディターで続ける',
+	'h j k l · Scroll · Other keys · Close': 'h j k l：スクロール · その他のキー：閉じる',
 	'Esc / Ctrl C · Back to editor': 'Esc / Ctrl C：エディターに戻る',
 	Completion: '補完',
 	candidates: '件の候補',
