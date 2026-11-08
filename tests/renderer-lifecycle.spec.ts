@@ -1104,9 +1104,10 @@ test('native diagnostic cards show severity, source, codes and safe selectable t
 		diagnosticItems
 	);
 	await expect(popup).toBeVisible();
-	await expect(editor).toBeFocused();
-	await showDiagnosticCard(page);
+	// A jump from the editor focuses the card so its scroll keys work.
 	const content = page.getByLabel('Diagnostic content', { exact: true });
+	await expect(content).toBeFocused();
+	await showDiagnosticCard(page);
 	await expect(content).toBeFocused();
 	await expect(popup).toContainText('main.rs');
 	await expect(popup).toContainText('Ln 42, Col 18');
@@ -1365,15 +1366,20 @@ test('passive diagnostics return focus from replaced type information without st
 	await expect(editor).toBeFocused();
 	await showType();
 	await showPassiveDiagnostics();
-	await expect(editor).toBeFocused();
+	await expect(page.getByLabel('Diagnostic content', { exact: true })).toBeFocused();
+	// Any key other than the card's own closes it and reaches the editor.
 	await page.keyboard.type('a');
-	expect(
-		await page.evaluate(() =>
-			window.rendererTest.calls
-				.filter((call) => call.method === 'input')
-				.map((call) => call.args)
+	await expect(diagnostics).toHaveCount(0);
+	await expect(editor).toBeFocused();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.calls
+					.filter((call) => call.method === 'input')
+					.map((call) => call.args)
+			)
 		)
-	).toEqual([['alpha', 'a']]);
+		.toEqual([['alpha', 'a']]);
 	await showType();
 	const settings = page.getByRole('button', { name: 'Settings', exact: true });
 	await settings.focus();
@@ -6211,4 +6217,60 @@ test('Indentation shows in the status bar and changes from the palette by mouse 
 		})
 	);
 	await expect(page.getByRole('button', { name: 'Indentation: Tab size: 8' })).toBeVisible();
+});
+
+test('diagnostic cards scroll with their own keys and hand any other key to the editor', async ({
+	page
+}) => {
+	await page.addInitScript(() => localStorage.setItem('nido.animations', 'false'));
+	await page.goto(`${origin}?view=app`);
+	const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+	const popup = page.getByRole('dialog', { name: 'Diagnostic details', exact: true });
+	const content = page.getByLabel('Diagnostic content', { exact: true });
+	await expect(editor).toBeFocused();
+	const jump = (): Promise<void> =>
+		page.evaluate(
+			(items) =>
+				window.rendererTest.emit({
+					type: 'diagnostics',
+					id: 'alpha',
+					// A long list so the card can scroll.
+					items: Array.from({ length: 20 }, () => items).flat(),
+					focus: false
+				}),
+			diagnosticItems
+		);
+	const inputs = (): Promise<unknown[]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'input')
+				.map((call) => call.args[1])
+		);
+	await jump();
+	await expect(content).toBeFocused();
+	for (const key of ['j', 'ArrowDown', 'Control+d']) {
+		await page.keyboard.press(key);
+	}
+	await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+	for (const key of ['k', 'h', 'l', 'ArrowUp', 'Home', 'Shift']) {
+		await page.keyboard.press(key);
+	}
+	await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
+	await expect(popup).toBeVisible();
+	expect(await inputs()).toEqual([]);
+	// A pending count or bracket travels with the key that ends it.
+	for (const keys of ['w', '3w', ']x', 'i']) {
+		await jump();
+		await expect(content).toBeFocused();
+		await page.keyboard.type(keys);
+		await expect(popup).toHaveCount(0);
+		await expect(editor).toBeFocused();
+	}
+	await expect.poll(inputs).toEqual(['w', '3w', ']x', 'i']);
+	// Focus outside the editor stays where it is.
+	const settings = page.getByRole('button', { name: 'Settings', exact: true });
+	await settings.focus();
+	await jump();
+	await expect(popup).toBeVisible();
+	await expect(settings).toBeFocused();
 });

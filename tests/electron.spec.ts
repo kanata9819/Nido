@@ -1804,12 +1804,16 @@ test('diagnostic jumps show native cards with severity, keyboard navigation and 
 		await page.keyboard.type('gg0]d');
 		const popup = page.getByRole('dialog', { name: 'Diagnostic details', exact: true });
 		const content = page.getByLabel('Diagnostic content', { exact: true });
-		await expect(editor).toBeFocused();
+		// A jump from the editor focuses the card so its scroll keys work.
+		await expect(content).toBeFocused();
 		await expect(popup).toContainText('unused_variables');
 		await page.keyboard.press('Escape');
 		await expect(popup).toHaveCount(0);
 		await expect(editor).toBeFocused();
+		// ]d also works inside the card.
 		await page.keyboard.type(']d');
+		await expect(content).toBeFocused();
+		await page.keyboard.press('Escape');
 		await expect(editor).toBeFocused();
 		await page.keyboard.type('gl');
 		await expect(content).toBeFocused();
