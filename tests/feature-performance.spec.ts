@@ -20,6 +20,8 @@ interface RuntimeDiagnostics {
 	}[];
 	requestFailures: { url: string; method: string; error?: string }[];
 	httpErrors: { url: string; status: number; statusText: string }[];
+	/** Requests still waiting for a response: a module that never arrives keeps the page blank. */
+	pending: Set<string>;
 }
 const runtimeDiagnostics = new WeakMap<Page, RuntimeDiagnostics>();
 test.beforeEach(({ page }) => {
@@ -27,7 +29,8 @@ test.beforeEach(({ page }) => {
 		pageErrors: [],
 		consoleErrors: [],
 		requestFailures: [],
-		httpErrors: []
+		httpErrors: [],
+		pending: new Set()
 	};
 	runtimeDiagnostics.set(page, diagnostics);
 	page.on('pageerror', (error) => diagnostics.pageErrors.push(error.stack || error.message));
@@ -36,7 +39,10 @@ test.beforeEach(({ page }) => {
 			diagnostics.consoleErrors.push({ text: message.text(), location: message.location() });
 		}
 	});
+	page.on('request', (request) => diagnostics.pending.add(request.url()));
+	page.on('requestfinished', (request) => diagnostics.pending.delete(request.url()));
 	page.on('requestfailed', (request) => {
+		diagnostics.pending.delete(request.url());
 		diagnostics.requestFailures.push({
 			url: request.url(),
 			method: request.method(),
@@ -60,14 +66,16 @@ test.afterEach(async ({ page }, testInfo) => {
 			.evaluate(() => ({
 				url: location.href,
 				readyState: document.readyState,
+				loadedModules: performance.getEntriesByType('resource').length,
 				rootHTML: document.getElementById('root')?.innerHTML.slice(0, 20000),
 				rendererTest: !!window.rendererTest,
 				calls: window.rendererTest?.calls.slice(-200),
 				canvasCount: document.querySelectorAll('canvas').length
 			}))
 			.catch((error: unknown) => ({ error: String(error) }));
+		const pending = [...diagnostics.pending];
 		await testInfo.attach('renderer-runtime-diagnostics', {
-			body: JSON.stringify({ ...diagnostics, snapshot }, null, 2),
+			body: JSON.stringify({ ...diagnostics, pending, snapshot }, null, 2),
 			contentType: 'application/json'
 		});
 		// The report is only in a CI artifact; the log is readable without downloading it.
@@ -75,6 +83,7 @@ test.afterEach(async ({ page }, testInfo) => {
 			'renderer-runtime-diagnostics',
 			JSON.stringify({
 				...diagnostics,
+				pending: pending.slice(0, 20),
 				snapshot: {
 					...snapshot,
 					rootHTML:
