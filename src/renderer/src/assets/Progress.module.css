@@ -34,3 +34,42 @@
 		animation: none;
 	}
 }
+.workspaceWakeError {
+	text-align: center;
+	padding: 24px;
+}
+.workspaceWakeError svg {
+	color: var(--ui-danger, #e59b96);
+}
+.workspaceWakeError strong {
+	color: var(--ui-text, #d8dee4);
+	font-size: 14px;
+	font-weight: 500;
+}
+.workspaceWakeError p {
+	margin: 0;
+	max-width: 560px;
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+}
+.workspaceWakeError div {
+	display: flex;
+	gap: 10px;
+}
+.workspaceWakeError button {
+	padding: 6px 14px;
+	border: 1px solid var(--ui-border-strong, #536359);
+	border-radius: 5px;
+	background: transparent;
+	color: var(--ui-text, #d8dee4);
+	cursor: pointer;
+}
+.workspaceWakeError button:first-child {
+	border-color: var(--ui-accent, #a8cf9e);
+	color: var(--ui-accent, #a8cf9e);
+}
+.workspaceWakeError button:hover,
+.workspaceWakeError button:focus-visible {
+	background: var(--ui-accent-soft, #a3cc9412);
+	outline: none;
+}

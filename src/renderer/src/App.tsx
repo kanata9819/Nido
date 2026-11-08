@@ -37,6 +37,7 @@ import { useWorkspaceSessions } from './hooks/useWorkspaceSessions';
 import { useFocusGuard } from './hooks/useFocusGuard';
 import { useInitializedEditors } from './hooks/useInitializedEditors';
 import { useWorkspaceSleep } from './hooks/useWorkspaceSleep';
+import WorkspaceWakeError from './components/WorkspaceWakeError';
 import styles from './assets/Nido.module.css';
 import { OverlayMotionContext, useReducedMotion } from './overlayMotion';
 import ErrorToast from './components/ErrorToast';
@@ -88,7 +89,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 	const { workspaces, setWorkspaces, active, setActive, states, mode, restoring } =
 		useWorkspaceSessions(report);
 	const { initializedEditors, finishEditorLoading, forgetEditor } = useInitializedEditors();
-	const wakeFailed = useWorkspaceSleep({
+	const { failed: wakeFailed, retry: retryWake } = useWorkspaceSleep({
 		workspaces,
 		setWorkspaces,
 		active,
@@ -431,6 +432,15 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 								(!!workspace &&
 									!initializedEditors.has(active) &&
 									!wakeFailed.has(active))) && <WorkspaceLoading />}
+							{workspace && wakeFailed.has(active) && (
+								<WorkspaceWakeError
+									key={active}
+									name={workspace.name}
+									message={wakeFailed.get(active)!}
+									onRetry={() => retryWake(active)}
+									onClose={() => closeWorkspace(active)}
+								/>
+							)}
 							<KeyboardGuide
 								visible={leader}
 								commands={commands}

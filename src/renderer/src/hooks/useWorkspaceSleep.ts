@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	type Dispatch,
+	type SetStateAction
+} from 'react';
 import type { Workspace } from '../../../shared/types';
 import { vimKey } from '../keyboard';
 
@@ -8,7 +15,8 @@ const checkInterval = 30 * 1000;
 
 /**
  * Put background workspaces to sleep after `sleepDelay`, and wake the selected one.
- * Returns the IDs whose wake failed, so the loading indicator can stop for them.
+ * Returns why waking failed, by workspace ID, so the app can show it instead of the
+ * loading indicator, and `retry` to try that workspace again.
  */
 export function useWorkspaceSleep({
 	workspaces,
@@ -25,7 +33,7 @@ export function useWorkspaceSleep({
 	/** Forget a slept editor's loaded state so waking shows the loading indicator. */
 	forgetEditor: (id: string) => void;
 	report: (message: string) => void;
-}): ReadonlySet<string> {
+}): { failed: ReadonlyMap<string, string>; retry: (id: string) => void } {
 	// When each background workspace was last selected (or first seen).
 	const lastSelected = useRef(new Map<string, number>());
 	const sleeping = useRef(new Set<string>());
@@ -33,7 +41,7 @@ export function useWorkspaceSleep({
 	// Keys typed while the selected workspace wakes, and the workspaces that just woke.
 	const pendingKeys = useRef(new Map<string, string[]>());
 	const awakened = useRef(new Set<string>());
-	const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
+	const [failed, setFailed] = useState<ReadonlyMap<string, string>>(() => new Map());
 	const previous = useRef(active);
 	const latest = useRef({ workspaces, active });
 	useEffect(() => {
@@ -63,7 +71,7 @@ export function useWorkspaceSleep({
 	if (failedSelection !== active) {
 		setFailedSelection(active);
 		if (failed.size) {
-			setFailed(new Set());
+			setFailed(new Map());
 		}
 	}
 
@@ -123,8 +131,12 @@ export function useWorkspaceSleep({
 				}
 			})
 			.catch((error) => {
-				setFailed((old) => new Set([...old, id]));
-				report(String(error));
+				// Electron prefixes the main process error with the IPC channel.
+				const message = String(error).replace(
+					/^Error: Error invoking remote method '[^']*': (Error: )?/,
+					''
+				);
+				setFailed((old) => new Map(old).set(id, message));
 			})
 			.finally(() => waking.current.delete(id));
 	}, [restoring, selectedSleeping, active, failed, setWorkspaces, report]);
@@ -143,13 +155,12 @@ export function useWorkspaceSleep({
 			focused.blur();
 		}
 		const keydown = (event: KeyboardEvent): void => {
-			const target = event.target instanceof Element ? event.target : null;
+			// Only typing aimed at nothing in particular is the editor's; keys for a focused
+			// control, such as a button or the palette, stay with it.
 			if (
 				event.defaultPrevented ||
 				event.isComposing ||
-				target?.closest(
-					'input, textarea, select, [contenteditable="true"], [role="dialog"]'
-				)
+				(event.target !== document.body && event.target !== document.documentElement)
 			) {
 				return;
 			}
@@ -171,5 +182,16 @@ export function useWorkspaceSleep({
 		};
 	}, [restoring, selectedSleeping, active, report]);
 
-	return failed;
+	const retry = useCallback((id: string): void => {
+		setFailed((old) => {
+			if (!old.has(id)) {
+				return old;
+			}
+			const next = new Map(old);
+			next.delete(id);
+			return next;
+		});
+	}, []);
+
+	return { failed, retry };
 }
