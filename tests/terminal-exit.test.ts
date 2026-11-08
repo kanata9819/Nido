@@ -53,7 +53,10 @@ test(
 			);
 		} finally {
 			await owner?.stop();
-			await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+			// Restarted shells are stopped without waiting for them to exit. On Windows the
+			// shell and its console host keep the folder in use for a few seconds after
+			// Neovim stops, so give the cleanup up to about 11 seconds (200 ms, 400 ms, ...).
+			await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 		}
 	}
 );
