@@ -9,6 +9,8 @@ test.beforeAll(async () => {
 	server = await createServer({
 		configFile: false,
 		root: resolve('src/renderer'),
+		// Keep this configuration's dependencies apart from the harness server's cache.
+		cacheDir: resolve('node_modules/.vite-renderer'),
 		server: { host: '127.0.0.1', port: 0 }
 	});
 	await server.listen();

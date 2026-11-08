@@ -1,8 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { createServer, type ViteDevServer } from 'vite';
-import { resolve } from 'node:path';
+import type { ViteDevServer } from 'vite';
+import { harnessWarmupTimeout, startHarnessServer } from './helpers/harness-server';
 import { viteFsUrl } from './helpers/vite-fs-url';
-import react from '@vitejs/plugin-react';
 import type { Grid as EditorGrid } from '../src/renderer/src/grid';
 import type { FrameMotion } from '../src/renderer/src/editorMotion';
 import type {} from './renderer/harness';
@@ -1197,15 +1196,9 @@ for (const setting of ['on', 'off', 'reduced'] as const) {
 	});
 }
 
-test.beforeAll(async () => {
-	server = await createServer({
-		configFile: false,
-		root: resolve('tests/renderer'),
-		plugins: [react()],
-		server: { host: '127.0.0.1', port: 0, fs: { allow: [process.cwd()] } }
-	});
-	await server.listen();
-	origin = server.resolvedUrls!.local[0];
+test.beforeAll(async ({ browser }) => {
+	test.setTimeout(harnessWarmupTimeout);
+	({ server, origin } = await startHarnessServer(browser));
 });
 
 test.afterAll(async () => {

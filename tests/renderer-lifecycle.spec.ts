@@ -1,7 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
-import { createServer, type ViteDevServer } from 'vite';
-import react from '@vitejs/plugin-react';
-import { resolve } from 'node:path';
+import type { ViteDevServer } from 'vite';
+import { harnessWarmupTimeout, startHarnessServer } from './helpers/harness-server';
 import { viteFsUrl } from './helpers/vite-fs-url';
 import { setTimeout as delay } from 'node:timers/promises';
 import type {} from './renderer/harness';
@@ -45,15 +44,9 @@ async function pauseRendererClock(page: Page): Promise<void> {
 	await page.clock.pauseAt(new Date(1000));
 }
 
-test.beforeAll(async () => {
-	server = await createServer({
-		configFile: false,
-		root: resolve('tests/renderer'),
-		plugins: [react()],
-		server: { host: '127.0.0.1', port: 0, fs: { allow: [process.cwd()] } }
-	});
-	await server.listen();
-	origin = server.resolvedUrls!.local[0];
+test.beforeAll(async ({ browser }) => {
+	test.setTimeout(harnessWarmupTimeout);
+	({ server, origin } = await startHarnessServer(browser));
 });
 
 for (const scale of [1, 1.25, 1.5, 2]) {
@@ -5344,6 +5337,14 @@ test('terminal startup in another workspace cannot take focus from the current e
 	page
 }) => {
 	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,openTerminal`);
+	// Settle only once the app has asked for its workspaces.
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some((call) => call.method === 'restoreWorkspaces')
+			)
+		)
+		.toBe(true);
 	await page.evaluate(() =>
 		window.rendererTest.settle('restoreWorkspaces', 0, {
 			workspaces: [

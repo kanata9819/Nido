@@ -1,7 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
-import { createServer, type ViteDevServer } from 'vite';
-import { resolve } from 'node:path';
-import react from '@vitejs/plugin-react';
+import type { ViteDevServer } from 'vite';
+import { harnessWarmupTimeout, startHarnessServer } from './helpers/harness-server';
 import type {} from './renderer/harness';
 import rustPack from '../resources/nido/language-packs/rust/pack.json';
 
@@ -74,15 +73,9 @@ test.afterEach(async ({ page }, testInfo) => {
 	}
 	expect(diagnostics.pageErrors, 'Renderer must not report uncaught browser errors').toEqual([]);
 });
-test.beforeAll(async () => {
-	server = await createServer({
-		configFile: false,
-		root: resolve('tests/renderer'),
-		plugins: [react()],
-		server: { host: '127.0.0.1', port: 0, fs: { allow: [process.cwd()] } }
-	});
-	await server.listen();
-	origin = server.resolvedUrls!.local[0];
+test.beforeAll(async ({ browser }) => {
+	test.setTimeout(harnessWarmupTimeout);
+	({ server, origin } = await startHarnessServer(browser));
 });
 test.afterAll(async () => server?.close());
 
