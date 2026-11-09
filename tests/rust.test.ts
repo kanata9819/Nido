@@ -132,11 +132,17 @@ local log = {}
 local ok, path = pcall(vim.lsp.log.get_filename)
 local file = ok and io.open(path, 'r')
 if file then
-  for line in file:lines() do table.insert(log, line) end
+  for line in file:lines() do
+    if line:find('rust') then table.insert(log, line) end
+  end
   file:close()
 end
+local client = vim.lsp.get_clients({bufnr=0, name='rust_analyzer'})[1]
+local status = client and client:request_sync('rust-analyzer/analyzerStatus',
+  {textDocument=vim.lsp.util.make_text_document_params(0)}, 10000, 0)
 return {buffer=vim.api.nvim_get_current_buf(), name=vim.api.nvim_buf_get_name(0),
   cwd=vim.fn.getcwd(), executable=vim.fn.exepath('rust-analyzer'), clients=clients,
+  status=status and (status.result or status.err),
   log=vim.list_slice(log, math.max(1, #log - 40))}`)
 				})
 			);
