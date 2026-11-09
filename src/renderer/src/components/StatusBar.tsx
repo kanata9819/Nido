@@ -134,7 +134,7 @@ export default function StatusBar({
 			)}
 			<span>{state.filetype || t('Plain text')}</span>
 			{state.filetype === 'rust' && (
-				<span title={t('Rust language server connection')}>
+				<span className={styles.lspStatus} title={t('Rust language server connection')}>
 					{state.lsp || t('Rust LSP: not connected')}
 				</span>
 			)}
@@ -150,7 +150,7 @@ export default function StatusBar({
 					{indentationLabel(state.indentation, t)}
 				</button>
 			)}
-			<span>UTF-8</span>
+			<span className={styles.encoding}>UTF-8</span>
 			{active && workspace?.kind !== 'terminal' && state.lineEnding && (
 				<select
 					className={styles.lineEnding}
@@ -186,7 +186,7 @@ export default function StatusBar({
 					{state.scrollPercent}%
 				</span>
 			)}
-			<Code2 size={15} />
+			<Code2 className={styles.statusIcon} size={15} />
 		</footer>
 	);
 }
