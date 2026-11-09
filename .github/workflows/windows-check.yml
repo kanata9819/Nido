@@ -13,12 +13,69 @@ concurrency:
     group: windows-baseline-${{ github.ref }}
     cancel-in-progress: true
 
-# Independent checks run as parallel jobs; each runs every step it ran in the single job
-# before. The `windows` job at the end keeps the check name that branch protection and
-# the release workflow expect, and passes only when every job passed.
+# Independent checks run as parallel jobs; together they run every step and repeat the
+# single job ran before. The `windows` job at the end keeps the check name that branch
+# protection and the release workflow expect, and passes only when every job passed.
 jobs:
+    changes:
+        name: Changed files
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        outputs:
+            code: ${{ steps.diff.outputs.code }}
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+            # Pull requests that change only documentation skip the Windows jobs. Pushes to
+            # main always run everything: releases use the assets of a successful main run.
+            - name: Look for changes outside the documentation
+              id: diff
+              env:
+                  EVENT: ${{ github.event_name }}
+                  BASE: ${{ github.event.pull_request.base.sha }}
+                  HEAD: ${{ github.event.pull_request.head.sha }}
+              run: |
+                  if [ "$EVENT" != "pull_request" ]; then
+                      echo "code=true" >> "$GITHUB_OUTPUT"
+                      exit 0
+                  fi
+                  changed=$(git diff --name-only "$BASE...$HEAD")
+                  echo "$changed"
+                  if [ -n "$changed" ] && ! echo "$changed" | grep -qvE '^(docs/|[^/]+\.md$|LICENCE$)'; then
+                      echo "code=false" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "code=true" >> "$GITHUB_OUTPUT"
+                  fi
+
+    lint:
+        name: Lint and types
+        needs: changes
+        if: needs.changes.outputs.code == 'true'
+        runs-on: windows-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v7
+            - uses: pnpm/action-setup@v6
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Lint without warnings
+              run: pnpm lint --max-warnings 0
+            - name: Check application and Windows test types
+              if: ${{ !cancelled() }}
+              run: |
+                  pnpm typecheck
+                  if ($LASTEXITCODE -ne 0) { throw 'Application typecheck failed.' }
+                  pnpm typecheck:windows
+                  if ($LASTEXITCODE -ne 0) { throw 'Windows test typecheck failed.' }
+
     unit:
-        name: Lint, types and Neovim integration
+        name: Neovim integration
+        needs: changes
+        if: needs.changes.outputs.code == 'true'
         runs-on: windows-latest
         timeout-minutes: 30
         steps:
@@ -37,18 +94,8 @@ jobs:
             - name: Prepare Rust language and debugging tests
               run: rustup component add rust-analyzer rust-src rustfmt
             - uses: denoland/setup-deno@v2
-            - name: Lint without warnings
-              run: pnpm lint --max-warnings 0
-            - name: Check application and Windows test types
-              if: ${{ !cancelled() }}
-              run: |
-                  pnpm typecheck
-                  if ($LASTEXITCODE -ne 0) { throw 'Application typecheck failed.' }
-                  pnpm typecheck:windows
-                  if ($LASTEXITCODE -ne 0) { throw 'Windows test typecheck failed.' }
             - name: Prepare bundled Neovim, debugger and language servers
               id: prepare
-              if: ${{ !cancelled() }}
               run: pnpm prepare:neovim
             - name: Run unit and Neovim integration tests
               if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
@@ -67,11 +114,14 @@ jobs:
               uses: actions/upload-artifact@v7
               with:
                   name: unit-reports
-                  path: test-results/
+                  path: |
+                      test-results/
                   retention-days: 7
 
-    renderer:
-        name: Renderer
+    renderer-lifecycle:
+        name: Renderer (lifecycle)
+        needs: changes
+        if: needs.changes.outputs.code == 'true'
         runs-on: windows-latest
         timeout-minutes: 30
         steps:
@@ -85,9 +135,62 @@ jobs:
             - name: Prepare renderer browser
               run: pnpm exec playwright install chromium
             - name: Verify renderer state transitions
-              run: pnpm test:renderer
+              run: pnpm test:renderer --project=lifecycle
+            - name: Upload test reports
+              if: always()
+              uses: actions/upload-artifact@v7
+              with:
+                  name: renderer-lifecycle-reports
+                  path: |
+                      playwright-report/
+                      test-results/
+                  retention-days: 7
+
+    renderer-performance:
+        name: Renderer (performance)
+        needs: changes
+        if: needs.changes.outputs.code == 'true'
+        runs-on: windows-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v7
+            - uses: pnpm/action-setup@v6
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Prepare renderer browser
+              run: pnpm exec playwright install chromium
+            - name: Verify renderer drawing and performance
+              run: pnpm test:renderer --project=performance
+            - name: Upload test reports
+              if: always()
+              uses: actions/upload-artifact@v7
+              with:
+                  name: renderer-performance-reports
+                  path: |
+                      playwright-report/
+                      test-results/
+                  retention-days: 7
+
+    renderer-checks:
+        name: Renderer WebGL and repeats
+        needs: changes
+        if: needs.changes.outputs.code == 'true'
+        runs-on: windows-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v7
+            - uses: pnpm/action-setup@v6
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Prepare renderer browser
+              run: pnpm exec playwright install chromium
             - name: Verify WebGL correction and row caches
-              if: ${{ !cancelled() }}
               env:
                   NIDO_TEST_SOFTWARE_GPU: '1'
               run: >-
@@ -108,7 +211,7 @@ jobs:
               if: always()
               uses: actions/upload-artifact@v7
               with:
-                  name: renderer-reports
+                  name: renderer-checks-reports
                   path: |
                       playwright-report/
                       test-results/
@@ -116,6 +219,8 @@ jobs:
 
     packaged:
         name: Packaged app
+        needs: changes
+        if: needs.changes.outputs.code == 'true'
         runs-on: windows-latest
         timeout-minutes: 40
         steps:
@@ -147,6 +252,48 @@ jobs:
             - name: Verify the packaged Windows app
               if: ${{ !cancelled() && steps.build.outcome == 'success' }}
               run: pnpm test:windows
+            - name: Upload test reports
+              if: always()
+              uses: actions/upload-artifact@v7
+              with:
+                  name: windows-baseline-reports
+                  path: |
+                      playwright-report/
+                      test-results/
+                  retention-days: 7
+
+    packaged-repeat:
+        name: Packaged app repeats
+        needs: changes
+        if: needs.changes.outputs.code == 'true'
+        runs-on: windows-latest
+        timeout-minutes: 40
+        steps:
+            - uses: actions/checkout@v7
+            - uses: pnpm/action-setup@v6
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Restore verified Neovim and debugger archives
+              uses: actions/cache@v6
+              with:
+                  path: .downloads
+                  key: downloads-${{ hashFiles('scripts/prepare-neovim.ps1', 'scripts/prepare-debugger.ps1') }}
+            - name: Restore Electron downloads
+              uses: actions/cache@v6
+              with:
+                  path: |
+                      ~\AppData\Local\electron\Cache
+                      ~\AppData\Local\electron-builder\Cache
+                  key: electron-${{ hashFiles('pnpm-lock.yaml') }}
+            - name: Prepare Rust language and debugging tests
+              run: rustup component add rust-analyzer rust-src rustfmt
+            - uses: denoland/setup-deno@v2
+            - name: Build the packaged Windows app
+              id: build
+              run: pnpm build:unpack
             - name: Repeat Git, reference and Neovim UI checks
               if: ${{ !cancelled() && steps.build.outcome == 'success' }}
               env:
@@ -161,7 +308,7 @@ jobs:
               if: always()
               uses: actions/upload-artifact@v7
               with:
-                  name: windows-baseline-reports
+                  name: windows-repeat-reports
                   path: |
                       playwright-report/
                       test-results/
@@ -169,6 +316,8 @@ jobs:
 
     update:
         name: Updater and installer
+        needs: changes
+        if: needs.changes.outputs.code == 'true'
         runs-on: windows-latest
         timeout-minutes: 30
         steps:
@@ -224,15 +373,35 @@ jobs:
     windows:
         name: windows
         if: always()
-        needs: [unit, renderer, packaged, update]
+        needs:
+            [
+                changes,
+                lint,
+                unit,
+                renderer-lifecycle,
+                renderer-performance,
+                renderer-checks,
+                packaged,
+                packaged-repeat,
+                update
+            ]
         runs-on: ubuntu-latest
         timeout-minutes: 5
         steps:
             - name: Require every Windows baseline job to pass
               env:
+                  CHANGES: ${{ needs.changes.result }}
+                  CODE: ${{ needs.changes.outputs.code }}
                   RESULTS: ${{ join(needs.*.result, ' ') }}
               run: |
                   echo "Job results: $RESULTS"
+                  if [ "$CHANGES" != "success" ]; then
+                      exit 1
+                  fi
+                  if [ "$CODE" = "false" ]; then
+                      echo "Documentation-only pull request: the Windows jobs were skipped."
+                      exit 0
+                  fi
                   for result in $RESULTS; do
                       if [ "$result" != "success" ]; then
                           exit 1

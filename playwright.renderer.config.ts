@@ -2,17 +2,29 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
 	testDir: './tests',
-	testMatch: [
-		'renderer-lifecycle.spec.ts',
-		'renderer-performance.spec.ts',
-		'renderer-horizontal.spec.ts',
-		'feature-performance.spec.ts',
-		'history-renderer.spec.ts',
-		'workspace-search-renderer.spec.ts',
-		'workspace-actions-renderer.spec.ts',
-		'document-symbols.spec.ts',
-		'terminal-shells.spec.ts',
-		'overlay-motion.spec.ts'
+	// Two projects of about the same length, so CI can run them on separate machines with
+	// --project. Without --project, both run, as before. A new renderer spec goes in one.
+	projects: [
+		{
+			name: 'lifecycle',
+			testMatch: [
+				'renderer-lifecycle.spec.ts',
+				'history-renderer.spec.ts',
+				'workspace-search-renderer.spec.ts',
+				'workspace-actions-renderer.spec.ts'
+			]
+		},
+		{
+			name: 'performance',
+			testMatch: [
+				'renderer-performance.spec.ts',
+				'renderer-horizontal.spec.ts',
+				'feature-performance.spec.ts',
+				'document-symbols.spec.ts',
+				'terminal-shells.spec.ts',
+				'overlay-motion.spec.ts'
+			]
+		}
 	],
 	timeout: 30000,
 	use: {
