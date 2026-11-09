@@ -546,6 +546,7 @@ export const japanese: Record<string, string> = {
 	'Switch file': 'ファイルを切り替え',
 	'Open buffers in this workspace': 'このワークスペースで開いているバッファー',
 	'Focus explorer': 'エクスプローラーにフォーカス',
+	Focus: 'フォーカス',
 	'Navigate with j / k / h / l': 'j / k / h / lで移動',
 	'Save file': 'ファイルを保存',
 	'Move workspace left': 'ワークスペースを左へ移動',

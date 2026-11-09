@@ -16,14 +16,25 @@ export class SessionHistory {
 		if (this.isStopped() || this.workspace.kind === 'terminal') {
 			return [];
 		}
-		const mode = (await this.client.request('nvim_get_mode', [])) as { blocking: boolean };
-		if (mode.blocking) {
-			return [];
+		let result: HistorySnapshot[];
+		try {
+			const mode = (await this.client.request('nvim_get_mode', [])) as {
+				blocking: boolean;
+			};
+			if (mode.blocking) {
+				return [];
+			}
+			result = (await this.client.request('nvim_exec_lua', [
+				"return require('nido_history').changed(...)",
+				[tokens]
+			])) as HistorySnapshot[];
+		} catch (error) {
+			// A workspace closed or put to sleep mid-capture has nothing left to record.
+			if (this.isStopped()) {
+				return [];
+			}
+			throw error;
 		}
-		const result = (await this.client.request('nvim_exec_lua', [
-			"return require('nido_history').changed(...)",
-			[tokens]
-		])) as HistorySnapshot[];
 		return Array.isArray(result)
 			? result.map((value) => ({
 					...value,
