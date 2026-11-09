@@ -60,6 +60,10 @@ export class Session {
 		this.events.state = value;
 	}
 	private stopped = false;
+	/** False once stop() has started or Neovim has exited. */
+	get running(): boolean {
+		return !this.stopped;
+	}
 	private processClosed = false;
 	private stopping?: Promise<void>;
 	private readonly interaction: SessionInteraction;

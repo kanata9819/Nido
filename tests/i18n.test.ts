@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createTranslator, japanese, parseLanguage, translate } from '../src/shared/i18n';
 import { buildItems } from '../src/renderer/src/commands';
 import type { SessionState, Workspace } from '../src/shared/types';
@@ -127,4 +130,22 @@ test('translated command searches keep shortcut keys and actions, and preserve p
 		createTranslator('ja')
 	);
 	assert.equal(files.items[0].title, 'Settings');
+});
+
+test('every literal message passed to t() has a Japanese translation', async () => {
+	const root = fileURLToPath(new URL('../src', import.meta.url));
+	const files = (await readdir(root, { recursive: true })).filter((file) => /\.tsx?$/.test(file));
+	const missing: string[] = [];
+	for (const file of files) {
+		const source = await readFile(join(root, file), 'utf8');
+		for (const [, literal] of source.matchAll(/\bt\(\s*('(?:\\.|[^'\\])*')\s*[,)]/g)) {
+			const message = JSON.parse(
+				`"${literal.slice(1, -1).replaceAll("\\'", "'").replaceAll('"', '\\"')}"`
+			) as string;
+			if (!Object.hasOwn(japanese, message)) {
+				missing.push(`${file}: ${message}`);
+			}
+		}
+	}
+	assert.deepEqual(missing, []);
 });
