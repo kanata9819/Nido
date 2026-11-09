@@ -45,6 +45,8 @@ jobs:
               run: pnpm test
             - name: Verify Deno language support
               run: pnpm test:deno
+            - name: Verify Rust language support
+              run: pnpm test:rust
             - name: Repeat prefetch frame verification
               run: pnpm test:prefetch
             - name: Prepare renderer browser
