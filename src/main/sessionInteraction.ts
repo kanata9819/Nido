@@ -66,11 +66,16 @@ export class SessionInteraction {
 				await this.client.request('nvim_command', ['startinsert']);
 			}
 			let remainingInput = Buffer.from(keys);
+			// Neovim takes input byte by byte and can stop inside a UTF-8 character. Decoding
+			// the rest would turn its continuation bytes into U+FFFD, so later attempts send
+			// the bytes themselves; msgpack binary is accepted as a String.
+			let payload: string | Buffer = keys;
 			while (remainingInput.length && !this.stopped) {
 				const acceptedBytes = (await this.client.request('nvim_input', [
-					remainingInput.toString()
+					payload
 				])) as number;
 				remainingInput = remainingInput.subarray(acceptedBytes);
+				payload = remainingInput;
 				if (acceptedBytes === 0) {
 					await new Promise((done) => setTimeout(done, 2));
 				}
