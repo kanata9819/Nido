@@ -130,21 +130,31 @@ export function registerWorkspaceHandlers({
 			const ids = orderedIds();
 			const active = state.active;
 			const current = ids.filter((id) => sessions.has(id)).map((id) => session(id));
-			// Fast mode queries remain available while Vim waits for a prompt or a key.
-			const modes = await Promise.all(
-				current.map((s) => s.client.request('nvim_get_mode', []))
-			);
-			if (modes.some((mode: { blocking: boolean }) => mode.blocking)) {
-				return;
+			let workspaces: SavedWorkspace[];
+			try {
+				// Fast mode queries remain available while Vim waits for a prompt or a key.
+				const modes = await Promise.all(
+					current.map((s) => s.client.request('nvim_get_mode', []))
+				);
+				if (modes.some((mode: { blocking: boolean }) => mode.blocking)) {
+					return;
+				}
+				workspaces = await Promise.all(
+					ids.map((id) =>
+						snapshotOf(id, {
+							restoreScroll: false,
+							includeUntitled: state.historyEnabled !== false
+						})
+					)
+				);
+			} catch (error) {
+				// A workspace closed or put to sleep meanwhile cancels its requests. The next
+				// checkpoint sees the new layout, so this one is skipped instead of reported.
+				if (current.some((s) => !s.running || sessions.get(s.workspace.id) !== s)) {
+					return;
+				}
+				throw error;
 			}
-			const workspaces = await Promise.all(
-				ids.map((id) =>
-					snapshotOf(id, {
-						restoreScroll: false,
-						includeUntitled: state.historyEnabled !== false
-					})
-				)
-			);
 			if (
 				!canCheckpoint() ||
 				active !== state.active ||
@@ -450,10 +460,11 @@ export function registerWorkspaceHandlers({
 				return false;
 			}
 			const saved = await s.snapshot({ includeUntitled: true });
+			await captureHistory(s);
+			// Check again after the last await: the workspace may have been selected meanwhile.
 			if (key === state.active || state.prompting || state.closing || !sessions.has(key)) {
 				return false;
 			}
-			await captureHistory(s);
 			muted.add(key);
 			sessions.delete(key);
 			sleeping.set(key, { workspace: { ...s.workspace }, saved });

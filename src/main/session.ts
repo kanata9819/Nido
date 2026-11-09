@@ -62,6 +62,10 @@ export class Session {
 	private stopped = false;
 	// Whether the connection failure was already reported, so an exit does not report it again.
 	private reported = false;
+	/** False once stop() has started or Neovim has exited. */
+	get running(): boolean {
+		return !this.stopped;
+	}
 	private processClosed = false;
 	private stopping?: Promise<void>;
 	private readonly interaction: SessionInteraction;
