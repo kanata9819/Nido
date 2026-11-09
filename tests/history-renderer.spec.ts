@@ -37,7 +37,7 @@ test('Time Machine ignores late previews and keeps restore disabled until the se
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'historyPreview')
+					window.rendererTest?.pending.filter((call) => call.method === 'historyPreview')
 						.length
 			)
 		)
@@ -47,7 +47,7 @@ test('Time Machine ignores late previews and keeps restore disabled until the se
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'historyPreview')
+					window.rendererTest?.pending.filter((call) => call.method === 'historyPreview')
 						.length
 			)
 		)
@@ -81,7 +81,7 @@ test('Time Machine ignores late previews and keeps restore disabled until the se
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'historyRestore')
 					.map((call) => call.args)
 			)
@@ -177,8 +177,9 @@ test('diff syntax colors follow excerpt positions when a hunk starts far into th
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'highlightSources')
-						.length
+					window.rendererTest?.pending.filter(
+						(call) => call.method === 'highlightSources'
+					).length
 			)
 		)
 		.toBeGreaterThan(0);

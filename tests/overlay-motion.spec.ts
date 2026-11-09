@@ -134,7 +134,8 @@ test('search fades in and out without moving the IME anchor or delaying editor i
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'input').at(-1)?.args
+					window.rendererTest?.calls.filter((call) => call.method === 'input').at(-1)
+						?.args
 			)
 		)
 		.toEqual(['alpha', 'x']);
@@ -177,7 +178,8 @@ test('Git reopened during its exit animation focuses the list and reloads change
 	await expect
 		.poll(() =>
 			page.evaluate(
-				() => window.rendererTest.calls.filter((call) => call.method === 'gitStatus').length
+				() =>
+					window.rendererTest?.calls.filter((call) => call.method === 'gitStatus').length
 			)
 		)
 		.toBe(before + 2);
@@ -235,7 +237,7 @@ test('Problems reopened during its fade returns keyboard input to the results', 
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'openProblem')
 					.map((call) => call.args)
 			)
@@ -259,7 +261,7 @@ test('Time Machine reopened during its fade waits for a fresh preview before res
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'historyPreview')
+					window.rendererTest?.pending.filter((call) => call.method === 'historyPreview')
 						.length
 			)
 		)
@@ -297,7 +299,7 @@ test('Time Machine reopened during its fade waits for a fresh preview before res
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'historyPreview')
+					window.rendererTest?.pending.filter((call) => call.method === 'historyPreview')
 						.length
 			)
 		)
@@ -318,7 +320,7 @@ test('Time Machine reopened during its fade waits for a fresh preview before res
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'historyRestore')
 					.map((call) => call.args)
 			)

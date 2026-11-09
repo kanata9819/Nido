@@ -251,7 +251,7 @@ test('Extensions bounds slow status polling, pauses while hidden and recovers fr
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter(({ method }) => method === 'languagePacks')
+					window.rendererTest?.pending.filter(({ method }) => method === 'languagePacks')
 						.length
 			)
 		)
@@ -291,7 +291,7 @@ test('Extensions bounds slow status polling, pauses while hidden and recovers fr
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter(({ method }) => method === 'languagePacks')
+					window.rendererTest?.pending.filter(({ method }) => method === 'languagePacks')
 						.length
 			)
 		)
@@ -357,7 +357,7 @@ test('Explorer waits for restored folders before restoring scroll and skips dele
 	await expect
 		.poll(() =>
 			page.evaluate(
-				() => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+				() => window.rendererTest?.pending.filter(({ method }) => method === 'files').length
 			)
 		)
 		.toBe(3);
@@ -456,7 +456,7 @@ test('Explorer reveals the current editor file through collapsed parents without
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending
+				window.rendererTest?.pending
 					.filter(({ method }) => method === 'files')
 					.map(({ args }) => args[1])
 			)
@@ -470,7 +470,7 @@ test('Explorer reveals the current editor file through collapsed parents without
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending
+				window.rendererTest?.pending
 					.filter(({ method }) => method === 'files')
 					.map(({ args }) => args[1])
 			)
@@ -552,7 +552,7 @@ test('Explorer cancels stale file reveals and leaves manual selection alone for 
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some(
+				window.rendererTest?.pending.some(
 					({ method, args }) => method === 'files' && args[1] === 'first'
 				)
 			)
@@ -562,7 +562,7 @@ test('Explorer cancels stale file reveals and leaves manual selection alone for 
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some(
+				window.rendererTest?.pending.some(
 					({ method, args }) => method === 'files' && args[1] === 'second'
 				)
 			)
@@ -633,7 +633,7 @@ test('Explorer refresh bounds directory requests and stops obsolete queued work'
 	await expect
 		.poll(() =>
 			page.evaluate(
-				() => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+				() => window.rendererTest?.pending.filter(({ method }) => method === 'files').length
 			)
 		)
 		.toBe(4);
@@ -645,7 +645,7 @@ test('Explorer refresh bounds directory requests and stops obsolete queued work'
 	await expect
 		.poll(() =>
 			page.evaluate(
-				() => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+				() => window.rendererTest?.pending.filter(({ method }) => method === 'files').length
 			)
 		)
 		.toBe(4);
@@ -672,7 +672,7 @@ test('Explorer refresh bounds directory requests and stops obsolete queued work'
 				.poll(() =>
 					page.evaluate(
 						() =>
-							window.rendererTest.pending.filter(({ method }) => method === 'files')
+							window.rendererTest?.pending.filter(({ method }) => method === 'files')
 								.length
 					)
 				)
@@ -690,7 +690,7 @@ test('Explorer refresh bounds directory requests and stops obsolete queued work'
 	await expect
 		.poll(() =>
 			page.evaluate(
-				() => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+				() => window.rendererTest?.pending.filter(({ method }) => method === 'files').length
 			)
 		)
 		.toBe(4);
@@ -730,7 +730,7 @@ test('expanding a folder during refresh reuses the other directory reads', async
 	await expect
 		.poll(() =>
 			page.evaluate(
-				() => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+				() => window.rendererTest?.pending.filter(({ method }) => method === 'files').length
 			)
 		)
 		.toBe(2);
@@ -774,7 +774,7 @@ test('Explorer removes missing directories and retries failed reads without reus
 	await expect
 		.poll(() =>
 			page.evaluate(
-				() => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+				() => window.rendererTest?.pending.filter(({ method }) => method === 'files').length
 			)
 		)
 		.toBe(2);
@@ -853,7 +853,7 @@ test('Explorer external changes reload only the affected folder and preserve sel
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending
+				window.rendererTest?.pending
 					.filter(({ method }) => method === 'files')
 					.map(({ args }) => args[1])
 			)
@@ -890,7 +890,7 @@ test('Explorer rejects a stale external directory read while reusing unaffected 
 	await expect
 		.poll(() =>
 			page.evaluate(
-				() => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+				() => window.rendererTest?.pending.filter(({ method }) => method === 'files').length
 			)
 		)
 		.toBe(3);
@@ -902,7 +902,7 @@ test('Explorer rejects a stale external directory read while reusing unaffected 
 	await expect
 		.poll(() =>
 			page.evaluate(
-				() => window.rendererTest.pending.filter(({ method }) => method === 'files').length
+				() => window.rendererTest?.pending.filter(({ method }) => method === 'files').length
 			)
 		)
 		.toBe(3);
@@ -918,7 +918,7 @@ test('Explorer rejects a stale external directory read while reusing unaffected 
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending
+				window.rendererTest?.pending
 					.filter(({ method }) => method === 'files')
 					.map(({ args }) => args[1])
 			)
@@ -997,7 +997,7 @@ test('Explorer unsubscribes collapsed and hidden folders and reconciles visibili
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending
+				window.rendererTest?.pending
 					.filter(({ method }) => method === 'files')
 					.map(({ args }) => args[1])
 			)
@@ -1013,7 +1013,7 @@ test('Explorer unsubscribes collapsed and hidden folders and reconciles visibili
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending
+				window.rendererTest?.pending
 					.filter(({ method }) => method === 'files')
 					.map(({ args }) => args[1])
 			)
@@ -1411,8 +1411,9 @@ test('Problems selection reuses sorting and filtering while preserving all multi
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'openProblem').at(-1)
-						?.args
+					window.rendererTest?.calls
+						.filter((call) => call.method === 'openProblem')
+						.at(-1)?.args
 			)
 		)
 		.toEqual(['alpha', 5001, 7]);
@@ -1477,8 +1478,9 @@ test('Problems refresh data, versions, workspace targets and translated labels',
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'openProblem').at(-1)
-						?.args
+					window.rendererTest?.calls
+						.filter((call) => call.method === 'openProblem')
+						.at(-1)?.args
 			)
 		)
 		.toEqual(['alpha', 2, 2]);
@@ -1532,8 +1534,9 @@ test('Problems refresh data, versions, workspace targets and translated labels',
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'openProblem').at(-1)
-						?.args
+					window.rendererTest?.calls
+						.filter((call) => call.method === 'openProblem')
+						.at(-1)?.args
 			)
 		)
 		.toEqual(['beta', 1, 9]);
@@ -1652,7 +1655,7 @@ test('Markdown rejects old-workspace reads and retries a later edit after failur
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'markdownPreview')
+					window.rendererTest?.pending.filter((call) => call.method === 'markdownPreview')
 						.length
 			)
 		)

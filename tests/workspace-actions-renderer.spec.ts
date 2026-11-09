@@ -18,7 +18,7 @@ async function restoreWorkspaces(page: Page, deferred: string): Promise<void> {
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some((call) => call.method === 'restoreWorkspaces')
+				window.rendererTest?.pending.some((call) => call.method === 'restoreWorkspaces')
 			)
 		)
 		.toBe(true);
@@ -61,7 +61,7 @@ test('a failed workspace creation preserves a newer terminal interaction', async
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some((call) => call.method === 'createWorkspace')
+				window.rendererTest?.pending.some((call) => call.method === 'createWorkspace')
 			)
 		)
 		.toBe(true);
@@ -96,7 +96,7 @@ test('successful workspace creation selects and focuses the new editor', async (
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some((call) => call.method === 'createWorkspace')
+				window.rendererTest?.pending.some((call) => call.method === 'createWorkspace')
 			)
 		)
 		.toBe(true);
@@ -120,7 +120,7 @@ test('closing the selected workspace selects the tab that takes its place', asyn
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some((call) => call.method === 'restoreWorkspaces')
+				window.rendererTest?.pending.some((call) => call.method === 'restoreWorkspaces')
 			)
 		)
 		.toBe(true);
