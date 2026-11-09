@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,10 +9,12 @@ import { Grid } from '../src/renderer/src/grid';
 
 test(
 	'Rust syntax and real rust-analyzer navigation, completion and diagnostics',
-	{ timeout: 90000 },
+	{ timeout: 180000 },
 	async () => {
-		const root = await mkdtemp(join(tmpdir(), 'nido-rust-'));
-		const externalRoot = await mkdtemp(join(tmpdir(), 'nido-external-'));
+		// Sessions open files by their real path. On Windows, tmpdir() can be an 8.3 short path
+		// (C:\Users\RUNNER~1), and rust-analyzer does not know a URI built from it.
+		const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-rust-')));
+		const externalRoot = await realpath(await mkdtemp(join(tmpdir(), 'nido-external-')));
 		let session: Session | undefined;
 		try {
 			await mkdir(join(root, 'src'));
@@ -107,8 +109,10 @@ test(
       return response and response.result`,
 					[method, value]
 				);
+			// An uninitialized client returns at once, so wait by time rather than by count.
 			let definition: unknown;
-			for (let i = 0; i < 100; i++) {
+			const indexed = Date.now() + 60000;
+			while (Date.now() < indexed) {
 				definition = await request('textDocument/definition', params);
 				if (Array.isArray(definition) && definition.length) break;
 				await new Promise((done) => setTimeout(done, 200));
