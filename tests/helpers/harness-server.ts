@@ -10,12 +10,17 @@ export const harnessWarmupTimeout = 120_000;
 /**
  * page.goto can resolve before the harness module has defined window.rendererTest, so a test
  * that calls it right after navigating failed now and then with "Cannot read properties of
- * undefined". Every Page shares one prototype; once a harness server starts, navigation on any
- * page waits for the harness when the loaded document includes it. Probe pages without the
- * harness script return at once.
+ * undefined". Every Page shares one prototype; once a harness server starts, navigating to the
+ * harness itself (path "/", e.g. "?view=app") waits until window.rendererTest is defined.
+ * Other navigations, such as the probe pages tests route to, behave exactly as before.
  */
-const harnessReady = (): boolean =>
-	window.rendererTest !== undefined || !document.querySelector('script[src$="harness.tsx"]');
+const harnessPage = (url: string): boolean => {
+	try {
+		return new URL(url).pathname === '/';
+	} catch {
+		return false;
+	}
+};
 const patchedPrototypes = new WeakSet<object>();
 function waitForHarnessAfterNavigation(page: Page): void {
 	const prototype = Object.getPrototypeOf(page) as Page;
@@ -26,12 +31,16 @@ function waitForHarnessAfterNavigation(page: Page): void {
 	const { goto, reload } = prototype;
 	prototype.goto = async function (this: Page, ...args: Parameters<Page['goto']>) {
 		const response = await goto.apply(this, args);
-		await this.waitForFunction(harnessReady);
+		if (harnessPage(args[0])) {
+			await this.waitForFunction(() => window.rendererTest !== undefined);
+		}
 		return response;
 	};
 	prototype.reload = async function (this: Page, ...args: Parameters<Page['reload']>) {
 		const response = await reload.apply(this, args);
-		await this.waitForFunction(harnessReady);
+		if (harnessPage(this.url())) {
+			await this.waitForFunction(() => window.rendererTest !== undefined);
+		}
 		return response;
 	};
 }
