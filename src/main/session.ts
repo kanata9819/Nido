@@ -60,6 +60,8 @@ export class Session {
 		this.events.state = value;
 	}
 	private stopped = false;
+	// Whether the connection failure was already reported, so an exit does not report it again.
+	private reported = false;
 	/** False once stop() has started or Neovim has exited. */
 	get running(): boolean {
 		return !this.stopped;
@@ -97,6 +99,7 @@ export class Session {
 		this.process = spawnNeovim(root, resources, remote, runtime);
 		this.client = new SessionClient(this.process, (error) => {
 			if (!this.stopped) {
+				this.reported = true;
 				this.emit({
 					type: 'error',
 					id: this.workspace.id,
@@ -165,9 +168,22 @@ export class Session {
 			stderr = (stderr + data.toString()).slice(-4000);
 		});
 		// Clean up and tell the renderer when Neovim exits.
-		this.process.on('exit', () => {
-			if (!this.stopped && stderr.trim()) {
-				this.emit({ type: 'error', id: this.workspace.id, message: stderr.trim() });
+		this.process.on('exit', (code, signal) => {
+			if (!this.stopped) {
+				// :q exits with 0 and needs no notice. A crash may leave stderr empty, so say
+				// why the tab disappears instead of closing it silently.
+				const failed = code !== 0 && !this.reported;
+				const message = [
+					failed
+						? `Neovim for ${this.workspace.name} stopped unexpectedly (${signal ? `signal ${signal}` : `exit code ${code}`}).`
+						: '',
+					stderr.trim()
+				]
+					.filter(Boolean)
+					.join('\n');
+				if (message) {
+					this.emit({ type: 'error', id: this.workspace.id, message });
+				}
 			}
 			this.stopped = true;
 			this.directoryWatcher.close();
