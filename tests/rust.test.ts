@@ -122,7 +122,8 @@ test(
 					packs: await session.languagePacks(),
 					messages,
 					// Which client the request saw, and what rust-analyzer logged.
-					lsp: await lua(`local clients = {}
+					lsp: await lua(
+						`local clients = {}
 for _, client in ipairs(vim.lsp.get_clients()) do
   table.insert(clients, {name=client.name, initialized=client.initialized,
     stopped=select(2, pcall(client.is_stopped, client)), root=client.root_dir,
@@ -140,10 +141,23 @@ end
 local client = vim.lsp.get_clients({bufnr=0, name='rust_analyzer'})[1]
 local status = client and client:request_sync('rust-analyzer/analyzerStatus',
   {textDocument=vim.lsp.util.make_text_document_params(0)}, 10000, 0)
+local params = ...
+local definition, definitionError = nil, nil
+local hover = nil
+if client then
+  definition, definitionError = client:request_sync('textDocument/definition', params, 10000, 0)
+  hover = client:request_sync('textDocument/hover', params, 10000, 0)
+end
 return {buffer=vim.api.nvim_get_current_buf(), name=vim.api.nvim_buf_get_name(0),
   cwd=vim.fn.getcwd(), executable=vim.fn.exepath('rust-analyzer'), clients=clients,
-  status=status and (status.result or status.err),
-  log=vim.list_slice(log, math.max(1, #log - 40))}`)
+  status=status and (type(status.result) == 'string' and status.result:sub(1, 1500) or status.err),
+  line=vim.api.nvim_buf_get_lines(0, params.position.line, params.position.line + 1, false)[1],
+  uri=vim.uri_from_bufnr(0), requested=params.textDocument.uri,
+  encoding=client and client.offset_encoding,
+  definition=definition, definitionError=definitionError, hover=hover,
+  log=vim.list_slice(log, math.max(1, #log - 40))}`,
+						[params]
+					)
 				})
 			);
 			await lua('vim.api.nvim_win_set_cursor(0, {3, 18}); require("nido_references").find()');
