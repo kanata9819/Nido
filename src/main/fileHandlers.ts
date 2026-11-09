@@ -10,6 +10,7 @@ export function registerFileHandlers({
 	text,
 	integer,
 	sessions,
+	sleepingFiles,
 	send,
 	trash
 }: {
@@ -18,6 +19,8 @@ export function registerFileHandlers({
 	text: (value: unknown) => string;
 	integer: (value: unknown, max?: number) => number;
 	sessions: Map<string, Session>;
+	/** Files open in sleeping workspaces, which have no Session until they wake. */
+	sleepingFiles: () => string[];
 	send: (event: NidoEvent) => void;
 	trash: (path: string) => Promise<void>;
 }): void {
@@ -68,25 +71,18 @@ export function registerFileHandlers({
 		const current = session(id);
 		if (action === 'rename' || action === 'delete' || action === 'copy') {
 			const source = await current.path(text(path));
-			for (const open of sessions.values()) {
-				if (open === current) {
-					continue;
-				}
-				if (
-					open.state.buffers.some((buffer) => {
-						if (!buffer.name) {
-							return false;
-						}
-						const child = relative(source, buffer.name);
-						return (
-							child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child)
-						);
-					})
-				) {
-					throw new Error(
-						'Close this file or folder in the other workspace session first.'
-					);
-				}
+			const inside = (file: string): boolean => {
+				const child = relative(source, file);
+				return child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child);
+			};
+			const openElsewhere = [...sessions.values()].some(
+				(open) =>
+					open !== current &&
+					open.state.buffers.some((buffer) => !!buffer.name && inside(buffer.name))
+			);
+			// A sleeping workspace reopens its files when it wakes, so they count as open too.
+			if (openElsewhere || sleepingFiles().some(inside)) {
+				throw new Error('Close this file or folder in the other workspace session first.');
 			}
 		}
 		await current.fileAction(

@@ -34,6 +34,7 @@ test('file IPC validates requests and protects files open in other workspace ses
 		['mirror', mirror],
 		['other', other]
 	]);
+	const sleeping: string[] = [];
 	const handlers = new Map<string, (...args: unknown[]) => unknown>();
 	registerFileHandlers({
 		handle: (name, action) => handlers.set(name, action),
@@ -44,6 +45,7 @@ test('file IPC validates requests and protects files open in other workspace ses
 		},
 		integer: (value) => Number(value),
 		sessions,
+		sleepingFiles: () => sleeping,
 		send: (event) => sent.push(event),
 		trash
 	});
@@ -60,6 +62,13 @@ test('file IPC validates requests and protects files open in other workspace ses
 
 	// A sibling with the same prefix is outside the selected directory.
 	other.state.buffers[0].name = join(root, 'src-sibling/file.txt');
+	// A sleeping workspace has no Session, but reopens its files when it wakes.
+	sleeping.push(join(root, 'src/file.txt'));
+	for (const action of ['rename', 'delete', 'copy']) {
+		await assert.rejects(fileAction(action), /other workspace session/);
+	}
+	assert.deepEqual(mutations, []);
+	sleeping[0] = join(root, 'src-sibling/file.txt');
 	await fileAction('delete');
 	assert.deepEqual(mutations, [['delete', 'src', '', trash]]);
 	assert.deepEqual(sent, [
