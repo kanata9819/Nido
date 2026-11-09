@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import type { ViteDevServer } from 'vite';
 import { harnessWarmupTimeout, startHarnessServer } from './helpers/harness-server';
 import type {} from './renderer/harness';
@@ -113,4 +113,44 @@ test('successful workspace creation selects and focuses the new editor', async (
 		'true'
 	);
 	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+});
+
+test('closing the selected workspace selects the tab that takes its place', async ({ page }) => {
+	await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some((call) => call.method === 'restoreWorkspaces')
+			)
+		)
+		.toBe(true);
+	await page.evaluate(() =>
+		window.rendererTest.settle('restoreWorkspaces', 0, {
+			workspaces: [
+				{ id: 'alpha', root: '/alpha', name: 'Alpha' },
+				{ id: 'beta', root: '/beta', name: 'Beta' },
+				{ id: 'gamma', root: '/gamma', name: 'Gamma' },
+				{ id: 'delta', root: '/delta', name: 'Delta' }
+			],
+			active: 'beta',
+			errors: []
+		})
+	);
+	const tab = (name: string): Locator =>
+		page.getByRole('tab', { name: `Workspace ${name}`, exact: true });
+	await expect(tab('Beta')).toHaveAttribute('aria-selected', 'true');
+	// The tab to the right takes the closed tab's place.
+	await page.evaluate(() => window.rendererTest.emit({ type: 'exit', id: 'beta' }));
+	await expect(tab('Beta')).toHaveCount(0);
+	await expect(tab('Gamma')).toHaveAttribute('aria-selected', 'true');
+	// Closing a background tab keeps the selection.
+	await page.evaluate(() => window.rendererTest.emit({ type: 'exit', id: 'alpha' }));
+	await expect(tab('Alpha')).toHaveCount(0);
+	await expect(tab('Gamma')).toHaveAttribute('aria-selected', 'true');
+	// The last tab has none to its right, so the one to its left is selected.
+	await page.getByRole('tab', { name: 'Workspace Delta', exact: true }).click();
+	await expect(tab('Delta')).toHaveAttribute('aria-selected', 'true');
+	await page.evaluate(() => window.rendererTest.emit({ type: 'exit', id: 'delta' }));
+	await expect(tab('Delta')).toHaveCount(0);
+	await expect(tab('Gamma')).toHaveAttribute('aria-selected', 'true');
 });

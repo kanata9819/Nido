@@ -42,6 +42,11 @@ export function useWorkspaceSessions(report: (message: string) => void): Workspa
 	const active = workspaces.some((w) => w.id === selectedWorkspace)
 		? selectedWorkspace
 		: workspaces[0]?.id || '';
+	// Exit events arrive outside render; they read the tab order from here.
+	const latestWorkspaces = useRef(workspaces);
+	useEffect(() => {
+		latestWorkspaces.current = workspaces;
+	});
 
 	useEffect(() => {
 		const pendingStates = new Map<string, Partial<SessionState>>();
@@ -87,6 +92,23 @@ export function useWorkspaceSessions(report: (message: string) => void): Workspa
 				}
 				case 'exit': {
 					pendingStates.delete(event.id);
+					const list = latestWorkspaces.current;
+					const index = list.findIndex((w) => w.id === event.id);
+					if (index >= 0) {
+						const remaining = list.filter((w) => w.id !== event.id);
+						// Several exits can arrive before the next render.
+						latestWorkspaces.current = remaining;
+						// Closing the selected tab selects the one that takes its place, as
+						// browsers do, rather than the first tab, which may be asleep.
+						setActive((selected) => {
+							const shown = list.some((w) => w.id === selected)
+								? selected
+								: list[0]?.id;
+							return shown === event.id
+								? (remaining[Math.min(index, remaining.length - 1)]?.id ?? '')
+								: selected;
+						});
+					}
 					setWorkspaces((old) =>
 						old
 							.filter((w) => w.id !== event.id)
