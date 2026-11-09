@@ -35,6 +35,12 @@ export function vimKey(
 		Insert: 'Insert'
 	};
 
+	// Other named keys, such as CapsLock, ContextMenu or the Japanese Zenkaku/Hankaku and
+	// Convert keys, have no Vim notation. Sending their names would type them as text.
+	if (!special[event.key] && !/^F\d+$/.test(event.key) && [...event.key].length > 1) {
+		return null;
+	}
+
 	const altGraph = isAltGraph(event);
 	const ctrlKey = event.ctrlKey && !altGraph;
 	const altKey = event.altKey && !altGraph;
