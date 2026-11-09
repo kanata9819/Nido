@@ -511,6 +511,46 @@ test(
 	}
 );
 
+test('an unexpected Neovim exit reports why the workspace closed', { timeout: 15000 }, async () => {
+	const events: NidoEvent[] = [];
+	const session = await Session.create(process.cwd(), (event) => events.push(event));
+	try {
+		const closed = once(session.process, 'close');
+		session.process.kill();
+		await closed;
+		const errors = events.filter((event) => event.type === 'error');
+		assert.equal(errors.length, 1);
+		assert.match(errors[0].message, /stopped unexpectedly/);
+		assert.ok(events.some((event) => event.type === 'exit'));
+	} finally {
+		await session.stop();
+	}
+});
+
+test('quitting Neovim and stopping a workspace report no error', { timeout: 15000 }, async () => {
+	const quitEvents: NidoEvent[] = [];
+	const quit = await Session.create(process.cwd(), (event) => quitEvents.push(event));
+	const stopEvents: NidoEvent[] = [];
+	const stopped = await Session.create(process.cwd(), (event) => stopEvents.push(event));
+	try {
+		const closed = once(quit.process, 'close');
+		void quit.client.request('nvim_command', ['qa!']).catch(() => {});
+		await closed;
+		await stopped.stop();
+		assert.deepEqual(
+			quitEvents.filter((event) => event.type === 'error'),
+			[]
+		);
+		assert.deepEqual(
+			stopEvents.filter((event) => event.type === 'error'),
+			[]
+		);
+	} finally {
+		await quit.stop();
+		await stopped.stop();
+	}
+});
+
 test(
 	'a broken RPC writer reports once without an uncaught error or hung request',
 	{ timeout: 15000 },

@@ -739,7 +739,7 @@ test('external command cards preserve native input focus, UTF-8 cursor, nested p
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls
+					window.rendererTest?.calls
 						.filter((call) => call.method === 'selectCompletion')
 						.at(-1)?.args
 			)
@@ -751,7 +751,8 @@ test('external command cards preserve native input focus, UTF-8 cursor, nested p
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'input').at(-1)?.args
+					window.rendererTest?.calls.filter((call) => call.method === 'input').at(-1)
+						?.args
 			)
 		)
 		.toEqual(['alpha', '<Esc>']);
@@ -828,7 +829,7 @@ test('command completion bounds large lists while preserving selection and manua
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls
+					window.rendererTest?.calls
 						.filter((call) => call.method === 'selectCompletion')
 						.at(-1)?.args
 			)
@@ -860,12 +861,12 @@ test('external command input keeps spaces, Unicode and control keys in order', a
 	await expect(input).toHaveAttribute('data-nvim-command-active', '');
 	await page.keyboard.type('Native message 日本語"');
 	await page.keyboard.press('Control+p');
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'c'));
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'input')
 					.map((call) => call.args[1])
 					.join('')
@@ -901,7 +902,7 @@ test('file picker opens after command submission before the command card redraws
 	await expect(input).toHaveAttribute('data-nvim-command-active', '');
 	await page.keyboard.press('Enter');
 	await page.keyboard.press('Control+p');
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	// Neovim processed Enter, but its redraw and the old command card are still pending.
 	await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'n'));
 	await expect(page.getByRole('textbox', { name: 'Filter items' })).toBeFocused();
@@ -1003,7 +1004,8 @@ test('external confirmation and hit-enter cards send replies to Neovim before di
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'input').at(-1)?.args
+					window.rendererTest?.calls.filter((call) => call.method === 'input').at(-1)
+						?.args
 			)
 		)
 		.toEqual(['alpha', 'n']);
@@ -1021,7 +1023,8 @@ test('external confirmation and hit-enter cards send replies to Neovim before di
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'input').at(-1)?.args
+					window.rendererTest?.calls.filter((call) => call.method === 'input').at(-1)
+						?.args
 			)
 		)
 		.toEqual(['alpha', '<CR>']);
@@ -1046,7 +1049,8 @@ test('external confirmation and hit-enter cards send replies to Neovim before di
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'input').at(-1)?.args
+					window.rendererTest?.calls.filter((call) => call.method === 'input').at(-1)
+						?.args
 			)
 		)
 		.toEqual(['alpha', 'n']);
@@ -1055,7 +1059,8 @@ test('external confirmation and hit-enter cards send replies to Neovim before di
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'input').at(-1)?.args
+					window.rendererTest?.calls.filter((call) => call.method === 'input').at(-1)
+						?.args
 			)
 		)
 		.toEqual(['alpha', '<Esc>']);
@@ -1135,7 +1140,7 @@ test('native diagnostic cards show severity, source, codes and safe selectable t
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'input')
 					.map((call) => call.args[1])
 			)
@@ -1150,7 +1155,7 @@ test('native diagnostic cards show severity, source, codes and safe selectable t
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'input').at(-1)
+					window.rendererTest?.calls.filter((call) => call.method === 'input').at(-1)
 						?.args[1]
 			)
 		)
@@ -1367,7 +1372,7 @@ test('passive diagnostics return focus from replaced type information without st
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'input')
 					.map((call) => call.args)
 			)
@@ -1404,7 +1409,7 @@ test('slow startup shows loading through restoration until the first completed e
 }) => {
 	await pauseRendererClock(page);
 	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,attach`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	// A slow test runner must not advance the renderer's controlled startup clock.
 	await delay(300);
 	const loading = page.getByRole('status', { name: 'Loading workspaces…' });
@@ -1424,7 +1429,7 @@ test('slow startup shows loading through restoration until the first completed e
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some((call) => call.method === 'attach')
+				window.rendererTest?.pending.some((call) => call.method === 'attach')
 			)
 		)
 		.toBe(true);
@@ -1484,7 +1489,7 @@ test('failed restoration dismisses Japanese loading and returns to the welcome s
 	await pauseRendererClock(page);
 	await page.addInitScript(() => localStorage.setItem('nido.language', 'ja'));
 	await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.clock.runFor(250);
 	const loading = page.getByRole('status', { name: 'ワークスペースを読み込み中…' });
 	await expect(loading).toBeVisible();
@@ -2391,7 +2396,7 @@ test('Extensions opens without a workspace, searches language packs and restores
 	page
 }) => {
 	await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('restoreWorkspaces', 0, {
 			workspaces: [],
@@ -2462,7 +2467,7 @@ test('Extensions shortcut preserves the editor and supports Japanese and command
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) =>
+					window.rendererTest?.calls.filter((call) =>
 						['input', 'closeWorkspace', 'openFile'].includes(call.method)
 					).length
 			)
@@ -2552,7 +2557,7 @@ test('compact mode keeps every session visible and fixes bar heights during hove
 	page
 }) => {
 	await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('restoreWorkspaces', 0, {
 			workspaces: [
@@ -2682,7 +2687,7 @@ test('compact mode scrolls the active session into view in a narrow window with 
 	await page.setViewportSize({ width: 720, height: 600 });
 	await page.addInitScript(() => localStorage.setItem('nido.compactMode', 'true'));
 	await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('restoreWorkspaces', 0, {
 			workspaces: Array.from({ length: 12 }, (_, i) => ({
@@ -2766,7 +2771,7 @@ test('activity bar moves above the explorer, preserves navigation and persists i
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'restoreWorkspaces')
+					window.rendererTest?.calls.filter((call) => call.method === 'restoreWorkspaces')
 						.length
 			)
 		)
@@ -2826,7 +2831,7 @@ for (const view of ['welcome', 'terminal'] as const) {
 			.poll(() =>
 				page.evaluate(
 					() =>
-						window.rendererTest.pending.filter(
+						window.rendererTest?.pending.filter(
 							(call) => call.method === 'restoreWorkspaces'
 						).length
 				)
@@ -2898,8 +2903,9 @@ test('settings switch the UI language immediately, persist it and switch back to
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'setLanguage').at(-1)
-						?.args[0]
+					window.rendererTest?.calls
+						.filter((call) => call.method === 'setLanguage')
+						.at(-1)?.args[0]
 			)
 		)
 		.toBe('ja');
@@ -2907,7 +2913,7 @@ test('settings switch the UI language immediately, persist it and switch back to
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'restoreWorkspaces')
+					window.rendererTest?.calls.filter((call) => call.method === 'restoreWorkspaces')
 						.length
 			)
 		)
@@ -3289,7 +3295,8 @@ test('window commands preserve Insert-mode spaces and punctuation during a pendi
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'inputMode').length
+					window.rendererTest?.pending.filter((call) => call.method === 'inputMode')
+						.length
 			)
 		)
 		.toBe(1);
@@ -3297,7 +3304,7 @@ test('window commands preserve Insert-mode spaces and punctuation during a pendi
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'input')
 					.map((call) => call.args[1])
 					.join('')
@@ -3345,7 +3352,7 @@ test('window commands leave IME-owned spaces and punctuation with composition', 
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'input')
 					.map((call) => call.args[1])
 			)
@@ -3376,7 +3383,7 @@ test('window commands preserve AltGr spaces and punctuation as editor input', as
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'input')
 					.map((call) => call.args[1])
 					.join('')
@@ -3426,7 +3433,7 @@ test('IME transition keys stay with composition before its start and after its c
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'input')
 					.map((call) => call.args[1])
 			)
@@ -3454,7 +3461,7 @@ test('interrupted IME input recovers on focus return and ignores an obsolete com
 		await expect
 			.poll(() =>
 				page.evaluate(() =>
-					window.rendererTest.calls
+					window.rendererTest?.calls
 						.filter((call) => call.method === 'input')
 						.map((call) => call.args[1])
 				)
@@ -3565,7 +3572,7 @@ test('native IME commits remain intact when editor focus moves', async ({ page }
 		await expect
 			.poll(() =>
 				page.evaluate(() =>
-					window.rendererTest.calls
+					window.rendererTest?.calls
 						.filter((call) => call.method === 'input')
 						.map((call) => call.args[1])
 				)
@@ -3580,7 +3587,7 @@ test('native IME commits remain intact when editor focus moves', async ({ page }
 		await expect
 			.poll(() =>
 				page.evaluate(() =>
-					window.rendererTest.calls
+					window.rendererTest?.calls
 						.filter((call) => call.method === 'input')
 						.map((call) => call.args[1])
 				)
@@ -3626,7 +3633,7 @@ test('blocked editors ignore late text, composition commits and paste events', a
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'input')
 					.map((call) => call.args[1])
 			)
@@ -3665,7 +3672,7 @@ test('hidden editors discard late IME input while another workspace accepts typi
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'input')
 					.map((call) => call.args)
 			)
@@ -3706,14 +3713,14 @@ test('Rapid insert text keeps spaces and following keys while a mode check is pe
 			})
 		)
 	);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'i'));
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'i'));
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'input')
 					.map((call) => call.args[1])
 					.join('')
@@ -3727,7 +3734,7 @@ test('Rapid Normal-mode menu keys open the debugger and keep its focus', async (
 	await page.goto(`${origin}?view=app&defer=inputMode`);
 	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
 	await page.keyboard.type(' D');
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'n'));
 	const debuggerPanel = page.getByRole('region', { name: 'Debugger', exact: true });
 	await expect(debuggerPanel).toBeVisible();
@@ -3804,9 +3811,9 @@ test('Git diff ignores an older response after selecting another file', async ({
 	await page.goto(`${origin}?view=git&defer=gitDiff`);
 	const list = page.getByRole('listbox', { name: 'Changed files' });
 	await expect(list).toBeFocused();
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await list.press('j');
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(2);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(2);
 	await page.evaluate(() =>
 		window.rendererTest.settle('gitDiff', 1, '@@ -1 +1 @@\n-old\n+SECOND_CONTENT')
 	);
@@ -3826,7 +3833,7 @@ test('Git page scrolling returns to the same position with an odd viewport heigh
 		.getByRole('navigation')
 		.getByRole('button', { name: 'Source control', exact: true })
 		.click();
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle(
 			'gitDiff',
@@ -3881,7 +3888,8 @@ test('Git staging keeps the reviewed file selected and commits only staged chang
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'gitStatus').length
+					window.rendererTest?.pending.filter((call) => call.method === 'gitStatus')
+						.length
 			)
 		)
 		.toBe(1);
@@ -3908,7 +3916,7 @@ test('Git staging keeps the reviewed file selected and commits only staged chang
 			.poll(() =>
 				page.evaluate(
 					() =>
-						window.rendererTest.pending.filter((call) => call.method === 'gitStatus')
+						window.rendererTest?.pending.filter((call) => call.method === 'gitStatus')
 							.length
 				)
 			)
@@ -3931,7 +3939,8 @@ test('Git staging keeps the reviewed file selected and commits only staged chang
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'gitStatus').length
+					window.rendererTest?.pending.filter((call) => call.method === 'gitStatus')
+						.length
 			)
 		)
 		.toBe(1);
@@ -3962,7 +3971,8 @@ test('Git staging keeps the reviewed file selected and commits only staged chang
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'gitStatus').length
+					window.rendererTest?.pending.filter((call) => call.method === 'gitStatus')
+						.length
 			)
 		)
 		.toBe(1);
@@ -4011,7 +4021,8 @@ test('Git commit failures preserve the draft and it survives switching views', a
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'gitStatus').length
+					window.rendererTest?.pending.filter((call) => call.method === 'gitStatus')
+						.length
 			)
 		)
 		.toBe(1);
@@ -4090,7 +4101,7 @@ test('Git history counts all commits and supports paging without reloading the f
 	await page.goto(`${origin}?view=git&defer=gitHistory`);
 	await page.addStyleTag({ content: '#root { display: flex; flex-direction: column; }' });
 	await page.getByRole('button', { name: '2 History', exact: true }).click();
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('gitHistory', 0, {
 			total: 101,
@@ -4131,7 +4142,9 @@ test('Git history counts all commits and supports paging without reloading the f
 	}
 	await page.screenshot({ path: 'test-results/git-history-keyboard.png' });
 	await page.getByRole('button', { name: 'Load older commits' }).click();
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.args[1])).toBe(100);
+	await expect
+		.poll(() => page.evaluate(() => window.rendererTest?.pending[0]?.args[1]))
+		.toBe(100);
 	await list.press('Control+d');
 	await expect(list).toHaveAttribute('aria-activedescendant', 'git-entry-0');
 	await page.evaluate(() =>
@@ -4157,7 +4170,7 @@ test('Git history counts all commits and supports paging without reloading the f
 	await page.getByRole('button', { name: '1 Changes', exact: true }).click();
 	await expect(page.getByRole('listbox', { name: 'Changed files' })).toBeVisible();
 	await page.getByRole('button', { name: '2 History', exact: true }).click();
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.args[1])).toBe(0);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending[0]?.args[1])).toBe(0);
 	await expect(page.getByRole('button', { name: '2 History', exact: true })).toBeDisabled();
 	await page.evaluate(() =>
 		window.rendererTest.settle('gitHistory', 0, { commits: [], total: 0 })
@@ -4170,14 +4183,14 @@ test('Git history counts all commits and supports paging without reloading the f
 
 test('A new diff clears the previous highlighting failure', async ({ page }) => {
 	await page.goto(`${origin}?view=highlight&defer=highlightSources`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('highlightSources', 0, 'unavailable', true)
 	);
 	await expect(page.getByRole('status')).toHaveText('Syntax highlighting unavailable');
 	await page.evaluate(() => window.rendererTest.render({ path: 'second.ts' }));
 	await expect(page.getByRole('status')).toHaveCount(0);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() => window.rendererTest.settle('highlightSources', 0, [[], []]));
 	await expect(page.locator('[data-git-scroll="after"]')).toContainText('after');
 });
@@ -4207,7 +4220,7 @@ test('workspace picker reaches connection and folder actions without a session t
 
 test('folder loading preserves keyboard focus on the connection', async ({ page }) => {
 	await page.goto(`${origin}?view=folders&defer=browseFolders`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.keyboard.press('Control+l');
 	await page.keyboard.press('Shift+Tab');
 	const connection = page.getByRole('combobox', { name: 'Connection', exact: true });
@@ -4229,7 +4242,7 @@ test('browsing folders moves focus to the list only if the user has not moved it
 	page
 }) => {
 	await page.goto(`${origin}?view=folders&defer=browseFolders`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('browseFolders', 0, { path: '/alpha', parent: '/', folders: [] })
 	);
@@ -4238,7 +4251,7 @@ test('browsing folders moves focus to the list only if the user has not moved it
 	await page.keyboard.press('Control+l');
 	await page.keyboard.type('/beta');
 	await page.keyboard.press('Enter');
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('browseFolders', 0, { path: '/beta', parent: '/', folders: [] })
 	);
@@ -4246,7 +4259,7 @@ test('browsing folders moves focus to the list only if the user has not moved it
 	await page.keyboard.press('Control+l');
 	await page.keyboard.type('/gamma');
 	await page.keyboard.press('Enter');
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.keyboard.press('Shift+Tab');
 	const connection = page.getByRole('combobox', { name: 'Connection', exact: true });
 	await expect(connection).toBeFocused();
@@ -4265,7 +4278,7 @@ test('creation entry chooses the session kind and cancelling resets the next edi
 }) => {
 	await page.goto(`${origin}?view=app&defer=favoriteWorkspaces`);
 	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('favoriteWorkspaces', 0, [
 			{ root: '/editor', name: 'Editor project', kind: 'editor' },
@@ -4296,7 +4309,7 @@ test('creation entry chooses the session kind and cancelling resets the next edi
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.find((call) => call.method === 'createWorkspace')
 					?.args.slice(0, 2)
 			)
@@ -4320,7 +4333,7 @@ test('creation entry chooses the session kind and cancelling resets the next edi
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'createWorkspace')
 					.at(-1)
 					?.args.slice(0, 2)
@@ -4333,11 +4346,11 @@ test('Folder browsing cancels old results and clamps selection after favorites c
 	page
 }) => {
 	await page.goto(`${origin}?view=folders&defer=browseFolders`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	const path = page.getByRole('textbox', { name: 'Folder path' });
 	await path.fill('/beta');
 	await path.press('Enter');
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(2);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(2);
 	await page.evaluate(() =>
 		window.rendererTest.settle('browseFolders', 1, {
 			path: '/beta',
@@ -4378,7 +4391,7 @@ test('Folder browsing cancels old results and clamps selection after favorites c
 
 test('Folder browsing keeps the current listing until the next one arrives', async ({ page }) => {
 	await page.goto(`${origin}?view=folders&defer=browseFolders`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('browseFolders', 0, {
 			path: '/alpha',
@@ -4401,7 +4414,7 @@ test('Folder browsing keeps the current listing until the next one arrives', asy
 	}
 	expect(await list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 	await list.press('l');
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	// No loading placeholder and no disabled controls while the next listing is pending.
 	await expect(list).toHaveAttribute('aria-busy', 'true');
 	await expect(list.getByRole('option')).toHaveCount(40);
@@ -4422,7 +4435,7 @@ test('Folder browsing keeps the current listing until the next one arrives', asy
 test('Favorites open from the command palette and hide again with Ctrl+F', async ({ page }) => {
 	await page.goto(`${origin}?view=app&defer=favoriteWorkspaces`);
 	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('favoriteWorkspaces', 0, [
 			{ root: '/editor', name: 'Editor project', kind: 'editor' }
@@ -4454,7 +4467,7 @@ test('Switching WSL connections ignores stale listings and displays Linux paths'
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'browseFolders')
+					window.rendererTest?.pending.filter((call) => call.method === 'browseFolders')
 						.length
 			)
 		)
@@ -4472,7 +4485,7 @@ test('Switching WSL connections ignores stale listings and displays Linux paths'
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'browseFolders')
+					window.rendererTest?.pending.filter((call) => call.method === 'browseFolders')
 						.length
 			)
 		)
@@ -4483,7 +4496,7 @@ test('Switching WSL connections ignores stale listings and displays Linux paths'
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'browseFolders')
+					window.rendererTest?.pending.filter((call) => call.method === 'browseFolders')
 						.length
 			)
 		)
@@ -4522,7 +4535,7 @@ test('Switching WSL connections ignores stale listings and displays Linux paths'
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls
+					window.rendererTest?.calls
 						.filter((call) => call.method === 'browseFolders')
 						.at(-1)?.args
 			)
@@ -4535,7 +4548,7 @@ test('Switching WSL connections ignores stale listings and displays Linux paths'
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls
+					window.rendererTest?.calls
 						.filter((call) => call.method === 'browseFolders')
 						.at(-1)?.args
 			)
@@ -4661,7 +4674,7 @@ test('state patches coalesce without dropping diagnostics, other sessions or opt
 
 test('workspace changes apply only missing settings and changed values', async ({ page }) => {
 	await page.goto(`${origin}?view=settings`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(5);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.calls.length)).toBe(5);
 	const alpha = { id: 'alpha', name: 'Renamed Alpha', root: '/alpha' };
 	const beta = { id: 'beta', name: 'Beta', root: '/beta' };
 	await page.evaluate((alpha) => window.rendererTest.render({ workspaces: [alpha] }), alpha);
@@ -4670,7 +4683,7 @@ test('workspace changes apply only missing settings and changed values', async (
 		([alpha, beta]) => window.rendererTest.render({ workspaces: [beta, alpha] }),
 		[alpha, beta]
 	);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(10);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.calls.length)).toBe(10);
 	expect(
 		await page.evaluate(() => window.rendererTest.calls.slice(5).map((call) => call.args[0]))
 	).toEqual(['beta', 'beta', 'beta', 'beta', 'beta']);
@@ -4688,7 +4701,7 @@ test('workspace changes apply only missing settings and changed values', async (
 			}),
 		[alpha, beta]
 	);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(12);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.calls.length)).toBe(12);
 	expect(await page.evaluate(() => window.rendererTest.calls.slice(10))).toEqual([
 		{ method: 'setWordWrap', args: ['alpha', true] },
 		{ method: 'setWordWrap', args: ['beta', true] }
@@ -4704,7 +4717,7 @@ test('workspace changes apply only missing settings and changed values', async (
 			}),
 		[alpha, beta]
 	);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.calls.length)).toBe(14);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.calls.length)).toBe(14);
 	expect(await page.evaluate(() => window.rendererTest.calls.slice(12))).toEqual([
 		{ method: 'setClipboardSharing', args: ['shell', true] },
 		{ method: 'setClipboardSharing', args: ['terminal', true] }
@@ -4718,7 +4731,7 @@ test('Explorer discards obsolete manual refreshes and loads started before a fil
 	await expect
 		.poll(() =>
 			page.evaluate(
-				() => window.rendererTest.pending.filter((call) => call.method === 'files').length
+				() => window.rendererTest?.pending.filter((call) => call.method === 'files').length
 			)
 		)
 		.toBe(1);
@@ -4740,7 +4753,7 @@ test('Explorer discards obsolete manual refreshes and loads started before a fil
 	await expect
 		.poll(() =>
 			page.evaluate(
-				() => window.rendererTest.pending.filter((call) => call.method === 'files').length
+				() => window.rendererTest?.pending.filter((call) => call.method === 'files').length
 			)
 		)
 		.toBe(2);
@@ -4759,7 +4772,7 @@ test('unchanged Git polls avoid commits while changed and removed badges still u
 		branch: 'main',
 		changes: [{ path: 'first.ts', status: 'M', staged: false }]
 	};
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate((value) => window.rendererTest.settle('gitStatus', 0, value), status);
 	const badges = page.getByRole('status');
 	await expect(badges).toContainText('Modified');
@@ -4768,7 +4781,7 @@ test('unchanged Git polls avoid commits while changed and removed badges still u
 		window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
 		window.rendererTest.settle('gitStatus', 0, value);
 	}, status);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(0);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(0);
 	expect(await badges.getAttribute('data-commits')).toBe(commits);
 	await page.evaluate(
 		(value) => {
@@ -4792,7 +4805,7 @@ test('failed Git refreshes preserve badges until a successful status replaces th
 	page
 }) => {
 	await page.goto(`${origin}?view=badges&defer=gitStatus`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('gitStatus', 0, {
 			root: '/alpha',
@@ -4807,7 +4820,7 @@ test('failed Git refreshes preserve badges until a successful status replaces th
 		window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
 		window.rendererTest.settle('gitStatus', 0, 'Git temporarily unavailable', true);
 	});
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(0);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(0);
 	await expect(badges).toContainText('Modified');
 	await expect(badges).toHaveAttribute('data-commits', commits!);
 	await page.evaluate(() => {
@@ -4823,13 +4836,13 @@ test('Git changes during an in-flight poll trigger a fresh request without waiti
 	await pauseRendererClock(page);
 	await page.goto(`${origin}?view=badges&defer=gitStatus`);
 	await page.clock.runFor(250);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() => {
 		window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
 		window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' });
 		window.rendererTest.settle('gitStatus', 0, { root: '/alpha', branch: 'main', changes: [] });
 	});
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('gitStatus', 0, {
 			root: '/alpha',
@@ -4849,7 +4862,7 @@ test('settings ignore obsolete failures after a newer request for the same value
 	page
 }) => {
 	await page.goto(`${origin}?view=settings&defer=setWordWrap`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.render({
 			settings: {
@@ -4861,7 +4874,7 @@ test('settings ignore obsolete failures after a newer request for the same value
 			}
 		})
 	);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(2);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(2);
 	await page.evaluate(() =>
 		window.rendererTest.render({
 			settings: {
@@ -4873,7 +4886,7 @@ test('settings ignore obsolete failures after a newer request for the same value
 			}
 		})
 	);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(3);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(3);
 	await page.evaluate(() => {
 		window.rendererTest.settle('setWordWrap', 2, undefined);
 		window.rendererTest.settle('setWordWrap', 0, 'Obsolete request failed', true);
@@ -4881,7 +4894,7 @@ test('settings ignore obsolete failures after a newer request for the same value
 			workspaces: [{ id: 'alpha', root: '/alpha', name: 'Renamed' }]
 		});
 	});
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	expect(
 		await page.evaluate(
 			() => window.rendererTest.calls.filter((call) => call.method === 'setWordWrap').length
@@ -4923,7 +4936,7 @@ test('Git badge polling backs off while idle and refreshes immediately on activi
 			() => window.rendererTest.calls.filter((call) => call.method === 'gitStatus').length
 		);
 	const settle = async (): Promise<void> => {
-		await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+		await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 		await page.evaluate(() =>
 			window.rendererTest.settle('gitStatus', 0, {
 				root: '/alpha',
@@ -4931,7 +4944,7 @@ test('Git badge polling backs off while idle and refreshes immediately on activi
 				changes: []
 			})
 		);
-		await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(0);
+		await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(0);
 	};
 	await page.clock.runFor(250);
 	await settle();
@@ -4966,7 +4979,7 @@ test('Git badge polling backs off while idle and refreshes immediately on activi
 
 test('Git badges clear immediately when switching workspaces', async ({ page }) => {
 	await page.goto(`${origin}?view=badges&defer=gitStatus`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('gitStatus', 0, {
 			root: '/alpha',
@@ -4978,7 +4991,7 @@ test('Git badges clear immediately when switching workspaces', async ({ page }) 
 	await page.evaluate(() => window.rendererTest.render({ workspaceId: 'beta' }));
 	await expect(page.getByRole('status')).toHaveText('{}');
 	await expect
-		.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.args[0]))
+		.poll(() => page.evaluate(() => window.rendererTest?.pending[0]?.args[0]))
 		.toBe('beta');
 	await page.evaluate(() =>
 		window.rendererTest.settle('gitStatus', 0, 'Not a Git repository', true)
@@ -5058,10 +5071,10 @@ test('Reference selection resets with a new result and old previews cannot repla
 	await page.goto(`${origin}?view=references&defer=previewReference`);
 	const list = page.getByRole('listbox', { name: 'Reference results' });
 	await expect(list).toBeFocused();
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await list.press('j');
 	await expect(list).toHaveAttribute('aria-activedescendant', 'reference-1');
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(2);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(2);
 	await page.evaluate(() =>
 		window.rendererTest.settle('previewReference', 1, {
 			first: 1,
@@ -5092,7 +5105,7 @@ test('Reference selection resets with a new result and old previews cannot repla
 	);
 	await expect(list).toHaveAttribute('aria-activedescendant', 'reference-0');
 	await expect
-		.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.args.slice(1)))
+		.poll(() => page.evaluate(() => window.rendererTest?.pending[0]?.args.slice(1)))
 		.toEqual([1, 2]);
 });
 
@@ -5309,7 +5322,7 @@ test('closing a terminal during startup keeps it closed and reuses the finished 
 	const terminal = page.getByRole('region', { name: 'Terminal', exact: true });
 	await expect(editor).toBeFocused();
 	await page.keyboard.press('Control+`');
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.keyboard.press('Control+`');
 	await page.evaluate(() =>
 		window.rendererTest.settle('openTerminal', 0, {
@@ -5341,7 +5354,7 @@ test('terminal startup in another workspace cannot take focus from the current e
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some((call) => call.method === 'restoreWorkspaces')
+				window.rendererTest?.pending.some((call) => call.method === 'restoreWorkspaces')
 			)
 		)
 		.toBe(true);
@@ -5383,7 +5396,7 @@ test('opening a file cannot dismiss a newer command palette', async ({ page }) =
 	await page.goto(`${origin}?view=app&defer=findFiles,openFile`);
 	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
 	await page.getByRole('button', { name: 'Find file', exact: true }).click();
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('findFiles', 0, [
 			{ name: 'main.rs', path: 'main.rs', directory: false }
@@ -5393,7 +5406,7 @@ test('opening a file cannot dismiss a newer command palette', async ({ page }) =
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some((call) => call.method === 'openFile')
+				window.rendererTest?.pending.some((call) => call.method === 'openFile')
 			)
 		)
 		.toBe(true);
@@ -5453,7 +5466,7 @@ test('a delayed shell restart cannot take focus after returning to the editor', 
 	await page.keyboard.press('Control+`');
 	await expect(page.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
 	await page.keyboard.press('Control+Shift+r');
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.keyboard.press('Control+k');
 	await expect(editor).toBeFocused();
 	await page.evaluate(() => window.rendererTest.settle('restartTerminal', 0, undefined));
@@ -5468,7 +5481,7 @@ test('only the latest file opening returns focus, while normal file opening stil
 }) => {
 	await page.goto(`${origin}?view=app&defer=findFiles,openFile`);
 	await page.getByRole('button', { name: 'Find file', exact: true }).click();
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('findFiles', 0, [
 			{ name: 'first.rs', path: 'first.rs', directory: false },
@@ -5483,7 +5496,7 @@ test('only the latest file opening returns focus, while normal file opening stil
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending
+				window.rendererTest?.pending
 					.filter((call) => call.method === 'openFile')
 					.map((call) => call.args)
 			)
@@ -5522,7 +5535,7 @@ for (const navigation of ['reference', 'problem', 'search'] as const) {
 			await expect
 				.poll(() =>
 					page.evaluate(() =>
-						window.rendererTest.pending.some(
+						window.rendererTest?.pending.some(
 							(call) => call.method === 'searchText' && call.args[1] === 'match'
 						)
 					)
@@ -5597,7 +5610,7 @@ for (const navigation of ['reference', 'problem', 'search'] as const) {
 		await expect
 			.poll(() =>
 				page.evaluate(
-					(method) => window.rendererTest.pending.some((call) => call.method === method),
+					(method) => window.rendererTest?.pending.some((call) => call.method === method),
 					method
 				)
 			)
@@ -5681,7 +5694,7 @@ test('file tabs drag to another position and buffer navigation follows the publi
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'moveBuffer')
 					.map((call) => call.args)
 			)
@@ -5701,7 +5714,7 @@ test('file tabs drag to another position and buffer navigation follows the publi
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'selectBuffer')
 					.map((call) => call.args)
 			)
@@ -5713,7 +5726,7 @@ test('file tabs drag to another position and buffer navigation follows the publi
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'moveBuffer')
 					.map((call) => call.args)
 			)
@@ -5736,7 +5749,7 @@ test('file tab keyboard moves respect the ends and are also available from the c
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'moveBuffer')
 					.map((call) => call.args)
 			)
@@ -5756,7 +5769,7 @@ test('file tab keyboard moves respect the ends and are also available from the c
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'moveBuffer')
 					.map((call) => call.args)
 			)
@@ -5774,7 +5787,7 @@ test('file tab keyboard moves respect the ends and are also available from the c
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'moveBuffer').length
+					window.rendererTest?.calls.filter((call) => call.method === 'moveBuffer').length
 			)
 		)
 		.toBe(3);
@@ -5789,7 +5802,7 @@ test('closed file shortcuts work in Insert mode, and the palette can reopen anot
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'closeBuffer')
 					.map((call) => call.args)
 			)
@@ -5813,7 +5826,7 @@ test('closed file shortcuts work in Insert mode, and the palette can reopen anot
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'reopenBuffer')
 					.map((call) => call.args)
 			)
@@ -5851,7 +5864,7 @@ test('closed file shortcuts work in Insert mode, and the palette can reopen anot
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'reopenBuffer')
+					window.rendererTest?.calls.filter((call) => call.method === 'reopenBuffer')
 						.length
 			)
 		)
@@ -5869,7 +5882,7 @@ test('file tab shortcuts leave a terminal session focused', async ({ page }) => 
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some((call) => call.method === 'restoreWorkspaces')
+				window.rendererTest?.pending.some((call) => call.method === 'restoreWorkspaces')
 			)
 		)
 		.toBe(true);
@@ -6014,7 +6027,7 @@ test('sleeping workspaces start nothing until selected, then load behind the ind
 }) => {
 	await pauseRendererClock(page);
 	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,wakeWorkspace`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('restoreWorkspaces', 0, {
 			workspaces: [
@@ -6041,7 +6054,7 @@ test('sleeping workspaces start nothing until selected, then load behind the ind
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.filter((call) => call.method === 'wakeWorkspace')
+				window.rendererTest?.pending.filter((call) => call.method === 'wakeWorkspace')
 			)
 		)
 		.toHaveLength(1);
@@ -6082,7 +6095,7 @@ test('background workspaces sleep after five minutes, and a failed wake offers a
 }) => {
 	await pauseRendererClock(page);
 	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,sleepWorkspace,wakeWorkspace`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('restoreWorkspaces', 0, {
 			workspaces: [
@@ -6136,7 +6149,7 @@ test('background workspaces sleep after five minutes, and a failed wake offers a
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'wakeWorkspace')
+					window.rendererTest?.calls.filter((call) => call.method === 'wakeWorkspace')
 						.length
 			)
 		)
@@ -6154,7 +6167,7 @@ test('background workspaces sleep after five minutes, and a failed wake offers a
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'closeWorkspace')
 					.map((call) => call.args)
 			)
@@ -6166,7 +6179,7 @@ test('typing while a workspace wakes reaches that workspace, not the previous on
 	page
 }) => {
 	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,wakeWorkspace`);
-	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('restoreWorkspaces', 0, {
 			workspaces: [
@@ -6188,7 +6201,7 @@ test('typing while a workspace wakes reaches that workspace, not the previous on
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some((call) => call.method === 'wakeWorkspace')
+				window.rendererTest?.pending.some((call) => call.method === 'wakeWorkspace')
 			)
 		)
 		.toBe(true);

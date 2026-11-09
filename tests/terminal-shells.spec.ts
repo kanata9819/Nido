@@ -51,7 +51,7 @@ async function openSettings(page: Page, language = 'en'): Promise<void> {
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some(
+				window.rendererTest?.pending.some(
 					(call) => call.method === 'availableTerminalShells'
 				)
 			)
