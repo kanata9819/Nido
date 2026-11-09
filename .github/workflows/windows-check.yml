@@ -30,7 +30,7 @@ jobs:
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - name: Restore verified Neovim and debugger archives
-              uses: actions/cache@v4
+              uses: actions/cache@v6
               with:
                   path: .downloads
                   key: downloads-${{ hashFiles('scripts/prepare-neovim.ps1', 'scripts/prepare-debugger.ps1') }}
@@ -127,12 +127,12 @@ jobs:
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - name: Restore verified Neovim and debugger archives
-              uses: actions/cache@v4
+              uses: actions/cache@v6
               with:
                   path: .downloads
                   key: downloads-${{ hashFiles('scripts/prepare-neovim.ps1', 'scripts/prepare-debugger.ps1') }}
             - name: Restore Electron downloads
-              uses: actions/cache@v4
+              uses: actions/cache@v6
               with:
                   path: |
                       ~\AppData\Local\electron\Cache
@@ -180,12 +180,12 @@ jobs:
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - name: Restore verified Neovim and debugger archives
-              uses: actions/cache@v4
+              uses: actions/cache@v6
               with:
                   path: .downloads
                   key: downloads-${{ hashFiles('scripts/prepare-neovim.ps1', 'scripts/prepare-debugger.ps1') }}
             - name: Restore Electron downloads
-              uses: actions/cache@v4
+              uses: actions/cache@v6
               with:
                   path: |
                       ~\AppData\Local\electron\Cache
