@@ -107,9 +107,7 @@ test(
       return response and response.result`,
 					[method, value]
 				);
-			// rust-analyzer answers nothing until it has loaded the workspace and the sysroot,
-			// which takes far longer on a fresh CI runner than on a warm machine. Wait for
-			// that by time: an uninitialized client returns at once, so a count would not.
+			// An uninitialized client returns at once, so wait by time rather than by count.
 			let definition: unknown;
 			const indexed = Date.now() + 120000;
 			while (Date.now() < indexed) {
@@ -120,7 +118,27 @@ test(
 			assert.match(
 				JSON.stringify(definition),
 				/lib\.rs/,
-				JSON.stringify({ packs: await session.languagePacks(), messages })
+				JSON.stringify({
+					packs: await session.languagePacks(),
+					messages,
+					// Which client the request saw, and what rust-analyzer logged.
+					lsp: await lua(`local clients = {}
+for _, client in ipairs(vim.lsp.get_clients()) do
+  table.insert(clients, {name=client.name, initialized=client.initialized,
+    stopped=select(2, pcall(client.is_stopped, client)), root=client.root_dir,
+    buffers=vim.tbl_keys(client.attached_buffers)})
+end
+local log = {}
+local ok, path = pcall(vim.lsp.log.get_filename)
+local file = ok and io.open(path, 'r')
+if file then
+  for line in file:lines() do table.insert(log, line) end
+  file:close()
+end
+return {buffer=vim.api.nvim_get_current_buf(), name=vim.api.nvim_buf_get_name(0),
+  cwd=vim.fn.getcwd(), executable=vim.fn.exepath('rust-analyzer'), clients=clients,
+  log=vim.list_slice(log, math.max(1, #log - 40))}`)
+				})
 			);
 			await lua('vim.api.nvim_win_set_cursor(0, {3, 18}); require("nido_references").find()');
 			for (
