@@ -9,7 +9,7 @@ import { Grid } from '../src/renderer/src/grid';
 
 test(
 	'Rust syntax and real rust-analyzer navigation, completion and diagnostics',
-	{ timeout: 90000 },
+	{ timeout: 240000 },
 	async () => {
 		const root = await mkdtemp(join(tmpdir(), 'nido-rust-'));
 		const externalRoot = await mkdtemp(join(tmpdir(), 'nido-external-'));
@@ -107,8 +107,12 @@ test(
       return response and response.result`,
 					[method, value]
 				);
+			// rust-analyzer answers nothing until it has loaded the workspace and the sysroot,
+			// which takes far longer on a fresh CI runner than on a warm machine. Wait for
+			// that by time: an uninitialized client returns at once, so a count would not.
 			let definition: unknown;
-			for (let i = 0; i < 100; i++) {
+			const indexed = Date.now() + 120000;
+			while (Date.now() < indexed) {
 				definition = await request('textDocument/definition', params);
 				if (Array.isArray(definition) && definition.length) break;
 				await new Promise((done) => setTimeout(done, 200));
