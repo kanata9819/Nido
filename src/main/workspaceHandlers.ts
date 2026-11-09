@@ -518,8 +518,11 @@ export function registerWorkspaceHandlers({
 			}
 			await captureHistory(s);
 			await s.stop();
-			sessions.delete(s.workspace.id);
-			send({ type: 'exit', id: s.workspace.id });
+			// Neovim's exit already removed the session and told the renderer. Report it here
+			// only for a process that never ran, so the renderer hears of the close once.
+			if (sessions.delete(s.workspace.id)) {
+				send({ type: 'exit', id: s.workspace.id });
+			}
 			// Do not revive explicitly closed or discarded drafts from a stale checkpoint.
 			replaceBackup = true;
 			await checkpoints.save();
