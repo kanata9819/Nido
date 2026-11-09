@@ -120,7 +120,7 @@ test('closing the selected workspace selects the tab that takes its place', asyn
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some((call) => call.method === 'restoreWorkspaces')
+				window.rendererTest?.pending.some((call) => call.method === 'restoreWorkspaces')
 			)
 		)
 		.toBe(true);
