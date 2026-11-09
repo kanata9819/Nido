@@ -191,7 +191,7 @@ test('editor allocates full-height document rows plus command and scroll oversca
 		.poll(() =>
 			canvas.evaluate((element) => {
 				const height = element.height / devicePixelRatio;
-				const call = window.rendererTest.calls
+				const call = window.rendererTest?.calls
 					.filter(({ method }) => method === 'attach' || method === 'resize')
 					.at(-1);
 				return call?.args[2] === Math.max(4, Math.ceil(height / 18)) + 2;
@@ -2664,7 +2664,9 @@ test('large explorer trees mount only the viewport and preserve keyboard navigat
 	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
 	await expect
 		.poll(() =>
-			page.evaluate(() => window.rendererTest.pending.some((call) => call.method === 'files'))
+			page.evaluate(() =>
+				window.rendererTest?.pending.some((call) => call.method === 'files')
+			)
 		)
 		.toBe(true);
 	await page.evaluate(() =>
@@ -2694,7 +2696,9 @@ test('large explorer trees mount only the viewport and preserve keyboard navigat
 	await tree.press('ArrowRight');
 	await expect
 		.poll(() =>
-			page.evaluate(() => window.rendererTest.pending.some((call) => call.method === 'files'))
+			page.evaluate(() =>
+				window.rendererTest?.pending.some((call) => call.method === 'files')
+			)
 		)
 		.toBe(true);
 	await page.evaluate(() =>
@@ -2715,7 +2719,7 @@ test('large explorer trees mount only the viewport and preserve keyboard navigat
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'openFile')
 					.map((call) => call.args)
 			)
@@ -2771,7 +2775,7 @@ test('opening and closing Git does not duplicate badge status reads, and file ch
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some((call) => call.method === 'gitStatus')
+				window.rendererTest?.pending.some((call) => call.method === 'gitStatus')
 			)
 		)
 		.toBe(true);
@@ -2815,7 +2819,7 @@ test('cursor-only state updates leave file tabs untouched while real tab changes
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some((call) => call.method === 'gitStatus')
+				window.rendererTest?.pending.some((call) => call.method === 'gitStatus')
 			)
 		)
 		.toBe(true);
@@ -2868,7 +2872,7 @@ test('cursor-only state updates leave file tabs untouched while real tab changes
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'selectBuffer')
 					.map((call) => call.args)
 			)

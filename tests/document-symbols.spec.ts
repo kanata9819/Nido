@@ -39,7 +39,7 @@ async function open(page: Page, language = 'en', deferSymbols = false): Promise<
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.pending.some((call) => call.method === 'restoreWorkspaces')
+				window.rendererTest?.pending.some((call) => call.method === 'restoreWorkspaces')
 			)
 		)
 		.toBe(true);

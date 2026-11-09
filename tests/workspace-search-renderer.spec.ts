@@ -30,7 +30,7 @@ async function matches(page: Page): Promise<void> {
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.pending.filter((call) => call.method === 'searchText')
+					window.rendererTest?.pending.filter((call) => call.method === 'searchText')
 						.length
 			)
 		)
@@ -83,7 +83,7 @@ test('search and replacement complete using Vim keys without arrows or mouse', a
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
-				window.rendererTest.calls
+				window.rendererTest?.calls
 					.filter((call) => call.method === 'previewReplacement')
 					.map((call) => call.args)
 			)
@@ -138,7 +138,7 @@ test('search and replacement complete using Vim keys without arrows or mouse', a
 		.poll(() =>
 			page.evaluate(
 				() =>
-					window.rendererTest.calls.filter((call) => call.method === 'applyReplacement')
+					window.rendererTest?.calls.filter((call) => call.method === 'applyReplacement')
 						.length
 			)
 		)
