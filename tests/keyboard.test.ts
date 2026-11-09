@@ -29,6 +29,43 @@ test('AltGr sends literal characters while ordinary Ctrl+Alt shortcuts keep thei
 	assert.equal(vimKey(keyEvent('AltGraph')), null);
 });
 
+test('named keys without Vim notation are not typed as text', () => {
+	const press = (key: string, ctrlKey = false): string | null =>
+		vimKey({
+			key,
+			ctrlKey,
+			altKey: false,
+			shiftKey: false,
+			metaKey: false,
+			isComposing: false
+		});
+	for (const key of [
+		'CapsLock',
+		'NumLock',
+		'ScrollLock',
+		'ContextMenu',
+		'Pause',
+		'PrintScreen',
+		'Zenkaku',
+		'Hankaku',
+		'KanjiMode',
+		'Convert',
+		'NonConvert',
+		'KanaMode',
+		'Alphanumeric',
+		'AudioVolumeUp'
+	]) {
+		assert.equal(press(key), null, key);
+		assert.equal(press(key, true), null, key);
+	}
+	// Single characters, including ones outside the BMP, and keys with notation still pass.
+	assert.equal(press('a'), 'a');
+	assert.equal(press('\u{20BB7}'), '\u{20BB7}');
+	assert.equal(press('F12'), '<F12>');
+	assert.equal(press('Escape'), '<Esc>');
+	assert.equal(press('a', true), '<C-a>');
+});
+
 test('global shortcuts leave AltGr input available to the editor', () => {
 	const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
 	const unexpected = (): never => {
