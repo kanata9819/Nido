@@ -3,7 +3,13 @@ import { test } from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTranslator, japanese, parseLanguage, translate } from '../src/shared/i18n';
+import {
+	createTranslator,
+	japanese,
+	parseLanguage,
+	translate,
+	translateMessage
+} from '../src/shared/i18n';
 import { buildItems } from '../src/renderer/src/commands';
 import type { SessionState, Workspace } from '../src/shared/types';
 
@@ -148,4 +154,38 @@ test('every literal message passed to t() has a Japanese translation', async () 
 		}
 	}
 	assert.deepEqual(missing, []);
+});
+
+test('main-process error messages are translated, with their values and prefixes kept', () => {
+	assert.equal(
+		translateMessage('ja', 'Workspace is no longer running.'),
+		'このワークスペースはすでに終了しています。'
+	);
+	assert.equal(
+		translateMessage('ja', 'Neovim for Alpha stopped unexpectedly (exit code 3221225477).'),
+		'AlphaのNeovimが予期せず終了しました（終了コード3221225477）。'
+	);
+	assert.equal(
+		translateMessage(
+			'ja',
+			'Neovim for Beta stopped unexpectedly (signal SIGTERM).\nstderr line'
+		),
+		'BetaのNeovimが予期せず終了しました（シグナルSIGTERM）。\nstderr line'
+	);
+	assert.equal(
+		translateMessage('ja', 'C:\\project: Error: Choose a project folder.'),
+		'C:\\project: プロジェクトのフォルダーを選んでください。'
+	);
+	assert.equal(
+		translateMessage('ja', 'Error: Workspace was closed.'),
+		'ワークスペースは閉じられました。'
+	);
+	// Unknown messages, such as output from external tools, and UI-label templates stay as they are.
+	for (const message of ['tsserver: unexpected token', 'Line 5', 'Workspace Alpha']) {
+		assert.equal(translateMessage('ja', message), message);
+	}
+	assert.equal(
+		translateMessage('en', 'Workspace is no longer running.'),
+		'Workspace is no longer running.'
+	);
 });

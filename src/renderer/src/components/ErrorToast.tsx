@@ -1,5 +1,7 @@
 import { X } from 'lucide-react';
-import { useI18n } from '../i18n';
+import { useContext } from 'react';
+import { LanguageContext, useI18n } from '../i18n';
+import { translateMessage } from '../../../shared/i18n';
 import { useNotificationDismissal } from '../hooks/useNotificationDismissal';
 import OverlayPresence from './OverlayPresence';
 import styles from '../assets/Nido.module.css';
@@ -17,6 +19,7 @@ export default function ErrorToast({
 	onClose: () => void;
 }): React.JSX.Element {
 	const t = useI18n();
+	const language = useContext(LanguageContext);
 	const fading = useNotificationDismissal(notice, animations, dismiss);
 	return (
 		<OverlayPresence>
@@ -27,7 +30,8 @@ export default function ErrorToast({
 					data-fading={fading}
 					role="alert"
 				>
-					<span>{notice.message}</span>
+					{/* Errors come from the main process in English; translate the known ones. */}
+					<span>{translateMessage(language, notice.message)}</span>
 					<button aria-label={t('Dismiss error')} onClick={onClose}>
 						<X size={16} />
 					</button>

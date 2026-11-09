@@ -858,7 +858,61 @@ export const japanese: Record<string, string> = {
 	'Git: Deleted (staged)': 'Git：削除（ステージ済み）',
 	'Git: Renamed (staged)': 'Git：名前変更（ステージ済み）',
 	'Git: Copied (staged)': 'Git：コピー（ステージ済み）',
-	'Git: Type changed (staged)': 'Git：種類変更（ステージ済み）'
+	'Git: Type changed (staged)': 'Git：種類変更（ステージ済み）',
+	// Messages from the main process, shown in error notices.
+	'Workspace is no longer running.': 'このワークスペースはすでに終了しています。',
+	'Workspace was closed.': 'ワークスペースは閉じられました。',
+	'Open an Editor session to edit files.':
+		'ファイルを編集するには、エディターのセッションを開いてください。',
+	'Neovim session is closed.': 'Neovimのセッションは終了しています。',
+	'Path is outside this workspace.': 'このワークスペースの外のパスです。',
+	'Choose a file.': 'ファイルを選んでください。',
+	'Choose a project folder.': 'プロジェクトのフォルダーを選んでください。',
+	'Save unsaved changes in this file or folder first.':
+		'先に、このファイルまたはフォルダーの未保存の変更を保存してください。',
+	'Cannot place a folder inside itself.': 'フォルダーをそれ自身の中に置くことはできません。',
+	'Choose a path inside this workspace, outside .git.':
+		'このワークスペースの中で、.git以外のパスを選んでください。',
+	'A file or folder already exists at that path.':
+		'そのパスには、すでにファイルまたはフォルダーがあります。',
+	'Close the destination file tab first.': '先に、移動先のファイルのタブを閉じてください。',
+	'File changed during the move. The move was cancelled; save and try again.':
+		'移動中にファイルが変更されたため、移動を取り消しました。保存してから、もう一度お試しください。',
+	'Finish the current Neovim command before doing this.':
+		'先に、実行中のNeovimのコマンドを終えてください。',
+	'Problems have changed. Select the item again.':
+		'問題の一覧が変わりました。もう一度選んでください。',
+	'File is unavailable.': 'ファイルを開けません。',
+	'No supported terminal shell is installed.':
+		'対応しているターミナルのシェルがインストールされていません。',
+	'Terminal input did not become ready.': 'ターミナルの入力の準備ができませんでした。',
+	'The window is closing.': 'ウィンドウを閉じています。',
+	'The folder belongs to another WSL distribution.':
+		'このフォルダーは、別のWSLのディストリビューションのものです。',
+	'Save unsaved editor changes before switching branches.':
+		'ブランチを切り替える前に、エディターの未保存の変更を保存してください。',
+	'Close this file or folder in the other workspace session first.':
+		'先に、ほかのワークスペースでこのファイルまたはフォルダーを閉じてください。',
+	'Language pack exceeds 128 KB.': '言語パックが128 KBを超えています。',
+	'Invalid language pack. Check schemaVersion, id, version, filetypes and command.':
+		'言語パックが正しくありません。schemaVersion・id・version・filetypes・commandを確認してください。',
+	'Duplicate pack id or language server name.':
+		'パックのidまたは言語サーバー名が重複しています。',
+	'A pack with this id or language server is already installed.':
+		'同じidまたは言語サーバーのパックが、すでにインストールされています。',
+	'Unknown language pack.': '不明な言語パックです。',
+	'Invalid saved workspace data.': '保存されたワークスペースのデータが正しくありません。',
+	'Bundled Neovim did not start. Check the Nido installation.':
+		'同梱のNeovimを起動できませんでした。Nidoのインストールを確認してください。',
+	'WSL Neovim did not start. Reconnect to this workspace.':
+		'WSLのNeovimを起動できませんでした。このワークスペースに接続し直してください。',
+	'Neovim for {name} stopped unexpectedly (exit code {code}).':
+		'{name}のNeovimが予期せず終了しました（終了コード{code}）。',
+	'Neovim for {name} stopped unexpectedly (signal {signal}).':
+		'{name}のNeovimが予期せず終了しました（シグナル{signal}）。',
+	'Neovim connection closed: {message}': 'Neovimとの接続が切れました：{message}',
+	'Bundled editor resource is missing: {file}. Reinstall Nido, or run pnpm prepare:neovim in development.':
+		'同梱のエディターのリソースが見つかりません：{file}。Nidoを再インストールするか、開発中ならpnpm prepare:neovimを実行してください。'
 };
 
 export function translate(
@@ -871,6 +925,62 @@ export function translate(
 	return template.replace(/\{(\w+)\}/g, (placeholder, name: string) =>
 		Object.hasOwn(values, name) ? String(values[name]) : placeholder
 	);
+}
+
+/**
+ * Main-process messages that carry values, such as a workspace name or an exit code. A
+ * message is matched against these, not against every template: UI labels such as
+ * "Line {line}" could otherwise match unrelated text.
+ */
+const messageTemplates = [
+	'Neovim for {name} stopped unexpectedly (exit code {code}).',
+	'Neovim for {name} stopped unexpectedly (signal {signal}).',
+	'Neovim connection closed: {message}',
+	'Bundled editor resource is missing: {file}. Reinstall Nido, or run pnpm prepare:neovim in development.'
+].map((template) => ({
+	template,
+	pattern: new RegExp(
+		`^${template
+			.replace(/[.*+?^$()|[\]\\]/g, '\\$&')
+			.replace(/\{(\w+)\}/g, (_, name: string) => `(?<${name}>.+)`)}$`,
+		's'
+	)
+}));
+
+function translateLine(language: Language, line: string): string {
+	if (Object.hasOwn(japanese, line)) {
+		return translate(language, line);
+	}
+	for (const { template, pattern } of messageTemplates) {
+		const values = pattern.exec(line)?.groups;
+		if (values) {
+			return translate(language, template, values);
+		}
+	}
+	// "C:\\project: Error: Choose a project folder." keeps its prefix.
+	const nested = /^(.*?)(?:: )?Error: (.+)$/s.exec(line);
+	if (nested && nested[2] !== line) {
+		const inner = translateLine(language, nested[2]);
+		if (inner !== nested[2]) {
+			return nested[1] ? `${nested[1]}: ${inner}` : inner;
+		}
+	}
+	return line;
+}
+
+/**
+ * Translate a message composed in the main process, line by line: a known message, a known
+ * template with its values, or a known message after an "Error: " prefix. Anything else,
+ * such as output from external tools, stays as it is.
+ */
+export function translateMessage(language: Language, message: string): string {
+	if (language === 'en') {
+		return message;
+	}
+	return message
+		.split('\n')
+		.map((line) => translateLine(language, line))
+		.join('\n');
 }
 
 export function createTranslator(language: Language): Translator {
