@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,10 +9,12 @@ import { Grid } from '../src/renderer/src/grid';
 
 test(
 	'Rust syntax and real rust-analyzer navigation, completion and diagnostics',
-	{ timeout: 240000 },
+	{ timeout: 180000 },
 	async () => {
-		const root = await mkdtemp(join(tmpdir(), 'nido-rust-'));
-		const externalRoot = await mkdtemp(join(tmpdir(), 'nido-external-'));
+		// Sessions open files by their real path. On Windows, tmpdir() can be an 8.3 short path
+		// (C:\Users\RUNNER~1), and rust-analyzer does not know a URI built from it.
+		const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-rust-')));
+		const externalRoot = await realpath(await mkdtemp(join(tmpdir(), 'nido-external-')));
 		let session: Session | undefined;
 		try {
 			await mkdir(join(root, 'src'));
@@ -109,7 +111,7 @@ test(
 				);
 			// An uninitialized client returns at once, so wait by time rather than by count.
 			let definition: unknown;
-			const indexed = Date.now() + 120000;
+			const indexed = Date.now() + 60000;
 			while (Date.now() < indexed) {
 				definition = await request('textDocument/definition', params);
 				if (Array.isArray(definition) && definition.length) break;
@@ -118,47 +120,7 @@ test(
 			assert.match(
 				JSON.stringify(definition),
 				/lib\.rs/,
-				JSON.stringify({
-					packs: await session.languagePacks(),
-					messages,
-					// Which client the request saw, and what rust-analyzer logged.
-					lsp: await lua(
-						`local clients = {}
-for _, client in ipairs(vim.lsp.get_clients()) do
-  table.insert(clients, {name=client.name, initialized=client.initialized,
-    stopped=select(2, pcall(client.is_stopped, client)), root=client.root_dir,
-    buffers=vim.tbl_keys(client.attached_buffers)})
-end
-local log = {}
-local ok, path = pcall(vim.lsp.log.get_filename)
-local file = ok and io.open(path, 'r')
-if file then
-  for line in file:lines() do
-    if line:find('rust') then table.insert(log, line) end
-  end
-  file:close()
-end
-local client = vim.lsp.get_clients({bufnr=0, name='rust_analyzer'})[1]
-local status = client and client:request_sync('rust-analyzer/analyzerStatus',
-  {textDocument=vim.lsp.util.make_text_document_params(0)}, 10000, 0)
-local params = ...
-local definition, definitionError = nil, nil
-local hover = nil
-if client then
-  definition, definitionError = client:request_sync('textDocument/definition', params, 10000, 0)
-  hover = client:request_sync('textDocument/hover', params, 10000, 0)
-end
-return {buffer=vim.api.nvim_get_current_buf(), name=vim.api.nvim_buf_get_name(0),
-  cwd=vim.fn.getcwd(), executable=vim.fn.exepath('rust-analyzer'), clients=clients,
-  status=status and (type(status.result) == 'string' and status.result:sub(1, 1500) or status.err),
-  line=vim.api.nvim_buf_get_lines(0, params.position.line, params.position.line + 1, false)[1],
-  uri=vim.uri_from_bufnr(0), requested=params.textDocument.uri,
-  encoding=client and client.offset_encoding,
-  definition=definition, definitionError=definitionError, hover=hover,
-  log=vim.list_slice(log, math.max(1, #log - 40))}`,
-						[params]
-					)
-				})
+				JSON.stringify({ packs: await session.languagePacks(), messages })
 			);
 			await lua('vim.api.nvim_win_set_cursor(0, {3, 18}); require("nido_references").find()');
 			for (
