@@ -128,7 +128,7 @@ export function registerHandlers({
 		session,
 		text
 	});
-	const prepareToQuit = registerWorkspaceHandlers({
+	const { prepareToQuit, sleepingFiles } = registerWorkspaceHandlers({
 		window,
 		sessions,
 		state,
@@ -221,6 +221,7 @@ export function registerHandlers({
 		text,
 		integer,
 		sessions,
+		sleepingFiles,
 		send,
 		trash: (file) => shell.trashItem(file)
 	});

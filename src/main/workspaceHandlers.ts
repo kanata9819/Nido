@@ -63,7 +63,11 @@ export function registerWorkspaceHandlers({
 	text: (value: unknown) => string;
 	shellChoice: (value?: unknown) => TerminalShell;
 	captureHistory: (session: Session) => Promise<void>;
-}): () => Promise<boolean> {
+}): {
+	prepareToQuit: () => Promise<boolean>;
+	/** Files that sleeping workspaces had open, which they reopen when they wake. */
+	sleepingFiles: () => string[];
+} {
 	const layoutPath = join(app.getPath('userData'), 'workspaces.json');
 	let checkpointReady = false;
 	let replaceBackup = false;
@@ -540,5 +544,9 @@ export function registerWorkspaceHandlers({
 			return true;
 		});
 	});
-	return prepareToQuit;
+	return {
+		prepareToQuit,
+		sleepingFiles: () =>
+			[...sleeping.values()].flatMap(({ saved }) => saved.files.map((file) => file.path))
+	};
 }
