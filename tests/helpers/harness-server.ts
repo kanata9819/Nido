@@ -1,5 +1,5 @@
 import type { Browser, Page } from '@playwright/test';
-import { createServer, type ViteDevServer } from 'vite';
+import { createServer, type Plugin, type ViteDevServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
 import type {} from '../renderer/harness';
@@ -21,6 +21,47 @@ const harnessPage = (url: string): boolean => {
 		return false;
 	}
 };
+/**
+ * Renderer tests now and then fail because a page never got a module from the Vite server:
+ * the harness never loads, or `import()` of a source file fails with "Failed to fetch
+ * dynamically imported module". Neither the browser nor Vite says why, so print what each
+ * side saw. Aborted requests are left out: closing a page aborts its requests.
+ */
+const instrumentedPages = new WeakSet<Page>();
+function reportLoadFailures(page: Page): void {
+	if (instrumentedPages.has(page)) {
+		return;
+	}
+	instrumentedPages.add(page);
+	page.on('requestfailed', (request) => {
+		const reason = request.failure()?.errorText ?? 'unknown';
+		if (!reason.includes('ERR_ABORTED')) {
+			console.log(`[harness] request failed: ${request.url()} (${reason})`);
+		}
+	});
+	page.on('response', (response) => {
+		if (response.status() >= 400) {
+			console.log(`[harness] ${response.status()} for ${response.url()}`);
+		}
+	});
+	page.on('pageerror', (error) => console.log(`[harness] page error: ${error.message}`));
+}
+const reportServerErrors: Plugin = {
+	name: 'report-harness-server-errors',
+	configureServer(server) {
+		server.middlewares.use((request, response, next) => {
+			response.on('finish', () => {
+				if (response.statusCode >= 400) {
+					console.log(
+						`[harness] Vite answered ${response.statusCode} for ${request.url}`
+					);
+				}
+			});
+			next();
+		});
+	}
+};
+
 const patchedPrototypes = new WeakSet<object>();
 function waitForHarnessAfterNavigation(page: Page): void {
 	const prototype = Object.getPrototypeOf(page) as Page;
@@ -30,6 +71,7 @@ function waitForHarnessAfterNavigation(page: Page): void {
 	patchedPrototypes.add(prototype);
 	const { goto, reload } = prototype;
 	prototype.goto = async function (this: Page, ...args: Parameters<Page['goto']>) {
+		reportLoadFailures(this);
 		const response = await goto.apply(this, args);
 		if (harnessPage(args[0])) {
 			await this.waitForFunction(() => window.rendererTest !== undefined);
@@ -59,7 +101,7 @@ export async function startHarnessServer(
 		configFile: false,
 		root: resolve('tests/renderer'),
 		cacheDir: resolve('node_modules/.vite-harness'),
-		plugins: [react()],
+		plugins: [react(), reportServerErrors],
 		server: { host: '127.0.0.1', port: 0, fs: { allow: [process.cwd()] } }
 	});
 	try {
