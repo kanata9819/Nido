@@ -267,6 +267,9 @@ for _, item in ipairs(files) do
   if buf > 0 and api.nvim_buf_is_loaded(buf) then
     local bo = vim.bo[buf]
     assert(not bo.modified, 'Save unsaved target files before replacing.')
+    -- A file changed on disk while open in a background tab is reloaded only when its
+    -- tab is selected. Read it now; otherwise it never matches what was searched.
+    vim.cmd.checktime(buf)
     assert(bo.modifiable and not bo.readonly and bo.buftype == '', 'Target file is read-only.')
     local ending = bo.fileformat == 'dos' and '\\r\\n' or bo.fileformat == 'mac' and '\\r' or '\\n'
     local originalLines = api.nvim_buf_get_lines(buf, 0, -1, false)

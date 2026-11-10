@@ -166,6 +166,38 @@ test('replacement rejects unsaved or externally changed targets before touching 
 		assert.deepEqual(buffers['z.txt'], ['DRAFTneedle']);
 	}));
 
+test('a file changed on disk while open in a background tab is reloaded and replaced', () =>
+	fixture(async (session, root) => {
+		await writeFile(join(root, 'background.txt'), 'old text\n');
+		await writeFile(join(root, 'shown.txt'), 'shown\n');
+		await session.openFile('background.txt');
+		await session.openFile('shown.txt');
+		// Another program, such as a Git checkout, rewrites the file behind the hidden tab.
+		await writeFile(join(root, 'background.txt'), 'new needle and more\n');
+		// Look the buffer up by its file name: on Windows the temporary folder's path can be a
+		// short 8.3 alias, while the buffer is named by the folder's real path.
+		const lines = (): Promise<string[]> =>
+			session.client.request('nvim_exec_lua', [
+				`for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+  if vim.fs.basename(vim.api.nvim_buf_get_name(buffer)) == ... then
+    return vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
+  end
+end
+error('No buffer for ' .. ...)`,
+				['background.txt']
+			]) as Promise<string[]>;
+		const result = await session.searchText('needle', defaultSearchOptions);
+		const preview = await session.previewReplacement(result.token!, 'thread', [0]);
+		assert.deepEqual(await lines(), ['new needle and more']);
+		await session.applyReplacement(preview.token);
+		assert.deepEqual(await lines(), ['new thread and more']);
+
+		await session.saveAll();
+		await writeFile(join(root, 'background.txt'), 'rewritten again\n');
+		await session.refreshFiles();
+		assert.deepEqual(await lines(), ['rewritten again']);
+	}));
+
 test('search cancellation invalidates replacement previews and replacement cannot be replayed', () =>
 	fixture(async (session, root) => {
 		await writeFile(join(root, 'one.txt'), 'needle\n');
