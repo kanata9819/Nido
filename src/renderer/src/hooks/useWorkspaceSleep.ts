@@ -122,7 +122,12 @@ export function useWorkspaceSleep({
 		void window.nido
 			.wakeWorkspace(id)
 			.then(({ workspace, errors }) => {
-				awakened.current.add(id);
+				// Typing is held only while this workspace stays selected. Remembering a wake
+				// that finished in the background would send the keys of a later, unfinished
+				// wake to a workspace that is not running.
+				if (latest.current.active === id) {
+					awakened.current.add(id);
+				}
 				setWorkspaces((old) =>
 					old.map((w) => (w.id === id ? { ...w, ...workspace, sleeping: false } : w))
 				);

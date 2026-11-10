@@ -1,4 +1,4 @@
-import { useI18n } from '../i18n';
+import { useErrorMessage, useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Command, X } from 'lucide-react';
@@ -29,6 +29,7 @@ export default function ExplorerCommands({
 	onDone: (path: string) => void;
 }): React.JSX.Element {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	const dialog = useRef<HTMLDialogElement>(null);
 	const field = useRef<HTMLInputElement>(null);
 	const [value, setValue] = useState(request?.value || '');
@@ -190,7 +191,7 @@ export default function ExplorerCommands({
 									/>
 								</>
 							)}
-							{error && <p role="alert">{error}</p>}
+							{error && <p role="alert">{errorMessage(error)}</p>}
 							<div className={styles.explorerActions}>
 								<button type="button" disabled={busy} onClick={onClose}>
 									{t('Cancel')}

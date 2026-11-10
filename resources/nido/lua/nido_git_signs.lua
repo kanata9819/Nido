@@ -19,6 +19,25 @@ local active = {}
 local stopped = false
 local M = {}
 
+-- Committed bytes as the buffer holds them: Neovim converts the encoding, drops a byte
+-- order mark and splits lines by 'fileformat' when it reads a file.
+local function decode(base, buffer)
+  local encoding = vim.bo[buffer].fileencoding
+  if encoding ~= '' and encoding ~= 'utf-8' then
+    base = vim.iconv(base, encoding, 'utf-8') or base
+  end
+  if vim.bo[buffer].bomb then
+    base = base:gsub('^\239\187\191', '', 1)
+  end
+  local format = vim.bo[buffer].fileformat
+  if format == 'dos' then
+    base = base:gsub('\r\n', '\n')
+  elseif format == 'mac' then
+    base = base:gsub('\r', '\n')
+  end
+  return base
+end
+
 local function colors()
   api.nvim_set_hl(0, 'NidoGitAdded', { fg = '#2ea043' })
   api.nvim_set_hl(0, 'NidoGitChanged', { fg = '#0078d4' })
@@ -60,8 +79,11 @@ function M.refresh(buffer)
       return
     end
     local eol = vim.bo[buffer].endofline
+    local reading = table.concat({vim.bo[buffer].fileencoding, vim.bo[buffer].fileformat,
+      tostring(vim.bo[buffer].bomb)}, ':')
     local previous = rendered[buffer]
-    if previous and previous.tick == tick and previous.base == base and previous.eol == eol then
+    if previous and previous.tick == tick and previous.base == base and previous.eol == eol
+        and previous.reading == reading then
       return
     end
     local lines = api.nvim_buf_get_lines(buffer, 0, -1, false)
@@ -70,7 +92,7 @@ function M.refresh(buffer)
       text = ''
     end
     -- Changed buffers still use a full diff; unchanged buffers reuse their signs.
-    local hunks = base and vim.diff(base, text, { result_type = 'indices' }) or {}
+    local hunks = base and vim.diff(decode(base, buffer), text, { result_type = 'indices' }) or {}
     local wanted = {}
     local function sign(row, group, symbol)
       row = math.max(0, math.min(row, #lines - 1))
@@ -107,17 +129,17 @@ function M.refresh(buffer)
       })
     end
     for _, id in ipairs(stale) do api.nvim_buf_del_extmark(buffer, namespace, id) end
-    rendered[buffer] = {tick=tick, base=base, eol=eol}
+    rendered[buffer] = {tick=tick, base=base, eol=eol, reading=reading}
     if changed then
       vim.cmd('redraw')
     end
   end
-  local function git(directory, arguments, callback)
+  local function git(directory, arguments, callback, bytes)
     local command = { 'git', '--no-pager', '--literal-pathspecs', '-C', directory }
     vim.list_extend(command, arguments)
     local running = {}
     current.process = running
-    local ok, process = pcall(vim.system, command, { text = true, timeout = 2000 }, vim.schedule_wrap(function(result)
+    local ok, process = pcall(vim.system, command, { text = not bytes, timeout = 2000 }, vim.schedule_wrap(function(result)
       if active[buffer] ~= current or current.process ~= running then return end
       current.process = nil
       if not valid() then finish(); return end
@@ -164,6 +186,7 @@ function M.refresh(buffer)
       untracked()
       return
     end
+    -- Read bytes: text mode would turn every CRLF into LF, whatever the buffer's 'fileformat'.
     git(root, {'show', head .. ':' .. path}, function(committed)
       if committed.code == 0 then
         bases[buffer] = {name=name, root=root, head=head, text=committed.stdout}
@@ -172,7 +195,7 @@ function M.refresh(buffer)
       end
       -- New files include staged additions and untracked files, but exclude ignored files.
       untracked()
-    end)
+    end, true)
   end)
 end
 

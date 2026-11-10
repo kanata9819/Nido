@@ -8,6 +8,9 @@ import { Session } from '../src/main/session';
 import type { NidoEvent } from '../src/shared/types';
 import { SessionFiles } from '../src/main/sessionFiles';
 
+// The neovim package replaces console methods for the process when its logger is created.
+const consoleAtStart = { ...console };
+
 async function referenceTo(session: Session, path: string, line = 1): Promise<void> {
 	await session.client.request('nvim_exec_lua', [
 		`local target, line = ...
@@ -505,6 +508,21 @@ test(
 			await assert.rejects(session.client.request('nvim_eval', ['1']), /session is closed/);
 			await assert.rejects(session.input('ihello'), /session is closed/);
 			await assert.rejects(session.setClipboardSharing(true), /session is closed/);
+		} finally {
+			await session.stop();
+		}
+	}
+);
+
+test(
+	'starting a workspace leaves the console of the process in place',
+	{ timeout: 15000 },
+	async () => {
+		const session = await Session.create(process.cwd(), () => {});
+		try {
+			// Handles such as this buffer are decoded with the package's default logger.
+			await session.client.request('nvim_get_current_buf', []);
+			assert.deepEqual({ ...console }, consoleAtStart);
 		} finally {
 			await session.stop();
 		}
