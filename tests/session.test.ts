@@ -2161,6 +2161,27 @@ test('an open file renames back to an earlier name, and only a real tab blocks a
 			/Close the destination file tab first/
 		);
 		assert.equal(await readFile(join(root, 'preview.txt'), 'utf8'), 'a\n');
+
+		// The source need not have a buffer: the destination tab still owns that name.
+		await writeFile(join(root, 'unopened.txt'), 'unopened\n');
+		await assert.rejects(
+			rename('unopened.txt', 'other.txt'),
+			/Close the destination file tab first/
+		);
+		assert.equal(await readFile(join(root, 'unopened.txt'), 'utf8'), 'unopened\n');
+
+		// The same protection applies to children of an unopened folder.
+		await mkdir(join(root, 'unopened'));
+		await writeFile(join(root, 'unopened/child.txt'), 'child\n');
+		await session.client.request('nvim_exec_lua', [
+			'local buf = vim.fn.bufadd(...); vim.fn.bufload(buf); vim.bo[buf].buflisted = true',
+			[join(root, 'destination/child.txt')]
+		]);
+		await assert.rejects(
+			rename('unopened', 'destination'),
+			/Close the destination file tab first/
+		);
+		assert.equal(await readFile(join(root, 'unopened/child.txt'), 'utf8'), 'child\n');
 	} finally {
 		await session?.stop();
 		await rm(root, { recursive: true, force: true });

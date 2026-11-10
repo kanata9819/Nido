@@ -248,7 +248,9 @@ return result`,
 					!affected.includes(buf) &&
 					// A hidden, unedited buffer is not a tab to close; it gives way below.
 					(buf.listed || buf.modified) &&
-					renamed.some((item) => relative(item.name, buf.name) === '')
+					// Destination buffers also matter when the source is not open. Otherwise
+					// saving an old destination buffer can overwrite the file just moved here.
+					isWithin(result, buf.name)
 			)
 		) {
 			throw new Error('Close the destination file tab first.');
