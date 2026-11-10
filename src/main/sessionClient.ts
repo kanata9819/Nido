@@ -1,5 +1,36 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { NeovimClient } from 'neovim';
+import { getLogger } from 'neovim/lib/utils/logger';
+
+type ClientLogger = NonNullable<
+	NonNullable<ConstructorParameters<typeof NeovimClient>[0]>['logger']
+>;
+
+const quiet = (): ClientLogger => silentLogger;
+const silentLogger = {
+	level: 'error',
+	info: quiet,
+	warn: quiet,
+	error: quiet,
+	debug: quiet
+} as unknown as ClientLogger;
+let consoleKept = false;
+
+/**
+ * The package's own logger replaces console.log, console.error and the rest for the whole
+ * process when it is first created, so that a plugin host cannot write to its RPC channel.
+ * Nido talks to Neovim over the child's pipes: create that logger once, keep the console,
+ * and give the client a logger that does no work for each notification.
+ */
+function clientLogger(): ClientLogger {
+	if (!consoleKept) {
+		consoleKept = true;
+		const native = { ...console };
+		getLogger();
+		Object.assign(console, native);
+	}
+	return silentLogger;
+}
 
 /**
  * RPC client for one Neovim process, extending NeovimClient from the `neovim` package.
@@ -15,7 +46,7 @@ export class SessionClient extends NeovimClient {
 		private readonly process: ChildProcessWithoutNullStreams,
 		onError: (error: Error) => void
 	) {
-		super();
+		super({ logger: clientLogger() });
 		process.stdin.on('error', (error) => {
 			const disconnected = !!this.failure;
 			this.cancelRequests(error);
