@@ -466,8 +466,19 @@ export class Session {
 		return this.persistence.restore(saved);
 	}
 
+	/** Reload unedited buffers whose files changed on disk, such as after a branch switch. */
 	async refreshFiles(): Promise<void> {
-		await this.client.request('nvim_command', ['checktime']);
+		// A bare :checktime reloads only the buffers shown in a window, so a file open in a
+		// background tab would keep its old text until selected.
+		await this.client.request('nvim_exec_lua', [
+			`for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+  if vim.api.nvim_buf_is_loaded(buffer) and vim.bo[buffer].buftype == ''
+      and not vim.bo[buffer].modified and vim.api.nvim_buf_get_name(buffer) ~= '' then
+    vim.cmd.checktime(buffer)
+  end
+end`,
+			[]
+		]);
 	}
 
 	async refreshGitSigns(): Promise<void> {
