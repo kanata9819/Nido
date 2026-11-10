@@ -1,8 +1,38 @@
 import { app } from 'electron';
 import { dirname, isAbsolute, join } from 'node:path';
-import { readdir, realpath } from 'node:fs/promises';
+import { readdir, realpath, stat } from 'node:fs/promises';
 import { parseWslPath } from '../shared/wsl';
 import { resolveWslFolder, wslDistributions } from './wsl';
+
+/** Whether a drive root can be listed. A disconnected network drive can take long to fail. */
+async function readableDrive(root: string): Promise<boolean> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			stat(root).then((info) => info.isDirectory()),
+			new Promise<boolean>((resolve) => {
+				timer = setTimeout(() => resolve(false), 2000);
+			})
+		]);
+	} catch {
+		return false;
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+/** The roots of the drives that this Windows computer can open, such as C:\ and D:\. */
+export async function windowsDrives(
+	platform = process.platform,
+	readable: (root: string) => Promise<boolean> = readableDrive
+): Promise<string[]> {
+	if (platform !== 'win32') {
+		return [];
+	}
+	const roots = Array.from({ length: 26 }, (_, index) => `${String.fromCharCode(65 + index)}:\\`);
+	const found = await Promise.all(roots.map((root) => readable(root).catch(() => false)));
+	return roots.filter((_, index) => found[index]);
+}
 
 export function registerFolderBrowserHandlers({
 	handle,
@@ -12,6 +42,7 @@ export function registerFolderBrowserHandlers({
 	text: (value: unknown) => string;
 }): void {
 	handle('wslDistributions', () => wslDistributions());
+	handle('windowsDrives', () => windowsDrives());
 	handle('browseFolders', async (value, distribution) => {
 		const requested = value === undefined || value === '' ? app.getPath('home') : text(value);
 		const remote = parseWslPath(requested);

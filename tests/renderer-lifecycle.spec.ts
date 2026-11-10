@@ -4218,6 +4218,63 @@ test('workspace picker reaches connection and folder actions without a session t
 	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
 });
 
+test('going up from a Windows drive root lists the drives and opens another one', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=folders&defer=browseFolders`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('browseFolders', 0, {
+			path: 'C:\\',
+			parent: 'C:\\',
+			folders: [{ name: 'Users', path: 'C:\\Users', directory: true }]
+		})
+	);
+	const list = page.getByRole('listbox', { name: 'Folders' });
+	await expect(list.getByRole('option')).toHaveText(['▸ Users']);
+	const parent = page.getByRole('button', { name: '↑ Parent' });
+	await expect(parent).toBeEnabled();
+	await list.focus();
+	await page.keyboard.press('h');
+	await expect(list.getByRole('option')).toHaveText(['▸ C:', '▸ D:']);
+	// The drive list has no folder of its own to open, and nothing above it.
+	await expect(parent).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Open current folder' })).toBeDisabled();
+	await page.keyboard.press('j');
+	await page.keyboard.press('l');
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending
+					.filter((call) => call.method === 'browseFolders')
+					.map((call) => call.args[0])
+			)
+		)
+		.toEqual(['D:\\']);
+	await page.evaluate(() =>
+		window.rendererTest.settle('browseFolders', 0, {
+			path: 'D:\\',
+			parent: 'D:\\',
+			folders: [{ name: 'Projects', path: 'D:\\Projects', directory: true }]
+		})
+	);
+	await expect(list.getByRole('option')).toHaveText(['▸ Projects']);
+	await expect(page.getByRole('textbox', { name: 'Folder path' })).toHaveValue('D:\\');
+});
+
+test('a POSIX root keeps the parent button disabled', async ({ page }) => {
+	await page.goto(`${origin}?view=folders&defer=browseFolders`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('browseFolders', 0, { path: '/', parent: '/', folders: [] })
+	);
+	await expect(page.getByRole('listbox', { name: 'Folders' })).toHaveAttribute(
+		'aria-busy',
+		'false'
+	);
+	await expect(page.getByRole('button', { name: '↑ Parent' })).toBeDisabled();
+});
+
 test('folder loading preserves keyboard focus on the connection', async ({ page }) => {
 	await page.goto(`${origin}?view=folders&defer=browseFolders`);
 	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);

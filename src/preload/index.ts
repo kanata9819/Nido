@@ -42,6 +42,7 @@ const api: NidoAPI = {
 	restartTerminal: (id, shell) => ipcRenderer.invoke('nido:restartTerminal', id, shell),
 	browseFolders: (path, distribution) =>
 		ipcRenderer.invoke('nido:browseFolders', path, distribution),
+	windowsDrives: () => ipcRenderer.invoke('nido:windowsDrives'),
 	closeWorkspace: (id) => ipcRenderer.invoke('nido:close', id),
 	sleepWorkspace: (id) => ipcRenderer.invoke('nido:sleep', id),
 	wakeWorkspace: (id) => ipcRenderer.invoke('nido:wake', id),

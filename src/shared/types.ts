@@ -297,6 +297,8 @@ export interface NidoAPI {
 		path?: string,
 		distribution?: string
 	): Promise<{ path: string; parent: string; folders: FileEntry[] }>;
+	/** Drive roots such as C:\ that the folder picker lists above a drive. Empty off Windows. */
+	windowsDrives(): Promise<string[]>;
 	closeWorkspace(id: string): Promise<boolean>;
 	/** Stop a background workspace's Neovim if nothing would be lost. Resolves whether it slept. */
 	sleepWorkspace(id: string): Promise<boolean>;

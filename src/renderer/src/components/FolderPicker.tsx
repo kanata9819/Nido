@@ -109,6 +109,44 @@ export default function FolderPicker({
 			}
 		}
 	}
+	// Above a Windows drive root, the picker lists the drives, so another one can be opened.
+	const atDriveRoot = !distribution && /^[a-z]:[\\/]$/i.test(directory);
+	async function browseDrives(): Promise<void> {
+		const id = ++request.current.id;
+		setLoading(true);
+		setError('');
+		try {
+			const drives = await window.nido.windowsDrives();
+			if (id !== request.current.id) {
+				return;
+			}
+			applyFolders({
+				path: '',
+				parent: '',
+				folders: drives.map((root) => ({
+					name: root.replace(/[\\/]$/, ''),
+					path: root,
+					directory: true
+				}))
+			});
+			requestAnimationFrame(() => {
+				if (id === request.current.id) {
+					list.current?.focus();
+				}
+			});
+		} catch (error) {
+			if (id === request.current.id) {
+				setError(String(error));
+			}
+		} finally {
+			if (id === request.current.id) {
+				setLoading(false);
+			}
+		}
+	}
+	function browseParent(): void {
+		void (atDriveRoot ? browseDrives() : browse(parent));
+	}
 	useEffect(() => {
 		list.current?.focus();
 	}, []);
@@ -243,7 +281,10 @@ export default function FolderPicker({
 			/>
 			<div className={styles.folderActions}>
 				{/* Loading keeps these enabled; toggling their state on every move made them flash. */}
-				<button disabled={busy || parent === directory} onClick={() => void browse(parent)}>
+				<button
+					disabled={busy || (parent === directory && !atDriveRoot)}
+					onClick={browseParent}
+				>
 					{t('↑ Parent')}
 				</button>
 				<button
@@ -325,8 +366,8 @@ export default function FolderPicker({
 						case 'Backspace': {
 							if (showFavorites) {
 								toggleFavorites();
-							} else if (!loading) {
-								void browse(parent);
+							} else if (!loading && (parent !== directory || atDriveRoot)) {
+								browseParent();
 							}
 							break;
 						}
