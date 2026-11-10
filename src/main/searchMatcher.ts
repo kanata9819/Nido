@@ -1,5 +1,6 @@
 import { Worker } from 'node:worker_threads';
 import type { SearchOptions } from '../shared/search';
+import { searchLineEnding } from './searchLines';
 
 export interface LineMatch {
 	line: number;
@@ -11,10 +12,10 @@ export interface LineMatch {
 // can be cancelled without blocking input, IPC, or other workspaces.
 const matcherWorker = String.raw`
 const { parentPort } = require('node:worker_threads');
-parentPort.on('message', ({ id, source, flags, text, replacement, selected, regex }) => {
+parentPort.on('message', ({ id, source, flags, text, ending, replacement, selected, regex }) => {
   try {
     const pattern = new RegExp(source, flags);
-    const parts = text.split(/(\r\n|\n|\r)/);
+    const parts = text.split(new RegExp('(' + ending + ')'));
     if (selected) {
       let count = 0;
       for (const line of selected) {
@@ -120,7 +121,7 @@ export class SearchMatcher {
 	}
 
 	find(text: string): Promise<LineMatch[]> {
-		return this.request({ text });
+		return this.request({ text, ending: searchLineEnding(text) });
 	}
 
 	replace(
@@ -128,7 +129,7 @@ export class SearchMatcher {
 		selected: number[],
 		replacement: string
 	): Promise<{ text: string; count: number }> {
-		return this.request({ text, selected, replacement });
+		return this.request({ text, ending: searchLineEnding(text), selected, replacement });
 	}
 
 	close(error?: Error): void {

@@ -6,6 +6,7 @@ import { gitIgnored, gitRoot } from './git';
 import type { FileEntry, SearchResults } from '../shared/types';
 import { defaultSearchOptions, type SearchOptions } from '../shared/search';
 import { SearchMatcher } from './searchMatcher';
+import { searchLineEnding } from './searchLines';
 import { WorkspaceReplacement } from './workspaceReplacement';
 
 /** Folders of dependencies and build output that text search never enters. */
@@ -64,7 +65,7 @@ function literalMatches(path: string, text: string, query: string): SearchResult
 		return [];
 	}
 	const found: SearchResults['matches'] = [];
-	const lines = text.split(/\r\n|\n|\r/);
+	const lines = text.split(searchLineEnding(text));
 	for (let index = 0; index < lines.length; index++) {
 		const column = lines[index].indexOf(query);
 		if (column < 0) {
@@ -336,7 +337,7 @@ export class SessionSearch {
 			hashes.set(entry.path, WorkspaceReplacement.hash(text));
 		}
 		// Columns are UTF-8 byte offsets for Neovim, including wide characters.
-		const lines = found.length ? text.split(/\r\n|\n|\r/) : [];
+		const lines = found.length ? text.split(searchLineEnding(text)) : [];
 		return found.map((match) => ({
 			path: entry.path,
 			line: match.line,
