@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LanguagePackSnapshot } from '../../../shared/languagePacks';
-import { useI18n } from '../i18n';
+import { useErrorMessage, useI18n } from '../i18n';
 import styles from '../assets/ExtensionsPage.module.css';
 
 const statusLabels = {
@@ -22,6 +22,7 @@ export default function LanguagePacksPanel({
 	category: 'language' | 'other';
 }): React.JSX.Element {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	const [snapshot, setSnapshot] = useState<LanguagePackSnapshot>({ packs: [], errors: [] });
 	const [error, setError] = useState('');
 	const [actionError, setActionError] = useState('');
@@ -161,12 +162,12 @@ export default function LanguagePacksPanel({
 			</p>
 			{error && (
 				<p role="alert" className={styles.packError}>
-					{error}
+					{errorMessage(error)}
 				</p>
 			)}
 			{actionError && (
 				<p role="alert" className={styles.packError}>
-					{actionError}
+					{errorMessage(actionError)}
 				</p>
 			)}
 			{snapshot.errors.map((message) => (

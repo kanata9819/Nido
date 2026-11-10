@@ -385,6 +385,27 @@ test('a new branch name that Git does not accept is reported as such', async () 
 	}
 });
 
+test('Git that exits before reading a long path list reports its failure without a pipe error', async () => {
+	const plain = await mkdtemp(join(tmpdir(), 'nido-ignore-plain-'));
+	const ceiling = process.env.GIT_CEILING_DIRECTORIES;
+	// Keep the folder outside any repository, wherever the temporary directory lives.
+	process.env.GIT_CEILING_DIRECTORIES = tmpdir();
+	try {
+		// More than a pipe holds: Git has exited by the time the rest is written.
+		const paths = Array.from({ length: 60_000 }, (_, index) => `folder/file-${index}.txt`);
+		await assert.rejects(gitIgnored(plain, paths), /not a git repository/i);
+		// An unhandled pipe error arrives as an uncaught exception, which fails this test.
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	} finally {
+		if (ceiling === undefined) {
+			delete process.env.GIT_CEILING_DIRECTORIES;
+		} else {
+			process.env.GIT_CEILING_DIRECTORIES = ceiling;
+		}
+		await rm(plain, { recursive: true, force: true });
+	}
+});
+
 test('side-by-side diffs align replacements, additions, deletions and source line numbers', () => {
 	const rows = splitDiff(
 		'diff --git a/file b/file\n--- a/file\n+++ b/file\n@@ -1,4 +1,5 @@\n context\n-old\n+new\n+extra\n tail\n-last\n+end\n+final\n\\ No newline at end of file\n'

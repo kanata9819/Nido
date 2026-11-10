@@ -1,5 +1,5 @@
 import sharedStyles from '../assets/Nido.module.css';
-import { useI18n } from '../i18n';
+import { useErrorMessage, useI18n } from '../i18n';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Star, X } from 'lucide-react';
 import type { FavoriteWorkspace, FileEntry } from '../../../shared/types';
@@ -27,6 +27,7 @@ export default function FolderPicker({
 	onOpen: (path: string) => void;
 }): React.JSX.Element {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	const [location, setLocation] = useState(() => ({
 		distribution: parseWslPath(initialPath)?.distribution || '',
 		initialPath
@@ -215,7 +216,7 @@ export default function FolderPicker({
 				</label>
 				{wslError && (
 					<small role="status">
-						{t('WSL unavailable')} · {wslError}
+						{t('WSL unavailable')} · {errorMessage(wslError)}
 					</small>
 				)}
 				{!wslError && !distributions.length && (
@@ -266,7 +267,7 @@ export default function FolderPicker({
 						: t('Files, terminal and language tools run in this WSL distribution.')}
 				</p>
 			)}
-			{error && <p role="alert">{error}</p>}
+			{error && <p role="alert">{errorMessage(error)}</p>}
 			<div
 				ref={list}
 				role="listbox"

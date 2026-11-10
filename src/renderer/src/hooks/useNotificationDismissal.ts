@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react';
 export function useNotificationDismissal(
 	notice: { message: string } | undefined,
 	animations: boolean,
-	dismiss: () => void
+	dismiss: () => void,
+	/** How long the notice stays before it fades, in milliseconds. */
+	delay = 2000
 ): boolean {
 	const [fading, setFading] = useState<{
 		notice: typeof notice;
@@ -28,13 +30,13 @@ export function useNotificationDismissal(
 			} else {
 				dismiss();
 			}
-		}, 2000);
+		}, delay);
 		return () => {
 			clearTimeout(timer);
 			clearTimeout(fadeTimer);
 			document.removeEventListener('keydown', onKey);
 		};
-	}, [notice, animations, dismiss]);
+	}, [notice, animations, dismiss, delay]);
 	return (
 		!!notice &&
 		fading?.notice === notice &&

@@ -24,7 +24,14 @@ export default function Notification({
 		setNotice(undefined);
 	}
 	const dismiss = useCallback(() => setNotice(undefined), []);
-	const fading = useNotificationDismissal(notice, animations, dismiss);
+	// A warning or an error asks for something, such as saving a file that cannot be
+	// recovered: leave time to read it. Esc and the button still dismiss it at once.
+	const fading = useNotificationDismissal(
+		notice,
+		animations,
+		dismiss,
+		notice && notice.severity !== 'info' ? 8000 : 2000
+	);
 	useEffect(() => {
 		return onNidoEvent((event) => {
 			if (

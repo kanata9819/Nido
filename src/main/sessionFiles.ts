@@ -13,6 +13,8 @@ interface OpenBuffer {
 	id: number;
 	name: string;
 	modified: boolean;
+	/** Shown as a tab. Neovim also keeps hidden buffers, such as previewed files. */
+	listed: boolean;
 }
 
 /** Whether `path` is `parent` itself or inside it. */
@@ -179,7 +181,8 @@ end`,
 		const buffers = (await this.client.request('nvim_exec_lua', [
 			`local result = {}
 for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-  table.insert(result, {id=buf, name=vim.api.nvim_buf_get_name(buf), modified=vim.bo[buf].modified})
+  table.insert(result, {id=buf, name=vim.api.nvim_buf_get_name(buf), modified=vim.bo[buf].modified,
+    listed=vim.bo[buf].buflisted})
 end
 return result`,
 			[]
@@ -208,6 +211,8 @@ return result`,
 			buffers.some(
 				(buf) =>
 					!affected.includes(buf) &&
+					// A hidden, unedited buffer is not a tab to close; it gives way below.
+					(buf.listed || buf.modified) &&
 					renamed.some((item) => relative(item.name, buf.name) === '')
 			)
 		) {
@@ -221,10 +226,29 @@ for _, item in ipairs(renamed) do
     return true
   end
 end
+local find = require('nido_buffers').find
+local function hidden(name, renamed_buffer)
+  local buffer = find(name)
+  return buffer > 0 and buffer ~= renamed_buffer and buffer or nil
+end
+for _, item in ipairs(renamed) do
+  local taken = vim.api.nvim_buf_is_valid(item.id) and hidden(item.name, item.id)
+  if taken and (vim.bo[taken].buflisted or vim.bo[taken].modified) then
+    return true
+  end
+end
 -- Check every buffer and update names in one RPC, without yielding to editor input.
 for _, item in ipairs(renamed) do
   if vim.api.nvim_buf_is_valid(item.id) then
+    local previous = vim.api.nvim_buf_get_name(item.id)
+    local taken = hidden(item.name, item.id)
+    if taken then vim.api.nvim_buf_delete(taken, {force=true}) end
     vim.api.nvim_buf_set_name(item.id, item.name)
+    -- Neovim keeps the old name as a hidden buffer, which would block renaming back to it.
+    local stale = hidden(previous, item.id)
+    if stale and not vim.api.nvim_buf_is_loaded(stale) and not vim.bo[stale].buflisted then
+      vim.api.nvim_buf_delete(stale, {force=true})
+    end
     if vim.api.nvim_buf_is_loaded(item.id) then
       vim.api.nvim_buf_call(item.id, function() vim.cmd.edit() end)
     end

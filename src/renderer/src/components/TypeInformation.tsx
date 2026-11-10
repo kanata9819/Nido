@@ -1,5 +1,5 @@
 import { onNidoEvent } from '../nidoEvents';
-import { useI18n } from '../i18n';
+import { useErrorMessage, useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Braces, X } from 'lucide-react';
 import Markdown from 'react-markdown';
@@ -21,6 +21,7 @@ export default function TypeInformation({
 	hidden?: boolean;
 }): React.JSX.Element | null {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	const [info, setInfo] = useState<Extract<NidoEvent, { type: 'hover' }>>();
 	const [linkError, setLinkError] = useState('');
 	const linkRequest = useRef({ generation: 0 });
@@ -308,7 +309,7 @@ export default function TypeInformation({
 							{info.markdown}
 						</Markdown>
 					</div>
-					{linkError && <p role="alert">{linkError}</p>}
+					{linkError && <p role="alert">{errorMessage(linkError)}</p>}
 				</div>
 				<footer>
 					<span

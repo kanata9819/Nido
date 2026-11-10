@@ -184,6 +184,9 @@ async function git(
 			}
 		);
 		if (input !== undefined) {
+			// Git can exit before it has read all of its input, such as outside a repository.
+			// Its exit status reports that; an unhandled pipe error would crash the app.
+			task.child.stdin?.on('error', () => {});
 			task.child.stdin?.end(input);
 		}
 		const { stdout } = await task;
