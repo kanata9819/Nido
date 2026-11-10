@@ -2110,6 +2110,50 @@ test('file mutations serialize and retain edits arriving during OS operations', 
 	}
 });
 
+test('an open file renames back to an earlier name, and only a real tab blocks a rename', async () => {
+	const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-rename-back-')));
+	let session: Session | undefined;
+	try {
+		await writeFile(join(root, 'a.txt'), 'a\n');
+		await writeFile(join(root, 'other.txt'), 'other\n');
+		session = await Session.create(root, () => {});
+		const rename = (from: string, to: string): Promise<void> =>
+			session!.fileAction('rename', from, to, async () => {});
+		const names = (): Promise<string[]> =>
+			session!.client.request('nvim_exec_lua', [
+				'return vim.tbl_map(vim.api.nvim_buf_get_name, vim.api.nvim_list_bufs())',
+				[]
+			]) as Promise<string[]>;
+		await session.openFile('a.txt');
+		await rename('a.txt', 'b.txt');
+		// Neovim would keep a hidden buffer named a.txt, which is not a tab to close.
+		assert.deepEqual(await names(), [join(root, 'b.txt')]);
+		await rename('b.txt', 'a.txt');
+		assert.deepEqual(await names(), [join(root, 'a.txt')]);
+		assert.equal(await readFile(join(root, 'a.txt'), 'utf8'), 'a\n');
+
+		// A hidden buffer under the new name, such as a previewed file, gives way.
+		await session.client.request('nvim_exec_lua', [
+			'vim.fn.bufload(vim.fn.bufadd(...))',
+			[join(root, 'preview.txt')]
+		]);
+		await rename('a.txt', 'preview.txt');
+		assert.deepEqual(await names(), [join(root, 'preview.txt')]);
+
+		// An open tab under the new name still does not.
+		await session.openFile('other.txt');
+		await rm(join(root, 'other.txt'));
+		await assert.rejects(
+			rename('preview.txt', 'other.txt'),
+			/Close the destination file tab first/
+		);
+		assert.equal(await readFile(join(root, 'preview.txt'), 'utf8'), 'a\n');
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('Tab, Shift Tab and Backspace respect indentation and preserve selected lines', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-indent-keys-'));
 	const session = await Session.create(root, () => {});
