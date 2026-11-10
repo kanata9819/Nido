@@ -11,7 +11,8 @@ import {
 	utimes,
 	writeFile,
 	rename,
-	symlink
+	symlink,
+	stat
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -2028,6 +2029,18 @@ test('explorer file actions preserve buffers, reject overwrites and protect work
 		await assert.rejects(action('copy', 'renamed', 'renamed/inside'), /inside itself/);
 		await symlink(outside, join(root, 'link'), 'junction');
 		await assert.rejects(action('createFile', 'link/escape.txt'), /outside this workspace/);
+		// New folders on the way are created, but never through a link that leads outside.
+		await action('createFile', 'new/nested/file.txt');
+		assert.equal(await readFile(join(root, 'new/nested/file.txt'), 'utf8'), '');
+		await action('createDirectory', 'made/of/folders');
+		assert.ok((await stat(join(root, 'made/of/folders'))).isDirectory());
+		await assert.rejects(
+			action('createFile', 'link/missing/escape.txt'),
+			/outside this workspace/
+		);
+		await assert.rejects(stat(join(outside, 'missing')), { code: 'ENOENT' });
+		await assert.rejects(action('createFile', 'copied/first.txt/inside.txt'), /already exists/);
+		await assert.rejects(action('createFile', 'new/.git/hooks/x'), /outside .git/);
 		await session.input('AX<Esc>');
 		await session.client.request('nvim_eval', ['1']);
 		await assert.rejects(action('delete', 'renamed'), /unsaved changes/);

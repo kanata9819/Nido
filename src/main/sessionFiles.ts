@@ -106,7 +106,8 @@ end`,
 	): Promise<void> {
 		this.validate(path);
 		if (action === 'createFile' || action === 'createDirectory') {
-			const result = await this.destination(path);
+			// A new file or folder may name folders that do not exist yet, as in src/new/file.ts.
+			const result = await this.destination(path, true);
 			if (action === 'createFile') {
 				await writeFile(result, '', { flag: 'wx' });
 			} else {
@@ -159,10 +160,15 @@ end`,
 		}
 	}
 
-	/** Resolve a new path whose parent exists and which is not taken yet. */
-	private async destination(value: string): Promise<string> {
+	/**
+	 * Resolve a new path which is not taken yet. Its parent must exist, unless `createParents`
+	 * is set: then the missing folders are created, inside the nearest existing one.
+	 */
+	private async destination(value: string, createParents = false): Promise<string> {
 		this.validate(value);
-		const parent = await this.path(dirname(value));
+		const parent = createParents
+			? await this.createParents(dirname(value))
+			: await this.path(dirname(value));
 		const result = resolve(parent, basename(value));
 		this.validate(relative(this.root, result));
 		try {
@@ -174,6 +180,35 @@ end`,
 			throw error;
 		}
 		throw new Error('A file or folder already exists at that path.');
+	}
+
+	/** The folder at a project-relative path, after creating any of it that is missing. */
+	private async createParents(folder: string): Promise<string> {
+		const missing: string[] = [];
+		let existing = folder;
+		for (;;) {
+			try {
+				// Resolving the existing part keeps a link inside it from leading outside.
+				const actual = await this.path(existing);
+				if (!(await stat(actual)).isDirectory()) {
+					throw new Error('A file or folder already exists at that path.');
+				}
+				if (!missing.length) {
+					return actual;
+				}
+				const result = resolve(actual, ...missing.reverse());
+				this.validate(relative(this.root, result));
+				await mkdir(result, { recursive: true });
+				return result;
+			} catch (error) {
+				const parent = dirname(existing);
+				if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || parent === existing) {
+					throw error;
+				}
+				missing.push(basename(existing));
+				existing = parent;
+			}
+		}
 	}
 
 	/** Every Neovim buffer, with its name as a host path. */
