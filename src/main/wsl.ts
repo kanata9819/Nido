@@ -68,6 +68,8 @@ async function run(
 			timeout: input ? 300000 : 20000,
 			maxBuffer: 1024 * 1024
 		});
+		// WSL can exit before it has read the script; its exit status reports the failure.
+		task.child.stdin?.on('error', () => {});
 		task.child.stdin?.end(input);
 		return decodeWslOutput((await task).stdout);
 	} catch (error) {
