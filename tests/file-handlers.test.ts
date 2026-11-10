@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { registerFileHandlers } from '../src/main/fileHandlers';
+import { windowsDrives } from '../src/main/folderBrowserHandlers';
 import type { Session } from '../src/main/session';
 import type { NidoEvent } from '../src/shared/types';
 
@@ -99,4 +100,19 @@ test('file IPC validates requests and protects files open in other workspace ses
 		() => handlers.get('previewReplacement')!('current', 'token', 'replacement', null),
 		/Choose matching lines/
 	);
+});
+
+test('the folder picker lists the Windows drives that can be opened, and none elsewhere', async () => {
+	const checked: string[] = [];
+	const readable = async (root: string): Promise<boolean> => {
+		checked.push(root);
+		if (root === 'E:\\') {
+			throw new Error('The device is not ready.');
+		}
+		return root === 'C:\\' || root === 'D:\\' || root === 'Z:\\';
+	};
+	assert.deepEqual(await windowsDrives('win32', readable), ['C:\\', 'D:\\', 'Z:\\']);
+	assert.equal(checked.length, 26);
+	assert.deepEqual(await windowsDrives('linux', readable), []);
+	assert.equal(checked.length, 26);
 });
