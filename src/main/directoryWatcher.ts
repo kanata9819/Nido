@@ -2,11 +2,16 @@ import { watch, type FSWatcher } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
+interface DirectoryStamp {
+	listing: string;
+	ignore?: string;
+}
+
 interface Directory {
 	path: string;
 	initialized: boolean;
 	polling: boolean;
-	stamp?: string;
+	stamp?: DirectoryStamp;
 	watcher?: FSWatcher;
 }
 
@@ -241,11 +246,21 @@ export class DirectoryWatcher {
 		this.batch.unref();
 	}
 
-	private async stamp(path: string): Promise<string | undefined> {
+	private async stamp(path: string): Promise<DirectoryStamp | undefined> {
 		try {
-			const directory = await stat(await this.resolveDirectory(path), { bigint: true });
+			const resolved = await this.resolveDirectory(path);
+			const [directory, ignore] = await Promise.all([
+				stat(resolved, { bigint: true }),
+				// Editing an existing ignore file does not change the directory's timestamps.
+				stat(join(resolved, '.gitignore'), { bigint: true }).catch(() => undefined)
+			]);
 			return directory.isDirectory()
-				? `${directory.dev}:${directory.ino}:${directory.mtimeNs}:${directory.ctimeNs}`
+				? {
+						listing: `${directory.dev}:${directory.ino}:${directory.mtimeNs}:${directory.ctimeNs}`,
+						ignore: ignore
+							? `${ignore.dev}:${ignore.ino}:${ignore.size}:${ignore.mtimeNs}:${ignore.ctimeNs}`
+							: undefined
+					}
 				: undefined;
 		} catch {
 			return undefined;
@@ -275,9 +290,17 @@ export class DirectoryWatcher {
 							continue;
 						}
 						const stamp = await this.stamp(directory.path);
-						if (this.current(directory) && directory.stamp !== stamp) {
+						if (this.current(directory)) {
+							const previous = directory.stamp;
 							directory.stamp = stamp;
-							this.queue(directory.path);
+							if (previous?.ignore !== stamp?.ignore) {
+								// Ignore rules also affect every expanded descendant's decorations.
+								for (const path of this.directories.keys()) {
+									this.queue(path);
+								}
+							} else if (previous?.listing !== stamp?.listing) {
+								this.queue(directory.path);
+							}
 						}
 					}
 				})
