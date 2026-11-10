@@ -165,3 +165,27 @@ test('closing during watcher setup cancels subscriptions and pending notificatio
 	await delay(350);
 	assert.equal(batches.length, 0);
 });
+
+test('polling refreshes subscribed descendants after an existing .gitignore is edited', async (context) => {
+	const { root, watcher, batches } = await fixture(context, true);
+	await mkdir(join(root, 'src'));
+	await writeFile(join(root, '.gitignore'), 'old-pattern\n');
+	await writeFile(join(root, 'src', 'existing.txt'), 'before');
+	await watcher.set(['', 'src']);
+	await until(
+		() => new Set(batches.flat()).size === 2,
+		'Initial listing reconciliation was not delivered.'
+	);
+	batches.length = 0;
+	// Rewriting an existing file does not change its parent directory's listing metadata.
+	await writeFile(join(root, '.gitignore'), 'src/existing.txt\n');
+	await until(
+		() => new Set(batches.flat()).size === 2,
+		'An ignore-rule edit did not refresh the root and its subscribed descendants.'
+	);
+	assert.deepEqual(new Set(batches.flat()), new Set(['', 'src']));
+	batches.length = 0;
+	await writeFile(join(root, 'src', 'existing.txt'), 'after');
+	await delay(1800);
+	assert.deepEqual(batches, [], 'Ordinary content edits refreshed the tree.');
+});
