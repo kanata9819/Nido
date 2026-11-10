@@ -563,3 +563,47 @@ test('Git stages literal paths, preserves working changes and commits only the i
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+for (const recreateSource of [false, true]) {
+	test(`staging edits after a staged rename ${recreateSource ? 'leaves a recreated source untracked' : 'does not require the removed source'}`, async () => {
+		const root = await mkdtemp(join(tmpdir(), 'nido-stage-renamed-'));
+		const git = (...args: string[]): string =>
+			execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true });
+		try {
+			git('init', '-q');
+			git('config', 'user.name', 'Nido Test');
+			git('config', 'user.email', 'nido-test@example.invalid');
+			git('config', 'commit.gpgsign', 'false');
+			await writeFile(join(root, 'before.txt'), 'first\nsecond\nthird\nfourth\n');
+			git('add', '--', 'before.txt');
+			git('commit', '-qm', 'Initial');
+			git('mv', '--', 'before.txt', 'after.txt');
+			await writeFile(join(root, 'after.txt'), 'first\nsecond\nthird\nfourth\nfifth\n');
+			if (recreateSource) await writeFile(join(root, 'before.txt'), 'unrelated new file\n');
+			const status = await gitStatus(root);
+			assert.equal(status.changes.find((change) => change.staged)?.original, 'before.txt');
+			await gitStage(root, 'after.txt', false);
+			assert.equal(git('show', ':after.txt'), 'first\nsecond\nthird\nfourth\nfifth\n');
+			assert.equal(git('ls-files', '-z'), 'after.txt\0');
+			assert.equal(
+				status.changes.find((change) => change.path === 'after.txt' && !change.staged)
+					?.original,
+				undefined
+			);
+			if (recreateSource) {
+				assert.equal(
+					await readFile(join(root, 'before.txt'), 'utf8'),
+					'unrelated new file\n'
+				);
+				assert.ok(
+					(await gitStatus(root)).changes.some(
+						(change) =>
+							change.path === 'before.txt' && change.status === '?' && !change.staged
+					)
+				);
+			}
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+}
