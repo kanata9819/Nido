@@ -6226,6 +6226,67 @@ test('typing while a workspace wakes reaches that workspace, not the previous on
 	]);
 });
 
+test('typing during an abandoned wake is dropped, even after an earlier wake finished in the background', async ({
+	page
+}) => {
+	await pauseRendererClock(page);
+	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,sleepWorkspace,wakeWorkspace`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('restoreWorkspaces', 0, {
+			workspaces: [
+				{ id: 'alpha', root: '/alpha', name: 'Alpha' },
+				{ id: 'beta', root: '/beta', name: 'Beta', sleeping: true }
+			],
+			active: 'alpha',
+			errors: []
+		})
+	);
+	const waking = (): Promise<boolean> =>
+		page.evaluate(() =>
+			window.rendererTest.pending.some((call) => call.method === 'wakeWorkspace')
+		);
+	const alpha = page.getByRole('tab', { name: 'Workspace Alpha', exact: true });
+	const beta = page.getByRole('tab', { name: 'Workspace Beta', exact: true });
+	// The first wake finishes after its workspace is no longer selected.
+	await page.keyboard.press('Alt+2');
+	await expect.poll(waking).toBe(true);
+	await page.keyboard.press('Alt+1');
+	await expect(alpha).toHaveAttribute('aria-selected', 'true');
+	await page.evaluate(() =>
+		window.rendererTest.settle('wakeWorkspace', 0, {
+			workspace: { id: 'beta', root: '/beta', name: 'Beta' },
+			errors: []
+		})
+	);
+	await expect(beta).not.toHaveAccessibleDescription('Sleeping');
+	await page.clock.runFor(6 * 60 * 1000);
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some((call) => call.method === 'sleepWorkspace')
+			)
+		)
+		.toBe(true);
+	await page.evaluate(() => window.rendererTest.settle('sleepWorkspace', 0, true));
+	await expect(beta).toHaveAccessibleDescription('Sleeping');
+
+	// The second wake is still running when the user leaves: its typing has no workspace.
+	await page.keyboard.press('Alt+2');
+	await expect.poll(waking).toBe(true);
+	await page.keyboard.type('x');
+	await page.keyboard.press('Alt+1');
+	await expect(alpha).toHaveAttribute('aria-selected', 'true');
+	await page.clock.runFor(300);
+	expect(
+		await page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'input')
+				.map((call) => call.args)
+		)
+	).toEqual([]);
+});
+
 test('Indentation shows in the status bar and changes from the palette by mouse or keyboard', async ({
 	page
 }) => {
