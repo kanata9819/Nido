@@ -294,6 +294,145 @@ test('damaged history is reported and preserved instead of overwritten', async (
 	assert.equal(await readFile(historyPath, 'utf8'), '{interrupted');
 });
 
+for (const original of ['', '\n']) {
+	test(`Time Machine restores ${JSON.stringify(original)} without changing its final newline`, async (context) => {
+		const root = await fixture(context);
+		const file = join(root, 'ending.txt');
+		await writeFile(file, original);
+		const session = await Session.create(root, () => {});
+		const service = new HistoryService(new LocalHistory(join(root, 'history')));
+		try {
+			await session.openFile('ending.txt');
+			const initial = await session.historyCurrent();
+			assert.equal(initial.text, original);
+			assert.equal(initial.endOfLine, original.endsWith('\n'));
+			assert.deepEqual(
+				await session.historySnapshots([
+					[initial.buffer, initial.tick, initial.fileformat, initial.endOfLine]
+				]),
+				[]
+			);
+			const version = (await service.list(session)).versions[0];
+			await session.input('gg0Cchanged<Esc>');
+			await session.inputMode();
+			const preview = await service.preview(session, file, version.id);
+			assert.equal(preview.identical, false);
+			await service.restore(session, file, version.id, preview.token);
+			assert.equal((await session.historyCurrent()).text, original);
+			assert.equal(await readFile(file, 'utf8'), original);
+			await session.input('u');
+			await session.inputMode();
+			assert.equal(await session.client.request('nvim_get_current_line', []), 'changed');
+			await session.input('<C-r>');
+			await session.inputMode();
+			await session.save();
+			assert.equal(await readFile(file, 'utf8'), original);
+		} finally {
+			await session.stop();
+		}
+	});
+}
+
+test('an empty file preview token permits restoring a nonempty version', async (context) => {
+	const root = await fixture(context);
+	const file = join(root, 'empty.txt');
+	await writeFile(file, '');
+	const session = await Session.create(root, () => {});
+	const service = new HistoryService(new LocalHistory(join(root, 'history')));
+	try {
+		const previous = await service.store.record(file, content('previous\n'), 'saved');
+		await session.openFile('empty.txt');
+		await service.list(session);
+		const preview = await service.preview(session, file, previous.id);
+		await service.restore(session, file, previous.id, preview.token);
+		assert.equal((await session.historyCurrent()).text, 'previous\n');
+		assert.equal(await readFile(file, 'utf8'), '');
+	} finally {
+		await session.stop();
+	}
+});
+
+for (const [original, target] of [
+	['', '\n'],
+	['\n', '']
+]) {
+	test(`Time Machine distinguishes ${JSON.stringify(original)} from ${JSON.stringify(target)} during restoration`, async (context) => {
+		const root = await fixture(context);
+		const file = join(root, 'blank.txt');
+		await writeFile(file, original);
+		const session = await Session.create(root, () => {});
+		const service = new HistoryService(new LocalHistory(join(root, 'history')));
+		try {
+			const previous = await service.store.record(file, content(target), 'saved');
+			await session.openFile('blank.txt');
+			await service.list(session);
+			const preview = await service.preview(session, file, previous.id);
+			assert.equal(preview.identical, false);
+			await service.restore(session, file, previous.id, preview.token);
+			const restored = await session.historyCurrent();
+			assert.equal(restored.text, target);
+			assert.equal(restored.endOfLine, target.endsWith('\n'));
+			assert.equal(
+				(await service.store.version(file, (await service.list(session)).versions[0].id))
+					.text,
+				target
+			);
+			await session.save();
+			assert.equal(await readFile(file, 'utf8'), target);
+		} finally {
+			await session.stop();
+		}
+	});
+}
+
+test('deleting all lines records a truly empty draft that restores to zero bytes', async (context) => {
+	const root = await fixture(context);
+	const file = join(root, 'deleted.txt');
+	await writeFile(file, 'original\n');
+	const session = await Session.create(root, () => {});
+	const service = new HistoryService(new LocalHistory(join(root, 'history')));
+	try {
+		await session.openFile('deleted.txt');
+		await session.input('ggdG');
+		await session.inputMode();
+		assert.equal((await session.historyCurrent()).text, '');
+		const version = (await service.list(session)).versions[0];
+		await session.input('ichanged<Esc>');
+		await session.inputMode();
+		const preview = await service.preview(session, file, version.id);
+		await service.restore(session, file, version.id, preview.token);
+		await session.save();
+		assert.equal(await readFile(file, 'utf8'), '');
+	} finally {
+		await session.stop();
+	}
+});
+
+test('undoing an empty-file restoration preserves the original newline when saving', async (context) => {
+	const root = await fixture(context);
+	const file = join(root, 'undo-empty.txt');
+	await writeFile(file, 'original\n');
+	const session = await Session.create(root, () => {});
+	const service = new HistoryService(new LocalHistory(join(root, 'history')));
+	try {
+		const empty = await service.store.record(file, content(''), 'saved');
+		await session.openFile('undo-empty.txt');
+		await service.list(session);
+		const preview = await service.preview(session, file, empty.id);
+		await service.restore(session, file, empty.id, preview.token);
+		await session.input('u');
+		await session.inputMode();
+		await session.save();
+		assert.equal(await readFile(file, 'utf8'), 'original\n');
+		await session.input('<C-r>');
+		await session.inputMode();
+		await session.save();
+		assert.equal(await readFile(file, 'utf8'), '');
+	} finally {
+		await session.stop();
+	}
+});
+
 test('unsaved drafts survive a new Neovim session and restore without writing the file, with native undo', async (context) => {
 	const root = await fixture(context);
 	const file = join(root, 'notes.txt');
