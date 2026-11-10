@@ -5030,6 +5030,33 @@ test('Completion keeps pending navigation blocked and closes on punctuation', as
 	await expect(menu).toHaveCount(0);
 });
 
+test('a failed file operation shows its reason without the IPC channel', async ({ page }) => {
+	await page.goto(`${origin}?view=explorer&defer=fileAction`);
+	await page.evaluate(() =>
+		window.rendererTest.render({
+			request: { action: 'createFile', path: '', title: 'New file', value: 'taken.ts' }
+		})
+	);
+	const field = page.getByRole('textbox');
+	await expect(field).toHaveValue('taken.ts');
+	await field.press('Enter');
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	// Electron wraps an error from the main process in the name of the IPC channel.
+	await page.evaluate(() =>
+		window.rendererTest.settle(
+			'fileAction',
+			0,
+			new Error(
+				"Error invoking remote method 'nido:fileAction': Error: A file or folder already exists at that path."
+			),
+			true
+		)
+	);
+	await expect(page.getByRole('alert')).toHaveText(
+		'A file or folder already exists at that path.'
+	);
+});
+
 test('Explorer requests reset their field and clear the previous validation error', async ({
 	page
 }) => {

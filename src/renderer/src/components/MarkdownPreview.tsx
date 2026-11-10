@@ -1,5 +1,5 @@
 import { onNidoEvent } from '../nidoEvents';
-import { useI18n } from '../i18n';
+import { useErrorMessage, useI18n } from '../i18n';
 import { memo, useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -18,6 +18,7 @@ function MarkdownPreview({
 	focusEditor: () => void;
 }): React.JSX.Element {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	const [source, setSource] = useState<string>();
 	const [error, setError] = useState('');
 	const body = useRef<HTMLDivElement>(null);
@@ -153,7 +154,7 @@ function MarkdownPreview({
 			>
 				<article className={prose.prose}>
 					{error ? (
-						<p role="alert">{error}</p>
+						<p role="alert">{errorMessage(error)}</p>
 					) : source === undefined ? (
 						<p>{t('Loading…')}</p>
 					) : (
