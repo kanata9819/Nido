@@ -4589,6 +4589,41 @@ test('Notification replacement resets fading and cancels the previous dismissal'
 	await expect(page.getByRole('status')).toHaveCount(0);
 });
 
+test('warnings and errors stay long enough to read, and Escape still dismisses them', async ({
+	page
+}) => {
+	await pauseRendererClock(page);
+	await page.goto(`${origin}?view=notification`);
+	const notify = (severity: 'warning' | 'error'): Promise<void> =>
+		page.evaluate(
+			(severity) =>
+				window.rendererTest.emit({
+					type: 'notification',
+					id: 'alpha',
+					severity,
+					title: 'Time Machine',
+					message: 'Save this file to keep your changes.'
+				}),
+			severity
+		);
+	const notice = page.getByRole('alert');
+	for (const severity of ['warning', 'error'] as const) {
+		await notify(severity);
+		await expect(notice).toHaveText(/Save this file/);
+		// An informational notice would be gone by now.
+		await page.clock.runFor(7900);
+		await expect(notice).toHaveAttribute('data-fading', 'false');
+		await page.clock.runFor(100);
+		await expect(notice).toHaveAttribute('data-fading', 'true');
+		await page.clock.runFor(300);
+		await expect(notice).toHaveCount(0);
+	}
+	await notify('warning');
+	await expect(notice).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(notice).toHaveCount(0);
+});
+
 test('Favorite toggling permits only one pending request', async ({ page }) => {
 	await page.goto(`${origin}?view=favorites&defer=setWorkspaceFavorite`);
 	const toggle = page.getByRole('button', { name: 'Toggle favorite' });
