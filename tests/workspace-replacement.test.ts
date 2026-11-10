@@ -174,10 +174,17 @@ test('a file changed on disk while open in a background tab is reloaded and repl
 		await session.openFile('shown.txt');
 		// Another program, such as a Git checkout, rewrites the file behind the hidden tab.
 		await writeFile(join(root, 'background.txt'), 'new needle and more\n');
+		// Look the buffer up by its file name: on Windows the temporary folder's path can be a
+		// short 8.3 alias, while the buffer is named by the folder's real path.
 		const lines = (): Promise<string[]> =>
 			session.client.request('nvim_exec_lua', [
-				'return vim.api.nvim_buf_get_lines(vim.fn.bufnr(...), 0, -1, false)',
-				[join(root, 'background.txt')]
+				`for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+  if vim.fs.basename(vim.api.nvim_buf_get_name(buffer)) == ... then
+    return vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
+  end
+end
+error('No buffer for ' .. ...)`,
+				['background.txt']
 			]) as Promise<string[]>;
 		const result = await session.searchText('needle', defaultSearchOptions);
 		const preview = await session.previewReplacement(result.token!, 'thread', [0]);
