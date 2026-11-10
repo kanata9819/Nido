@@ -373,6 +373,18 @@ test('ignore decorations follow Git rules, exceptions and tracked files', async 
 	}
 });
 
+test('a new branch name that Git does not accept is reported as such', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-branch-name-'));
+	try {
+		execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root, windowsHide: true });
+		for (const name of ['two..dots', 'with space', 'ends.lock', 'tilde~1']) {
+			await assert.rejects(gitSwitch(root, name, true), { message: 'Invalid branch name.' });
+		}
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('Git that exits before reading a long path list reports its failure without a pipe error', async () => {
 	const plain = await mkdtemp(join(tmpdir(), 'nido-ignore-plain-'));
 	const ceiling = process.env.GIT_CEILING_DIRECTORIES;
