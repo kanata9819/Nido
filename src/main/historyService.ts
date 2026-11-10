@@ -50,11 +50,14 @@ export class HistoryService {
 						// The editor can decode other encodings; never archive a lossy disk baseline.
 						return;
 					}
-					const fileformat = original.includes('\r\n')
-						? 'dos'
-						: original.includes('\r')
-							? 'mac'
-							: 'unix';
+					// Read line endings as Neovim does: CRLF only when every line ends in it,
+					// so a file with mixed endings keeps its CR characters. Without any LF
+					// there is nothing to detect, and the buffer's own format applies.
+					const fileformat = original.includes('\n')
+						? /(?:^|[^\r])\n/.test(original)
+							? 'unix'
+							: 'dos'
+						: value.fileformat;
 					original =
 						fileformat === 'dos'
 							? original.replaceAll('\r\n', '\n')

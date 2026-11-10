@@ -431,6 +431,35 @@ test('the first dirty snapshot preserves the disk baseline line endings independ
 	}
 });
 
+test('the disk baseline of a file with mixed line endings restores to the same bytes', async (context) => {
+	const root = await fixture(context);
+	const file = join(root, 'mixed.txt');
+	const original = 'first\r\nsecond\nthird\r\n';
+	await writeFile(file, original);
+	const session = await Session.create(root, () => {});
+	const service = new HistoryService(new LocalHistory(join(root, 'history')));
+	try {
+		await session.openFile('mixed.txt');
+		await session.client.request('nvim_buf_set_lines', [0, 1, 2, false, ['draft']]);
+		const { path, versions } = await service.list(session);
+		const saved = versions.find((version) => version.kind === 'saved')!;
+		// Neovim reads CRLF only when every line ends in it; this buffer keeps its CRs.
+		const baseline = await service.store.version(path, saved.id);
+		assert.equal(baseline.fileformat, 'unix');
+		assert.equal(baseline.text, original);
+		const preview = await service.preview(session, path, saved.id);
+		assert.deepEqual(
+			preview.diff.split('\n').filter((line) => /^[-+]/.test(line)),
+			['-second', '+draft']
+		);
+		await service.restore(session, path, saved.id, preview.token);
+		await session.save();
+		assert.equal(await readFile(file, 'utf8'), original);
+	} finally {
+		await session.stop();
+	}
+});
+
 test('history write failures before restoration keep the buffer intact and failures afterward report partial success', async (context) => {
 	const root = await fixture(context);
 	const file = join(root, 'notes.txt');
