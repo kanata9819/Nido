@@ -373,6 +373,18 @@ test('ignore decorations follow Git rules, exceptions and tracked files', async 
 	}
 });
 
+test('a new branch name that Git does not accept is reported as such', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-branch-name-'));
+	try {
+		execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root, windowsHide: true });
+		for (const name of ['two..dots', 'with space', 'ends.lock', 'tilde~1']) {
+			await assert.rejects(gitSwitch(root, name, true), { message: 'Invalid branch name.' });
+		}
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('side-by-side diffs align replacements, additions, deletions and source line numbers', () => {
 	const rows = splitDiff(
 		'diff --git a/file b/file\n--- a/file\n+++ b/file\n@@ -1,4 +1,5 @@\n context\n-old\n+new\n+extra\n tail\n-last\n+end\n+final\n\\ No newline at end of file\n'

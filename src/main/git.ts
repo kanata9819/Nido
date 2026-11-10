@@ -129,7 +129,14 @@ export async function gitSwitch(cwd: string, name: string, create: boolean): Pro
 		throw new Error('Invalid branch name.');
 	}
 	if (create) {
-		await git(cwd, ['check-ref-format', `refs/heads/${name}`]);
+		try {
+			await git(cwd, ['check-ref-format', `refs/heads/${name}`]);
+		} catch (error) {
+			// Git rejects the name without a message; the failed command line is no help.
+			throw (error as Error).message.startsWith('Git is not installed')
+				? error
+				: new Error('Invalid branch name.');
+		}
 		await git(cwd, ['switch', '-c', name]);
 		return;
 	}
