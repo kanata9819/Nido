@@ -2827,6 +2827,83 @@ test('EditorConfig toggles existing buffers, indentation guides and save rules',
 	}
 });
 
+test('Git gutter signs compare committed bytes as the buffer reads them', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-git-signs-encoding-'));
+	let session: Session | undefined;
+	const git = (...args: string[]): void => {
+		execFileSync('git', args, { cwd: root });
+	};
+	const files: Record<string, Buffer> = {
+		'bom.txt': Buffer.from('\uFEFFone\ntwo\nthree\n'),
+		'bom-crlf.txt': Buffer.from('\uFEFFone\r\ntwo\r\nthree\r\n'),
+		'latin1.txt': Buffer.from('caf\xe9\ntwo\nna\xefve\n', 'latin1'),
+		'utf16.txt': Buffer.concat([
+			Buffer.from([0xff, 0xfe]),
+			Buffer.from('one\ntwo\nthree\n', 'utf16le')
+		]),
+		'mixed.txt': Buffer.from('one\r\ntwo\nthree\r\n')
+	};
+	try {
+		git('init', '-q');
+		// Commit the bytes as they are, whatever the machine's line ending conversion.
+		git('config', 'core.autocrlf', 'false');
+		for (const [name, content] of Object.entries(files)) {
+			await writeFile(join(root, name), content);
+		}
+		git('add', '.');
+		git(
+			'-c',
+			'user.name=Nido Test',
+			'-c',
+			'user.email=nido@example.test',
+			'commit',
+			'-qm',
+			'base'
+		);
+		session = await Session.create(root, () => {});
+		const signs = (expected: [number, string][]): ReturnType<Session['client']['request']> =>
+			session!.client.request('nvim_exec_lua', [
+				`
+local expected = ...
+local buffer = vim.api.nvim_get_current_buf()
+local namespace = vim.api.nvim_get_namespaces().nido_git_signs
+local function signs()
+  local result = {}
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buffer, namespace, 0, -1, {details=true})) do
+    table.insert(result, {mark[2], mark[4].sign_hl_group})
+  end
+  return result
+end
+local module = require('nido_git_signs')
+local system, finished = vim.system, 0
+vim.system = function(command, options, callback)
+  return system(command, options, function(result)
+    callback(result)
+    if vim.tbl_contains(command, 'show') then vim.schedule(function() finished = finished + 1 end) end
+  end)
+end
+module.refresh(buffer)
+-- Signs are empty before the comparison too: wait for the committed file to be read.
+local ok = vim.wait(5000, function()
+  return (#expected > 0 or finished > 0) and vim.deep_equal(signs(), expected)
+end, 20)
+vim.system = system
+assert(ok, vim.fn.bufname(buffer) .. ': ' .. vim.inspect(signs()))`,
+				[expected]
+			]);
+		for (const name of Object.keys(files)) {
+			await session.openFile(name);
+			await signs([]);
+			// An edit is still found, on its own line only.
+			await session.client.request('nvim_buf_set_lines', [0, 1, 2, false, ['changed']]);
+			await signs([[1, 'NidoGitChanged']]);
+		}
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('Git gutter signs track HEAD, unsaved edits, deletions, new files and commits', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-git-signs-'));
 	let session: Session | undefined;
