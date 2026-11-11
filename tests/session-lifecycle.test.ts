@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { Session } from '../src/main/session';
 import type { NidoEvent } from '../src/shared/types';
 import { SessionFiles } from '../src/main/sessionFiles';
+import { neovimError } from '../src/main/sessionClient';
 
 // The neovim package replaces console methods for the process when its logger is created.
 const consoleAtStart = { ...console };
@@ -693,3 +694,41 @@ test(
 		}
 	}
 );
+
+test('a Lua error raised on purpose reaches the user without its location or stack traceback', async () => {
+	assert.equal(
+		neovimError(
+			'nvim_exec_lua',
+			"Error executing lua: C:\\Program Files\\nido\\resources\\nido\\lua\\nido_buffers.lua:79: File is unavailable: C:\\work\\a.txt\nstack traceback:\n\t[C]: in function 'assert'\n\tC:\\Program Files\\nido\\resources\\nido\\lua\\nido_buffers.lua:79: in function 'reopen'\n\t[string \"<nvim>\"]:1: in main chunk"
+		).message,
+		'File is unavailable: C:\\work\\a.txt'
+	);
+	// An unexpected failure keeps its location and traceback, which say where the bug is.
+	const unexpected =
+		'Error executing lua: [string "<nvim>"]:1: attempt to index a nil value\nstack traceback:\n\t[string "<nvim>"]:1: in main chunk';
+	assert.equal(neovimError('nvim_exec_lua', unexpected).message, `nvim_exec_lua: ${unexpected}`);
+	assert.equal(
+		neovimError('nvim_buf_delete', 'Invalid buffer id: 99').message,
+		'nvim_buf_delete: Invalid buffer id: 99'
+	);
+
+	const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-lua-error-')));
+	const session = await Session.create(root, () => {});
+	try {
+		await writeFile(join(root, 'notes.txt'), 'notes\n');
+		await session.openFile('notes.txt');
+		await session.closeBuffer(
+			(await session.client.request('nvim_get_current_buf', [])) as number
+		);
+		await rm(join(root, 'notes.txt'));
+		await assert.rejects(session.reopenBuffer(), {
+			message: `File is unavailable: ${join(root, 'notes.txt')}`
+		});
+		await assert.rejects(session.markdownPreview(), {
+			message: 'Open a Markdown file to preview.'
+		});
+	} finally {
+		await session.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});

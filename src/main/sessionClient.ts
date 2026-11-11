@@ -33,6 +33,20 @@ function clientLogger(): ClientLogger {
 }
 
 /**
+ * The error for a failed request. A message that Lua code raises on purpose, with error() or
+ * assert(), is shown to the user as it is: without the request name, the Lua file and line
+ * it came from, or the stack traceback. Any other failure, such as indexing nil, keeps them,
+ * because they say where the bug is.
+ */
+export function neovimError(name: string, message: string): Error {
+	const raised =
+		/^Error executing lua: (?:(?:\[string "[^"\n]*"\]|[^\n]+?\.lua):\d+: )?([\s\S]*?)\nstack traceback:\n\s*\[C\]: in function '(?:error|assert)'/.exec(
+			message
+		);
+	return new Error(raised ? raised[1] : `${name}: ${message}`);
+}
+
+/**
  * RPC client for one Neovim process, extending NeovimClient from the `neovim` package.
  * request('nvim_<name>', args) calls a Neovim API function and resolves with its result.
  *
@@ -88,7 +102,7 @@ export class SessionClient extends NeovimClient {
 						name,
 						args,
 						(error: [number, string] | null, result: unknown) => {
-							finish(error ? new Error(`${name}: ${error[1]}`) : null, result);
+							finish(error ? neovimError(name, error[1]) : null, result);
 						}
 					);
 				})
