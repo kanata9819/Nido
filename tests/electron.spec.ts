@@ -527,9 +527,10 @@ for (const animations of [true, false]) {
 			await expect(error).toHaveText('Workspace is no longer running.');
 			await expect(input).toBeFocused();
 			await expect(error).toHaveCSS('transition-duration', animations ? '0.3s' : '0s');
-			await page.clock.runFor(1500);
+			// The same error again restarts its eight seconds.
+			await page.clock.runFor(7000);
 			await showError();
-			await page.clock.runFor(1500);
+			await page.clock.runFor(7500);
 			await expect(error).toHaveCSS('opacity', '1');
 			await page.clock.runFor(500);
 			if (animations) {
