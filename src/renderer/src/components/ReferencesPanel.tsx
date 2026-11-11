@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useI18n } from '../i18n';
+import { useErrorMessage, useI18n } from '../i18n';
 import { createPortal } from 'react-dom';
 import type { ReferenceList, ReferencePreview } from '../../../shared/types';
 import FileIcon from './FileIcon';
@@ -35,6 +35,7 @@ function ReferencePreviewContent({
 	error
 }: Omit<PreviewContent, 'key' | 'index'>): React.JSX.Element {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	return (
 		<>
 			<header>
@@ -57,7 +58,7 @@ function ReferencePreviewContent({
 						</div>
 					))
 				) : (
-					<p>{error || t('Loading preview…')}</p>
+					<p>{error ? errorMessage(error) : t('Loading preview…')}</p>
 				)}
 			</div>
 		</>
@@ -76,6 +77,7 @@ export default function ReferencesPanel({
 	onOpen
 }: Props): React.JSX.Element {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	const list = useRef<HTMLDivElement>(null);
 	const [selected, setSelected] = useState(0);
 	const [focused, setFocused] = useState(false);
@@ -333,7 +335,7 @@ export default function ReferencesPanel({
 						);
 					})}
 				</div>
-				{state.error && <p role="alert">{state.error}</p>}
+				{state.error && <p role="alert">{errorMessage(state.error)}</p>}
 				{!state.loading && !state.error && !state.items.length && (
 					<p>{t('No references found.')}</p>
 				)}

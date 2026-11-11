@@ -6406,6 +6406,83 @@ test('typing during an abandoned wake is dropped, even after an earlier wake fin
 	).toEqual([]);
 });
 
+test('Git errors show their reason alone, translated, in the panel and the diff', async ({
+	page
+}) => {
+	await page.addInitScript(() => localStorage.setItem('nido.language', 'ja'));
+	await page.goto(`${origin}?view=app&defer=gitStatus,gitDiff,gitStage`);
+	await expect(
+		page.getByRole('tab', { name: 'ワークスペース Alpha', exact: true })
+	).toBeVisible();
+	const settleStatus = (): Promise<void> =>
+		page.evaluate(() => {
+			for (const call of window.rendererTest.pending.filter(
+				(entry) => entry.method === 'gitStatus'
+			)) {
+				void call;
+				window.rendererTest.settle('gitStatus', 0, {
+					root: '/alpha',
+					branch: 'main',
+					changes: [{ path: 'renamed.txt', status: 'R', staged: true }]
+				});
+			}
+		});
+	await page.keyboard.press('Control+Shift+g');
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some((call) => call.method === 'gitStatus')
+			)
+		)
+		.toBe(true);
+	await settleStatus();
+	// Electron wraps an error from the main process in the name of the IPC channel.
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some((call) => call.method === 'gitDiff')
+			)
+		)
+		.toBe(true);
+	await page.evaluate(() =>
+		window.rendererTest.settle(
+			'gitDiff',
+			0,
+			new Error(
+				"Error invoking remote method 'nido:gitDiff': Error: This change no longer exists. Refresh the changes list."
+			),
+			true
+		)
+	);
+	const preview = page.locator('[data-git-preview]');
+	await expect(preview).toContainText('この変更はもうありません。変更の一覧を更新してください。');
+	await expect(preview).not.toContainText('invoking remote method');
+	// The change is staged, so u unstages it.
+	await page.getByRole('option', { name: 'renamed.txt' }).click();
+	await page.keyboard.press('u');
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some((call) => call.method === 'gitStage')
+			)
+		)
+		.toBe(true);
+	await page.evaluate(() =>
+		window.rendererTest.settle(
+			'gitStage',
+			0,
+			new Error(
+				"Error invoking remote method 'nido:gitStage': Error: Git is not installed or is not on PATH."
+			),
+			true
+		)
+	);
+	await settleStatus();
+	await expect(page.getByRole('alert')).toHaveText(
+		'Gitがインストールされていないか、PATHにありません。'
+	);
+});
+
 test('Indentation shows in the status bar and changes from the palette by mouse or keyboard', async ({
 	page
 }) => {

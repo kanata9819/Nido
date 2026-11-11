@@ -180,6 +180,19 @@ test('main-process error messages are translated, with their values and prefixes
 		translateMessage('ja', 'Error: Workspace was closed.'),
 		'ワークスペースは閉じられました。'
 	);
+	// Messages that the editor's Lua code raises with the file or shell they are about.
+	assert.equal(
+		translateMessage('ja', 'File is unavailable: C:\\work\\notes.txt'),
+		'ファイルを開けません：C:\\work\\notes.txt'
+	);
+	assert.equal(
+		translateMessage('ja', 'Shell is not installed or not on PATH: pwsh.exe'),
+		'シェルがインストールされていないか、PATHにありません：pwsh.exe'
+	);
+	assert.equal(
+		translateMessage('ja', 'Stage changes before committing.'),
+		'コミットする前に、変更をステージしてください。'
+	);
 	// Unknown messages, such as output from external tools, and UI-label templates stay as they are.
 	for (const message of ['tsserver: unexpected token', 'Line 5', 'Workspace Alpha']) {
 		assert.equal(translateMessage('ja', message), message);

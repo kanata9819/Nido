@@ -87,9 +87,7 @@ export function useGitPanel({
 			await action();
 			await refresh();
 		} catch (failure) {
-			setError(
-				String(failure).replace(/^Error: Error invoking remote method '[^']+': Error: /, '')
-			);
+			setError(String(failure));
 		} finally {
 			locked.current = false;
 			setBusy(false);
@@ -113,12 +111,7 @@ export function useGitPanel({
 				},
 				(failure) => {
 					if (!cancelled) {
-						setError(
-							String(failure).replace(
-								/^Error: Error invoking remote method '[^']+': Error: /,
-								''
-							)
-						);
+						setError(String(failure));
 					}
 				}
 			)
