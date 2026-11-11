@@ -6082,6 +6082,32 @@ test('editor font size accepts half sizes and keeps the last valid one', async (
 	await expect(page.getByRole('spinbutton', { name: 'Editor font size' })).toHaveValue('9.5');
 });
 
+test('number settings can be cleared and retyped', async ({ page }) => {
+	await page.goto(`${origin}?view=app`);
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	for (const [name, key, typed] of [
+		['Editor font size', 'nido.fontSize', '18'],
+		['Editor font weight', 'nido.fontWeight', '400'],
+		['Editor line height', 'nido.lineHeight', '22'],
+		['Sticky Scroll maximum lines', 'nido.stickyScrollMaxLines', '8']
+	]) {
+		const input = page.getByRole('spinbutton', { name });
+		await input.click();
+		await page.keyboard.press('ControlOrMeta+A');
+		await page.keyboard.press('Backspace');
+		// An empty field waits for the next number instead of springing back to the old one.
+		await expect(input).toHaveValue('');
+		await page.keyboard.type(typed);
+		await expect(input).toHaveValue(typed);
+		await expect.poll(() => page.evaluate((k) => localStorage.getItem(k), key)).toBe(typed);
+	}
+	// Leaving a field that holds an invalid number shows the last valid one again.
+	const lines = page.getByRole('spinbutton', { name: 'Sticky Scroll maximum lines' });
+	await lines.fill('11');
+	await lines.blur();
+	await expect(lines).toHaveValue('8');
+});
+
 test('scroll keys move type information and any other key closes it and continues in the editor', async ({
 	page
 }) => {
