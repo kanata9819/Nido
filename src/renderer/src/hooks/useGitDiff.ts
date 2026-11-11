@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { GitChange, GitStatus } from '../../../shared/types';
-import { useI18n } from '../i18n';
+import { useErrorMessage, useI18n } from '../i18n';
 
 export function useGitDiff(
 	workspaceId: string,
@@ -8,18 +8,22 @@ export function useGitDiff(
 	status: GitStatus | undefined
 ): string {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	const [diffResult, setDiffResult] = useState<{
 		workspaceId: string;
 		change: GitChange;
 		status: GitStatus | undefined;
 		value: string;
+		failed?: boolean;
 	}>();
 	const diff = !current
 		? t('Select a change to preview its diff.')
 		: diffResult?.workspaceId === workspaceId &&
 			  diffResult.change === current &&
 			  diffResult.status === status
-			? diffResult.value
+			? diffResult.failed
+				? errorMessage(diffResult.value)
+				: diffResult.value
 			: t('Loading diff…');
 	useEffect(() => {
 		let cancelled = false;
@@ -44,7 +48,8 @@ export function useGitDiff(
 							workspaceId,
 							change: current,
 							status,
-							value: String(failure)
+							value: String(failure),
+							failed: true
 						});
 					}
 				});

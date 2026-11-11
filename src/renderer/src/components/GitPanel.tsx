@@ -1,4 +1,4 @@
-import { useI18n } from '../i18n';
+import { useErrorMessage, useI18n } from '../i18n';
 import { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import { Check, GitBranch, RefreshCw } from 'lucide-react';
 import styles from '../assets/GitPanel.module.css';
@@ -18,6 +18,7 @@ export default function GitPanel({
 	setMessage: (message: string) => void;
 }): React.JSX.Element {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	const messageId = useId();
 	const {
 		status,
@@ -286,7 +287,7 @@ export default function GitPanel({
 			</div>
 			{error && (
 				<p className={styles.error} role="alert">
-					{error}
+					{errorMessage(error)}
 				</p>
 			)}
 			{notice && (

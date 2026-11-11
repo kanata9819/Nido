@@ -1,4 +1,4 @@
-import { useI18n } from '../i18n';
+import { useErrorMessage, useI18n } from '../i18n';
 import type { GitView } from '../types';
 import { useEffect, useRef, useState } from 'react';
 import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
@@ -17,6 +17,7 @@ export default function GitBrowser({
 	onClose: () => void;
 }): React.JSX.Element {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	const [view, setView] = useState<GitView>('changes');
 	const [message, setMessage] = useState('');
 	const [revision, setRevision] = useState(0);
@@ -31,6 +32,7 @@ export default function GitBrowser({
 		commit: GitCommitEntry;
 		path: string;
 		value: string;
+		failed?: boolean;
 	}>();
 	const [newBranchName, setNewBranchName] = useState('');
 	const [creating, setCreating] = useState(false);
@@ -56,9 +58,7 @@ export default function GitBrowser({
 		try {
 			await action();
 		} catch (failure) {
-			setError(
-				String(failure).replace(/^Error: Error invoking remote method '[^']+': Error: /, '')
-			);
+			setError(String(failure));
 		} finally {
 			locked.current = false;
 			setBusy(false);
@@ -111,12 +111,7 @@ export default function GitBrowser({
 			} catch (failure) {
 				if (!cancelled) {
 					setCommitCount(undefined);
-					setError(
-						String(failure).replace(
-							/^Error: Error invoking remote method '[^']+': Error: /,
-							''
-						)
-					);
+					setError(String(failure));
 				}
 			} finally {
 				if (!cancelled) {
@@ -138,7 +133,9 @@ export default function GitBrowser({
 			: diffResult?.workspaceId === workspaceId &&
 				  diffResult.commit === commit &&
 				  diffResult.path === path
-				? diffResult.value
+				? diffResult.failed
+					? errorMessage(diffResult.value)
+					: diffResult.value
 				: t('Loading diff…');
 	useEffect(() => {
 		let cancelled = false;
@@ -159,7 +156,13 @@ export default function GitBrowser({
 			})
 			.catch((failure) => {
 				if (!cancelled) {
-					setDiffResult({ workspaceId, commit, path, value: String(failure) });
+					setDiffResult({
+						workspaceId,
+						commit,
+						path,
+						value: String(failure),
+						failed: true
+					});
 				}
 			});
 		return () => {
@@ -398,7 +401,7 @@ export default function GitBrowser({
 					)}
 					{error && (
 						<p role="alert" className={styles.error}>
-							{error}
+							{errorMessage(error)}
 						</p>
 					)}
 					<footer>

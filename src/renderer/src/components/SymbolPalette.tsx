@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { DocumentSymbolList } from '../../../shared/types';
 import { filterItems } from '../commands';
 import { useFocusGuard } from '../hooks/useFocusGuard';
-import { useI18n } from '../i18n';
+import { useErrorMessage, useI18n } from '../i18n';
 import PaletteItems from './PaletteItems';
 
 export default function SymbolPalette({
@@ -17,6 +17,7 @@ export default function SymbolPalette({
 	focusEditor: () => void;
 }): React.JSX.Element {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	const [version, setVersion] = useState<number>();
 	const [query, setQuery] = useState('');
 	const [selection, setSelection] = useState(0);
@@ -84,7 +85,7 @@ export default function SymbolPalette({
 			query={query}
 			loading={loading}
 			message={
-				failure ||
+				(failure && errorMessage(failure)) ||
 				current?.error ||
 				(!query && !current?.items.length ? 'No symbols found in this file.' : '')
 			}

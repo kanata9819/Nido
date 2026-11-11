@@ -306,7 +306,8 @@ export default function TypeInformation({
 								}
 							}}
 						>
-							{info.markdown}
+							{/* Nido's own notices, such as "No type information at this position." */}
+							{t(info.markdown)}
 						</Markdown>
 					</div>
 					{linkError && <p role="alert">{errorMessage(linkError)}</p>}

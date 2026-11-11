@@ -912,7 +912,64 @@ export const japanese: Record<string, string> = {
 		'{name}のNeovimが予期せず終了しました（シグナル{signal}）。',
 	'Neovim connection closed: {message}': 'Neovimとの接続が切れました：{message}',
 	'Bundled editor resource is missing: {file}. Reinstall Nido, or run pnpm prepare:neovim in development.':
-		'同梱のエディターのリソースが見つかりません：{file}。Nidoを再インストールするか、開発中ならpnpm prepare:neovimを実行してください。'
+		'同梱のエディターのリソースが見つかりません：{file}。Nidoを再インストールするか、開発中ならpnpm prepare:neovimを実行してください。',
+	'Enter an absolute folder path.': 'フォルダーの絶対パスを入力してください。',
+	'Choose a WSL distribution and an absolute Linux folder path.':
+		'WSLのディストリビューションと、Linuxの絶対パスを選んでください。',
+	'The file belongs to another WSL distribution.':
+		'このファイルは、別のWSLのディストリビューションのものです。',
+	'WSL editor setup did not return its runtime paths.':
+		'WSLのエディターの準備で、実行に必要なパスが返されませんでした。',
+	'Open a Markdown file to preview.': 'プレビューするにはMarkdownのファイルを開いてください。',
+	// Git panel messages.
+	'Git is not installed or is not on PATH.':
+		'Gitがインストールされていないか、PATHにありません。',
+	'Open a Git working tree.': 'Gitの作業ツリーを開いてください。',
+	'Branch no longer exists. Refresh the list.':
+		'このブランチはもうありません。一覧を更新してください。',
+	'Invalid branch name.': 'ブランチ名が正しくありません。',
+	'Enter a commit message (up to 10,000 characters).':
+		'コミットメッセージを入力してください（10,000文字まで）。',
+	'Stage changes before committing.': 'コミットする前に、変更をステージしてください。',
+	'This change no longer exists. Refresh the changes list.':
+		'この変更はもうありません。変更の一覧を更新してください。',
+	'File is not part of this commit.': 'このファイルは、このコミットに含まれていません。',
+	// Messages from the editor's Lua code, shown in notices, cards and panels.
+	'Buffer has unsaved changes.': 'このバッファーには未保存の変更があります。',
+	'File is unavailable: {path}': 'ファイルを開けません：{path}',
+	'Could not open file.': 'ファイルを開けませんでした。',
+	'Buffer cannot be modified': 'このバッファーは変更できません',
+	'Buffer has no indentation settings': 'このバッファーにはインデントの設定がありません',
+	'No type information at this position.': 'この位置には型情報がありません。',
+	'Language server request failed.': '言語サーバーへの要求に失敗しました。',
+	'No language server supports references for this file.':
+		'このファイルの参照に対応した言語サーバーがありません。',
+	'No references found at the cursor.': 'カーソル位置の参照は見つかりませんでした。',
+	'References changed. Select a result again.':
+		'参照の一覧が変わりました。もう一度選んでください。',
+	'Reference is no longer available.': 'この参照はもう使えません。',
+	'The references request timed out.': '参照の取得がタイムアウトしました。',
+	'The language server could not accept the references request.':
+		'言語サーバーが参照の要求を受け付けませんでした。',
+	'Code changed; try running again.': 'コードが変更されました。もう一度実行してください。',
+	'Place the cursor inside main, a test or a test module.':
+		'main、テスト、またはテストモジュールの中にカーソルを置いてください。',
+	'Required language tools are not installed.': '必要な言語ツールがインストールされていません。',
+	'Shell is not installed or not on PATH: {command}':
+		'シェルがインストールされていないか、PATHにありません：{command}',
+	'Bundled CodeLLDB is missing. Run pnpm prepare:neovim.':
+		'同梱のCodeLLDBが見つかりません。pnpm prepare:neovimを実行してください。',
+	'Choose a debug target': 'デバッグする対象を選んでください',
+	'No debug session is running': '実行中のデバッグセッションはありません',
+	'No target selection pending': '選択待ちの対象はありません',
+	'Only Cargo runnables are supported': 'Cargoの実行対象にのみ対応しています',
+	'Open a source file first': '先にソースファイルを開いてください',
+	'Pause the debugger before stepping': 'ステップ実行の前に、デバッガーを一時停止してください',
+	'Save modified files before debugging or running':
+		'デバッグや実行の前に、変更したファイルを保存してください',
+	'Stop the current run or debugger first':
+		'先に、実行中のプログラムかデバッガーを止めてください',
+	'This Cargo command cannot be debugged': 'このCargoコマンドはデバッグできません'
 };
 
 export function translate(
@@ -936,7 +993,9 @@ const messageTemplates = [
 	'Neovim for {name} stopped unexpectedly (exit code {code}).',
 	'Neovim for {name} stopped unexpectedly (signal {signal}).',
 	'Neovim connection closed: {message}',
-	'Bundled editor resource is missing: {file}. Reinstall Nido, or run pnpm prepare:neovim in development.'
+	'Bundled editor resource is missing: {file}. Reinstall Nido, or run pnpm prepare:neovim in development.',
+	'File is unavailable: {path}',
+	'Shell is not installed or not on PATH: {command}'
 ].map((template) => ({
 	template,
 	pattern: new RegExp(
