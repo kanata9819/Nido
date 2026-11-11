@@ -969,7 +969,19 @@ export const japanese: Record<string, string> = {
 		'デバッグや実行の前に、変更したファイルを保存してください',
 	'Stop the current run or debugger first':
 		'先に、実行中のプログラムかデバッガーを止めてください',
-	'This Cargo command cannot be debugged': 'このCargoコマンドはデバッグできません'
+	'This Cargo command cannot be debugged': 'このCargoコマンドはデバッグできません',
+	'Could not start {command}': '{command}を起動できませんでした',
+	'{command} is not installed or is not on PATH.':
+		'{command}がインストールされていないか、PATHにありません。',
+	'Language server exited ({code}, {signal}).':
+		'言語サーバーが終了しました（{code}、{signal}）。',
+	'Invalid symbols returned by the language server: {reason}':
+		'言語サーバーが正しくないシンボルを返しました：{reason}',
+	'Deno language server is not running.': 'Denoの言語サーバーが動いていません。',
+	'TS7 LSP not found. Install TypeScript 7 in the project or set typescript.command in {path}':
+		'TypeScript 7の言語サーバーが見つかりません。プロジェクトにTypeScript 7をインストールするか、次のファイルでtypescript.commandを設定してください：{path}',
+	'Rust language support needs rust-analyzer. Run: rustup component add rust-analyzer':
+		'Rustの言語サポートにはrust-analyzerが必要です。rustup component add rust-analyzerを実行してください'
 };
 
 export function translate(
@@ -995,7 +1007,12 @@ const messageTemplates = [
 	'Neovim connection closed: {message}',
 	'Bundled editor resource is missing: {file}. Reinstall Nido, or run pnpm prepare:neovim in development.',
 	'File is unavailable: {path}',
-	'Shell is not installed or not on PATH: {command}'
+	'Shell is not installed or not on PATH: {command}',
+	'Could not start {command}',
+	'{command} is not installed or is not on PATH.',
+	'Language server exited ({code}, {signal}).',
+	'Invalid symbols returned by the language server: {reason}',
+	'TS7 LSP not found. Install TypeScript 7 in the project or set typescript.command in {path}'
 ].map((template) => ({
 	template,
 	pattern: new RegExp(
