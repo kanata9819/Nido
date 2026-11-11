@@ -27,6 +27,9 @@ export default defineConfig({
 		}
 	],
 	timeout: 30000,
+	// On CI, a test that failed after net::ERR_NO_BUFFER_SPACE runs once more. Every other
+	// failure still fails: tests/helpers/renderer-test.ts stops its retry at the start.
+	retries: process.env.CI ? 1 : 0,
 	use: {
 		launchOptions: {
 			// Use SwiftShader only for the dedicated WebGL checks. Other tests
