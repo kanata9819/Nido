@@ -20,7 +20,9 @@ export default function ErrorToast({
 }): React.JSX.Element {
 	const t = useI18n();
 	const language = useContext(LanguageContext);
-	const fading = useNotificationDismissal(notice, animations, dismiss);
+	// Errors stay as long as warning and error notifications: leave time to read them.
+	// Esc and the button still dismiss them at once.
+	const fading = useNotificationDismissal(notice, animations, dismiss, 8000);
 	return (
 		<OverlayPresence>
 			{notice?.message ? (

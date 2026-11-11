@@ -4681,6 +4681,37 @@ test('warnings and errors stay long enough to read, and Escape still dismisses t
 	await expect(notice).toHaveCount(0);
 });
 
+test('an error notice stays long enough to read, and Escape still dismisses it', async ({
+	page
+}) => {
+	await pauseRendererClock(page);
+	await page.goto(`${origin}?view=app`);
+	await expect(page.getByRole('tab', { name: 'Workspace Alpha', exact: true })).toBeVisible();
+	const show = (): Promise<void> =>
+		page.evaluate(() =>
+			window.rendererTest.emit({
+				type: 'error',
+				id: 'alpha',
+				message:
+					"Error: Error invoking remote method 'nido:gitCommit': Error: Stage changes before committing."
+			})
+		);
+	const error = page.getByRole('alert').filter({ hasText: 'Stage changes before committing.' });
+	await show();
+	await expect(error).toHaveText('Stage changes before committing.');
+	// An informational notice would be gone by now.
+	await page.clock.runFor(7900);
+	await expect(error).toHaveAttribute('data-fading', 'false');
+	await page.clock.runFor(100);
+	await expect(error).toHaveAttribute('data-fading', 'true');
+	await page.clock.runFor(300);
+	await expect(error).toHaveCount(0);
+	await show();
+	await expect(error).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(error).toHaveCount(0);
+});
+
 test('Favorite toggling permits only one pending request', async ({ page }) => {
 	await page.goto(`${origin}?view=favorites&defer=setWorkspaceFavorite`);
 	const toggle = page.getByRole('button', { name: 'Toggle favorite' });
