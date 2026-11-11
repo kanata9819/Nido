@@ -20,8 +20,10 @@ export function buildProblemItems(
 }
 
 export function filterItems(items: Item[], query: string): Item[] {
-	const needle = query.toLowerCase();
-	return items.filter((item) => `${item.title} ${item.detail}`.toLowerCase().includes(needle));
+	// Windows paths use backslashes, but a query such as src/main is typed with slashes.
+	const comparable = (text: string): string => text.toLowerCase().replaceAll('\\', '/');
+	const needle = comparable(query);
+	return items.filter((item) => comparable(`${item.title} ${item.detail}`).includes(needle));
 }
 
 export function buildItems(

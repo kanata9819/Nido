@@ -347,7 +347,9 @@ export class SessionSearch {
 
 	async findFiles(query = ''): Promise<FileEntry[]> {
 		const generation = ++this.searchGeneration;
-		const needle = query.toLowerCase();
+		// Windows paths use backslashes, but a query such as src/main is typed with slashes.
+		const comparable = (text: string): string => text.toLowerCase().replaceAll('\\', '/');
+		const needle = comparable(query);
 		const result: FileEntry[] = [];
 		const directories = [''];
 		while (directories.length && result.length < 100) {
@@ -382,7 +384,7 @@ export class SessionSearch {
 					}
 				}
 				if (!entry.directory) {
-					if (`${entry.name} ${entry.path}`.toLowerCase().includes(needle)) {
+					if (comparable(`${entry.name} ${entry.path}`).includes(needle)) {
 						result.push(entry);
 					}
 					if (result.length >= 100) {
