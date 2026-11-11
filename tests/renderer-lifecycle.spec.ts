@@ -5496,6 +5496,87 @@ test('closing a terminal during startup keeps it closed and reuses the finished 
 	await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
 });
 
+for (const existingTerminal of [false, true]) {
+	test(`terminal toggle after switching workspaces ${existingTerminal ? 'reuses the visible terminal' : 'opens a missing terminal on the first press'}`, async ({
+		page
+	}) => {
+		await page.goto(`${origin}?view=app&defer=restoreWorkspaces,openTerminal`);
+		await page.evaluate(
+			(existing) =>
+				window.rendererTest.settle('restoreWorkspaces', 0, {
+					workspaces: [
+						{ id: 'alpha', root: '/alpha', name: 'Alpha', terminalId: 'alpha-shell' },
+						{
+							id: 'beta',
+							root: '/beta',
+							name: 'Beta',
+							...(existing ? { terminalId: 'beta-shell' } : {})
+						}
+					],
+					active: 'alpha',
+					errors: []
+				}),
+			existingTerminal
+		);
+		await expect(
+			page.getByRole('textbox', { name: 'Neovim input', exact: true })
+		).toBeFocused();
+		await page.keyboard.press('Control+`');
+		await expect(
+			page.getByRole('textbox', { name: 'Terminal input', exact: true })
+		).toBeFocused();
+		await page.keyboard.press('Alt+2');
+		await expect(
+			page.getByRole('tab', { name: 'Workspace Beta', exact: true })
+		).toHaveAttribute('aria-selected', 'true');
+		const visibleTerminal = page.locator('section[aria-label="Terminal"]:visible');
+		if (existingTerminal) {
+			await expect(visibleTerminal).toHaveCount(1);
+			await expect(visibleTerminal).toContainText('Beta');
+			await page.keyboard.press('Control+`');
+			await expect(visibleTerminal).toHaveCount(0);
+			await page.keyboard.press('Control+`');
+		} else {
+			await expect(visibleTerminal).toHaveCount(0);
+			await page.keyboard.press('Control+`');
+			await expect
+				.poll(() =>
+					page.evaluate(
+						() =>
+							window.rendererTest.calls.filter(
+								(call) => call.method === 'openTerminal'
+							).length
+					)
+				)
+				.toBe(1);
+			await page.evaluate(() =>
+				window.rendererTest.settle('openTerminal', 0, {
+					id: 'beta-shell',
+					root: '/beta',
+					name: 'Terminal Beta',
+					kind: 'terminal'
+				})
+			);
+		}
+		await expect(visibleTerminal).toHaveCount(1);
+		await expect(visibleTerminal).toContainText('Beta');
+		await expect(
+			visibleTerminal.getByRole('textbox', { name: 'Terminal input' })
+		).toBeFocused();
+		await page.keyboard.press('Control+`');
+		await expect(visibleTerminal).toHaveCount(0);
+		await page.keyboard.press('Control+`');
+		await expect(visibleTerminal).toHaveCount(1);
+		expect(
+			await page.evaluate(() =>
+				window.rendererTest.calls
+					.filter((call) => call.method === 'openTerminal')
+					.map((call) => call.args[0])
+			)
+		).toEqual(existingTerminal ? [] : ['beta']);
+	});
+}
+
 test('terminal startup in another workspace cannot take focus from the current editor', async ({
 	page
 }) => {
