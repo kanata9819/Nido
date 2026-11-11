@@ -47,6 +47,19 @@ pnpm build:win
 
 The end-to-end and Windows packaging tests can have additional environment requirements. Run the checks relevant to your change and explain anything you could not run in the PR.
 
+### Testing on Linux or macOS
+
+Nido itself runs on Windows, but most unit and renderer tests also run on Linux and macOS, which helps when you have no Windows machine at hand. Prepare the same pinned Neovim release for your platform, then run the tests:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm prepare:neovim:unix
+pnpm test
+pnpm test:renderer
+```
+
+`prepare:neovim:unix` downloads the Neovim release for your platform, checks its SHA256 and unpacks it into `resources/`. Tests that need PowerShell, Rust or the debugger still fail there; CI runs everything on Windows.
+
 ### Code layout
 
 - `src/main/` — Electron main-process code.

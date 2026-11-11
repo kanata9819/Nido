@@ -5,6 +5,8 @@ import { appendFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'no
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
+import { neovimBundle } from '../src/main/neovimBundle';
+import { neovimReleases } from '../scripts/prepare-neovim';
 
 const powershell = process.platform === 'win32' ? 'powershell.exe' : 'pwsh';
 const available =
@@ -149,3 +151,19 @@ for (const failure of ['checksum', 'missing resources'] as const) {
 		}
 	);
 }
+
+test('each platform finds its bundled Neovim where the preparation script puts it', async () => {
+	assert.deepEqual(neovimBundle('win32', 'x64'), {
+		folder: 'nvim-win64',
+		executable: 'nvim-win64/bin/nvim.exe'
+	});
+	for (const [platform, release] of Object.entries(neovimReleases)) {
+		const [name, arch] = platform.split('-');
+		assert.deepEqual(neovimBundle(name as NodeJS.Platform, arch), {
+			folder: release.folder,
+			executable: `${release.folder}/bin/nvim`
+		});
+		assert.match(release.sha256, /^[0-9a-f]{64}$/);
+	}
+	assert.throws(() => neovimBundle('freebsd', 'x64'), /not available for freebsd x64/);
+});
