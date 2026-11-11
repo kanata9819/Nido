@@ -6,6 +6,7 @@ import type { SearchMatch } from '../shared/types';
 import type { ReplacementPreview, ReplacementResult, SearchOptions } from '../shared/search';
 import { editorPath } from '../shared/wsl';
 import { SearchMatcher } from './searchMatcher';
+import { searchLineEnding } from './searchLines';
 
 const digest = (text: string | Buffer): string => createHash('sha256').update(text).digest('hex');
 const stale = 'Search results changed. Search again.';
@@ -19,7 +20,7 @@ interface ReplacementFile {
 }
 
 function context(text: string, selected: number[]): string {
-	const lines = text.split(/\r\n|\n|\r/);
+	const lines = text.split(searchLineEnding(text));
 	const rows = new Set<number>();
 	for (const line of selected) {
 		for (let row = Math.max(0, line - 3); row < Math.min(lines.length, line + 2); row++) {

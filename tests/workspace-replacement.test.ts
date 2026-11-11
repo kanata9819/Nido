@@ -271,3 +271,37 @@ test('an empty replacement deletes matches without changing final newline or BOM
 			assert.equal(await readFile(join(root, `${index}.txt`), 'utf8'), expected[index]);
 		}
 	}));
+
+test('embedded CR search positions and replacement previews agree with Neovim rows', () =>
+	fixture(async (session, root) => {
+		const samples = [
+			'prefix\rneedle\nnext\n',
+			'prefix\rneedle\r\nnext\r\n',
+			'prefix\rneedle\r\nnext\n'
+		];
+		for (let index = 0; index < samples.length; index++) {
+			await writeFile(join(root, `${index}.txt`), samples[index]);
+		}
+		const result = await session.searchText('needle', defaultSearchOptions);
+		assert.equal(result.matches.length, samples.length);
+		for (const match of result.matches) {
+			assert.equal(match.line, 1);
+			assert.equal(match.column, 8);
+			await session.openFile(match.path, match.line, match.column);
+			assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), [1, 7]);
+		}
+		const preview = await session.previewReplacement(result.token!, 'changed', [0, 1, 2]);
+		assert.equal(preview.count, 3);
+		for (const file of preview.files) {
+			assert.ok(file.before.startsWith('1  prefix\rneedle'));
+			assert.ok(file.after.startsWith('1  prefix\rchanged'));
+		}
+		await session.applyReplacement(preview.token);
+		await session.saveAll();
+		for (let index = 0; index < samples.length; index++) {
+			assert.equal(
+				await readFile(join(root, `${index}.txt`), 'utf8'),
+				samples[index].replace('needle', 'changed')
+			);
+		}
+	}));
