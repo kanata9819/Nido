@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { registerFileHandlers } from '../src/main/fileHandlers';
 import { windowsDrives } from '../src/main/folderBrowserHandlers';
 import type { Session } from '../src/main/session';
-import type { NidoEvent } from '../src/shared/types';
+import { SessionSearch } from '../src/main/sessionSearch';
+import type { WorkspaceReplacement } from '../src/main/workspaceReplacement';
+import type { FileEntry, NidoEvent } from '../src/shared/types';
+import { filterItems } from '../src/renderer/src/commands';
 
 test('file IPC validates requests and protects files open in other workspace sessions', async () => {
 	const root = resolve('file-handler-fixture');
@@ -115,4 +120,47 @@ test('the folder picker lists the Windows drives that can be opened, and none el
 	assert.equal(checked.length, 26);
 	assert.deepEqual(await windowsDrives('linux', readable), []);
 	assert.equal(checked.length, 26);
+});
+
+test('quick open matches folder separators typed either way', async () => {
+	// On Windows, listed paths use backslashes.
+	const listing: Record<string, FileEntry[]> = {
+		'': [
+			{ name: 'src', path: 'src', directory: true },
+			{ name: 'README.md', path: 'README.md', directory: false }
+		],
+		src: [{ name: 'main', path: 'src\\main', directory: true }],
+		'src\\main': [{ name: 'index.ts', path: 'src\\main\\index.ts', directory: false }]
+	};
+	// Every listed folder resolves to one real folder, which the listing cache can stat.
+	const folder = await mkdtemp(join(tmpdir(), 'nido-quick-open-'));
+	try {
+		const search = new SessionSearch(
+			folder,
+			async () => folder,
+			async (path) => listing[path] ?? [],
+			{ clear: () => {} } as unknown as WorkspaceReplacement
+		);
+		for (const query of ['src/main/index', 'src\\main\\index', 'SRC/Main/INDEX.ts']) {
+			assert.deepEqual(
+				(await search.findFiles(query)).map((file) => file.path),
+				['src\\main\\index.ts'],
+				query
+			);
+		}
+		assert.deepEqual(await search.findFiles('src/other'), []);
+		// The palette filters the results again with the same query.
+		const items = (await search.findFiles('src/main')).map((file) => ({
+			key: '',
+			title: file.name,
+			detail: file.path,
+			run: () => {}
+		}));
+		assert.deepEqual(
+			filterItems(items, 'src/main/index').map((item) => item.detail),
+			['src\\main\\index.ts']
+		);
+	} finally {
+		await rm(folder, { recursive: true, force: true });
+	}
 });
