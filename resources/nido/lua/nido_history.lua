@@ -5,6 +5,17 @@ local limit_warning = 'This unsaved file exceeds the Time Machine limit (4 MiB o
 local binary_warning = 'This unsaved file cannot be captured by Time Machine because it contains binary data. Save it to keep your changes.'
 local warned = {}
 
+local function end_of_line(buffer)
+  if not vim.bo[buffer].endofline then return false end
+  -- Both an empty file and a single newline have one empty buffer line and 'eol'.
+  -- wordcount() sees Neovim's empty-buffer flag, even after edits or API changes.
+  if vim.api.nvim_buf_line_count(buffer) == 1
+      and vim.api.nvim_buf_get_lines(buffer, 0, 1, false)[1] == '' then
+    return vim.api.nvim_buf_call(buffer, function() return vim.fn.wordcount().bytes > 0 end)
+  end
+  return true
+end
+
 local function snapshot(buffer, strict)
   if not vim.api.nvim_buf_is_loaded(buffer) or not vim.bo[buffer].buflisted
       or vim.bo[buffer].buftype ~= '' or vim.api.nvim_buf_get_name(buffer) == '' then
@@ -25,7 +36,8 @@ local function snapshot(buffer, strict)
     end
   end
   local text = table.concat(lines, '\n')
-  if vim.bo[buffer].endofline then text = text .. '\n' end
+  local ending = end_of_line(buffer)
+  if ending then text = text .. '\n' end
   if text:find('\0', 1, true) then
     if strict then return { error = 'Time Machine only supports text files.' } end
     return nil, binary_warning
@@ -37,7 +49,7 @@ local function snapshot(buffer, strict)
   return {
     path = vim.api.nvim_buf_get_name(buffer), buffer = buffer,
     tick = vim.api.nvim_buf_get_changedtick(buffer), modified = vim.bo[buffer].modified,
-    text = text, endOfLine = vim.bo[buffer].endofline, fileformat = vim.bo[buffer].fileformat,
+    text = text, endOfLine = ending, fileformat = vim.bo[buffer].fileformat,
   }
 end
 
@@ -63,7 +75,7 @@ function M.changed(tokens)
     if vim.api.nvim_buf_is_loaded(buffer) then
       local token = previous[buffer]
       if not token or token[2] ~= vim.api.nvim_buf_get_changedtick(buffer)
-          or token[3] ~= vim.bo[buffer].fileformat or token[4] ~= vim.bo[buffer].endofline then
+          or token[3] ~= vim.bo[buffer].fileformat or token[4] ~= end_of_line(buffer) then
         local value, warning = snapshot(buffer, false)
         if warning and vim.bo[buffer].modified then
           if warned[buffer] ~= warning and vim.g.nido_channel then
@@ -99,7 +111,7 @@ end
 function M.restore(path, token, value)
   local buffer = vim.api.nvim_get_current_buf()
   local actual = table.concat({ buffer, vim.api.nvim_buf_get_changedtick(buffer),
-    vim.bo[buffer].fileformat, tostring(vim.bo[buffer].endofline) }, ':')
+    vim.bo[buffer].fileformat, tostring(end_of_line(buffer)) }, ':')
   if vim.api.nvim_buf_get_name(buffer) ~= path or actual ~= token then
     return { error = 'The file changed. Refresh the preview before restoring.' }
   end
@@ -109,13 +121,16 @@ function M.restore(path, token, value)
   require('nido_scroll').restore()
   local lines = vim.split(value.text, '\n', { plain = true })
   if value.endOfLine and lines[#lines] == '' and #lines > 1 then table.remove(lines) end
+  -- Deleting every line preserves Neovim's truly empty-buffer flag. Setting one
+  -- empty line instead would make saving this revision write a newline.
+  if value.text == '' then lines = {} end
   local cursor = vim.api.nvim_win_get_cursor(0)
   -- A restoration is a new edit. Native undo can return to the previous draft.
   vim.api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
   vim.bo[buffer].endofline = value.endOfLine
   vim.bo[buffer].fileformat = value.fileformat
   vim.bo[buffer].modified = true
-  cursor[1] = math.min(cursor[1], #lines)
+  cursor[1] = math.min(cursor[1], math.max(1, #lines))
   cursor[2] = math.min(cursor[2], #(lines[cursor[1]] or ''))
   vim.api.nvim_win_set_cursor(0, cursor)
   return M.current()
