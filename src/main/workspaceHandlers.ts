@@ -465,8 +465,18 @@ export function registerWorkspaceHandlers({
 			}
 			const saved = await s.snapshot({ includeUntitled: true });
 			await captureHistory(s);
+			// Snapshot and history capture yield to editor activity. A new edit, prompt,
+			// debugger or shell must keep the workspace running instead of being discarded.
+			if (!(await s.canSleep())) {
+				return false;
+			}
 			// Check again after the last await: the workspace may have been selected meanwhile.
-			if (key === state.active || state.prompting || state.closing || !sessions.has(key)) {
+			if (
+				key === state.active ||
+				state.prompting ||
+				state.closing ||
+				sessions.get(key) !== s
+			) {
 				return false;
 			}
 			muted.add(key);
