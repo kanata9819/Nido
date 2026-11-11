@@ -262,11 +262,14 @@ export default function SettingsPanel({
 						min="1"
 						max="10"
 						step="1"
-						value={stickyScrollMaxLines}
+						defaultValue={stickyScrollMaxLines}
 						onChange={(event) => {
 							if (event.target.value && event.target.validity.valid) {
 								setStickyScrollMaxLines(event.target.valueAsNumber);
 							}
+						}}
+						onBlur={(event) => {
+							event.target.value = String(stickyScrollMaxLines);
 						}}
 					/>
 				</label>
