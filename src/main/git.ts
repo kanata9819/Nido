@@ -247,10 +247,22 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 		const path = record.slice(3);
 		const original = /[RC]/.test(status) ? records[++i] : undefined;
 		if (status[0] !== ' ' && status !== '??') {
-			changes.push({ path, original, status: status[0], staged: true });
+			changes.push({
+				path,
+				original: /[RC]/.test(status[0]) ? original : undefined,
+				status: status[0],
+				staged: true
+			});
 		}
 		if (status[1] !== ' ') {
-			changes.push({ path, original, status: status[1], staged: false });
+			// The second path belongs to the side that renamed/copied the file. Later
+			// edits at its new name must not stage the old name as well.
+			changes.push({
+				path,
+				original: /[RC]/.test(status[1]) ? original : undefined,
+				status: status[1],
+				staged: false
+			});
 		}
 	}
 	return { root, branch, changes };
