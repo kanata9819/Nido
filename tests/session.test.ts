@@ -138,7 +138,7 @@ test('input mode queries observe preceding queued keys before following text', a
 	}
 });
 
-test('favorite storage preserves entries independently and rejects invalid data', async () => {
+test('favorite storage preserves entries independently and sets damaged data aside', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-favorites-store-'));
 	const path = join(root, 'favorites.json');
 	try {
@@ -161,10 +161,17 @@ test('favorite storage preserves entries independently and rejects invalid data'
 			[{ root, kind: 'editor' }]
 		]) {
 			await writeFile(path, JSON.stringify(invalid));
-			await assert.rejects(readFavorites(path), /Invalid favorite workspace data/);
+			assert.deepEqual(await readFavorites(path), []);
+			// Damaged data is kept aside, and the next change starts a new list.
+			assert.equal(await readFile(`${path}.invalid`, 'utf8'), JSON.stringify(invalid));
+			await assert.rejects(readFile(path), { code: 'ENOENT' });
 		}
 		await writeFile(path, '{broken');
-		await assert.rejects(readFavorites(path), SyntaxError);
+		const [first, second] = await Promise.all([readFavorites(path), readFavorites(path)]);
+		assert.deepEqual([first, second], [[], []]);
+		assert.equal(await readFile(`${path}.invalid`, 'utf8'), '{broken');
+		await writeFavorites(path, favorites);
+		assert.deepEqual(await readFavorites(path), favorites);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

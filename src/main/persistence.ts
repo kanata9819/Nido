@@ -181,16 +181,38 @@ function retainExistingDrafts(previous: SavedLayout, current: SavedLayout): Save
 	};
 }
 
+/**
+ * Favorites have no backup, so damaged data would make every later read and change fail until
+ * the file was deleted by hand. It is moved aside to `favorites.json.invalid`, where it can
+ * still be recovered, and the list starts empty.
+ */
 export async function readFavorites(path: string): Promise<FavoriteWorkspace[]> {
-	let data: unknown;
+	let content: string;
 	try {
-		data = JSON.parse(await readFile(path, 'utf8'));
+		content = await readFile(path, 'utf8');
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
 			return [];
 		}
 		throw error;
 	}
+	try {
+		return parseFavorites(content);
+	} catch {
+		try {
+			await rename(path, `${path}.invalid`);
+		} catch (error) {
+			// A simultaneous read may have moved it already.
+			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+				throw error;
+			}
+		}
+		return [];
+	}
+}
+
+function parseFavorites(content: string): FavoriteWorkspace[] {
+	const data: unknown = JSON.parse(content);
 	if (
 		!Array.isArray(data) ||
 		!data.every(
