@@ -232,7 +232,9 @@ export default function LanguagePacksPanel({
 								{t('Enabled')}
 							</label>
 						</div>
-						{pack.message && <p className={styles.packError}>{t(pack.message)}</p>}
+						{pack.message && (
+							<p className={styles.packError}>{errorMessage(pack.message)}</p>
+						)}
 						{pack.setup && (
 							<code className={styles.installCommand}>{t(pack.setup)}</code>
 						)}

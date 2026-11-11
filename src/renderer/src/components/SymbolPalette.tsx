@@ -86,7 +86,7 @@ export default function SymbolPalette({
 			loading={loading}
 			message={
 				(failure && errorMessage(failure)) ||
-				current?.error ||
+				(current?.error && errorMessage(current.error)) ||
 				(!query && !current?.items.length ? 'No symbols found in this file.' : '')
 			}
 			setQuery={setQuery}
