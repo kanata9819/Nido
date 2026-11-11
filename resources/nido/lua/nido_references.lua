@@ -118,6 +118,9 @@ function M.preview(index, expected_version)
   local item = get_item(index, expected_version)
   local buffer = vim.fn.bufadd(item.filename)
   vim.fn.bufload(buffer)
+  -- A previously previewed file may have changed outside the editor while hidden.
+  -- Refresh it without switching files, but keep any unsaved buffer text.
+  if not vim.bo[buffer].modified then vim.cmd.checktime(buffer) end
   local line = math.min(item.lnum, vim.api.nvim_buf_line_count(buffer))
   local first = math.max(1, line - 8)
   local lines = vim.api.nvim_buf_get_lines(buffer, first - 1, math.min(line + 8, vim.api.nvim_buf_line_count(buffer)), false)

@@ -33,6 +33,76 @@ vim.lsp.get_clients = original`,
 	assert.equal(session.state.references?.items.length, 1);
 }
 
+test('reference previews reload external changes without switching files or changing readonly', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-reference-reload-'));
+	let session: Session | undefined;
+	try {
+		await writeFile(join(root, 'caller.txt'), 'caller\n');
+		const target = join(root, 'target.txt');
+		await writeFile(target, 'before\n');
+		session = await Session.create(root, () => {});
+		await session.openFile('caller.txt');
+		const active = await session.client.request('nvim_eval', ['bufnr()']);
+		await referenceTo(session, target);
+		const version = session.state.references!.version;
+		const before = await session.previewReference(1, version);
+		assert.equal(before.lines[0].map((span) => span.text).join(''), 'before');
+		await session.client.request('nvim_exec_lua', [
+			'vim.bo[vim.fn.bufnr(...)].readonly = true',
+			[target]
+		]);
+		await writeFile(target, 'changed externally\n');
+		const after = await session.previewReference(1, version);
+		assert.equal(after.lines[0].map((span) => span.text).join(''), 'changed externally');
+		assert.equal(await session.client.request('nvim_eval', ['bufnr()']), active);
+		assert.equal(
+			await session.client.request('nvim_exec_lua', [
+				'return vim.bo[vim.fn.bufnr(...)].readonly',
+				[target]
+			]),
+			true
+		);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('reference previews preserve unsaved target text after the disk file changes', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-reference-draft-'));
+	let session: Session | undefined;
+	try {
+		await writeFile(join(root, 'caller.txt'), 'caller\n');
+		const target = join(root, 'target.txt');
+		await writeFile(target, 'before\n');
+		session = await Session.create(root, () => {});
+		await session.openFile('caller.txt');
+		const active = await session.client.request('nvim_eval', ['bufnr()']);
+		await referenceTo(session, target);
+		const version = session.state.references!.version;
+		await session.previewReference(1, version);
+		await session.client.request('nvim_exec_lua', [
+			"vim.api.nvim_buf_set_lines(vim.fn.bufnr(...), 0, -1, false, {'unsaved target'})",
+			[target]
+		]);
+		await writeFile(target, 'changed externally\n');
+		const preview = await session.previewReference(1, version);
+		assert.equal(preview.lines[0].map((span) => span.text).join(''), 'unsaved target');
+		assert.equal(await session.client.request('nvim_eval', ['bufnr()']), active);
+		assert.equal(await readFile(target, 'utf8'), 'changed externally\n');
+		assert.equal(
+			await session.client.request('nvim_exec_lua', [
+				'return vim.bo[vim.fn.bufnr(...)].modified',
+				[target]
+			]),
+			true
+		);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('file tabs reorder, reopen in their original positions and retain their cursor', async () => {
 	const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-tab-order-')));
 	let session: Session | undefined;
