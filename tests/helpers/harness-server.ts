@@ -1,5 +1,5 @@
 import type { Browser, Page } from '@playwright/test';
-import { execFile } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createServer, type Plugin, type ViteDevServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
@@ -31,8 +31,10 @@ const harnessPage = (url: string): boolean => {
 const instrumentedPages = new WeakSet<Page>();
 /**
  * Windows CI runners now and then fail requests with net::ERR_NO_BUFFER_SPACE (WSAENOBUFS), the
- * error for running out of socket resources. Count the machine's TCP connections by state and
- * by process the first time it happens, while those sockets still exist, to show what holds them.
+ * error for running out of socket buffers or the memory behind them. The first time it happens,
+ * report the machine's TCP connections, its free memory and the processes using the most, while
+ * they still show the cause. A report after one failure on 2026-11-11 found 696 connections in
+ * TIME_WAIT of 16,384 ports, so the ports are not what runs out.
  */
 const socketReport = String.raw`
 $connections = Get-NetTCPConnection
@@ -46,6 +48,11 @@ $connections | Group-Object OwningProcess | Sort-Object Count -Descending | Sele
 		"[harness]   $($process.ProcessName) ($($_.Name)): $($_.Count)"
 	}
 netsh int ipv4 show dynamicport tcp | ForEach-Object { "[harness] $_" }
+$system = Get-CimInstance Win32_OperatingSystem
+"[harness] Free memory: $([math]::Round($system.FreePhysicalMemory / 1MB, 2)) GB of $([math]::Round($system.TotalVisibleMemorySize / 1MB, 2)) GB"
+'[harness] Processes by memory (largest five):'
+Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 5 |
+	ForEach-Object { "[harness]   $($_.ProcessName) ($($_.Id)): $([math]::Round($_.WorkingSet64 / 1MB)) MB, $($_.HandleCount) handles" }
 `;
 let socketsReported = false;
 function reportSockets(): void {
@@ -53,15 +60,23 @@ function reportSockets(): void {
 		return;
 	}
 	socketsReported = true;
-	execFile(
-		'powershell.exe',
-		['-NoProfile', '-NonInteractive', '-Command', socketReport],
-		{ windowsHide: true, timeout: 30_000 },
-		(error, stdout, stderr) =>
-			console.log(
-				error ? `[harness] socket report failed: ${stderr || error}` : stdout.trimEnd()
-			)
-	);
+	// Wait for it: Playwright replaces the worker after a failed test, which discarded a
+	// report that was still running. It runs once per worker, and only after a failure.
+	try {
+		console.log(
+			execFileSync(
+				'powershell.exe',
+				['-NoProfile', '-NonInteractive', '-Command', socketReport],
+				{
+					encoding: 'utf8',
+					windowsHide: true,
+					timeout: 30_000
+				}
+			).trimEnd()
+		);
+	} catch (error) {
+		console.log(`[harness] socket report failed: ${String(error)}`);
+	}
 }
 function reportLoadFailures(page: Page): void {
 	if (instrumentedPages.has(page)) {
