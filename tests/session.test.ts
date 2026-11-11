@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { Session } from '../src/main/session';
+import { neovimBundle } from '../src/main/neovimBundle';
 import { Grid } from '../src/renderer/src/grid';
 import { vimKey } from '../src/renderer/src/keyboard';
 import { accumulateScroll, scrollOffset } from '../src/renderer/src/scroll';
@@ -3717,7 +3718,9 @@ test('Nido uses bundled Neovim and isolated config', async () => {
         if script.name:match('nido[/\\\\]init.lua$') then found = true end
       end
       assert(found, 'Nido init.lua must be sourced')
-      assert(vim.v.progpath:match('nvim%-win64[/\\\\]bin[/\\\\]nvim.exe$'))
+      local executable = ...
+      -- The bundled executable for this platform, such as nvim-win64/bin/nvim.exe.
+      assert(vim.fs.normalize(vim.v.progpath):sub(-#executable) == executable, vim.v.progpath)
       assert(package.loaded.lazy == nil and package.loaded.noice == nil)
       local paths = vim.opt.runtimepath:get()
       assert(#paths == 3)
@@ -3733,7 +3736,7 @@ test('Nido uses bundled Neovim and isolated config', async () => {
       assert(vim.treesitter.get_parser(buf):parse()[1])
       vim.api.nvim_win_close(win, true)
       return {vim.g.nido, vim.o.showtabline, vim.o.laststatus, vim.o.showmode}`,
-			[]
+			[neovimBundle().executable]
 		]);
 		assert.deepEqual(result, [true, 0, 0, false]);
 	} finally {

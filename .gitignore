@@ -25,5 +25,8 @@ out
 /.nyc_output/
 /.downloads/
 /resources/nvim-win64/
+# Neovim releases for development and tests on Linux and macOS (scripts/prepare-neovim.ts).
+/resources/nvim-linux-*/
+/resources/nvim-macos-*/
 /resources/debug/
 /resources/.nvim-*/

@@ -20,6 +20,7 @@
 		"typecheck": "npm run typecheck:node && npm run typecheck:web",
 		"start": "electron-vite preview",
 		"preview:text-rendering": "node prototypes/text-rendering/preview.mjs",
+		"prepare:neovim:unix": "tsx scripts/prepare-neovim.ts && npm ci --prefix resources/languages --ignore-scripts --no-audit --no-fund",
 		"prepare:neovim": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-neovim.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-debugger.ps1 && npm ci --prefix resources/languages --ignore-scripts --no-audit --no-fund",
 		"dev": "npm run prepare:neovim && electron-vite dev",
 		"build": "npm run prepare:neovim && npm run typecheck && electron-vite build",

@@ -42,6 +42,7 @@ import { SessionOptions } from './sessionOptions';
 import { SessionBuffers } from './sessionBuffers';
 import { SessionNavigation } from './sessionNavigation';
 import { spawnNeovim } from './neovimProcess';
+import { neovimBundle } from './neovimBundle';
 
 export class Session {
 	// The workspace's terminal runs in its own Neovim, so it is a separate Session.
@@ -223,7 +224,7 @@ export class Session {
 			throw new Error('Choose a project folder.');
 		}
 		for (const file of [
-			...(!remote ? ['nvim-win64/bin/nvim.exe'] : ['nido/wsl-runtime.sh']),
+			...(!remote ? [neovimBundle().executable] : ['nido/wsl-runtime.sh']),
 			'nido/init.lua',
 			'nido/session.lua',
 			'languages/node_modules/typescript-language-server/lib/cli.mjs',

@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { resolve } from 'node:path';
 import type { parseWslPath } from '../shared/wsl';
 import { wslArguments, type prepareWsl } from './wsl';
+import { neovimBundle } from './neovimBundle';
 
 type WslRemote = ReturnType<typeof parseWslPath>;
 type WslRuntime = Awaited<ReturnType<typeof prepareWsl>>;
@@ -30,7 +31,7 @@ export function spawnNeovim(
 		"lua vim.opt.runtimepath = {vim.env.VIMRUNTIME, vim.fn.fnamemodify(vim.v.progpath, ':h:h') .. '/lib/nvim'}; vim.opt.packpath = {}"
 	];
 	return spawn(
-		runtime && remote ? 'wsl.exe' : resolve(resources, 'nvim-win64/bin/nvim.exe'),
+		runtime && remote ? 'wsl.exe' : resolve(resources, neovimBundle().executable),
 		runtime && remote
 			? wslArguments(remote.distribution, remote.path, [
 					'env',
@@ -68,7 +69,7 @@ export function spawnNeovim(
 						NIDO_WORKSPACE_ROOT: root,
 						NIDO_NODE: process.execPath,
 						NIDO_LANGUAGES: resolve(resources, 'languages'),
-						VIMRUNTIME: resolve(resources, 'nvim-win64/share/nvim/runtime'),
+						VIMRUNTIME: resolve(resources, neovimBundle().folder, 'share/nvim/runtime'),
 						VIMINIT: '',
 						EXINIT: ''
 					},

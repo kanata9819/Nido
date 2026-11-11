@@ -15,6 +15,8 @@ export default defineConfig(
 			'logs/**',
 			'resources/debug/**',
 			'resources/nvim-win64/**',
+			'resources/nvim-linux-*/**',
+			'resources/nvim-macos-*/**',
 			'test-results/**',
 			'playwright-report/**'
 		]
