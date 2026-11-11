@@ -1,4 +1,5 @@
 import type { Browser, Page } from '@playwright/test';
+import { execFile } from 'node:child_process';
 import { createServer, type Plugin, type ViteDevServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
@@ -28,6 +29,40 @@ const harnessPage = (url: string): boolean => {
  * side saw. Aborted requests are left out: closing a page aborts its requests.
  */
 const instrumentedPages = new WeakSet<Page>();
+/**
+ * Windows CI runners now and then fail requests with net::ERR_NO_BUFFER_SPACE (WSAENOBUFS), the
+ * error for running out of socket resources. Count the machine's TCP connections by state and
+ * by process the first time it happens, while those sockets still exist, to show what holds them.
+ */
+const socketReport = String.raw`
+$connections = Get-NetTCPConnection
+'[harness] TCP connections by state:'
+$connections | Group-Object State | Sort-Object Count -Descending |
+	ForEach-Object { "[harness]   $($_.Name): $($_.Count)" }
+'[harness] TCP connections by process (largest five):'
+$connections | Group-Object OwningProcess | Sort-Object Count -Descending | Select-Object -First 5 |
+	ForEach-Object {
+		$process = Get-Process -Id $_.Name -ErrorAction SilentlyContinue
+		"[harness]   $($process.ProcessName) ($($_.Name)): $($_.Count)"
+	}
+netsh int ipv4 show dynamicport tcp | ForEach-Object { "[harness] $_" }
+`;
+let socketsReported = false;
+function reportSockets(): void {
+	if (socketsReported || process.platform !== 'win32') {
+		return;
+	}
+	socketsReported = true;
+	execFile(
+		'powershell.exe',
+		['-NoProfile', '-NonInteractive', '-Command', socketReport],
+		{ windowsHide: true, timeout: 30_000 },
+		(error, stdout, stderr) =>
+			console.log(
+				error ? `[harness] socket report failed: ${stderr || error}` : stdout.trimEnd()
+			)
+	);
+}
 function reportLoadFailures(page: Page): void {
 	if (instrumentedPages.has(page)) {
 		return;
@@ -37,6 +72,9 @@ function reportLoadFailures(page: Page): void {
 		const reason = request.failure()?.errorText ?? 'unknown';
 		if (!reason.includes('ERR_ABORTED')) {
 			console.log(`[harness] request failed: ${request.url()} (${reason})`);
+		}
+		if (reason.includes('ERR_NO_BUFFER_SPACE')) {
+			reportSockets();
 		}
 	});
 	page.on('response', (response) => {

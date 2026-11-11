@@ -136,6 +136,19 @@ jobs:
               run: pnpm exec playwright install chromium
             - name: Verify renderer state transitions
               run: pnpm test:renderer --project=lifecycle
+            - name: Report socket use after a failure
+              # Renderer tests now and then fail with net::ERR_NO_BUFFER_SPACE on these runners.
+              # Sockets in TIME_WAIT outlive the test run by minutes, so they still show here.
+              if: failure()
+              shell: pwsh
+              run: |
+                  $connections = Get-NetTCPConnection
+                  'TCP connections by state:'
+                  $connections | Group-Object State | Sort-Object Count -Descending | Format-Table Count, Name -AutoSize
+                  'TCP connections by process (largest ten):'
+                  $connections | Group-Object OwningProcess | Sort-Object Count -Descending | Select-Object -First 10 |
+                      ForEach-Object { '{0,6}  {1} ({2})' -f $_.Count, (Get-Process -Id $_.Name -ErrorAction SilentlyContinue).ProcessName, $_.Name }
+                  netsh int ipv4 show dynamicport tcp
             - name: Upload test reports
               if: always()
               uses: actions/upload-artifact@v7
@@ -164,6 +177,19 @@ jobs:
               run: pnpm exec playwright install chromium
             - name: Verify renderer drawing and performance
               run: pnpm test:renderer --project=performance
+            - name: Report socket use after a failure
+              # Renderer tests now and then fail with net::ERR_NO_BUFFER_SPACE on these runners.
+              # Sockets in TIME_WAIT outlive the test run by minutes, so they still show here.
+              if: failure()
+              shell: pwsh
+              run: |
+                  $connections = Get-NetTCPConnection
+                  'TCP connections by state:'
+                  $connections | Group-Object State | Sort-Object Count -Descending | Format-Table Count, Name -AutoSize
+                  'TCP connections by process (largest ten):'
+                  $connections | Group-Object OwningProcess | Sort-Object Count -Descending | Select-Object -First 10 |
+                      ForEach-Object { '{0,6}  {1} ({2})' -f $_.Count, (Get-Process -Id $_.Name -ErrorAction SilentlyContinue).ProcessName, $_.Name }
+                  netsh int ipv4 show dynamicport tcp
             - name: Upload test reports
               if: always()
               uses: actions/upload-artifact@v7
@@ -207,6 +233,19 @@ jobs:
                   --repeat-each 5
                   --reporter=list,html
                   --output=test-results/renderer-repeat
+            - name: Report socket use after a failure
+              # Renderer tests now and then fail with net::ERR_NO_BUFFER_SPACE on these runners.
+              # Sockets in TIME_WAIT outlive the test run by minutes, so they still show here.
+              if: failure()
+              shell: pwsh
+              run: |
+                  $connections = Get-NetTCPConnection
+                  'TCP connections by state:'
+                  $connections | Group-Object State | Sort-Object Count -Descending | Format-Table Count, Name -AutoSize
+                  'TCP connections by process (largest ten):'
+                  $connections | Group-Object OwningProcess | Sort-Object Count -Descending | Select-Object -First 10 |
+                      ForEach-Object { '{0,6}  {1} ({2})' -f $_.Count, (Get-Process -Id $_.Name -ErrorAction SilentlyContinue).ProcessName, $_.Name }
+                  netsh int ipv4 show dynamicport tcp
             - name: Upload test reports
               if: always()
               uses: actions/upload-artifact@v7
