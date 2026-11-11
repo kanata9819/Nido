@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/renderer-test';
 import type { ViteDevServer } from 'vite';
 import { harnessWarmupTimeout, startHarnessServer } from './helpers/harness-server';
 import type {} from './renderer/harness';

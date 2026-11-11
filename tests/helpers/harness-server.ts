@@ -4,6 +4,7 @@ import { createServer, type Plugin, type ViteDevServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
 import type {} from '../renderer/harness';
+import { noteBufferSpaceFailure } from './renderer-test';
 
 /** Long enough for a cold dependency optimization and transform on a CI runner. */
 export const harnessWarmupTimeout = 120_000;
@@ -34,7 +35,9 @@ const instrumentedPages = new WeakSet<Page>();
  * error for running out of socket buffers or the memory behind them. The first time it happens,
  * report the machine's TCP connections, its free memory and the processes using the most, while
  * they still show the cause. A report after one failure on 2026-11-11 found 696 connections in
- * TIME_WAIT of 16,384 ports, so the ports are not what runs out.
+ * TIME_WAIT of 16,384 ports, so the ports are not what runs out; a later one found 328, with
+ * 12 GB of 16 GB free and no process holding unusual memory or handles. The test that saw
+ * it is retried once on CI (tests/helpers/renderer-test.ts).
  */
 const socketReport = String.raw`
 $connections = Get-NetTCPConnection
@@ -89,6 +92,7 @@ function reportLoadFailures(page: Page): void {
 			console.log(`[harness] request failed: ${request.url()} (${reason})`);
 		}
 		if (reason.includes('ERR_NO_BUFFER_SPACE')) {
+			noteBufferSpaceFailure();
 			reportSockets();
 		}
 	});
