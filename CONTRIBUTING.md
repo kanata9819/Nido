@@ -35,6 +35,8 @@ pnpm dev
 
 `pnpm dev` invokes the `prepare:neovim` script. It downloads and validates a pinned Windows Neovim distribution and debugging dependencies when needed, and prepares language resources. The first run can take longer than subsequent runs.
 
+Language dependencies are reused while the package manifests, installed package metadata and Node.js version are unchanged and the required server files are present. Changing dependencies or deleting required files triggers a fresh `npm ci`. To force a clean reinstall when troubleshooting language tools, run `pnpm prepare:languages --force`.
+
 ### Useful commands
 
 ```powershell
