@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import {
+	appendFile,
+	copyFile,
+	mkdir,
+	mkdtemp,
+	readFile,
+	readdir,
+	rm,
+	writeFile
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
@@ -57,20 +66,50 @@ async function prepareFixture(
 		join(root, 'scripts/prepare-neovim.ps1'),
 		script.replace(/\$nidoHash = '[^']+'/, `$nidoHash = '${hash}'`)
 	);
+	await copyFile(
+		resolve(__dirname, '../scripts/download-archive.ps1'),
+		join(root, 'scripts/download-archive.ps1')
+	);
 	return { hash, archive };
 }
 
-function runSetup(root: string): string {
+function runSetup(
+	root: string,
+	download?: { source: string; fail?: boolean },
+	script = 'prepare-neovim.ps1'
+): string {
 	return execFileSync(
 		powershell,
 		[
 			'-NoProfile',
 			'-ExecutionPolicy',
 			'Bypass',
-			'-File',
-			join(root, 'scripts/prepare-neovim.ps1')
+			...(download
+				? [
+						'-Command',
+						`$ErrorActionPreference = 'Stop'
+function Invoke-WebRequest {
+    param([string] $Uri, [string] $OutFile, [switch] $UseBasicParsing)
+    [IO.File]::AppendAllText($env:NIDO_SETUP_TEST_CALLS, $OutFile + [Environment]::NewLine)
+    Copy-Item -LiteralPath $env:NIDO_SETUP_TEST_SOURCE -Destination $OutFile
+    if ($env:NIDO_SETUP_TEST_FAIL -eq '1') { throw 'interrupted fixture download' }
+}
+& $env:NIDO_SETUP_TEST_SCRIPT`
+					]
+				: ['-File', join(root, 'scripts', script)])
 		],
-		{ windowsHide: true, encoding: 'utf8', stdio: 'pipe' }
+		{
+			windowsHide: true,
+			encoding: 'utf8',
+			stdio: 'pipe',
+			env: {
+				...process.env,
+				NIDO_SETUP_TEST_SOURCE: download?.source,
+				NIDO_SETUP_TEST_FAIL: download?.fail ? '1' : '0',
+				NIDO_SETUP_TEST_CALLS: join(root, 'download-calls.txt'),
+				NIDO_SETUP_TEST_SCRIPT: join(root, 'scripts', script)
+			}
+		}
 	);
 }
 
@@ -127,11 +166,15 @@ for (const failure of ['checksum', 'missing resources'] as const) {
 				await mkdir(join(bundle, 'bin'), { recursive: true });
 				await writeFile(join(bundle, 'bin/nvim.exe'), 'old executable');
 				await writeFile(join(bundle, 'nido-version.txt'), 'old checksum');
+				let download: { source: string } | undefined;
 				if (failure === 'checksum') {
 					await appendFile(archive, 'corruption');
+					const source = join(root, 'corrupted.zip');
+					await copyFile(archive, source);
+					download = { source };
 				}
 				assert.throws(
-					() => runSetup(root),
+					() => runSetup(root, download),
 					failure === 'checksum'
 						? /checksum mismatch/
 						: /missing required editor resources/
@@ -145,6 +188,171 @@ for (const failure of ['checksum', 'missing resources'] as const) {
 					'old checksum'
 				);
 				assert.deepEqual(await readdir(join(root, 'resources')), ['nvim-win64']);
+			} finally {
+				await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+			}
+		}
+	);
+}
+
+test(
+	'Neovim setup replaces a corrupt cached archive and reuses the repaired bundle',
+	{ skip: !available },
+	async () => {
+		const root = await mkdtemp(join(tmpdir(), 'nido-neovim-cache-'));
+		try {
+			const { hash, archive } = await prepareFixture(root);
+			const source = join(root, 'verified.zip');
+			await copyFile(archive, source);
+			await appendFile(archive, 'corruption');
+			assert.match(runSetup(root, { source }), /SHA256 verified/);
+			assert.equal(
+				createHash('sha256')
+					.update(await readFile(archive))
+					.digest('hex'),
+				hash
+			);
+			assert.equal(runSetup(root, { source }).trim(), '');
+			assert.equal(
+				(await readFile(join(root, 'download-calls.txt'), 'utf8')).trim().split(/\r?\n/)
+					.length,
+				1
+			);
+		} finally {
+			await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+		}
+	}
+);
+
+for (const failure of ['interrupted request', 'invalid checksum'] as const) {
+	test(
+		`Neovim setup can retry after a downloaded archive has an ${failure}`,
+		{ skip: !available },
+		async () => {
+			const root = await mkdtemp(join(tmpdir(), 'nido-neovim-download-'));
+			try {
+				const { archive } = await prepareFixture(root);
+				const source = join(root, 'download.zip');
+				await copyFile(archive, source);
+				if (failure === 'invalid checksum') await appendFile(source, 'corruption');
+				await rm(archive);
+				assert.throws(
+					() => runSetup(root, { source, fail: failure === 'interrupted request' }),
+					failure === 'interrupted request'
+						? /interrupted fixture download/
+						: /checksum mismatch/
+				);
+				assert.deepEqual(await readdir(join(root, '.downloads')), []);
+				assert.equal((await readdir(join(root, 'resources')).catch(() => [])).length, 0);
+				const valid = await prepareFixture(root);
+				await copyFile(valid.archive, source);
+				await rm(valid.archive);
+				assert.match(runSetup(root, { source }), /SHA256 verified/);
+			} finally {
+				await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+			}
+		}
+	);
+}
+
+for (const dependency of ['CodeLLDB', 'nvim-dap'] as const) {
+	test(
+		`${dependency} setup replaces a corrupt cached archive`,
+		{ skip: !available },
+		async () => {
+			const root = await mkdtemp(join(tmpdir(), 'nido-debugger-cache-'));
+			try {
+				let script = await readFile(
+					resolve(__dirname, '../scripts/prepare-debugger.ps1'),
+					'utf8'
+				);
+				const version = /\$version = '([^']+)'/.exec(script)?.[1];
+				const revision = /\$revision = '([^']+)'/.exec(script)?.[1];
+				assert.ok(version);
+				assert.ok(revision);
+				const codeLLDB = 'codelldb/extension/adapter/codelldb.exe';
+				const dap = `nvim-dap-${revision}/lua/dap.lua`;
+				const relative = dependency === 'CodeLLDB' ? 'extension/adapter/codelldb.exe' : dap;
+				const fixture = join(root, 'fixture');
+				const other = join(
+					root,
+					'resources/debug',
+					dependency === 'CodeLLDB' ? dap : codeLLDB
+				);
+				const installed = join(
+					root,
+					'resources/debug',
+					dependency === 'CodeLLDB' ? codeLLDB : dap
+				);
+				const archive = join(
+					root,
+					'.downloads',
+					dependency === 'CodeLLDB'
+						? `codelldb-${version}.vsix`
+						: `nvim-dap-${revision}.zip`
+				);
+				const source = join(root, 'verified.zip');
+				for (const directory of [
+					join(fixture, relative, '..'),
+					join(other, '..'),
+					join(root, '.downloads'),
+					join(root, 'scripts')
+				]) {
+					await mkdir(directory, { recursive: true });
+				}
+				await writeFile(join(fixture, relative), 'new dependency');
+				await writeFile(other, 'existing other dependency');
+				execFileSync(
+					powershell,
+					[
+						'-NoProfile',
+						'-Command',
+						'Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::CreateFromDirectory($env:NIDO_SETUP_TEST_SOURCE, $env:NIDO_SETUP_TEST_ARCHIVE)'
+					],
+					{
+						windowsHide: true,
+						env: {
+							...process.env,
+							NIDO_SETUP_TEST_SOURCE: fixture,
+							NIDO_SETUP_TEST_ARCHIVE: archive
+						}
+					}
+				);
+				const hash = createHash('sha256')
+					.update(await readFile(archive))
+					.digest('hex');
+				script =
+					dependency === 'CodeLLDB'
+						? script.replace(/\$hash = '[^']+'/, `$hash = '${hash}'`)
+						: script.replace(
+								'5b5085443ce67a9c09de7a2403ab6fb7c1e76d3a38bc2b80ba231acd2e886f2a',
+								hash
+							);
+				await writeFile(join(root, 'scripts/prepare-debugger.ps1'), script);
+				await copyFile(
+					resolve(__dirname, '../scripts/download-archive.ps1'),
+					join(root, 'scripts/download-archive.ps1')
+				);
+				await copyFile(archive, source);
+				await appendFile(archive, 'corruption');
+				assert.match(
+					runSetup(root, { source }, 'prepare-debugger.ps1'),
+					/Bundled CodeLLDB/
+				);
+				assert.equal(await readFile(installed, 'utf8'), 'new dependency');
+				assert.equal(await readFile(other, 'utf8'), 'existing other dependency');
+				assert.equal(
+					createHash('sha256')
+						.update(await readFile(archive))
+						.digest('hex'),
+					hash
+				);
+				runSetup(root, { source, fail: true }, 'prepare-debugger.ps1');
+				assert.equal(
+					(await readFile(join(root, 'download-calls.txt'), 'utf8')).trim().split(/\r?\n/)
+						.length,
+					1
+				);
 			} finally {
 				await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 			}

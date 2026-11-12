@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'download-archive.ps1')
 $nidoRoot = Split-Path $PSScriptRoot -Parent
 $nidoResources = Join-Path $nidoRoot 'resources'
 $nidoBundle = Join-Path $nidoResources 'nvim-win64'
@@ -12,16 +13,7 @@ if ((Test-Path $nidoMarker) -and ((Get-Content $nidoMarker -Raw).Trim() -eq $nid
 $nidoDownloads = Join-Path $nidoRoot '.downloads'
 New-Item -ItemType Directory -Force -Path $nidoDownloads | Out-Null
 $nidoArchive = Join-Path $nidoDownloads "nvim-win64-$nidoVersion.zip"
-if (!(Test-Path $nidoArchive)) {
-    Invoke-WebRequest "https://github.com/neovim/neovim/releases/download/v$nidoVersion/nvim-win64.zip" -OutFile $nidoArchive
-}
-$nidoSha = [System.Security.Cryptography.SHA256]::Create()
-$nidoStream = [System.IO.File]::OpenRead($nidoArchive)
-try { $nidoActualHash = [BitConverter]::ToString($nidoSha.ComputeHash($nidoStream)).Replace('-', '').ToLowerInvariant() }
-finally { $nidoStream.Dispose(); $nidoSha.Dispose() }
-if ($nidoActualHash -ne $nidoHash) {
-    throw "Neovim archive checksum mismatch: $nidoArchive"
-}
+Get-NidoVerifiedArchive -Uri "https://github.com/neovim/neovim/releases/download/v$nidoVersion/nvim-win64.zip" -Path $nidoArchive -ExpectedHash $nidoHash
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $nidoTemporary = Join-Path $nidoResources ('.nvim-' + [Guid]::NewGuid().ToString('N'))
 $nidoBackup = Join-Path $nidoResources ('.nvim-backup-' + [Guid]::NewGuid().ToString('N'))
