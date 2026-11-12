@@ -64,8 +64,12 @@ function M.open(path)
     vim.cmd.buffer(buffer)
     return
   end
-  -- Buffer references avoid filename expansion; text mode preserves CRLF detection.
-  vim.cmd('edit ++nobin #' .. buffer)
+  -- Pass the name with file expansion off. ":edit #N" still expanded environment
+  -- variables in the name it stood for: "a$HOME.txt" opened "a/home/user.txt", and
+  -- saving wrote a file there. Clearing 'binary' first does what ++nobin did, which
+  -- keeps line-ending detection.
+  vim.bo[buffer].binary = false
+  api.nvim_cmd({cmd='edit', args={api.nvim_buf_get_name(buffer)}, magic={file=false}}, {})
 end
 
 function M.detect()
