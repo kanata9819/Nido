@@ -6,6 +6,13 @@ import type { SessionClient } from './sessionClient';
 import type { SessionInteraction } from './sessionInteraction';
 
 export class SessionPersistence {
+	/**
+	 * The lines last read from each untitled draft, by recovery ID, with the buffer's
+	 * changedtick. Checkpoints run every few seconds; a draft that has not changed since
+	 * is not read and sent again, which for a large draft paused the editor each time.
+	 */
+	private drafts = new Map<string, { tick: number; lines: string[] }>();
+
 	constructor(
 		private readonly workspace: Workspace,
 		private readonly client: SessionClient,
@@ -23,7 +30,7 @@ export class SessionPersistence {
 			return { root: this.workspace.root, kind: 'terminal', files: [], current: '' };
 		}
 		const data = (await this.client.request('nvim_exec_lua', [
-			`local include_untitled, recovery_scope = ...
+			`local include_untitled, recovery_scope, known = ...
       local files, untitled, current_untitled, total = {}, {}, nil, 0
       for _, b in ipairs(require('nido_buffers').list()) do
         local name = vim.api.nvim_buf_get_name(b)
@@ -59,8 +66,9 @@ export class SessionPersistence {
             id = recovery_scope .. ':' .. b
             vim.b[b].nido_recovery_id = id
           end
-          table.insert(untitled, {id=id, index=#files + #untitled + 1,
-            lines=vim.api.nvim_buf_get_lines(b, 0, -1, false),
+          local tick = vim.api.nvim_buf_get_changedtick(b)
+          table.insert(untitled, {id=id, index=#files + #untitled + 1, tick=tick,
+            lines=known[id] ~= tick and vim.api.nvim_buf_get_lines(b, 0, -1, false) or nil,
             endOfLine=vim.bo[b].endofline, fileformat=vim.bo[b].fileformat,
             line=math.max(1,pos[1]), column=pos[2]})
           if b == vim.api.nvim_get_current_buf() then current_untitled = #untitled - 1 end
@@ -70,12 +78,44 @@ export class SessionPersistence {
       if #untitled > 0 then result.untitled = untitled end
       if current_untitled then result.currentUntitled = current_untitled end
       return result`,
-			[options.includeUntitled !== false, this.workspace.id]
-		])) as Omit<SavedWorkspace, 'root'>;
+			[
+				options.includeUntitled !== false,
+				this.workspace.id,
+				// Drafts whose lines are already held, with their changedtick.
+				Object.fromEntries([...this.drafts].map(([id, { tick }]) => [id, tick]))
+			]
+		])) as Omit<SavedWorkspace, 'root' | 'untitled'> & {
+			untitled?: (Omit<NonNullable<SavedWorkspace['untitled']>[number], 'lines'> & {
+				id: string;
+				tick: number;
+				lines?: string[];
+			})[];
+		};
+		const { untitled: drafts, ...rest } = data;
+		if (drafts?.some(({ id, lines }) => !lines && !this.drafts.has(id))) {
+			// A concurrent snapshot forgot a draft that this one found unchanged: read all.
+			this.drafts.clear();
+			return this.snapshot({ ...options, restoreScroll: false });
+		}
+		const untitled = drafts?.map(({ tick, lines, ...draft }) => {
+			const known = lines ?? this.drafts.get(draft.id)!.lines;
+			this.drafts.set(draft.id, { tick, lines: known });
+			return { ...draft, lines: known };
+		});
+		if (options.includeUntitled !== false) {
+			// Forget drafts that were saved, discarded or closed.
+			const current = new Set(untitled?.map(({ id }) => id));
+			for (const id of this.drafts.keys()) {
+				if (!current.has(id)) {
+					this.drafts.delete(id);
+				}
+			}
+		}
 		return {
 			root: this.workspace.root,
 			terminal: this.hasTerminal(),
-			...data,
+			...rest,
+			...(untitled ? { untitled } : {}),
 			current: hostPath(this.workspace.root, data.current),
 			files: Array.isArray(data.files)
 				? data.files.map((file) => ({

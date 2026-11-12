@@ -334,6 +334,60 @@ test('workspace recovery preserves multiple untitled drafts and the active curso
 	}
 });
 
+test('checkpoints read an untitled draft again only after it changes', async (context) => {
+	const root = await temporaryRoot(context);
+	const session = await Session.create(root, () => {});
+	try {
+		// Count the lines Neovim reads for drafts; a large unchanged draft must not be reread.
+		await session.client.request('nvim_exec_lua', [
+			`local get_lines = vim.api.nvim_buf_get_lines
+      _G.draft_reads = 0
+      vim.api.nvim_buf_get_lines = function(...)
+        _G.draft_reads = _G.draft_reads + 1
+        return get_lines(...)
+      end
+      vim.cmd('enew')
+      local lines = {}
+      for i = 1, 5000 do lines[i] = 'draft ' .. i end
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)`,
+			[]
+		]);
+		const reads = (): Promise<unknown> =>
+			session.client.request('nvim_exec_lua', ['return _G.draft_reads', []]);
+		const first = await session.snapshot({ includeUntitled: true });
+		assert.equal(first.untitled?.[0].lines.length, 5000);
+		const afterFirst = (await reads()) as number;
+		const second = await session.snapshot({ includeUntitled: true });
+		assert.equal(await reads(), afterFirst, 'an unchanged draft was read again');
+		assert.deepEqual(second.untitled, first.untitled);
+		assert.equal(JSON.stringify(second.untitled?.[0]).includes('tick'), false);
+		// An edit, an undo and an option change each reach the next checkpoint.
+		await session.input('ggAx<Esc>');
+		const edited = await session.snapshot({ includeUntitled: true });
+		assert.equal(edited.untitled?.[0].lines[0], 'draft 1x');
+		await session.input('u');
+		assert.deepEqual(
+			(await session.snapshot({ includeUntitled: true })).untitled?.[0].lines,
+			first.untitled?.[0].lines
+		);
+		await session.client.request('nvim_exec_lua', ['vim.bo.fileformat = "dos"', []]);
+		assert.equal(
+			(await session.snapshot({ includeUntitled: true })).untitled?.[0].fileformat,
+			'dos'
+		);
+		// Concurrent checkpoints agree, and a discarded draft is forgotten.
+		const [a, b] = await Promise.all([
+			session.snapshot({ includeUntitled: true }),
+			session.snapshot({ includeUntitled: true })
+		]);
+		assert.deepEqual(a.untitled, b.untitled);
+		await session.client.request('nvim_exec_lua', ['vim.cmd("bwipeout!")', []]);
+		assert.equal((await session.snapshot({ includeUntitled: true })).untitled, undefined);
+	} finally {
+		await session.stop();
+	}
+});
+
 test('workspace recovery preserves reordered named tabs with an untitled draft between them', async (context) => {
 	const root = await realpath(await temporaryRoot(context));
 	const path = join(root, 'workspaces.json');
