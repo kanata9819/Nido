@@ -4,7 +4,10 @@ import { searchLineEnding } from './searchLines';
 
 export interface LineMatch {
 	line: number;
+	/** UTF-16 offset, retained for callers working with JavaScript strings. */
 	index: number;
+	/** One-based UTF-8 byte column for Neovim. */
+	column: number;
 	text: string;
 }
 
@@ -35,6 +38,7 @@ parentPort.on('message', ({ id, source, flags, text, ending, replacement, select
         pattern.lastIndex = 0;
         const match = pattern.exec(parts[index]);
         if (match) matches.push({ line: index / 2 + 1, index: match.index,
+          column: Buffer.byteLength(parts[index].slice(0, match.index)) + 1,
           text: parts[index].slice(Math.max(0, match.index - 80), match.index + 220).trim() });
         if (matches.length === 201) break;
       }

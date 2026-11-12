@@ -336,12 +336,10 @@ export class SessionSearch {
 		if (found.length) {
 			hashes.set(entry.path, WorkspaceReplacement.hash(text));
 		}
-		// Columns are UTF-8 byte offsets for Neovim, including wide characters.
-		const lines = found.length ? text.split(searchLineEnding(text)) : [];
 		return found.map((match) => ({
 			path: entry.path,
 			line: match.line,
-			column: Buffer.byteLength(lines[match.line - 1].slice(0, match.index)) + 1,
+			column: match.column,
 			text: match.text
 		}));
 	}
