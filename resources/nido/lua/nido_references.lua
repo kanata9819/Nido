@@ -162,6 +162,8 @@ function M.highlight(buffer, first, lines, syntax_only)
   local highlighted = {}
   for offset, text in ipairs(lines) do
     local spans = {}
+    -- Join each color run once instead of copying every growing prefix on long lines.
+    local pieces = {}
     local column = 0
     -- Inspect byte positions, but never split a UTF-8 character in the response.
     for character in text:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
@@ -210,12 +212,15 @@ function M.highlight(buffer, first, lines, syntax_only)
       end
       local previous = spans[#spans]
       if previous and previous.color == foreground then
-        previous.text = previous.text .. character
+        pieces[#pieces + 1] = character
       else
-        table.insert(spans, { text = character, color = foreground })
+        if previous then previous.text = table.concat(pieces) end
+        pieces = {character}
+        table.insert(spans, { text = '', color = foreground })
       end
       column = column + #character
     end
+    if #spans > 0 then spans[#spans].text = table.concat(pieces) end
     if #spans == 0 then
       spans = { { text = '', color = color('Normal') or '#d4d4d4' } }
     end
