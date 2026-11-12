@@ -5,6 +5,147 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { vimKey } from '../src/renderer/src/keyboard';
 import { useEditorInput as createEditorInput } from '../src/renderer/src/hooks/useEditorInput';
 import { useKeyboardShortcuts as createKeyboardHandler } from '../src/renderer/src/hooks/useKeyboardShortcuts';
+import { buildCommands, type CommandsCallbacks } from '../src/renderer/src/commandItems';
+import { createTranslator } from '../src/shared/i18n';
+import type { SessionState, Workspace } from '../src/shared/types';
+
+function leaderCommands(
+	kind: 'editor' | 'terminal',
+	named: boolean
+): {
+	actions: unknown[][];
+	commands: ReturnType<typeof buildCommands>;
+	state: SessionState;
+	workspaces: Workspace[];
+} {
+	const actions: unknown[][] = [];
+	const noop = (): void => {};
+	const create = async (): Promise<void> => {};
+	const callbacks: CommandsCallbacks = {
+		save: noop,
+		showPanel: (panel) => {
+			actions.push(['panel', panel]);
+		},
+		moveWorkspace: (offset) => {
+			actions.push(['move', offset]);
+		},
+		run: noop,
+		focusEditor: noop,
+		captureFocus: () => () => true,
+		closeWorkspace: noop,
+		create,
+		createTerminal: create,
+		showFavorites: create,
+		showExplorer: noop,
+		openDebugger: noop,
+		openFile: noop,
+		activate: noop,
+		toggleFavorite: noop,
+		isFavorite: false
+	};
+	const workspaces: Workspace[] = [{ id: 'workspace', root: '/project', name: 'Project', kind }];
+	const state: SessionState = {
+		buffers: [{ id: 1, name: named ? '/project/file.ts' : '', modified: false }],
+		current: 1,
+		mode: 'n',
+		line: 1,
+		column: 1,
+		filetype: 'typescript'
+	};
+	const commands = buildCommands(
+		'workspace',
+		workspaces,
+		state,
+		callbacks,
+		createTranslator('en')
+	);
+	return { actions, commands, state, workspaces };
+}
+
+for (const [kind, named] of [
+	['editor', true],
+	['editor', false],
+	['terminal', false]
+] as const) {
+	test(`leader keys are unique (${kind} workspace, ${named ? 'named' : 'unnamed'} buffer)`, () => {
+		const { commands } = leaderCommands(kind, named);
+		const bound = commands.filter(({ key }) => key);
+		const seen = new Map<string, string>();
+		for (const { key, title } of bound) {
+			assert.equal(seen.has(key), false, `${key} is shared by ${seen.get(key)} and ${title}`);
+			seen.set(key, title);
+		}
+	});
+}
+
+test('leader h opens history and leader Shift+H/L reorder workspaces', () => {
+	const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
+	const fixture = leaderCommands('editor', true);
+	try {
+		Object.defineProperty(globalThis, 'document', {
+			configurable: true,
+			value: {
+				activeElement: {
+					closest: (): null => null,
+					hasAttribute: (): boolean => false,
+					getAttribute: (): string => 'editor'
+				}
+			}
+		});
+		let handler!: ReturnType<typeof createKeyboardHandler>;
+		function KeyboardProbe(): null {
+			handler = createKeyboardHandler({
+				save: () => {},
+				panel: null,
+				leader: true,
+				error: '',
+				dismissError: () => {},
+				focusEditor: () => {},
+				modal: { current: null },
+				mode: { current: { workspace: 'normal' } },
+				active: 'workspace',
+				workspaces: fixture.workspaces,
+				nextWorkspace: () => {},
+				showExplorer: () => {},
+				showDebugger: () => {},
+				closeReferences: () => {},
+				toggleTerminal: () => {},
+				restartShell: () => {},
+				create: async () => {},
+				showPanel: () => {},
+				commands: fixture.commands,
+				state: fixture.state,
+				run: () => {
+					throw new Error('A leader key switched buffer tabs.');
+				},
+				setLeader: () => {},
+				activate: () => {}
+			});
+			return null;
+		}
+		renderToStaticMarkup(createElement(KeyboardProbe));
+		for (const key of ['h', 'H', 'L']) {
+			handler({
+				...keyEvent(key, false, key !== 'h'),
+				ctrlKey: false,
+				altKey: false,
+				preventDefault: () => {},
+				stopPropagation: () => {}
+			} as KeyboardEvent);
+		}
+		assert.deepEqual(fixture.actions, [
+			['panel', 'history'],
+			['move', -1],
+			['move', 1]
+		]);
+	} finally {
+		if (originalDocument) {
+			Object.defineProperty(globalThis, 'document', originalDocument);
+		} else {
+			Reflect.deleteProperty(globalThis, 'document');
+		}
+	}
+});
 
 function keyEvent(key: string, altGraph = true, shiftKey = false): KeyboardEvent {
 	return {
