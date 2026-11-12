@@ -4,6 +4,9 @@ import type { SessionEvents } from './sessionEvents';
 
 export class SessionUI {
 	private attached = false;
+	/** Whether Neovim should consider this UI focused; told to Neovim once attached. */
+	private focused = false;
+	private reportedFocus?: boolean;
 	private uiQueue: Promise<void> = Promise.resolve();
 	private resizeGeneration = 0;
 
@@ -39,6 +42,8 @@ export class SessionUI {
 				// command text and messages are external even with cmdheight=1.
 				await this.client.request('nvim_set_option_value', ['cmdheight', 1, {}]);
 				this.attached = true;
+				this.reportedFocus = undefined;
+				this.reportFocus();
 				this.events.replayUI();
 				this.emit({ type: 'state', id: this.workspace.id, state: this.events.state });
 			} catch (error) {
@@ -48,6 +53,32 @@ export class SessionUI {
 		});
 		this.uiQueue = next.catch(() => {});
 		return next;
+	}
+
+	/**
+	 * Tell Neovim whether its workspace is the one in front, in a focused window. Neovim
+	 * runs FocusGained and FocusLost from this, and checks on FocusGained whether open
+	 * files changed on disk: without it, a file edited in another program kept its old
+	 * text when the user came back.
+	 */
+	setFocus(focused: boolean): void {
+		this.focused = focused;
+		this.reportFocus();
+	}
+
+	private reportFocus(): void {
+		if (!this.attached || this.reportedFocus === this.focused) {
+			return;
+		}
+		const focused = this.focused;
+		this.reportedFocus = focused;
+		// Not queued: while a command waits for its key, Neovim answers this after that key,
+		// and attaching or resizing must not wait for it.
+		this.client.request('nvim_ui_set_focus', [focused]).catch(() => {
+			if (this.reportedFocus === focused) {
+				this.reportedFocus = undefined;
+			}
+		});
 	}
 
 	async resize(columns: number, rows: number): Promise<void> {

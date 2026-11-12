@@ -128,7 +128,7 @@ export function registerHandlers({
 		session,
 		text
 	});
-	const { prepareToQuit, sleepingFiles } = registerWorkspaceHandlers({
+	const { prepareToQuit, sleepingFiles, syncFocus } = registerWorkspaceHandlers({
 		window,
 		sessions,
 		state,
@@ -142,9 +142,11 @@ export function registerHandlers({
 		captureHistory
 	});
 
-	handle('attach', (id, columns, rows) =>
-		session(id).attach(integer(columns, 1000), integer(rows, 500))
-	);
+	handle('attach', async (id, columns, rows) => {
+		await session(id).attach(integer(columns, 1000), integer(rows, 500));
+		// A workspace that started or woke since the last focus change learns it now.
+		syncFocus();
+	});
 	handle(
 		'openTerminal',
 		async (id, shell) => (await session(id).openTerminal(shellChoice(shell))).workspace

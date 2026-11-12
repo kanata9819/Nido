@@ -307,6 +307,12 @@ export class Session {
 		return this.ui.attach(columns, rows);
 	}
 
+	setFocus(focused: boolean): void {
+		if (!this.stopped) {
+			this.ui.setFocus(focused);
+		}
+	}
+
 	async startTerminal(shell = 'auto'): Promise<void> {
 		return this.interaction.enqueue(async () => {
 			if (!terminalShells.includes(shell as TerminalShell)) {
