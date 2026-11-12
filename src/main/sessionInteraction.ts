@@ -31,6 +31,19 @@ export class SessionInteraction {
 		return next;
 	}
 
+	/**
+	 * Whether Neovim waits for the next key of a command, such as after r, g, z or Ctrl+W,
+	 * or at a hit-enter prompt. Requests other than the fast API wait for that key, and
+	 * the input queue holds every key behind them: the editor would stop responding.
+	 */
+	private async awaitingKey(): Promise<boolean> {
+		const mode = (await this.client.request('nvim_get_mode', [])) as {
+			mode: string;
+			blocking: boolean;
+		};
+		return mode.blocking || mode.mode.startsWith('r');
+	}
+
 	command<T>(operation: () => Promise<T>): Promise<T> {
 		// Observe preceding keys before probing for commands that still need a reply.
 		const ready = this.inputMode();
@@ -58,6 +71,8 @@ export class SessionInteraction {
 			if (
 				!this.events.hasInputPrompt &&
 				(keys === '<C-n>' || keys === '<C-p>') &&
+				// A pending command, such as r or Ctrl+V, takes Ctrl+N itself.
+				!(await this.awaitingKey()) &&
 				(await this.client.request('nvim_eval', ['pumvisible()']))
 			) {
 				keys = keys === '<C-n>' ? '<Down>' : '<Up>';
@@ -142,6 +157,10 @@ export class SessionInteraction {
 
 	click(row: number, column: number): Promise<void> {
 		const next = this.inputQueue.then(async () => {
+			// A click would complete a pending command: g then a click is g<LeftMouse>.
+			if (await this.awaitingKey()) {
+				return;
+			}
 			this.events.beginScrollBatch();
 			try {
 				// Mouse coordinates refer to the visible viewport, not the pre-scroll editing anchor.
@@ -178,6 +197,9 @@ export class SessionInteraction {
 
 	jumpSticky(window: number, buffer: number, line: number): Promise<void> {
 		const next = this.inputQueue.then(async () => {
+			if (await this.awaitingKey()) {
+				return;
+			}
 			this.events.beginScrollBatch();
 			try {
 				const moved = await this.client.request('nvim_exec_lua', [
@@ -319,6 +341,10 @@ export class SessionInteraction {
 			this.prefetchDown = undefined;
 		}
 		const next = this.inputQueue.then(async () => {
+			// Ignore the wheel while a command waits for its key.
+			if (await this.awaitingKey()) {
+				return;
+			}
 			this.scrollDetached = true;
 			this.events.beginScrollBatch();
 			try {
