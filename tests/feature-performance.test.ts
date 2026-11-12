@@ -105,6 +105,30 @@ test('workspace grep skips line inspection in large nonmatching files', async ()
 	}
 });
 
+test('worker search returns byte columns without splitting matching files again on the main thread', async () => {
+	const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-search-columns-')));
+	const text = 'ordinary row\n'.repeat(10000) + '日本語 🦊 needle\n';
+	const split = String.prototype.split;
+	let mainSplits = 0;
+	try {
+		await writeFile(join(root, 'match.txt'), text);
+		const files = new SessionFiles(root, {} as Session['client']);
+		String.prototype.split = function (...args) {
+			if (String(this) === text) mainSplits++;
+			return split.apply(this, args);
+		};
+		const result = await files.searchText('needle', defaultSearchOptions);
+		assert.deepEqual(result.matches, [
+			{ path: 'match.txt', line: 10001, column: 16, text: '日本語 🦊 needle' }
+		]);
+		assert.ok(result.token, 'replacement tokens must remain available');
+		assert.equal(mainSplits, 0, 'matching text must be split only in the search worker');
+	} finally {
+		String.prototype.split = split;
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
 test('workspace search avoids clearing scratch buffers and inspects only bytes read from disk', async () => {
 	const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-search-scratch-')));
 	const allocate = Buffer.alloc;

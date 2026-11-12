@@ -21,6 +21,37 @@ async function fixture(check: (session: Session, root: string) => Promise<void>)
 	}
 }
 
+test('search workers report byte columns and retain string offsets across line formats', async () => {
+	const samples = [
+		{ text: 'before\n日本語 🦊 needle\n', line: 2, index: 7, column: 16 },
+		{ text: 'before\r\n日本語 🦊 needle\r\n', line: 2, index: 7, column: 16 },
+		{ text: 'before\r\n日本語 🦊 needle\n', line: 2, index: 7, column: 16 },
+		{ text: 'before\r日本語 🦊 needle\r', line: 2, index: 7, column: 16 },
+		{ text: '日本語 🦊 needle', line: 1, index: 7, column: 16 },
+		{ text: 'prefix\r日本語 🦊 needle\n', line: 1, index: 14, column: 23 }
+	];
+	for (const [query, options] of [
+		['needle', defaultSearchOptions],
+		['n(eed)le', { ...defaultSearchOptions, regex: true }],
+		['(?=needle)', { ...defaultSearchOptions, regex: true }],
+		['NEEDLE', { ...defaultSearchOptions, caseSensitive: false }],
+		['needle', { ...defaultSearchOptions, wholeWord: true }]
+	] as const) {
+		const matcher = new SearchMatcher(query, options);
+		try {
+			for (const { text, ...expected } of samples) {
+				const matches = await matcher.find(text);
+				assert.deepEqual(
+					matches.map(({ line, index, column }) => ({ line, index, column })),
+					[expected]
+				);
+			}
+		} finally {
+			matcher.close();
+		}
+	}
+});
+
 test('selected-line replacement previews without writes, preserves BOM/CRLF and undo, and edits unopened buffers', () =>
 	fixture(async (session, root) => {
 		const originals = [
