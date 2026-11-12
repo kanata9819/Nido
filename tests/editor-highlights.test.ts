@@ -596,9 +596,9 @@ local result = {[1]={result={
   {range={start={line=0, character=0}, ['end']={line=0, character=5}}, kind=2},
   {range={start={line=0, character=12}, ['end']={line=0, character=17}}, kind=3},
 }}}
-local function request(column)
+local function request(column, force)
   api.nvim_win_set_cursor(0, {1, column})
-  api.nvim_exec_autocmds('CursorMoved', {buffer=buffer})
+  api.nvim_exec_autocmds(force and 'FocusGained' or 'CursorMoved', {buffer=buffer})
   local expected = requests + 1
   assert(vim.wait(3000, function() return requests >= expected end, 5))
   return callbacks[requests]
@@ -615,9 +615,10 @@ local ok, err = pcall(function()
   api.nvim_win_set_cursor(0, {1, 2})
   api.nvim_exec_autocmds('CursorMoved', {buffer=buffer})
   assert(#marks() == 2, 'Moving inside an already highlighted identifier must not clear its ranges')
-  local expected = requests + 1
-  assert(vim.wait(3000, function() return requests >= expected end, 5))
-  local replaced = callbacks[requests]
+  local kept = requests
+  vim.wait(300)
+  assert(requests == kept, 'An existing semantic occurrence should not repeat its request')
+  local replaced = request(2, true)
   api.nvim_buf_set_text(buffer, 0, 17, 0, 17, {' value'})
   api.nvim_exec_autocmds('TextChanged', {buffer=buffer})
   assert(#marks() == 2, 'An edit outside the selected identifier must retain its tracked ranges')
@@ -627,7 +628,7 @@ local ok, err = pcall(function()
   assert(#marks() == 0, 'A different occurrence of the same word must not inherit semantic highlights')
   local empty = request(0)
   empty(result)
-  local current = request(2)
+  local current = request(2, true)
   current({[1]={result={}}})
   assert(#marks() == 0, 'A current empty response must replace retained ranges')
   local edited = request(6)
@@ -645,6 +646,95 @@ assert(ok, err)
 `,
 			[]
 		]);
+	} finally {
+		await session.stop();
+	}
+});
+
+test('semantic word highlights reuse unchanged occurrences without suppressing forced refreshes', async (context) => {
+	const session = await Session.create(process.cwd(), () => {});
+	try {
+		await session.attach(80, 24);
+		const result = await session.client.request('nvim_exec_lua', [
+			String.raw`
+local api = vim.api
+local buffer = api.nvim_get_current_buf()
+local ns = api.nvim_create_namespace('nvim.lsp.references')
+api.nvim_buf_set_lines(buffer, 0, -1, false, {'target target target'})
+local original = {vim.lsp.get_clients, vim.lsp.get_client_by_id, vim.lsp.buf_request_all, api.nvim_buf_set_extmark}
+local attached, requests, writes = true, 0, 0
+local client = {id=1, offset_encoding='utf-16', supports_method=function() return false end}
+vim.lsp.get_clients = function(filter)
+  if filter and filter.method == 'textDocument/documentHighlight' then return attached and {client} or {} end
+  return original[1](filter)
+end
+vim.lsp.get_client_by_id = function(id) return id == 1 and client or original[2](id) end
+api.nvim_buf_set_extmark = function(buf, namespace, ...)
+  if namespace == ns then writes = writes + 1 end
+  return original[4](buf, namespace, ...)
+end
+vim.lsp.buf_request_all = function(buf, method, params, callback)
+  if method ~= 'textDocument/documentHighlight' then return original[3](buf, method, params, callback) end
+  requests = requests + 1
+  local ranges = api.nvim_win_get_cursor(0)[2] < 14 and {{0,6},{7,13}} or {{14,20}}
+  local highlights = {}
+  for _, range in ipairs(ranges) do
+    table.insert(highlights, {range={start={line=0,character=range[1]}, ['end']={line=0,character=range[2]}}})
+  end
+  callback({[1]={result=highlights}})
+  return function() end
+end
+local function marks() return api.nvim_buf_get_extmarks(buffer, ns, 0, -1, {}) end
+local function move(column)
+  api.nvim_win_set_cursor(0, {1, column})
+  api.nvim_exec_autocmds('CursorMoved', {buffer=buffer})
+end
+local measurements
+local ok, err = pcall(function()
+  for _, column in ipairs({0,1,2,3,4,5,7,8,9,10,11,12}) do
+    move(column)
+    vim.wait(300)
+    assert(#marks() == 2, 'Known semantic occurrences must keep their reference ranges')
+  end
+  measurements = {cursorPositions=12, documentHighlightRequests=requests, referenceExtmarkWrites=writes}
+  assert(requests == 1, 'Cursor movement repeated an unchanged documentHighlight request: ' .. requests)
+  assert(writes == 2, 'Cursor movement rewrote the same semantic extmarks: ' .. writes)
+  -- These events invalidate semantic results even though the current word has not changed.
+  for _, event in ipairs({'FocusGained', 'LspAttach'}) do
+    local expected = requests + 1
+    api.nvim_exec_autocmds(event, {buffer=buffer, data={client_id=1}})
+    move(1)
+    assert(vim.wait(3000, function() return requests == expected end, 5),
+      event .. ' refresh was lost when the cursor moved during its debounce')
+  end
+  local expected = requests + 1
+  api.nvim_buf_set_text(buffer, 0, 20, 0, 20, {'!'})
+  api.nvim_exec_autocmds('TextChanged', {buffer=buffer})
+  move(2)
+  assert(vim.wait(3000, function() return requests == expected end, 5), 'An edit reused stale semantic results')
+  attached = false
+  api.nvim_exec_autocmds('LspDetach', {buffer=buffer, data={client_id=1}})
+  move(3)
+  assert(vim.wait(3000, function() return #marks() == 0 and #vim.fn.getmatches() == 1 end, 5),
+    'Detaching the provider must replace semantic ranges with the text fallback')
+  attached = true
+  expected = requests + 1
+  api.nvim_exec_autocmds('LspAttach', {buffer=buffer, data={client_id=1}})
+  move(4)
+  assert(vim.wait(3000, function() return requests == expected and #marks() == 2 end, 5))
+  expected = requests + 1
+  move(14)
+  assert(#marks() == 0, 'An unhighlighted occurrence with the same spelling must not reuse semantic results')
+  assert(vim.wait(3000, function() return requests == expected and #marks() == 1 end, 5))
+  assert(marks()[1][3] == 14, 'A shadowed symbol must get its own semantic range')
+end)
+vim.lsp.get_clients, vim.lsp.get_client_by_id, vim.lsp.buf_request_all, api.nvim_buf_set_extmark = unpack(original)
+assert(ok, err)
+return measurements
+`,
+			[]
+		]);
+		context.diagnostic(JSON.stringify(result));
 	} finally {
 		await session.stop();
 	}
