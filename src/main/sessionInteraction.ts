@@ -149,6 +149,10 @@ export class SessionInteraction {
 
 	selectCompletion(index: number): Promise<void> {
 		const next = this.inputQueue.then(async () => {
+			// Ctrl+R or Ctrl+V can wait for a key while the completion menu is open.
+			if (await this.awaitingKey()) {
+				return;
+			}
 			await this.client.request('nvim_select_popupmenu_item', [index, false, false, {}]);
 		});
 		this.inputQueue = next.catch(() => {});
@@ -225,6 +229,10 @@ export class SessionInteraction {
 			}
 			// Reserve this position in the input queue before an asynchronous OS clipboard read.
 			const content = typeof text === 'function' ? await text() : text;
+			// The pasted text would complete the command instead: after g, "x" would run gx.
+			if (await this.awaitingKey()) {
+				throw new Error('Finish the current Neovim command before pasting.');
+			}
 			await this.restoreScroll();
 			if (this.workspace.kind === 'terminal') {
 				await this.client.request('nvim_command', ['startinsert']);

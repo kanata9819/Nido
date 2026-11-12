@@ -152,6 +152,8 @@ export const japanese: Record<string, string> = {
 		'現在のNeovimコマンドを終えてから編集タイムマシンを開いてください。',
 	'Finish the current Neovim command before restoring.':
 		'現在のNeovimコマンドを終えてから復元してください。',
+	'Finish the current Neovim command before pasting.':
+		'現在のNeovimコマンドを終えてから貼り付けてください。',
 	'Version restored into the editor. Save when ready.':
 		'編集内容を復元しました。確認してから保存できます。',
 	'Extensions (Ctrl+Shift+X)': '拡張機能（Ctrl+Shift+X）',
