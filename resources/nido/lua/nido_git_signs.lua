@@ -88,7 +88,11 @@ function M.refresh(buffer)
     end
     local lines = api.nvim_buf_get_lines(buffer, 0, -1, false)
     local text = table.concat(lines, '\n') .. (eol and '\n' or '')
-    if #lines == 1 and lines[1] == '' then
+    -- One empty buffer line can be either a zero-byte file or one newline.
+    -- wordcount() includes Neovim's empty-buffer flag, including after edits.
+    if eol and #lines == 1 and lines[1] == '' and api.nvim_buf_call(buffer, function()
+        return vim.fn.wordcount().bytes == 0
+      end) then
       text = ''
     end
     -- Changed buffers still use a full diff; unchanged buffers reuse their signs.
