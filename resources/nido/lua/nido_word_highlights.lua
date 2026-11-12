@@ -30,8 +30,12 @@ local function clear()
   clear_highlights()
 end
 
-local function refresh()
+local function refresh(event)
   if stopped then return end
+  local cursor_event = event and (event.event == 'CursorMoved' or event.event == 'CursorMovedI')
+  -- A client or focus change can invalidate semantic results without changing the text.
+  -- Keep that refresh pending even if the next event just moves inside the same word.
+  if highlighted and not cursor_event then highlighted.tick = nil end
   -- Scrolling moves Neovim's cursor for the viewport; keep the editing anchor's references.
   if require('nido_scroll').cursor() then invalidate(); return end
   local buffer, window = api.nvim_get_current_buf(), api.nvim_get_current_win()
@@ -56,8 +60,15 @@ local function refresh()
       end
     end
   end
-  if keep then invalidate() else clear() end
-  local tick, ticket = api.nvim_buf_get_changedtick(buffer), generation
+  local tick = api.nvim_buf_get_changedtick(buffer)
+  if keep then
+    invalidate()
+    -- The existing semantic range already identifies this occurrence in unchanged text.
+    if cursor_event and highlighted and highlighted.tick == tick then return end
+  else
+    clear()
+  end
+  local ticket = generation
   timer:start(250, 0, vim.schedule_wrap(function()
     if ticket ~= generation or not api.nvim_buf_is_valid(buffer)
         or api.nvim_get_current_buf() ~= buffer or api.nvim_get_current_win() ~= window
@@ -78,7 +89,7 @@ local function refresh()
           or api.nvim_buf_get_changedtick(buffer) ~= tick
           or not vim.deep_equal(cursor, api.nvim_win_get_cursor(window)) then return end
       clear_highlights()
-      highlighted = {buffer=buffer, window=window, word=word}
+      highlighted = {buffer=buffer, window=window, word=word, tick=tick}
       for id, response in pairs(results) do
         local client = vim.lsp.get_client_by_id(id)
         if client and not response.err and response.result then
