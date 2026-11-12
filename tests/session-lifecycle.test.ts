@@ -493,6 +493,64 @@ test(
 	}
 );
 
+test(
+	'scrolling, clicking or Ctrl+N while a command waits for its key keeps the editor responsive',
+	{ timeout: 60000 },
+	async () => {
+		const root = await mkdtemp(join(tmpdir(), 'nido-pending-key-'));
+		let session: Session | undefined;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			await writeFile(join(root, 'lines.txt'), 'one\ntwo\nthree\n');
+			session = await Session.create(root, () => {});
+			await session.openFile('lines.txt');
+			const current = session;
+			const line = (): Promise<unknown> =>
+				current.client.request('nvim_get_current_line', []);
+			const actions = {
+				scroll: () => current.scroll(1),
+				'pixel scroll': () => current.scroll(0.5, true, true),
+				click: () => current.click(0, 0),
+				'Ctrl+N': () => current.input('<C-n>')
+			};
+			// r, g, z and Ctrl+W wait for their next key; Ctrl+V does so in Insert mode.
+			for (const keys of ['r', 'g', 'z', '<C-w>', 'i<C-v>']) {
+				for (const [name, action] of Object.entries(actions)) {
+					await current.input('<Esc>gg0');
+					await current.input(keys);
+					await Promise.race([
+						// Ctrl+V inserts the first Escape; the second leaves Insert mode.
+						Promise.all([action(), current.input('<Esc><Esc>')]),
+						new Promise<never>((_, reject) => {
+							timer = setTimeout(
+								() => reject(new Error(`${keys} then ${name} stopped the editor.`)),
+								2000
+							);
+						})
+					]);
+					clearTimeout(timer);
+					assert.equal(await current.inputMode(), 'n', `${keys} then ${name}`);
+				}
+			}
+			// Ctrl+W Ctrl+N opened a new window, as it should; Ctrl+V inserted Escapes.
+			await current.client.request('nvim_command', ['only!']);
+			await current.openFile('lines.txt');
+			await current.client.request('nvim_command', ['edit!']);
+			// Ctrl+N still completes the command that waits for it.
+			await current.input('<Esc>gg0r');
+			await current.input('<C-n>');
+			assert.equal(await line(), '\x0ene');
+			await current.input('u');
+			assert.equal(await line(), 'one');
+		} finally {
+			clearTimeout(timer);
+			await session?.client.request('nvim_input', ['<Esc>']).catch(() => {});
+			await session?.stop();
+			await rm(root, { recursive: true, force: true });
+		}
+	}
+);
+
 test('closing a workspace cancels in-flight filesystem searches', { timeout: 15000 }, async () => {
 	const session = await Session.create(process.cwd(), () => {});
 	const files = SessionFiles.prototype.files;
