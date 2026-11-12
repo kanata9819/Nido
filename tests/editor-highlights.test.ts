@@ -227,6 +227,97 @@ end), 'syntax-only previews use the same keyword color')
 	}
 });
 
+test('preview highlights preserve Unicode run boundaries, byte positions and empty lines', async () => {
+	const session = await Session.create(process.cwd(), () => {});
+	try {
+		await session.client.request('nvim_exec_lua', [
+			`
+local api, references = vim.api, require('nido_references')
+local inspect, tokens = vim.inspect_pos, vim.lsp.semantic_tokens.get_at_pos
+local buffer = api.nvim_create_buf(false, true)
+local text = '猫é😀 + λ中'
+local long = string.rep('é😀', 4096)
+local lines = {text, '', long}
+api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
+api.nvim_set_hl(0, 'Normal', {fg='#d4d4d4'})
+for index, color in ipairs({'#112233', '#445566', '#778899', '#aabbcc'}) do
+  api.nvim_set_hl(0, 'NidoPreviewTest' .. index, {fg=color})
+end
+local columns = {}
+vim.inspect_pos = function(buf, row, column)
+  assert(buf == buffer)
+  local groups = {syntax={}, treesitter={}, semantic_tokens={}, extmarks={}}
+  if row == 0 then
+    columns[#columns + 1] = column
+    if column < 6 then
+      groups.syntax = {{hl_group='NidoPreviewTest1'}}
+    elseif column < 10 then
+      groups.treesitter = {{hl_group='NidoPreviewTest2', metadata={}}}
+    elseif column == 11 then
+      groups.semantic_tokens = {{opts={hl_group='NidoPreviewTest3', priority=200}}}
+    elseif column == 13 then
+      groups.extmarks = {{ns='nido_brackets', opts={hl_group='NidoPreviewTest4', priority=300}}}
+    end
+  end
+  return groups
+end
+vim.lsp.semantic_tokens.get_at_pos = function() return {} end
+local ok, message = pcall(function()
+  local result = references.highlight(buffer, 1, lines)
+  assert(vim.deep_equal(columns, {0, 3, 4, 6, 10, 11, 12, 13, 15}), vim.inspect(columns))
+  assert(vim.deep_equal(result, {
+    {
+      {text='猫é', color='#112233'}, {text='😀', color='#445566'},
+      {text=' ', color='#d4d4d4'}, {text='+', color='#778899'},
+      {text=' ', color='#d4d4d4'}, {text='λ', color='#aabbcc'},
+      {text='中', color='#d4d4d4'},
+    },
+    {{text='', color='#d4d4d4'}},
+    {{text=long, color='#d4d4d4'}},
+  }), 'Unicode text and all highlight sources must retain their exact spans')
+end)
+vim.inspect_pos, vim.lsp.semantic_tokens.get_at_pos = inspect, tokens
+api.nvim_buf_delete(buffer, {force=true})
+assert(ok, message)
+`,
+			[]
+		]);
+	} finally {
+		await session.stop();
+	}
+});
+
+test('a long preview row stays within a bounded allocation budget', async (context) => {
+	const session = await Session.create(process.cwd(), () => {});
+	try {
+		const allocatedKiB = await session.client.request('nvim_exec_lua', [
+			`
+local references = require('nido_references')
+local text = string.rep('x', 16000)
+references.highlight_text({'warmup'}, '')
+collectgarbage('collect')
+local before = collectgarbage('count')
+-- Count intermediate Lua allocations as well as the returned spans, without a timing limit.
+collectgarbage('stop')
+local ok, result = pcall(references.highlight_text, {text}, '')
+local allocated = collectgarbage('count') - before
+collectgarbage('restart')
+assert(ok, result)
+assert(#result == 1 and #result[1] == 1 and result[1][1].text == text)
+assert(allocated < 32 * 1024,
+  string.format('A 16,000-byte preview row allocated %.1f MiB', allocated / 1024))
+return allocated
+`,
+			[]
+		]);
+		context.diagnostic(
+			`16,000-byte preview row: ${Number(allocatedKiB).toFixed(0)} KiB allocated`
+		);
+	} finally {
+		await session.stop();
+	}
+});
+
 test('application logs detect their format and highlight levels, timestamps and values in the editor and previews', async (context) => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-log-highlights-'));
 	let session: Session | undefined;
