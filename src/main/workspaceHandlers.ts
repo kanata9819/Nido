@@ -322,7 +322,7 @@ export function registerWorkspaceHandlers({
 		);
 	});
 
-	handle('restore', (shell) => {
+	handle('restore', async (shell) => {
 		const selectedShell = shellChoice(shell);
 		state.restoration ??= (async () => {
 			const errors: string[] = [];
@@ -394,7 +394,19 @@ export function registerWorkspaceHandlers({
 				errors
 			};
 		})();
-		return state.restoration;
+		const restored = await state.restoration;
+		// A renderer can reconnect after tabs were created, closed or put to sleep.
+		// Share startup work, but rebuild its response from the current sessions.
+		const ids = orderedIds();
+		return {
+			workspaces: ids.map((id) =>
+				sessions.has(id)
+					? session(id).workspace
+					: { ...sleeping.get(id)!.workspace, sleeping: true }
+			),
+			active: ids.includes(state.active) ? state.active : ids[0] || '',
+			errors: restored.errors
+		};
 	});
 
 	handle('layout', (ids, selected) => {
