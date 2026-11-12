@@ -135,10 +135,23 @@ end`,
 		if (isWithin(source, result)) {
 			throw new Error('Cannot place a folder inside itself.');
 		}
+		if (
+			buffers.some(
+				(buf) =>
+					!affected.includes(buf) &&
+					// A hidden, unedited buffer is not a tab to close.
+					(buf.listed || buf.modified) &&
+					// Saving an old destination buffer could replace the file moved or copied here,
+					// even when the source is not open in the editor.
+					isWithin(result, buf.name)
+			)
+		) {
+			throw new Error('Close the destination file tab first.');
+		}
 		if (action === 'copy') {
 			await cp(source, result, { recursive: true, force: false, errorOnExist: true });
 		} else if (action === 'rename') {
-			await this.move(source, result, buffers, affected);
+			await this.move(source, result, affected);
 		} else {
 			throw new Error('Unknown file action.');
 		}
@@ -232,29 +245,11 @@ return result`,
 	 * Move a file or folder on disk, then point its open buffers at the new location. If a buffer
 	 * was edited in the meantime, the move is undone.
 	 */
-	private async move(
-		source: string,
-		result: string,
-		buffers: OpenBuffer[],
-		affected: OpenBuffer[]
-	): Promise<void> {
+	private async move(source: string, result: string, affected: OpenBuffer[]): Promise<void> {
 		const renamed = affected.map((buf) => ({
 			id: buf.id,
 			name: resolve(result, relative(source, buf.name))
 		}));
-		if (
-			buffers.some(
-				(buf) =>
-					!affected.includes(buf) &&
-					// A hidden, unedited buffer is not a tab to close; it gives way below.
-					(buf.listed || buf.modified) &&
-					// Destination buffers also matter when the source is not open. Otherwise
-					// saving an old destination buffer can overwrite the file just moved here.
-					isWithin(result, buf.name)
-			)
-		) {
-			throw new Error('Close the destination file tab first.');
-		}
 		await rename(source, result);
 		const edited = await this.client.request('nvim_exec_lua', [
 			`local renamed = ...

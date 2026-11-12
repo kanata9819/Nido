@@ -1,4 +1,4 @@
-import { isAbsolute, sep } from 'node:path';
+import { basename, dirname, isAbsolute, resolve, sep } from 'node:path';
 import type { FileAction, NidoEvent } from '../shared/types';
 import type { SearchOptions } from '../shared/search';
 import type { Session } from './session';
@@ -69,8 +69,7 @@ export function registerFileHandlers({
 			throw new Error('Invalid file action.');
 		}
 		const current = session(id);
-		if (action === 'rename' || action === 'delete' || action === 'copy') {
-			const source = await current.path(text(path));
+		const protectOtherWorkspaces = (source: string): void => {
 			const inside = (file: string): boolean => {
 				const child = relative(source, file);
 				return child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child);
@@ -84,13 +83,18 @@ export function registerFileHandlers({
 			if (openElsewhere || sleepingFiles().some(inside)) {
 				throw new Error('Close this file or folder in the other workspace session first.');
 			}
+		};
+		if (action === 'rename' || action === 'delete' || action === 'copy') {
+			protectOtherWorkspaces(await current.path(text(path)));
 		}
-		await current.fileAction(
-			action as FileAction,
-			text(path),
-			target === undefined ? '' : text(target),
-			trash
-		);
+		const destination = target === undefined ? '' : text(target);
+		if ((action === 'rename' || action === 'copy') && destination) {
+			// The destination does not exist on disk yet, but a tab can still hold its old
+			// contents. Resolve the parent so in-workspace links use the same host path.
+			const parent = await current.path(dirname(destination));
+			protectOtherWorkspaces(resolve(parent, basename(destination)));
+		}
+		await current.fileAction(action as FileAction, text(path), destination, trash);
 		for (const open of sessions.values()) {
 			if (open.workspace.root === current.workspace.root) {
 				send({ type: 'filesChanged', id: open.workspace.id });

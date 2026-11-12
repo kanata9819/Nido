@@ -107,6 +107,62 @@ test('file IPC validates requests and protects files open in other workspace ses
 	);
 });
 
+for (const action of ['rename', 'copy'] as const) {
+	for (const folder of [false, true]) {
+		for (const sleeping of [false, true]) {
+			test(`${action} protects a ${folder ? 'folder child' : 'file'} destination in another ${sleeping ? 'sleeping' : 'active'} workspace`, async () => {
+				const root = resolve('file-destination-handler-fixture');
+				const destination = join(root, 'actual/target');
+				let openFile = folder ? join(destination, 'notes.txt') : destination;
+				const mutations: unknown[][] = [];
+				const current = {
+					workspace: { id: 'current', root },
+					state: { buffers: [] },
+					// The destination's parent can be reached through an in-workspace link.
+					path: async (path: string) =>
+						path === 'alias' ? join(root, 'actual') : resolve(root, path),
+					fileAction: async (...args: unknown[]) => mutations.push(args)
+				} as unknown as Session;
+				const other = {
+					workspace: { id: 'other', root },
+					state: { buffers: [{ name: openFile, modified: true }] }
+				} as Session;
+				const sessions = new Map([
+					['current', current],
+					...(!sleeping ? [['other', other] as const] : [])
+				]);
+				const handlers = new Map<string, (...args: unknown[]) => unknown>();
+				registerFileHandlers({
+					handle: (name, action) => handlers.set(name, action),
+					session: (id) => sessions.get(String(id))!,
+					text: (value) => String(value),
+					integer: Number,
+					sessions,
+					sleepingFiles: () => (sleeping ? [openFile] : []),
+					send: () => {},
+					trash: async () => {}
+				});
+				const run = (): Promise<void> =>
+					handlers.get('fileAction')!(
+						'current',
+						action,
+						'source',
+						'alias/target'
+					) as Promise<void>;
+				await assert.rejects(run(), /other workspace session/);
+				assert.deepEqual(mutations, []);
+				// The shared prefix does not put a neighboring file or directory inside the destination.
+				openFile = folder
+					? join(`${destination}-sibling`, 'notes.txt')
+					: `${destination}-sibling`;
+				other.state.buffers[0].name = openFile;
+				await run();
+				assert.equal(mutations.length, 1);
+			});
+		}
+	}
+}
+
 test('the folder picker lists the Windows drives that can be opened, and none elsewhere', async () => {
 	const checked: string[] = [];
 	const readable = async (root: string): Promise<boolean> => {
