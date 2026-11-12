@@ -33,6 +33,14 @@ end
 -- The GUI applies the persisted setting once it connects to this session.
 vim.g.editorconfig = false
 vim.cmd('runtime plugin/editorconfig.lua')
+api.nvim_create_autocmd('BufReadPre', {callback=function(event)
+  -- A reread detects fresh encoding and line-ending options. Remove the previous
+  -- extension first so BufReadPost records this read's baseline before applying it.
+  if saved[event.buf] then
+    restore(event.buf)
+    saved[event.buf] = nil
+  end
+end})
 api.nvim_create_autocmd('BufWipeout', {callback=function(event) saved[event.buf] = nil end})
 
 function M.set_enabled(enabled)

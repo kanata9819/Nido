@@ -2799,6 +2799,50 @@ test('EditorConfig reads CRLF files cleanly when the project requests LF', async
 	}
 });
 
+test('EditorConfig keeps newly detected encoding and line endings after reloading a file', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-editorconfig-reload-'));
+	let session: Session | undefined;
+	try {
+		await writeFile(
+			join(root, '.editorconfig'),
+			'root = true\n[*]\nindent_style = space\nindent_size = 2\n'
+		);
+		const path = join(root, 'sample.txt');
+		await writeFile(path, 'before\n');
+		session = await Session.create(root, () => {});
+		await session.setEditorConfig(true);
+		await session.openFile('sample.txt');
+		const lua = (code: string): ReturnType<Session['client']['request']> =>
+			session!.client.request('nvim_exec_lua', [code, []]);
+		const replacements = [
+			Buffer.from('\uFEFFafter\r\n'),
+			Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('unicode\r\n', 'utf16le')])
+		];
+		for (const [index, replacement] of replacements.entries()) {
+			await writeFile(path, replacement);
+			await lua('vim.cmd.edit({bang=true})');
+			assert.deepEqual(
+				await lua(
+					'return {vim.bo.fileformat, vim.bo.fileencoding, vim.bo.bomb, vim.bo.shiftwidth}'
+				),
+				['dos', index === 0 ? 'utf-8' : 'utf-16le', true, 2]
+			);
+			await session.save();
+			assert.deepEqual(await readFile(path), replacement);
+		}
+		await session.setEditorConfig(false);
+		assert.deepEqual(
+			await lua('return {vim.bo.fileformat, vim.bo.fileencoding, vim.bo.bomb}'),
+			['dos', 'utf-16le', true]
+		);
+		await session.save();
+		assert.deepEqual(await readFile(path), replacements[1]);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('indentation is published and converts only leading whitespace', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-indentation-'));
 	let session: Session | undefined;
