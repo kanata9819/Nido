@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtemp, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -595,6 +595,60 @@ test('a workspace coming back into focus reloads files changed by another progra
 		assert.equal(await line(), 'after');
 		assert.deepEqual(await events(), ['FocusLost', 'FocusGained']);
 	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('files whose names hold $, #, % or spaces open and save under their own name', async () => {
+	const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-special-names-')));
+	// A variable Neovim inherits: ":edit" used to expand it inside a file name.
+	process.env.NIDO_TEST_EXPANDED = 'expanded';
+	let session: Session | undefined;
+	try {
+		const names = [
+			'first $NIDO_TEST_EXPANDED.txt',
+			'a#b%c.txt',
+			'crlf $NIDO_TEST_EXPANDED.txt'
+		];
+		for (const name of names) {
+			await writeFile(join(root, name), name.startsWith('crlf') ? 'one\r\ntwo\r\n' : 'one\n');
+		}
+		session = await Session.create(root, () => {});
+		const current = session;
+		await current.attach(80, 24);
+		const buffer = (): Promise<unknown> =>
+			current.client.request('nvim_exec_lua', [
+				`return {name=vim.api.nvim_buf_get_name(0), line=vim.api.nvim_get_current_line(),
+          format=vim.bo.fileformat, binary=vim.bo.binary}`,
+				[]
+			]);
+		// The first file names the empty start-up buffer; later ones are added.
+		for (const name of names) {
+			await current.openFile(name);
+			assert.deepEqual(await buffer(), {
+				name: join(root, name),
+				line: 'one',
+				format: name.startsWith('crlf') ? 'dos' : 'unix',
+				binary: false
+			});
+			await current.input('Ax<Esc>');
+			await current.save();
+			assert.equal(
+				await readFile(join(root, name), 'utf8'),
+				name.startsWith('crlf') ? 'onex\r\ntwo\r\n' : 'onex\n'
+			);
+		}
+		// Reopening a listed buffer by its name returns to it.
+		await current.openFile(names[0]);
+		assert.equal(((await buffer()) as { name: string }).name, join(root, names[0]));
+		assert.deepEqual(
+			(await readdir(root)).sort(),
+			[...names].sort(),
+			'no file may be written under an expanded name'
+		);
+	} finally {
+		delete process.env.NIDO_TEST_EXPANDED;
 		await session?.stop();
 		await rm(root, { recursive: true, force: true });
 	}
