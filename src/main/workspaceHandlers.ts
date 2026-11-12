@@ -513,13 +513,22 @@ export function registerWorkspaceHandlers({
 				if (state.prompting || state.closing || window.isDestroyed()) {
 					throw new Error('The window is closing.');
 				}
+				// Preferences can change while restore runs. Register before loading them
+				// again so subsequent pack updates also reach this session.
+				sessions.set(key, s);
+				await s.reloadLanguagePacks(await languagePacks.load());
+				if (state.prompting || state.closing || window.isDestroyed()) {
+					throw new Error('The window is closing.');
+				}
 			} catch (error) {
+				if (sessions.get(key) === s) {
+					sessions.delete(key);
+				}
 				await s.stop();
 				throw error;
 			}
 			sleeping.delete(key);
 			muted.delete(key);
-			sessions.set(key, s);
 			events.release();
 			return { workspace: s.workspace, errors };
 		});
