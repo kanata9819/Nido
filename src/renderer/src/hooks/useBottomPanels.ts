@@ -200,7 +200,7 @@ export function useBottomPanels({
 			starting.canFocus = captureFocus();
 			return;
 		}
-		if (terminalVisible && bottomPanel === 'terminal' && workspace?.kind !== 'terminal') {
+		if (terminalVisible && bottomPanel === 'terminal' && workspace?.terminalId) {
 			closeTerminal();
 		} else {
 			showTerminal();
