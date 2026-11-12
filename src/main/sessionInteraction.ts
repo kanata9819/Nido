@@ -157,12 +157,12 @@ export class SessionInteraction {
 
 	click(row: number, column: number): Promise<void> {
 		const next = this.inputQueue.then(async () => {
-			// A click would complete a pending command: g then a click is g<LeftMouse>.
-			if (await this.awaitingKey()) {
-				return;
-			}
 			this.events.beginScrollBatch();
 			try {
+				// A click would complete a pending command: g then a click is g<LeftMouse>.
+				if (await this.awaitingKey()) {
+					return;
+				}
 				// Mouse coordinates refer to the visible viewport, not the pre-scroll editing anchor.
 				await this.client.request('nvim_exec_lua', [
 					"require('nido_scroll').restore(true)",
@@ -197,11 +197,11 @@ export class SessionInteraction {
 
 	jumpSticky(window: number, buffer: number, line: number): Promise<void> {
 		const next = this.inputQueue.then(async () => {
-			if (await this.awaitingKey()) {
-				return;
-			}
 			this.events.beginScrollBatch();
 			try {
+				if (await this.awaitingKey()) {
+					return;
+				}
 				const moved = await this.client.request('nvim_exec_lua', [
 					"return require('nido_sticky').jump(...)",
 					[window, buffer, line]
@@ -341,13 +341,15 @@ export class SessionInteraction {
 			this.prefetchDown = undefined;
 		}
 		const next = this.inputQueue.then(async () => {
-			// Ignore the wheel while a command waits for its key.
-			if (await this.awaitingKey()) {
-				return;
-			}
-			this.scrollDetached = true;
+			// Batch from the start: a redraw that arrives while Neovim answers must not be
+			// published alone, ahead of the grid it belongs with.
 			this.events.beginScrollBatch();
 			try {
+				// Ignore the wheel while a command waits for its key.
+				if (await this.awaitingKey()) {
+					return;
+				}
+				this.scrollDetached = true;
 				if (this.workspace.kind === 'terminal') {
 					await this.client.request('nvim_command', ['stopinsert']);
 				}
