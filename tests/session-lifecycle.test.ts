@@ -494,7 +494,7 @@ test(
 );
 
 test(
-	'scrolling, clicking or Ctrl+N while a command waits for its key keeps the editor responsive',
+	'scrolling, clicking, pasting or Ctrl+N while a command waits for its key keeps the editor responsive',
 	{ timeout: 60000 },
 	async () => {
 		const root = await mkdtemp(join(tmpdir(), 'nido-pending-key-'));
@@ -511,7 +511,14 @@ test(
 				scroll: () => current.scroll(1),
 				'pixel scroll': () => current.scroll(0.5, true, true),
 				click: () => current.click(0, 0),
-				'Ctrl+N': () => current.input('<C-n>')
+				'Ctrl+N': () => current.input('<C-n>'),
+				'completion item': () => current.selectCompletion(0),
+				// Pasted text would complete the command instead, so the paste is refused.
+				paste: () =>
+					assert.rejects(
+						current.paste('xyz'),
+						/Finish the current Neovim command before pasting/
+					)
 			};
 			// r, g, z and Ctrl+W wait for their next key; Ctrl+V does so in Insert mode.
 			for (const keys of ['r', 'g', 'z', '<C-w>', 'i<C-v>']) {
