@@ -67,6 +67,8 @@ export function registerWorkspaceHandlers({
 	prepareToQuit: () => Promise<boolean>;
 	/** Files that sleeping workspaces had open, which they reopen when they wake. */
 	sleepingFiles: () => string[];
+	/** Tell each Neovim whether it is the selected workspace in a focused window. */
+	syncFocus: () => void;
 } {
 	const layoutPath = join(app.getPath('userData'), 'workspaces.json');
 	let checkpointReady = false;
@@ -407,6 +409,7 @@ export function registerWorkspaceHandlers({
 		}
 		state.order = ids;
 		state.active = selected;
+		syncFocus();
 	});
 
 	registerFolderBrowserHandlers({ handle, text });
@@ -554,8 +557,18 @@ export function registerWorkspaceHandlers({
 			return true;
 		});
 	});
+	function syncFocus(): void {
+		const focused = !window.isDestroyed() && window.isFocused();
+		for (const [id, s] of sessions) {
+			s.setFocus(focused && id === state.active);
+		}
+	}
+	window.on('focus', syncFocus);
+	window.on('blur', syncFocus);
+
 	return {
 		prepareToQuit,
+		syncFocus,
 		sleepingFiles: () =>
 			[...sleeping.values()].flatMap(({ saved }) => saved.files.map((file) => file.path))
 	};

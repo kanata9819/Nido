@@ -558,6 +558,48 @@ test(
 	}
 );
 
+test('a workspace coming back into focus reloads files changed by another program', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-focus-reload-'));
+	let session: Session | undefined;
+	try {
+		await writeFile(join(root, 'notes.txt'), 'before\n');
+		session = await Session.create(root, () => {});
+		const current = session;
+		const line = (): Promise<unknown> => current.client.request('nvim_get_current_line', []);
+		// Focus requested before the UI attaches is reported once it does.
+		current.setFocus(true);
+		await current.attach(80, 24);
+		await current.openFile('notes.txt');
+		const events = (): Promise<unknown> =>
+			current.client.request('nvim_exec_lua', ['return _G.focus_events', []]);
+		await current.client.request('nvim_exec_lua', [
+			`_G.focus_events = {}
+      vim.api.nvim_create_autocmd({'FocusGained', 'FocusLost'}, {callback=function(event)
+        table.insert(_G.focus_events, event.event)
+      end})`,
+			[]
+		]);
+		current.setFocus(false);
+		// Neovim compares timestamps in whole seconds, and on FocusGained it checks files
+		// only when it last did so more than two seconds ago, here when the UI attached.
+		await new Promise((resolve) => setTimeout(resolve, 2100));
+		await writeFile(join(root, 'notes.txt'), 'after\n');
+		await current.input('0');
+		assert.equal(await line(), 'before', 'only focus should prompt the reload');
+		current.setFocus(true);
+		// Repeating a state sends nothing.
+		current.setFocus(true);
+		for (let attempt = 0; attempt < 100 && (await line()) !== 'after'; attempt++) {
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		assert.equal(await line(), 'after');
+		assert.deepEqual(await events(), ['FocusLost', 'FocusGained']);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('closing a workspace cancels in-flight filesystem searches', { timeout: 15000 }, async () => {
 	const session = await Session.create(process.cwd(), () => {});
 	const files = SessionFiles.prototype.files;
