@@ -64,6 +64,9 @@ export default function UpdateButton(): React.JSX.Element {
 				: status === 'available'
 					? ArrowDownToLine
 					: RefreshCw;
+	const currentVersion = update?.currentVersion
+		? t('Nido version {version}', { version: update.currentVersion })
+		: '';
 	const action: UpdateAction =
 		status === 'available' ? 'download' : status === 'downloaded' ? 'install' : 'check';
 	return (
@@ -75,7 +78,9 @@ export default function UpdateButton(): React.JSX.Element {
 			title={
 				update?.message
 					? t(update.message)
-					: `${label}${update?.version ? `   ${update.version}` : ''}`
+					: [label + (update?.version ? `   ${update.version}` : ''), currentVersion]
+							.filter(Boolean)
+							.join('\n')
 			}
 			disabled={busy || status === 'disabled'}
 			onClick={() =>

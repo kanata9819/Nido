@@ -807,6 +807,7 @@ export const japanese: Record<string, string> = {
 	'Nido is up to date': 'Nidoは最新です',
 	'Retry update check': '更新の確認を再試行',
 	'Check for updates': '更新を確認',
+	'Nido version {version}': 'Nido バージョン {version}',
 	Update: '更新',
 	'Dismiss notification': '通知を閉じる',
 	'Dismiss error': 'エラーを閉じる',
