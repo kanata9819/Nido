@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'download-archive.ps1')
 $nidoRoot = Split-Path $PSScriptRoot -Parent
 $bundle = Join-Path $nidoRoot 'resources/debug'
 $cache = Join-Path $nidoRoot '.downloads'
@@ -7,31 +8,15 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $version = '1.12.3'
 $hash = 'a916e509308dac817732f63ca604a8b93ed29cd16f38a2fa9f0b64ed58e8f51a'
 
-# Avoid Get-FileHash, which may be unavailable in CI's nested Windows PowerShell process.
-function Get-ArchiveSha256 {
-  param([string] $Path)
-  $sha = [System.Security.Cryptography.SHA256]::Create()
-  $stream = $null
-  try {
-    $stream = [System.IO.File]::OpenRead($Path)
-    [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
-  } finally {
-    if ($null -ne $stream) { $stream.Dispose() }
-    $sha.Dispose()
-  }
-}
-
 if (!(Test-Path "$bundle/codelldb/extension/adapter/codelldb.exe")) {
   $archive = "$cache/codelldb-$version.vsix"
-  if (!(Test-Path $archive)) { Invoke-WebRequest "https://github.com/vadimcn/codelldb/releases/download/v$version/codelldb-win32-x64.vsix" -OutFile $archive }
-  if ((Get-ArchiveSha256 $archive) -ne $hash) { throw 'CodeLLDB checksum mismatch' }
+  Get-NidoVerifiedArchive -Uri "https://github.com/vadimcn/codelldb/releases/download/v$version/codelldb-win32-x64.vsix" -Path $archive -ExpectedHash $hash
   [IO.Compression.ZipFile]::ExtractToDirectory($archive, "$bundle/codelldb")
 }
 $revision = '9e848e09a697ee95302a3ef2dd43fd6eb709e570'
 if (!(Test-Path "$bundle/nvim-dap-$revision/lua/dap.lua")) {
   $archive = "$cache/nvim-dap-$revision.zip"
-  if (!(Test-Path $archive)) { Invoke-WebRequest "https://github.com/mfussenegger/nvim-dap/archive/$revision.zip" -OutFile $archive }
-  if ((Get-ArchiveSha256 $archive) -ne '5b5085443ce67a9c09de7a2403ab6fb7c1e76d3a38bc2b80ba231acd2e886f2a') { throw 'nvim-dap checksum mismatch' }
+  Get-NidoVerifiedArchive -Uri "https://github.com/mfussenegger/nvim-dap/archive/$revision.zip" -Path $archive -ExpectedHash '5b5085443ce67a9c09de7a2403ab6fb7c1e76d3a38bc2b80ba231acd2e886f2a'
   [IO.Compression.ZipFile]::ExtractToDirectory($archive, $bundle)
 }
 Write-Output 'Bundled CodeLLDB 1.12.3 and pinned nvim-dap.'
