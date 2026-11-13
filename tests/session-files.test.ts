@@ -8,49 +8,86 @@ import { SessionFiles } from '../src/main/sessionFiles';
 import { SearchMatcher } from '../src/main/searchMatcher';
 import { defaultSearchOptions } from '../src/shared/search';
 
-for (const folder of [false, true]) {
-	for (const modified of [false, true]) {
-		test(`rename protects a ${modified ? 'modified hidden buffer' : 'tab'} at an unopened ${folder ? 'folder child' : 'file'} destination`, async () => {
-			const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-move-target-')));
-			try {
-				if (folder) await mkdir(join(root, 'source'));
-				const source = folder ? 'source/file.txt' : 'source.txt';
-				const destination = folder ? 'target/file.txt' : 'target.txt';
-				await writeFile(join(root, source), 'source contents\n');
-				const client = {
-					request: async (_method: string, args: unknown[]) => {
-						if (String(args[0]).includes('local result = {}')) {
-							return [
-								{
-									id: 1,
-									name: join(root, destination),
-									listed: !modified,
-									modified
-								}
-							];
+for (const action of ['rename', 'copy'] as const) {
+	for (const folder of [false, true]) {
+		for (const modified of [false, true]) {
+			test(`${action} protects a ${modified ? 'modified hidden buffer' : 'tab'} at an unopened ${folder ? 'folder child' : 'file'} destination`, async () => {
+				const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-move-target-')));
+				try {
+					if (folder) await mkdir(join(root, 'source'));
+					const source = folder ? 'source/file.txt' : 'source.txt';
+					const destination = folder ? 'target/file.txt' : 'target.txt';
+					await writeFile(join(root, source), 'source contents\n');
+					const client = {
+						request: async (_method: string, args: unknown[]) => {
+							if (String(args[0]).includes('local result = {}')) {
+								return [
+									{
+										id: 1,
+										name: join(root, destination),
+										listed: !modified,
+										modified
+									}
+								];
+							}
+							return false;
 						}
-						return false;
-					}
-				} as unknown as NeovimClient;
-				const files = new SessionFiles(root, client);
-				await assert.rejects(
-					files.fileAction(
-						'rename',
-						folder ? 'source' : source,
-						folder ? 'target' : destination,
-						async () => {}
-					),
-					/Close the destination file tab first/
-				);
-				assert.equal(await readFile(join(root, source), 'utf8'), 'source contents\n');
-				await assert.rejects(stat(join(root, folder ? 'target' : destination)), {
-					code: 'ENOENT'
-				});
-			} finally {
-				await rm(root, { recursive: true, force: true });
-			}
-		});
+					} as unknown as NeovimClient;
+					const files = new SessionFiles(root, client);
+					await assert.rejects(
+						files.fileAction(
+							action,
+							folder ? 'source' : source,
+							folder ? 'target' : destination,
+							async () => {}
+						),
+						/Close the destination file tab first/
+					);
+					assert.equal(await readFile(join(root, source), 'utf8'), 'source contents\n');
+					await assert.rejects(stat(join(root, folder ? 'target' : destination)), {
+						code: 'ENOENT'
+					});
+				} finally {
+					await rm(root, { recursive: true, force: true });
+				}
+			});
+		}
 	}
+}
+
+for (const action of ['rename', 'copy'] as const) {
+	test(`${action} permits an unedited hidden destination and a tab with a shared path prefix`, async () => {
+		const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-target-sibling-')));
+		try {
+			await writeFile(join(root, 'source.txt'), 'source contents\n');
+			const client = {
+				request: async (_method: string, args: unknown[]) => {
+					if (String(args[0]).includes('local result = {}')) {
+						return [
+							{
+								id: 1,
+								name: join(root, 'target.txt'),
+								listed: false,
+								modified: false
+							},
+							{
+								id: 2,
+								name: join(root, 'target.txt-other'),
+								listed: true,
+								modified: true
+							}
+						];
+					}
+					return false;
+				}
+			} as unknown as NeovimClient;
+			const files = new SessionFiles(root, client);
+			await files.fileAction(action, 'source.txt', 'target.txt', async () => {});
+			assert.equal(await readFile(join(root, 'target.txt'), 'utf8'), 'source contents\n');
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
 }
 
 test('saved-text search keeps embedded CR characters inside LF and CRLF rows', async () => {
