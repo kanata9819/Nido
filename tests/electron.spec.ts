@@ -4500,8 +4500,9 @@ test('normal shutdown restores workspace order, active file and cursors', async 
 		await page.keyboard.press('Control+Shift+n');
 		await chooseWorkspace(page, join(root, 'Two'));
 		await expect(page.getByRole('tab', { name: 'Workspace Two', exact: true })).toBeVisible();
+		// Space h opens Time Machine; Space Shift+H moves the workspace left.
 		await page.keyboard.press('Space');
-		await page.keyboard.press('h');
+		await page.keyboard.press('Shift+H');
 		const closed = running.waitForEvent('close');
 		await page.evaluate(() => {
 			void window.nido.windowAction('close');
