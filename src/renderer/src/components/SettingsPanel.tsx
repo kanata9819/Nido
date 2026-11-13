@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n';
 import type { UITheme } from '../../../shared/types';
 import type { ActivityBarPosition, EditorSettings } from '../hooks/useEditorSettings';
@@ -57,6 +58,21 @@ export default function SettingsPanel({
 	setLineHeight
 }: SettingsPanelProps): React.JSX.Element {
 	const t = useI18n();
+	const [version, setVersion] = useState('');
+	useEffect(() => {
+		let active = true;
+		void window.nido
+			.updateState()
+			.then((state) => {
+				if (active) {
+					setVersion(state.currentVersion);
+				}
+			})
+			.catch(() => undefined);
+		return () => {
+			active = false;
+		};
+	}, []);
 	return (
 		<div className={styles.settings} onKeyDown={settingsKeyDown}>
 			<section aria-labelledby="settings-general">
@@ -355,6 +371,14 @@ export default function SettingsPanel({
 				<br />
 				{t(
 					'Nido includes its own Neovim and editor settings. Personal Neovim config is not loaded.'
+				)}
+				{version && (
+					<>
+						<br />
+						<span data-testid="app-version">
+							{t('Nido version {version}', { version })}
+						</span>
+					</>
 				)}
 			</p>
 		</div>
