@@ -144,7 +144,9 @@ test('a packaged update downloads and verifies an installer, permits cancellatio
 		const download = page.getByRole('button', { name: 'Download update', exact: true });
 		await expect(download).toHaveAttribute(
 			'title',
-			new RegExp(`^Download update\\s+${nextVersion.replaceAll('.', '\\.')}$`)
+			new RegExp(
+				`^Download update\\s+${nextVersion.replaceAll('.', '\\.')}\\nNido version ${version.replaceAll('.', '\\.')}$`
+			)
 		);
 		await download.click();
 		await expect(
