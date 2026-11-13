@@ -354,13 +354,13 @@ export function buildCommands(
 						}
 					},
 					{
-						key: 'h',
+						key: 'H',
 						title: 'Move workspace left',
 						detail: 'Reorder the workspace tabs',
 						run: () => moveWorkspace(-1)
 					},
 					{
-						key: 'l',
+						key: 'L',
 						title: 'Move workspace right',
 						detail: 'Reorder the workspace tabs',
 						run: () => moveWorkspace(1)
