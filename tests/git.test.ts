@@ -450,6 +450,51 @@ test('side-by-side diffs align replacements, additions, deletions and source lin
 	);
 });
 
+test('Git previews keep blank context lines even when Git is configured to suppress their prefix', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-diff-blank-context-'));
+	const git = (...args: string[]): string =>
+		execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true });
+	const verify = (diff: string, source: string): void => {
+		assert.deepEqual(
+			splitDiff(diff).map((row) => [
+				row.before?.number,
+				row.before?.text,
+				row.after?.number,
+				row.after?.text
+			]),
+			[
+				[1, 'old first', 1, 'new first'],
+				[2, '', 2, ''],
+				[3, 'middle', 3, 'middle'],
+				[4, '', 4, ''],
+				[5, 'old last', 5, 'new last']
+			],
+			source
+		);
+	};
+	try {
+		git('init', '-q');
+		git('config', 'core.autocrlf', 'false');
+		git('config', 'user.name', 'Nido Test');
+		git('config', 'user.email', 'nido@example.test');
+		git('config', 'commit.gpgsign', 'false');
+		git('config', 'diff.suppressBlankEmpty', 'true');
+		await writeFile(join(root, 'file.txt'), 'old first\n\nmiddle\n\nold last\n');
+		git('add', '.');
+		git('commit', '-qm', 'Initial');
+		await writeFile(join(root, 'file.txt'), 'new first\n\nmiddle\n\nnew last\n');
+		verify(await gitDiff(root, 'file.txt', false), 'working tree diff');
+		await gitStage(root, 'file.txt', false);
+		verify(await gitDiff(root, 'file.txt', true), 'staged diff');
+		await gitCommit(root, 'Update');
+		const { commits } = await gitHistory(root, 0);
+		verify(await gitCommitDiff(root, commits[0].hash, 'file.txt'), 'commit diff');
+		assert.equal(git('config', '--get', 'diff.suppressBlankEmpty').trim(), 'true');
+	} finally {
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
 test('history, first-parent diffs and branch switches preserve conflicting edits', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-history-'));
 	const git = (...args: string[]): string =>

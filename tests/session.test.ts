@@ -3034,6 +3034,86 @@ assert(ok, vim.fn.bufname(buffer) .. ': ' .. vim.inspect(signs()))`,
 	}
 });
 
+test('Git gutter signs distinguish an empty file from a single newline, including background buffers', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-git-signs-empty-'));
+	let session: Session | undefined;
+	const git = (...args: string[]): void => {
+		execFileSync('git', args, { cwd: root, windowsHide: true });
+	};
+	try {
+		git('init', '-q');
+		git('config', 'core.autocrlf', 'false');
+		await writeFile(join(root, 'empty.txt'), '');
+		await writeFile(join(root, 'newline.txt'), '\n');
+		git('add', '.');
+		git(
+			'-c',
+			'user.name=Nido Test',
+			'-c',
+			'user.email=nido@example.test',
+			'-c',
+			'commit.gpgsign=false',
+			'commit',
+			'-qm',
+			'base'
+		);
+		await writeFile(join(root, 'new-empty.txt'), '');
+		await writeFile(join(root, 'new-newline.txt'), '\n');
+		session = await Session.create(root, () => {});
+		const lua = (
+			code: string,
+			args: unknown[] = []
+		): ReturnType<Session['client']['request']> =>
+			session!.client.request('nvim_exec_lua', [code, args]);
+		const signs = async (expected: [number, string][], buffer = 0): Promise<void> => {
+			await lua(
+				`
+local expected, buffer = ...
+if buffer == 0 then buffer = vim.api.nvim_get_current_buf() end
+local system, active, started = vim.system, 0, false
+vim.system = function(command, options, callback)
+  if command[1] ~= 'git' then return system(command, options, callback) end
+  active = active + 1
+  started = true
+  return system(command, options, function(result)
+    callback(result)
+    vim.schedule(function() active = active - 1 end)
+  end)
+end
+require('nido_git_signs').refresh(buffer)
+local completed = vim.wait(5000, function() return started and active == 0 end, 10)
+vim.system = system
+assert(completed, 'Git sign comparison completed')
+local result = {}
+for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buffer, vim.api.nvim_get_namespaces().nido_git_signs, 0, -1, {details=true})) do
+  table.insert(result, {mark[2], mark[4].sign_hl_group})
+end
+assert(vim.deep_equal(result, expected), vim.api.nvim_buf_get_name(buffer) .. ': ' .. vim.inspect(result))`,
+				[expected, buffer]
+			);
+		};
+		await session.openFile('empty.txt');
+		await signs([]);
+		await session.openFile('newline.txt');
+		await signs([]);
+		const newline = (await lua('return vim.api.nvim_get_current_buf()')) as number;
+		await lua('vim.api.nvim_buf_set_lines(0, 0, -1, false, {})');
+		await signs([[0, 'NidoGitDeleted']]);
+		await session.openFile('new-empty.txt');
+		await signs([]);
+		await session.openFile('new-newline.txt');
+		await signs([[0, 'NidoGitAdded']]);
+		await signs([[0, 'NidoGitDeleted']], newline);
+		await lua('vim.api.nvim_buf_set_lines(...)', [newline, 0, -1, false, ['']]);
+		await lua('vim.api.nvim_buf_set_lines(0, 0, -1, false, {})');
+		await signs([]);
+		await signs([], newline);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('Git gutter signs track HEAD, unsaved edits, deletions, new files and commits', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-git-signs-'));
 	let session: Session | undefined;

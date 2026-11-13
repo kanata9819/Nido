@@ -5,6 +5,8 @@ import { parseWslPath, wslHostPath } from '../shared/wsl';
 import { wslArguments } from './wsl';
 
 const exec = promisify(execFile);
+// The preview parser needs the leading space on unchanged blank lines in a unified diff.
+const diffConfig = ['-c', 'diff.suppressBlankEmpty=false'];
 
 export async function gitRoot(cwd: string): Promise<string> {
 	return (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
@@ -84,6 +86,7 @@ export async function gitCommitDiff(cwd: string, hash: string, path: string): Pr
 	}
 	const root = (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
 	return git(root, [
+		...diffConfig,
 		'show',
 		'--format=',
 		'--first-parent',
@@ -285,9 +288,14 @@ export async function gitDiff(cwd: string, path: string, staged: boolean): Promi
 	const { root, change } = await selectedChange(cwd, path, staged);
 	const options = ['--no-ext-diff', '--no-textconv', '--no-color', '--unified=2147483647'];
 	if (change.status === '?') {
-		return git(root, ['diff', ...options, '--no-index', '--', '/dev/null', change.path], true);
+		return git(
+			root,
+			[...diffConfig, 'diff', ...options, '--no-index', '--', '/dev/null', change.path],
+			true
+		);
 	}
 	return git(root, [
+		...diffConfig,
 		'diff',
 		...options,
 		...(staged ? ['--cached'] : []),
