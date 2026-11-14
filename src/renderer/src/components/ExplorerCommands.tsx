@@ -6,13 +6,19 @@ import type { FileAction } from '../../../shared/types';
 import styles from '../assets/Palette.module.css';
 import OverlayPresence from './OverlayPresence';
 
+/** A file operation waiting for the user to enter a path (or confirm a delete). */
 export interface FileRequest {
 	action: FileAction;
 	path: string;
+	/** The initial text of the path field. */
 	value: string;
 	title: string;
 }
 
+/**
+ * The explorer's command dialog. Without a `request` it lists file commands, each run by its
+ * key; with a `request` it shows the form for that operation.
+ */
 export default function ExplorerCommands({
 	visible = true,
 	workspaceId,
@@ -35,6 +41,7 @@ export default function ExplorerCommands({
 	const [value, setValue] = useState(request?.value || '');
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState('');
+	// Reset the form while rendering when the request changes or the dialog opens again.
 	const [previousRequest, setPreviousRequest] = useState(request);
 	const [previousVisible, setPreviousVisible] = useState(visible);
 	if (request !== previousRequest || visible !== previousVisible) {
@@ -61,6 +68,7 @@ export default function ExplorerCommands({
 		field.current?.focus();
 		field.current?.select();
 	}, [request, visible]);
+	// Run the requested operation, then report the path to select.
 	const submit = async (): Promise<void> => {
 		if (!request || busy) {
 			return;
@@ -75,6 +83,7 @@ export default function ExplorerCommands({
 			if (renaming && /[\\/]/.test(value)) {
 				throw new Error(t('Enter a name. Use Move to… to change folders.'));
 			}
+			// Renaming keeps the folder and replaces the name; moving and copying take a path.
 			const target = renaming ? request.path.replace(/[^\\/]+$/, '') + value : value;
 			await window.nido.fileAction(
 				workspaceId,
@@ -82,19 +91,30 @@ export default function ExplorerCommands({
 				path,
 				creating ? undefined : target
 			);
-			onDone(
+			// Select the result in the explorer: the parent folder after a delete.
+			const selected =
 				request.action === 'delete'
 					? request.path.replace(/[\\/]?[^\\/]+$/, '')
 					: creating
 						? path
-						: target
-			);
+						: target;
+			onDone(selected);
 			onClose();
 		} catch (e) {
 			setError(String(e));
 			setBusy(false);
 			field.current?.focus();
 		}
+	};
+	// Move focus to the next (1) or previous (-1) enabled command, wrapping around.
+	const moveFocus = (step: 1 | -1): void => {
+		const buttons = [
+			...dialog.current!.querySelectorAll<HTMLButtonElement>(
+				'[data-file-command]:not(:disabled)'
+			)
+		];
+		const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+		buttons[(index + step + buttons.length) % buttons.length]?.focus();
 	};
 	return createPortal(
 		<OverlayPresence>
@@ -121,6 +141,7 @@ export default function ExplorerCommands({
 								onClose();
 							}
 						}
+						// In the command list, a command's key runs it, and j/k or the arrows move between them.
 						if (!request && !event.ctrlKey && !event.altKey && !event.metaKey) {
 							const command = commands.find(
 								(item) => item.key === event.key && !item.disabled
@@ -131,20 +152,7 @@ export default function ExplorerCommands({
 							}
 							if (['j', 'k', 'ArrowDown', 'ArrowUp'].includes(event.key)) {
 								event.preventDefault();
-								const buttons = [
-									...dialog.current!.querySelectorAll<HTMLButtonElement>(
-										'[data-file-command]:not(:disabled)'
-									)
-								];
-								const index = buttons.indexOf(
-									document.activeElement as HTMLButtonElement
-								);
-								buttons[
-									(index +
-										(['j', 'ArrowDown'].includes(event.key) ? 1 : -1) +
-										buttons.length) %
-										buttons.length
-								]?.focus();
+								moveFocus(['j', 'ArrowDown'].includes(event.key) ? 1 : -1);
 							}
 						}
 					}}

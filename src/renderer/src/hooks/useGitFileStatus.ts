@@ -7,6 +7,23 @@ export { gitFileKey, type Decoration } from '../fileDecorations';
 
 const emptyDecorations: Record<string, Decoration> = {};
 
+/** Names of Git's one-letter statuses, used in the decoration's tooltip. */
+const statusLabels: Record<string, string> = {
+	'?': 'Untracked',
+	U: 'Conflict',
+	M: 'Modified',
+	A: 'Added',
+	D: 'Deleted',
+	R: 'Renamed',
+	C: 'Copied',
+	T: 'Type changed'
+};
+
+/**
+ * Git status marks for the explorer and tabs, keyed by gitFileKey. Polls git status every 3
+ * seconds, slowing down to 30 seconds while nothing changes, and refreshes at once when the
+ * window gains focus or files change.
+ */
 export function useGitFileStatus(
 	workspaceId: string,
 	buffers: BufferInfo[]
@@ -55,20 +72,9 @@ export function useGitFileStatus(
 				for (const change of [...status.changes].sort(
 					(a, b) => Number(b.staged) - Number(a.staged)
 				)) {
+					// Untracked files (? in Git) are marked U.
 					const code = change.status === '?' ? 'U' : change.status;
-					const label =
-						change.status === '?'
-							? 'Untracked'
-							: change.status === 'U'
-								? 'Conflict'
-								: {
-										M: 'Modified',
-										A: 'Added',
-										D: 'Deleted',
-										R: 'Renamed',
-										C: 'Copied',
-										T: 'Type changed'
-									}[code] || code;
+					const label = statusLabels[change.status] || change.status;
 					next[gitFileKey(`${status.root}/${change.path}`)] = {
 						code,
 						title: `Git: ${label}${change.staged ? ' (staged)' : ''}`

@@ -1,14 +1,22 @@
 import type { SessionState } from '../../shared/types';
 import { parseWslPath } from '../../shared/wsl';
 
+// Marks shown on files and folders in the explorer and tabs: Git status letters and
+// diagnostic counts. Folders aggregate the marks of the files inside them.
+
+/** The marks of one file or folder. */
 export interface Decoration {
+	/** Git status letter such as M or U; empty when unchanged. */
 	code: string;
+	/** Tooltip describing the Git status. */
 	title: string;
+	/** The most severe diagnostic, for coloring the name. */
 	diagnostic?: 'error' | 'warning';
 	errors?: number;
 	warnings?: number;
 }
 
+/** A path normalized for lookups: forward slashes and lowercase (WSL paths keep their case). */
 export function gitFileKey(path: string): string {
 	const remote = parseWslPath(path);
 	if (remote) {
@@ -17,6 +25,11 @@ export function gitFileKey(path: string): string {
 	return path.replaceAll('\\', '/').toLowerCase();
 }
 
+/**
+ * Combine Git marks with diagnostics: `problems` (counted per file) and `diagnostics` (the
+ * most severe level per file). Then add each file's marks to every folder above it, up to
+ * the workspace root.
+ */
 export function fileDecorations(
 	root: string,
 	git: Record<string, Decoration>,
