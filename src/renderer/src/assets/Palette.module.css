@@ -293,3 +293,19 @@
 :global(:root[data-theme='neon']) .noResults {
 	color: var(--ui-text-secondary);
 }
+
+/* An action in the palette that waits for Enter, such as sleeping a busy workspace. */
+.paletteConfirmation {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	margin: 0 12px 8px;
+	padding: 9px 12px;
+	border: 1px solid var(--ui-accent, #a3cc94);
+	border-radius: 8px;
+	background: var(--ui-accent-soft, #a3cc941f);
+	font-size: 12px;
+}
+.paletteConfirmation small {
+	color: #82919d;
+}

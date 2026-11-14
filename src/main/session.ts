@@ -19,6 +19,7 @@ import type {
 	ReferencePreview,
 	SavedWorkspace,
 	SessionState,
+	SleepBlocker,
 	Workspace
 } from '../shared/types';
 import { SessionFiles } from './sessionFiles';
@@ -517,25 +518,52 @@ end`,
 	}
 
 	/**
-	 * Whether stopping Neovim now and restoring a snapshot later loses nothing: no unsaved
-	 * edits, shells, debug sessions or pending prompts.
+	 * Everything that keeps this workspace from sleeping; empty when stopping Neovim now and
+	 * restoring a snapshot later loses nothing: no unsaved edits, shells, debug sessions or
+	 * pending prompts.
 	 */
-	async canSleep(): Promise<boolean> {
-		if (this.stopped || this.workspace.kind === 'terminal' || this.terminal) {
-			return false;
+	async sleepBlockers(): Promise<SleepBlocker[]> {
+		if (this.stopped || this.workspace.kind === 'terminal') {
+			return ['unavailable'];
+		}
+		const blockers: SleepBlocker[] = [];
+		// A hidden terminal panel still runs its shell.
+		if (this.terminal) {
+			blockers.push('terminal');
 		}
 		const debug = this.state.debug?.status;
 		if (debug && !['idle', 'finished', 'error'].includes(debug)) {
-			return false;
+			blockers.push('debug');
 		}
 		const mode = (await this.client.request('nvim_get_mode', [])) as {
 			mode: string;
 			blocking: boolean;
 		};
 		if (mode.blocking || mode.mode !== 'n') {
-			return false;
+			// Asking about buffers would wait for the key Neovim expects.
+			blockers.push('mode');
+		} else if (await this.modified()) {
+			blockers.push('modified');
 		}
-		return !(await this.modified());
+		return blockers;
+	}
+
+	/** Whether the workspace can sleep now (see sleepBlockers). */
+	async canSleep(): Promise<boolean> {
+		return (await this.sleepBlockers()).length === 0;
+	}
+
+	/** Stop this workspace's terminal, even when its panel is hidden. */
+	async closeTerminal(): Promise<void> {
+		const terminal = this.terminal;
+		if (!terminal) {
+			return;
+		}
+		await terminal.stop();
+		if (this.terminal === terminal) {
+			this.terminal = undefined;
+			this.workspace.terminalId = undefined;
+		}
 	}
 
 	/** Save every modified file. */

@@ -18,7 +18,8 @@ electron.loaded = true;
 testRequire.cache[electronPath] = electron;
 
 async function fixture(context: TestContext): Promise<{
-	sleep: () => Promise<unknown>;
+	sleep: (resolve?: boolean) => Promise<unknown>;
+	saves: () => number;
 	current: Session;
 	sessions: Map<string, Session>;
 	state: AppState;
@@ -42,6 +43,7 @@ async function fixture(context: TestContext): Promise<{
 		closing: false
 	};
 	let checkCount = 0;
+	let saves = 0;
 	let stopped = false;
 	let snapshot = (): void => {};
 	let capture = (): void => {};
@@ -50,7 +52,15 @@ async function fixture(context: TestContext): Promise<{
 		workspace: { id: 'background', name: 'Background', root },
 		state: { buffers: [] },
 		canSleep: Session.prototype.canSleep,
+		sleepBlockers: Session.prototype.sleepBlockers,
 		modified: async () => busy.modified,
+		saveAll: async () => {
+			saves++;
+			busy.modified = false;
+		},
+		closeTerminal: async function (this: Session) {
+			this.terminal = undefined;
+		},
 		client: {
 			request: async () => {
 				if (++checkCount === 2) recheck();
@@ -91,7 +101,9 @@ async function fixture(context: TestContext): Promise<{
 		await rm(root, { recursive: true, force: true });
 	});
 	return {
-		sleep: () => handlers.get('sleep')!('background') as Promise<unknown>,
+		sleep: (resolve?: boolean) =>
+			handlers.get('sleep')!('background', resolve) as Promise<unknown>,
+		saves: () => saves,
 		current,
 		sessions,
 		state,
@@ -122,7 +134,8 @@ for (const stage of ['snapshot', 'capture'] as const) {
 			};
 			if (stage === 'snapshot') check.onSnapshot(mutate);
 			else check.onCapture(mutate);
-			assert.equal(await check.sleep(), false);
+			// The handler reports what keeps the workspace running.
+			assert.deepEqual(await check.sleep(), [change]);
 			assert.equal(check.stopped(), false);
 			assert.equal(check.sessions.get('background'), check.current);
 			assert.deepEqual(check.filesAsleep(), []);
@@ -151,4 +164,27 @@ test('a workspace that remains idle sleeps after its final eligibility check', a
 	assert.equal(check.stopped(), true);
 	assert.equal(check.sessions.has('background'), false);
 	assert.equal(check.filesAsleep().length, 1);
+});
+
+test('sleeping on request closes the terminal and saves files first', async (context) => {
+	const check = await fixture(context);
+	check.current.terminal = {} as Session;
+	check.busy.modified = true;
+	assert.deepEqual(await check.sleep(), ['terminal', 'modified']);
+	assert.equal(check.stopped(), false);
+	assert.equal(check.saves(), 0, 'nothing is saved without the user agreeing');
+	assert.equal(await check.sleep(true), true);
+	assert.equal(check.saves(), 1);
+	assert.equal(check.current.terminal, undefined);
+	assert.equal(check.stopped(), true);
+});
+
+test('sleeping on request leaves everything as it is when something else blocks it', async (context) => {
+	const check = await fixture(context);
+	check.current.terminal = {} as Session;
+	check.busy.mode = 'i';
+	assert.deepEqual(await check.sleep(true), ['terminal', 'mode']);
+	assert.notEqual(check.current.terminal, undefined, 'the terminal keeps running');
+	assert.equal(check.saves(), 0);
+	assert.equal(check.stopped(), false);
 });

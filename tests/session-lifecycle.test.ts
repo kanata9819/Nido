@@ -898,11 +898,14 @@ test(
 		try {
 			await session.openFile('a.txt', 2, 3);
 			assert.equal(await session.canSleep(), true);
+			assert.deepEqual(await session.sleepBlockers(), []);
 			await session.input('ix');
 			await session.inputMode();
 			assert.equal(await session.canSleep(), false, 'Insert mode is still editing');
+			assert.deepEqual(await session.sleepBlockers(), ['mode']);
 			await session.input('<Esc>');
 			assert.equal(await session.canSleep(), false, 'Unsaved edits need the running Neovim');
+			assert.deepEqual(await session.sleepBlockers(), ['modified']);
 			await session.input('u');
 			await session.inputMode();
 			assert.equal(await session.canSleep(), true);
@@ -962,4 +965,59 @@ test('a Lua error raised on purpose reaches the user without its location or sta
 		await session.stop();
 		await rm(root, { recursive: true, force: true });
 	}
+});
+
+test('a running terminal or debugger keeps a workspace awake, and says which', async () => {
+	const fake = (overrides: Record<string, unknown>): Session =>
+		Object.assign(Object.create(Session.prototype), {
+			stopped: false,
+			workspace: { id: 'w', root: '/w', name: 'w', kind: 'editor' },
+			events: {
+				state: { buffers: [], current: 0, mode: 'n', line: 1, column: 1, filetype: '' }
+			},
+			client: { request: async () => ({ mode: 'n', blocking: false }) },
+			buffers: { modified: async () => false },
+			...overrides
+		});
+	const debugging = {
+		state: {
+			buffers: [],
+			current: 0,
+			mode: 'n',
+			line: 1,
+			column: 1,
+			filetype: '',
+			debug: { status: 'running', output: '', variables: [], targets: [] }
+		}
+	};
+	assert.deepEqual(await fake({}).sleepBlockers(), []);
+	// A hidden terminal panel still runs its shell.
+	assert.deepEqual(await fake({ terminal: {} }).sleepBlockers(), ['terminal']);
+	assert.deepEqual(await fake({ events: debugging }).sleepBlockers(), ['debug']);
+	// Every blocker is listed, so the user can be asked about all of them at once.
+	assert.deepEqual(
+		await fake({ terminal: {}, buffers: { modified: async () => true } }).sleepBlockers(),
+		['terminal', 'modified']
+	);
+	assert.deepEqual(
+		await fake({
+			workspace: { id: 't', root: '/t', name: 't', kind: 'terminal' }
+		}).sleepBlockers(),
+		['unavailable']
+	);
+});
+
+test('closing a workspace terminal stops it and forgets it', async () => {
+	let stopped = 0;
+	const session = Object.assign(Object.create(Session.prototype), {
+		workspace: { id: 'w', root: '/w', name: 'w', kind: 'editor', terminalId: 'w-shell' },
+		terminal: { stop: async () => void stopped++ }
+	}) as Session;
+	await session.closeTerminal();
+	assert.equal(stopped, 1);
+	assert.equal(session.terminal, undefined);
+	assert.equal(session.workspace.terminalId, undefined);
+	// Closing again does nothing.
+	await session.closeTerminal();
+	assert.equal(stopped, 1);
 });

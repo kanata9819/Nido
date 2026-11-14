@@ -6,7 +6,13 @@ import { readLayout, writeLayout, type SavedLayout } from './persistence';
 import { WorkspaceCheckpoints } from './workspaceCheckpoints';
 import { registerFavoriteHandlers } from './favoriteHandlers';
 import { registerFolderBrowserHandlers } from './folderBrowserHandlers';
-import type { NidoEvent, SavedWorkspace, TerminalShell, Workspace } from '../shared/types';
+import type {
+	NidoEvent,
+	SavedWorkspace,
+	SleepBlocker,
+	TerminalShell,
+	Workspace
+} from '../shared/types';
 import { parseWslPath } from '../shared/wsl';
 import type { HandlerDeps } from './handlers';
 import { createTranslator } from '../shared/i18n';
@@ -20,6 +26,11 @@ import { untitledRecoveryLimitMessage } from '../shared/recovery';
 interface PrestartedLayout {
 	saved: SavedLayout;
 	starts: ({ created: Promise<Session>; claim: () => void } | undefined)[];
+}
+
+/** Blockers that sleeping on request can clear: a terminal is closed, files are saved. */
+export function resolvableBlocker(blocker: SleepBlocker): boolean {
+	return blocker === 'terminal' || blocker === 'modified';
 }
 
 /**
@@ -473,25 +484,35 @@ export function registerWorkspaceHandlers({
 	});
 
 	// Stop a background workspace's Neovim, keeping its tab and a snapshot to wake from.
-	handle('sleep', (id) => {
+	// Resolves true when it slept, or what keeps it running. With `resolve` (the user agreed),
+	// a running terminal is closed and unsaved files are saved first.
+	handle('sleep', (id, resolve) => {
 		const key = text(id);
-		return exclusive(key, async () => {
+		return exclusive(key, async (): Promise<boolean | SleepBlocker[]> => {
 			const s = sessions.get(key);
-			if (
-				!s ||
-				key === state.active ||
-				state.prompting ||
-				state.closing ||
-				!(await s.canSleep())
-			) {
+			if (!s || key === state.active || state.prompting || state.closing) {
 				return false;
+			}
+			let blockers = await s.sleepBlockers();
+			if (resolve === true && blockers.length && blockers.every(resolvableBlocker)) {
+				if (blockers.includes('terminal')) {
+					await s.closeTerminal();
+				}
+				if (blockers.includes('modified')) {
+					await s.saveAll();
+				}
+				blockers = await s.sleepBlockers();
+			}
+			if (blockers.length) {
+				return blockers;
 			}
 			const saved = await s.snapshot({ includeUntitled: true });
 			await captureHistory(s);
 			// Snapshot and history capture yield to editor activity. A new edit, prompt,
 			// debugger or shell must keep the workspace running instead of being discarded.
-			if (!(await s.canSleep())) {
-				return false;
+			const lateBlockers = await s.sleepBlockers();
+			if (lateBlockers.length) {
+				return lateBlockers;
 			}
 			// Check again after the last await: the workspace may have been selected meanwhile.
 			if (
