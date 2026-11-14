@@ -2273,6 +2273,32 @@ vim.api.nvim_win_set_cursor(0, {1, 6})`);
 	}
 });
 
+test('Ctrl Enter and Ctrl Shift Enter open a line without splitting the current one', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-insert-line-'));
+	const session = await Session.create(root, () => {});
+	const lua = (code: string): ReturnType<Session['client']['request']> =>
+		session.client.request('nvim_exec_lua', [code, []]);
+	try {
+		for (const [keys, expected] of [
+			['<C-CR>', ['  abc', '  x', 'end']],
+			['<C-S-CR>', ['  x', '  abc', 'end']]
+		] as const) {
+			await session.input('<Esc>');
+			await lua(`vim.api.nvim_buf_set_lines(0, 0, -1, false, {'  abc', 'end'})
+vim.api.nvim_win_set_cursor(0, {1, 3})`);
+			await session.input(`i${keys}x`);
+			assert.deepEqual(
+				await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)'),
+				expected
+			);
+			assert.equal(await lua('return vim.fn.mode()'), 'i');
+		}
+	} finally {
+		await session.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('Ctrl Backspace and Ctrl Delete remove words in insert mode', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-word-delete-'));
 	const session = await Session.create(root, () => {});

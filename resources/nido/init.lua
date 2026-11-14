@@ -108,6 +108,10 @@ vim.keymap.set({'n', 'x', 'i'}, '<Home>', function()
   end
   vim.api.nvim_win_set_cursor(0, {row, column == indent and 0 or indent})
 end, {silent=true})
+-- As in VS Code, Ctrl+Enter starts a new line below without splitting the current one,
+-- and Ctrl+Shift+Enter one above.
+vim.keymap.set('i', '<C-CR>', '<C-o>o', {silent=true})
+vim.keymap.set('i', '<C-S-CR>', '<C-o>O', {silent=true})
 -- As in VS Code, Ctrl+Backspace and Ctrl+Delete remove a word instead of a character.
 vim.keymap.set('i', '<C-BS>', '<C-w>', {silent=true})
 vim.keymap.set('i', '<C-Del>', function()
