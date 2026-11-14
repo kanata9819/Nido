@@ -2408,7 +2408,7 @@ vim.api.nvim_win_set_cursor(0, {1, 0})`);
 	}
 });
 
-test('typing brackets inserts pairs, skips closing brackets and deletes empty pairs without changing paste', async () => {
+test('typing brackets and double quotes inserts pairs, skips closers and deletes empty pairs', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-auto-brackets-'));
 	let session: Session | undefined;
 	try {
@@ -2425,7 +2425,8 @@ test('typing brackets inserts pairs, skips closing brackets and deletes empty pa
 		for (const [left, right] of [
 			['(', ')'],
 			['[', ']'],
-			['{', '}']
+			['{', '}'],
+			['"', '"']
 		]) {
 			await reset();
 			await session.input(left);
@@ -2444,14 +2445,30 @@ test('typing brackets inserts pairs, skips closing brackets and deletes empty pa
 		await session.input('([{value}])');
 		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '([{value}])');
 		await reset();
-		await session.paste('([{');
-		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '([{');
+		await lua("vim.bo.syntax = 'typescript'");
+		await session.input('"test";');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '"test";');
+		await reset();
+		await session.input('"a\\"');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '"a\\""');
+		await session.input('<BS>');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '"a\\"');
+		await reset();
+		await session.input('"a\\\\";');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '"a\\\\";');
+		await reset();
+		await session.paste('([{"');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '([{"');
 		await reset();
 		await lua("vim.bo.syntax = 'typescript'");
 		await session.input('// ');
 		await lua('return vim.api.nvim_get_current_line()');
-		await session.input('(');
-		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '// (');
+		await session.input('("');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '// ("');
+		await session.input('<Left>"');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '// (""');
+		await session.input('<BS>');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '// ("');
 	} finally {
 		await session?.stop();
 		await rm(root, { recursive: true, force: true });
