@@ -1,3 +1,6 @@
+-- Run by the main process right after Neovim starts. It sends the session state (buffers, cursor, mode, search,
+-- diagnostics, language server status) to the main process as `nido:state` notifications,
+-- and reports edits and viewport movement as they happen. `channel` is the UI's RPC channel.
 local channel = ...
 vim.g.nido_channel = channel
 -- Keep plugin/LSP notices out of the grid and avoid Neovim's hit-enter prompt.
@@ -5,6 +8,7 @@ vim.notify = function(message, level, opts)
   vim.rpcnotify(channel, 'nido:message', tostring(message), level or vim.log.levels.INFO,
     opts and opts.title or (message == 'No locations found' and 'Code navigation' or 'Nido'))
 end
+-- Report every edit as `nido:edit`, once per changedtick.
 local edit_ticks = {}
 vim.api.nvim_create_autocmd({'TextChanged', 'TextChangedI', 'TextChangedP'}, {
   callback = function(event)
@@ -79,6 +83,7 @@ local buffers_dirty = true
 local publish
 local search_cache, search_pending, search_timer
 local search_delay = 16
+--- Cancel the scheduled search count.
 local function cancel_search()
   search_pending = nil
   if search_timer and not search_timer:is_closing() then
@@ -87,6 +92,8 @@ local function cancel_search()
   end
   search_timer = nil
 end
+--- What the search count depends on (buffer, text, pattern and options), or nil without an
+--- active search.
 local function search_context()
   local pattern = vim.fn.getreg('/')
   if vim.v.hlsearch ~= 1 or pattern == '' or vim.bo.buftype ~= '' then
@@ -99,6 +106,8 @@ local function search_context()
     tostring(vim.o.magic), vim.bo.iskeyword, vim.o.regexpengine}, '\0')
   return {buffer=buffer, context=context, key=context .. '\0' .. cursor[1] .. ':' .. cursor[2], pattern=pattern}
 end
+--- The search count for the status bar. Counting runs later, throttled by how long the last
+--- count took; until then a cached or "counting" result is returned.
 local function search_status()
   local request = search_context()
   if not request then
@@ -145,6 +154,7 @@ vim.api.nvim_create_autocmd('BufUnload', {callback=function(event)
   if search_pending and search_pending.buffer == event.buf then cancel_search() end
 end})
 vim.api.nvim_create_autocmd('VimLeavePre', {callback=cancel_search})
+--- Rebuild the problems list and the worst severity per file after diagnostics changed.
 local function refresh_diagnostics()
   if not diagnostics_dirty then
     return
@@ -178,6 +188,7 @@ local function refresh_diagnostics()
   end
 end
 
+--- The language servers attached to the current buffer, and their progress messages.
 local function lsp_status()
   local clients = {}
   local tasks = {}

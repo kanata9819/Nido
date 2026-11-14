@@ -1,3 +1,7 @@
+-- Nido's Neovim configuration, loaded with -u for every workspace. It sets the editor's
+-- options and keymaps and loads the nido_* modules in lua/. The main process then runs
+-- session.lua, which connects this Neovim to Nido.
+--
 -- Nido owns this configuration; personal Neovim config is not loaded.
 vim.g.nido = true
 if vim.env.NIDO_WSL == '1' then
@@ -111,6 +115,7 @@ vim.keymap.set('i', '<Tab>', function()
 end, { expr = true, silent = true })
 local completion_scheduled
 local completion_context
+--- Tell the UI whether the completion menu is waiting for refreshed items.
 local function completion_refresh(pending)
   if vim.g.nido_channel then
     vim.rpcnotify(vim.g.nido_channel, 'nido:completion_refresh', pending, vim.fn.pumvisible() == 1)
@@ -294,6 +299,7 @@ end
 for _, key in ipairs({ 'K', '<C-k>' }) do
   vim.keymap.set('n', key, show_type_information)
 end
+--- Rename the symbol under the cursor through the language server, asking for the new name.
 local function rename_symbol()
   if #vim.lsp.get_clients({bufnr=0, method='textDocument/rename'}) == 0 then
     vim.notify('No language server supports renaming in this file.', vim.log.levels.WARN, {title='Rename symbol'})
