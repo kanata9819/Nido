@@ -2272,8 +2272,17 @@ vim.api.nvim_win_set_cursor(0,{1,2})`);
 				`  ${prefix} first()`
 			);
 			assert.equal(await lua('return vim.fn.mode()'), 'i');
+			// The cursor stays on the same text as the marker is added and removed.
 			await session.input('<C-/>');
 			assert.equal(await lua('return vim.api.nvim_get_current_line()'), '  first()');
+			await session.input('<Esc>0f(i<C-/>X');
+			assert.equal(
+				await lua('return vim.api.nvim_get_current_line()'),
+				`  ${prefix} firstX()`
+			);
+			await session.input('<BS><C-/>Y');
+			assert.equal(await lua('return vim.api.nvim_get_current_line()'), '  firstY()');
+			await session.input('<BS>');
 			await session.input('<Esc>ggVj<C-/>');
 			assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0,0,-1,false)'), [
 				`  ${prefix} first()`,

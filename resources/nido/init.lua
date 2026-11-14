@@ -76,10 +76,22 @@ vim.keymap.set('i', '<C-z>', '<C-o>u', {remap=true, silent=true})
 vim.keymap.set('n', '<C-S-z>', '<C-r>', {remap=true, silent=true})
 vim.keymap.set('x', '<C-S-z>', '<Esc><C-r>', {remap=true, silent=true})
 vim.keymap.set('i', '<C-S-z>', '<C-o><C-r>', {remap=true, silent=true})
+--- Toggle the current line's comment in Insert mode, keeping the cursor on the same text.
+local function toggle_comment_in_insert()
+  local row, column = unpack(vim.api.nvim_win_get_cursor(0))
+  local length = #vim.api.nvim_get_current_line()
+  local indent = #vim.api.nvim_get_current_line():match('^%s*')
+  vim.cmd.normal({args={'gcc'}, mods={silent=true}})
+  -- The comment marker is added or removed after the indentation.
+  if column >= indent then
+    column = math.max(indent, column + #vim.api.nvim_get_current_line() - length)
+  end
+  vim.api.nvim_win_set_cursor(0, {row, column})
+end
 for _, key in ipairs({'<C-/>', '<C-_>'}) do
   vim.keymap.set('n', key, 'gcc', {remap=true, silent=true})
   vim.keymap.set('x', key, 'gc', {remap=true, silent=true})
-  vim.keymap.set('i', key, '<C-o>gcc', {remap=true, silent=true})
+  vim.keymap.set('i', key, toggle_comment_in_insert, {silent=true})
 end
 vim.keymap.set('i', '<S-Tab>', '<C-d>', {silent=true})
 vim.keymap.set('x', '<Tab>', '>gv', {silent=true})
