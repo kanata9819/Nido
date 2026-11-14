@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Clock3, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react';
 import type { HistoryList, HistoryPreview } from '../../../shared/history';
-import { useI18n } from '../i18n';
+import { remoteErrorText, useI18n } from '../i18n';
 import { filename } from '../commands';
 import GitDiff from './GitDiff';
 import styles from '../assets/TimeMachine.module.css';
 
-const message = (error: unknown): string =>
-	String(error).replace(/^Error: (?:Error invoking remote method '[^']+': Error: )?/, '');
 
+/**
+ * Time Machine (Ctrl+Shift+H): the stored versions of the current file and a diff of the
+ * selected one against the editor. Ctrl+Enter restores it into the editor (unsaved).
+ */
 export default function TimeMachine({
 	workspaceId,
 	onClose
@@ -27,13 +29,17 @@ export default function TimeMachine({
 	}>();
 	const [busy, setBusy] = useState<'list' | 'restore' | null>('list');
 	const [error, setError] = useState('');
+	// False once the panel has unmounted.
 	const alive = useRef(false);
+	// Grows with each list request, so a late answer to an older one is ignored.
 	const request = useRef(0);
 	const list = useRef<HTMLDivElement>(null);
 	const content = useRef<HTMLDivElement>(null);
+	// The preview only counts for the list and version it was loaded for.
 	const current =
 		preview && preview.list === data && preview.id === selected ? preview : undefined;
 	const value = current?.value;
+	// Load the versions of the current file.
 	const requestHistory = useCallback(
 		async (generation: number): Promise<void> => {
 			try {
@@ -50,7 +56,7 @@ export default function TimeMachine({
 				);
 			} catch (failure) {
 				if (alive.current && request.current === generation) {
-					setError(message(failure));
+					setError(remoteErrorText(failure));
 				}
 			} finally {
 				if (alive.current && request.current === generation) {
@@ -73,6 +79,8 @@ export default function TimeMachine({
 			alive.current = false;
 		};
 	}, [requestHistory]);
+	// Preview the selected version shortly after the selection settles, so moving quickly
+	// through the list does not request every version.
 	useEffect(() => {
 		if (!data || !selected) {
 			return;
@@ -88,7 +96,7 @@ export default function TimeMachine({
 					},
 					(failure) => {
 						if (!cancelled) {
-							setPreview({ list: data, id: selected, error: message(failure) });
+							setPreview({ list: data, id: selected, error: remoteErrorText(failure) });
 						}
 					}
 				),
@@ -101,6 +109,7 @@ export default function TimeMachine({
 		};
 	}, [workspaceId, data, selected]);
 
+	/** Restore the previewed version into the editor, then close Time Machine. */
 	const restore = async (): Promise<void> => {
 		if (busy || !value || value.identical) {
 			return;
@@ -119,7 +128,7 @@ export default function TimeMachine({
 			}
 		} catch (failure) {
 			if (alive.current) {
-				setError(message(failure));
+				setError(remoteErrorText(failure));
 			}
 		} finally {
 			if (alive.current) {
@@ -127,6 +136,7 @@ export default function TimeMachine({
 			}
 		}
 	};
+	/** A version's time in the UI language, to the second. */
 	const time = (timestamp: number): string =>
 		new Date(timestamp).toLocaleString(document.documentElement.lang, {
 			month: 'short',
