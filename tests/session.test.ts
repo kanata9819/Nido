@@ -2547,7 +2547,7 @@ test('typing brackets and double quotes inserts pairs, skips closers and deletes
 	}
 });
 
-test('Enter inside braces opens an indented body and aligns the closing brace', async () => {
+test('Enter inside brackets opens an indented body and aligns the closing bracket', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-brace-enter-'));
 	let session: Session | undefined;
 	try {
@@ -2558,7 +2558,9 @@ test('Enter inside braces opens an indented body and aligns the closing brace', 
 			['rust', 'fn main() {}', 11, true, ['fn main() {', '    ', '}']],
 			['typescript', '  if (true) {  }', 14, true, ['  if (true) {', '    ', '  }']],
 			['', '{}', 1, true, ['{', '  ', '}']],
-			['', '\t{}', 2, false, ['\t{', '\t\t', '\t}']]
+			['', '\t{}', 2, false, ['\t{', '\t\t', '\t}']],
+			['typescript', '  call()', 7, true, ['  call(', '    ', '  )']],
+			['rust', 'let a = [];', 9, true, ['let a = [', '    ', '];']]
 		] as const) {
 			await session.input('<Esc>');
 			await session.client.request('nvim_exec_lua', [

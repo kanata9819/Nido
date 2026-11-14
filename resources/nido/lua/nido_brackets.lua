@@ -129,7 +129,9 @@ vim.keymap.set('i', '<CR>', function()
   local line = api.nvim_get_current_line()
   local column = vim.fn.col('.') - 1
   local before, after = line:sub(1, column), line:sub(column + 1)
-  if vim.bo.buftype ~= '' or not before:match('{%s*$') or not after:match('^%s*}')
+  -- As in VS Code, Enter between any bracket pair opens an indented body.
+  local open, close = before:match('([%(%[{])%s*$'), after:match('^%s*([%)%]}])')
+  if vim.bo.buftype ~= '' or not open or closing[close] ~= open
       or ignored(vim.fn.line('.'), column - #(before:match('%s*$'))) then
     return '<CR>'
   end
