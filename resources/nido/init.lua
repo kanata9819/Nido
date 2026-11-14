@@ -290,6 +290,9 @@ vim.api.nvim_set_hl(0, 'rustStructure', {link='@keyword'})
 vim.api.nvim_set_hl(0, '@lsp.type.namespace.rust', {link='@module'})
 vim.api.nvim_set_hl(0, '@lsp.type.typeAlias.rust', {link='@type'})
 vim.api.nvim_set_hl(0, '@lsp.type.const.rust', {link='@constant'})
+-- rust-analyzer's static is a kind of variable, so VS Code colors statics like variables;
+-- only const items carry the constant modifier and get the constant color.
+vim.api.nvim_set_hl(0, '@lsp.type.static.rust', {link='@variable'})
 vim.o.winborder = 'rounded'
 vim.api.nvim_set_hl(0, 'NormalFloat', {fg='#d4d4d4', bg='#1b1e21'})
 vim.api.nvim_set_hl(0, 'FloatBorder', {fg='#65717d', bg='#1b1e21'})
