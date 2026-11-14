@@ -28,4 +28,8 @@ export interface Item {
 	title: string;
 	detail: string;
 	run: () => void;
+	/** In the workspace list: the selected workspace, or one that is asleep. */
+	status?: 'current' | 'sleeping';
+	/** In the workspace list: put this workspace to sleep (Ctrl+S); absent when it cannot. */
+	sleep?: () => void;
 }

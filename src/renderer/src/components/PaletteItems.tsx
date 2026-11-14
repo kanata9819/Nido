@@ -52,6 +52,7 @@ const PaletteItem = memo(function PaletteItem({
 	index: number;
 	selected: boolean;
 }): React.JSX.Element {
+	const t = useI18n();
 	// Problems and symbols are listboxes navigated with the keyboard; their rows are options
 	// with ids that aria-activedescendant refers to.
 	const option = panel === 'problems' || panel === 'symbols';
@@ -62,6 +63,8 @@ const PaletteItem = memo(function PaletteItem({
 			aria-selected={option ? selected : undefined}
 			data-severity={item.severity}
 			className={selected ? styles.selectedItem : ''}
+			data-workspace-status={item.status}
+			title={item.status === 'current' ? t('Current workspace · Cannot sleep') : undefined}
 			ref={(node) => {
 				if (node && selected) {
 					node.scrollIntoView({ block: 'nearest' });
@@ -80,6 +83,11 @@ const PaletteItem = memo(function PaletteItem({
 				<strong>{item.title}</strong>
 				<small>{item.detail}</small>
 			</span>
+			{item.status && (
+				<span className={styles.workspaceStatus} data-status={item.status}>
+					{item.status === 'current' ? t('Current') : t('Sleeping')}
+				</span>
+			)}
 			{item.key && <kbd>{item.key}</kbd>}
 		</button>
 	);
@@ -198,6 +206,16 @@ export default function PaletteItems({
 					} else if (event.key === 'ArrowUp' || (event.ctrlKey && event.key === 'k')) {
 						event.preventDefault();
 						setSelection((n) => Math.max(0, n - 1));
+					} else if (
+						panel === 'workspaces' &&
+						event.ctrlKey &&
+						!event.shiftKey &&
+						!event.altKey &&
+						event.key.toLowerCase() === 's'
+					) {
+						// Ctrl+S puts the selected workspace to sleep; the list stays open.
+						event.preventDefault();
+						filtered[Math.max(0, selection)]?.sleep?.();
 					} else if (event.key === 'Enter') {
 						event.preventDefault();
 						if (['files', 'search', 'symbols'].includes(panel) && loading) {
@@ -277,7 +295,9 @@ export default function PaletteItems({
 				<span>
 					{panel === 'problems'
 						? t('{count} problems · j/k Select · / Filter', { count: filtered.length })
-						: t('↑ ↓ or Ctrl+j / k to navigate')}
+						: panel === 'workspaces'
+							? t('↑ ↓ or Ctrl+j / k to navigate · Ctrl+S Sleep')
+							: t('↑ ↓ or Ctrl+j / k to navigate')}
 				</span>
 				<span>{t('Enter to select · Esc to return')}</span>
 			</div>

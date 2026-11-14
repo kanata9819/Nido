@@ -171,6 +171,25 @@
 .paletteItems kbd {
 	margin-left: auto;
 }
+/* The workspace list marks the selected workspace and the ones that are asleep. */
+.workspaceStatus {
+	margin-left: auto;
+	padding: 1px 7px;
+	border: 1px solid currentColor;
+	border-radius: 999px;
+	font-size: 10px;
+	white-space: nowrap;
+	color: #82919d;
+}
+.workspaceStatus[data-status='current'] {
+	color: var(--ui-accent, #a3cc94);
+}
+.workspaceStatus + kbd {
+	margin-left: 8px;
+}
+.paletteItems button[data-workspace-status='sleeping'] > span:nth-child(2) {
+	opacity: 0.6;
+}
 .selectedItem {
 	background: var(--ui-accent-soft, #a3cc9412);
 }
