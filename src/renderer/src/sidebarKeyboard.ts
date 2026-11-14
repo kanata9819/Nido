@@ -1,6 +1,7 @@
 import type { FileEntry } from '../../shared/types';
 import { toggle } from './sidebarToggle';
 
+/** The explorer state the key handler reads and changes. */
 interface ExplorerKeyboardOptions {
 	visible: (FileEntry & { depth: number })[];
 	selectedIndex: number;
@@ -11,6 +12,10 @@ interface ExplorerKeyboardOptions {
 	onOpen: (path: string) => void;
 }
 
+/**
+ * The explorer's keyboard handler: j/k and the arrows move, l and Enter open or expand, h
+ * collapses or moves to the parent folder, g/G jump to the ends, and Ctrl+D/U/F/B page.
+ */
 export function createExplorerKeyHandler({
 	visible,
 	selectedIndex,

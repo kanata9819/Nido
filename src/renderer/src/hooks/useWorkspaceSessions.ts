@@ -27,7 +27,7 @@ interface WorkspaceSessions {
 }
 
 /** The state of a workspace before Neovim has reported any. */
-const initialState: SessionState = {
+export const initialSessionState: SessionState = {
 	buffers: [],
 	current: 0,
 	mode: 'n',
@@ -76,7 +76,7 @@ export function useWorkspaceSessions(report: (message: string) => void): Workspa
 									const next = { ...old };
 									for (const [id, update] of updates) {
 										next[id] = {
-											...(old[id] || initialState),
+											...(old[id] || initialSessionState),
 											...update
 										};
 									}

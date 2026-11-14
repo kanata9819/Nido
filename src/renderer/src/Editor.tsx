@@ -16,6 +16,7 @@ import NeovimUI from './components/NeovimUI';
 import type { UITheme } from '../../shared/types';
 import { defaultFontWeight } from './hooks/useEditorSettings';
 
+/** Settings and callbacks of one editor; `blocked` is true while a dialog covers it. */
 interface Props {
 	theme: UITheme;
 	scrollFollowCursor?: boolean;
@@ -69,21 +70,26 @@ function Editor({
 	const grid = useRef(editorGrid);
 	const composing = useRef(false);
 	const attached = useRef(false);
+	// Wheel movement smaller than a line or column, carried over to the next wheel event.
 	const wheel = useRef({ remainder: 0, time: 0 });
 	const horizontalWheel = useRef({ remainder: 0, time: 0 });
+	// Functions the renderer installs: repaint, the sticky scroll repaint, and scroll.
 	const paint = useRef<() => void>(() => {});
 	const stickyPaint = useRef<(motionOffset: number) => void>(() => {});
 	const scroll = useRef<
 		(lines: number, follow: boolean, discrete: boolean, columns?: number) => void
 	>(() => {});
+	// The latest scroll request; clicks and sticky jumps wait for it so they hit the right row.
 	const scrollCompletion = useRef<Promise<void>>(Promise.resolve());
 	const error = useRef(onError);
 
+	// Drop leftover wheel movement when the editor or its font changes.
 	useEffect(() => {
 		wheel.current = { remainder: 0, time: 0 };
 		horizontalWheel.current = { remainder: 0, time: 0 };
 	}, [active, blocked, lineHeight, fontSize, fontFamily]);
 
+	// End an IME composition that the window losing focus or becoming hidden interrupted.
 	useEffect(() => {
 		const resetComposition = (): void => {
 			composing.current = false;
@@ -188,28 +194,27 @@ function Editor({
 			className={styles.editor}
 			hidden={!active}
 			onKeyDownCapture={(event) => {
-				if (!blocked && event.altKey && event.shiftKey && event.key.toLowerCase() === 'm') {
-					const content = host.current?.querySelector<HTMLElement>(
-						'[data-neovim-ui] [tabindex="0"]'
-					);
-					if (content) {
-						event.preventDefault();
-						event.stopPropagation();
-						content.focus();
-					}
+				// Alt+Shift+M focuses Neovim's messages and Alt+Shift+S the sticky headers.
+				if (blocked || !event.altKey || !event.shiftKey) {
+					return;
 				}
-				if (!blocked && event.altKey && event.shiftKey && event.key.toLowerCase() === 's') {
-					const header = host.current?.querySelector<HTMLButtonElement>(
-						'[data-sticky-scroll] button'
-					);
-					if (header) {
-						event.preventDefault();
-						event.stopPropagation();
-						header.focus();
-					}
+				const key = event.key.toLowerCase();
+				let selector: string | undefined;
+				if (key === 'm') {
+					selector = '[data-neovim-ui] [tabindex="0"]';
+				} else if (key === 's') {
+					selector = '[data-sticky-scroll] button';
+				}
+				const target = selector && host.current?.querySelector<HTMLElement>(selector);
+				if (target) {
+					event.preventDefault();
+					event.stopPropagation();
+					target.focus();
 				}
 			}}
 			onPointerDown={(event) => {
+				// A click moves Neovim's cursor to the clicked cell. It waits for scrolling to
+				// finish and maps the position through any sideways offset first.
 				if (
 					event.button !== 0 ||
 					blocked ||
