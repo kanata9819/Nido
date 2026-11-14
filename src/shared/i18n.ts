@@ -468,6 +468,11 @@ export const japanese: Record<string, string> = {
 	'Open favorite workspace': 'お気に入りのワークスペースを開く',
 	'Choose a saved project · Ctrl+F in the folder picker':
 		'登録したプロジェクトを選択 · フォルダー選択画面ではCtrl+F',
+	'Current workspace · Cannot sleep': '現在のワークスペース · スリープできません',
+	'↑ ↓ or Ctrl+j / k to navigate · Ctrl+S Sleep':
+		'↑ ↓ または Ctrl+j / k で移動 · Ctrl+S でスリープ',
+	'{name} cannot sleep now. Save its changes, close its terminal and finish running commands first.':
+		'{name} は今スリープできません。変更を保存し、ターミナルを閉じて、実行中のコマンドを終えてください。',
 	'Spaces: {size}': 'スペース: {size}',
 	'Tab size: {size}': 'タブ: {size}',
 	'Indentation: {current}': 'インデント: {current}',

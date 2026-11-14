@@ -742,7 +742,11 @@
 :global(:root[data-theme='neon']) .main {
 	background: var(--surface-editor);
 }
-/* A sleeping workspace dims its dot until it wakes. */
+/* A sleeping workspace looks inactive until it wakes: dimmed text and a hollow dot. */
+.workspaceTab[data-sleeping] > button:first-child {
+	opacity: 0.55;
+}
 .workspaceTab[data-sleeping] .workspaceDot {
-	opacity: 0.45;
+	background: transparent !important;
+	box-shadow: inset 0 0 0 1.5px #82919d;
 }

@@ -68,6 +68,7 @@ test('translated command searches keep shortcut keys and actions, and preserve p
 		openFile: noop,
 		activate: noop,
 		toggleFavorite: noop,
+		sleepWorkspace: noop,
 		isFavorite: false
 	};
 	const workspaces: Workspace[] = [{ id: 'alpha', name: 'Settings', root: '/Settings' }];

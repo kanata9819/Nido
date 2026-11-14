@@ -41,6 +41,7 @@ function leaderCommands(
 		openFile: noop,
 		activate: noop,
 		toggleFavorite: noop,
+		sleepWorkspace: noop,
 		isFavorite: false
 	};
 	const workspaces: Workspace[] = [{ id: 'workspace', root: '/project', name: 'Project', kind }];

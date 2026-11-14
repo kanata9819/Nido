@@ -82,7 +82,11 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 	const { workspaces, setWorkspaces, active, setActive, states, mode, restoring } =
 		useWorkspaceSessions(report);
 	const { initializedEditors, finishEditorLoading, forgetEditor } = useInitializedEditors();
-	const { failed: wakeFailed, retry: retryWake } = useWorkspaceSleep({
+	const {
+		failed: wakeFailed,
+		retry: retryWake,
+		sleep: sleepNow
+	} = useWorkspaceSleep({
 		workspaces,
 		setWorkspaces,
 		active,
@@ -273,6 +277,21 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 				if (workspace) {
 					toggleFavorite(workspace);
 				}
+			},
+			sleepWorkspace: (id) => {
+				const name = workspaces.find((w) => w.id === id)?.name ?? '';
+				run(
+					sleepNow(id).then((result) => {
+						if (result === 'busy') {
+							report(
+								t(
+									'{name} cannot sleep now. Save its changes, close its terminal and finish running commands first.',
+									{ name }
+								)
+							);
+						}
+					})
+				);
 			},
 			isFavorite: favorites.some(
 				(f) => f.root === workspace?.root && f.kind === (workspace?.kind || 'editor')

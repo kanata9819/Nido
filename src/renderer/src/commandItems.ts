@@ -21,6 +21,8 @@ export interface CommandsCallbacks {
 	openFile: (path: string) => void;
 	activate: (id: string) => void;
 	toggleFavorite: () => void;
+	/** Put a background workspace to sleep, from the workspace list. */
+	sleepWorkspace: (id: string) => void;
 	isFavorite: boolean;
 }
 

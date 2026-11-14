@@ -9,12 +9,16 @@ import {
 import type { Workspace } from '../../../shared/types';
 import { vimKey } from '../keyboard';
 
+/** The outcome of a request to sleep a workspace. */
+export type SleepResult = 'slept' | 'busy' | 'ignored';
+
 /** A background workspace sleeps after this long without being selected. */
 export const sleepDelay = 5 * 60 * 1000;
 const checkInterval = 30 * 1000;
 
 /**
- * Put background workspaces to sleep after `sleepDelay`, and wake the selected one.
+ * Put background workspaces to sleep after `sleepDelay` (or on request), and wake the
+ * selected one.
  * Returns why waking failed, by workspace ID, so the app can show it instead of the
  * loading indicator, and `retry` to try that workspace again.
  */
@@ -33,7 +37,12 @@ export function useWorkspaceSleep({
 	/** Forget a slept editor's loaded state so waking shows the loading indicator. */
 	forgetEditor: (id: string) => void;
 	report: (message: string) => void;
-}): { failed: ReadonlyMap<string, string>; retry: (id: string) => void } {
+}): {
+	failed: ReadonlyMap<string, string>;
+	retry: (id: string) => void;
+	/** Put a background workspace to sleep now. */
+	sleep: (id: string) => Promise<SleepResult>;
+} {
 	// When each background workspace was last selected (or first seen).
 	const lastSelected = useRef(new Map<string, number>());
 	const sleeping = useRef(new Set<string>());
@@ -75,6 +84,44 @@ export function useWorkspaceSleep({
 		}
 	}
 
+	/**
+	 * Put a background workspace to sleep. Resolves `busy` when it cannot sleep now (unsaved
+	 * edits, a shell, a prompt), and `ignored` for the selected workspace, a sleeping one, or
+	 * one already being put to sleep. A busy workspace is tried again after another delay.
+	 */
+	const sleepWorkspace = useCallback(
+		async (id: string): Promise<SleepResult> => {
+			const workspace = latest.current.workspaces.find((w) => w.id === id);
+			if (
+				!workspace ||
+				id === latest.current.active ||
+				workspace.sleeping ||
+				sleeping.current.has(id)
+			) {
+				return 'ignored';
+			}
+			sleeping.current.add(id);
+			try {
+				if (!(await window.nido.sleepWorkspace(id))) {
+					lastSelected.current.set(id, Date.now());
+					return 'busy';
+				}
+				forgetEditor(id);
+				setWorkspaces((old) =>
+					old.map((w) => (w.id === id ? { ...w, sleeping: true } : w))
+				);
+				return 'slept';
+			} catch (error) {
+				lastSelected.current.set(id, Date.now());
+				throw error;
+			} finally {
+				sleeping.current.delete(id);
+			}
+		},
+		[setWorkspaces, forgetEditor]
+	);
+
+	// Every so often, put the workspaces not selected for `sleepDelay` to sleep.
 	useEffect(() => {
 		if (restoring) {
 			return;
@@ -82,35 +129,13 @@ export function useWorkspaceSleep({
 		const timer = window.setInterval(() => {
 			const now = Date.now();
 			for (const workspace of latest.current.workspaces) {
-				const id = workspace.id;
-				if (
-					id === latest.current.active ||
-					workspace.sleeping ||
-					sleeping.current.has(id) ||
-					now - (lastSelected.current.get(id) ?? now) < sleepDelay
-				) {
-					continue;
+				if (now - (lastSelected.current.get(workspace.id) ?? now) >= sleepDelay) {
+					void sleepWorkspace(workspace.id).catch(() => {});
 				}
-				sleeping.current.add(id);
-				void window.nido
-					.sleepWorkspace(id)
-					.then((slept) => {
-						if (slept) {
-							forgetEditor(id);
-							setWorkspaces((old) =>
-								old.map((w) => (w.id === id ? { ...w, sleeping: true } : w))
-							);
-						} else {
-							// Busy (unsaved edits, a shell, a prompt): try again after another delay.
-							lastSelected.current.set(id, Date.now());
-						}
-					})
-					.catch(() => lastSelected.current.set(id, Date.now()))
-					.finally(() => sleeping.current.delete(id));
 			}
 		}, checkInterval);
 		return () => window.clearInterval(timer);
-	}, [restoring, setWorkspaces, forgetEditor]);
+	}, [restoring, sleepWorkspace]);
 
 	const selectedSleeping = !!workspaces.find((workspace) => workspace.id === active)?.sleeping;
 	useEffect(() => {
@@ -198,5 +223,5 @@ export function useWorkspaceSleep({
 		});
 	}, []);
 
-	return { failed, retry };
+	return { failed, retry, sleep: sleepWorkspace };
 }

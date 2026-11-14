@@ -45,7 +45,8 @@ export function buildItems(
 	t: Translator = createTranslator('en'),
 	preparedProblems?: { items: Item[]; filtered: Item[] }
 ): { commands: Item[]; items: Item[]; filtered: Item[] } {
-	const { run, focusEditor, captureFocus, create, openFile, activate } = callbacks;
+	const { run, focusEditor, captureFocus, create, openFile, activate, sleepWorkspace } =
+		callbacks;
 
 	const commands = buildCommands(active, workspaces, state, callbacks, t);
 
@@ -73,12 +74,25 @@ export function buildItems(
 			break;
 		case 'workspaces':
 			items = [
-				...workspaces.map((w, i) => ({
-					key: String(i + 1),
-					title: w.name,
-					detail: w.root,
-					run: () => activate(w.id)
-				})),
+				...workspaces.map((w, i) => {
+					const current = w.id === active;
+					return {
+						key: String(i + 1),
+						title: w.name,
+						detail: w.root,
+						run: () => activate(w.id),
+						status: current
+							? ('current' as const)
+							: w.sleeping
+								? ('sleeping' as const)
+								: undefined,
+						// The selected workspace stays awake, and a terminal workspace runs a shell.
+						sleep:
+							current || w.sleeping || w.kind === 'terminal'
+								? undefined
+								: () => sleepWorkspace(w.id)
+					};
+				}),
 				{
 					key: '+',
 					title: t('Open workspace'),

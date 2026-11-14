@@ -155,3 +155,56 @@ test('closing the selected workspace selects the tab that takes its place', asyn
 	await expect(tab('Delta')).toHaveCount(0);
 	await expect(tab('Gamma')).toHaveAttribute('aria-selected', 'true');
 });
+
+test('Ctrl+S in the workspace list puts a background workspace to sleep', async ({ page }) => {
+	await restoreWorkspaces(page, 'sleepWorkspace');
+	const sleeps = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'sleepWorkspace')
+				.map((call) => call.args)
+		);
+	await page.getByRole('button', { name: 'Workspaces', exact: true }).click();
+	const list = page.getByRole('dialog', { name: 'workspaces palette', exact: true });
+	const alpha = list.getByRole('button', { name: /Alpha/ });
+	const beta = list.getByRole('button', { name: /Beta/ });
+	await expect(alpha).toContainText('Current');
+	await expect(alpha).toHaveAttribute('title', 'Current workspace · Cannot sleep');
+
+	// The selected workspace stays awake.
+	await page.keyboard.press('Control+s');
+	expect(await sleeps()).toEqual([]);
+
+	await page.keyboard.press('ArrowDown');
+	await page.keyboard.press('Control+s');
+	await expect.poll(sleeps).toEqual([['beta']]);
+	await page.evaluate(() => window.rendererTest.settle('sleepWorkspace', 0, true));
+	await expect(
+		page.getByRole('tab', { name: 'Workspace Beta', exact: true })
+	).toHaveAccessibleDescription('Sleeping');
+	await expect(beta).toContainText('Sleeping');
+	await expect(list).toBeVisible();
+
+	// A sleeping workspace is not asked again.
+	await page.keyboard.press('Control+s');
+	expect(await sleeps()).toEqual([['beta']]);
+});
+
+test('a workspace that cannot sleep explains why', async ({ page }) => {
+	await restoreWorkspaces(page, 'sleepWorkspace');
+	await page.getByRole('button', { name: 'Workspaces', exact: true }).click();
+	await page.keyboard.press('ArrowDown');
+	await page.keyboard.press('Control+s');
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some((call) => call.method === 'sleepWorkspace')
+			)
+		)
+		.toBe(true);
+	await page.evaluate(() => window.rendererTest.settle('sleepWorkspace', 0, false));
+	await expect(page.getByRole('alert')).toContainText('Beta cannot sleep now.');
+	await expect(
+		page.getByRole('tab', { name: 'Workspace Beta', exact: true })
+	).not.toHaveAttribute('aria-description', 'Sleeping');
+});
