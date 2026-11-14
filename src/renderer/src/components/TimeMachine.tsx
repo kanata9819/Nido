@@ -6,7 +6,6 @@ import { filename } from '../commands';
 import GitDiff from './GitDiff';
 import styles from '../assets/TimeMachine.module.css';
 
-
 /**
  * Time Machine (Ctrl+Shift+H): the stored versions of the current file and a diff of the
  * selected one against the editor. Ctrl+Enter restores it into the editor (unsaved).
@@ -96,7 +95,11 @@ export default function TimeMachine({
 					},
 					(failure) => {
 						if (!cancelled) {
-							setPreview({ list: data, id: selected, error: remoteErrorText(failure) });
+							setPreview({
+								list: data,
+								id: selected,
+								error: remoteErrorText(failure)
+							});
 						}
 					}
 				),
