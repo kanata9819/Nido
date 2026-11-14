@@ -1,7 +1,14 @@
+// UI translations. Messages are written in English in the code; the English text is the key
+// of its Japanese translation below. {name} placeholders are filled from the values.
+
+/** The UI languages. */
 export type Language = 'en' | 'ja';
+/** Values for the {name} placeholders of a message. */
 export type TranslationValues = Record<string, string | number>;
+/** Translates an English message into the UI language. */
 export type Translator = (message: string, values?: TranslationValues) => string;
 
+/** A saved language setting, or English when it is not a supported language. */
 export function parseLanguage(value: unknown): Language {
 	return value === 'ja' ? 'ja' : 'en';
 }
@@ -987,6 +994,7 @@ export const japanese: Record<string, string> = {
 		'Rustの言語サポートにはrust-analyzerが必要です。rustup component add rust-analyzerを実行してください'
 };
 
+/** Translate a message and fill in its placeholders; unknown messages stay in English. */
 export function translate(
 	language: Language,
 	message: string,
@@ -1026,6 +1034,7 @@ const messageTemplates = [
 	)
 }));
 
+/** Translate one line of a main-process message (see translateMessage). */
 function translateLine(language: Language, line: string): string {
 	if (Object.hasOwn(japanese, line)) {
 		return translate(language, line);
@@ -1062,6 +1071,7 @@ export function translateMessage(language: Language, message: string): string {
 		.join('\n');
 }
 
+/** A translator for one language. */
 export function createTranslator(language: Language): Translator {
 	return (message, values) => translate(language, message, values);
 }

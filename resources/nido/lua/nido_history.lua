@@ -1,10 +1,14 @@
+-- Buffer side of Time Machine (see src/main/historyService.ts): reads buffer contents to
+-- record them, and restores a stored version into a buffer.
 local M = {}
 local max_bytes, max_lines = 4 * 1048576, 100000
 local limit_error = 'Time Machine supports text files up to 4 MiB and 100,000 lines.'
 local limit_warning = 'This unsaved file exceeds the Time Machine limit (4 MiB or 100,000 lines) and cannot be recovered after an unexpected exit. Save it to keep your changes.'
 local binary_warning = 'This unsaved file cannot be captured by Time Machine because it contains binary data. Save it to keep your changes.'
+-- Buffers already warned that they cannot be recorded.
 local warned = {}
 
+--- Whether the buffer's text ends with a newline.
 local function end_of_line(buffer)
   if not vim.bo[buffer].endofline then return false end
   -- Both an empty file and a single newline have one empty buffer line and 'eol'.
@@ -16,6 +20,8 @@ local function end_of_line(buffer)
   return true
 end
 
+--- The text of a buffer as a history snapshot. Buffers that cannot be recorded return nil and
+--- a warning, or with `strict` an error table.
 local function snapshot(buffer, strict)
   if not vim.api.nvim_buf_is_loaded(buffer) or not vim.bo[buffer].buflisted
       or vim.bo[buffer].buftype ~= '' or vim.api.nvim_buf_get_name(buffer) == '' then
@@ -53,10 +59,13 @@ local function snapshot(buffer, strict)
   }
 end
 
+--- The current buffer, or an error saying why it cannot be used.
 function M.current()
   return snapshot(vim.api.nvim_get_current_buf(), true)
 end
 
+--- Snapshots of the buffers that changed since their token, current buffer first, up to a
+--- size budget per call. Each unrecordable buffer is warned about once.
 function M.changed(tokens)
   local previous, result, bytes = {}, {}, 0
   for buffer in pairs(warned) do
@@ -97,6 +106,7 @@ function M.changed(tokens)
   return result
 end
 
+--- A unified diff with the whole file as context; identical texts give one unchanged hunk.
 function M.diff(before, after)
   if before ~= after then
     return vim.diff(before, after, { result_type = 'unified', ctxlen = max_lines, algorithm = 'histogram' })
@@ -108,6 +118,7 @@ function M.diff(before, after)
   return table.concat(output, '\n')
 end
 
+--- Replace the current buffer's text with a stored version, if it still matches `token`.
 function M.restore(path, token, value)
   local buffer = vim.api.nvim_get_current_buf()
   local actual = table.concat({ buffer, vim.api.nvim_buf_get_changedtick(buffer),

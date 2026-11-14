@@ -2,12 +2,30 @@ import { useI18n } from '../i18n';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReferencePreview } from '../../../shared/types';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { splitDiff } from '../gitDiff';
+import { splitDiff, type DiffRow } from '../gitDiff';
 import styles from '../assets/GitPanel.module.css';
 
+// Rows are drawn virtually: only the visible rows and `overscan` rows around them exist.
 const rowHeight = 22;
 const overscan = 20;
 
+type Side = 'before' | 'after';
+
+/** The style of a row on one side: a hunk heading, a removed or added line, or a gap. */
+function rowClass(row: DiffRow, side: Side): string {
+	if (row.heading) {
+		return styles.hunk;
+	}
+	if (row[side]?.changed) {
+		return side === 'before' ? styles.removed : styles.added;
+	}
+	return row[side] ? '' : styles.emptyLine;
+}
+
+/**
+ * A side-by-side diff with syntax highlighting. Both panes scroll together, and n/N jump
+ * between changes.
+ */
 export default function GitDiff({
 	workspaceId,
 	path,
@@ -25,6 +43,7 @@ export default function GitDiff({
 }): React.JSX.Element {
 	const t = useI18n();
 	const rows = useMemo(() => splitDiff(diff), [diff]);
+	// The text of each side, for syntax highlighting, and for each row its line in that text.
 	const sources = useMemo(
 		() =>
 			(['before', 'after'] as const).map((side) => {
@@ -40,6 +59,7 @@ export default function GitDiff({
 			}),
 		[rows]
 	);
+	// The first row of every block of changed rows, for n/N.
 	const changes = useMemo(
 		() =>
 			rows.flatMap((row, index) =>
@@ -50,6 +70,7 @@ export default function GitDiff({
 			),
 		[rows]
 	);
+	// The longest line, so both panes scroll horizontally the same distance.
 	const width = useMemo(
 		() =>
 			rows.reduce(
@@ -88,18 +109,21 @@ export default function GitDiff({
 	const error = currentHighlight?.error || '';
 	const before = useRef<HTMLPreElement>(null);
 	const after = useRef<HTMLPreElement>(null);
+	// The scroll position set on a pane by code, so its scroll event is not mirrored back.
 	const synchronized = useRef(new WeakMap<HTMLPreElement, number>());
 
+	/** Scroll both panes to the next (1) or previous (-1) change. */
 	function jump(direction: number): void {
 		if (!changes.length) {
 			return;
 		}
-		const next =
-			activeChange < 0
-				? direction === 1
-					? 0
-					: changes.length - 1
-				: (activeChange + direction + changes.length) % changes.length;
+		// Without a selected change, start from the first (or for -1 the last) one.
+		let next: number;
+		if (activeChange >= 0) {
+			next = (activeChange + direction + changes.length) % changes.length;
+		} else {
+			next = direction === 1 ? 0 : changes.length - 1;
+		}
 		const row = changes[next];
 		setSelectedChange({ diff, row });
 		setViewport({ diff, row });
@@ -111,6 +135,7 @@ export default function GitDiff({
 		}
 	}
 
+	// Track the pane height to know how many rows are visible.
 	useEffect(() => {
 		const pane = after.current;
 		if (!pane) {
@@ -150,6 +175,26 @@ export default function GitDiff({
 			cancelled = true;
 		};
 	}, [workspaceId, path, diff, rows, sources]);
+	// A row's text on one side: highlighted when highlighting has loaded, plain otherwise.
+	// A space keeps empty rows at full height.
+	function lineContent(row: DiffRow, side: Side, index: number): React.ReactNode {
+		const line = row[side];
+		if (!line) {
+			return row.heading || ' ';
+		}
+		const sideIndex = side === 'before' ? 0 : 1;
+		const spans = currentHighlight?.lines?.[sideIndex]?.[sources[sideIndex].positions[index]];
+		return (
+			spans?.map((span, column) => (
+				<span key={column} style={{ color: span.color }}>
+					{span.text || ' '}
+				</span>
+			)) ||
+			line.text ||
+			' '
+		);
+	}
+
 	return (
 		<div className={styles.splitDiff}>
 			{(['before', 'after'] as const).map((side) => (
@@ -252,30 +297,12 @@ export default function GitDiff({
 												? 'true'
 												: undefined
 										}
-										className={`${styles.diffLine} ${row.heading ? styles.hunk : row[side]?.changed ? (side === 'before' ? styles.removed : styles.added) : !row[side] ? styles.emptyLine : ''}`}
+										className={`${styles.diffLine} ${rowClass(row, side)}`}
 									>
 										<span className={styles.lineNumber} aria-hidden="true">
 											{row[side]?.number}
 										</span>
-										<code>
-											{currentHighlight?.lines && row[side]
-												? currentHighlight.lines[
-														side === 'before' ? 0 : 1
-													]?.[
-														sources[side === 'before' ? 0 : 1]
-															.positions[index]
-													]?.map((span, column) => (
-														<span
-															key={column}
-															style={{ color: span.color }}
-														>
-															{span.text || ' '}
-														</span>
-													)) ||
-													row[side].text ||
-													' '
-												: row.heading || row[side]?.text || ' '}
-										</code>
+										<code>{lineContent(row, side, index)}</code>
 									</div>
 								);
 							})}

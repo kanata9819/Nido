@@ -1,6 +1,10 @@
+-- The diagnostic card: sends the diagnostics at the cursor to the renderer, which shows them in
+-- a card (DiagnosticInformation.tsx), and hides it again when the cursor moves.
 local M = {}
+-- Where the card was shown (buffer, window and cursor), or nil when it is hidden.
 local visible
 
+--- Hide the card.
 function M.hide()
   if visible and vim.g.nido_channel then
     vim.rpcnotify(vim.g.nido_channel, 'nido:diagnostics', {})
@@ -8,6 +12,7 @@ function M.hide()
   visible = nil
 end
 
+--- Show the diagnostics of the cursor line, most severe first. `focus` lets the card take focus.
 function M.show(focus)
   if focus == nil then focus = true end
   require('nido_hover').clear()
@@ -43,11 +48,13 @@ function M.show(focus)
   end
 end
 
+--- Jump to the next (1) or previous (-1) diagnostic, with a count, and show it.
 function M.jump(direction)
   vim.diagnostic.jump({count=direction * vim.v.count1, float=false})
   M.show(false)
 end
 
+-- Hide the card when the cursor leaves its position, the buffer is left, or diagnostics change.
 vim.api.nvim_create_autocmd('CursorMoved', {
   callback = function()
     -- A jump's delayed CursorMoved must not dismiss the card for its new position.

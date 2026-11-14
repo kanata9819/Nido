@@ -27,10 +27,12 @@ import styles from '../assets/CompletionMenu.module.css';
 import OverlayPresence from './OverlayPresence';
 
 interface Menu {
+	/** Neovim's popupmenu items: word, kind, menu and info. */
 	items: [string, string, string, string][];
 	selected: number;
 	row: number;
 	column: number;
+	/** Whether the language server is still refreshing the items; selection waits until it is done. */
 	pending?: boolean;
 }
 
@@ -39,6 +41,7 @@ const rowHeight = 22;
 const visibleRows = 8;
 const overscan = 8;
 
+/** Icons for LSP completion item kinds. */
 const kindIcons: Record<string, LucideIcon> = {
 	Text,
 	Method: Box,
@@ -67,6 +70,10 @@ const kindIcons: Record<string, LucideIcon> = {
 	TypeParameter: CaseSensitive
 };
 
+/**
+ * The insert-mode completion menu, drawn by Nido instead of Neovim's own popup menu. It
+ * follows Neovim's popupmenu_* redraw events and appears next to the cursor.
+ */
 export default function CompletionMenu({
 	id,
 	grid,
@@ -91,11 +98,14 @@ export default function CompletionMenu({
 	useLayoutEffect(() => {
 		currentMenu.current = menu;
 	}, [menu]);
+	// Whether the menu opened above or below the cursor. It keeps that side while it stays open,
+	// so it does not jump as the items change.
 	const placement = useRef<
 		{ element: HTMLDivElement; above: boolean; height: number } | undefined
 	>(undefined);
 	const listId = `completion-${id}`;
 	const count = menu?.items.length ?? 0;
+	// Rows are drawn virtually: only the visible rows and `overscan` rows around them exist.
 	const first = Math.min(count, Math.max(0, Math.floor(viewport.top / rowHeight) - overscan));
 	const last = Math.min(
 		count,
@@ -106,6 +116,7 @@ export default function CompletionMenu({
 		indices.push(menu.selected);
 		indices.sort((a, b) => a - b);
 	}
+	// Follow Neovim: show, select and hide the menu, and close it when insert mode ends.
 	useEffect(
 		() =>
 			onNidoEvent((event) => {
@@ -146,6 +157,7 @@ export default function CompletionMenu({
 							});
 						}
 						if (name === 'popupmenu_show') {
+							// Grid -1 is command-line completion, which NeovimUI draws.
 							if (Number(args[4]) === -1) {
 								setMenu(undefined);
 								continue;
@@ -176,6 +188,8 @@ export default function CompletionMenu({
 			}),
 		[id]
 	);
+	// Close the menu on keys that end completion, and on blur. Keys that keep completing,
+	// such as letters and Backspace, keep it open; while it refreshes, navigation waits.
 	useEffect(() => {
 		const anchor = input.current;
 		if (!anchor) {
@@ -215,6 +229,7 @@ export default function CompletionMenu({
 			anchor.removeEventListener('blur', close);
 		};
 	}, [input]);
+	// Place the menu at the cursor, and track its scroll position for virtual rendering.
 	useLayoutEffect(() => {
 		const element = card.current;
 		const anchor = input.current;

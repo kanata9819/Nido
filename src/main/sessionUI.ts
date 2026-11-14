@@ -2,12 +2,17 @@ import type { NidoEvent, Workspace } from '../shared/types';
 import type { SessionClient } from './sessionClient';
 import type { SessionEvents } from './sessionEvents';
 
+/**
+ * Attaches Nido as Neovim's UI and keeps its size and focus up to date. Attach and resize
+ * requests run in their own queue, in order.
+ */
 export class SessionUI {
 	private attached = false;
 	/** Whether Neovim should consider this UI focused; told to Neovim once attached. */
 	private focused = false;
 	private reportedFocus?: boolean;
 	private uiQueue: Promise<void> = Promise.resolve();
+	// Only the latest of several queued resizes is sent.
 	private resizeGeneration = 0;
 
 	constructor(
@@ -17,6 +22,7 @@ export class SessionUI {
 		private readonly emit: (event: NidoEvent) => void
 	) {}
 
+	/** Attach the UI at the given grid size, or reattach for a renderer that reloaded. */
 	async attach(columns: number, rows: number): Promise<void> {
 		const next = this.uiQueue.then(async () => {
 			if (this.attached) {
@@ -66,6 +72,7 @@ export class SessionUI {
 		this.reportFocus();
 	}
 
+	/** Send the focus state to Neovim when it changed since it was last reported. */
 	private reportFocus(): void {
 		if (!this.attached || this.reportedFocus === this.focused) {
 			return;
@@ -81,6 +88,7 @@ export class SessionUI {
 		});
 	}
 
+	/** Resize the grid. */
 	async resize(columns: number, rows: number): Promise<void> {
 		const generation = ++this.resizeGeneration;
 		const next = this.uiQueue.then(async () => {

@@ -2,6 +2,7 @@ import { memo, useCallback, type ComponentProps } from 'react';
 import Editor from '../Editor';
 import { WorkspaceWelcome } from './Welcome';
 
+/** The editor of a workspace, or the welcome screen when no file is open. */
 interface Props extends ComponentProps<typeof Editor> {
 	empty: boolean;
 	onOpenFiles: () => void;

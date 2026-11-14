@@ -1,6 +1,10 @@
 import type { AppUpdater } from 'electron-updater';
 import type { UpdateState } from '../shared/types';
 
+// Auto-update through electron-updater, which downloads new releases from GitHub. Nothing is
+// downloaded or installed automatically: the update button checks, downloads and installs.
+
+/** The parts of electron-updater that Updates uses, so tests can pass a fake. */
 export type UpdateBackend = Pick<
 	AppUpdater,
 	| 'on'
@@ -13,19 +17,30 @@ export type UpdateBackend = Pick<
 	| 'quitAndInstall'
 >;
 
+/** How Updates reports to the rest of the app. */
 interface UpdateOptions {
 	currentVersion: string;
 	enabled: boolean;
+	/** Sends the new state to the update button. */
 	publish: (state: UpdateState) => void;
+	/** Shows a notification. */
 	notify: (message: string, severity: 'info' | 'error') => void;
+	/** Saves the workspaces and confirms unsaved changes; resolves false when the user cancels. */
 	prepareToQuit: () => Promise<boolean>;
+	/** Undoes prepareToQuit when installing fails, so Nido keeps running. */
 	recover: () => void;
 }
 
+/**
+ * The update state machine: idle → checking → current/available → downloading → downloaded
+ * → installing. Only one check, download or install runs at a time.
+ */
 export class Updates {
 	private state: UpdateState;
 	private pending: Promise<UpdateState> | undefined;
+	// Whether the running action was started by the user, so its result is shown as a notification.
 	private manual = false;
+	// Whether prepareToQuit succeeded for the running install, so a failure must undo it.
 	private prepared = false;
 
 	constructor(
@@ -60,10 +75,12 @@ export class Updates {
 		});
 	}
 
+	/** A copy of the current state. */
 	snapshot(): UpdateState {
 		return { ...this.state };
 	}
 
+	/** Change the status and publish it. Extra fields such as `message` are cleared unless given. */
 	private set(status: UpdateState['status'], extra: Partial<UpdateState> = {}): void {
 		if (!this.options.enabled) {
 			return;
@@ -77,6 +94,7 @@ export class Updates {
 		this.options.publish(this.snapshot());
 	}
 
+	/** Enter the error state, notify when the user is waiting for the result, and recover. */
 	private fail(error: unknown): void {
 		if (!this.options.enabled) {
 			return;
@@ -96,6 +114,7 @@ export class Updates {
 		}
 	}
 
+	/** Run an action unless another is running; then every caller gets the running one's result. */
 	private run(manual: boolean, action: () => Promise<void>): Promise<UpdateState> {
 		if (this.pending) {
 			return this.pending;
@@ -111,6 +130,7 @@ export class Updates {
 		return this.pending;
 	}
 
+	/** Check for a new version. Automatic checks (`manual` false) only notify about errors. */
 	check(manual = true): Promise<UpdateState> {
 		if (this.pending) {
 			return this.pending;
@@ -150,6 +170,7 @@ export class Updates {
 		});
 	}
 
+	/** Download the available version. */
 	download(): Promise<UpdateState> {
 		if (this.pending) {
 			return this.pending;
@@ -163,6 +184,7 @@ export class Updates {
 		});
 	}
 
+	/** Quit and install the downloaded version, after Nido has saved its workspaces. */
 	install(): Promise<UpdateState> {
 		if (this.pending) {
 			return this.pending;

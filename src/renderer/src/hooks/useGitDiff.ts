@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react';
 import type { GitChange, GitStatus } from '../../../shared/types';
 import { useErrorMessage, useI18n } from '../i18n';
 
+/**
+ * The diff text of the selected change in the Git panel. It is loaded again whenever the
+ * selection or the Git status changes.
+ */
 export function useGitDiff(
 	workspaceId: string,
 	current: GitChange | undefined,
@@ -16,15 +20,21 @@ export function useGitDiff(
 		value: string;
 		failed?: boolean;
 	}>();
-	const diff = !current
-		? t('Select a change to preview its diff.')
-		: diffResult?.workspaceId === workspaceId &&
-			  diffResult.change === current &&
-			  diffResult.status === status
-			? diffResult.failed
-				? errorMessage(diffResult.value)
-				: diffResult.value
-			: t('Loading diff…');
+	// A result only counts for the change and status it was loaded for; until the new one
+	// arrives, the preview says it is loading.
+	const loaded =
+		!!current &&
+		diffResult?.workspaceId === workspaceId &&
+		diffResult.change === current &&
+		diffResult.status === status;
+	let diff: string;
+	if (!current) {
+		diff = t('Select a change to preview its diff.');
+	} else if (!loaded) {
+		diff = t('Loading diff…');
+	} else {
+		diff = diffResult.failed ? errorMessage(diffResult.value) : diffResult.value;
+	}
 	useEffect(() => {
 		let cancelled = false;
 		if (current) {

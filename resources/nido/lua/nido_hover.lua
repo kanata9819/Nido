@@ -1,8 +1,12 @@
+-- The hover card (K): asks the language servers for hover information and sends the Markdown
+-- to the renderer (TypeInformation.tsx), with its code blocks highlighted.
 local M = {}
+-- Grows with every request and dismissal, so a late response is dropped.
 local generation = 0
 local pending
 local visible = false
 
+--- Cancel the pending request.
 local function invalidate()
   generation = generation + 1
   local request = pending
@@ -10,6 +14,7 @@ local function invalidate()
   if request and request.cancel then pcall(request.cancel) end
 end
 
+--- Highlight each fenced code block of `markdown` with its language (or the buffer's filetype).
 local function highlight_blocks(markdown)
   local blocks, lines, language = {}, nil, nil
   local aliases = {ts='typescript', tsx='typescriptreact', js='javascript', jsx='javascriptreact', rs='rust'}
@@ -33,6 +38,7 @@ local function highlight_blocks(markdown)
   return blocks
 end
 
+--- Send the card's content to the renderer; empty Markdown hides it.
 local function send(markdown)
   if vim.g.nido_channel then
     visible = markdown ~= ''
@@ -40,17 +46,21 @@ local function send(markdown)
   end
 end
 
+--- Hide the card and cancel its request.
 function M.clear()
   invalidate()
   if visible then send('') end
 end
 
+-- Moving, editing or leaving the buffer closes the card.
 vim.api.nvim_create_autocmd({'CursorMoved', 'InsertEnter', 'BufLeave', 'WinLeave'}, {callback=M.clear})
 vim.api.nvim_create_autocmd({'TextChanged', 'TextChangedI', 'TextChangedP'}, {callback=function(event)
   if event.buf == vim.api.nvim_get_current_buf() then M.clear() end
 end})
 vim.api.nvim_create_autocmd('VimLeavePre', {callback=invalidate})
 
+--- Request hover information at the cursor. Results arriving after the cursor moved or the
+--- text changed are dropped.
 function M.show()
   require('nido_diagnostics').hide()
   invalidate()

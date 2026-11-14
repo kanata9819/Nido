@@ -58,6 +58,7 @@ export function registerHandlers({
 		return found;
 	}
 
+	/** The terminal shell the renderer chose, checked against the known shells. */
 	function shellChoice(value: unknown = 'auto'): TerminalShell {
 		if (!terminalShells.includes(value as TerminalShell)) {
 			throw new Error('Invalid terminal shell.');
@@ -73,11 +74,20 @@ export function registerHandlers({
 		return value;
 	}
 
+	/** A whole number from 1 to `max`. */
 	function integer(value: unknown, max = 1_000_000): number {
 		if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > max) {
 			throw new Error('Invalid number.');
 		}
 		return Number(value);
+	}
+
+	/** A boolean value; throws `message` otherwise. */
+	function boolean(value: unknown, message: string): boolean {
+		if (typeof value !== 'boolean') {
+			throw new Error(message);
+		}
+		return value;
 	}
 
 	// Register one handler. Only the application renderer may invoke the explicit API below.
@@ -172,36 +182,21 @@ export function registerHandlers({
 	handle('markdownPreview', (id, token) =>
 		session(id).markdownPreview(token === undefined ? '' : text(token))
 	);
-	handle('clipboardSharing', (id, enabled) => {
-		if (typeof enabled !== 'boolean') {
-			throw new Error('Invalid clipboard setting.');
-		}
-		return session(id).setClipboardSharing(enabled);
-	});
-	handle('relativeLineNumbers', (id, enabled) => {
-		if (typeof enabled !== 'boolean') {
-			throw new Error('Invalid line number setting.');
-		}
-		return session(id).setRelativeLineNumbers(enabled);
-	});
-	handle('editorConfig', (id, enabled) => {
-		if (typeof enabled !== 'boolean') {
-			throw new Error('Invalid EditorConfig setting.');
-		}
-		return session(id).setEditorConfig(enabled);
-	});
-	handle('wordWrap', (id, enabled) => {
-		if (typeof enabled !== 'boolean') {
-			throw new Error('Invalid word wrap setting.');
-		}
-		return session(id).setWordWrap(enabled);
-	});
-	handle('methodSeparators', (id, enabled) => {
-		if (typeof enabled !== 'boolean') {
-			throw new Error('Invalid method separator setting.');
-		}
-		return session(id).setMethodSeparators(enabled);
-	});
+	handle('clipboardSharing', (id, enabled) =>
+		session(id).setClipboardSharing(boolean(enabled, 'Invalid clipboard setting.'))
+	);
+	handle('relativeLineNumbers', (id, enabled) =>
+		session(id).setRelativeLineNumbers(boolean(enabled, 'Invalid line number setting.'))
+	);
+	handle('editorConfig', (id, enabled) =>
+		session(id).setEditorConfig(boolean(enabled, 'Invalid EditorConfig setting.'))
+	);
+	handle('wordWrap', (id, enabled) =>
+		session(id).setWordWrap(boolean(enabled, 'Invalid word wrap setting.'))
+	);
+	handle('methodSeparators', (id, enabled) =>
+		session(id).setMethodSeparators(boolean(enabled, 'Invalid method separator setting.'))
+	);
 	handle('openDocumentation', (value) => {
 		const url = new URL(text(value));
 		if (!['https:', 'http:'].includes(url.protocol)) {
@@ -250,6 +245,8 @@ export function registerHandlers({
 	);
 	handle('reopenBuffer', (id) => session(id).reopenBuffer());
 
+	// Close a tab, asking first whether to discard its unsaved changes. Resolves false when the
+	// user keeps the tab.
 	handle('closeBuffer', async (id, value) => {
 		const s = session(id);
 		const buffer = integer(value);
@@ -341,6 +338,7 @@ export function registerHandlers({
 		);
 	});
 
+	// Apply the window background for a UI theme. The page itself is styled by the renderer.
 	handle('theme', (value) => {
 		if (!uiThemes.includes(value as UITheme)) {
 			throw new Error('Invalid theme.');

@@ -1,8 +1,16 @@
+/**
+ * How much of an eased scroll of `distance` is still ahead after `elapsed` ms. The movement
+ * eases out (cubic): fast at first, slowing to a stop at `duration`.
+ */
 export function scrollOffset(distance: number, elapsed: number, duration = 120): number {
 	const progress = duration > 0 ? Math.min(1, Math.max(0, elapsed / duration)) : 1;
 	return distance * (1 - progress) ** 3;
 }
 
+/**
+ * Add a wheel delta to the pixels left over from earlier events and return the whole lines
+ * (or columns) to scroll, keeping the rest. A change of direction drops the rest.
+ */
 export function accumulateScroll(
 	remainder: number,
 	delta: number,
@@ -28,12 +36,17 @@ export function accumulateScroll(
 	return { lines, remainder: total - lines * lineHeight };
 }
 
+/** A scroll request for Neovim. */
 interface ScrollCommand {
 	lines: number;
 	follow: boolean;
 	columns?: number;
 }
 
+/**
+ * The request in flight. It is done once Neovim has both replied (`completed`) and redrawn
+ * the scrolled viewport (`acknowledged`).
+ */
 interface PendingScroll extends ScrollCommand {
 	acknowledged: boolean;
 	completed: boolean;
@@ -46,22 +59,27 @@ export class ScrollQueue {
 	private follow = true;
 	private inFlight: PendingScroll | undefined;
 
+	/** Whether movement is waiting to be sent. */
 	get hasQueued(): boolean {
 		return this.queued !== 0 || this.horizontal !== 0;
 	}
 
+	/** Whether a request is in flight. */
 	get pending(): boolean {
 		return this.inFlight !== undefined;
 	}
 
+	/** Whether vertical movement is queued or in flight. */
 	get verticalPending(): boolean {
 		return this.queued !== 0 || !!this.inFlight?.lines;
 	}
 
+	/** Columns sent but not yet redrawn by Neovim. */
 	get pendingColumns(): number {
 		return this.inFlight?.acknowledged ? 0 : (this.inFlight?.columns ?? 0);
 	}
 
+	/** Drop queued sideways movement. */
 	cancelHorizontal(): void {
 		this.horizontal = 0;
 	}
@@ -71,22 +89,26 @@ export class ScrollQueue {
 		return this.queued + (this.inFlight?.acknowledged ? 0 : (this.inFlight?.lines ?? 0));
 	}
 
+	/** Add movement to send with the next request. */
 	enqueue(lines: number, follow: boolean, columns = 0): void {
 		this.queued += lines;
 		this.horizontal += columns;
 		this.follow = follow;
 	}
 
+	/** Drop movement that was not sent yet. */
 	cancelQueued(): void {
 		this.queued = 0;
 		this.horizontal = 0;
 	}
 
+	/** Forget queued movement and the request in flight. */
 	reset(): void {
 		this.cancelQueued();
 		this.inFlight = undefined;
 	}
 
+	/** Take the queued movement (at most 1000 lines or columns) as the next request. */
 	start(): ScrollCommand | undefined {
 		if (this.pending || !this.hasQueued) {
 			return undefined;
@@ -103,24 +125,28 @@ export class ScrollQueue {
 		return command;
 	}
 
+	/** Neovim redrew the viewport for the request in flight. */
 	acknowledge(): void {
 		if (this.inFlight) {
 			this.inFlight.acknowledged = true;
 		}
 	}
 
+	/** Neovim replied to the request in flight. */
 	complete(): void {
 		if (this.inFlight) {
 			this.inFlight.completed = true;
 		}
 	}
 
+	/** The request failed: drop queued movement and let the request finish. */
 	fail(): void {
 		this.cancelQueued();
 		// Failed commands have no redraw to acknowledge.
 		this.acknowledge();
 	}
 
+	/** Clear the request once it is complete. Returns whether it was. */
 	finish(): boolean {
 		// Invoke replies and redraw notifications can arrive in either order.
 		if (!this.inFlight?.acknowledged || !this.inFlight.completed) {

@@ -3,15 +3,19 @@ import type { DebugAction, DebugState, DebugVariable } from '../../../shared/typ
 import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import styles from '../assets/DebugPanel.module.css';
 
+/** Sends a Run and Debug action to the main process; `target` picks a launch target or variable. */
 type Action = (value: DebugAction, target?: number) => void;
 
+// Keys that move between buttons and variables (Vim keys and arrows).
 const navigationKeys = ['h', 'j', 'k', 'l', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
 const variableSelector = '[data-debug-variable]';
 
+/** A key pressed without modifiers. */
 function isPlain(event: KeyboardEvent): boolean {
 	return !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
 }
 
+/** Ctrl+D or Ctrl+U. */
 function isHalfPage(event: KeyboardEvent): boolean {
 	return (
 		event.ctrlKey &&
@@ -87,6 +91,10 @@ function focusAdjacentButton(event: KeyboardEvent, panel: HTMLElement | null): v
 	buttons[(index + direction + buttons.length) % buttons.length]?.focus();
 }
 
+/**
+ * The Run and Debug panel below the editor: controls, the program output and, while paused,
+ * the variables tree. It is driven with the keyboard (h/j/k/l, Enter, Ctrl+D/U).
+ */
 export default function DebugPanel({
 	blocked = false,
 	state,
@@ -314,6 +322,7 @@ function useFocusRestoration(
 	}, [panelRef, focusedRef, awaitingVariablesRef, focusTick, variables]);
 }
 
+/** The panel's buttons: run, debug, step and stop, enabled to match the debugger's state. */
 function DebugToolbar({
 	state,
 	action,
@@ -365,6 +374,7 @@ function DebugToolbar({
 	);
 }
 
+/** One row of the variables tree; expandable rows expand on Enter or click. */
 function VariableRow({
 	value,
 	selected,

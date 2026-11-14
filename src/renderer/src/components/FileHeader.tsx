@@ -8,6 +8,7 @@ import FileIcon from './FileIcon';
 import DiagnosticBadges from './DiagnosticBadges';
 import styles from '../assets/Nido.module.css';
 
+// The file tabs and breadcrumb above the editor.
 interface FileHeaderProps {
 	workspace: Workspace;
 	buffers: SessionState['buffers'];
@@ -18,6 +19,10 @@ interface FileHeaderProps {
 	run: (promise: Promise<unknown>) => void;
 }
 
+/**
+ * The open files as tabs (drag to reorder) with their Git and diagnostic marks, and below them
+ * the current file's path. A terminal workspace shows its folder and a restart button instead.
+ */
 function FileHeader({
 	workspace,
 	buffers,
@@ -32,8 +37,10 @@ function FileHeader({
 	const currentIndex = buffers.findIndex((buffer) => buffer.id === currentId);
 	const current = buffers[currentIndex];
 	const selectedTab = useRef<HTMLDivElement>(null);
+	// The tab being dragged; a tab can only be dropped within its own workspace.
 	const draggedTab = useRef<{ workspace: string; buffer: number } | null>(null);
 	const [dropTarget, setDropTarget] = useState<number | null>(null);
+	// Keep the selected tab scrolled into view.
 	useLayoutEffect(() => {
 		selectedTab.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 	}, [active, current?.id, currentIndex]);
@@ -145,6 +152,7 @@ function FileHeader({
 					);
 				})}
 			</div>
+			{/* The current file's path relative to the workspace, shown as "folder / file". */}
 			<div className={styles.breadcrumb}>
 				<span>{workspace.name}</span>
 				<ChevronRight size={13} />

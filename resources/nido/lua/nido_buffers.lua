@@ -1,13 +1,17 @@
+-- Nido's tabs: the order of listed buffers, closing and reopening tabs.
 local M = {}
 -- shortcut: keep 100 closed files in memory, persist if reopening across restarts is needed.
+-- `order` is the tab order the user arranged; `closed` holds recently closed files to reopen.
 local order, closed = {}, {}
 local api = vim.api
 
+--- The buffer of `path`, or -1 when there is none.
 function M.find(path)
   -- bufnr() treats names as patterns; check existence before exact lookup without creating a buffer.
   return vim.fn.bufexists(path) == 1 and vim.fn.bufadd(path) or -1
 end
 
+--- The listed buffers in tab order. New buffers join at the end.
 function M.list()
   local available, result = {}, {}
   local buffers = api.nvim_list_bufs()
@@ -27,6 +31,7 @@ function M.list()
   return result
 end
 
+--- Move a tab to position `index` (one-based).
 function M.place(buffer, index)
   local buffers = M.list()
   local previous = vim.fn.index(buffers, buffer) + 1
@@ -36,6 +41,7 @@ function M.place(buffer, index)
   api.nvim_exec_autocmds('User', {pattern='NidoBuffers'})
 end
 
+--- Move a tab to where tab `target` is.
 function M.move(buffer, target)
   local buffers = M.list()
   local index = vim.fn.index(buffers, target) + 1
@@ -43,6 +49,7 @@ function M.move(buffer, target)
   M.place(buffer, index)
 end
 
+--- Close a tab, remembering the file and cursor so it can be reopened. `force` discards changes.
 function M.close(buffer, force)
   if not force and vim.bo[buffer].modified then error('Buffer has unsaved changes.') end
   local name = api.nvim_buf_get_name(buffer)
@@ -66,6 +73,7 @@ function M.close(buffer, force)
   end
 end
 
+--- Reopen the most recently closed file at its cursor and tab position.
 function M.reopen()
   local entry = closed[#closed]
   if not entry then return end

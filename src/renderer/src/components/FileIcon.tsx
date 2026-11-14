@@ -33,6 +33,7 @@ import html from '../assets/file-icons/html5.svg';
 import css from '../assets/file-icons/css3.svg';
 import lua from '../assets/file-icons/lua.svg';
 
+/** Language logos by file extension. */
 const icons: Record<string, string> = {
 	rs: rust,
 	ts: typescript,
@@ -65,6 +66,10 @@ const icons: Record<string, string> = {
 	lua
 };
 
+/**
+ * Well-known file names and extensions, each with its icon and color. These take precedence
+ * over the language logos; the first matching pattern wins.
+ */
 const fileKinds: [RegExp, LucideIcon, string][] = [
 	[/^(readme|changelog|license|licence|copying|authors)(\..+)?$/, BookOpen, '#80b9d9'],
 	[/^\.git(ignore|attributes|modules|keep)?$/, GitBranch, '#e59277'],
@@ -91,6 +96,7 @@ const fileKinds: [RegExp, LucideIcon, string][] = [
 	[/\.(pdf|docx?|odt)$/, FileType, '#e59b96']
 ];
 
+/** The icon of a file: a well-known kind, a language logo, or a generic code file icon. */
 export default function FileIcon({
 	path,
 	className

@@ -5,6 +5,11 @@ import { LocalHistory } from './localHistory';
 import type { HandlerDeps } from './handlers';
 import type { Session } from './session';
 
+/**
+ * IPC handlers for Time Machine, and the timer that records changed buffers into local
+ * history. Returns a function that captures one session right away, used before a workspace
+ * closes or sleeps so its latest edits are not lost.
+ */
 export function registerHistoryHandlers({
 	window,
 	sessions,
@@ -21,6 +26,7 @@ export function registerHistoryHandlers({
 	const history = new HistoryService(
 		new LocalHistory(join(app.getPath('userData'), 'time-machine'))
 	);
+	// Sessions whose capture failed. Each failure is reported once until a capture succeeds again.
 	const reported = new WeakSet<Session>();
 	let busy = false;
 	let disposed = false;
@@ -45,26 +51,20 @@ export function registerHistoryHandlers({
 			report(s, error);
 		}
 	};
+	// Capturing pauses while the app prepares to quit or closes, or when history is turned off.
+	const paused = (): boolean =>
+		disposed || state.prompting || state.closing || state.historyEnabled === false;
+	// Every 2 seconds, record the open buffers that changed since the last pass.
 	const timer = setInterval(() => {
-		if (
-			busy ||
-			disposed ||
-			state.prompting ||
-			state.closing ||
-			state.historyEnabled === false
-		) {
+		if (busy || paused()) {
 			return;
 		}
 		busy = true;
-		// Keep serialization and disk work bounded even with many independent workspaces.
+		// Capture workspaces one at a time so serialization and disk work stay bounded even
+		// with many independent workspaces.
 		void (async () => {
 			for (const s of sessions.values()) {
-				if (
-					disposed ||
-					state.prompting ||
-					state.closing ||
-					state.historyEnabled === false
-				) {
+				if (paused()) {
 					break;
 				}
 				await capture(s);

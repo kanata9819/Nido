@@ -2,11 +2,16 @@ import { useEffect, useRef } from 'react';
 import type { Workspace } from '../../../shared/types';
 import type { EditorSettings } from './useEditorSettings';
 
+/** The settings that each workspace's Neovim applies. */
 export type SessionSettings = Pick<
 	EditorSettings,
 	'clipboardSharing' | 'relativeLineNumbers' | 'editorConfig' | 'wordWrap' | 'methodSeparators'
 >;
 
+/**
+ * Send the session settings to every workspace (and its terminal) when they change or a
+ * workspace opens. Each value is sent once per workspace.
+ */
 export function useSessionSettings(
 	workspaces: Workspace[],
 	{
@@ -18,6 +23,7 @@ export function useSessionSettings(
 	}: SessionSettings,
 	setError: (message: string) => void
 ): void {
+	// The value last sent per workspace and setting.
 	const applied = useRef(
 		new Map<string, Partial<Record<keyof SessionSettings, { value: boolean }>>>()
 	);
@@ -78,6 +84,7 @@ export function useSessionSettings(
 				apply(workspace.id, 'editorConfig', editorConfig, window.nido.setEditorConfig);
 			}
 		}
+		// Forget workspaces that closed.
 		for (const id of applied.current.keys()) {
 			if (!currentIds.has(id)) {
 				applied.current.delete(id);

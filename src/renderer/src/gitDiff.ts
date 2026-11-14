@@ -1,15 +1,23 @@
+// Turns a unified diff into rows for the side-by-side diff view.
+
+/** A line on one side of a diff, with its line number in that version. */
 export interface DiffLine {
 	number: number;
 	text: string;
 	changed?: boolean;
 }
 
+/** One row of the side-by-side view: a line on each side (a gap when absent) or a heading. */
 export interface DiffRow {
 	before?: DiffLine;
 	after?: DiffLine;
 	heading?: string;
 }
 
+/**
+ * Split a unified diff into side-by-side rows. Unchanged lines appear on both sides; a run of
+ * removed lines is paired row by row with the added lines that follow it.
+ */
 export function splitDiff(diff: string): DiffRow[] {
 	const rows: DiffRow[] = [];
 	let before = 0;

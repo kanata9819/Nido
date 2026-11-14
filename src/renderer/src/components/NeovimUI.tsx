@@ -14,6 +14,7 @@ import OverlayPresence from './OverlayPresence';
 import Chunks from './NeovimUIChunks';
 import NeovimMessages from './NeovimMessages';
 
+// Command-line completion rows are drawn virtually, like the other long lists.
 const completionRowHeight = 30;
 const completionOverscan = 8;
 
@@ -44,6 +45,10 @@ function positionCommandInput(
 	anchor.style.maxWidth = `${Math.max(2, host.right - point.left)}px`;
 }
 
+/**
+ * One level of Neovim's command line (a nested level appears for example with Ctrl+R=),
+ * with the prompt, the typed text and the cursor.
+ */
 function CommandLine({
 	command,
 	grid,
@@ -76,6 +81,10 @@ function CommandLine({
 	);
 }
 
+/**
+ * Nido's own drawing of Neovim's command line, messages and command-line completion (Neovim's
+ * ext_cmdline, ext_messages and ext_popupmenu UI), from the state the main process sends.
+ */
 export default function NeovimUI({
 	id,
 	grid,
@@ -95,6 +104,7 @@ export default function NeovimUI({
 }): React.JSX.Element {
 	const t = useI18n();
 	const [state, setState] = useState(emptyNeovimUI);
+	// The message and history versions the user closed; newer messages open the dialog again.
 	const [dismissed, setDismissed] = useState({ messages: -1, history: -1 });
 	const caret = useRef<HTMLSpanElement>(null);
 	const commandCard = useRef<HTMLDivElement>(null);
@@ -117,11 +127,13 @@ export default function NeovimUI({
 		[id]
 	);
 
+	// Nested command lines, innermost last; the innermost one has the cursor.
 	const commands = Object.values(state.commands).sort((a, b) => a.level - b.level);
 	const current = commands.at(-1);
 	const showCommand = !hidden && (Boolean(current) || state.block.length > 0);
 	const showCompletion = showCommand && state.completion !== null;
 	const completionCount = state.completion?.items.length ?? 0;
+	// The completion rows to draw, plus the selected row when it is outside them.
 	const firstCompletion = Math.min(
 		Math.max(0, completionCount - 1),
 		Math.max(0, Math.floor(completionViewport.top / completionRowHeight) - completionOverscan)
@@ -149,17 +161,21 @@ export default function NeovimUI({
 	const showMessages =
 		!hidden &&
 		(showHistory || (messages.length > 0 && dismissed.messages !== state.messageVersion));
+	// A confirm or hit-enter prompt waiting for an answer.
 	const prompt = state.messages.findLast(
 		(message) => message.kind === 'confirm' || message.kind === 'return_prompt'
 	);
+	// Mode, pending command and ruler text, shown with the command line.
 	const auxiliary = [state.showmode, state.showcmd, state.ruler].filter(
 		(content) => content.length
 	);
 
+	/** Send keys to Neovim, keeping focus in the editor input. */
 	const send = (keys: string): void => {
 		void window.nido.input(id, keys).catch((error) => onError(String(error)));
 		input.current?.focus();
 	};
+	/** Close the message dialog, answering a waiting prompt with Esc. */
 	const closeMessages = (): void => {
 		if (prompt) {
 			send('<Esc>');
@@ -168,6 +184,7 @@ export default function NeovimUI({
 		input.current?.focus();
 	};
 
+	// Track the completion list's scroll position for virtual rendering.
 	useLayoutEffect(() => {
 		const list = completionList.current;
 		if (!showCompletion || !list) {
@@ -186,6 +203,8 @@ export default function NeovimUI({
 		return () => observer.disconnect();
 	}, [showCompletion]);
 
+	// While the command line is shown, move the editor's input element to its cursor so IME
+	// composition appears there.
 	useLayoutEffect(() => {
 		const anchor = input.current;
 		const cursor = caret.current;
@@ -212,6 +231,7 @@ export default function NeovimUI({
 		};
 	}, [state.commands, showCommand, current, input, id, paint]);
 
+	// Scroll new messages into view.
 	useLayoutEffect(() => {
 		if (!showMessages) {
 			return;
@@ -222,6 +242,7 @@ export default function NeovimUI({
 		}
 	}, [showMessages, showHistory, state.messageVersion, state.historyVersion]);
 
+	// Expose the command-line completion to assistive technology through the input element.
 	useLayoutEffect(() => {
 		const anchor = input.current;
 		if (!anchor || !state.completion || !current || hidden) {

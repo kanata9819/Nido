@@ -3,6 +3,10 @@ import type { MessageChunk } from '../../../shared/neovimUI';
 import { color } from '../gridColors';
 import type { Grid } from '../grid';
 
+/**
+ * Text from Neovim's command line or messages, colored with the highlight groups of the
+ * editor grid.
+ */
 export default function NeovimUIChunks({
 	content,
 	grid

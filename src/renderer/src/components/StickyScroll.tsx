@@ -4,7 +4,9 @@ import type { StickyScrollState } from '../../../shared/types';
 import type { Grid } from '../grid';
 import { stickyRows, type StickyRow } from '../stickyScroll';
 import styles from '../assets/StickyScroll.module.css';
+import { listIndex } from '../listNavigation';
 
+/** What the sticky header draws, in pixels, computed from the grid on every paint. */
 interface Model {
 	state: StickyScrollState;
 	rows: StickyRow[];
@@ -17,6 +19,29 @@ interface Model {
 	horizontalOffset: number;
 }
 
+/** Whether two models draw the same thing. */
+function sameModel(previous: Model, next: Model): boolean {
+	return (
+		previous.state === next.state &&
+		previous.top === next.top &&
+		previous.width === next.width &&
+		previous.left === next.left &&
+		previous.cellWidth === next.cellWidth &&
+		previous.lineHeight === next.lineHeight &&
+		previous.background === next.background &&
+		previous.horizontalOffset === next.horizontalOffset &&
+		previous.rows.length === next.rows.length &&
+		previous.rows.every(
+			(row, index) =>
+				row.scope === next.rows[index].scope && row.offset === next.rows[index].offset
+		)
+	);
+}
+
+/**
+ * Sticky scroll: the header lines of the scopes that contain the top of the window, pinned
+ * above the editor. Clicking a header jumps to it; holding Shift over one shows its end line.
+ */
 export default function StickyScroll({
 	id,
 	grid,
@@ -42,8 +67,10 @@ export default function StickyScroll({
 }): React.JSX.Element | null {
 	const t = useI18n();
 	const [model, setModel] = useState<Model>();
+	// The header whose end line is shown instead, while Shift is held over it.
 	const [peek, setPeek] = useState<number>();
 	const hovered = useRef<number>(undefined);
+	// Pressing or releasing Shift over a header switches it between its first and end line.
 	useEffect(() => {
 		const keyDown = (event: KeyboardEvent): void => {
 			if (event.key === 'Shift') {
@@ -65,6 +92,8 @@ export default function StickyScroll({
 			window.removeEventListener('blur', blur);
 		};
 	}, []);
+	// Recompute the model on every editor paint (the editor calls paintRef), so the headers
+	// move with smooth scrolling.
 	useLayoutEffect(() => {
 		const update = (motionOffset: number): void => {
 			const surface = grid.current;
@@ -95,29 +124,10 @@ export default function StickyScroll({
 						horizontalOffset: surface.horizontalOffset
 					}
 				: undefined;
-			setModel((previous) => {
-				if (
-					previous &&
-					next &&
-					previous.state === next.state &&
-					previous.top === next.top &&
-					previous.width === next.width &&
-					previous.left === next.left &&
-					previous.cellWidth === next.cellWidth &&
-					previous.lineHeight === next.lineHeight &&
-					previous.background === next.background &&
-					previous.horizontalOffset === next.horizontalOffset &&
-					previous.rows.length === next.rows.length &&
-					previous.rows.every(
-						(row, index) =>
-							row.scope === next.rows[index].scope &&
-							row.offset === next.rows[index].offset
-					)
-				) {
-					return previous;
-				}
-				return next;
-			});
+			// Keep the previous model when nothing changed, so React skips the render.
+			setModel((previous) =>
+				previous && next && sameModel(previous, next) ? previous : next
+			);
 		};
 		paintRef.current = update;
 		const frame = requestAnimationFrame(() => update(0));
@@ -130,6 +140,7 @@ export default function StickyScroll({
 	if (!model) {
 		return null;
 	}
+	// Jump to a header's line (or its end line), after any scroll in progress has finished.
 	const jump = (scope: StickyRow['scope'], ending: boolean): void => {
 		const state = model.state;
 		void (async () => {
@@ -143,6 +154,7 @@ export default function StickyScroll({
 			input.current?.focus();
 		})().catch((error) => onError(String(error)));
 	};
+	// The last header can slide up as its scope scrolls out of view.
 	const lastOffset = model.rows.at(-1)?.offset ?? 0;
 	return (
 		<div
@@ -162,6 +174,7 @@ export default function StickyScroll({
 				lineHeight: `${model.lineHeight}px`,
 				tabSize: model.state.tabstop
 			}}
+			// With focus in the headers (Alt+Shift+S), j/k move between them and Esc returns.
 			onKeyDown={(event) => {
 				const buttons = [
 					...event.currentTarget.querySelectorAll<HTMLButtonElement>('button')
@@ -174,20 +187,7 @@ export default function StickyScroll({
 				} else if (['j', 'k', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
 					event.preventDefault();
 					event.stopPropagation();
-					const next =
-						event.key === 'Home'
-							? 0
-							: event.key === 'End'
-								? buttons.length - 1
-								: Math.max(
-										0,
-										Math.min(
-											buttons.length - 1,
-											index +
-												(['j', 'ArrowDown'].includes(event.key) ? 1 : -1)
-										)
-									);
-					buttons[next]?.focus();
+					buttons[listIndex(event.key, index, buttons.length)]?.focus();
 				}
 			}}
 		>

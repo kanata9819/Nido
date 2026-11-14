@@ -1,5 +1,6 @@
 import progressStyles from '../assets/Progress.module.css';
 import { useI18n } from '../i18n';
+import type { Translator } from '../../../shared/i18n';
 import { Code2, Search, ChevronUp, ChevronDown, X, SquareTerminal } from 'lucide-react';
 import type { Workspace, SessionState } from '../../../shared/types';
 import styles from '../assets/StatusBar.module.css';
@@ -19,6 +20,21 @@ interface StatusBarProps {
 	onSearch: (key: 'n' | 'N' | '<Esc>') => void;
 }
 
+/**
+ * "current / total" of the active search. `incomplete` is 1 until counting finished (or
+ * timed out) and 2 when there are more matches than are counted.
+ */
+function searchCount(
+	search: Exclude<SessionState['search'], false | undefined>,
+	t: Translator
+): string {
+	if (search.incomplete === 1) {
+		return t('Counting…');
+	}
+	return `${search.current} / ${search.total}${search.incomplete === 2 ? '+' : ''}`;
+}
+
+/** The name of a Neovim mode (as from mode()) for the status bar. */
 function modeLabel(mode: string): string {
 	switch (mode[0]) {
 		case 't':
@@ -34,6 +50,10 @@ function modeLabel(mode: string): string {
 	}
 }
 
+/**
+ * The status bar: workspace location, mode, panel toggles, search matches, language server
+ * progress, and the current file's indentation, line endings and cursor position.
+ */
 export default function StatusBar({
 	active,
 	workspace,
@@ -88,14 +108,11 @@ export default function StatusBar({
 					aria-label={t('Search matches')}
 				>
 					<Search size={13} />
+					{/* * and # search for \<word\>; show the word without its boundaries. */}
 					<strong title={state.search.pattern}>
 						{state.search.pattern.replace(/^\\</, '').replace(/\\>$/, '')}
 					</strong>
-					<span>
-						{state.search.incomplete === 1
-							? t('Counting…')
-							: `${state.search.current} / ${state.search.total}${state.search.incomplete === 2 ? '+' : ''}`}
-					</span>
+					<span>{searchCount(state.search, t)}</span>
 					<button
 						aria-label={t('Previous search match')}
 						title={t('Previous (N)')}

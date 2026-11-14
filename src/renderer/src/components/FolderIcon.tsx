@@ -12,6 +12,7 @@ import {
 	type LucideIcon
 } from 'lucide-react';
 
+/** Well-known folder names, each with its icon and color. The first matching pattern wins. */
 const folderKinds: [RegExp, LucideIcon, string][] = [
 	[/^(src|source|lib|include|crate|crates)$/, FolderCode, '#9fc68e'],
 	[/^(test|tests|__tests__|spec|specs)$/, FolderCheck, '#76c5b5'],
@@ -23,6 +24,7 @@ const folderKinds: [RegExp, LucideIcon, string][] = [
 	[/^(const|consts|constants)$/, FolderLock, '#80b9d9']
 ];
 
+/** The icon of a folder in the explorer, chosen by its name. */
 export default function FolderIcon({
 	path,
 	expanded

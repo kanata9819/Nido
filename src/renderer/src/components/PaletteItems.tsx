@@ -5,6 +5,8 @@ import type { Panel, Item } from '../types';
 import styles from '../assets/Palette.module.css';
 import FileIcon from './FileIcon';
 
+// The filter field and result list shared by the palettes (commands, files, workspaces,
+// open files, problems, symbols and text search).
 interface PaletteItemsProps {
 	panel: Exclude<Panel, null>;
 	filtered: Item[];
@@ -16,6 +18,7 @@ interface PaletteItemsProps {
 	setSelection: React.Dispatch<React.SetStateAction<number>>;
 }
 
+/** The icon of an item in palettes that have no file to show an icon for. */
 function itemIcon(panel: Exclude<Panel, null>, severity: number | undefined): React.JSX.Element {
 	switch (panel) {
 		case 'problems':
@@ -37,6 +40,7 @@ function itemIcon(panel: Exclude<Panel, null>, severity: number | undefined): Re
 	}
 }
 
+/** One row of a palette. */
 const PaletteItem = memo(function PaletteItem({
 	panel,
 	item,
@@ -48,17 +52,14 @@ const PaletteItem = memo(function PaletteItem({
 	index: number;
 	selected: boolean;
 }): React.JSX.Element {
+	// Problems and symbols are listboxes navigated with the keyboard; their rows are options
+	// with ids that aria-activedescendant refers to.
+	const option = panel === 'problems' || panel === 'symbols';
 	return (
 		<button
-			id={
-				panel === 'problems'
-					? `problem-${index}`
-					: panel === 'symbols'
-						? `symbol-${index}`
-						: undefined
-			}
-			role={panel === 'problems' || panel === 'symbols' ? 'option' : undefined}
-			aria-selected={panel === 'problems' || panel === 'symbols' ? selected : undefined}
+			id={option ? `${panel === 'problems' ? 'problem' : 'symbol'}-${index}` : undefined}
+			role={option ? 'option' : undefined}
+			aria-selected={option ? selected : undefined}
 			data-severity={item.severity}
 			className={selected ? styles.selectedItem : ''}
 			ref={(node) => {
@@ -84,6 +85,10 @@ const PaletteItem = memo(function PaletteItem({
 	);
 });
 
+/**
+ * A palette's filter field and results. Enter runs the selected item; while results are
+ * still loading, Enter is remembered and runs the first result for that query once loaded.
+ */
 export default function PaletteItems({
 	panel,
 	filtered,
@@ -98,6 +103,7 @@ export default function PaletteItems({
 	const results = useRef<HTMLDivElement>(null);
 	const filter = useRef<HTMLInputElement>(null);
 	const pendingEnter = useRef<string | undefined>(undefined);
+	// Run the Enter pressed while loading, unless the query changed or focus left the field.
 	useEffect(() => {
 		if (!loading && pendingEnter.current === query) {
 			pendingEnter.current = undefined;
@@ -106,6 +112,7 @@ export default function PaletteItems({
 			}
 		}
 	}, [loading, query, filtered, selection]);
+	// The problems palette is used from its list, so focus it and keep the selection in range.
 	useEffect(() => {
 		if (panel === 'problems') {
 			results.current?.focus();
@@ -116,6 +123,7 @@ export default function PaletteItems({
 			setSelection((index) => Math.max(0, Math.min(index, filtered.length - 1)));
 		}
 	}, [panel, filtered.length, setSelection]);
+	// Keep the selected problem in view while the list resizes.
 	useEffect(() => {
 		const node = results.current;
 		if (panel !== 'problems' || !node) {
@@ -127,6 +135,35 @@ export default function PaletteItems({
 		observer.observe(node);
 		return () => observer.disconnect();
 	}, [panel]);
+
+	const placeholder = (): string => {
+		switch (panel) {
+			case 'files':
+				return t('Type a filename…');
+			case 'symbols':
+				return t('Type a symbol name…');
+			case 'search':
+				return t('Type text to grep…');
+			default:
+				return t('Type to search…');
+		}
+	};
+	// Shown instead of the list when nothing matches: progress, an error, or a hint.
+	const emptyMessage = (): string => {
+		if (loading) {
+			return panel === 'symbols' ? t('Loading symbols…') : t('Looking through your project…');
+		}
+		if (message) {
+			return t(message);
+		}
+		if (panel === 'search') {
+			return query ? t('No matching lines.') : t('Enter text to search this workspace.');
+		}
+		return panel === 'problems' && !query
+			? t('No problems reported.')
+			: t('No matching items.');
+	};
+
 	return (
 		<>
 			<input
@@ -141,15 +178,7 @@ export default function PaletteItems({
 					panel === 'symbols' && filtered[selection] ? `symbol-${selection}` : undefined
 				}
 				aria-label={panel === 'search' ? t('Search in files') : t('Filter items')}
-				placeholder={
-					panel === 'files'
-						? t('Type a filename…')
-						: panel === 'symbols'
-							? t('Type a symbol name…')
-							: panel === 'search'
-								? t('Type text to grep…')
-								: t('Type to search…')
-				}
+				placeholder={placeholder()}
 				value={query}
 				onChange={(event) => {
 					pendingEnter.current = undefined;
@@ -242,23 +271,7 @@ export default function PaletteItems({
 						selected={i === selection}
 					/>
 				))}
-				{!filtered.length && (
-					<p className={styles.noResults}>
-						{loading
-							? panel === 'symbols'
-								? t('Loading symbols…')
-								: t('Looking through your project…')
-							: message
-								? t(message)
-								: panel === 'search'
-									? query
-										? t('No matching lines.')
-										: t('Enter text to search this workspace.')
-									: panel === 'problems' && !query
-										? t('No problems reported.')
-										: t('No matching items.')}
-					</p>
-				)}
+				{!filtered.length && <p className={styles.noResults}>{emptyMessage()}</p>}
 			</div>
 			<div className={styles.paletteFooter}>
 				<span>

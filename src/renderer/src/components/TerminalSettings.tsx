@@ -3,6 +3,7 @@ import type { TerminalShell } from '../../../shared/types';
 import type { EditorSettings } from '../hooks/useEditorSettings';
 import { useI18n } from '../i18n';
 
+/** Names of the terminal shells, shown in the shell setting. */
 const shellLabels: Record<TerminalShell, string> = {
 	auto: 'Auto (installed shell)',
 	pwsh: 'PowerShell 7 (pwsh)',
@@ -11,6 +12,7 @@ const shellLabels: Record<TerminalShell, string> = {
 	'wsl.exe': 'WSL'
 };
 
+/** The terminal section of the settings: which shell new terminals start. */
 export default function TerminalSettings({
 	terminalShell,
 	setTerminalShell
@@ -18,6 +20,7 @@ export default function TerminalSettings({
 	const t = useI18n();
 	const [installedShells, setInstalledShells] = useState<TerminalShell[]>();
 	const [shellError, setShellError] = useState(false);
+	// Offer only installed shells, and fall back to auto when the saved one is gone.
 	useEffect(() => {
 		let cancelled = false;
 		void window.nido

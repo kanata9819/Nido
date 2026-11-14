@@ -1,8 +1,13 @@
+-- Bracket pair colorization, the highlight of the pair around the cursor, and bracket guides.
+-- Each buffer's pairs are found in the background (yielding so typing stays responsive),
+-- skipping brackets in strings and comments, and kept in a nido_bracket_index for queries.
 local api = vim.api
 local namespace = api.nvim_create_namespace('nido_brackets')
+-- One color per nesting level, repeating.
 local colors = { '#FFD700', '#DA70D6', '#179FFF' }
 local closing = { [')'] = '(', [']'] = '[', ['}'] = '{' }
 local pending = {}
+--- Cancel a buffer's scheduled bracket scan.
 local function cancel_pending(buffer)
   local ticket = pending[buffer]
   pending[buffer] = nil
@@ -11,6 +16,8 @@ local function cancel_pending(buffer)
     ticket.timer:close()
   end
 end
+-- Per buffer: its pairs, the indexes for the cursor match and for scopes, the changedtick
+-- that was scanned, and the color extmarks.
 local pairs_by_buffer = {}
 local match_indices = {}
 local scope_indices = {}
@@ -22,6 +29,7 @@ local guide_context
 local matched
 local match_namespace = api.nvim_create_namespace('nido_bracket_match')
 
+--- Drop a pair whose bracket was edited, until the next scan.
 local function invalidate_position(buffer, position)
   position.invalid = true
   if match_indices[buffer] then match_indices[buffer].invalidate(position) end
@@ -33,6 +41,7 @@ local function invalidate_position(buffer, position)
   end
 end
 
+--- Highlight the innermost pair around the cursor.
 local function match_brackets()
   local buffer = api.nvim_get_current_buf()
   local cursor = require('nido_scroll').cursor() or api.nvim_win_get_cursor(0)
@@ -55,6 +64,7 @@ local function match_brackets()
   end
 end
 
+--- Whether the bracket at a position is inside a string or comment.
 local function ignored(row, column)
   for _, id in ipairs(vim.fn.synstack(row, column)) do
     local name = vim.fn.synIDattr(id, 'name'):lower()
@@ -112,6 +122,7 @@ vim.keymap.set('i', '<CR>', function()
     inner, outer, row + 2, #inner)
 end, {expr=true})
 
+--- Define the bracket colors, again after a color scheme change.
 local function set_colors()
   for level, color in ipairs(colors) do
     api.nvim_set_hl(0, 'NidoBracket' .. level, { fg = color })
@@ -121,6 +132,7 @@ local function set_colors()
   api.nvim_set_hl(0, 'MatchParen', {})
 end
 
+--- Scan a buffer's brackets and color them, unless the buffer is unchanged since the last scan.
 local function update(buffer, ticket)
   if not api.nvim_buf_is_valid(buffer) or not api.nvim_buf_is_loaded(buffer) then
     pending[buffer] = nil

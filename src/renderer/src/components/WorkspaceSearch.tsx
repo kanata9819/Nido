@@ -8,6 +8,10 @@ import { navigateSearchList as navigate } from './workspaceSearchNavigation';
 import ReplacementPreviewPanel from './ReplacementPreviewPanel';
 import WorkspaceSearchResults from './WorkspaceSearchResults';
 
+/**
+ * Workspace text search with replace (Ctrl+Shift+F). Search state and requests live in
+ * useWorkspaceSearch; this component handles the fields, focus and keyboard.
+ */
 export default function WorkspaceSearch({
 	workspaceId,
 	onClose
@@ -28,7 +32,9 @@ export default function WorkspaceSearch({
 	const files = useRef<HTMLDivElement>(null);
 	const diff = useRef<HTMLDivElement>(null);
 	const applyButton = useRef<HTMLButtonElement>(null);
+	// An Enter pressed while results were loading, remembered for the query it was pressed for.
 	const pendingEnter = useRef<string | undefined>(undefined);
+	// Where to move focus after the next render, once the element exists and nothing is busy.
 	const focusTarget = useRef<'results' | 'files' | 'replace' | undefined>(undefined);
 	const focus = (target: 'results' | 'files' | 'replace'): void => {
 		focusTarget.current = target;
@@ -55,22 +61,21 @@ export default function WorkspaceSearch({
 		prepare,
 		apply
 	} = useWorkspaceSearch({ workspaceId, query, options, replacement, focus });
+	// Move focus to the requested element after each render.
 	useLayoutEffect(() => {
 		const target = focusTarget.current;
-		const element =
-			target === 'files'
-				? files.current
-				: target === 'replace'
-					? replaceInput.current
-					: target === 'results'
-						? results.current
-						: undefined;
+		const element = target
+			? { files: files.current, replace: replaceInput.current, results: results.current }[
+					target
+				]
+			: undefined;
 		if (element && !busy) {
 			element.focus();
 			focusTarget.current = undefined;
 		}
 	});
 
+	// Open a match in the editor, and close the search unless focus moved elsewhere meanwhile.
 	const open = (index: number): void => {
 		const match = result.matches[index];
 		if (!match) {
@@ -87,6 +92,7 @@ export default function WorkspaceSearch({
 			.catch(failure);
 	};
 
+	// Run the Enter pressed while loading once its search completes.
 	useEffect(() => {
 		if (!loading && pendingEnter.current === query) {
 			pendingEnter.current = undefined;
@@ -98,11 +104,13 @@ export default function WorkspaceSearch({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [loading, result]);
 
+	// Keep the selected row in view.
 	useEffect(() => {
 		const list = preview ? files.current : results.current;
 		list?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
 	}, [selection, preview, file]);
 
+	// Discard a replacement preview after the search changed, keeping focus in the panel.
 	const invalidate = (): void => {
 		if (
 			preview &&
@@ -114,6 +122,7 @@ export default function WorkspaceSearch({
 		}
 		invalidateSearch();
 	};
+	// The query, folder or an option changed: the results and preview no longer apply.
 	const searchChanged = (): void => {
 		invalidate();
 		pendingEnter.current = undefined;

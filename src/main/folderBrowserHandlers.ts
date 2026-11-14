@@ -34,6 +34,7 @@ export async function windowsDrives(
 	return roots.filter((_, index) => found[index]);
 }
 
+/** IPC handlers for the folder picker that opens a workspace, including folders in WSL. */
 export function registerFolderBrowserHandlers({
 	handle,
 	text
@@ -43,6 +44,8 @@ export function registerFolderBrowserHandlers({
 }): void {
 	handle('wslDistributions', () => wslDistributions());
 	handle('windowsDrives', () => windowsDrives());
+	// List the subfolders of a folder. Without a path this starts at the home folder; with a
+	// `distribution` the path is a Linux path inside that WSL distribution.
 	handle('browseFolders', async (value, distribution) => {
 		const requested = value === undefined || value === '' ? app.getPath('home') : text(value);
 		const remote = parseWslPath(requested);

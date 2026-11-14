@@ -1,5 +1,8 @@
+-- An index of bracket pairs for fast queries: a segment tree over the pairs, where each node
+-- keeps the earliest start and latest end of the pairs below it.
 local M = {}
 
+--- Whether position `a` comes before position `b`.
 local function before(a, b)
   return a.row < b.row or (a.row == b.row and a.column < b.column)
 end
@@ -31,6 +34,7 @@ function M.new(pairs, work)
   end
   if #pairs > 0 then build(1, 1, #pairs) end
 
+  --- The pair that contains a position and comes first in endpoint order (the innermost one).
   local function innermost(row, column)
     local position = {row=row, column=column}
     local function find(node, first, last)
@@ -43,6 +47,7 @@ function M.new(pairs, work)
     return find(1, 1, #pairs)
   end
 
+  --- The pairs that overlap rows [first_row, last_row).
   local function overlapping(first_row, last_row)
     local result = {}
     local function visit(node, first, last)
@@ -60,6 +65,7 @@ function M.new(pairs, work)
     return result
   end
 
+  --- Remove the pair that starts or ends at `position` (an endpoint table) from the index.
   local function invalidate(position)
     local node = leaves[position]
     if not node then return end

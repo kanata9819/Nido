@@ -1,6 +1,10 @@
+-- Runs the shell of a terminal workspace in a Neovim terminal buffer.
 local M = {}
+-- The running shell's job id and its terminal buffer.
 local job, buffer
 
+--- Start (or restart) the shell. `command` is the shell's command line, resolved by the main
+--- process; inside WSL the user's login shell is used instead.
 function M.start(choice, command)
   local choices = {
     auto = true,

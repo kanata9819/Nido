@@ -1,13 +1,51 @@
 import { onNidoEvent } from '../nidoEvents';
 import { useI18n } from '../i18n';
 import { useEffect, useState } from 'react';
-import { ArrowDownToLine, Check, LoaderCircle, RefreshCw } from 'lucide-react';
+import { ArrowDownToLine, Check, LoaderCircle, RefreshCw, type LucideIcon } from 'lucide-react';
+import type { Translator } from '../../../shared/i18n';
 import type { UpdateAction, UpdateState } from '../../../shared/types';
 import styles from '../assets/UpdateButton.module.css';
 
+/** What the button does in each update state, as its accessible name and tooltip. */
+function updateLabel(
+	t: Translator,
+	status: UpdateState['status'] | undefined,
+	percent = 0
+): string {
+	switch (status) {
+		case 'available':
+			return t('Download update');
+		case 'downloaded':
+			return t('Restart to update');
+		case 'checking':
+			return t('Checking for updates');
+		case 'downloading':
+			return t('Downloading update {percent}%', { percent: Math.floor(percent) });
+		case 'installing':
+			return t('Restarting to update');
+		case 'current':
+			return t('Nido is up to date');
+		case 'error':
+			return t('Retry update check');
+		default:
+			return t('Check for updates');
+	}
+}
+
+/** Icons for update states that are not busy; others show RefreshCw. */
+const statusIcons: Partial<Record<UpdateState['status'], LucideIcon>> = {
+	current: Check,
+	available: ArrowDownToLine
+};
+
+/**
+ * The update button in the title bar. It follows the main process's update state and runs
+ * the next step on click: check, download, or restart to install.
+ */
 export default function UpdateButton(): React.JSX.Element {
 	const t = useI18n();
 	const [update, setUpdate] = useState<UpdateState>();
+	// Use the state pushed by the main process; the initial request only fills in until then.
 	useEffect(() => {
 		let active = true;
 		let received = false;
@@ -37,33 +75,8 @@ export default function UpdateButton(): React.JSX.Element {
 
 	const status = update?.status;
 	const busy = !update || ['checking', 'downloading', 'installing'].includes(update.status);
-	const label =
-		status === 'available'
-			? t('Download update')
-			: status === 'downloaded'
-				? t('Restart to update')
-				: status === 'checking'
-					? t('Checking for updates')
-					: status === 'downloading'
-						? t('Downloading update {percent}%', {
-								percent: Math.floor(update?.percent ?? 0)
-							})
-						: status === 'installing'
-							? t('Restarting to update')
-							: status === 'current'
-								? t('Nido is up to date')
-								: status === 'error'
-									? t('Retry update check')
-									: t('Check for updates');
-	const Icon = busy
-		? LoaderCircle
-		: status === 'downloaded'
-			? RefreshCw
-			: status === 'current'
-				? Check
-				: status === 'available'
-					? ArrowDownToLine
-					: RefreshCw;
+	const label = updateLabel(t, status, update?.percent);
+	const Icon = busy ? LoaderCircle : ((status && statusIcons[status]) ?? RefreshCw);
 	const currentVersion = update?.currentVersion
 		? t('Nido version {version}', { version: update.currentVersion })
 		: '';

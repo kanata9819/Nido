@@ -2,27 +2,42 @@ import type { Grid } from './grid';
 import { ScrollQueue, scrollOffset } from './scroll';
 import { HorizontalScroll } from './horizontalScroll';
 
+/** What an EditorScroll needs from its editor. */
 interface Options {
 	id: string;
 	grid: Grid;
+	/** Whether the editor may scroll now (it is active and not behind a dialog). */
 	enabled: () => boolean;
+	/** Request a repaint on the next animation frame. */
 	schedule: () => void;
 	onError: (error: unknown) => void;
+	/** Receives every scroll request, so a sticky-scroll jump can wait for them. */
 	onCompletion: (promise: Promise<void>) => void;
 }
 
-/** Own wheel requests, native redraw acknowledgements and history prefetch. */
+/**
+ * Scrolling of one editor. Wheel input is shown at once by moving the drawn grid
+ * (`scrollPreview`), while the matching scroll is sent to Neovim, one request at a time
+ * (ScrollQueue). When Neovim's redraw arrives the preview shrinks by the scrolled amount.
+ * Rows above and below the viewport are prefetched so the preview has something to show.
+ *
+ * Wheel scrolling can also be eased: the gesture's distance is spread over a few frames.
+ */
 export class EditorScroll {
 	private readonly queue = new ScrollQueue();
 	private readonly horizontal = new HorizontalScroll();
+	// Whether the rows beyond the viewport need refilling; `down` is the last scroll direction.
 	private prefetchNeeded = true;
 	private down = false;
 	private fetching = false;
 	private disposed = false;
 	private paused = false;
+	// Grows on reset, so replies to requests from before it are ignored.
 	private generation = 0;
+	// Shortly after scrolling stops, a fractional horizontal offset is settled to whole columns.
 	private settleTimer?: ReturnType<typeof setTimeout>;
 	private settleAt = 0;
+	// Eased vertical wheel movement, in lines, advanced on animation frames.
 	private wheelMotion?: {
 		distance: number;
 		remaining: number;
@@ -41,14 +56,17 @@ export class EditorScroll {
 
 	constructor(private readonly options: Options) {}
 
+	/** Whether a scroll request is waiting for Neovim. */
 	get pending(): boolean {
 		return this.queue.pending;
 	}
 
+	/** The sideways pixel offset drawn ahead of Neovim's horizontal scroll. */
 	get horizontalOffset(): number {
 		return this.horizontal.offset;
 	}
 
+	/** The first column Neovim shows (its leftcol). */
 	get horizontalColumn(): number {
 		return this.horizontal.native;
 	}
@@ -57,6 +75,7 @@ export class EditorScroll {
 		return this.horizontal.active;
 	}
 
+	/** Neovim reported its leftcol after something else than a wheel scrolled sideways. */
 	observeHorizontal(column: number): void {
 		if (this.horizontal.acknowledge(column, 0)) {
 			this.queue.cancelHorizontal();
@@ -77,12 +96,14 @@ export class EditorScroll {
 		}
 	}
 
+	/** Stop sideways scrolling where it is. */
 	stopHorizontal(): void {
 		this.horizontalMotion = undefined;
 		this.horizontal.stop(this.queue.pendingColumns);
 		this.queue.cancelHorizontal();
 	}
 
+	/** Settle a sideways offset to whole columns. Returns whether one was still unsettled. */
 	alignHorizontal(): boolean {
 		if (
 			!this.horizontal.active ||
@@ -103,14 +124,17 @@ export class EditorScroll {
 		this.horizontal.discardFrame();
 	}
 
+	/** Whether a prefetch request is running. */
 	get prefetchPending(): boolean {
 		return this.fetching;
 	}
 
+	/** Whether an eased wheel gesture is still moving. */
 	get animating(): boolean {
 		return this.wheelMotion !== undefined || this.horizontalMotion !== undefined;
 	}
 
+	/** Whether the preview has run out of prefetched rows in its direction. */
 	get needsPrefetch(): boolean {
 		return (
 			this.prefetchNeeded &&
@@ -120,14 +144,17 @@ export class EditorScroll {
 		);
 	}
 
+	/** Whether a prefetch should start now. */
 	get canPrefetch(): boolean {
 		return this.needsPrefetch && !this.fetching && !this.pending && this.options.enabled();
 	}
 
+	/** The prefetched rows no longer match, for example after an edit. */
 	invalidatePrefetch(): void {
 		this.prefetchNeeded = true;
 	}
 
+	/** Forget everything in flight, for example after the grid was cleared. */
 	reset(): void {
 		this.generation++;
 		this.queue.reset();
@@ -137,6 +164,7 @@ export class EditorScroll {
 		this.stop();
 	}
 
+	/** Drop queued scrolling while the editor is disabled, and settle again once enabled. */
 	pauseIfDisabled(): void {
 		if (!this.options.enabled()) {
 			this.paused = true;
@@ -153,6 +181,7 @@ export class EditorScroll {
 		}
 	}
 
+	/** Stop all motion and the preview; `preserveHorizontal` keeps the sideways position. */
 	stop(preserveHorizontal = false): void {
 		this.wheelMotion = undefined;
 		this.horizontalMotion = undefined;
@@ -193,6 +222,10 @@ export class EditorScroll {
 		this.options.schedule();
 	};
 
+	/**
+	 * Scroll by `lines` (fractional with pixel scrolling). With a `duration` the movement is
+	 * eased over that many milliseconds; `follow` moves the cursor with the viewport.
+	 */
 	request(lines: number, follow: boolean, duration = 0, now = performance.now()): void {
 		this.horizontal.invalidateLimit();
 		// Retarget from the current position, preserving unconsumed distance through wheel bursts.
@@ -216,6 +249,7 @@ export class EditorScroll {
 		}
 	}
 
+	/** Move eased gestures to where they are at `now`; without `animate` they finish at once. */
 	advance(now: number, animate: boolean): void {
 		const sideways = this.horizontalMotion;
 		if (sideways) {
@@ -258,6 +292,10 @@ export class EditorScroll {
 		}
 	}
 
+	/**
+	 * Convert a distance in standard rows into grid rows. Rows can differ in height (for example
+	 * with virtual lines), so the distance is measured in pixels from the current position.
+	 */
 	private screenLines(lines: number): number {
 		const grid = this.options.grid;
 		const height = grid.cellHeight;
@@ -296,6 +334,7 @@ export class EditorScroll {
 		return low + (target - top) / (grid.rowTop(low + 1) - top) - position;
 	}
 
+	/** Scroll sideways by `columns`, eased with a `duration` like vertical wheel scrolling. */
 	requestHorizontal(
 		columns: number,
 		follow: boolean,
@@ -324,6 +363,7 @@ export class EditorScroll {
 		this.options.schedule();
 	}
 
+	/** Move sideways in the preview at once, asking Neovim to scroll some columns ahead. */
 	private shiftHorizontal(
 		columns: number,
 		follow: boolean,
@@ -348,6 +388,7 @@ export class EditorScroll {
 		}
 	}
 
+	/** Preview a movement now and queue it for Neovim. */
 	private move(lines: number, follow: boolean, columns = 0): void {
 		const { grid, schedule } = this.options;
 		grid.scrolling = true;
@@ -374,6 +415,10 @@ export class EditorScroll {
 		schedule();
 	}
 
+	/**
+	 * Called for each viewport change Neovim reports. `direct` ones answer our own scroll
+	 * request; others (such as a jump) make the queued wheel movement obsolete.
+	 */
 	acknowledge(direct: boolean, column?: number): void {
 		if (
 			column !== undefined &&
@@ -390,6 +435,7 @@ export class EditorScroll {
 		}
 	}
 
+	/** The request in flight has both its reply and its redraw; send the next one. */
 	finish(): void {
 		if (!this.queue.finish()) {
 			return;
@@ -403,6 +449,7 @@ export class EditorScroll {
 		}
 	}
 
+	/** Send the queued movement to Neovim, unless a request is already in flight. */
 	flush(): void {
 		if (!this.options.enabled()) {
 			return;
@@ -440,6 +487,7 @@ export class EditorScroll {
 		);
 	}
 
+	/** Ask Neovim to draw rows beyond the viewport in the last scroll direction. */
 	prefetch(): void {
 		const down = this.down;
 		const generation = this.generation;
@@ -475,6 +523,7 @@ export class EditorScroll {
 		);
 	}
 
+	/** Stop all motion when the editor goes away. */
 	dispose(): void {
 		this.disposed = true;
 		this.wheelMotion = undefined;

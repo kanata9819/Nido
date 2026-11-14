@@ -4,6 +4,10 @@ import Editor from '../Editor';
 import { defaultFontFamily, type EditorSettings } from '../hooks/useEditorSettings';
 import styles from '../assets/Nido.module.css';
 
+/**
+ * The terminal below the editor (Ctrl+@). It is an Editor showing the terminal workspace's
+ * Neovim, which runs the shell.
+ */
 export default function TerminalPanel({
 	id,
 	name,

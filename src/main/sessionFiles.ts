@@ -9,6 +9,7 @@ import type { SearchOptions } from '../shared/search';
 import { SessionSearch } from './sessionSearch';
 import { WorkspaceReplacement } from './workspaceReplacement';
 
+/** A buffer as Neovim reports it, used to protect open files during file operations. */
 interface OpenBuffer {
 	id: number;
 	name: string;
@@ -23,8 +24,14 @@ function isWithin(parent: string, path: string): boolean {
 	return !isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`);
 }
 
+/**
+ * The workspace's files: resolving paths, opening files, listing folders for the explorer and
+ * the explorer's file operations. Search and replacement are delegated to SessionSearch and
+ * WorkspaceReplacement.
+ */
 export class SessionFiles {
 	readonly replacements: WorkspaceReplacement;
+	// File operations run one at a time.
 	private mutations: Promise<void> = Promise.resolve();
 	private readonly search: SessionSearch;
 	constructor(
@@ -40,6 +47,7 @@ export class SessionFiles {
 		);
 	}
 
+	/** The real path of a workspace-relative path; throws for anything outside the workspace. */
 	async path(relativePath: string): Promise<string> {
 		if (isAbsolute(relativePath)) {
 			throw new Error('Expected a project-relative path.');
@@ -52,6 +60,7 @@ export class SessionFiles {
 		return actual;
 	}
 
+	/** Open a file in the editor, optionally at a (one-based) line and column. */
 	async openFile(relativePath: string, line?: number, column = 1): Promise<void> {
 		const file = await this.path(relativePath);
 		if (!(await stat(file)).isFile()) {
@@ -299,6 +308,10 @@ return false`,
 		}
 	}
 
+	/**
+	 * List one folder for the explorer: folders first, then files, without symbolic links or .git.
+	 * With `checkIgnored`, entries are marked when .gitignore excludes them.
+	 */
 	async files(relativePath: string, checkIgnored = true): Promise<FileEntry[]> {
 		const directory = await this.path(relativePath);
 		const entries = await readdir(directory, { withFileTypes: true });

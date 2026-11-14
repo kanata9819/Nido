@@ -1,5 +1,10 @@
 import type { KeyboardEvent } from 'react';
 
+/**
+ * Keyboard navigation for the settings panel: j/k, the arrows and Ctrl+D/U move between
+ * fields (wrapping around), and Enter toggles a checkbox. Keys a field needs itself, such as
+ * arrows in a select or a number field and letters in a text field, are left alone.
+ */
 export function settingsKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
 	if (event.nativeEvent.isComposing || event.altKey || event.metaKey) {
 		return;

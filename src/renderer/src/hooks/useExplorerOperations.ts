@@ -5,6 +5,7 @@ import type { getVisibleEntries } from '../sidebarTree';
 
 type ExplorerEntry = ReturnType<typeof getVisibleEntries>[number];
 
+/** The explorer's file commands (new file or folder, rename, copy, move, delete) and their dialog. */
 export function useExplorerOperations({
 	workspace,
 	selectedEntry,

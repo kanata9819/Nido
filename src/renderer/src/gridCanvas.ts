@@ -6,6 +6,8 @@ import { gridDamageBands } from './gridDamage';
 import { gridCellStyles } from './gridCellStyles';
 import { RowPainter, type GlyphMeasure } from './gridRowPainter';
 
+// Paints the grid onto the canvas: changed rows are rasterized into row images, which are
+// then copied to the canvas at their scrolled positions (see the comments in draw()).
 type GridGuides = ReturnType<typeof createGridGuides>;
 
 /** Everything one draw() call shares between its bands and rows. */
@@ -46,11 +48,16 @@ export class GridCanvas implements GlyphMeasure {
 	private surface?: HTMLCanvasElement;
 	private scrolling = false;
 	private previousCursorRows: number[] = [];
+	// The rows that changed since the last paint.
 	private firstDirtyRow = Infinity;
 	private lastDirtyRow = -Infinity;
 
 	constructor(private readonly grid: Grid) {}
 
+	/**
+	 * Mark a row (or with no row, everything) for repainting. A change of digits in an otherwise
+	 * unchanged row, such as a line number, marks only that prefix of the row image.
+	 */
 	invalidate(row?: number, column?: number, before?: Cell, after?: Cell): void {
 		if (row !== undefined) {
 			const cells = this.grid.cells[row];
@@ -100,6 +107,7 @@ export class GridCanvas implements GlyphMeasure {
 		}
 	}
 
+	/** Repaint the whole canvas on the next frame, reusing the row images. */
 	invalidatePaint(): void {
 		this.paintDirty = true;
 	}

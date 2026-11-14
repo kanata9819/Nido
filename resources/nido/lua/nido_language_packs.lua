@@ -1,6 +1,9 @@
+-- Starts the language servers of the enabled language packs with vim.lsp, and reports
+-- their status to the Extensions page.
 local M = {}
 local api = vim.api
 local base = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':h:h')
+-- Loaded built-in adapters, and per pack its manifest, whether it is enabled, and its status.
 local adapters, states = {}, {}
 -- PATH directory listings, kept only while one configuration is applied.
 local listings
@@ -55,10 +58,12 @@ function M.exepath(name)
   return found
 end
 
+--- Like executable(), using the faster exepath above.
 function M.executable(name)
   return M.exepath(name) ~= '' and 1 or 0
 end
 
+--- A built-in adapter (language-packs/<id>/adapter.lua), loaded once.
 function M.adapter(id)
   assert(id == 'typescript' or id == 'deno' or id == 'rust', 'Unknown built-in language adapter')
   if not adapters[id] then
@@ -67,6 +72,7 @@ function M.adapter(id)
   return adapters[id]
 end
 
+--- Stop a pack's language server and remove its configuration.
 local function stop(state)
   vim.lsp.enable(state.pack.serverName, false)
   for _, client in ipairs(vim.lsp.get_clients({name=state.pack.serverName})) do client:stop(true) end
@@ -76,6 +82,7 @@ local function stop(state)
   if state.pack.adapter == 'rust' then pcall(api.nvim_del_augroup_by_name, 'NidoRustPack') end
 end
 
+--- Apply a pack configuration from the main process.
 function M.apply(config)
   -- A tool installed since the last apply must be found, so listings never outlive it.
   listings = {}
@@ -84,6 +91,8 @@ function M.apply(config)
   if not ok then error(err, 0) end
 end
 
+--- Stop packs that were removed, disabled or changed, then configure and enable the rest.
+--- A pack whose command is missing is marked `missing`; one that fails to start, `error`.
 function M.apply_packs(config)
   local wanted = {}
   for _, pack in ipairs(config.packs or {}) do
@@ -159,6 +168,7 @@ function M.apply_packs(config)
   end
 end
 
+--- Each pack's status, refined to running or starting from its language server clients.
 function M.snapshot()
   local result = {}
   for id, state in pairs(states) do
@@ -173,6 +183,7 @@ function M.snapshot()
   return result
 end
 
+--- Apply the configuration passed in NIDO_LANGUAGE_PACK_CONFIG at startup.
 function M.setup()
   local ok, config = pcall(vim.json.decode, vim.env.NIDO_LANGUAGE_PACK_CONFIG or '{}')
   if ok then M.apply(config) else vim.notify('Invalid language pack configuration: ' .. tostring(config), vim.log.levels.ERROR) end

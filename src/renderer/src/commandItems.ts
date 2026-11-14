@@ -2,6 +2,9 @@ import type { Panel, Item } from './types';
 import type { DebugAction, Indentation, SessionState, Workspace } from '../../shared/types';
 import type { Translator } from '../../shared/i18n';
 
+// The command palette's commands (Ctrl+Shift+P). Titles are English and translated when shown.
+
+/** The app actions that commands run. */
 export interface CommandsCallbacks {
 	save: () => void;
 	showPanel: (value: Panel) => void;
@@ -28,6 +31,7 @@ export function indentationLabel(indentation: Indentation, t: Translator): strin
 	});
 }
 
+/** Commands that change the current file's indentation, offered when it is known. */
 function indentationCommands(
 	active: string,
 	indentation: Indentation,
@@ -77,6 +81,7 @@ function indentationCommands(
 	];
 }
 
+/** Every command for the current workspace and state. Keys are the leader keys (Space then key). */
 export function buildCommands(
 	active: string,
 	workspaces: Workspace[],

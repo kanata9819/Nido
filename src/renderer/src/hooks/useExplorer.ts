@@ -16,11 +16,13 @@ import { explorerFilePath } from '../explorerState';
 import { useSavedExplorerState } from './useSavedExplorerState';
 import { useExplorerOperations } from './useExplorerOperations';
 
+/** The explorer tree of a workspace and the actions on it. */
 interface ExplorerState {
 	visible: ReturnType<typeof getVisibleEntries>;
 	expanded: Set<string>;
 	selected: string;
 	selectedIndex: number;
+	/** Grows when the selection should be scrolled into view, such as after revealing a file. */
 	reveal: number;
 	setSelected: Dispatch<SetStateAction<string>>;
 	setExpanded: Dispatch<SetStateAction<Set<string>>>;
@@ -37,12 +39,22 @@ interface ExplorerState {
 	onDone: (path: string) => void;
 }
 
+/**
+ * A folder listing being loaded or loaded. `dirty` marks a listing whose folder changed while
+ * it was loading, so it is read once more afterwards.
+ */
 interface DirectoryRequest {
 	files: Promise<FileEntry[]>;
 	pending: boolean;
 	dirty: boolean;
 }
 
+/** The folder of a workspace-relative path; '' for the root. */
+function parentPath(path: string): string {
+	return path.replace(/[\\/]?[^\\/]+$/, '');
+}
+
+/** Whether two listings of a folder are the same, so the old one can be kept. */
 function sameEntries(previous: FileEntry[] | undefined, next: FileEntry[]): boolean {
 	return (
 		previous === next ||
@@ -60,6 +72,11 @@ function sameEntries(previous: FileEntry[] | undefined, next: FileEntry[]): bool
 	);
 }
 
+/**
+ * The explorer of a workspace: loads the expanded folders, watches them for changes, and
+ * reveals the current file. A hidden workspace's tree keeps its state but loads only when
+ * shown again.
+ */
 export function useExplorer({
 	workspace,
 	active,
@@ -77,29 +94,32 @@ export function useExplorer({
 	const [reveal, setReveal] = useState(0);
 	const [ready, setReady] = useState(false);
 	const [pageVisible, setPageVisible] = useState(() => !document.hidden);
+	// Grows when listings must be reloaded; `loadedRevision` is the last one loaded.
 	const [revision, setRevision] = useState(0);
 	const loadedRevision = useRef(-1);
 	const requests = useRef(new Map<string, DirectoryRequest>());
+	// Grows when every request is invalidated, so a reload started earlier is dropped.
 	const requestGeneration = useRef(0);
 	const tree = useRef<HTMLDivElement>(null);
 	const visible = useMemo(
 		() => getVisibleEntries(entriesByDirectory, expanded),
 		[entriesByDirectory, expanded]
 	);
+	// The folders whose contents are shown: the root and expanded folders whose parents are
+	// all expanded too.
 	const directories = useMemo(
 		() =>
 			['', ...expanded].filter((path) => {
-				let parent = path.replace(/[\\/]?[^\\/]+$/, '');
-				while (parent) {
+				for (let parent = parentPath(path); parent; parent = parentPath(parent)) {
 					if (!expanded.has(parent)) {
 						return false;
 					}
-					parent = parent.replace(/[\\/]?[^\\/]+$/, '');
 				}
 				return true;
 			}),
 		[expanded]
 	);
+	// The folders to watch, as JSON so the watch effect only runs when the list changes.
 	const watchedDirectories = useMemo(
 		() =>
 			JSON.stringify(
@@ -114,6 +134,7 @@ export function useExplorer({
 			),
 		[ready, visible, expanded, directories]
 	);
+	/** Reload some folders (`paths`) or all of them. */
 	const invalidate = useCallback((paths?: string[]): void => {
 		requestGeneration.current++;
 		if (paths) {
@@ -125,6 +146,7 @@ export function useExplorer({
 		}
 		setRevision((value) => value + 1);
 	}, []);
+	// Reload folders when files change, or only the folders a watcher reported.
 	useEffect(
 		() =>
 			onNidoEvent((event) => {
@@ -159,6 +181,7 @@ export function useExplorer({
 			}),
 		[workspace.id, invalidate]
 	);
+	// Stop watching when the workspace closes.
 	useEffect(
 		() => () => {
 			requestGeneration.current++;
@@ -167,11 +190,13 @@ export function useExplorer({
 		},
 		[workspace.id]
 	);
+	// Track whether the window is visible.
 	useEffect(() => {
 		const visibility = (): void => setPageVisible(!document.hidden);
 		document.addEventListener('visibilitychange', visibility);
 		return () => document.removeEventListener('visibilitychange', visibility);
 	}, []);
+	// Watch the shown folders while this workspace is active and the window is visible.
 	useEffect(() => {
 		let cancelled = false;
 		const paths: string[] = active && pageVisible ? JSON.parse(watchedDirectories) : [];
@@ -184,6 +209,8 @@ export function useExplorer({
 			cancelled = true;
 		};
 	}, [workspace.id, active, pageVisible, watchedDirectories, onError]);
+	// Reload when the workspace becomes visible again or the window regains focus, to catch
+	// changes that no notification reported.
 	useEffect(() => {
 		if (!active || !pageVisible) {
 			return;
@@ -196,6 +223,7 @@ export function useExplorer({
 		window.addEventListener('focus', focus);
 		return () => window.removeEventListener('focus', focus);
 	}, [active, pageVisible, invalidate]);
+	/** The listing of a folder, reusing a request in progress unless `replace` is set. */
 	const requestDirectory = useCallback(
 		(path: string, replace = false): DirectoryRequest => {
 			let request = requests.current.get(path);
@@ -218,6 +246,7 @@ export function useExplorer({
 		},
 		[workspace.id, invalidate]
 	);
+	/** Load a folder now, for example when it is expanded. */
 	const load = async (path: string): Promise<void> => {
 		// Explicit refreshes supersede old reads; automatic reloads can reuse this request.
 		const request = requestDirectory(path, true);
@@ -236,6 +265,7 @@ export function useExplorer({
 		}
 	};
 
+	// Reveal the current file: expand its parent folders and select it.
 	useEffect(() => {
 		const path = explorerFilePath(workspace.root, currentFile);
 		if (!active || !path) {
@@ -307,6 +337,8 @@ export function useExplorer({
 		setSelected
 	]);
 
+	// Load every shown folder when the tree becomes visible or after an invalidation, at most
+	// four at a time.
 	useEffect(() => {
 		// Keep each tree's state, but load hidden workspaces only when first activated or changed.
 		if (!active || !pageVisible || loadedRevision.current === revision) {

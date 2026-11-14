@@ -1,11 +1,17 @@
+-- EditorConfig support that can be switched on and off. Neovim's built-in editorconfig
+-- plugin applies .editorconfig settings; this wraps it so turning the setting off restores
+-- each buffer's options from before it was applied.
 local api = vim.api
 local M = {}
 local editorconfig = require('editorconfig')
 local configure = editorconfig.config
+-- Per buffer, the options before EditorConfig changed them.
 local saved = {}
+-- The options EditorConfig can set.
 local options = {'expandtab', 'shiftwidth', 'softtabstop', 'tabstop', 'fileformat',
   'fileencoding', 'bomb', 'textwidth', 'fixendofline', 'endofline', 'spelllang'}
 
+--- Undo EditorConfig's changes to a buffer.
 local function restore(buffer)
   api.nvim_clear_autocmds({group='nvim.editorconfig', event='BufWritePre', buffer=buffer})
   if saved[buffer] then
@@ -43,6 +49,7 @@ api.nvim_create_autocmd('BufReadPre', {callback=function(event)
 end})
 api.nvim_create_autocmd('BufWipeout', {callback=function(event) saved[event.buf] = nil end})
 
+--- Turn EditorConfig on or off for every loaded buffer.
 function M.set_enabled(enabled)
   if vim.g.editorconfig == enabled then
     return

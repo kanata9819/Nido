@@ -2,10 +2,20 @@ import type { Workspace } from '../shared/types';
 import type { SessionClient } from './sessionClient';
 import type { SessionEvents } from './sessionEvents';
 
-/** Serialize input, saves and scrolling against the same editing anchor. */
+/**
+ * Everything the user does in the editor (keys, clicks, wheel scrolling, pastes, saves) goes
+ * through one queue, so Neovim receives it in order.
+ *
+ * Wheel scrolling moves the viewport without moving the cursor ("detached" scrolling, see
+ * nido_scroll.lua). The next key or command first restores the cursor's position so it
+ * applies where the user was editing.
+ */
 export class SessionInteraction {
 	private inputQueue: Promise<void> = Promise.resolve();
+	// Whether the viewport was scrolled away from the cursor since the last restore.
 	private scrollDetached = false;
+	// Prefetching draws rows beyond the viewport ahead of scrolling. A new generation cancels the
+	// running prefetch; `prefetchCaches` holds where each direction (up, down) can continue.
 	private prefetchGeneration = 0;
 	private prefetchDown?: boolean;
 	private prefetchCaches: unknown[] = [];
@@ -22,6 +32,7 @@ export class SessionInteraction {
 		return this.isStopped();
 	}
 
+	/** Run `operation` after everything queued earlier; a failure does not block later ones. */
 	enqueue<T>(operation: () => Promise<T>): Promise<T> {
 		const next = this.inputQueue.then(operation);
 		this.inputQueue = next.then(
@@ -44,25 +55,23 @@ export class SessionInteraction {
 		return mode.blocking || mode.mode.startsWith('r');
 	}
 
+	/** Run a command from the UI (save, switch tab, ...). Refuses while a Neovim command waits for a key. */
 	command<T>(operation: () => Promise<T>): Promise<T> {
 		// Observe preceding keys before probing for commands that still need a reply.
 		const ready = this.inputMode();
 		return this.enqueue(async () => {
 			await ready;
-			const mode = (await this.client.request('nvim_get_mode', [])) as {
-				mode: string;
-				blocking: boolean;
-			};
-			if (mode.blocking || mode.mode.startsWith('r')) {
+			if (await this.awaitingKey()) {
 				throw new Error('Finish the current Neovim command before doing this.');
 			}
 			return operation();
 		});
 	}
 
+	/** Send keys in Neovim's key notation. */
 	input(keys: string): Promise<void> {
 		// nvim_input can accept only part of a byte sequence when its input queue is full.
-		const next = this.inputQueue.then(async () => {
+		return this.enqueue(async () => {
 			if (this.stopped) {
 				throw new Error('Neovim session is closed.');
 			}
@@ -96,13 +105,12 @@ export class SessionInteraction {
 				}
 			}
 		});
-		this.inputQueue = next.catch(() => {});
-		return next;
 	}
 
+	/** Neovim's mode after every queued key has been processed, or 'pending' while it waits for a key. */
 	inputMode(): Promise<string> {
 		// A deferred API request observes preceding input after Neovim has processed it.
-		const next = this.inputQueue.then(async () => {
+		return this.enqueue(async () => {
 			if (this.stopped) {
 				throw new Error('Neovim session is closed.');
 			}
@@ -140,27 +148,22 @@ export class SessionInteraction {
 			}
 			return result;
 		});
-		this.inputQueue = next.then(
-			() => {},
-			() => {}
-		);
-		return next;
 	}
 
+	/** Select an item of the completion menu. */
 	selectCompletion(index: number): Promise<void> {
-		const next = this.inputQueue.then(async () => {
+		return this.enqueue(async () => {
 			// Ctrl+R or Ctrl+V can wait for a key while the completion menu is open.
 			if (await this.awaitingKey()) {
 				return;
 			}
 			await this.client.request('nvim_select_popupmenu_item', [index, false, false, {}]);
 		});
-		this.inputQueue = next.catch(() => {});
-		return next;
 	}
 
+	/** A left click at a grid cell of the visible viewport. */
 	click(row: number, column: number): Promise<void> {
-		const next = this.inputQueue.then(async () => {
+		return this.enqueue(async () => {
 			this.events.beginScrollBatch();
 			try {
 				// A click would complete a pending command: g then a click is g<LeftMouse>.
@@ -195,12 +198,11 @@ export class SessionInteraction {
 				this.events.endScrollBatch();
 			}
 		});
-		this.inputQueue = next.catch(() => {});
-		return next;
 	}
 
+	/** Jump to a scope header that sticky scroll shows. */
 	jumpSticky(window: number, buffer: number, line: number): Promise<void> {
-		const next = this.inputQueue.then(async () => {
+		return this.enqueue(async () => {
 			this.events.beginScrollBatch();
 			try {
 				if (await this.awaitingKey()) {
@@ -218,12 +220,11 @@ export class SessionInteraction {
 				this.events.endScrollBatch();
 			}
 		});
-		this.inputQueue = next.catch(() => {});
-		return next;
 	}
 
+	/** Paste text, or text read from the clipboard once it is this paste's turn. */
 	paste(text: string | (() => Promise<string>)): Promise<void> {
-		const next = this.inputQueue.then(async () => {
+		return this.enqueue(async () => {
 			if (this.stopped) {
 				throw new Error('Neovim session is closed.');
 			}
@@ -239,10 +240,9 @@ export class SessionInteraction {
 			}
 			await this.client.request('nvim_paste', [content, true, -1]);
 		});
-		this.inputQueue = next.catch(() => {});
-		return next;
 	}
 
+	/** Return a scrolled-away viewport to the cursor, so the next action applies there. */
 	async restoreScroll(): Promise<void> {
 		if (!this.scrollDetached) {
 			return;
@@ -251,12 +251,17 @@ export class SessionInteraction {
 		this.scrollDetached = false;
 	}
 
+	/** Stop prefetching and forget where it would continue, for example after switching files. */
 	cancelPrefetch(): void {
 		this.prefetchGeneration++;
 		this.prefetchDown = undefined;
 		this.prefetchCaches = [];
 	}
 
+	/**
+	 * Called for every grid_scroll redraw event. Scrolling that the prefetch did not cause makes
+	 * its continuation hints invalid.
+	 */
 	observeScroll(args: unknown[]): void {
 		if (this.prefetchingStrip) {
 			return;
@@ -271,6 +276,7 @@ export class SessionInteraction {
 		}
 	}
 
+	/** Draw rows below (`down`) or above the viewport in strips, until Neovim has no more. */
 	async prefetchScroll(down = false): Promise<void> {
 		const generation = ++this.prefetchGeneration;
 		this.prefetchDown = down;
@@ -335,6 +341,10 @@ export class SessionInteraction {
 		}
 	}
 
+	/**
+	 * Scroll the viewport by `lines` (fractional with `pixel`) and `columns`. `follow` lets the
+	 * cursor follow the viewport.
+	 */
 	async scroll(lines: number, follow = true, pixel = false, columns = 0): Promise<void> {
 		if (!lines && !columns) {
 			return;
@@ -348,7 +358,7 @@ export class SessionInteraction {
 			this.prefetchGeneration++;
 			this.prefetchDown = undefined;
 		}
-		const next = this.inputQueue.then(async () => {
+		return this.enqueue(async () => {
 			// Batch from the start: a redraw that arrives while Neovim answers must not be
 			// published alone, ahead of the grid it belongs with.
 			this.events.beginScrollBatch();
@@ -375,13 +385,16 @@ export class SessionInteraction {
 				this.events.endScrollBatch();
 			}
 		});
-		this.inputQueue = next.catch(() => {});
-		return next;
 	}
 
+	/**
+	 * Save the current buffer (`write`) or all buffers (`wall`), formatting first with `format`.
+	 * Resolves when the save finished. The queue is released early if Neovim asks a question
+	 * (such as whether to overwrite), so the user's answer can reach it.
+	 */
 	write(command: 'write' | 'wall', format = false): Promise<void> {
 		// Saving must follow committed input and precede any subsequently queued edits.
-		const next = this.inputQueue.then(async () => {
+		return this.enqueue(async () => {
 			if (this.stopped) {
 				throw new Error('Neovim session is closed.');
 			}
@@ -440,11 +453,6 @@ return ok and "" or tostring(err)`,
 				}
 			}
 			return { writing };
-		});
-		this.inputQueue = next.then(
-			() => {},
-			() => {}
-		);
-		return next.then(({ writing }) => writing);
+		}).then(({ writing }) => writing);
 	}
 }

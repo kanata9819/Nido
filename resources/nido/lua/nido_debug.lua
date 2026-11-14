@@ -1,22 +1,30 @@
+-- Run and Debug for Rust. Runs Cargo targets, or builds them and debugs them with CodeLLDB
+-- through nvim-dap, and publishes the panel's state (status, output, variables) as
+-- `nido:debug`.
 local M = {}
 local base = vim.fs.dirname(vim.fs.dirname(debug.getinfo(1, 'S').source:sub(2)))
 local resources = vim.fs.dirname(base)
 vim.opt.runtimepath:append(resources .. '/debug/nvim-dap-9e848e09a697ee95302a3ef2dd43fd6eb709e570')
 local dap = require('dap')
 local root = vim.env.NIDO_WORKSPACE_ROOT or vim.fn.getcwd()
+-- The RPC channel to publish to, and the running Cargo process. `generation` grows with every
+-- run, so callbacks of an older run are ignored.
 local channel, build
 local generation = 0
 local launch_args = {}
 local launch_cwd = root
 local launch_env
+-- The state shown in the Run and Debug panel (see DebugState in src/shared/types.ts).
 local state = {status='idle', output='', variables={}, targets={}}
 local output_pending
+--- Send the state to the renderer now.
 local function publish()
   output_pending = nil
   if channel then
     vim.rpcnotify(channel, 'nido:debug', state)
   end
 end
+--- Append program output (the last 20000 characters are kept), publishing at most every 50 ms.
 local function output(text)
   state.output = (state.output .. text):sub(-20000)
   if not output_pending then
@@ -25,6 +33,7 @@ local function output(text)
     vim.defer_fn(function() if output_pending == token then publish() end end, 50)
   end
 end
+--- Enter the error state with `message` in the output.
 local function fail(message)
   state.status = 'error'
   output(tostring(message) .. '\n')
@@ -36,6 +45,7 @@ dap.defaults.fallback.terminal_win_cmd = function()
   terminal_buf = vim.api.nvim_create_buf(false, true)
   return terminal_buf
 end
+--- Copy the debuggee's terminal output into the state.
 local function read_output()
   if terminal_buf and vim.api.nvim_buf_is_valid(terminal_buf) then
     local count = vim.api.nvim_buf_line_count(terminal_buf)
@@ -46,6 +56,7 @@ local function read_output()
     end
   end
 end
+--- Stop polling the debuggee's terminal and read it one last time.
 local function close_output()
   if timer then
     timer:stop()
@@ -65,8 +76,11 @@ vim.fn.sign_define('DapBreakpointRejected', {text='○', texthl='DiagnosticWarn'
 vim.fn.sign_define('DapStopped', {text='▶', texthl='DiagnosticWarn', linehl='NidoDebugLine'})
 vim.api.nvim_set_hl(0, 'NidoDebugLine', {bg='#343020'})
 
+-- The variables tree: which nodes are expanded, the node of each variable path, and each
+-- variable's value at the previous and current stop, to mark changed values.
 local expanded, nodes, previous, current = {}, {}, {}, {}
 local epoch, next_id = 0, 0
+--- Forget the variables of the previous stop; a new run also collapses the tree.
 local function reset_variables(new_run)
   epoch = epoch + 1
   if new_run then
@@ -82,6 +96,7 @@ local function reset_variables(new_run)
   end
 end
 local refresh
+--- Rebuild the variables tree of the current frame, loading expanded children on demand.
 refresh = function()
   vim.schedule(function()
     local session = dap.session()
@@ -136,6 +151,7 @@ refresh = function()
     publish()
   end)
 end
+-- Follow the debug session's events.
 for _, event in ipairs({'scopes', 'variables', 'stackTrace'}) do dap.listeners.after[event].nido = refresh end
 dap.listeners.after.event_stopped.nido = function() reset_variables(false); state.status='paused'; refresh() end
 dap.listeners.after.event_continued.nido = function() state.status='running'; refresh() end
@@ -175,6 +191,7 @@ dap.listeners.on_session.nido = function(_, session)
   end
 end
 
+--- Debug build target `index` with CodeLLDB.
 local function launch(index)
   local target = state.targets[index]
   assert(target, 'Choose a debug target')
@@ -189,12 +206,15 @@ local function launch(index)
   cwd=launch_cwd, args=launch_args, env=launch_env, stopOnEntry=false, terminal='integrated'})
 end
 
+--- Refuse to build while a file has unsaved changes.
 local function check_saved()
   for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
     assert(vim.bo[buffer].buftype ~= '' or not vim.bo[buffer].modified, 'Save modified files before debugging or running')
   end
 end
 
+--- Build the debug targets with Cargo (args from a rust-analyzer runnable, or all binaries),
+--- then debug the only target or let the user choose one.
 local function start_build(args)
   assert(vim.fn.executable(dap.adapters.codelldb.executable.command) == 1, 'Bundled CodeLLDB is missing. Run pnpm prepare:neovim.')
   check_saved()
@@ -255,6 +275,7 @@ local function start_build(args)
   end)
 end
 
+--- Run a rust-analyzer runnable, or with `debug`, build and debug it.
 function M.runnable(item, debug, rpc)
   assert(not build and not dap.session(), 'Stop the current run or debugger first')
   assert(item.kind == 'cargo', 'Only Cargo runnables are supported')
@@ -298,6 +319,7 @@ function M.runnable(item, debug, rpc)
   end)
 end
 
+--- Perform a Run and Debug panel action (see DebugAction in src/shared/types.ts).
 local function action_impl(action, rpc, index)
   channel = rpc
   if action == 'breakpoint' then
@@ -351,6 +373,7 @@ local function action_impl(action, rpc, index)
   end
 end
 
+--- action_impl, reporting failures in the panel as well as to the caller.
 function M.action(...)
   local ok, err = pcall(action_impl, ...)
   if not ok then

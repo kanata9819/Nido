@@ -2,6 +2,7 @@ import { useI18n } from '../i18n';
 import { ArrowRight, FolderOpen, Leaf } from 'lucide-react';
 import styles from '../assets/Welcome.module.css';
 
+/** Shown in a workspace with no open file. */
 export function WorkspaceWelcome({ onOpen }: { onOpen: () => void }): React.JSX.Element {
 	const t = useI18n();
 	return (
@@ -33,6 +34,7 @@ export function WorkspaceWelcome({ onOpen }: { onOpen: () => void }): React.JSX.
 	);
 }
 
+/** Shown when no workspace is open. */
 export function Welcome({
 	creating,
 	create

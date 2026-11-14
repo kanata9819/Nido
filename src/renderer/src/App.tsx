@@ -3,7 +3,6 @@
 // useWorkspaceSessions and useKeyboardShortcuts.
 import { LanguageContext, useI18n } from './i18n';
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { SessionState } from '../../shared/types';
 import WorkspaceEditor from './components/WorkspaceEditor';
 import TerminalPanel from './components/TerminalPanel';
 import Notification from './components/Notification';
@@ -33,7 +32,7 @@ import { useFavoriteWorkspaces } from './hooks/useFavoriteWorkspaces';
 import { useGitFileStatus } from './hooks/useGitFileStatus';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { usePointerVisibility } from './hooks/usePointerVisibility';
-import { useWorkspaceSessions } from './hooks/useWorkspaceSessions';
+import { initialSessionState, useWorkspaceSessions } from './hooks/useWorkspaceSessions';
 import { useFocusGuard } from './hooks/useFocusGuard';
 import { useInitializedEditors } from './hooks/useInitializedEditors';
 import { useWorkspaceSleep } from './hooks/useWorkspaceSleep';
@@ -44,15 +43,6 @@ import ErrorToast from './components/ErrorToast';
 import { useErrorNotice } from './hooks/useErrorNotice';
 import { useNativePreferences } from './hooks/useNativePreferences';
 import { usePalette } from './hooks/usePalette';
-
-const defaultState: SessionState = {
-	buffers: [],
-	current: 0,
-	mode: 'n',
-	line: 1,
-	column: 1,
-	filetype: ''
-};
 
 // Provide the language and animation settings to every component.
 export default function App(): React.JSX.Element {
@@ -67,11 +57,14 @@ export default function App(): React.JSX.Element {
 	);
 }
 
+/** The app's layout and the state that ties its parts together. */
 function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Element {
 	const t = useI18n();
 	const pointerHidden = usePointerVisibility();
 	const [markdownVisible, setMarkdownVisible] = useState(false);
+	// Whether the Space leader menu (KeyboardGuide) is open.
 	const [leader, setLeader] = useState(false);
+	// Grows to ask the active editor to take focus.
 	const [focusTick, setFocusTick] = useState(0);
 	const { notice: errorNotice, error, dismissError, report } = useErrorNotice();
 	const requestEditorFocus = useCallback(() => setFocusTick((n) => n + 1), []);
@@ -127,7 +120,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 	const { panel, closePanel, showPanel, query, fileList } = palette;
 
 	const modal = useRef<HTMLDivElement>(null);
-	const state = states[active] || defaultState;
+	const state = states[active] || initialSessionState;
 	const workspace = workspaces.find((w) => w.id === active);
 	const gitFiles = useGitFileStatus(workspace?.sleeping ? '' : active, state.buffers);
 	const explorerVisible = sidebar && !!workspace && workspace.kind !== 'terminal';
@@ -136,6 +129,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 		() => fileDecorations(workspace?.root || '', gitFiles, state.diagnostics, state.problems),
 		[workspace?.root, gitFiles, state.diagnostics, state.problems]
 	);
+	// Close any overlay and return focus to the editor.
 	const focusEditor = useCallback((): void => {
 		closePanel();
 		setLeader(false);
@@ -151,6 +145,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 		focusEditor();
 	}, [focusEditor]);
 
+	/** Run a request, reporting a failure in the error toast. */
 	const run = useCallback(
 		(promise: Promise<unknown>): void => {
 			void promise.catch((e) => report(String(e)));
@@ -223,6 +218,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 	);
 	const openFiles = useCallback((): void => showPanel('files'), [showPanel]);
 
+	/** Show the explorer and focus it. */
 	const showExplorer = (): void => {
 		if (workspace?.kind === 'terminal') {
 			focusEditor();
@@ -236,6 +232,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 		);
 	};
 
+	/** Save the current file, formatting it first when format on save is on. */
 	const save = (): void => run(window.nido.save(active, formatOnSave));
 	const openProblem = useCallback(
 		(index: number): void =>
@@ -244,6 +241,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 			),
 		[active, state.diagnosticsVersion, runThenFocus]
 	);
+	// Build the problems list only while its palette is open.
 	const problemItems = useMemo(
 		() => (panel === 'problems' ? buildProblemItems(state.problems, openProblem, t) : []),
 		[panel, state.problems, openProblem, t]
@@ -315,6 +313,8 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 		activate
 	});
 
+	// Handle shortcuts before any element sees the key (capture phase). Rebinding on every
+	// render keeps the handler's view of the state current.
 	useLayoutEffect(() => {
 		document.addEventListener('keydown', keydown, true);
 		return () => document.removeEventListener('keydown', keydown, true);

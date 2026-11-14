@@ -13,6 +13,10 @@ import { createTranslator } from '../shared/i18n';
 import type { LanguagePacks } from './languagePacks';
 import { untitledRecoveryLimitMessage } from '../shared/recovery';
 
+/**
+ * The saved layout read at startup, with the Neovim processes started for it before the
+ * renderer asked. `claim` releases the events each session held until the renderer took it over.
+ */
 interface PrestartedLayout {
 	saved: SavedLayout;
 	starts: ({ created: Promise<Session>; claim: () => void } | undefined)[];
@@ -44,6 +48,10 @@ export function bufferedEmitter(send: (event: NidoEvent) => void): {
 	};
 }
 
+/**
+ * IPC handlers for opening, closing, restoring, sleeping and waking workspaces, plus the
+ * checkpoints that save the layout and the quit sequence that saves it one last time.
+ */
 export function registerWorkspaceHandlers({
 	window,
 	sessions,

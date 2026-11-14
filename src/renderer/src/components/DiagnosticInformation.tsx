@@ -13,8 +13,10 @@ import type { NidoEvent } from '../../../shared/types';
 import { useI18n } from '../i18n';
 import styles from '../assets/DiagnosticInformation.module.css';
 import OverlayPresence from './OverlayPresence';
+import { placeNearCursor } from '../popupPosition';
 import { vimKey } from '../keyboard';
 
+/** LSP diagnostic severities 1 to 4, with their label and icon. */
 const severities = [
 	{ label: 'Error', name: 'error', icon: CircleAlert },
 	{ label: 'Warning', name: 'warning', icon: TriangleAlert },
@@ -22,6 +24,7 @@ const severities = [
 	{ label: 'Hint', name: 'hint', icon: Lightbulb }
 ];
 
+/** A diagnostic message, with `code` spans in the editor font. */
 function Message({ text, fontFamily }: { text: string; fontFamily: string }): React.JSX.Element {
 	return (
 		<>
@@ -38,6 +41,10 @@ function Message({ text, fontFamily }: { text: string; fontFamily: string }): Re
 	);
 }
 
+/**
+ * The diagnostic card: the errors and warnings at the cursor, shown after a jump with [d/]d or
+ * on request. While it has focus, [d and ]d (with a count) jump on to the next diagnostic.
+ */
 export default function DiagnosticInformation({
 	id,
 	input,
@@ -62,12 +69,14 @@ export default function DiagnosticInformation({
 	}
 	const card = useRef<HTMLDivElement>(null);
 	const body = useRef<HTMLDivElement>(null);
+	// Keys typed so far of a pending jump, such as "2]" before the final d.
 	const keys = useRef('');
 	const close = (): void => {
 		keys.current = '';
 		setInfo(undefined);
 		input.current?.focus();
 	};
+	/** Send a jump to Neovim; the next diagnostics event replaces the card. */
 	const jump = (sequence: string): void => {
 		keys.current = '';
 		void window.nido.input(id, sequence).catch((error) => onError(String(error)));
@@ -79,6 +88,7 @@ export default function DiagnosticInformation({
 		}
 	}, [hidden]);
 
+	// Show diagnostics events for this workspace; a hover card replaces this card.
 	useEffect(() => {
 		if (hidden) {
 			return;
@@ -102,6 +112,7 @@ export default function DiagnosticInformation({
 		});
 	}, [id, input, hidden]);
 
+	// Position the card at the cursor and close it on a click outside.
 	useLayoutEffect(() => {
 		const element = card.current;
 		const anchor = input.current;
@@ -109,18 +120,7 @@ export default function DiagnosticInformation({
 			return;
 		}
 		const host = element.parentElement!;
-		const position = (): void => {
-			const below = anchor.offsetTop + anchor.offsetHeight + 10;
-			const above = anchor.offsetTop - element.offsetHeight - 10;
-			element.style.left = `${Math.max(12, Math.min(anchor.offsetLeft, host.clientWidth - element.offsetWidth - 12))}px`;
-			element.style.top = `${Math.max(
-				12,
-				Math.min(
-					below + element.offsetHeight <= host.clientHeight - 12 ? below : above,
-					host.clientHeight - element.offsetHeight - 12
-				)
-			)}px`;
-		};
+		const position = (): void => placeNearCursor(element, anchor, host);
 		position();
 		body.current!.scrollTop = 0;
 		// Jumps with [d / ]d come from the editor, so the card can take its keys too;

@@ -8,8 +8,9 @@ import {
 } from 'react';
 import type { SearchResults } from '../../../shared/types';
 import type { ReplacementPreview, SearchOptions } from '../../../shared/search';
-import { useI18n } from '../i18n';
+import { remoteErrorText, useI18n } from '../i18n';
 
+/** Inputs of useWorkspaceSearch; `focus` asks the component to move focus after a render. */
 interface Options {
 	workspaceId: string;
 	query: string;
@@ -18,14 +19,17 @@ interface Options {
 	focus: (target: 'results' | 'files') => void;
 }
 
+/** Search results, the replacement preview and the actions on them. */
 interface WorkspaceSearch {
 	selection: number;
 	setSelection: Dispatch<SetStateAction<number>>;
+	/** Indexes of matches the user left out of the replacement. */
 	excluded: Set<number>;
 	setExcluded: Dispatch<SetStateAction<Set<number>>>;
 	loading: boolean;
 	setLoading: Dispatch<SetStateAction<boolean>>;
 	busy: boolean;
+	/** True while a preview or apply request runs; read before React re-renders. */
 	locked: RefObject<boolean>;
 	error: string;
 	notice: string;
@@ -41,6 +45,10 @@ interface WorkspaceSearch {
 	apply: () => Promise<void>;
 }
 
+/**
+ * The state of the workspace search panel: searching as the query changes, preparing a
+ * replacement preview, and applying it.
+ */
 export function useWorkspaceSearch({
 	workspaceId,
 	query,
@@ -58,17 +66,15 @@ export function useWorkspaceSearch({
 	const [result, setResult] = useState<SearchResults>({ matches: [], truncated: false });
 	const [preview, setPreview] = useState<ReplacementPreview>();
 	const [file, setFile] = useState(0);
+	// Grows with each preview or apply request and when the search changes, so a late answer to an
+	// older request is ignored.
 	const request = useRef(0);
+	// False once the panel has unmounted.
 	const alive = useRef(true);
 	const locked = useRef(false);
 
-	const failure = (value: unknown): void => {
-		const message = String(value).replace(
-			/^Error: (?:Error invoking remote method '[^']+': Error: )?/,
-			''
-		);
-		setError(t(message));
-	};
+	// Show an error without the wrapper that Electron adds to errors from the main process.
+	const failure = (value: unknown): void => setError(t(remoteErrorText(value)));
 	useEffect(() => {
 		alive.current = true;
 		return () => {
@@ -76,6 +82,7 @@ export function useWorkspaceSearch({
 		};
 	}, []);
 
+	// Search 100 ms after the query or options last changed; a newer search cancels this one.
 	useEffect(() => {
 		let cancelled = false;
 		const timer = window.setTimeout(() => {
@@ -108,17 +115,20 @@ export function useWorkspaceSearch({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [workspaceId, query, options]);
 
+	/** Forget the preview and messages, because the search they refer to changed. */
 	const invalidate = (): void => {
 		request.current++;
 		setPreview(undefined);
 		setError('');
 		setNotice('');
 	};
+	/** Clear the results until the new search finishes. */
 	const reset = (): void => {
 		setResult({ matches: [], truncated: false });
 		setSelection(0);
 		setLoading(!!query);
 	};
+	/** Request a preview of replacing every included match. */
 	const prepare = async (): Promise<void> => {
 		if (locked.current || loading || !result.token) {
 			return;
@@ -155,6 +165,7 @@ export function useWorkspaceSearch({
 			}
 		}
 	};
+	/** Apply the previewed replacement; the changed files stay unsaved in the editor. */
 	const apply = async (): Promise<void> => {
 		if (locked.current || !preview?.count) {
 			return;

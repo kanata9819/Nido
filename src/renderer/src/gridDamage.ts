@@ -1,5 +1,6 @@
 import type { Grid } from './grid';
 
+/** A vertical range of the canvas to repaint, in CSS pixels. */
 interface PaintBand {
 	top: number;
 	bottom: number;

@@ -9,6 +9,10 @@ import { useGitBrowserKeyboard } from '../hooks/useGitBrowserKeyboard';
 import GitDiff from './GitDiff';
 import styles from '../assets/GitPanel.module.css';
 
+/**
+ * The Git browser (Space g): the changes view (GitPanel), the commit history with each
+ * commit's files and diffs, and the branches, switched with 1/2/3.
+ */
 export default function GitBrowser({
 	workspaceId,
 	onClose
@@ -20,10 +24,12 @@ export default function GitBrowser({
 	const errorMessage = useErrorMessage();
 	const [view, setView] = useState<GitView>('changes');
 	const [message, setMessage] = useState('');
+	// Grows to reload the history or branches view.
 	const [revision, setRevision] = useState(0);
 	const [history, setHistory] = useState<GitCommitEntry[]>([]);
 	const [commitCount, setCommitCount] = useState<number>();
 	const [branches, setBranches] = useState<GitBranchEntry[]>([]);
+	// The commit opened from the history; its changed files replace the history in the list.
 	const [commit, setCommit] = useState<GitCommitEntry>();
 	const [files, setFiles] = useState<string[]>([]);
 	const [index, setIndex] = useState(0);
@@ -37,6 +43,7 @@ export default function GitBrowser({
 	const [newBranchName, setNewBranchName] = useState('');
 	const [creating, setCreating] = useState(false);
 	const [working, setBusy] = useState(false);
+	// The view and revision whose data has loaded; the browser is busy until it matches.
 	const [loadedView, setLoadedView] = useState<{ view: GitView; revision: number }>();
 	const busy =
 		working ||
@@ -46,8 +53,10 @@ export default function GitBrowser({
 	const [branchName, setBranchName] = useState('');
 	const list = useRef<HTMLDivElement>(null);
 	const branchInput = useRef<HTMLInputElement>(null);
+	// Set while an action runs, so a second one cannot start before React re-renders.
 	const locked = useRef(false);
 
+	/** Run one Git action at a time and show its error. */
 	async function run(action: () => Promise<void>): Promise<void> {
 		if (locked.current) {
 			return;
@@ -65,6 +74,7 @@ export default function GitBrowser({
 		}
 	}
 
+	/** Load the first page of history, or with `append` the next older page. */
 	async function loadHistory(append = false): Promise<void> {
 		const { commits: entries, total } = await window.nido.gitHistory(
 			workspaceId,
@@ -81,6 +91,7 @@ export default function GitBrowser({
 		}
 	}, [creating]);
 
+	// Load the history or branches whenever the view changes or is refreshed.
 	useEffect(() => {
 		if (view === 'changes') {
 			return;
@@ -126,17 +137,22 @@ export default function GitBrowser({
 		};
 	}, [view, revision, workspaceId]);
 
+	// The diff of the selected file of the open commit. A loaded result only counts for the
+	// commit and file it was loaded for.
 	const path = files[index];
-	const diff =
-		!commit || !path
-			? t('Select a commit and press Enter to browse its changed files.')
-			: diffResult?.workspaceId === workspaceId &&
-				  diffResult.commit === commit &&
-				  diffResult.path === path
-				? diffResult.failed
-					? errorMessage(diffResult.value)
-					: diffResult.value
-				: t('Loading diff…');
+	const loaded =
+		!!commit &&
+		diffResult?.workspaceId === workspaceId &&
+		diffResult.commit === commit &&
+		diffResult.path === path;
+	let diff: string;
+	if (!commit || !path) {
+		diff = t('Select a commit and press Enter to browse its changed files.');
+	} else if (!loaded) {
+		diff = t('Loading diff…');
+	} else {
+		diff = diffResult.failed ? errorMessage(diffResult.value) : diffResult.value;
+	}
 	useEffect(() => {
 		let cancelled = false;
 		if (!commit || !path) {
@@ -170,6 +186,7 @@ export default function GitBrowser({
 		};
 	}, [workspaceId, commit, path]);
 
+	/** Esc: close the new branch form, leave the open commit, or close the browser. */
 	function returnToPreviousView(): void {
 		if (creating) {
 			setCreating(false);
@@ -189,6 +206,7 @@ export default function GitBrowser({
 		list.current?.focus();
 	}
 
+	/** Switch to another view, starting it fresh. */
 	function changeView(next: GitView): void {
 		if (busy) {
 			return;
@@ -204,6 +222,7 @@ export default function GitBrowser({
 		setError('');
 	}
 
+	/** Switch to (or with `create`, create) a branch, then reload the branch list. */
 	function switchBranch(branch: string, create: boolean): void {
 		void run(async () => {
 			await window.nido.gitSwitch(workspaceId, branch, create);
@@ -215,6 +234,7 @@ export default function GitBrowser({
 		});
 	}
 
+	/** Enter: switch to the selected branch, or open the selected commit's files. */
 	function openSelection(): void {
 		if (view === 'branches' && branches[index]) {
 			const branch = branches[index];
@@ -231,6 +251,7 @@ export default function GitBrowser({
 		}
 	}
 
+	// The text of each list row, also used as its key and title.
 	let labels: string[];
 	if (view === 'branches') {
 		labels = branches.map(

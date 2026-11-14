@@ -5,6 +5,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { NidoAPI, NidoEvent } from '../shared/types';
 
+/** Each method forwards its arguments to the matching IPC handler and returns its result. */
 const api: NidoAPI = {
 	languagePacks: (id) => ipcRenderer.invoke('nido:languagePacks', id),
 	setLanguagePackEnabled: (id, enabled) =>

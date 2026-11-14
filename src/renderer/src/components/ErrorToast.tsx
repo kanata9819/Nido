@@ -7,6 +7,7 @@ import OverlayPresence from './OverlayPresence';
 import styles from '../assets/Nido.module.css';
 import notificationStyles from '../assets/Notification.module.css';
 
+/** The app-level error toast, for errors not shown in a panel. */
 export default function ErrorToast({
 	notice,
 	animations,

@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
 
+/**
+ * Dismiss a notice after `delay`, or at once on Esc. With animations, it fades for 300 ms
+ * first. Returns whether the notice is fading.
+ */
 export function useNotificationDismissal(
 	notice: { message: string } | undefined,
 	animations: boolean,

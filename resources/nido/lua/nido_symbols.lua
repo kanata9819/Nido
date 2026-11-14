@@ -1,20 +1,30 @@
+-- Document symbols for the symbol palette: asks every attached language server for the
+-- current buffer's symbols and publishes them (with progress) as `nido:symbols`.
 local M = {}
+-- `version` grows with every published state, so the renderer can tell states apart and
+-- open() can refuse an index into an outdated list. `search` identifies the latest request.
 local version = 0
 local search = 0
+-- The requests of the current search, the 10-second timeout, the published state, and the
+-- buffer's changedtick when the search started.
 local pending = {}
 local deadline
 local state
 local changedtick
 
+--- Cancel the timeout.
 local function stop_deadline()
   if deadline and not deadline:is_closing() then deadline:stop(); deadline:close() end
   deadline = nil
 end
 
+--- Send the state to the renderer.
 local function publish()
   vim.rpcnotify(vim.g.nido_channel, 'nido:symbols', state)
 end
 
+--- Start a symbol search in the current buffer, cancelling the previous one. Returns the
+--- version of its first state. Results from several servers are merged without duplicates.
 function M.find()
   search = search + 1
   local current = search
@@ -39,6 +49,7 @@ function M.find()
   end
   local uri = vim.uri_from_bufnr(buffer)
   local remaining, seen = #clients, {}
+  --- Add symbols (and their children, named container.child) to the state, validating them.
   local function collect(symbols, container, encoding)
     assert(type(symbols) == 'table', 'Invalid symbol list')
     for _, symbol in ipairs(symbols) do
@@ -70,6 +81,7 @@ function M.find()
       end
     end
   end
+  -- Give up on servers that have not answered within 10 seconds.
   deadline = vim.defer_fn(function()
     if current ~= search then return end
     for _, request in ipairs(pending) do
@@ -115,6 +127,7 @@ function M.find()
   return request_version
 end
 
+--- Jump to symbol `index` of state `expected_version`, unless the list or the file changed.
 function M.open(index, expected_version)
   assert(state and expected_version == state.version and not state.loading, 'Symbols changed. Select a result again.')
   assert(vim.api.nvim_buf_is_valid(state.buffer) and vim.api.nvim_get_current_buf() == state.buffer

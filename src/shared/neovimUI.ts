@@ -1,9 +1,16 @@
 // External Neovim UI content stays separate from the editor grid and workspace state.
+// Neovim draws its command line, messages and popup menu through ext_cmdline, ext_messages
+// and ext_popupmenu events; the main process folds them into a NeovimUIState
+// (applyNeovimUI), and the renderer draws that state (components/NeovimUI.tsx).
+
+/** A run of message text in one highlight group. */
 export type MessageChunk = [highlight: number, text: string];
+/** A message; `kind` is Neovim's msg_show kind, such as emsg or confirm. */
 export interface NeovimMessage {
 	kind: string;
 	content: MessageChunk[];
 }
+/** One level of the command line, from cmdline_show. `position` is the cursor's byte offset. */
 export interface NeovimCommandLine {
 	content: MessageChunk[];
 	position: number;
@@ -12,21 +19,29 @@ export interface NeovimCommandLine {
 	indent: number;
 	level: number;
 	highlight: number;
+	/** A character shown at the cursor while Neovim waits for one, such as " after Ctrl+R. */
 	special?: { text: string; shift: boolean };
 }
+/** Everything Neovim shows outside the editor grid. */
 export interface NeovimUIState {
+	/** Open command lines by nesting level. */
 	commands: Record<number, NeovimCommandLine>;
+	/** Lines entered so far of a multi-line command (cmdline_block). */
 	block: MessageChunk[][];
 	messages: NeovimMessage[];
+	/** The message history (:messages) while it is shown. */
 	history: NeovimMessage[] | null;
 	showmode: MessageChunk[];
 	showcmd: MessageChunk[];
 	ruler: MessageChunk[];
+	/** Grow with new messages, so a closed message dialog opens again for them. */
 	messageVersion: number;
 	historyVersion: number;
+	/** Command-line completion. Insert-mode completion is drawn by CompletionMenu instead. */
 	completion: { items: [string, string, string, string][]; selected: number } | null;
 }
 
+/** The changed parts of a NeovimUIState, sent instead of the whole state. */
 export type NeovimUIPatch = Partial<Omit<NeovimUIState, 'completion'>> & {
 	completion?: {
 		items?: NonNullable<NeovimUIState['completion']>['items'];
@@ -34,22 +49,24 @@ export type NeovimUIPatch = Partial<Omit<NeovimUIState, 'completion'>> & {
 	} | null;
 };
 
+/**
+ * Apply a patch from the main process. A completion patch may leave out the items, which are
+ * large, when only the selection changed.
+ */
 export function patchNeovimUI(state: NeovimUIState, patch: NeovimUIPatch): NeovimUIState {
-	return {
-		...state,
-		...patch,
-		completion:
-			patch.completion === undefined
-				? state.completion
-				: patch.completion === null
-					? null
-					: {
-							items: patch.completion.items ?? state.completion?.items ?? [],
-							selected: patch.completion.selected
-						}
-	};
+	let completion = state.completion;
+	if (patch.completion === null) {
+		completion = null;
+	} else if (patch.completion) {
+		completion = {
+			items: patch.completion.items ?? state.completion?.items ?? [],
+			selected: patch.completion.selected
+		};
+	}
+	return { ...state, ...patch, completion };
 }
 
+/** The state before Neovim has shown anything. */
 export function emptyNeovimUI(): NeovimUIState {
 	return {
 		commands: {},
@@ -65,6 +82,7 @@ export function emptyNeovimUI(): NeovimUIState {
 	};
 }
 
+/** Message chunks from a redraw event, dropping malformed ones. */
 function chunks(value: unknown): MessageChunk[] {
 	return Array.isArray(value)
 		? value

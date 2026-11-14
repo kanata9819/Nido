@@ -2,11 +2,17 @@ import { watch, type FSWatcher } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
+// Watches the folders expanded in the explorer and reports which ones need listing again.
+// Native file system notifications are used where they work; elsewhere (UNC and WSL paths, or
+// when a watcher fails) folders are polled and compared by their stamp.
+
+/** What polling compares to detect a change: the folder's and its .gitignore's file stats. */
 interface DirectoryStamp {
 	listing: string;
 	ignore?: string;
 }
 
+/** A watched folder. `path` is relative to the workspace root; '' is the root itself. */
 interface Directory {
 	path: string;
 	initialized: boolean;
@@ -15,6 +21,26 @@ interface Directory {
 	watcher?: FSWatcher;
 }
 
+/** Run `action` for every item, at most `limit` at a time. */
+async function forEachConcurrently<T>(
+	items: T[],
+	action: (item: T) => Promise<void>,
+	limit = 4
+): Promise<void> {
+	let next = 0;
+	await Promise.all(
+		Array.from({ length: Math.min(limit, items.length) }, async () => {
+			while (next < items.length) {
+				await action(items[next++]);
+			}
+		})
+	);
+}
+
+/**
+ * On Windows one recursive watcher on the root covers every expanded folder. Elsewhere each
+ * folder gets its own watcher. Changes are batched and reported to `changed` every 250 ms.
+ */
 export class DirectoryWatcher {
 	private readonly directories = new Map<string, Directory>();
 	private readonly dirty = new Set<string>();
@@ -31,6 +57,7 @@ export class DirectoryWatcher {
 		private readonly usePolling = false
 	) {}
 
+	/** Watch exactly `paths`, starting and stopping watchers as needed. */
 	set(paths: string[]): Promise<void> {
 		if (this.stopped) {
 			return Promise.resolve();
@@ -59,6 +86,7 @@ export class DirectoryWatcher {
 		return this.pending;
 	}
 
+	/** Resolves once every watcher, including ones requested while waiting, has started. */
 	async ready(): Promise<void> {
 		let pending: Promise<void>;
 		do {
@@ -67,6 +95,7 @@ export class DirectoryWatcher {
 		} while (pending !== this.pending);
 	}
 
+	/** Stop every watcher and timer. */
 	close(): void {
 		this.stopped = true;
 		clearTimeout(this.batch);
@@ -78,72 +107,69 @@ export class DirectoryWatcher {
 		this.dirty.clear();
 	}
 
+	/** Whether `directory` is still watched, so results for a removed folder are dropped. */
 	private current(directory: Directory): boolean {
 		return !this.stopped && this.directories.get(directory.path) === directory;
 	}
 
+	/** Start watching (or polling) the folders that are not watched yet. */
 	private async prepare(): Promise<void> {
 		const directories = [...this.directories.values()].filter(
 			({ initialized }) => !initialized
 		);
-		let next = 0;
-		await Promise.all(
-			Array.from({ length: Math.min(4, directories.length) }, async () => {
-				while (next < directories.length) {
-					const directory = directories[next++];
-					if (!this.current(directory)) {
-						continue;
-					}
-					directory.initialized = true;
-					if (this.recursive && !this.usePolling && directory.path) {
-						if (this.directories.get('')?.polling) {
-							directory.polling = true;
-							directory.stamp = await this.stamp(directory.path);
-						}
-						this.queue(directory.path);
-						continue;
-					}
-					try {
-						const path = await this.resolveDirectory(directory.path);
+		await forEachConcurrently(directories, async (directory) => {
+			if (!this.current(directory)) {
+				return;
+			}
+			directory.initialized = true;
+			if (this.recursive && !this.usePolling && directory.path) {
+				if (this.directories.get('')?.polling) {
+					directory.polling = true;
+					directory.stamp = await this.stamp(directory.path);
+				}
+				this.queue(directory.path);
+				return;
+			}
+			try {
+				const path = await this.resolveDirectory(directory.path);
+				if (!this.current(directory)) {
+					return;
+				}
+				if (this.usePolling) {
+					directory.polling = true;
+					directory.stamp = await this.stamp(directory.path);
+				} else {
+					directory.watcher = watch(
+						path,
+						{ persistent: false, recursive: this.recursive },
+						(event, filename) =>
+							this.recursive
+								? this.notifyRecursive(directory, event, filename)
+								: this.notify(directory, event, filename)
+					);
+					directory.watcher.on('error', () => {
 						if (!this.current(directory)) {
-							continue;
-						}
-						if (this.usePolling) {
-							directory.polling = true;
-							directory.stamp = await this.stamp(directory.path);
-						} else {
-							directory.watcher = watch(
-								path,
-								{ persistent: false, recursive: this.recursive },
-								(event, filename) =>
-									this.recursive
-										? this.notifyRecursive(directory, event, filename)
-										: this.notify(directory, event, filename)
-							);
-							directory.watcher.on('error', () => {
-								if (!this.current(directory)) {
-									return;
-								}
-								this.fallback(directory);
-							});
-						}
-					} catch {
-						if (!this.current(directory)) {
-							continue;
+							return;
 						}
 						this.fallback(directory);
-						directory.stamp = await this.stamp(directory.path);
-					}
-					if (this.current(directory)) {
-						// Reconcile changes between the preceding listing and watcher attachment.
-						this.queue(directory.path);
-					}
+					});
 				}
-			})
-		);
+			} catch {
+				if (!this.current(directory)) {
+					return;
+				}
+				this.fallback(directory);
+				directory.stamp = await this.stamp(directory.path);
+			}
+			if (this.current(directory)) {
+				// Reconcile changes between the preceding listing and watcher attachment.
+				this.queue(directory.path);
+			}
+		});
 		this.schedulePoll();
 	}
 
+	/** Switch a folder (or, for the recursive root, every folder) from watching to polling. */
 	private fallback(directory: Directory): void {
 		const affected =
 			this.recursive && directory.path === '' ? this.directories.values() : [directory];
@@ -156,14 +182,13 @@ export class DirectoryWatcher {
 		this.schedulePoll();
 	}
 
+	/** Handle an event from the recursive root watcher; `filename` is relative to the root. */
 	private notifyRecursive(root: Directory, event: string, filename: string | null): void {
 		if (!this.current(root)) {
 			return;
 		}
 		if (filename === null) {
-			for (const path of this.directories.keys()) {
-				this.queue(path);
-			}
+			this.queueAll();
 			return;
 		}
 		const parent = dirname(filename);
@@ -173,9 +198,7 @@ export class DirectoryWatcher {
 		}
 		const name = basename(filename);
 		if (name === '.gitignore' || name === '.git') {
-			for (const path of this.directories.keys()) {
-				this.queue(path);
-			}
+			this.queueAll();
 		} else if (event !== 'rename') {
 			return;
 		}
@@ -189,14 +212,13 @@ export class DirectoryWatcher {
 		}
 	}
 
+	/** Handle an event from a single folder's watcher; `filename` is relative to that folder. */
 	private notify(directory: Directory, event: string, filename: string | null): void {
 		if (!this.current(directory)) {
 			return;
 		}
 		if (filename === '.gitignore' || filename === '.git' || filename === null) {
-			for (const path of this.directories.keys()) {
-				this.queue(path);
-			}
+			this.queueAll();
 		} else if (event !== 'rename') {
 			// Editing file contents does not change the Explorer's directory listing.
 			return;
@@ -229,6 +251,14 @@ export class DirectoryWatcher {
 		this.queue(directory.path);
 	}
 
+	/** Refresh every watched directory, for changes that can affect all of them. */
+	private queueAll(): void {
+		for (const path of this.directories.keys()) {
+			this.queue(path);
+		}
+	}
+
+	/** Mark a folder as changed; changes are reported together after a short delay. */
 	private queue(path: string): void {
 		if (this.stopped || !this.directories.has(path)) {
 			return;
@@ -246,6 +276,7 @@ export class DirectoryWatcher {
 		this.batch.unref();
 	}
 
+	/** The stamp of a folder, or undefined when it is missing. */
 	private async stamp(path: string): Promise<DirectoryStamp | undefined> {
 		try {
 			const resolved = await this.resolveDirectory(path);
@@ -267,6 +298,7 @@ export class DirectoryWatcher {
 		}
 	}
 
+	/** Poll the folders without native notifications every 1.5 seconds. */
 	private schedulePoll(): void {
 		if (
 			this.stopped ||
@@ -281,30 +313,22 @@ export class DirectoryWatcher {
 			this.polling = true;
 			// Poll only directories whose native notifications are unavailable (including UNC/WSL).
 			const directories = [...this.directories.values()].filter(({ polling }) => polling);
-			let next = 0;
-			await Promise.all(
-				Array.from({ length: Math.min(4, directories.length) }, async () => {
-					while (next < directories.length) {
-						const directory = directories[next++];
-						if (!this.current(directory)) {
-							continue;
-						}
-						const stamp = await this.stamp(directory.path);
-						if (this.current(directory)) {
-							const previous = directory.stamp;
-							directory.stamp = stamp;
-							if (previous?.ignore !== stamp?.ignore) {
-								// Ignore rules also affect every expanded descendant's decorations.
-								for (const path of this.directories.keys()) {
-									this.queue(path);
-								}
-							} else if (previous?.listing !== stamp?.listing) {
-								this.queue(directory.path);
-							}
-						}
+			await forEachConcurrently(directories, async (directory) => {
+				if (!this.current(directory)) {
+					return;
+				}
+				const stamp = await this.stamp(directory.path);
+				if (this.current(directory)) {
+					const previous = directory.stamp;
+					directory.stamp = stamp;
+					if (previous?.ignore !== stamp?.ignore) {
+						// Ignore rules also affect every expanded descendant's decorations.
+						this.queueAll();
+					} else if (previous?.listing !== stamp?.listing) {
+						this.queue(directory.path);
 					}
-				})
-			);
+				}
+			});
 			this.polling = false;
 			this.schedulePoll();
 		}, 1500);

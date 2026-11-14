@@ -7,8 +7,13 @@ import styles from '../assets/Notification.module.css';
 import { useNotificationDismissal } from '../hooks/useNotificationDismissal';
 import OverlayPresence from './OverlayPresence';
 
+/** A notification event from the main process. */
 type Notice = Extract<NidoEvent, { type: 'notification' }>;
 
+/**
+ * A notification toast. It shows the active workspace's notifications, and warnings and
+ * errors from any workspace, then fades away on its own.
+ */
 export default function Notification({
 	workspaceId,
 	animations
@@ -18,6 +23,7 @@ export default function Notification({
 }): React.JSX.Element | null {
 	const t = useI18n();
 	const [notice, setNotice] = useState<Notice>();
+	// Switching workspaces drops the previous workspace's notification.
 	const [previousWorkspace, setPreviousWorkspace] = useState(workspaceId);
 	if (workspaceId !== previousWorkspace) {
 		setPreviousWorkspace(workspaceId);

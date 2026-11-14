@@ -4,6 +4,7 @@ import type { SearchOptions } from '../shared/search';
 import type { Session } from './session';
 import { workspaceRelative as relative } from './workspacePaths';
 
+/** IPC handlers for the explorer, file search, text search and replacement. */
 export function registerFileHandlers({
 	handle,
 	session,
@@ -24,7 +25,9 @@ export function registerFileHandlers({
 	send: (event: NidoEvent) => void;
 	trash: (path: string) => Promise<void>;
 }): void {
+	// List one folder of the explorer.
 	handle('files', (id, path) => session(id).files(text(path)));
+	// Watch the folders expanded in the explorer, so it refreshes when their contents change.
 	handle('watchDirectories', (id, paths) => {
 		if (
 			!Array.isArray(paths) ||
@@ -61,6 +64,7 @@ export function registerFileHandlers({
 			column === undefined ? undefined : integer(column, 2_000_000)
 		)
 	);
+	// Create, rename, copy or delete a file or folder from the explorer.
 	handle('fileAction', async (id, action, path, target) => {
 		if (
 			typeof action !== 'string' ||
@@ -69,6 +73,8 @@ export function registerFileHandlers({
 			throw new Error('Invalid file action.');
 		}
 		const current = session(id);
+		// Refuse to change a file (or a folder holding files) that another workspace has open,
+		// since that workspace's tab would then refer to a file that moved or disappeared.
 		const protectOtherWorkspaces = (source: string): void => {
 			const inside = (file: string): boolean => {
 				const child = relative(source, file);
@@ -95,6 +101,7 @@ export function registerFileHandlers({
 			protectOtherWorkspaces(resolve(parent, basename(destination)));
 		}
 		await current.fileAction(action as FileAction, text(path), destination, trash);
+		// Refresh the explorer of every workspace showing the same folder.
 		for (const open of sessions.values()) {
 			if (open.workspace.root === current.workspace.root) {
 				send({ type: 'filesChanged', id: open.workspace.id });

@@ -1,7 +1,12 @@
+-- Line endings: opening files safely, the status bar's line-ending label, and converting
+-- between LF and CRLF.
 local M = {}
 local api = vim.api
+-- Per buffer, the rows that end in a literal CR and how many there are, kept current as the
+-- buffer changes so the status bar never rescans a large file.
 local states = {}
 
+--- Record the rows [first, last) that end in CR.
 local function scan(state, buffer, first, last)
   for offset, line in ipairs(api.nvim_buf_get_lines(buffer, first, last, false)) do
     if line:sub(-1) == '\r' then
@@ -11,6 +16,7 @@ local function scan(state, buffer, first, last)
   end
 end
 
+--- The CR rows of a buffer, attaching to it on first use to follow its edits.
 local function track(buffer)
   local state = states[buffer]
   if not state then
@@ -47,6 +53,7 @@ local function track(buffer)
   return state
 end
 
+--- Open `path` in the current window, reusing its buffer and leaving unsaved edits alone.
 function M.open(path)
   local buffer = require('nido_buffers').find(path)
   if buffer < 0 then
@@ -72,6 +79,8 @@ function M.open(path)
   api.nvim_cmd({cmd='edit', args={api.nvim_buf_get_name(buffer)}, magic={file=false}}, {})
 end
 
+--- The current buffer's line endings for the status bar: LF, CRLF, CR or Mixed, or nil for
+--- special buffers. A Unix buffer whose lines all end in CR is reported as CRLF.
 function M.detect()
   if vim.bo.buftype ~= '' then
     return nil
@@ -95,6 +104,7 @@ function M.detect()
   return label
 end
 
+--- Convert the current buffer to LF or CRLF line endings (applied to disk on save).
 function M.convert(format)
   assert(format == 'LF' or format == 'CRLF', 'Invalid line ending')
   assert(vim.bo.buftype == '' and vim.bo.modifiable, 'Buffer cannot be modified')

@@ -1,5 +1,8 @@
+-- Built-in adapter of the TypeScript language pack: starts the bundled TypeScript language
+-- server, or one configured in lsp.json (typescript.server and typescript.command).
 local M = {}
 
+--- The decoded JSON file at `path`, or nil when it does not exist.
 local function json(path)
   if vim.fn.filereadable(path) == 0 then
     return nil
@@ -7,6 +10,7 @@ local function json(path)
   return vim.json.decode(table.concat(vim.fn.readfile(path), '\n'))
 end
 
+--- Configure the TypeScript language server from the settings.
 function M.setup()
   local path = vim.env.NIDO_LSP_CONFIG or vim.fs.joinpath(vim.fn.stdpath('config'), 'lsp.json')
   local ok, settings = pcall(json, path)

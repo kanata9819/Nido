@@ -3,6 +3,10 @@ import { flushSync } from 'react-dom';
 import type { Panel } from '../types';
 import { isAltGraph } from '../keyboard';
 
+/**
+ * Whether a key is a UI shortcut only in Normal mode (Space for the leader, Shift+H/L for
+ * tabs, Ctrl+P for files), so its meaning depends on Neovim's current mode.
+ */
 const needsMode = (event: KeyboardEvent): boolean =>
 	!event.altKey &&
 	!event.metaKey &&
@@ -10,6 +14,37 @@ const needsMode = (event: KeyboardEvent): boolean =>
 		(event.key === ' ' || (event.shiftKey && ['H', 'L'].includes(event.key)))) ||
 		(event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'p'));
 
+/** A new keydown event with the same key, to dispatch again after the mode is known. */
+function copyKeyDown(event: KeyboardEvent): KeyboardEvent {
+	return new KeyboardEvent('keydown', {
+		key: event.key,
+		code: event.code,
+		location: event.location,
+		repeat: event.repeat,
+		ctrlKey: event.ctrlKey,
+		altKey: event.altKey,
+		shiftKey: event.shiftKey,
+		metaKey: event.metaKey,
+		modifierAltGraph: isAltGraph(event),
+		bubbles: true,
+		cancelable: true
+	});
+}
+
+/** The mode name the shortcuts use, from Neovim's mode() value. */
+function modeName(mode: string): string {
+	if (mode === 'n') {
+		return 'normal';
+	}
+	return mode.startsWith('i') ? 'insert' : mode;
+}
+
+/**
+ * Holds keys whose meaning depends on Neovim's mode until the real mode is known. The mode
+ * the renderer last heard of can trail fast typing: Space typed right after i must insert a
+ * space, not open the leader menu. `defer` takes such a key, asks Neovim for its mode, and
+ * dispatches the key (and every key typed meanwhile) again in order.
+ */
 export function useKeyboardModeQueue({
 	active,
 	panel,
@@ -26,6 +61,7 @@ export function useKeyboardModeQueue({
 	checkingMode: React.RefObject<boolean>;
 	defer: (event: KeyboardEvent, focusedInput: string | null | undefined) => boolean;
 } {
+	// Keys waiting for the mode check, and the copies already dispatched again, which pass.
 	const queued = useRef<KeyboardEvent[]>([]);
 	const checkingMode = useRef(false);
 	const replayed = useRef(new WeakSet<KeyboardEvent>());
@@ -44,21 +80,7 @@ export function useKeyboardModeQueue({
 		) {
 			event.preventDefault();
 			event.stopPropagation();
-			queued.current.push(
-				new KeyboardEvent('keydown', {
-					key: event.key,
-					code: event.code,
-					location: event.location,
-					repeat: event.repeat,
-					ctrlKey: event.ctrlKey,
-					altKey: event.altKey,
-					shiftKey: event.shiftKey,
-					metaKey: event.metaKey,
-					modifierAltGraph: isAltGraph(event),
-					bubbles: true,
-					cancelable: true
-				})
-			);
+			queued.current.push(copyKeyDown(event));
 			if (!checkingMode.current) {
 				checkingMode.current = true;
 				run(
@@ -75,12 +97,7 @@ export function useKeyboardModeQueue({
 									needsMode(next)
 								) {
 									const actual = await window.nido.inputMode(context.active);
-									context.mode.current[context.active] =
-										actual === 'n'
-											? 'normal'
-											: actual.startsWith('i')
-												? 'insert'
-												: actual;
+									context.mode.current[context.active] = modeName(actual);
 								}
 								replayed.current.add(next);
 								// Commit a menu transition before handling the next buffered key.

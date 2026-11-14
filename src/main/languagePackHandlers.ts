@@ -5,6 +5,7 @@ import type { AppState } from './handlers';
 import type { LanguagePacks } from './languagePacks';
 import type { Session } from './session';
 
+/** IPC handlers for the Extensions page: listing, enabling and installing language packs. */
 export function registerLanguagePackHandlers({
 	window,
 	sessions,
@@ -20,6 +21,8 @@ export function registerLanguagePackHandlers({
 	handle: (name: string, action: (...args: unknown[]) => unknown) => void;
 	languagePacks: LanguagePacks;
 }): void {
+	// Run pack changes one at a time, then reload the packs in every open workspace so running
+	// language servers follow the new configuration.
 	let packUpdate: Promise<unknown> = Promise.resolve();
 	const updatePacks = (action: () => Promise<void>): Promise<void> => {
 		const update = packUpdate.then(async () => {
@@ -43,6 +46,7 @@ export function registerLanguagePackHandlers({
 		packUpdate = update.catch(() => {});
 		return update;
 	};
+	// List every pack with whether it is enabled and, for workspace `id`, whether it is running.
 	handle('languagePacks', async (id): Promise<LanguagePackSnapshot> => {
 		await packUpdate;
 		const config = await languagePacks.load();

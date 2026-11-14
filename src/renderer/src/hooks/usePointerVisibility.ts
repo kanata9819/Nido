@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+/** Whether to hide the mouse pointer: after typing, until the mouse moves or clicks. */
 export function usePointerVisibility(): boolean {
 	const [pointerHidden, setPointerHidden] = useState(false);
 	useEffect(() => {

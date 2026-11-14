@@ -2,183 +2,137 @@ import { terminalShells, uiThemes, type TerminalShell, type UITheme } from '../.
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { parseLanguage, type Language } from '../../../shared/i18n';
 
+// Settings of the editor and the UI, saved in the renderer's localStorage.
+
+/** The default font before Meiryo was added to it. */
 const previousDefaultFontFamily = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
 export const defaultFontFamily = '"Cascadia Code", "Consolas", "Meiryo", "Yu Gothic UI", monospace';
 export const defaultFontWeight = 350;
+/** Where the activity bar sits: along the left edge or above the explorer. */
 export type ActivityBarPosition = 'left' | 'top';
 
+/**
+ * State saved in localStorage under `key`. `read` turns the saved text (null when nothing is
+ * saved) into a value, falling back to a default for anything invalid.
+ */
+function useStoredState<T>(
+	key: string,
+	read: (saved: string | null) => T,
+	write: (value: T) => string = String
+): [T, Dispatch<SetStateAction<T>>] {
+	const [value, setValue] = useState(() => read(localStorage.getItem(key)));
+	useEffect(() => {
+		localStorage.setItem(key, write(value));
+	}, [key, value, write]);
+	return [value, setValue];
+}
+
+/** A saved on/off setting; `fallback` applies until the user changes it. */
+function useStoredFlag(
+	key: string,
+	fallback: boolean
+): [boolean, Dispatch<SetStateAction<boolean>>] {
+	return useStoredState(key, (saved) => (fallback ? saved !== 'false' : saved === 'true'));
+}
+
+/** A saved number, used when `valid` accepts it. */
+function useStoredNumber(
+	key: string,
+	fallback: number,
+	valid: (value: number) => boolean
+): [number, Dispatch<SetStateAction<number>>] {
+	return useStoredState(key, (saved) => {
+		const value = Number(saved);
+		return valid(value) ? value : fallback;
+	});
+}
+
+/**
+ * Every user setting of the renderer, each saved in localStorage as nido.<name>. Settings
+ * that Neovim or the main process needs are passed on by useSessionSettings and
+ * useNativePreferences.
+ */
 export function useEditorSettings(): EditorSettings {
-	const [language, setLanguage] = useState<Language>(() =>
-		parseLanguage(localStorage.getItem('nido.language'))
+	const [language, setLanguage] = useStoredState<Language>('nido.language', parseLanguage);
+	const [theme, setTheme] = useStoredState<UITheme>('nido.theme', (saved) =>
+		uiThemes.includes(saved as UITheme) ? (saved as UITheme) : 'dark'
 	);
-	useEffect(() => {
-		localStorage.setItem('nido.language', language);
-	}, [language]);
-	const [theme, setTheme] = useState<UITheme>(() => {
-		const saved = localStorage.getItem('nido.theme') as UITheme;
-		return uiThemes.includes(saved) ? saved : 'dark';
-	});
-	useEffect(() => {
-		localStorage.setItem('nido.theme', theme);
-	}, [theme]);
-	const [wordWrap, setWordWrap] = useState(
-		() => localStorage.getItem('nido.wordWrap') !== 'false'
+	const [wordWrap, setWordWrap] = useStoredFlag('nido.wordWrap', true);
+	const [historyEnabled, setHistoryEnabled] = useStoredFlag('nido.historyEnabled', true);
+	const [methodSeparators, setMethodSeparators] = useStoredFlag('nido.methodSeparators', false);
+	const [stickyScroll, setStickyScroll] = useStoredFlag('nido.stickyScroll', true);
+	const [stickyScrollMaxLines, setStickyScrollMaxLines] = useStoredNumber(
+		'nido.stickyScrollMaxLines',
+		5,
+		(value) => Number.isInteger(value) && value >= 1 && value <= 10
 	);
-	const [historyEnabled, setHistoryEnabled] = useState(
-		() => localStorage.getItem('nido.historyEnabled') !== 'false'
+	const [terminalShell, setTerminalShell] = useStoredState<TerminalShell>(
+		'nido.terminalShell',
+		(saved) =>
+			terminalShells.includes(saved as TerminalShell) ? (saved as TerminalShell) : 'auto'
 	);
-	useEffect(() => {
-		localStorage.setItem('nido.historyEnabled', String(historyEnabled));
-	}, [historyEnabled]);
-	useEffect(() => {
-		localStorage.setItem('nido.wordWrap', String(wordWrap));
-	}, [wordWrap]);
-	const [methodSeparators, setMethodSeparators] = useState(
-		() => localStorage.getItem('nido.methodSeparators') === 'true'
+	const [editorConfig, setEditorConfig] = useStoredFlag('nido.editorConfig', true);
+	const [relativeLineNumbers, setRelativeLineNumbers] = useStoredFlag(
+		'nido.relativeLineNumbers',
+		false
 	);
-	useEffect(() => {
-		localStorage.setItem('nido.methodSeparators', String(methodSeparators));
-	}, [methodSeparators]);
-	const [stickyScroll, setStickyScroll] = useState(
-		() => localStorage.getItem('nido.stickyScroll') !== 'false'
+	const [sidebar, setSidebar] = useStoredFlag('nido.sidebar', true);
+	const [activityBarPosition, setActivityBarPosition] = useStoredState<ActivityBarPosition>(
+		'nido.activityBarPosition',
+		(saved) => (saved === 'top' ? 'top' : 'left')
 	);
-	const [stickyScrollMaxLines, setStickyScrollMaxLines] = useState(() => {
-		const value = Number(localStorage.getItem('nido.stickyScrollMaxLines'));
-		return Number.isInteger(value) && value >= 1 && value <= 10 ? value : 5;
-	});
-	useEffect(() => {
-		localStorage.setItem('nido.stickyScroll', String(stickyScroll));
-		localStorage.setItem('nido.stickyScrollMaxLines', String(stickyScrollMaxLines));
-	}, [stickyScroll, stickyScrollMaxLines]);
-	const [terminalShell, setTerminalShell] = useState<TerminalShell>(() => {
-		const saved = localStorage.getItem('nido.terminalShell') as TerminalShell;
-		return terminalShells.includes(saved) ? saved : 'auto';
-	});
-	useEffect(() => {
-		localStorage.setItem('nido.terminalShell', terminalShell);
-	}, [terminalShell]);
-	const [editorConfig, setEditorConfig] = useState(
-		() => localStorage.getItem('nido.editorConfig') !== 'false'
+	// Compact mode was called "auto-hide session tabs" before; keep an old choice.
+	const [compactMode, setCompactMode] = useStoredState(
+		'nido.compactMode',
+		(saved) => (saved ?? localStorage.getItem('nido.autoHideSessionTabs')) === 'true'
 	);
-	useEffect(() => {
-		localStorage.setItem('nido.editorConfig', String(editorConfig));
-	}, [editorConfig]);
-	const [relativeLineNumbers, setRelativeLineNumbers] = useState(
-		() => localStorage.getItem('nido.relativeLineNumbers') === 'true'
+	const [animations, setAnimations] = useStoredFlag('nido.animations', true);
+	const [smoothCursor, setSmoothCursor] = useStoredFlag('nido.smoothCursor', false);
+	const [smoothBlink, setSmoothBlink] = useStoredFlag('nido.smoothBlink', false);
+	const [scrollFollowCursor, setScrollFollowCursor] = useStoredFlag(
+		'nido.scrollFollowCursor',
+		true
 	);
-	useEffect(() => {
-		localStorage.setItem('nido.relativeLineNumbers', String(relativeLineNumbers));
-	}, [relativeLineNumbers]);
-	const [sidebar, setSidebar] = useState(() => localStorage.getItem('nido.sidebar') !== 'false');
-	useEffect(() => {
-		localStorage.setItem('nido.sidebar', String(sidebar));
-	}, [sidebar]);
-	const [activityBarPosition, setActivityBarPosition] = useState<ActivityBarPosition>(() =>
-		localStorage.getItem('nido.activityBarPosition') === 'top' ? 'top' : 'left'
-	);
-	useEffect(() => {
-		localStorage.setItem('nido.activityBarPosition', activityBarPosition);
-	}, [activityBarPosition]);
-	const [compactMode, setCompactMode] = useState(
-		() =>
-			(localStorage.getItem('nido.compactMode') ??
-				localStorage.getItem('nido.autoHideSessionTabs')) === 'true'
-	);
-	useEffect(() => {
-		localStorage.setItem('nido.compactMode', String(compactMode));
-	}, [compactMode]);
-	const [animations, setAnimations] = useState(
-		() => localStorage.getItem('nido.animations') !== 'false'
-	);
-	const [smoothCursor, setSmoothCursor] = useState(
-		() => localStorage.getItem('nido.smoothCursor') === 'true'
-	);
-	const [smoothBlink, setSmoothBlink] = useState(
-		() => localStorage.getItem('nido.smoothBlink') === 'true'
-	);
-	useEffect(() => {
-		localStorage.setItem('nido.smoothBlink', String(smoothBlink));
-	}, [smoothBlink]);
-	useEffect(() => {
-		localStorage.setItem('nido.smoothCursor', String(smoothCursor));
-	}, [smoothCursor]);
-	const [scrollFollowCursor, setScrollFollowCursor] = useState(
-		() => localStorage.getItem('nido.scrollFollowCursor') !== 'false'
-	);
-	const [formatOnSave, setFormatOnSave] = useState(
-		() => localStorage.getItem('nido.formatOnSave') !== 'false'
-	);
-	const [clipboardSharing, setClipboardSharing] = useState(
-		() => localStorage.getItem('nido.clipboardSharing') === 'true'
-	);
-	useEffect(() => {
-		localStorage.setItem('nido.clipboardSharing', String(clipboardSharing));
-	}, [clipboardSharing]);
-	const [fontFamily, setFontFamily] = useState(() => {
-		const saved = localStorage.getItem('nido.fontFamily');
+	const [formatOnSave, setFormatOnSave] = useStoredFlag('nido.formatOnSave', true);
+	const [clipboardSharing, setClipboardSharing] = useStoredFlag('nido.clipboardSharing', false);
+	// The default font gained Meiryo. A font saved before that change that is still the old
+	// default moves to the new one once; the migration flag keeps a later choice of it.
+	const [fontFamily, setFontFamily] = useStoredState('nido.fontFamily', (saved) => {
 		const migrated = localStorage.getItem('nido.fontFamily.meiryoMigration') === 'true';
 		return saved === null || (!migrated && saved === previousDefaultFontFamily)
 			? defaultFontFamily
 			: saved;
 	});
-
 	useEffect(() => {
-		localStorage.setItem('nido.fontFamily', fontFamily);
 		localStorage.setItem('nido.fontFamily.meiryoMigration', 'true');
 	}, [fontFamily]);
-
-	const [fontWeight, setFontWeight] = useState(() => {
-		const value = Number(localStorage.getItem('nido.fontWeight'));
-		return Number.isInteger(value) && value >= 100 && value <= 900 ? value : defaultFontWeight;
-	});
-
-	useEffect(() => {
-		localStorage.setItem('nido.fontWeight', String(fontWeight));
-	}, [fontWeight]);
-
-	useEffect(() => {
-		localStorage.setItem('nido.scrollFollowCursor', String(scrollFollowCursor));
-	}, [scrollFollowCursor]);
-
-	useEffect(() => {
-		localStorage.setItem('nido.formatOnSave', String(formatOnSave));
-	}, [formatOnSave]);
-
-	useEffect(() => {
-		localStorage.setItem('nido.animations', String(animations));
-	}, [animations]);
-
-	const [sidebarWidth, setSidebarWidth] = useState(() => {
-		const saved = Number(localStorage.getItem('nido.sidebarWidth'));
-		return Number.isFinite(saved) && saved >= 160 && saved <= 480 ? saved : 243;
-	});
-
-	const resizeSidebar = useCallback((width: number): void => {
-		setSidebarWidth(Math.max(160, Math.min(480, width)));
-	}, []);
-
-	useEffect(() => {
-		localStorage.setItem('nido.sidebarWidth', String(sidebarWidth));
-	}, [sidebarWidth]);
-
-	const [fontSize, setFontSize] = useState(() => {
-		const value = Number(localStorage.getItem('nido.fontSize'));
-		// Half sizes allow finer tuning, e.g. 9.5px between two whole sizes.
-		return value >= 8 && value <= 24 && Number.isInteger(value * 2) ? value : 15;
-	});
-
-	useEffect(() => {
-		localStorage.setItem('nido.fontSize', String(fontSize));
-	}, [fontSize]);
-
-	const [lineHeight, setLineHeight] = useState(() => {
-		const value = Number(localStorage.getItem('nido.lineHeight'));
-		return Number.isInteger(value) && value >= 8 && value <= 80 ? value : 18;
-	});
-
-	useEffect(() => {
-		localStorage.setItem('nido.lineHeight', String(lineHeight));
-	}, [lineHeight]);
+	const [fontWeight, setFontWeight] = useStoredNumber(
+		'nido.fontWeight',
+		defaultFontWeight,
+		(value) => Number.isInteger(value) && value >= 100 && value <= 900
+	);
+	const [sidebarWidth, setSidebarWidth] = useStoredNumber(
+		'nido.sidebarWidth',
+		243,
+		(value) => Number.isFinite(value) && value >= 160 && value <= 480
+	);
+	const resizeSidebar = useCallback(
+		(width: number): void => {
+			setSidebarWidth(Math.max(160, Math.min(480, width)));
+		},
+		[setSidebarWidth]
+	);
+	// Half sizes allow finer tuning, e.g. 9.5px between two whole sizes.
+	const [fontSize, setFontSize] = useStoredNumber(
+		'nido.fontSize',
+		15,
+		(value) => value >= 8 && value <= 24 && Number.isInteger(value * 2)
+	);
+	const [lineHeight, setLineHeight] = useStoredNumber(
+		'nido.lineHeight',
+		18,
+		(value) => Number.isInteger(value) && value >= 8 && value <= 80
+	);
 
 	return {
 		historyEnabled,
@@ -232,6 +186,7 @@ export function useEditorSettings(): EditorSettings {
 	};
 }
 
+/** Every setting with its setter. */
 export interface EditorSettings {
 	historyEnabled: boolean;
 	setHistoryEnabled: Dispatch<SetStateAction<boolean>>;

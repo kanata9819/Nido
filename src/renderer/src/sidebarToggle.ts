@@ -9,6 +9,7 @@ interface ToggleDeps {
 	load: (path: string) => Promise<void>;
 }
 
+/** Click or Enter on an explorer entry: open a file, or expand or collapse a folder. */
 export function toggle({
 	entry,
 	expanded,

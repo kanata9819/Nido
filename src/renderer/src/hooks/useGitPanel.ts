@@ -11,9 +11,11 @@ import {
 import type { GitChange, GitStatus } from '../../../shared/types';
 import { useGitDiff } from './useGitDiff';
 
+/** Identifies a change in the list; a file can be both staged and unstaged. */
 export const gitChangeKey = (change: GitChange): string => `${change.staged}:${change.path}`;
 const key = gitChangeKey;
 
+/** State and Git actions of the Git panel. */
 export function useGitPanel({
 	workspaceId,
 	onBusyChange,
@@ -46,7 +48,9 @@ export function useGitPanel({
 	const [error, setError] = useState('');
 	const [notice, setNotice] = useState('');
 	const [busy, setBusy] = useState(true);
+	// Set while an action runs, so a second one cannot start before React re-renders.
 	const locked = useRef(false);
+	// Staged changes first, then unstaged ones.
 	const changes = useMemo(
 		() => [...(status?.changes || [])].sort((a, b) => Number(b.staged) - Number(a.staged)),
 		[status]
@@ -55,6 +59,8 @@ export function useGitPanel({
 	const stagedCount = changes.filter((change) => change.staged).length;
 	const unstagedCount = changes.length - stagedCount;
 
+	// Show a new status, keeping the selection on the same change, or the same file on the other
+	// side when it was staged or unstaged, or else the first change.
 	const applyStatus = useCallback((next: GitStatus): void => {
 		setStatus(next);
 		setSelected((previous) => {
@@ -75,6 +81,7 @@ export function useGitPanel({
 		applyStatus(await window.nido.gitStatus(workspaceId));
 	}
 
+	/** Run one Git action at a time, then reload the status. */
 	async function run(action: () => Promise<unknown>): Promise<void> {
 		if (locked.current) {
 			return;
@@ -98,6 +105,7 @@ export function useGitPanel({
 		onBusyChange?.(busy);
 	}, [busy, onBusyChange]);
 
+	// Load the status when the panel opens or the workspace changes.
 	useEffect(() => {
 		let cancelled = false;
 		locked.current = true;
@@ -128,6 +136,7 @@ export function useGitPanel({
 
 	const diff = useGitDiff(workspaceId, current, status);
 
+	/** Stage the selected change, or unstage it when it is staged. */
 	function stage(): void {
 		if (current) {
 			void run(() => window.nido.gitStage(workspaceId, current.path, current.staged));

@@ -13,6 +13,8 @@ import { createExplorerKeyHandler } from './sidebarKeyboard';
 import styles from './assets/Nido.module.css';
 import { gitFileKey, type Decoration } from './hooks/useGitFileStatus';
 
+// The file explorer beside the editor. State and loading live in useExplorer; this file draws
+// the tree and handles resizing.
 interface Props {
 	gitFiles: Record<string, Decoration>;
 	width: number;
@@ -39,6 +41,11 @@ export default memo(
 				previous.onError === next.onError))
 );
 
+/**
+ * The explorer of one workspace: a virtual tree of the expanded folders with Git and
+ * diagnostic marks, driven with Vim-style keys (see sidebarKeyboard.ts). Its width can be
+ * dragged or changed with Shift+H/L.
+ */
 function Sidebar({
 	gitFiles,
 	workspace,
@@ -50,7 +57,9 @@ function Sidebar({
 	onResize
 }: Props): React.JSX.Element {
 	const t = useI18n();
+	// The pointer position and width when a resize drag started.
 	const drag = useRef<{ x: number; width: number } | null>(null);
+	// Set after z, so zz centers the selection as in Vim.
 	const centerPrefix = useRef(false);
 	const {
 		visible,
@@ -83,6 +92,7 @@ function Sidebar({
 		tree,
 		rememberScroll
 	});
+	// The marks of the workspace folder itself, shown on its header.
 	const rootDecoration = gitFiles[gitFileKey(workspace.root).replace(/\/$/, '')];
 
 	return (

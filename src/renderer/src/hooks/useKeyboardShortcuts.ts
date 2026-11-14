@@ -27,6 +27,7 @@ interface Shortcut {
 	editorWorkspace: boolean;
 }
 
+/** What the shortcuts act on: app state and the actions they trigger. */
 interface UseKeyboardShortcutsParams {
 	save: () => void;
 	panel: Panel;
@@ -54,6 +55,11 @@ interface UseKeyboardShortcutsParams {
 	activate: (id: string) => void;
 }
 
+/**
+ * The window-wide keydown handler for Nido's shortcuts: the Space leader menu, Ctrl+Shift
+ * shortcuts, tab and workspace switching, and Escape. Keys that depend on Neovim's mode wait
+ * in useKeyboardModeQueue until the mode is known.
+ */
 export function useKeyboardShortcuts({
 	save,
 	panel,

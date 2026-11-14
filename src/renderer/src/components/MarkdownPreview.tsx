@@ -8,6 +8,10 @@ import styles from '../assets/MarkdownPreview.module.css';
 
 export default memo(MarkdownPreview);
 
+/**
+ * The rendered preview of the current Markdown file. It reloads 150 ms after edits; the token
+ * from the last read lets the main process skip sending unchanged text.
+ */
 function MarkdownPreview({
 	workspaceId,
 	onClose,
@@ -24,12 +28,15 @@ function MarkdownPreview({
 	const body = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		let cancelled = false;
+		// Grows with every change, so a read that started before the change is ignored.
 		let generation = 0;
 		let token = '';
 		let timer: number | undefined;
 		let pending = false;
+		// Whether the buffer may have changed since the last read.
 		let dirty = true;
 		body.current?.focus();
+		// Read the buffer, at most one read at a time, while the window is visible.
 		const refresh = (): void => {
 			if (cancelled || document.hidden || pending || !dirty) {
 				return;
@@ -62,6 +69,7 @@ function MarkdownPreview({
 					}
 				});
 		};
+		// After an edit, read again once the edits pause.
 		const schedule = (): void => {
 			generation++;
 			dirty = true;

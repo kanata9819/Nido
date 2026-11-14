@@ -5,6 +5,10 @@ import { untitledRecoveryLimitMessage } from '../shared/recovery';
 import type { SessionClient } from './sessionClient';
 import type { SessionInteraction } from './sessionInteraction';
 
+/**
+ * Saves and restores what a workspace has open (files, cursors and unsaved untitled buffers),
+ * for workspace checkpoints, sleeping workspaces and the next launch.
+ */
 export class SessionPersistence {
 	/**
 	 * The lines last read from each untitled draft, by recovery ID, with the buffer's
@@ -20,6 +24,10 @@ export class SessionPersistence {
 		private readonly hasTerminal: () => boolean
 	) {}
 
+	/**
+	 * Read the open files and untitled drafts from Neovim. `restoreScroll` first returns a window
+	 * scrolled away from its cursor; `includeUntitled` false leaves the drafts out.
+	 */
 	async snapshot(
 		options: { restoreScroll?: boolean; includeUntitled?: boolean } = {}
 	): Promise<SavedWorkspace> {
@@ -91,6 +99,7 @@ export class SessionPersistence {
 				lines?: string[];
 			})[];
 		};
+		// Drafts that did not change come back without lines; reuse the lines read last time.
 		const { untitled: drafts, ...rest } = data;
 		if (drafts?.some(({ id, lines }) => !lines && !this.drafts.has(id))) {
 			// A concurrent snapshot forgot a draft that this one found unchanged: read all.
@@ -126,6 +135,7 @@ export class SessionPersistence {
 		};
 	}
 
+	/** Reopen saved files and drafts. Returns an error message for each file that failed to open. */
 	async restore(saved: SavedWorkspace): Promise<string[]> {
 		const errors: string[] = [];
 		const failedFiles: number[] = [];
@@ -171,6 +181,8 @@ export class SessionPersistence {
           vim.api.nvim_win_set_cursor(0, {line, math.min(draft.column, #draft.lines[line])})
         end`,
 				[
+					// A draft's index is its tab position among files and drafts. Files that failed to open
+					// left no tab, so drafts move up by the number of failed files before them.
 					saved.untitled.map((draft, index) => {
 						const position = draft.index;
 						return position === undefined
@@ -187,6 +199,7 @@ export class SessionPersistence {
 				]
 			]);
 		}
+		// The current buffer was a draft, already selected above; otherwise select the current file.
 		if (saved.currentUntitled !== undefined) {
 			return errors;
 		}

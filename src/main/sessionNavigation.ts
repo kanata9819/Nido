@@ -13,6 +13,7 @@ export class SessionNavigation {
 		private readonly workspace: Workspace
 	) {}
 
+	// Requests carry the list's version; Lua refuses an index into a list that has since changed.
 	async openReference(index: number, version: number): Promise<void> {
 		this.interaction.cancelPrefetch();
 		await this.interaction.command(async () => {
@@ -24,6 +25,7 @@ export class SessionNavigation {
 		});
 	}
 
+	/** Request the current buffer's symbols. Returns the request's version. */
 	async findSymbols(): Promise<number> {
 		return this.client.request('nvim_exec_lua', ["return require('nido_symbols').find()", []]);
 	}
@@ -38,6 +40,7 @@ export class SessionNavigation {
 		);
 	}
 
+	/** Jump to a diagnostic from the Problems panel and center it in the window. */
 	async openProblem(index: number, version: number): Promise<void> {
 		this.interaction.cancelPrefetch();
 		await this.interaction.command(async () => {
@@ -60,6 +63,7 @@ require('nido_scroll').center()`,
 		});
 	}
 
+	/** Highlighted lines around a reference, for the preview beside the references list. */
 	async previewReference(index: number, version: number): Promise<ReferencePreview> {
 		return this.client.request('nvim_exec_lua', [
 			"return require('nido_references').preview(...)",
@@ -67,6 +71,10 @@ require('nido_scroll').center()`,
 		]);
 	}
 
+	/**
+	 * Syntax-highlight two versions of a file's text (for diffs) with the highlighting of the
+	 * filetype `path` would have.
+	 */
 	async highlightSources(
 		path: string,
 		before: string,

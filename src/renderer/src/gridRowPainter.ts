@@ -172,6 +172,7 @@ export class RowPainter {
 		}
 	}
 
+	// Canvas state changes are costly; set the font and color only when they change.
 	private setFont(value: string): void {
 		if (value !== this.currentFont) {
 			this.row.ctx.font = value;
@@ -186,6 +187,7 @@ export class RowPainter {
 		}
 	}
 
+	/** Record how far `text` reaches left of its cell (see the class comment). */
 	private rememberText(text: string): void {
 		if (!this.trackOverhang) {
 			return;
@@ -207,6 +209,7 @@ export class RowPainter {
 		this.paintText(from, to);
 	}
 
+	/** Fill the backgrounds of cells [from, to), and the diagnostic badges. */
 	private paintBackgrounds(from: number, to: number): void {
 		const { ctx, cells, cellWidth, dpr, imageHeight } = this.row;
 		for (let col = from; col < to; col++) {
@@ -257,6 +260,7 @@ export class RowPainter {
 		return col;
 	}
 
+	/** Draw the text of cells [from, to). */
 	private paintText(from: number, to: number): void {
 		const { cells } = this.row;
 		for (let col = from; col < to; col++) {
@@ -293,6 +297,10 @@ export class RowPainter {
 		return col;
 	}
 
+	/**
+	 * Draw one cell. Indent guides, Git signs and bracket matches are drawn as shapes; other
+	 * text is drawn with its underline, undercurl or strikethrough.
+	 */
 	private paintCell(col: number, cell: Cell, style: CellStyle): void {
 		const { ctx, cellWidth, dpr, rowHeight, imageHeight } = this.row;
 		const h = style.highlight;

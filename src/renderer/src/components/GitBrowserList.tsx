@@ -4,6 +4,10 @@ import type { RefObject } from 'react';
 import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
 import styles from '../assets/GitPanel.module.css';
 
+/**
+ * The keyboard-driven list of the Git browser: commits, the files of a commit, or branches.
+ * j/k and the arrows move, Ctrl+D/U and Ctrl+F/B page, Enter opens, and n creates a branch.
+ */
 export default function GitBrowserList({
 	view,
 	busy,
@@ -32,9 +36,11 @@ export default function GitBrowserList({
 	setCreating: (creating: boolean) => void;
 }): React.JSX.Element {
 	const t = useI18n();
+	// Commits and branches use two-line rows; a commit's files are plain one-line rows.
+	const entryRows = view === 'branches' || (view === 'history' && !commit);
 	return (
 		<div
-			className={`${styles.list} ${view === 'branches' || (view === 'history' && !commit) ? styles.historyList : ''}`}
+			className={`${styles.list} ${entryRows ? styles.historyList : ''}`}
 			ref={listRef}
 			role="listbox"
 			aria-label={listLabel}
@@ -100,7 +106,7 @@ export default function GitBrowserList({
 					id={`git-entry-${position}`}
 					role="option"
 					aria-selected={index === position}
-					className={`${styles.change} ${view === 'branches' || (view === 'history' && !commit) ? styles.historyEntry : ''}`}
+					className={`${styles.change} ${entryRows ? styles.historyEntry : ''}`}
 					title={label}
 					ref={(node) => {
 						if (node && index === position) {

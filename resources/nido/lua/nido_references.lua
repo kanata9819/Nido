@@ -1,19 +1,27 @@
+-- Find references for the references panel, its previews, and syntax highlighting of text
+-- for previews and diffs elsewhere in Nido.
 local M = {}
+-- `version` grows with every published list, so requests for outdated lists are refused;
+-- `items` is the latest list and `search` identifies the latest request.
 local version = 0
 local items = {}
 local search = 0
 local pending = {}
 local deadline
 
+--- Cancel the request timeout.
 local function stop_deadline()
   if deadline and not deadline:is_closing() then deadline:stop(); deadline:close() end
   deadline = nil
 end
 
+--- Send the references state to the renderer.
 local function publish(state)
   vim.rpcnotify(vim.g.nido_channel, 'nido:references', state)
 end
 
+--- Ask the language servers for references to the symbol under the cursor, cancelling the
+--- previous search, and publish the results as they arrive.
 function M.find()
   search = search + 1
   local current = search
@@ -109,11 +117,13 @@ function M.find()
   end
 end
 
+--- Reference `index` of list `expected_version`; throws when the list changed.
 local function get_item(index, expected_version)
   assert(expected_version == version, 'References changed. Select a result again.')
   return assert(items[index], 'Reference is no longer available.')
 end
 
+--- Highlighted lines around a reference (8 above and below), read without switching files.
 function M.preview(index, expected_version)
   local item = get_item(index, expected_version)
   local buffer = vim.fn.bufadd(item.filename)
@@ -127,6 +137,7 @@ function M.preview(index, expected_version)
   return { first = first, line = line, lines = M.highlight(buffer, first, lines) }
 end
 
+--- Syntax-highlight `lines` as `language` in a scratch buffer.
 function M.highlight_text(lines, language)
   local buffer = vim.api.nvim_create_buf(false, true)
   local ok, spans = pcall(function()
@@ -147,6 +158,8 @@ function M.highlight_text(lines, language)
   return spans
 end
 
+--- The colored spans of `lines` (starting at line `first` of `buffer`), from treesitter,
+--- semantic tokens and syntax highlighting; `syntax_only` uses only syntax highlighting.
 function M.highlight(buffer, first, lines, syntax_only)
   local colors = {}
   local function color(group)
@@ -229,6 +242,7 @@ function M.highlight(buffer, first, lines, syntax_only)
   return highlighted
 end
 
+--- Jump to a reference and center it.
 function M.open(index, expected_version)
   local item = get_item(index, expected_version)
   vim.cmd("normal! m'")

@@ -3,8 +3,13 @@ import { delimiter, resolve } from 'node:path';
 import { terminalShells, type TerminalShell } from '../shared/types';
 import { wslDistributions } from './wsl';
 
+// Finds the shells installed on this computer for terminal workspaces.
 type InstalledShell = Exclude<TerminalShell, 'auto'>;
 
+/**
+ * The command line that starts `shell`, or undefined when it is not installed. Searches PATH
+ * and the shell's usual install folder. wsl.exe only counts when a distribution is installed.
+ */
 async function installedShell(shell: InstalledShell): Promise<string[] | undefined> {
 	const directories = (process.env.PATH ?? '')
 		.split(delimiter)
@@ -49,6 +54,7 @@ async function installedShell(shell: InstalledShell): Promise<string[] | undefin
 	return undefined;
 }
 
+/** The shells the terminal settings can offer, always including `auto`. */
 export async function availableTerminalShells(): Promise<TerminalShell[]> {
 	const available = await Promise.all(
 		terminalShells.map(async (shell) =>
@@ -58,6 +64,10 @@ export async function availableTerminalShells(): Promise<TerminalShell[]> {
 	return available.filter((shell): shell is TerminalShell => shell !== undefined);
 }
 
+/**
+ * The command line for the chosen shell. When it is `auto` or not installed, falls back to
+ * PowerShell 7, then Windows PowerShell, then cmd.exe.
+ */
 export async function resolveTerminalShell(choice = 'auto'): Promise<string[]> {
 	if (!terminalShells.includes(choice as TerminalShell)) {
 		throw new Error('Invalid terminal shell.');

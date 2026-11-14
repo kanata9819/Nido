@@ -6,6 +6,11 @@ import type { FavoriteWorkspace, FileEntry } from '../../../shared/types';
 import styles from '../assets/Palette.module.css';
 import { parseWslPath, wslHostPath } from '../../../shared/wsl';
 
+/**
+ * The folder picker for opening a workspace: browse local folders, drives or a WSL
+ * distribution's folders, or pick a favorite (Ctrl+F). Ctrl+L edits the path and Ctrl+Enter
+ * opens the folder shown.
+ */
 export default function FolderPicker({
 	initialPath,
 	initialFavorites = false,
@@ -28,6 +33,7 @@ export default function FolderPicker({
 }): React.JSX.Element {
 	const t = useI18n();
 	const errorMessage = useErrorMessage();
+	// The connection (a WSL distribution, or '' for this computer) and where it started.
 	const [location, setLocation] = useState(() => ({
 		distribution: parseWslPath(initialPath)?.distribution || '',
 		initialPath
@@ -35,6 +41,7 @@ export default function FolderPicker({
 	const distribution = location.distribution;
 	const [distributions, setDistributions] = useState<string[]>([]);
 	const [wslError, setWslError] = useState('');
+	// The path in the address field; a Linux path for a WSL connection.
 	const [path, setPath] = useState(parseWslPath(initialPath)?.path || initialPath);
 	const [directory, setDirectory] = useState('');
 	const [parent, setParent] = useState('');
@@ -44,17 +51,20 @@ export default function FolderPicker({
 	const [error, setError] = useState('');
 	const list = useRef<HTMLDivElement>(null);
 	const address = useRef<HTMLInputElement>(null);
+	// Grows with every listing request, so only the latest one is shown.
 	const request = useRef({ id: 0 });
 	// Favorites stay out of the way until requested (Ctrl+F or the Favorites button).
 	const [showFavorites, setShowFavorites] = useState(initialFavorites);
 	// Bumped per listing so the folder list starts at its top after each move.
 	const [listing, setListing] = useState(0);
 	const choiceCount = showFavorites ? favorites.length : folders.length;
+	// Keep the selection in range when the list gets shorter.
 	const [previousChoiceCount, setPreviousChoiceCount] = useState(choiceCount);
 	if (choiceCount !== previousChoiceCount) {
 		setPreviousChoiceCount(choiceCount);
 		setSelected((value) => Math.max(0, Math.min(value, choiceCount - 1)));
 	}
+	/** Switch to another connection, starting at `initial` (its home folder when empty). */
 	function changeConnection(next: string, initial = ''): void {
 		request.current.id++;
 		setLoading(true);
@@ -64,6 +74,7 @@ export default function FolderPicker({
 		setPath(parseWslPath(initial)?.path || initial);
 		setLocation({ distribution: next, initialPath: initial });
 	}
+	/** Show a folder listing. */
 	const applyFolders = useCallback(
 		(result: Awaited<ReturnType<typeof window.nido.browseFolders>>): void => {
 			setPath(parseWslPath(result.path)?.path || result.path);
@@ -75,6 +86,7 @@ export default function FolderPicker({
 		},
 		[]
 	);
+	/** List a folder; a path in another WSL distribution switches the connection first. */
 	async function browse(next: string): Promise<void> {
 		const remote = parseWslPath(next);
 		if (remote && remote.distribution !== distribution) {
@@ -111,6 +123,7 @@ export default function FolderPicker({
 	}
 	// Above a Windows drive root, the picker lists the drives, so another one can be opened.
 	const atDriveRoot = !distribution && /^[a-z]:[\\/]$/i.test(directory);
+	/** List the drives of this computer, as the level above a drive root. */
 	async function browseDrives(): Promise<void> {
 		const id = ++request.current.id;
 		setLoading(true);
@@ -144,12 +157,14 @@ export default function FolderPicker({
 			}
 		}
 	}
+	/** Go up one folder. */
 	function browseParent(): void {
 		void (atDriveRoot ? browseDrives() : browse(parent));
 	}
 	useEffect(() => {
 		list.current?.focus();
 	}, []);
+	// Load the WSL distributions for the connection list.
 	useEffect(() => {
 		let cancelled = false;
 		void window.nido.wslDistributions().then(
@@ -168,6 +183,7 @@ export default function FolderPicker({
 			cancelled = true;
 		};
 	}, []);
+	// List the starting folder whenever the connection changes.
 	useEffect(() => {
 		const counter = request.current;
 		const id = ++counter.id;
@@ -203,6 +219,7 @@ export default function FolderPicker({
 	useEffect(() => {
 		list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
 	}, [selected, showFavorites]);
+	/** Switch between the folder list and the favorites. */
 	function toggleFavorites(): void {
 		setShowFavorites((value) => !value);
 		setSelected(0);

@@ -4,6 +4,10 @@ import { useI18n } from '../i18n';
 import styles from '../assets/WorkspaceSearch.module.css';
 import { navigateSearchList as navigate } from './workspaceSearchNavigation';
 
+/**
+ * The preview of a workspace replacement: the files it changes, and the selected file's lines
+ * before and after. h/l move between the two and scroll sideways; j/k, Ctrl+D/U and g/G scroll.
+ */
 export default function ReplacementPreviewPanel({
 	preview,
 	file,

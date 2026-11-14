@@ -4,9 +4,11 @@ import { useI18n } from '../i18n';
 import styles from '../assets/ExtensionsPage.module.css';
 import LanguagePacksPanel from './LanguagePacksPanel';
 
+/** The tabs of the Extensions page. */
 const views = ['languages', 'other'] as const;
 const viewTitles = { languages: 'Languages', other: 'Other extensions' } as const;
 
+/** The Extensions page (Ctrl+Shift+X): language packs and other extensions, with a search. */
 export default function ExtensionsPage({
 	onClose,
 	workspaceId
@@ -21,6 +23,7 @@ export default function ExtensionsPage({
 	const content = useRef<HTMLDivElement>(null);
 	const tabs = useRef<(HTMLButtonElement | null)[]>([]);
 	useLayoutEffect(() => search.current?.focus(), []);
+	// Switch tabs, clearing the search and scrolling back to the top.
 	const selectView = (next: typeof view): void => {
 		setView(next);
 		setQuery('');
@@ -56,6 +59,7 @@ export default function ExtensionsPage({
 						aria-selected={view === tab}
 						tabIndex={view === tab ? 0 : -1}
 						onClick={() => selectView(tab)}
+						// Arrow keys, Home and End move between tabs (the ARIA tabs pattern).
 						onKeyDown={(event) => {
 							let next: number;
 							if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {

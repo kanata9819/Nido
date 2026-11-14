@@ -1,6 +1,7 @@
 import type { Highlight } from './gridTypes';
 import { color } from './gridColors';
 
+/** How to paint cells of one highlight group: colors and canvas font. */
 export interface CellStyle {
 	highlight: Highlight;
 	background: string;
@@ -11,6 +12,7 @@ export interface CellStyle {
 	accent?: string;
 }
 
+/** A cell's background color; `reverse` swaps it with the foreground. */
 function cellBackground(h: Highlight, background: string, foreground: string): string {
 	if (h.reverse) {
 		if (h.foreground === undefined) {
@@ -32,6 +34,7 @@ function cellBackground(h: Highlight, background: string, foreground: string): s
 	return color(h.background);
 }
 
+/** A cell's text color; `reverse` swaps it with the background. */
 function cellForeground(h: Highlight, background: string, foreground: string): string {
 	if (h.reverse) {
 		if (h.background === undefined) {

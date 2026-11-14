@@ -34,6 +34,8 @@ export function spawnNeovim(
 		runtime && remote ? 'wsl.exe' : resolve(resources, neovimBundle().executable),
 		runtime && remote
 			? wslArguments(remote.distribution, remote.path, [
+					// Inside WSL, unset variables that would point Neovim or Node.js at a user's own
+					// configuration, then pass Nido's settings.
 					'env',
 					'-u',
 					'VIMRUNTIME',

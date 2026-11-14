@@ -1,10 +1,14 @@
+-- Git change marks in the sign column: added, changed and deleted lines compared with the
+-- committed version of the file (HEAD). Without Git the module does nothing.
 if vim.fn.executable('git') == 0 then
   return {}
 end
 local api = vim.api
 local namespace = api.nvim_create_namespace('nido_git_signs')
+-- Per buffer: a counter that drops outdated refreshes, and the delayed refresh after an edit.
 local generations = {}
 local pending = {}
+--- Cancel a buffer's delayed refresh.
 local function cancel_pending(buffer)
   local token = pending[buffer]
   pending[buffer] = nil
@@ -13,6 +17,7 @@ local function cancel_pending(buffer)
     token.timer:close()
   end
 end
+-- Per buffer: the committed text at HEAD, the signs last drawn, and the refresh running now.
 local bases = {}
 local rendered = {}
 local active = {}
@@ -38,6 +43,7 @@ local function decode(base, buffer)
   return base
 end
 
+--- Define the sign colors, again after a color scheme change.
 local function colors()
   api.nvim_set_hl(0, 'NidoGitAdded', { fg = '#2ea043' })
   api.nvim_set_hl(0, 'NidoGitChanged', { fg = '#0078d4' })
@@ -46,6 +52,9 @@ end
 colors()
 api.nvim_create_autocmd('ColorScheme', { callback = colors })
 
+--- Recompute a buffer's signs: read the committed text with git (cached per HEAD), diff it
+--- with the buffer, and update only the signs that changed. A refresh requested while one
+--- runs is done again afterwards.
 function M.refresh(buffer)
   if not buffer or buffer == 0 then buffer = api.nvim_get_current_buf() end
   if stopped or not api.nvim_buf_is_loaded(buffer) or vim.bo[buffer].buftype ~= '' then
@@ -64,6 +73,7 @@ function M.refresh(buffer)
   active[buffer] = current
   local generation = generations[buffer]
   local tick = api.nvim_buf_get_changedtick(buffer)
+  -- Whether this refresh is still current: the buffer is unchanged and no newer one started.
   local function valid()
     return not stopped and active[buffer] == current and api.nvim_buf_is_loaded(buffer)
       and generations[buffer] == generation
@@ -74,6 +84,7 @@ function M.refresh(buffer)
     active[buffer] = nil
     if current.again then M.refresh(buffer) end
   end
+  -- Draw the signs for committed text `base` (nil when the file is not in a repository).
   local function render(base)
     if not valid() then
       return
@@ -138,6 +149,7 @@ function M.refresh(buffer)
       vim.cmd('redraw')
     end
   end
+  -- Run a git command for this refresh; only one runs at a time.
   local function git(directory, arguments, callback, bytes)
     local command = { 'git', '--no-pager', '--literal-pathspecs', '-C', directory }
     vim.list_extend(command, arguments)
@@ -203,6 +215,7 @@ function M.refresh(buffer)
   end)
 end
 
+--- Refresh every loaded buffer, for example after a commit or branch switch.
 function M.refresh_all()
   for _, buffer in ipairs(api.nvim_list_bufs()) do
     if api.nvim_buf_is_loaded(buffer) then
@@ -211,6 +224,7 @@ function M.refresh_all()
   end
 end
 
+-- Refresh 150 ms after edits, saves and entering a buffer.
 api.nvim_create_autocmd({'BufEnter', 'BufWritePost', 'TextChanged', 'TextChangedI', 'TextChangedP', 'FileChangedShellPost'}, {
   callback = function(event)
     local buffer = event.buf
@@ -226,6 +240,7 @@ api.nvim_create_autocmd({'BufEnter', 'BufWritePost', 'TextChanged', 'TextChanged
   end,
 })
 api.nvim_create_autocmd('FocusGained', { callback = function() M.refresh() end })
+--- Stop tracking a buffer that was closed.
 local function forget(buffer)
   local current = active[buffer]
   active[buffer] = nil

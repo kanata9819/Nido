@@ -3,6 +3,9 @@ import { LanguageContext, useI18n } from '../i18n';
 import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
 import styles from '../assets/GitPanel.module.css';
 
+// The summary cards the Git browser shows beside the list for the selected commit or branch.
+
+/** The selected commit's subject, author, date and hash. */
 export function CommitDetails({
 	entry,
 	busy,
@@ -56,6 +59,7 @@ export function CommitDetails({
 	);
 }
 
+/** The selected branch and what switching to it does. */
 export function BranchDetails({
 	entry,
 	busy,

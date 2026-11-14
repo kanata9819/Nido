@@ -1,3 +1,4 @@
+/** The canvas position and size within its host, in CSS pixels, aligned to device pixels. */
 export interface CanvasSurface {
 	left: number;
 	top: number;
@@ -5,7 +6,10 @@ export interface CanvasSurface {
 	height: number;
 }
 
-// Match CSS bounds to the backing pixels, including fractional Windows display scaling.
+/**
+ * Size the canvas to the whole device pixels inside `host` and return its position and size.
+ * This matches CSS bounds to the backing pixels, including fractional Windows display scaling.
+ */
 export function alignCanvasSurface(
 	canvas: HTMLCanvasElement,
 	host: HTMLElement,

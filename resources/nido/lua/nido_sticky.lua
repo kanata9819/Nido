@@ -1,6 +1,13 @@
+-- Sticky scroll and method separators. Finds each buffer's scopes (functions, classes,
+-- blocks): first from bracket pairs, then from the language server's document symbols when
+-- available. publish() sends the scopes around the top of the window to the renderer, which
+-- pins their header lines above the editor (StickyScroll.tsx).
 local M = {}
 local api = vim.api
+-- Per buffer: the scopes found (`entries`), the delayed refresh, what was last published,
+-- and the delayed recoloring.
 local entries, pending, published, color_pending = {}, {}, {}, {}
+--- Cancel a buffer's delayed refresh.
 local function cancel_pending(buffer)
   local ticket = pending[buffer]
   pending[buffer] = nil
@@ -9,12 +16,14 @@ local function cancel_pending(buffer)
     ticket.timer:close()
   end
 end
+-- Per buffer, the document symbol request in flight.
 local outlines = {}
 local method_separators = false
 local method_namespace = api.nvim_create_namespace('nido_method_separators')
 local scope_namespace = api.nvim_create_namespace('nido_sticky_scopes')
 local script_filetypes = {typescript=true, typescriptreact=true, javascript=true, javascriptreact=true}
 
+--- Cancel a buffer's document symbol request.
 local function cancel_outline(buffer)
   local request = outlines[buffer]
   outlines[buffer] = nil
@@ -26,6 +35,7 @@ local function redraw()
   vim.schedule(function() vim.cmd.redraw({bang=true}) end)
 end
 
+--- Scopes from the buffer's {} pairs, with the header line found above a lone {.
 local function fallback(buffer, lines)
   local scopes = {}
   for _, pair in ipairs(require('nido_brackets').pairs(buffer)) do
@@ -67,6 +77,7 @@ local function fallback(buffer, lines)
   return scopes
 end
 
+--- Order scopes by their first line, outer scopes first.
 local function sort(scopes)
   table.sort(scopes, function(a, b)
     return a.line < b.line or (a.line == b.line and a.ending > b.ending)
@@ -92,6 +103,7 @@ local function function_callback(text, from)
     or (before == 0 and text:sub(start):match('^function%s*%*?%s*%(')), start
 end
 
+--- The lines that start a function, found by text matching, for method separators.
 local function fallback_methods(lines)
   local methods = {}
   local script = script_filetypes[vim.bo.filetype]
@@ -123,6 +135,7 @@ local function fallback_methods(lines)
   return methods
 end
 
+--- Store the method separator lines and redraw when they changed.
 local function set_methods(buffer, entry, methods)
   entry.methods = methods
   api.nvim_buf_clear_namespace(buffer, method_namespace, 0, -1)
@@ -137,6 +150,7 @@ local function set_methods(buffer, entry, methods)
   end
 end
 
+--- Store a buffer's scopes and redraw when they changed.
 local function set_scopes(buffer, entry, scopes)
   entry.scopes, entry.scope_marks = sort(scopes), {}
   api.nvim_buf_clear_namespace(buffer, scope_namespace, 0, -1)
@@ -157,6 +171,7 @@ local function set_scopes(buffer, entry, scopes)
   end
 end
 
+--- Find a buffer's scopes again: bracket scopes now, document symbols when they arrive.
 local function refresh(buffer)
   cancel_outline(buffer)
   if not api.nvim_buf_is_valid(buffer) or not api.nvim_buf_is_loaded(buffer)
@@ -242,6 +257,7 @@ local function refresh(buffer)
   end
 end
 
+--- Refresh a buffer shortly after it changes.
 local function schedule(buffer)
   cancel_outline(buffer)
   cancel_pending(buffer)
@@ -255,6 +271,7 @@ local function schedule(buffer)
   end, 120)
 end
 
+--- The colored text of a scope's header (or end) line, cached until the line changes.
 local function highlight(entry, buffer, line, scope, key)
   local text = api.nvim_buf_get_lines(buffer, line - 1, line, false)[1] or ''
   if scope.colors ~= entry.highlights then
@@ -307,6 +324,7 @@ local function highlight(entry, buffer, line, scope, key)
   return cached.spans
 end
 
+--- Drop cached colors after highlighting changed, for example when semantic tokens arrive.
 local function recolor(buffer)
   if color_pending[buffer] or not entries[buffer] then return end
   color_pending[buffer] = true
@@ -320,6 +338,7 @@ local function recolor(buffer)
   end)
 end
 
+--- Send the sticky scroll state of the current window to the renderer.
 function M.publish(window, buffer)
   if not vim.g.nido_channel or window ~= api.nvim_get_current_win() then return false end
   local info = vim.fn.getwininfo(window)[1]
@@ -390,6 +409,7 @@ function M.publish(window, buffer)
   return false
 end
 
+--- Turn the separator lines between functions on or off.
 function M.set_method_separators(enabled)
   if method_separators == enabled then return end
   method_separators = enabled
@@ -407,6 +427,7 @@ function M.set_method_separators(enabled)
   redraw()
 end
 
+--- Jump to a sticky header's line; returns whether the cursor moved.
 function M.jump(window, buffer, line)
   if window ~= api.nvim_get_current_win() or buffer ~= api.nvim_get_current_buf()
       or vim.bo.buftype ~= '' or line < 1 or line > api.nvim_buf_line_count(buffer) then return false end

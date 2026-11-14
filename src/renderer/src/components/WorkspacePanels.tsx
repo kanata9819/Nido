@@ -12,6 +12,7 @@ interface Props {
 	animations: boolean;
 }
 
+/** The panels below the editor: references and Run and Debug. Only one is shown at a time. */
 export default function WorkspacePanels({
 	active,
 	blocked,

@@ -14,17 +14,20 @@ import {
 	type Workspace
 } from '../../../shared/types';
 
+/** The open workspaces, the selected one, and each workspace's session state. */
 interface WorkspaceSessions {
 	workspaces: Workspace[];
 	setWorkspaces: Dispatch<SetStateAction<Workspace[]>>;
 	active: string;
 	setActive: Dispatch<SetStateAction<string>>;
 	states: Record<string, SessionState>;
+	/** Each workspace's Neovim mode as last reported, read by the keyboard shortcuts. */
 	mode: RefObject<Record<string, string>>;
 	restoring: boolean;
 }
 
-const initialState: SessionState = {
+/** The state of a workspace before Neovim has reported any. */
+export const initialSessionState: SessionState = {
 	buffers: [],
 	current: 0,
 	mode: 'n',
@@ -33,12 +36,17 @@ const initialState: SessionState = {
 	filetype: ''
 };
 
+/**
+ * The workspaces and their session state, restored at startup and kept up to date from the
+ * main process's events.
+ */
 export function useWorkspaceSessions(report: (message: string) => void): WorkspaceSessions {
 	const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
 	const [selectedWorkspace, setActive] = useState('');
 	const [states, setStates] = useState<Record<string, SessionState>>({});
 	const [restoring, setRestoring] = useState(true);
 	const mode = useRef<Record<string, string>>({});
+	// The selected workspace, or the first one when it closed.
 	const active = workspaces.some((w) => w.id === selectedWorkspace)
 		? selectedWorkspace
 		: workspaces[0]?.id || '';
@@ -48,6 +56,7 @@ export function useWorkspaceSessions(report: (message: string) => void): Workspa
 		latestWorkspaces.current = workspaces;
 	});
 
+	// Apply session events: state (batched to one render per frame), errors and exits.
 	useEffect(() => {
 		const pendingStates = new Map<string, Partial<SessionState>>();
 		let frame = 0;
@@ -67,7 +76,7 @@ export function useWorkspaceSessions(report: (message: string) => void): Workspa
 									const next = { ...old };
 									for (const [id, update] of updates) {
 										next[id] = {
-											...(old[id] || initialState),
+											...(old[id] || initialSessionState),
 											...update
 										};
 									}
@@ -131,6 +140,7 @@ export function useWorkspaceSessions(report: (message: string) => void): Workspa
 		};
 	}, [report]);
 
+	// Restore the workspaces of the last run, with the saved terminal shell.
 	useEffect(() => {
 		let cancelled = false;
 		void window.nido
@@ -164,6 +174,7 @@ export function useWorkspaceSessions(report: (message: string) => void): Workspa
 		};
 	}, [report]);
 
+	// Tell the main process the tab order and the selected workspace, to save them.
 	useEffect(() => {
 		if (!restoring) {
 			void window.nido

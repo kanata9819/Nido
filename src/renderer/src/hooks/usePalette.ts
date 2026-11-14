@@ -3,6 +3,7 @@ import type { FileEntry } from '../../../shared/types';
 import type { Panel } from '../types';
 import { useFileSearch } from './useFileSearch';
 
+/** Which palette or panel is open over the editor, and its filter and selection. */
 export interface PaletteState {
 	panel: Panel;
 	closePanel: () => void;

@@ -8,9 +8,14 @@ import { editorPath } from '../shared/wsl';
 import { SearchMatcher } from './searchMatcher';
 import { searchLineEnding } from './searchLines';
 
+// Workspace-wide replace: after a text search, replaces the selected matches in their files.
+// It works in two steps. prepare() computes the result and returns a preview; apply() writes
+// the result into Neovim buffers, where the user reviews and saves it. Both steps refuse to
+// run when a file changed since the search, so a replacement never uses outdated text.
 const digest = (text: string | Buffer): string => createHash('sha256').update(text).digest('hex');
 const stale = 'Search results changed. Search again.';
 
+/** One file's text before and after the replacement. `hash` is of the bytes read from disk. */
 interface ReplacementFile {
 	path: string;
 	original: string;
@@ -19,6 +24,7 @@ interface ReplacementFile {
 	count: number;
 }
 
+/** The lines around the selected lines (two above, one below), numbered, for the preview. */
 function context(text: string, selected: number[]): string {
 	const lines = text.split(searchLineEnding(text));
 	const rows = new Set<number>();
@@ -47,6 +53,7 @@ interface SearchSnapshot {
 	hashes: Map<string, string>;
 }
 
+/** Validate the replacement text and the selected match indexes. */
 function checkReplacement(replacement: string, selected: number[], matches: SearchMatch[]): void {
 	if (
 		typeof replacement !== 'string' ||
@@ -77,9 +84,11 @@ function linesByFile(selected: number[], matches: SearchMatch[]): Map<string, nu
 	return groups;
 }
 
+/** Replacement state for one workspace: the latest search and the latest preview. */
 export class WorkspaceReplacement {
 	private snapshot?: SearchSnapshot;
 	private preview?: { token: string; files: ReplacementFile[] };
+	// Grows with every new search or preview, so a slower earlier request cannot finish later.
 	private generation = 0;
 	private matcher?: SearchMatcher;
 
@@ -89,6 +98,7 @@ export class WorkspaceReplacement {
 		private path: (path: string) => Promise<string>
 	) {}
 
+	/** Forget the search and preview, for example when a new search starts. */
 	clear(): void {
 		this.generation++;
 		this.snapshot = undefined;
@@ -97,6 +107,7 @@ export class WorkspaceReplacement {
 		this.matcher = undefined;
 	}
 
+	/** Remember a finished search and return the token that refers to it. */
 	complete(
 		query: string,
 		options: SearchOptions,
@@ -108,10 +119,12 @@ export class WorkspaceReplacement {
 		return token;
 	}
 
+	/** The hash complete() expects for a file's text. */
 	static hash(text: string): string {
 		return digest(text);
 	}
 
+	/** Read a file (up to 1 MiB of UTF-8 text) and hash its bytes; throws for other files. */
 	private async read(path: string): Promise<{ text: string; hash: string }> {
 		const file = await open(await this.path(path), 'r');
 		try {
@@ -135,8 +148,8 @@ export class WorkspaceReplacement {
 	}
 
 	/**
-	 * Replace the selected matches in memory and show the result in the open buffers without
-	 * saving. Returns a preview whose token apply() accepts.
+	 * Replace the selected matches in memory and check that open buffers still hold what was
+	 * searched. Nothing is edited yet. Returns a preview whose token apply() accepts.
 	 */
 	async prepare(
 		token: string,
@@ -225,6 +238,7 @@ export class WorkspaceReplacement {
 		return { files, previews };
 	}
 
+	/** Write a prepared replacement into the buffers. The files stay unsaved. */
 	async apply(token: string): Promise<ReplacementResult> {
 		const preview = this.preview;
 		if (!preview || preview.token !== token) {
@@ -248,6 +262,10 @@ export class WorkspaceReplacement {
 		};
 	}
 
+	/**
+	 * Check every target buffer in Neovim and, with `apply`, replace its lines. Files that are not
+	 * open are loaded into hidden buffers first, so they show up as modified tabs.
+	 */
 	private async edit(files: ReplacementFile[], apply: boolean): Promise<void> {
 		await this.client
 			.request('nvim_exec_lua', [

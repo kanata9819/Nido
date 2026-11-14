@@ -6,6 +6,10 @@ import type {
 	LanguagePackManifest
 } from '../shared/languagePacks';
 
+// Discovers, validates and stores language packs. Bundled packs live in
+// resources/nido/language-packs; packs the user installs live in the user data folder.
+
+// Type checks for manifest values. `text` and `strings` also bound their length.
 function object(value: unknown): value is Record<string, unknown> {
 	return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -106,6 +110,7 @@ function hasValidLanguages(value: Record<string, unknown>): boolean {
 	);
 }
 
+/** Every key a manifest may have; other keys are dropped. */
 const manifestKeys = [
 	'schemaVersion',
 	'id',
@@ -125,6 +130,7 @@ const manifestKeys = [
 	'adapter'
 ];
 
+/** Validate a manifest and return it with only the known keys; throws when it is invalid. */
 export function validateLanguagePack(value: unknown, bundled = false): LanguagePackManifest {
 	if (
 		!object(value) ||
@@ -144,6 +150,10 @@ export function validateLanguagePack(value: unknown, bundled = false): LanguageP
 	) as unknown as LanguagePackManifest;
 }
 
+/**
+ * Load every pack: bundled ones first, then the user's. A pack is a folder with pack.json or a
+ * single .json file. Invalid or duplicate packs are skipped and reported in `errors`.
+ */
 export async function discoverLanguagePacks(
 	resources: string,
 	directory?: string
@@ -197,6 +207,10 @@ export async function discoverLanguagePacks(
 	return { packs, disabled: [], errors };
 }
 
+/**
+ * The user's language packs and which packs are disabled (stored in
+ * language-packs-state.json). Reads and writes run one at a time.
+ */
 export class LanguagePacks {
 	readonly directory: string;
 	private readonly settingsPath: string;
@@ -234,12 +248,14 @@ export class LanguagePacks {
 		return config;
 	}
 
+	/** Run `action` after every earlier read and write has finished. */
 	private enqueue<T>(action: () => Promise<T>): Promise<T> {
 		const next = this.writing.then(action);
 		this.writing = next.catch(() => {});
 		return next;
 	}
 
+	/** Enable or disable a pack by id. */
 	setEnabled(id: string, enabled: boolean): Promise<void> {
 		return this.enqueue(async () => {
 			const config = await this.read();
@@ -262,6 +278,7 @@ export class LanguagePacks {
 		});
 	}
 
+	/** Copy a manifest into the user's pack folder, refusing duplicates of an installed pack. */
 	install(path: string): Promise<void> {
 		return this.enqueue(async () => {
 			if ((await stat(path)).size > 128_000) {

@@ -21,6 +21,10 @@ type Redraw = Extract<NidoEvent, { type: 'redraw' }>;
 type RedrawSummary = ReturnType<typeof summarizeRedraw>;
 type Scroll = NonNullable<RedrawSummary['scroll']>;
 
+/**
+ * What an EditorRenderer draws with. The *Ref values are read on every frame, so settings
+ * such as animations can change without creating a new renderer.
+ */
 export interface EditorRendererOptions {
 	id: string;
 	grid: Grid;
@@ -124,6 +128,7 @@ export class EditorRenderer {
 		this.cursor.resetBlink();
 	}
 
+	/** Stop drawing and remove every listener. */
 	dispose(): void {
 		const { grid, surface, input } = this.options;
 		this.disposed = true;
@@ -184,6 +189,7 @@ export class EditorRenderer {
 		}
 	};
 
+	/** Whether to animate scrolling: animations are on and reduced motion is not requested. */
 	private get animate(): boolean {
 		return this.options.animationsRef.current && !this.reducedMotion.matches;
 	}
@@ -518,6 +524,10 @@ export class EditorRenderer {
 		}
 	}
 
+	/**
+	 * Start an animated sideways scroll. The frame shown so far becomes the outgoing image; when a
+	 * sideways animation is already running, its target is the starting point instead.
+	 */
 	private startHorizontalMotion(scroll: Scroll, now: number): void {
 		const { surface, grid } = this.options;
 		cancelAnimationFrame(this.frame);
@@ -544,6 +554,7 @@ export class EditorRenderer {
 		);
 	}
 
+	/** Start an animated vertical scroll from the current frame, continuing any running one. */
 	private startVerticalMotion(scroll: Scroll, now: number): void {
 		const { surface, grid } = this.options;
 		const motion = this.motion;

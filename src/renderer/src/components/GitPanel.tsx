@@ -5,7 +5,17 @@ import styles from '../assets/GitPanel.module.css';
 import GitDiff from './GitDiff';
 import FileIcon from './FileIcon';
 import { gitChangeKey as key, useGitPanel } from '../hooks/useGitPanel';
+import { listIndex } from '../listNavigation';
 
+/** The file name of a repository path (Git uses / on every platform). */
+const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
+/** The folder of a repository path. */
+const folderName = (path: string): string => path.slice(0, path.lastIndexOf('/'));
+
+/**
+ * The Git panel: commit message, changed files (staged first) and the diff of the selected
+ * file. State and Git calls live in useGitPanel.
+ */
 export default function GitPanel({
 	workspaceId,
 	onBusyChange,
@@ -45,6 +55,22 @@ export default function GitPanel({
 	useEffect(() => {
 		list.current?.focus();
 	}, [workspaceId]);
+
+	// What the commit button does now, shown below it.
+	const commitHint = (): string => {
+		if (busy) {
+			return t('Working…');
+		}
+		if (status && !changes.length) {
+			return t('No changes to commit.');
+		}
+		if (!stagedCount) {
+			return t('Stage changes to include them in the commit.');
+		}
+		return message.trim()
+			? t('Only staged changes ({count}) will be committed.', { count: stagedCount })
+			: t('Enter a message to commit staged changes ({count}).', { count: stagedCount });
+	};
 
 	return (
 		<section
@@ -100,25 +126,7 @@ export default function GitPanel({
 							</span>
 						</button>
 						<p id={`${messageId}-hint`} className={styles.commitHint}>
-							{busy
-								? t('Working…')
-								: status && !changes.length
-									? t('No changes to commit.')
-									: !stagedCount
-										? t('Stage changes to include them in the commit.')
-										: !message.trim()
-											? t(
-													'Enter a message to commit staged changes ({count}).',
-													{
-														count: stagedCount
-													}
-												)
-											: t(
-													'Only staged changes ({count}) will be committed.',
-													{
-														count: stagedCount
-													}
-												)}
+							{commitHint()}
 						</p>
 					</div>
 					<div className={styles.listToolbar}>
@@ -161,23 +169,7 @@ export default function GitPanel({
 								case 'Home':
 								case 'End': {
 									event.preventDefault();
-									const next =
-										event.key === 'Home'
-											? 0
-											: event.key === 'End'
-												? changes.length - 1
-												: Math.max(
-														0,
-														Math.min(
-															changes.length - 1,
-															index +
-																(['j', 'ArrowDown'].includes(
-																	event.key
-																)
-																	? 1
-																	: -1)
-														)
-													);
+									const next = listIndex(event.key, index, changes.length);
 									if (changes[next]) {
 										setSelected(key(changes[next]));
 									}
@@ -236,13 +228,9 @@ export default function GitPanel({
 								>
 									<FileIcon path={change.path} />
 									<span className={styles.fileName}>
-										<strong>
-											{change.path.slice(change.path.lastIndexOf('/') + 1)}
-										</strong>
+										<strong>{fileName(change.path)}</strong>
 										{change.path.includes('/') && (
-											<small>
-												{change.path.slice(0, change.path.lastIndexOf('/'))}
-											</small>
+											<small>{folderName(change.path)}</small>
 										)}
 									</span>
 									<b className={styles.statusBadge} data-status={change.status}>

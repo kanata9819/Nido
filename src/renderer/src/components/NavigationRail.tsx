@@ -4,6 +4,7 @@ import type { Panel } from '../types';
 import type { ActivityBarPosition } from '../hooks/useEditorSettings';
 import styles from '../assets/Nido.module.css';
 
+/** The vertical activity bar with buttons for the explorer, search, Git, Time Machine and more. */
 export default function NavigationRail({
 	position,
 	sidebar,

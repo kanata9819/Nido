@@ -5,6 +5,10 @@ import { readFavorites, writeFavorites } from './persistence';
 import { parseWslPath } from '../shared/wsl';
 import { resolveWslFolder } from './wsl';
 
+/**
+ * IPC handlers for favorite workspaces, the folders pinned in the workspace list. Favorites
+ * are stored in favorites.json in the user data folder.
+ */
 export function registerFavoriteHandlers({
 	handle,
 	text
@@ -14,10 +18,13 @@ export function registerFavoriteHandlers({
 }): void {
 	const favoritesPath = join(app.getPath('userData'), 'favorites.json');
 	let favoriteWrite: Promise<unknown> = Promise.resolve();
+	// List favorites, after any pending change has been written.
 	handle('favorites', async () => {
 		await favoriteWrite;
 		return readFavorites(favoritesPath);
 	});
+	// Add (`enabled`) or remove a favorite. Added folders are resolved to their real path, so
+	// one folder reached through different links is stored once.
 	handle('favorite', (value, kind, enabled) => {
 		const path = text(value);
 		if (

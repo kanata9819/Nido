@@ -4,15 +4,20 @@ import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { parseWslPath, validWslDistribution, wslHostPath } from '../shared/wsl';
 
+// Runs commands inside WSL distributions through wsl.exe: listing distributions, resolving
+// folders, moving files to the trash, and installing the runtime Neovim needs there.
 const exec = promisify(execFile);
+// Runtime setups in progress per distribution, so concurrent workspaces share one setup.
 const preparing = new Map<string, Promise<WslRuntime>>();
 
+/** Linux paths of Neovim, Node.js and Nido's resources inside a distribution. */
 interface WslRuntime {
 	nvim: string;
 	node: string;
 	resources: string;
 }
 
+/** Decode wsl.exe output. Some of its commands print UTF-16, which contains NUL bytes. */
 export function decodeWslOutput(value: Buffer): string {
 	return value
 		.toString(value.includes(0) ? 'utf16le' : 'utf8')
@@ -20,6 +25,17 @@ export function decodeWslOutput(value: Buffer): string {
 		.trim();
 }
 
+/** The most useful text from a failed wsl.exe run: its stderr, else its stdout, else the error. */
+function failureDetail(error: unknown): string {
+	const failure = error as Error & { stdout?: Buffer; stderr?: Buffer };
+	return failure.stderr?.length
+		? decodeWslOutput(failure.stderr)
+		: failure.stdout?.length
+			? decodeWslOutput(failure.stdout)
+			: failure.message;
+}
+
+/** wsl.exe arguments that run `args` in `distribution` with `cwd` as working directory. */
 export function wslArguments(distribution: string, cwd: string, args: string[]): string[] {
 	if (!validWslDistribution(distribution)) {
 		throw new Error('Invalid WSL distribution.');
@@ -27,6 +43,7 @@ export function wslArguments(distribution: string, cwd: string, args: string[]):
 	return ['--distribution', distribution, '--cd', cwd, '--exec', ...args];
 }
 
+/** Names of the installed WSL distributions. Empty off Windows. */
 export async function wslDistributions(executable = 'wsl.exe'): Promise<string[]> {
 	if (process.platform !== 'win32') {
 		return [];
@@ -42,19 +59,13 @@ export async function wslDistributions(executable = 'wsl.exe'): Promise<string[]
 			.map((name) => name.trim())
 			.filter(Boolean);
 	} catch (error) {
-		const failure = error as Error & { stdout?: Buffer; stderr?: Buffer };
 		throw new Error(
-			`WSL is unavailable. Install WSL and a Linux distribution, then retry. ${
-				failure.stderr?.length
-					? decodeWslOutput(failure.stderr)
-					: failure.stdout?.length
-						? decodeWslOutput(failure.stdout)
-						: failure.message
-			}`
+			`WSL is unavailable. Install WSL and a Linux distribution, then retry. ${failureDetail(error)}`
 		);
 	}
 }
 
+/** Run a command in a distribution and return its output; `input` is written to its stdin. */
 async function run(
 	distribution: string,
 	cwd: string,
@@ -73,19 +84,11 @@ async function run(
 		task.child.stdin?.end(input);
 		return decodeWslOutput((await task).stdout);
 	} catch (error) {
-		const failure = error as Error & { stdout?: Buffer; stderr?: Buffer };
-		throw new Error(
-			`WSL (${distribution}): ${
-				failure.stderr?.length
-					? decodeWslOutput(failure.stderr)
-					: failure.stdout?.length
-						? decodeWslOutput(failure.stdout)
-						: failure.message
-			}`
-		);
+		throw new Error(`WSL (${distribution}): ${failureDetail(error)}`);
 	}
 }
 
+/** The UNC path of a folder in a distribution, with links resolved. Empty `path` means home. */
 export async function resolveWslFolder(distribution: string, path = ''): Promise<string> {
 	const remote = parseWslPath(path);
 	if (remote && remote.distribution.toLowerCase() !== distribution.toLowerCase()) {
@@ -106,6 +109,7 @@ export async function resolveWslFolder(distribution: string, path = ''): Promise
 	return wslHostPath(distribution, actual);
 }
 
+/** Move a file inside WSL to its trash with `gio trash`. */
 export async function trashWslFile(path: string): Promise<void> {
 	const remote = parseWslPath(path);
 	if (!remote) {
@@ -114,6 +118,10 @@ export async function trashWslFile(path: string): Promise<void> {
 	await run(remote.distribution, '~', ['gio', 'trash', '--', remote.path]);
 }
 
+/**
+ * Make sure a distribution has the runtime Nido needs (wsl-runtime.sh installs it when
+ * missing) and return its paths. The script prints KEY=value lines.
+ */
 export async function prepareWsl(distribution: string, resources: string): Promise<WslRuntime> {
 	const key = `${distribution}\0${resources}`;
 	let pending = preparing.get(key);

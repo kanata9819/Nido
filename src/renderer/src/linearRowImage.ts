@@ -1,8 +1,14 @@
+// Draws row images at fractional pixel positions with WebGL. A row placed between two device
+// pixels must blend each pixel with the one above it; doing that in linear light (rather than
+// on sRGB values, as Canvas2D does) keeps text from looking lighter while scrolling.
+
+/** A row image uploaded to the GPU, with its size in pixels for the cache budget. */
 interface Texture {
 	image: WebGLTexture;
 	pixels: number;
 }
 
+/** The compiled shaders and their uniform locations. */
 interface Program {
 	image: WebGLProgram;
 	viewport: WebGLUniformLocation | null;
@@ -10,6 +16,7 @@ interface Program {
 	phase: WebGLUniformLocation | null;
 }
 
+// Places a row's quad on the canvas. `row` is (top, width, height) in device pixels.
 const vertex = `#version 300 es
 uniform vec2 viewport;
 uniform vec3 row;
@@ -20,6 +27,8 @@ void main() {
     gl_Position = vec4(pixel / viewport * vec2(2.0, -2.0) + vec2(-1.0, 1.0), 0.0, 1.0);
 }`;
 
+// Mixes each pixel with the one above it by `phase` (the fractional part of the row's top),
+// in linear light, then encodes the result back to sRGB.
 const fragment = `#version 300 es
 precision highp float;
 uniform sampler2D source;
@@ -42,6 +51,7 @@ void main() {
 export class LinearRowImages {
 	private static readonly documents = new WeakMap<Document, LinearRowImages>();
 
+	/** One shared instance per document, since WebGL contexts are limited. */
 	static forDocument(document: Document): LinearRowImages {
 		let rows = this.documents.get(document);
 		if (!rows) {
@@ -79,6 +89,7 @@ export class LinearRowImages {
 		});
 	}
 
+	/** Start a frame of the given canvas size. Returns false when WebGL is unavailable. */
 	begin(width: number, height: number): boolean {
 		const gl = this.gl;
 		if (!gl || gl.isContextLost() || this.unavailable) {
@@ -99,6 +110,7 @@ export class LinearRowImages {
 		return true;
 	}
 
+	/** Drop the texture of a row image whose content changed. */
 	invalidate(source: HTMLCanvasElement): void {
 		const texture = this.textures.get(source);
 		if (texture) {
@@ -108,6 +120,7 @@ export class LinearRowImages {
 		}
 	}
 
+	/** The texture of a row image, uploading it the first time. */
 	private prepare(source: HTMLCanvasElement): WebGLTexture | undefined {
 		const gl = this.gl!;
 		let texture = this.textures.get(source);
@@ -131,10 +144,12 @@ export class LinearRowImages {
 		return texture.image;
 	}
 
+	/** Queue a row image to draw at `top` (device pixels) in this frame. */
 	paint(source: HTMLCanvasElement, top: number): void {
 		this.pending.push({ source, top });
 	}
 
+	/** Draw one row; rows at whole-pixel positions are left to Canvas2D. */
 	private paintRow(source: HTMLCanvasElement, top: number): void {
 		const origin = Math.floor(top);
 		const phase = top - origin;
@@ -162,6 +177,7 @@ export class LinearRowImages {
 		this.painted = true;
 	}
 
+	/** Draw the queued rows and composite them onto the editor canvas, then trim the cache. */
 	finish(context: CanvasRenderingContext2D, dpr: number, contentHeight: number): void {
 		// Keep Canvas2D and WebGL work together instead of switching contexts per row.
 		for (const { source, top } of this.pending) {
@@ -188,6 +204,7 @@ export class LinearRowImages {
 		}
 	}
 
+	/** Compile the shaders; undefined when that fails. */
 	private createProgram(gl: WebGL2RenderingContext): Program | undefined {
 		const program = gl.createProgram();
 		if (!program) {

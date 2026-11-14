@@ -11,6 +11,10 @@ export class SessionBuffers {
 		private readonly workspace: Workspace
 	) {}
 
+	/**
+	 * The current Markdown buffer for the preview. The token is the buffer and its changedtick;
+	 * when it equals `known` the text is left out, since the preview already has it.
+	 */
 	async markdownPreview(known = ''): Promise<MarkdownSnapshot> {
 		const snapshot = (await this.client.request('nvim_exec_lua', [
 			`if vim.bo.filetype ~= 'markdown' then
@@ -26,12 +30,14 @@ return {token=token, path=vim.api.nvim_buf_get_name(buffer),
 		return { ...snapshot, path: hostPath(this.workspace.root, snapshot.path) };
 	}
 
+	/** Convert the current file to LF or CRLF line endings. */
 	async setLineEnding(format: 'LF' | 'CRLF'): Promise<void> {
 		await this.interaction.command(() =>
 			this.client.request('nvim_exec_lua', ["require('nido_eol').convert(...)", [format]])
 		);
 	}
 
+	/** Change the indentation of the current file; `rewrite` also converts existing lines. */
 	async setIndentation(indentation: Indentation, rewrite = false): Promise<void> {
 		await this.interaction.command(() =>
 			this.client.request('nvim_exec_lua', [
@@ -41,6 +47,7 @@ return {token=token, path=vim.api.nvim_buf_get_name(buffer),
 		);
 	}
 
+	/** Whether any file buffer has unsaved changes. */
 	async modified(): Promise<boolean> {
 		return (await this.interaction.command(() =>
 			this.client.request('nvim_exec_lua', [
@@ -60,6 +67,7 @@ return false`,
 		await this.interaction.command(() => this.client.request('nvim_set_current_buf', [buffer]));
 	}
 
+	/** Close a tab; `force` discards unsaved changes. */
 	async closeBuffer(buffer: number, force = false): Promise<void> {
 		this.interaction.cancelPrefetch();
 		await this.interaction.command(() =>
@@ -70,6 +78,7 @@ return false`,
 		);
 	}
 
+	/** Move a tab to the position of tab `target`. */
 	async moveBuffer(buffer: number, target: number): Promise<void> {
 		await this.interaction.command(() =>
 			this.client.request('nvim_exec_lua', [
@@ -79,6 +88,7 @@ return false`,
 		);
 	}
 
+	/** Reopen the most recently closed tab. */
 	async reopenBuffer(): Promise<void> {
 		this.interaction.cancelPrefetch();
 		await this.interaction.command(() =>

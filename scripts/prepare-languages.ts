@@ -1,8 +1,12 @@
+// Installs the language tools bundled with Nido (the TypeScript language server) into
+// resources/languages/node_modules with npm ci. The install is skipped while a marker file
+// matches the package manifests, the installed packages and the Node.js version.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
+/** Files the bundled TypeScript support needs; a missing one forces a reinstall. */
 const requiredFiles = [
 	'typescript/package.json',
 	'typescript/lib/tsserver.js',
@@ -10,6 +14,7 @@ const requiredFiles = [
 	'typescript-language-server/lib/cli.mjs'
 ];
 
+/** Run npm ci in `directory`. */
 function installLanguages(directory: string): void {
 	const result = spawnSync('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], {
 		cwd: directory,
@@ -27,6 +32,7 @@ function installLanguages(directory: string): void {
 	}
 }
 
+/** Install the language tools unless they are up to date (or `force`). Returns whether it installed. */
 export async function prepareLanguages(
 	root: string,
 	{
@@ -40,6 +46,7 @@ export async function prepareLanguages(
 	const inputs = await Promise.all(
 		['package.json', 'package-lock.json'].map((file) => readFile(join(directory, file), 'utf8'))
 	);
+	// A hash of everything the installed packages depend on, stored in the marker file.
 	const fingerprint = async (): Promise<string> => {
 		const installed = await Promise.all(
 			[
@@ -86,6 +93,7 @@ export async function prepareLanguages(
 	return true;
 }
 
+// Run from the command line: pnpm prepare:languages [--force].
 if (process.argv[1] && resolve(process.argv[1]) === __filename) {
 	prepareLanguages(dirname(__dirname), { force: process.argv.includes('--force') }).then(
 		(installed) =>

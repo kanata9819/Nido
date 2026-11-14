@@ -2,6 +2,10 @@ import { Worker } from 'node:worker_threads';
 import type { SearchOptions } from '../shared/search';
 import { searchLineEnding } from './searchLines';
 
+// Matches search text (plain text, whole word or regular expression) against file contents in
+// a worker thread, for workspace text search and replacement.
+
+/** The first match on a line. */
 export interface LineMatch {
 	line: number;
 	/** UTF-16 offset, retained for callers working with JavaScript strings. */
@@ -53,6 +57,7 @@ parentPort.on('message', ({ id, source, flags, text, ending, replacement, select
 let idleWorker: Worker | undefined;
 let idleTimer: NodeJS.Timeout | undefined;
 
+/** One search's pattern, running in its own worker until close(). */
 export class SearchMatcher {
 	private worker?: Worker;
 	private sequence = 0;
@@ -81,6 +86,7 @@ export class SearchMatcher {
 		}
 	}
 
+	/** Send a job to the worker. A job running longer than 2 seconds closes the matcher. */
 	private request<T>(value: Record<string, unknown>): Promise<T> {
 		if (this.closed) {
 			return Promise.reject(new Error('Search cancelled.'));
@@ -124,10 +130,12 @@ export class SearchMatcher {
 		});
 	}
 
+	/** The first match on each line of `text` (up to 201 lines, to detect truncation). */
 	find(text: string): Promise<LineMatch[]> {
 		return this.request({ text, ending: searchLineEnding(text) });
 	}
 
+	/** Replace every match on the selected (one-based) lines; throws when a line no longer matches. */
 	replace(
 		text: string,
 		selected: number[],
@@ -136,6 +144,10 @@ export class SearchMatcher {
 		return this.request({ text, ending: searchLineEnding(text), selected, replacement });
 	}
 
+	/**
+	 * Cancel pending jobs. A worker that finished cleanly is kept idle for 10 seconds, so the next
+	 * search starts without creating one.
+	 */
 	close(error?: Error): void {
 		if (this.closed) {
 			return;

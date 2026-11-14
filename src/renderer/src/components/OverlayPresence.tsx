@@ -3,18 +3,24 @@ import type { HTMLAttributes, ReactElement } from 'react';
 import { OverlayMotionContext, overlayMotionDuration } from '../overlayMotion';
 import '../assets/OverlayMotion.css';
 
+/** The attributes OverlayPresence sets on its child for the CSS animations. */
 interface OverlayAttributes extends HTMLAttributes<HTMLElement> {
 	'data-overlay-motion'?: boolean;
 	'data-overlay-phase'?: 'open' | 'closing';
 }
 
-// The child must be a DOM element so its positioning and existing refs stay intact.
+/**
+ * Keeps an overlay (dialog, popup, toast) mounted while it animates closed. When `children`
+ * becomes null, the last element stays for the closing animation, marked as closing. The
+ * child must be a DOM element so its positioning and existing refs stay intact.
+ */
 export default function OverlayPresence({
 	children
 }: {
 	children: ReactElement<OverlayAttributes> | null;
 }): React.JSX.Element | null {
 	const animate = useContext(OverlayMotionContext);
+	// The element shown last, kept while it fades out.
 	const [retained, setRetained] = useState(children);
 	if (children && children !== retained) {
 		setRetained(children);
