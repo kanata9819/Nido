@@ -586,10 +586,13 @@ test('diagnostic undercurls stay continuous across spaces and wide characters', 
 			const { cellWidth } = grid.draw(canvas, 120, 48, 14, 'monospace', true, undefined, 24);
 			const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
 			const width = Math.round(cellWidth * devicePixelRatio);
+			// LCD text antialiasing can tint neutral glyph edges above the undercurl.
+			const waveTop = Math.floor(19 * devicePixelRatio);
+			const waveBottom = Math.round(24 * devicePixelRatio);
 			const red = Array.from({ length: 7 * width }, (_, x) => {
-				let strongest = 0;
+				let strongest = 16;
 				let peak = -1;
-				for (let y = 0; y < 24 * devicePixelRatio; y++) {
+				for (let y = waveTop; y < waveBottom; y++) {
 					const offset = (y * pixels.width + x) * 4;
 					const contrast = pixels.data[offset] - pixels.data[offset + 1];
 					if (contrast > strongest) {
