@@ -542,6 +542,78 @@ for (const scale of [1, 1.25, 1.5]) {
 	});
 }
 
+test('diagnostic undercurls stay continuous across spaces and wide characters', async ({
+	browser
+}) => {
+	const context = await browser.newContext({ deviceScaleFactor: 1.25 });
+	try {
+		const page = await context.newPage();
+		await page.route('**/undercurl-probe', (route) =>
+			route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+		);
+		await page.goto(`${origin}undercurl-probe`);
+		const { before, span, after } = await page.evaluate(async (url) => {
+			const { Grid } = await import(url);
+			const grid = new Grid();
+			grid.busy = true;
+			grid.apply([
+				['grid_resize', [1, 8, 2]],
+				[
+					'hl_attr_define',
+					[1, { undercurl: true, special: 0xff0000 }, {}, []],
+					[2, { undercurl: true, special: 0xff0000, bold: true }, {}, []]
+				],
+				[
+					'grid_line',
+					[
+						1,
+						0,
+						0,
+						[
+							['x', 0],
+							['a', 1],
+							[' ', 1],
+							['日', 2],
+							['', 2],
+							['b', 1],
+							['z', 0]
+						]
+					]
+				],
+				['flush']
+			]);
+			const canvas = document.createElement('canvas');
+			const { cellWidth } = grid.draw(canvas, 120, 48, 14, 'monospace', true, undefined, 24);
+			const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+			const width = Math.round(cellWidth * devicePixelRatio);
+			const red = Array.from({ length: 7 * width }, (_, x) => {
+				let strongest = 0;
+				let peak = -1;
+				for (let y = 0; y < 24 * devicePixelRatio; y++) {
+					const offset = (y * pixels.width + x) * 4;
+					const contrast = pixels.data[offset] - pixels.data[offset + 1];
+					if (contrast > strongest) {
+						strongest = contrast;
+						peak = y;
+					}
+				}
+				return peak;
+			});
+			return {
+				before: red.slice(0, width),
+				span: red.slice(width, 6 * width),
+				after: red.slice(6 * width)
+			};
+		}, viteFsUrl('src/renderer/src/grid.ts'));
+		expect(before.every((y) => y === -1)).toBe(true);
+		expect(span.every((y) => y >= 0)).toBe(true);
+		expect(new Set(span).size).toBeGreaterThan(1);
+		expect(after.every((y) => y === -1)).toBe(true);
+	} finally {
+		await context.close();
+	}
+});
+
 for (const scale of [1, 1.25, 1.5]) {
 	for (const opacity of [1, 0.5]) {
 		test(`inline diagnostic capsules retain rounded corners, accents and cached rows at ${scale * 100}% scale, opacity ${opacity}`, async ({
