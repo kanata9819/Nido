@@ -260,19 +260,24 @@ export class RowPainter {
 		return col;
 	}
 
-	/** Draw the text of cells [from, to). */
+	/** Draw cell text and decorations, including undercurls on cells without a glyph. */
 	private paintText(from: number, to: number): void {
-		const { cells } = this.row;
+		const { cells, cellWidth } = this.row;
 		for (let col = from; col < to; col++) {
 			const cell = cells[col];
-			if (!cell?.text || cell.text === ' ') {
+			if (!cell) {
 				continue;
 			}
 			const style = this.row.cellStyle(cell.highlight);
-			if (style.highlight.codeLens) {
-				col = this.paintCodeLens(col, style);
-			} else {
+			if (cell.text && cell.text !== ' ') {
+				if (style.highlight.codeLens) {
+					col = this.paintCodeLens(col, style);
+					continue;
+				}
 				this.paintCell(col, cell, style);
+			}
+			if (style.highlight.undercurl) {
+				this.paintUndercurl(col * cellWidth, style.special ?? style.foreground);
 			}
 		}
 	}
@@ -299,7 +304,7 @@ export class RowPainter {
 
 	/**
 	 * Draw one cell. Indent guides, Git signs and bracket matches are drawn as shapes; other
-	 * text is drawn with its underline, undercurl or strikethrough.
+	 * text is drawn with its underline or strikethrough.
 	 */
 	private paintCell(col: number, cell: Cell, style: CellStyle): void {
 		const { ctx, cellWidth, dpr, rowHeight, imageHeight } = this.row;
@@ -350,7 +355,22 @@ export class RowPainter {
 		}
 	}
 
-	/** The bracket match box, underlines, undercurls and strikethrough. */
+	/** The wave meets adjacent cells at the same height and can be moved with the row cache. */
+	private paintUndercurl(x: number, color: string): void {
+		const { ctx, cellWidth, rowHeight } = this.row;
+		const top = rowHeight - 3.5;
+		const bottom = top + 2;
+		const step = cellWidth / 6;
+		ctx.beginPath();
+		ctx.moveTo(x, top);
+		ctx.bezierCurveTo(x + step, top, x + 2 * step, bottom, x + 3 * step, bottom);
+		ctx.bezierCurveTo(x + 4 * step, bottom, x + 5 * step, top, x + cellWidth, top);
+		ctx.strokeStyle = color;
+		ctx.lineWidth = 1;
+		ctx.stroke();
+	}
+
+	/** The bracket match box, underlines and strikethrough. */
 	private paintDecorations(x: number, baseline: number, style: CellStyle): void {
 		const { ctx, cellWidth, dpr, rowHeight } = this.row;
 		const h = style.highlight;
@@ -366,17 +386,13 @@ export class RowPainter {
 				(this.highlightHeight - 1) / dpr
 			);
 		}
-		if ((!h.bracketMatch && h.underline) || h.undercurl || h.strikethrough) {
+		if ((!h.bracketMatch && h.underline && !h.undercurl) || h.strikethrough) {
 			if (style.special !== undefined) {
 				this.setFill(style.special);
 			}
 			ctx.fillRect(
 				x,
-				h.strikethrough
-					? rowHeight / 2
-					: h.underline && !h.undercurl
-						? Math.min(rowHeight - 1, baseline + 2)
-						: rowHeight - 3,
+				h.strikethrough ? rowHeight / 2 : Math.min(rowHeight - 1, baseline + 2),
 				cellWidth,
 				1
 			);
