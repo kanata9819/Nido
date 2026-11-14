@@ -2480,7 +2480,7 @@ vim.api.nvim_win_set_cursor(0, {1, 0})`);
 	}
 });
 
-test('typing brackets and double quotes inserts pairs, skips closers and deletes empty pairs', async () => {
+test('typing brackets and quotes inserts pairs, skips closers and deletes empty pairs', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-auto-brackets-'));
 	let session: Session | undefined;
 	try {
@@ -2541,6 +2541,38 @@ test('typing brackets and double quotes inserts pairs, skips closers and deletes
 		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '// (""');
 		await session.input('<BS>');
 		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '// ("');
+		// A quote right after a word character does not pair, as in VS Code.
+		await reset();
+		await session.input('say"');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'say"');
+		// Single quotes and backticks pair where they are string delimiters.
+		await reset();
+		await lua("vim.bo.filetype = 'typescript'");
+		for (const quote of ["'", '`']) {
+			await reset();
+			await session.input(`a = ${quote}`);
+			assert.equal(
+				await lua('return vim.api.nvim_get_current_line()'),
+				`a = ${quote}${quote}`
+			);
+			await session.input(`x${quote};`);
+			assert.equal(
+				await lua('return vim.api.nvim_get_current_line()'),
+				`a = ${quote}x${quote};`
+			);
+			await reset();
+			await session.input(`${quote}<BS>`);
+			assert.equal(await lua('return vim.api.nvim_get_current_line()'), '');
+		}
+		await reset();
+		await session.input("it's");
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), "it's");
+		// Elsewhere they are apostrophes or Rust lifetimes.
+		await reset();
+		await lua("vim.bo.filetype = 'rust'");
+		await session.input("fn f<LT>'a");
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), "fn f<'a");
+		await lua("vim.bo.filetype = ''");
 	} finally {
 		await session?.stop();
 		await rm(root, { recursive: true, force: true });

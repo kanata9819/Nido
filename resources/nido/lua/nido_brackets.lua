@@ -98,28 +98,46 @@ local function escaped(line, column)
   return #line:sub(1, column - 1):match('\\*$') % 2 == 1
 end
 
-vim.keymap.set('i', '"', function()
-  local row, column = vim.fn.line('.'), vim.fn.col('.')
-  local line = api.nvim_get_current_line()
-  local keys = '"'
-  if vim.bo.buftype == '' and not escaped(line, column) then
-    local next = line:sub(column, column)
-    if next == '"' and not ignored(row, column, true) then
-      keys = '<Right>'
-    elseif (next == '' or next:match('[%s%)%]%},;]')) and not ignored(row, math.max(1, column - 1)) then
-      keys = '""<Left>'
+-- Quotes that pair in every file, and the file types where single quotes and backticks do;
+-- elsewhere they are often apostrophes or Rust lifetimes.
+local scripts = {'javascript', 'javascriptreact', 'typescript', 'typescriptreact'}
+local quote_filetypes = {
+  ["'"] = vim.list_extend({'python', 'lua', 'sh', 'bash', 'zsh', 'ps1', 'css', 'scss', 'html', 'vue',
+    'yaml', 'toml'}, scripts),
+  ['`'] = vim.list_extend({'markdown'}, scripts),
+}
+--- Whether a quote character pairs in the current buffer.
+local function pairs_quote(quote)
+  return quote == '"' or vim.list_contains(quote_filetypes[quote], vim.bo.filetype)
+end
+
+for _, quote in ipairs({'"', "'", '`'}) do
+  vim.keymap.set('i', quote, function()
+    local row, column = vim.fn.line('.'), vim.fn.col('.')
+    local line = api.nvim_get_current_line()
+    local keys = quote
+    if vim.bo.buftype == '' and pairs_quote(quote) and not escaped(line, column) then
+      local next = line:sub(column, column)
+      if next == quote and not ignored(row, column, true) then
+        keys = '<Right>'
+      -- As in VS Code, a quote right after a word character does not pair: it's, a"b.
+      elseif (next == '' or next:match('[%s%)%]%},;]'))
+          and vim.fn.matchstr(line:sub(1, column - 1), [[\k$]]) == ''
+          and not ignored(row, math.max(1, column - 1)) then
+        keys = quote .. quote .. '<Left>'
+      end
     end
-  end
-  -- A command mapping sees preceding input before checking escapes and syntax.
-  api.nvim_feedkeys(vim.keycode(keys), 'in', false)
-end)
+    -- A command mapping sees preceding input before checking escapes and syntax.
+    api.nvim_feedkeys(vim.keycode(keys), 'in', false)
+  end)
+end
 
 vim.keymap.set('i', '<BS>', function()
   local column = vim.fn.col('.') - 1
   local line = api.nvim_get_current_line()
   local left, right = line:sub(column, column), line:sub(column + 1, column + 1)
-  if vim.bo.buftype == '' and (closing[right] == left or (left == '"' and right == '"'
-      and not escaped(line, column) and not ignored(vim.fn.line('.'), column, true))) then
+  if vim.bo.buftype == '' and (closing[right] == left or (left == right and left:match('["\'`]')
+      and pairs_quote(left) and not escaped(line, column) and not ignored(vim.fn.line('.'), column, true))) then
     return '<Del><BS>'
   end
   return '<BS>'
