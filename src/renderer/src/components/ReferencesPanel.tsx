@@ -108,7 +108,7 @@ export default function ReferencesPanel({
 	}
 	const currentContent = useRef<HTMLDivElement>(null);
 	const displayedContent = useRef<PreviewContent | undefined>(undefined);
-	// Set after Space, so Space d closes the panel like it does from the editor.
+	// Set after Space, so Space then d closes the panel.
 	const closePrefix = useRef(false);
 	const item = state.items[selected];
 	const previewKey = `${state.version}:${selected}`;
