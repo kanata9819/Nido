@@ -9,7 +9,7 @@ import {
 /** The UI language, provided at the root of the app. */
 export const LanguageContext = createContext<Language>('en');
 
-/** The translator for the current UI language: t('English text', values). */
+/** The translator for the current UI language: it maps an English message to the UI language. */
 export function useI18n(): Translator {
 	const language = useContext(LanguageContext);
 	return useMemo(() => createTranslator(language), [language]);

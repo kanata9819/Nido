@@ -1,6 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { FavoriteWorkspace, TerminalShell, Workspace } from '../../../shared/types';
 
+/** State and callbacks the workspace actions use. */
 interface Options {
 	workspaces: Workspace[];
 	active: string;
@@ -18,6 +19,7 @@ interface Options {
 	run: (promise: Promise<unknown>) => void;
 }
 
+/** Actions that open, select, reorder and close workspaces. */
 interface WorkspaceActions {
 	creating: boolean;
 	create: () => Promise<void>;

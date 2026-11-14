@@ -1,14 +1,31 @@
 import type { Grid } from './grid';
 
+/** A cursor position in grid cells (fractional while moving) and its width in cells. */
 interface Position {
 	row: number;
 	column: number;
 	width: number;
 }
 
+/** How long the cursor glides to a new position, in milliseconds. */
 const movementDuration = 100;
+/** Input events that restart blinking, so the cursor stays visible while typing. */
+const inputEvents = ['focus', 'blur', 'keydown', 'input', 'compositionstart'];
 
-/** Own cursor interpolation, blink timing and their focus listeners. */
+/** The position `progress` (0 to 1) of the way from `from` to `to`. */
+function interpolate(from: Position, to: Position, progress: number): Position {
+	return {
+		row: from.row + (to.row - from.row) * progress,
+		column: from.column + (to.column - from.column) * progress,
+		width: from.width + (to.width - from.width) * progress
+	};
+}
+
+/**
+ * The editor cursor's smooth movement and blinking. With smooth cursor on, the drawn cursor
+ * glides to each new position; it blinks every 550 ms (fading with smooth blink) while the
+ * editor has focus.
+ */
 export class EditorCursor {
 	private position?: Position;
 	private motion?: { from: Position; to: Position; start: number; duration: number };
@@ -25,16 +42,23 @@ export class EditorCursor {
 		private readonly schedule: () => void
 	) {}
 
+	/** Whether the cursor is moving or fading, so the next frame must be painted. */
 	get animating(): boolean {
 		return !!(this.motion || this.fade);
 	}
 
+	/** Jump to the next position without gliding, for example after the grid changed. */
 	resetPosition(): void {
 		this.position = undefined;
 		this.motion = undefined;
 		this.lastTargetTime = undefined;
 	}
 
+	/**
+	 * The position to draw the cursor at `now`, and the blink fade. The cursor jumps instead
+	 * of gliding when `smooth` is off, on an `interrupted` motion (such as a scroll), with
+	 * reduced motion, or when the window is not focused.
+	 */
 	update(now: number, smooth: boolean, interrupted: boolean, focused: boolean): Position {
 		const target = {
 			...(this.grid.scrollCursor ?? this.grid.cursor),
@@ -67,15 +91,7 @@ export class EditorCursor {
 			if (this.motion) {
 				const progress = Math.min(1, (now - this.motion.start) / this.motion.duration);
 				const eased = 1 - (1 - progress) ** 3;
-				this.position = {
-					row: this.motion.from.row + (this.motion.to.row - this.motion.from.row) * eased,
-					column:
-						this.motion.from.column +
-						(this.motion.to.column - this.motion.from.column) * eased,
-					width:
-						this.motion.from.width +
-						(this.motion.to.width - this.motion.from.width) * eased
-				};
+				this.position = interpolate(this.motion.from, this.motion.to, eased);
 				if (progress === 1) {
 					this.motion = undefined;
 				}
@@ -102,6 +118,7 @@ export class EditorCursor {
 		return this.position;
 	}
 
+	/** Blinking only runs in the focused, visible editor, and not with reduced motion. */
 	private canBlink(): boolean {
 		return (
 			document.hasFocus() &&
@@ -129,6 +146,7 @@ export class EditorCursor {
 		this.timer = setTimeout(this.blink, 550);
 	};
 
+	/** Show the cursor and start the blink cycle over. */
 	resetBlink = (): void => {
 		clearTimeout(this.timer);
 		this.grid.cursorVisible = true;
@@ -140,8 +158,9 @@ export class EditorCursor {
 		}
 	};
 
+	/** Restart blinking on input and focus changes. */
 	listen(): void {
-		for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart']) {
+		for (const event of inputEvents) {
 			this.input.addEventListener(event, this.resetBlink);
 		}
 		window.addEventListener('focus', this.resetBlink);
@@ -150,9 +169,10 @@ export class EditorCursor {
 		this.reducedMotion.addEventListener('change', this.resetBlink);
 	}
 
+	/** Stop blinking and remove the listeners. */
 	dispose(): void {
 		clearTimeout(this.timer);
-		for (const event of ['focus', 'blur', 'keydown', 'input', 'compositionstart']) {
+		for (const event of inputEvents) {
 			this.input.removeEventListener(event, this.resetBlink);
 		}
 		window.removeEventListener('focus', this.resetBlink);

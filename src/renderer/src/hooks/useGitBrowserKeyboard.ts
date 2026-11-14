@@ -1,7 +1,9 @@
 import type { GitView } from '../types';
 import { useLayoutEffect } from 'react';
 
+// Keyboard shortcuts of the Git browser that work wherever focus is inside it.
 const panelSelector = '[data-panel="git"]';
+/** 1, 2 and 3 switch between the Git browser's views. */
 const views = new Map<string, GitView>([
 	['1', 'changes'],
 	['2', 'history'],
@@ -78,6 +80,10 @@ function scrollPreview(event: KeyboardEvent, preview: HTMLElement): boolean {
 	return true;
 }
 
+/**
+ * The Git browser's shortcuts: 1/2/3 switch views, Esc goes back, Ctrl+H/L move between list
+ * and preview, and Vim keys scroll the preview.
+ */
 export function useGitBrowserKeyboard({
 	busy,
 	back,

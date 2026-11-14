@@ -39,6 +39,11 @@ interface RedrawBatch {
 	outgoingHeight: number;
 }
 
+/**
+ * The editor's copy of a Neovim UI grid (see :help ui-linegrid) plus Nido's additions: rows
+ * cached above and below the viewport, fractional scroll positions, sticky scroll and bracket
+ * guides. Positions are in cells unless a name says pixels.
+ */
 export class Grid {
 	// Keep enough history for fast gestures while a refill spans several display frames.
 	private static readonly cacheRowLimit = 256;
@@ -47,6 +52,7 @@ export class Grid {
 	columns = 0;
 	rows = 0;
 	cursor = { row: 0, column: 0 };
+	/** Where the cursor appears while the viewport is scrolled away from it (detached scrolling). */
 	scrollCursor?: { row: number; column: number };
 	foreground = '#d6dce2';
 	background = '#191e23';
@@ -57,7 +63,9 @@ export class Grid {
 	cursorOpacity = 1;
 	pixelScrollEnabled = false;
 	scrolling = false;
+	/** The viewport's fractional row offset from pixel scrolling. */
 	scrollFraction = 0;
+	/** Rows of wheel movement shown ahead of Neovim's redraw (see EditorScroll). */
 	scrollPreview = 0;
 	horizontalOffset = 0;
 	horizontalGutter = 0;
@@ -92,6 +100,7 @@ export class Grid {
 	private lowerLayout?: Cell[][];
 	private lowerFontHeight = 0;
 
+	/** The cursor's width in cells: 2 on a wide character. */
 	get cursorWidth(): number {
 		const cursor = this.scrollCursor ?? this.cursor;
 		// Neovim sends an empty continuation cell after a wide glyph, including emoji.
@@ -112,20 +121,24 @@ export class Grid {
 			.join('\n');
 	}
 
+	/** Whether rows above the viewport are cached. */
 	get hasUpperRows(): boolean {
 		return this.upperRows.length > 0;
 	}
 
+	/** Whether the cached rows above cover the previewed position. */
 	get canPreviewUpwardScroll(): boolean {
 		return this.scrollFraction + this.scrollPreview >= -this.upperRows.length;
 	}
 
+	/** Whether the cache above is running low and should be refilled. */
 	get needsUpperRows(): boolean {
 		const remaining =
 			this.upperRows.length + Math.min(0, this.scrollFraction + this.scrollPreview);
 		return !this.upperRowsAtStart && remaining <= Grid.cacheRowLimit * 0.75;
 	}
 
+	/** Whether the cached rows below cover the previewed position. */
 	get canPreviewDownwardScroll(): boolean {
 		return (
 			this.scrollFraction + this.scrollPreview <=
@@ -133,6 +146,7 @@ export class Grid {
 		);
 	}
 
+	/** Whether the cache below is running low and should be refilled. */
 	get needsLowerRows(): boolean {
 		const remaining =
 			this.lowerRows.length - Math.max(0, this.scrollFraction + this.scrollPreview);
@@ -147,6 +161,10 @@ export class Grid {
 		return Math.max(minimum, Math.min(maximum, lines));
 	}
 
+	/**
+	 * The top of a row in pixels, from the top of the viewport's first row. Negative and
+	 * beyond-the-end rows are cached rows; fractional rows are between two tops.
+	 */
 	rowTop(row: number): number {
 		if (row < 0) {
 			const index = Math.max(0, this.upperRows.length + Math.floor(row));
@@ -167,10 +185,12 @@ export class Grid {
 		return top + (row - index) * (bottom - top);
 	}
 
+	/** The y position of a row on the canvas, after the scroll offset. */
 	rowY(row: number): number {
 		return row === this.rows - 1 ? this.contentHeight : this.rowTop(row) - this.scrollPixels;
 	}
 
+	/** The viewport row at a y position on the canvas, or -1 outside the rows. */
 	rowAt(y: number): number {
 		if (y < 0 || y >= this.contentHeight) {
 			return -1;
@@ -185,6 +205,7 @@ export class Grid {
 		return row < this.rows - 1 ? row : -1;
 	}
 
+	/** Whether `row` is one of the cached rows `rows`. */
 	private cacheContains(rows: Cell[][], row: Cell[]): boolean {
 		if (!rows.length) {
 			return false;
@@ -243,6 +264,7 @@ export class Grid {
 		}
 	}
 
+	/** Drop the rows cached above and below the viewport. */
 	private clearScrollCaches(): void {
 		this.upperRows = [];
 		this.upperRowsAtStart = false;
@@ -314,6 +336,7 @@ export class Grid {
 		};
 	}
 
+	/** Apply one redraw call (Neovim's or one of Nido's nido_* calls). */
 	private applyCall(name: string, args: unknown[], batch: RedrawBatch): void {
 		switch (name) {
 			case 'nido_sticky_scroll':
@@ -399,6 +422,7 @@ export class Grid {
 		}
 	}
 
+	/** Take new sticky scroll state, repainting rows whose method separators changed. */
 	private setStickyScroll(state: StickyScrollState): void {
 		const separators = Array.isArray(state.separators) ? state.separators : [];
 		const previous = this.stickyScroll;
@@ -422,6 +446,7 @@ export class Grid {
 		};
 	}
 
+	/** Take new bracket guides, repainting only when they changed. */
 	private setBracketGuides(guides: BracketGuide[]): void {
 		if (
 			guides.length !== this.bracketGuides.length ||
@@ -504,6 +529,7 @@ export class Grid {
 		}
 	}
 
+	/** grid_resize: start over with blank cells of the new size. */
 	private resize(columns: number, rows: number): void {
 		this.layoutDirty = true;
 		this.canvas.invalidatePaint();
@@ -517,6 +543,7 @@ export class Grid {
 		);
 	}
 
+	/** grid_clear: blank every cell. */
 	private clear(): void {
 		this.layoutDirty = true;
 		this.canvas.invalidatePaint();
@@ -590,6 +617,7 @@ export class Grid {
 		return row;
 	}
 
+	/** hl_attr_define: store a highlight group's colors and attributes. */
 	private defineHighlight(args: unknown[]): void {
 		// New IDs cannot affect previously laid out or rasterized rows.
 		if (this.highlights.has(Number(args[0]))) {
@@ -602,6 +630,7 @@ export class Grid {
 		this.highlights.set(Number(args[0]), gridHighlight(args));
 	}
 
+	/** Settle the caches and scroll position once every call of a batch has been applied. */
 	private finishBatch(batch: RedrawBatch): void {
 		if (batch.cacheRows && batch.cacheOffset === 0) {
 			this.restorePrefetchedCaches(batch, batch.cacheRows);
@@ -671,6 +700,7 @@ export class Grid {
 		return this.rowLayout.compact(cells) ? Math.ceil(cellHeight * 0.7) : cellHeight;
 	}
 
+	/** The pixel height of the first `rows` rows. */
 	private scrollHeight(rows: number): number {
 		let height = rows * this.cellHeight;
 		for (let row = 0; row < Math.min(rows, this.rows - 1); row++) {
@@ -781,10 +811,12 @@ export class Grid {
 		// The painter snaps each destination once, without changing scroll geometry.
 	}
 
+	/** The rows cached above the viewport, nearest last. */
 	get historyRows(): readonly Cell[][] {
 		return this.upperRows;
 	}
 
+	/** The rows cached below the viewport, nearest first. */
 	get futureRows(): readonly Cell[][] {
 		return this.lowerRows;
 	}
