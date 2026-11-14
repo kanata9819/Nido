@@ -8,6 +8,18 @@ import styles from '../assets/NeovimUI.module.css';
 import Chunks from './NeovimUIChunks';
 import OverlayPresence from './OverlayPresence';
 
+/** How serious a message is, from its kind in Neovim's msg_show event. */
+function messageSeverity(kind: string): 'error' | 'warning' | 'info' {
+	if (/emsg|echoerr|lua_error|rpc_error|shell_err/.test(kind)) {
+		return 'error';
+	}
+	return kind === 'wmsg' ? 'warning' : 'info';
+}
+
+/**
+ * Neovim's messages (or the message history, :messages) as a dialog over the editor. While
+ * Neovim waits at a prompt, keys typed here are sent to it as the answer.
+ */
 export default function NeovimMessages({
 	visible,
 	showHistory,
@@ -63,6 +75,7 @@ export default function NeovimMessages({
 								event.preventDefault();
 								closeMessages();
 							} else if (
+								// At a prompt, every plain key answers it.
 								prompt &&
 								!event.ctrlKey &&
 								!event.metaKey &&
@@ -91,17 +104,11 @@ export default function NeovimMessages({
 							<article
 								key={index}
 								data-kind={message.kind}
-								data-severity={
-									/emsg|echoerr|lua_error|rpc_error|shell_err/.test(message.kind)
-										? 'error'
-										: message.kind === 'wmsg'
-											? 'warning'
-											: 'info'
-								}
+								data-severity={messageSeverity(message.kind)}
 							>
-								{/emsg|echoerr|lua_error|rpc_error|shell_err|wmsg/.test(
-									message.kind
-								) && <CircleAlert size={14} aria-hidden="true" />}
+								{messageSeverity(message.kind) !== 'info' && (
+									<CircleAlert size={14} aria-hidden="true" />
+								)}
 								<pre>
 									<Chunks content={message.content} grid={grid.current} />
 								</pre>

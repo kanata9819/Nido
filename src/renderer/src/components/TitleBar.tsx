@@ -33,6 +33,13 @@ interface TitleBarProps {
 	run: (promise: Promise<unknown>) => void;
 }
 
+/** Colors of the dots that tell workspace tabs apart, used in turn. */
+const workspaceColors = ['#a3cc94', '#b5a0dd', '#d5b77f', '#83bcd0'];
+
+/**
+ * The title bar: workspace tabs (with favorite and close buttons), buttons to open a workspace
+ * or terminal, the update button, and the window controls.
+ */
 export default function TitleBar({
 	compact,
 	workspaces,
@@ -52,9 +59,11 @@ export default function TitleBar({
 	const header = useRef<HTMLElement>(null);
 	const selectedTab = useRef<HTMLDivElement>(null);
 	const [maximized, setMaximized] = useState(false);
+	// Keep the selected workspace tab scrolled into view.
 	useLayoutEffect(() => {
 		selectedTab.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 	}, [active, compact]);
+	// In compact mode the tabs are small; Alt+Shift+W moves focus to them.
 	useEffect(() => {
 		if (!compact) {
 			return;
@@ -79,6 +88,7 @@ export default function TitleBar({
 		document.addEventListener('keydown', focusTabs, true);
 		return () => document.removeEventListener('keydown', focusTabs, true);
 	}, [compact]);
+	// Track whether the window is maximized, to show the matching button.
 	useEffect(() => {
 		let active = true;
 		let received = false;
@@ -131,7 +141,7 @@ export default function TitleBar({
 							<span
 								className={styles.workspaceDot}
 								style={{
-									background: ['#a3cc94', '#b5a0dd', '#d5b77f', '#83bcd0'][i % 4]
+									background: workspaceColors[i % workspaceColors.length]
 								}}
 							/>
 							<span>{w.name}</span>

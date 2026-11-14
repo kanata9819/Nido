@@ -7,8 +7,10 @@ import type { Language } from '../../../shared/i18n';
 import { settingsKeyDown } from '../settingsKeyboard';
 import TerminalSettings from './TerminalSettings';
 
+/** Every editor setting with its setter, except the sidebar width, which is set by dragging. */
 export type SettingsPanelProps = Omit<EditorSettings, 'sidebarWidth' | 'resizeSidebar'>;
 
+/** The settings panel. Each control reads and writes one setting from useEditorSettings. */
 export default function SettingsPanel({
 	historyEnabled,
 	setHistoryEnabled,
@@ -59,6 +61,7 @@ export default function SettingsPanel({
 }: SettingsPanelProps): React.JSX.Element {
 	const t = useI18n();
 	const [version, setVersion] = useState('');
+	// Show the running version at the bottom of the panel.
 	useEffect(() => {
 		let active = true;
 		void window.nido

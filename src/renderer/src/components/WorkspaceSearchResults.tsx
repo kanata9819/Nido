@@ -4,8 +4,13 @@ import { useI18n } from '../i18n';
 import styles from '../assets/WorkspaceSearch.module.css';
 import { navigateSearchList as navigate } from './workspaceSearchNavigation';
 
+/** A search match with its index in the results and the text shown for it. */
 type Row = SearchResults['matches'][number] & { index: number; title: string };
 
+/**
+ * The matches of a workspace text search. Enter opens a match; / r f move to the search,
+ * replace and folder fields. While replacing, Space excludes a match and a toggles them all.
+ */
 export default function WorkspaceSearchResults({
 	rows,
 	selection,
@@ -42,6 +47,7 @@ export default function WorkspaceSearchResults({
 	query: string;
 }): React.JSX.Element {
 	const t = useI18n();
+	// Include or exclude a match from the replacement.
 	const toggle = (index: number): void =>
 		setExcluded((old) => {
 			const next = new Set(old);
