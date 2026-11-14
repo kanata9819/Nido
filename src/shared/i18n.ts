@@ -642,7 +642,10 @@ export const japanese: Record<string, string> = {
 	'Jump to this scope · Shift: ending line · Alt+Shift+S: focus headers':
 		'このスコープに移動 · Shift：末尾の行 · Alt+Shift+S：見出しにフォーカス',
 	'Terminal ·': 'ターミナル ·',
-	'Ctrl+@ Toggle · Ctrl+K Editor': 'Ctrl+@：切り替え · Ctrl+K：エディター',
+	'Ctrl+@ Toggle · Ctrl+K Editor · Ctrl+Shift+C Copy mode':
+		'Ctrl+@：切り替え · Ctrl+K：エディター · Ctrl+Shift+C：コピーモード',
+	'COPY · v Select · y Copy · q Back to the shell':
+		'コピーモード · v：選択 · y：コピー · q：シェルに戻る',
 	'Hide terminal': 'ターミナルを非表示',
 	'Terminal display': 'ターミナル表示',
 	'Neovim editor display': 'Neovimエディター表示',

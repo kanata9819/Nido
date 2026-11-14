@@ -20,6 +20,9 @@ export class SessionInteraction {
 	private prefetchDown?: boolean;
 	private prefetchCaches: unknown[] = [];
 	private prefetchingStrip = false;
+	// Terminal copy mode, and a Ctrl+\ held to see whether Ctrl+N follows.
+	private copyMode = false;
+	private heldBackslash = false;
 
 	constructor(
 		private readonly client: SessionClient,
@@ -76,6 +79,26 @@ export class SessionInteraction {
 				throw new Error('Neovim session is closed.');
 			}
 			await this.restoreScroll();
+			const terminal = this.workspace.kind === 'terminal';
+			if (terminal) {
+				// Neovim's own Ctrl+\ Ctrl+N also enters copy mode. Hold Ctrl+\ until the
+				// next key shows whether it starts that sequence.
+				if (this.heldBackslash) {
+					this.heldBackslash = false;
+					if (keys === '<C-n>') {
+						await this.startCopyMode();
+						return;
+					}
+					keys = '<C-\\>' + keys;
+				} else if (keys === '<C-\\>' && !this.copyMode) {
+					this.heldBackslash = true;
+					return;
+				}
+				if (this.copyMode && (keys === 'q' || keys === '<Esc>')) {
+					await this.leaveCopyMode();
+					return;
+				}
+			}
 			// Native completion bypasses insert mappings for Ctrl+N/P and inserts previews.
 			if (
 				!this.events.hasInputPrompt &&
@@ -86,7 +109,8 @@ export class SessionInteraction {
 			) {
 				keys = keys === '<C-n>' ? '<Down>' : '<Up>';
 			}
-			if (this.workspace.kind === 'terminal' && !this.events.hasInputPrompt) {
+			// Keys go to the shell, except in copy mode, where they move and select.
+			if (terminal && !this.copyMode && !this.events.hasInputPrompt) {
 				await this.client.request('nvim_command', ['startinsert']);
 			}
 			let remainingInput = Buffer.from(keys);
@@ -104,7 +128,57 @@ export class SessionInteraction {
 					await new Promise((done) => setTimeout(done, 2));
 				}
 			}
+			// i, a or a yank (which returns to the shell) leave copy mode from Neovim's side.
+			if (terminal && this.copyMode) {
+				const mode = (await this.client.request('nvim_eval', ['mode(1)'])) as string;
+				if (mode.startsWith('t')) {
+					this.setCopyMode(false);
+				}
+			}
 		});
+	}
+
+	/** Whether the terminal is in copy mode: keys move and select instead of reaching the shell. */
+	get inCopyMode(): boolean {
+		return this.copyMode;
+	}
+
+	/** Enter copy mode in a terminal: leave terminal input for Normal mode in its buffer. */
+	enterCopyMode(): Promise<void> {
+		return this.enqueue(async () => {
+			this.heldBackslash = false;
+			await this.startCopyMode();
+		});
+	}
+
+	/** Leave terminal input for Normal mode, so Vim motions, v and y work on the output. */
+	private async startCopyMode(): Promise<void> {
+		if (this.stopped || this.workspace.kind !== 'terminal' || this.copyMode) {
+			return;
+		}
+		await this.client.request('nvim_command', ['stopinsert']);
+		// Leaving terminal mode completes when Neovim next processes input.
+		await this.client.request('nvim_eval', ['1']);
+		this.setCopyMode(true);
+	}
+
+	/** Return from copy mode to the shell. */
+	private async leaveCopyMode(): Promise<void> {
+		await this.client.request('nvim_command', ['startinsert']);
+		this.setCopyMode(false);
+	}
+
+	/** Forget copy mode, for example when the shell restarts in a new terminal buffer. */
+	forgetCopyMode(): void {
+		this.heldBackslash = false;
+		this.setCopyMode(false);
+	}
+
+	private setCopyMode(enabled: boolean): void {
+		if (this.copyMode !== enabled) {
+			this.copyMode = enabled;
+			this.events.updateState({ copyMode: enabled });
+		}
 	}
 
 	/** Neovim's mode after every queued key has been processed, or 'pending' while it waits for a key. */
@@ -236,7 +310,9 @@ export class SessionInteraction {
 			}
 			await this.restoreScroll();
 			if (this.workspace.kind === 'terminal') {
+				// Pasting goes to the shell, so it ends copy mode.
 				await this.client.request('nvim_command', ['startinsert']);
+				this.setCopyMode(false);
 			}
 			await this.client.request('nvim_paste', [content, true, -1]);
 		});

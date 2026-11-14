@@ -50,6 +50,27 @@ function M.start(choice, command)
     end,
   })
   assert(job > 0, 'Could not start ' .. command[1])
+  -- Copy mode (Ctrl+Shift+C): a yank copies the text to the system clipboard through Nido,
+  -- which also works inside WSL, and returns to the shell.
+  vim.api.nvim_create_autocmd('TextYankPost', {
+    buffer = buffer,
+    callback = function()
+      local event = vim.v.event
+      if event.operator ~= 'y' then
+        return
+      end
+      local text = table.concat(event.regcontents, '\n')
+      if event.regtype == 'V' then
+        text = text .. '\n'
+      end
+      vim.rpcnotify(vim.g.nido_channel, 'nido:yank', text)
+      vim.schedule(function()
+        if vim.api.nvim_get_current_buf() == buffer then
+          vim.cmd('startinsert')
+        end
+      end)
+    end,
+  })
   vim.cmd('startinsert')
 end
 

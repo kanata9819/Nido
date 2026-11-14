@@ -46,6 +46,8 @@ interface UseKeyboardShortcutsParams {
 	closeReferences: () => void;
 	toggleTerminal: () => void;
 	restartShell: () => void;
+	/** Put the focused terminal in copy mode. */
+	terminalCopyMode: () => void;
 	create: () => Promise<void>;
 	showPanel: (value: Panel) => void;
 	commands: Item[];
@@ -77,6 +79,7 @@ export function useKeyboardShortcuts({
 	closeReferences,
 	toggleTerminal,
 	restartShell,
+	terminalCopyMode,
 	create,
 	showPanel,
 	commands,
@@ -393,6 +396,13 @@ export function useKeyboardShortcuts({
 				shortcut.consume();
 				if (!event.repeat) {
 					restartShell();
+				}
+			}
+			// Ctrl+Shift+C: copy mode, to move through the output with Vim keys and copy it.
+			if (isCtrlShift(event, 'c')) {
+				shortcut.consume();
+				if (!event.repeat) {
+					terminalCopyMode();
 				}
 			}
 			return;

@@ -212,6 +212,7 @@ export function registerHandlers({
 	});
 	handle('paste', (id, value) => session(id).paste(text(value)));
 	handle('pasteClipboard', (id) => session(id).paste(() => clipboard.readText()));
+	handle('terminalCopyMode', (id) => session(id).enterCopyMode());
 	registerFileHandlers({
 		handle,
 		session,

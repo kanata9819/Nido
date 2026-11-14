@@ -68,6 +68,7 @@ const api: NidoAPI = {
 		ipcRenderer.invoke('nido:jumpSticky', id, window, buffer, line),
 	paste: (id, text) => ipcRenderer.invoke('nido:paste', id, text),
 	pasteClipboard: (id) => ipcRenderer.invoke('nido:pasteClipboard', id),
+	terminalCopyMode: (id) => ipcRenderer.invoke('nido:terminalCopyMode', id),
 	files: (id, path) => ipcRenderer.invoke('nido:files', id, path),
 	watchDirectories: (id, paths) => ipcRenderer.invoke('nido:watchDirectories', id, paths),
 	fileAction: (id, action, path, target) =>

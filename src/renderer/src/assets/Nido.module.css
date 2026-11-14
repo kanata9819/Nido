@@ -750,3 +750,12 @@
 	background: transparent !important;
 	box-shadow: inset 0 0 0 1.5px #82919d;
 }
+
+/* The terminal's copy mode hint: keys select output instead of reaching the shell. */
+.copyMode {
+	padding: 1px 8px;
+	border-radius: 999px;
+	background: var(--ui-accent-soft, #a3cc941f);
+	color: var(--ui-accent, #a3cc94);
+	font-weight: 600;
+}

@@ -50,6 +50,12 @@ export class SessionEvents {
 		private filePath?: (path: string) => string
 	) {}
 
+	/** Change part of the state from the main process and publish it. */
+	updateState(partial: Partial<SessionState>): void {
+		this.state = { ...this.state, ...partial };
+		this.publishState();
+	}
+
 	/** Hold redraws and state until endScrollBatch(), so a scroll appears as one frame. */
 	beginScrollBatch(): void {
 		this.isBatchingScroll = true;

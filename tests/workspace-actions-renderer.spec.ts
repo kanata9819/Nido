@@ -262,3 +262,47 @@ test('a workspace that cannot be cleared for sleep explains why', async ({ page 
 		page.getByRole('tab', { name: 'Workspace Beta', exact: true })
 	).not.toHaveAttribute('aria-description', 'Sleeping');
 });
+
+test('Ctrl+Shift+C puts the focused terminal in copy mode and shows it', async ({ page }) => {
+	await restoreWorkspaces(page, '');
+	await page.keyboard.press('Control+`');
+	const terminal = page.getByRole('textbox', { name: 'Terminal input', exact: true });
+	await expect(terminal).toBeFocused();
+	await page.keyboard.press('Control+Shift+c');
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.calls
+					.filter((call) => call.method === 'terminalCopyMode')
+					.map((call) => call.args)
+			)
+		)
+		.toEqual([['alpha-shell']]);
+	// The key is Nido's, not the shell's.
+	expect(
+		await page.evaluate(() =>
+			window.rendererTest.calls.some(
+				(call) => call.method === 'input' && call.args[0] === 'alpha-shell'
+			)
+		)
+	).toBe(false);
+	const panel = page.getByRole('region', { name: 'Terminal', exact: true });
+	await expect(panel.getByRole('status')).toHaveCount(0);
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'statePatch',
+			id: 'alpha-shell',
+			state: { copyMode: true }
+		})
+	);
+	await expect(panel.getByRole('status')).toContainText('COPY · v Select · y Copy');
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'statePatch',
+			id: 'alpha-shell',
+			state: { copyMode: false }
+		})
+	);
+	await expect(panel.getByRole('status')).toHaveCount(0);
+	await expect(panel).toContainText('Ctrl+Shift+C Copy mode');
+});

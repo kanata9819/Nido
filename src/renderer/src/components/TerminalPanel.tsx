@@ -14,6 +14,7 @@ export default function TerminalPanel({
 	active,
 	blocked,
 	focusTick,
+	copyMode = false,
 	settings,
 	restartShell,
 	onClose,
@@ -24,6 +25,8 @@ export default function TerminalPanel({
 	active: boolean;
 	blocked: boolean;
 	focusTick: number;
+	/** Whether the terminal is in copy mode (Ctrl+Shift+C). */
+	copyMode?: boolean;
 	settings: EditorSettings;
 	restartShell: (id: string) => void;
 	onClose: () => void;
@@ -37,7 +40,13 @@ export default function TerminalPanel({
 				<strong>
 					{t('Terminal ·')} {name}
 				</strong>
-				<span>{t('Ctrl+@ Toggle · Ctrl+K Editor')}</span>
+				{copyMode ? (
+					<span className={styles.copyMode} role="status">
+						{t('COPY · v Select · y Copy · q Back to the shell')}
+					</span>
+				) : (
+					<span>{t('Ctrl+@ Toggle · Ctrl+K Editor · Ctrl+Shift+C Copy mode')}</span>
+				)}
 				<button
 					className={styles.restartShell}
 					title={t('Restart shell (Ctrl+Shift+R)')}
