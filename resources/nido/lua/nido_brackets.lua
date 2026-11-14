@@ -64,11 +64,11 @@ local function match_brackets()
   end
 end
 
---- Whether the bracket at a position is inside a string or comment.
-local function ignored(row, column)
+--- Whether a position is inside a comment, string, or character literal.
+local function ignored(row, column, comments_only)
   for _, id in ipairs(vim.fn.synstack(row, column)) do
     local name = vim.fn.synIDattr(id, 'name'):lower()
-    if name:find('comment') or name:find('string') or name:find('character') then
+    if name:find('comment') or (not comments_only and (name:find('string') or name:find('character'))) then
       return true
     end
   end
@@ -93,10 +93,33 @@ for right, left in pairs(closing) do
     return right
   end, {expr=true})
 end
+
+local function escaped(line, column)
+  return #line:sub(1, column - 1):match('\\*$') % 2 == 1
+end
+
+vim.keymap.set('i', '"', function()
+  local row, column = vim.fn.line('.'), vim.fn.col('.')
+  local line = api.nvim_get_current_line()
+  local keys = '"'
+  if vim.bo.buftype == '' and not escaped(line, column) then
+    local next = line:sub(column, column)
+    if next == '"' and not ignored(row, column, true) then
+      keys = '<Right>'
+    elseif (next == '' or next:match('[%s%)%]%},;]')) and not ignored(row, math.max(1, column - 1)) then
+      keys = '""<Left>'
+    end
+  end
+  -- A command mapping sees preceding input before checking escapes and syntax.
+  api.nvim_feedkeys(vim.keycode(keys), 'in', false)
+end)
+
 vim.keymap.set('i', '<BS>', function()
   local column = vim.fn.col('.') - 1
   local line = api.nvim_get_current_line()
-  if vim.bo.buftype == '' and closing[line:sub(column + 1, column + 1)] == line:sub(column, column) then
+  local left, right = line:sub(column, column), line:sub(column + 1, column + 1)
+  if vim.bo.buftype == '' and (closing[right] == left or (left == '"' and right == '"'
+      and not escaped(line, column) and not ignored(vim.fn.line('.'), column, true))) then
     return '<Del><BS>'
   end
   return '<BS>'
