@@ -8,7 +8,7 @@ import { navigateSearchList as navigate } from './workspaceSearchNavigation';
 type Row = SearchResults['matches'][number] & { index: number; title: string };
 
 /**
- * The matches of a workspace text search. Enter opens a match; / r f move to the search,
+ * The matches of a workspace text search. Enter opens a match; i a / r f move to the search,
  * replace and folder fields. While replacing, Space excludes a match and a toggles them all.
  */
 export default function WorkspaceSearchResults({
@@ -77,7 +77,8 @@ export default function WorkspaceSearchResults({
 				if (event.ctrlKey || event.altKey || event.metaKey) {
 					return;
 				}
-				if (event.key === '/') {
+				// i, a (except while replacing, where it toggles all) and / start typing the search.
+				if (['/', 'i'].includes(event.key) || (!replace && event.key === 'a')) {
 					event.preventDefault();
 					queryInput.current?.focus();
 				} else if (event.key === 'r') {

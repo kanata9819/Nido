@@ -55,6 +55,10 @@ test('search and replacement complete using Vim keys without arrows or mouse', a
 	await open(page);
 	const query = page.getByRole('textbox', { name: 'Search in files', exact: true });
 	const results = page.getByRole('listbox', { name: 'Search results', exact: true });
+	// The search opens on its results, as in Vim's Normal mode; i starts typing.
+	await expect(results).toBeFocused();
+	await page.keyboard.press('i');
+	await expect(query).toBeFocused();
 	await page.keyboard.type('joke');
 	await expect(query).toHaveValue('joke');
 	await page.waitForTimeout(180);
@@ -66,6 +70,12 @@ test('search and replacement complete using Vim keys without arrows or mouse', a
 	await expect(results.getByRole('option').nth(1)).toHaveAttribute('aria-selected', 'true');
 	await page.keyboard.press('k');
 	await page.keyboard.press('/');
+	await expect(query).toBeFocused();
+	// Ctrl+C leaves the field like Escape, keeping the query.
+	await page.keyboard.press('Control+c');
+	await expect(results).toBeFocused();
+	await expect(query).toHaveValue('joke');
+	await page.keyboard.press('a');
 	await expect(query).toBeFocused();
 	await page.keyboard.press('Escape');
 	await page.keyboard.press('r');
@@ -160,6 +170,7 @@ test('search options, folder and focus trap are keyboard accessible, and stale r
 }) => {
 	await open(page);
 	const query = page.getByRole('textbox', { name: 'Search in files', exact: true });
+	await page.keyboard.press('i');
 	await page.keyboard.type('joke');
 	await page.keyboard.press('Alt+c');
 	await page.keyboard.press('Alt+r');
@@ -203,6 +214,7 @@ test('Japanese search shows translated controls and regex errors within a small 
 }) => {
 	await page.setViewportSize({ width: 960, height: 720 });
 	await open(page, 'ja');
+	await page.keyboard.press('i');
 	await page.keyboard.type('[');
 	await page.keyboard.press('Alt+r');
 	await page.waitForTimeout(180);

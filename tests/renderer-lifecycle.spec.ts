@@ -981,7 +981,8 @@ test('file picker opens after command submission before the command card redraws
 	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	// Neovim processed Enter, but its redraw and the old command card are still pending.
 	await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'n'));
-	await expect(page.getByRole('textbox', { name: 'Filter items' })).toBeFocused();
+	// The file picker opens on its list, as in Vim's Normal mode.
+	await expect(page.getByRole('group', { name: 'Palette results' })).toBeFocused();
 });
 
 test('external messages show safe selectable output, severity, history and keyboard scrolling', async ({
@@ -5795,10 +5796,10 @@ test('only the latest file opening returns focus, while normal file opening stil
 			{ name: 'second.rs', path: 'second.rs', directory: false }
 		])
 	);
-	const filter = page.getByRole('textbox', { name: 'Filter items' });
-	await expect(filter).toBeFocused();
+	const list = page.getByRole('group', { name: 'Palette results' });
+	await expect(list).toBeFocused();
 	await page.keyboard.press('Enter');
-	await page.keyboard.press('Control+j');
+	await page.keyboard.press('j');
 	await page.keyboard.press('Enter');
 	await expect
 		.poll(() =>
@@ -5816,7 +5817,7 @@ test('only the latest file opening returns focus, while normal file opening stil
 	await page.evaluate(
 		() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
 	);
-	await expect(filter).toBeFocused();
+	await expect(list).toBeFocused();
 	await page.evaluate(() => window.rendererTest.settle('openFile', 0, undefined));
 	await expect(page.getByRole('dialog', { name: 'files palette' })).toBeHidden();
 	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
@@ -5937,6 +5938,62 @@ for (const navigation of ['reference', 'problem', 'search'] as const) {
 	});
 }
 
+test('palettes open on their list like Normal mode, and i a / start typing until Escape or Ctrl+C', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=app`);
+	const editor = page.getByRole('textbox', { name: 'Neovim input' });
+	await expect(editor).toBeFocused();
+	await page.keyboard.press('Control+Shift+p');
+	const palette = page.getByRole('dialog', { name: 'commands palette' });
+	const list = palette.getByRole('group', { name: 'Palette results' });
+	const filter = palette.getByRole('textbox', { name: 'Filter items' });
+	const selected = palette.locator('button[class*="selectedItem"]');
+	await expect(list).toBeFocused();
+	// Plain j/k move the selection without typing into the filter.
+	const first = await selected.textContent();
+	await page.keyboard.press('j');
+	await expect(selected).not.toHaveText(first!);
+	await page.keyboard.press('k');
+	await expect(selected).toHaveText(first!);
+	await expect(filter).toHaveValue('');
+	await expect(palette.getByText('j/k Move · i / Filter', { exact: true })).toBeVisible();
+	// i starts typing; Escape returns to the list and keeps the filter.
+	await page.keyboard.press('i');
+	await expect(filter).toBeFocused();
+	await expect(
+		palette.getByText('Typing · ↑ ↓ Move · Esc / Ctrl+C Back to the list', { exact: true })
+	).toBeVisible();
+	await page.keyboard.type('jk');
+	await expect(filter).toHaveValue('jk');
+	await page.keyboard.press('Escape');
+	await expect(list).toBeFocused();
+	await expect(filter).toHaveValue('jk');
+	// a and / also start typing; Ctrl+C leaves the field like Escape.
+	await page.keyboard.press('a');
+	await expect(filter).toBeFocused();
+	await page.keyboard.press('Control+a');
+	await page.keyboard.press('Backspace');
+	await expect(filter).toHaveValue('');
+	await page.keyboard.press('Control+c');
+	await expect(list).toBeFocused();
+	await page.keyboard.press('/');
+	await expect(filter).toBeFocused();
+	await page.keyboard.type('Open');
+	await page.keyboard.press('Escape');
+	await expect(list).toBeFocused();
+	await expect(filter).toHaveValue('Open');
+	// On the list, Ctrl+C closes the palette like Escape.
+	await page.keyboard.press('Control+c');
+	await expect(palette).toBeHidden();
+	await expect(editor).toBeFocused();
+	await page.keyboard.press('Control+Shift+p');
+	await expect(list).toBeFocused();
+	await page.keyboard.press('Escape');
+	await expect(palette).toBeHidden();
+	await expect(editor).toBeFocused();
+});
+
 test('late reference results keep command palette focus and remain reachable afterwards', async ({
 	page
 }) => {
@@ -5963,6 +6020,9 @@ test('late reference results keep command palette focus and remain reachable aft
 	await expect(filter).toBeFocused();
 	await page.keyboard.type(' debug');
 	await expect(filter).toHaveValue('Open debug');
+	// Escape leaves the filter for the list, then closes the palette.
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('group', { name: 'Palette results' })).toBeFocused();
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
 	await page.keyboard.press('Control+j');
