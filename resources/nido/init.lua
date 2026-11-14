@@ -94,6 +94,15 @@ for _, key in ipairs({'<C-/>', '<C-_>'}) do
   vim.keymap.set('i', key, toggle_comment_in_insert, {silent=true})
 end
 vim.keymap.set('i', '<S-Tab>', '<C-d>', {silent=true})
+-- As in VS Code, Ctrl+Backspace and Ctrl+Delete remove a word instead of a character.
+vim.keymap.set('i', '<C-BS>', '<C-w>', {silent=true})
+vim.keymap.set('i', '<C-Del>', function()
+  local after = vim.api.nvim_get_current_line():sub(vim.fn.col('.'))
+  -- Whitespace, then a run of word characters or of other non-blank characters.
+  local word = vim.fn.matchstr(after, [[^\s*\%(\k\+\|\%(\k\@!\S\)\+\)\?]])
+  -- At the end of a line, join the next one.
+  return string.rep('<Del>', math.max(1, vim.fn.strchars(word)))
+end, {expr=true, silent=true})
 vim.keymap.set('x', '<Tab>', '>gv', {silent=true})
 vim.keymap.set('x', '<S-Tab>', '<gv', {silent=true})
 vim.o.showtabline = 0

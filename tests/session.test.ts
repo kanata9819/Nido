@@ -2243,6 +2243,39 @@ vim.api.nvim_buf_set_lines(0,0,-1,false,{'one','    日本語','last'})`);
 	}
 });
 
+test('Ctrl Backspace and Ctrl Delete remove words in insert mode', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-word-delete-'));
+	const session = await Session.create(root, () => {});
+	const lua = (code: string): ReturnType<Session['client']['request']> =>
+		session.client.request('nvim_exec_lua', [code, []]);
+	try {
+		for (const [line, column, keys, expected] of [
+			['foo bar', 7, '<C-BS>', ['foo ', '  b']],
+			['foo bar', 0, '<C-Del>', [' bar', '  b']],
+			['foo bar', 3, '<C-Del>', ['foo', '  b']],
+			['foo.bar', 1, '<C-Del>', ['f.bar', '  b']],
+			['x 日本語 y', 1, '<C-Del>', ['x y', '  b']],
+			// At the end of a line, Ctrl+Delete joins the next one.
+			['a', 1, '<C-Del>', ['a  b']]
+		] as const) {
+			await session.input('<Esc>');
+			await lua(`vim.fn.setreg('"', 'keep')
+vim.api.nvim_buf_set_lines(0, 0, -1, false, {'${line}', '  b'})
+vim.api.nvim_win_set_cursor(0, {1, ${column}})`);
+			await session.input(`${column === line.length ? 'A' : 'i'}${keys}`);
+			assert.deepEqual(
+				await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)'),
+				expected,
+				`${line} ${keys}`
+			);
+			assert.equal(await lua("return vim.fn.getreg('\"')"), 'keep');
+		}
+	} finally {
+		await session.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('Ctrl slash toggles language comments on the current line and selected lines', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-comment-keys-'));
 	const session = await Session.create(root, () => {});
