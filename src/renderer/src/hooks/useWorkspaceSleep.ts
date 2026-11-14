@@ -6,11 +6,14 @@ import {
 	type Dispatch,
 	type SetStateAction
 } from 'react';
-import type { Workspace } from '../../../shared/types';
+import type { SleepBlocker, Workspace } from '../../../shared/types';
 import { vimKey } from '../keyboard';
 
-/** The outcome of a request to sleep a workspace. */
-export type SleepResult = 'slept' | 'busy' | 'ignored';
+/**
+ * The outcome of a request to sleep a workspace: it slept, the request did not apply, or
+ * what keeps it running.
+ */
+export type SleepResult = 'slept' | 'ignored' | SleepBlocker;
 
 /** A background workspace sleeps after this long without being selected. */
 export const sleepDelay = 5 * 60 * 1000;
@@ -85,9 +88,10 @@ export function useWorkspaceSleep({
 	}
 
 	/**
-	 * Put a background workspace to sleep. Resolves `busy` when it cannot sleep now (unsaved
-	 * edits, a shell, a prompt), and `ignored` for the selected workspace, a sleeping one, or
-	 * one already being put to sleep. A busy workspace is tried again after another delay.
+	 * Put a background workspace to sleep. Resolves what keeps it running when it cannot
+	 * sleep now (unsaved edits, a terminal, a prompt), and `ignored` for the selected
+	 * workspace, a sleeping one, or one already being put to sleep. A workspace that did not
+	 * sleep is tried again after another delay.
 	 */
 	const sleepWorkspace = useCallback(
 		async (id: string): Promise<SleepResult> => {
@@ -102,9 +106,10 @@ export function useWorkspaceSleep({
 			}
 			sleeping.current.add(id);
 			try {
-				if (!(await window.nido.sleepWorkspace(id))) {
+				const result = await window.nido.sleepWorkspace(id);
+				if (result !== true) {
 					lastSelected.current.set(id, Date.now());
-					return 'busy';
+					return result || 'ignored';
 				}
 				forgetEditor(id);
 				setWorkspaces((old) =>

@@ -50,6 +50,7 @@ async function fixture(context: TestContext): Promise<{
 		workspace: { id: 'background', name: 'Background', root },
 		state: { buffers: [] },
 		canSleep: Session.prototype.canSleep,
+		sleepBlocker: Session.prototype.sleepBlocker,
 		modified: async () => busy.modified,
 		client: {
 			request: async () => {
@@ -122,7 +123,8 @@ for (const stage of ['snapshot', 'capture'] as const) {
 			};
 			if (stage === 'snapshot') check.onSnapshot(mutate);
 			else check.onCapture(mutate);
-			assert.equal(await check.sleep(), false);
+			// The handler reports what keeps the workspace running.
+			assert.equal(await check.sleep(), change);
 			assert.equal(check.stopped(), false);
 			assert.equal(check.sessions.get('background'), check.current);
 			assert.deepEqual(check.filesAsleep(), []);

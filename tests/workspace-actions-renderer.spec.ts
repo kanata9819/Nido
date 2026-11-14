@@ -202,8 +202,12 @@ test('a workspace that cannot sleep explains why', async ({ page }) => {
 			)
 		)
 		.toBe(true);
-	await page.evaluate(() => window.rendererTest.settle('sleepWorkspace', 0, false));
-	await expect(page.getByRole('alert')).toContainText('Beta cannot sleep now.');
+	// A hidden terminal still runs its shell; the message says how to close it.
+	await page.evaluate(() => window.rendererTest.settle('sleepWorkspace', 0, 'terminal'));
+	await expect(page.getByRole('alert')).toContainText(
+		'Beta cannot sleep while its terminal runs.'
+	);
+	await expect(page.getByRole('alert')).toContainText('type exit in it');
 	await expect(
 		page.getByRole('tab', { name: 'Workspace Beta', exact: true })
 	).not.toHaveAttribute('aria-description', 'Sleeping');

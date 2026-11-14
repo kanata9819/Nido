@@ -33,6 +33,7 @@ import { useGitFileStatus } from './hooks/useGitFileStatus';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { usePointerVisibility } from './hooks/usePointerVisibility';
 import { initialSessionState, useWorkspaceSessions } from './hooks/useWorkspaceSessions';
+import type { SleepResult } from './hooks/useWorkspaceSleep';
 import { useFocusGuard } from './hooks/useFocusGuard';
 import { useInitializedEditors } from './hooks/useInitializedEditors';
 import { useWorkspaceSleep } from './hooks/useWorkspaceSleep';
@@ -43,6 +44,16 @@ import ErrorToast from './components/ErrorToast';
 import { useErrorNotice } from './hooks/useErrorNotice';
 import { useNativePreferences } from './hooks/useNativePreferences';
 import { usePalette } from './hooks/usePalette';
+
+/** Why a workspace could not sleep, by the reason the main process gave. */
+const sleepBlockerMessages: Partial<Record<SleepResult, string>> = {
+	modified: '{name} cannot sleep: it has unsaved changes. Save them first.',
+	terminal:
+		'{name} cannot sleep while its terminal runs. Hiding the terminal keeps the shell running; type exit in it to close it.',
+	debug: '{name} cannot sleep while Run and Debug is running. Stop it first.',
+	mode: '{name} cannot sleep while it is outside Normal mode or waiting for a key. Switch to it and press Esc first.',
+	unavailable: '{name} cannot sleep.'
+};
 
 // Provide the language and animation settings to every component.
 export default function App(): React.JSX.Element {
@@ -282,13 +293,9 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 				const name = workspaces.find((w) => w.id === id)?.name ?? '';
 				run(
 					sleepNow(id).then((result) => {
-						if (result === 'busy') {
-							report(
-								t(
-									'{name} cannot sleep now. Save its changes, close its terminal and finish running commands first.',
-									{ name }
-								)
-							);
+						const reason = sleepBlockerMessages[result];
+						if (reason) {
+							report(t(reason, { name }));
 						}
 					})
 				);

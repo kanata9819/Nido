@@ -471,8 +471,15 @@ export const japanese: Record<string, string> = {
 	'Current workspace · Cannot sleep': '現在のワークスペース · スリープできません',
 	'↑ ↓ or Ctrl+j / k to navigate · Ctrl+S Sleep':
 		'↑ ↓ または Ctrl+j / k で移動 · Ctrl+S でスリープ',
-	'{name} cannot sleep now. Save its changes, close its terminal and finish running commands first.':
-		'{name} は今スリープできません。変更を保存し、ターミナルを閉じて、実行中のコマンドを終えてください。',
+	'{name} cannot sleep: it has unsaved changes. Save them first.':
+		'{name} は未保存の変更があるためスリープできません。先に保存してください。',
+	'{name} cannot sleep while its terminal runs. Hiding the terminal keeps the shell running; type exit in it to close it.':
+		'{name} はターミナルが動いているためスリープできません。ターミナルを隠してもシェルは動き続けます。閉じるにはターミナルで exit を実行してください。',
+	'{name} cannot sleep while Run and Debug is running. Stop it first.':
+		'{name} は実行・デバッグ中のためスリープできません。先に停止してください。',
+	'{name} cannot sleep while it is outside Normal mode or waiting for a key. Switch to it and press Esc first.':
+		'{name} はノーマルモード以外か、キー入力待ちのためスリープできません。切り替えて Esc を押してください。',
+	'{name} cannot sleep.': '{name} はスリープできません。',
 	'Spaces: {size}': 'スペース: {size}',
 	'Tab size: {size}': 'タブ: {size}',
 	'Indentation: {current}': 'インデント: {current}',

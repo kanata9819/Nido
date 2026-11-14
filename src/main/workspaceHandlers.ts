@@ -6,7 +6,13 @@ import { readLayout, writeLayout, type SavedLayout } from './persistence';
 import { WorkspaceCheckpoints } from './workspaceCheckpoints';
 import { registerFavoriteHandlers } from './favoriteHandlers';
 import { registerFolderBrowserHandlers } from './folderBrowserHandlers';
-import type { NidoEvent, SavedWorkspace, TerminalShell, Workspace } from '../shared/types';
+import type {
+	NidoEvent,
+	SavedWorkspace,
+	SleepBlocker,
+	TerminalShell,
+	Workspace
+} from '../shared/types';
 import { parseWslPath } from '../shared/wsl';
 import type { HandlerDeps } from './handlers';
 import { createTranslator } from '../shared/i18n';
@@ -473,25 +479,25 @@ export function registerWorkspaceHandlers({
 	});
 
 	// Stop a background workspace's Neovim, keeping its tab and a snapshot to wake from.
+	// Resolves true when it slept, or what keeps it running.
 	handle('sleep', (id) => {
 		const key = text(id);
-		return exclusive(key, async () => {
+		return exclusive(key, async (): Promise<boolean | SleepBlocker> => {
 			const s = sessions.get(key);
-			if (
-				!s ||
-				key === state.active ||
-				state.prompting ||
-				state.closing ||
-				!(await s.canSleep())
-			) {
+			if (!s || key === state.active || state.prompting || state.closing) {
 				return false;
+			}
+			const blocker = await s.sleepBlocker();
+			if (blocker) {
+				return blocker;
 			}
 			const saved = await s.snapshot({ includeUntitled: true });
 			await captureHistory(s);
 			// Snapshot and history capture yield to editor activity. A new edit, prompt,
 			// debugger or shell must keep the workspace running instead of being discarded.
-			if (!(await s.canSleep())) {
-				return false;
+			const lateBlocker = await s.sleepBlocker();
+			if (lateBlocker) {
+				return lateBlocker;
 			}
 			// Check again after the last await: the workspace may have been selected meanwhile.
 			if (

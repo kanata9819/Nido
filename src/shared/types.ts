@@ -52,6 +52,12 @@ export interface Workspace {
 	sleeping?: boolean;
 }
 /** A folder the user pinned in the workspace list. */
+/**
+ * Why a workspace cannot sleep: unsaved changes, a running terminal, a debug session, Neovim
+ * not in Normal mode (or waiting for a key), or a workspace that cannot sleep at all.
+ */
+export type SleepBlocker = 'modified' | 'terminal' | 'debug' | 'mode' | 'unavailable';
+
 export interface FavoriteWorkspace {
 	root: string;
 	name: string;
@@ -355,8 +361,11 @@ export interface NidoAPI {
 	/** Drive roots such as C:\ that the folder picker lists above a drive. Empty off Windows. */
 	windowsDrives(): Promise<string[]>;
 	closeWorkspace(id: string): Promise<boolean>;
-	/** Stop a background workspace's Neovim if nothing would be lost. Resolves whether it slept. */
-	sleepWorkspace(id: string): Promise<boolean>;
+	/**
+	 * Stop a background workspace's Neovim if nothing would be lost. Resolves true when it
+	 * slept, or why it could not (false when it is selected, already asleep or the app closes).
+	 */
+	sleepWorkspace(id: string): Promise<true | false | SleepBlocker>;
 	/** Restart a sleeping workspace's Neovim and restore its files. */
 	wakeWorkspace(id: string): Promise<{ workspace: Workspace; errors: string[] }>;
 	attach(id: string, columns: number, rows: number): Promise<void>;
