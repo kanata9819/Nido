@@ -264,6 +264,7 @@ require('nido_brackets')
 require('nido_word_highlights')
 require('nido_sticky')
 require('nido_git_signs')
+require('nido_watchfiles')
 -- Darken surfaces without changing Azami's token colors.
 for _, name in ipairs({'Normal', 'NormalNC', 'LineNr', 'CursorLineNr', 'SignColumn', 'EndOfBuffer'}) do
   local attrs = vim.api.nvim_get_hl(0, {name=name, link=false})
