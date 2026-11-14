@@ -1,6 +1,10 @@
+-- Indent guides: a colored │ at every indentation level, drawn as ephemeral extmarks by a
+-- decoration provider, so they cost nothing for lines that are not redrawn.
 local api = vim.api
 local namespace = api.nvim_create_namespace('nido_indent')
+-- Per window being redrawn: the indent step, the visible columns and each row's indent.
 local windows = {}
+-- One color per level, repeating.
 local colors = { '#75633f', '#476a86', '#745781', '#467568', '#805655', '#647747' }
 
 local function set_colors()
@@ -13,9 +17,12 @@ set_colors()
 api.nvim_create_autocmd('ColorScheme', { callback = set_colors })
 
 api.nvim_set_decoration_provider(namespace, {
+  -- Forget the previous redraw's windows.
   on_start = function()
     windows = {}
   end,
+  -- Measure the indentation of the rows about to be drawn. Floating and special windows get
+  -- no guides.
   on_win = function(_, window, buffer, first, last)
     if vim.bo[buffer].buftype ~= '' or api.nvim_win_get_config(window).relative ~= '' then
       return false
@@ -53,6 +60,7 @@ api.nvim_set_decoration_provider(namespace, {
       return state
     end)
   end,
+  -- Draw a guide at each indentation level of the row that is in view.
   on_line = function(_, window, buffer, row)
     local state = windows[window]
     if not state then

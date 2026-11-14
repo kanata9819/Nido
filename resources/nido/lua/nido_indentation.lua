@@ -1,3 +1,5 @@
+-- The current file's indentation (spaces or tabs, and the width): shown in the status bar
+-- and changed from its indentation commands.
 local api = vim.api
 local M = {}
 
@@ -29,6 +31,8 @@ local function convert(spaces, size, tabstop)
   end
 end
 
+--- Use spaces or tabs of `size` for the current buffer. `rewrite` also converts the leading
+--- whitespace of every line.
 function M.set(spaces, size, rewrite)
   assert(type(spaces) == 'boolean', 'Invalid indentation')
   assert(type(size) == 'number' and size % 1 == 0 and size >= 1 and size <= 16,

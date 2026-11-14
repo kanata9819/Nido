@@ -1,7 +1,10 @@
+-- Run and Debug for Rust: finds the cargo target (main, test or test module) at the cursor
+-- through rust-analyzer's runnables, and starts it with nido_debug.
 local M = {}
 vim.api.nvim_set_hl(0, 'NidoCodeLens', {fg='#808080'})
 vim.api.nvim_set_hl(0, 'NidoCodeLensHint', {fg='#606060'})
 
+--- Ask rust-analyzer for the buffer's runnables, retrying while Cargo is still loading.
 local function request(buffer, callback, attempt)
   local client = vim.lsp.get_clients({bufnr=buffer, name='rust_analyzer'})[1]
   if not client then
@@ -25,6 +28,7 @@ local function request(buffer, callback, attempt)
   end, buffer)
 end
 
+--- Run (or with `debug`, debug) the innermost target that contains the cursor.
 function M.execute(debug)
   local buffer = vim.api.nvim_get_current_buf()
   local cursor = vim.api.nvim_win_get_cursor(0)

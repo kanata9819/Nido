@@ -1,5 +1,8 @@
+-- Built-in adapter of the Rust language pack: starts rust-analyzer, finding it in Cargo's bin
+-- folder when it is not on PATH.
 local M = {}
 
+--- Configure rust-analyzer. Returns false (and warns once) when it is not installed.
 function M.setup()
   local cargo_home = vim.env.CARGO_HOME or vim.fs.joinpath(vim.fn.expand('~'), '.cargo')
   local cargo_bin = vim.fs.joinpath(cargo_home, 'bin')

@@ -1,13 +1,17 @@
+-- Built-in adapter of the Deno language pack: starts denols for Deno projects, and leaves
+-- Node projects (with a Node lockfile closer than the Deno config) to TypeScript.
 local M = {}
 local api = vim.api
 local filetypes = {'typescript', 'typescriptreact', 'javascript', 'javascriptreact'}
 
+--- The Deno project root of a buffer, or nil when the buffer belongs to a Node project.
 function M.root(buffer)
   local root = vim.fs.root(buffer, {{'deno.json', 'deno.jsonc', 'deno.lock'}})
   local node = vim.fs.root(buffer, {{'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb'}})
   if root and (not node or #root >= #node) then return root end
 end
 
+--- Configure denols. Returns false (and warns once) when Deno is not installed.
 function M.setup()
   local group = api.nvim_create_augroup('NidoDeno', {clear=true})
   local command = require('nido_language_packs').exepath('deno')

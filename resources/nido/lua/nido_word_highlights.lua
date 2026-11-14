@@ -1,4 +1,8 @@
+-- Highlights the other occurrences of the word under the cursor: through the language
+-- server's documentHighlight where available (so shadowed names are told apart), otherwise
+-- by matching the word as text.
 local api = vim.api
+-- `generation` drops late responses; `highlighted` and `text_match` are what is shown now.
 local generation = 0
 local cancel
 local highlighted
@@ -8,12 +12,14 @@ local timer = vim.uv.new_timer()
 timer:unref()
 local stopped = false
 
+--- Cancel the pending refresh and request.
 local function invalidate()
   generation = generation + 1
   if not stopped then timer:stop() end
   if cancel then cancel(); cancel = nil end
 end
 
+--- Remove the shown highlights.
 local function clear_highlights()
   if highlighted and api.nvim_buf_is_valid(highlighted.buffer) then
     vim.lsp.util.buf_clear_references(highlighted.buffer)
@@ -25,11 +31,13 @@ local function clear_highlights()
   text_match = nil
 end
 
+--- Cancel and remove everything.
 local function clear()
   invalidate()
   clear_highlights()
 end
 
+--- Update the highlights for the word under the cursor.
 local function refresh(event)
   if stopped then return end
   local cursor_event = event and (event.event == 'CursorMoved' or event.event == 'CursorMovedI')
@@ -100,6 +108,7 @@ local function refresh(event)
   end))
 end
 
+--- Define the highlight colors, again after a color scheme change.
 local function set_colors()
   api.nvim_set_hl(0, 'LspReferenceText', {bg='#ffffff', blend=88})
   api.nvim_set_hl(0, 'LspReferenceRead', {bg='#ffffff', blend=88})
