@@ -4,7 +4,7 @@ import { useI18n } from '../i18n';
 import styles from '../assets/WorkspaceSearch.module.css';
 import { useFocusGuard } from '../hooks/useFocusGuard';
 import { useWorkspaceSearch } from '../hooks/useWorkspaceSearch';
-import { navigateSearchList as navigate } from './workspaceSearchNavigation';
+import { isLeaveTypingKey, navigateSearchList as navigate } from './workspaceSearchNavigation';
 import ReplacementPreviewPanel from './ReplacementPreviewPanel';
 import WorkspaceSearchResults from './WorkspaceSearchResults';
 
@@ -35,7 +35,8 @@ export default function WorkspaceSearch({
 	// An Enter pressed while results were loading, remembered for the query it was pressed for.
 	const pendingEnter = useRef<string | undefined>(undefined);
 	// Where to move focus after the next render, once the element exists and nothing is busy.
-	const focusTarget = useRef<'results' | 'files' | 'replace' | undefined>(undefined);
+	// The search opens on its results, as in Vim's Normal mode; i, a or / start typing.
+	const focusTarget = useRef<'results' | 'files' | 'replace' | undefined>('results');
 	const focus = (target: 'results' | 'files' | 'replace'): void => {
 		focusTarget.current = target;
 	};
@@ -149,7 +150,8 @@ export default function WorkspaceSearch({
 			return;
 		}
 		const key = event.key.toLowerCase();
-		if (event.key === 'Escape') {
+		// Escape, or Ctrl+C when no text is selected, steps back: out of a field, then closes.
+		if (isLeaveTypingKey(event)) {
 			event.preventDefault();
 			event.stopPropagation();
 			if (locked.current) {
@@ -204,7 +206,6 @@ export default function WorkspaceSearch({
 					{t('Search in files')}
 					<input
 						ref={queryInput}
-						autoFocus
 						value={query}
 						disabled={busy}
 						placeholder={t('Type text to grep…')}
@@ -379,9 +380,13 @@ export default function WorkspaceSearch({
 			<div className={styles.footer}>
 				{preview
 					? t('j/k Files · Enter/l Diff · h Back · Ctrl+Enter Focus apply · Esc Back')
-					: t(
-							'Esc Results/close · j/k Move · / Search · r Replace · f Folder · Space Include · a All · Ctrl+Enter Preview'
-						)}
+					: replace
+						? t(
+								'Esc Results/close · j/k Move · i / Search · r Replace · f Folder · Space Include · a All · Ctrl+Enter Preview'
+							)
+						: t(
+								'Esc Results/close · j/k Move · i a / Search · r Replace · f Folder · Ctrl+Enter Preview'
+							)}
 			</div>
 			<div className={styles.footer}>
 				{t(

@@ -137,6 +137,19 @@
 	font-size: 13.5px;
 	outline: none;
 }
+/* A palette's filter shows whether it is being typed in (Insert mode) or the list has focus. */
+.paletteInput[data-palette-filter]:focus {
+	border-color: var(--ui-accent, #a3bb9b);
+}
+.paletteInput[data-palette-filter]:not(:focus) {
+	opacity: 0.72;
+}
+.paletteItems:focus {
+	outline: none;
+}
+.paletteItems:focus .selectedItem {
+	box-shadow: inset 2px 0 var(--ui-accent, #a3bb9b);
+}
 .paletteItems {
 	overflow: auto;
 	min-height: 70px;

@@ -93,6 +93,7 @@ export default function SymbolPalette({
 			}
 			setQuery={setQuery}
 			setSelection={setSelection}
+			onClose={focusEditor}
 		/>
 	);
 }

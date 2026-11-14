@@ -1134,6 +1134,9 @@ test('file search sends the query, cancels closing searches and ignores old resu
 	const cancelled = await page.evaluate(
 		() => window.rendererTest.calls.filter((call) => call.method === 'cancelFindFiles').length
 	);
+	// Escape leaves the filter for the list first; the second one closes the picker.
+	await page.keyboard.press('Escape');
+	await expect(filter).toHaveValue('needle');
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
 	expect(
