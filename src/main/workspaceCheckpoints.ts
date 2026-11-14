@@ -1,6 +1,10 @@
 import type { SavedLayout } from './persistence';
 
-/** Coalesce background saves and let shutdown finish after any in-flight write. */
+/**
+ * Saves the workspace layout (open workspaces, files and cursors) in the background so it can
+ * be restored on the next launch, even after a crash. Coalesces saves and lets shutdown finish
+ * after any in-flight write.
+ */
 export class WorkspaceCheckpoints {
 	private pending?: Promise<void>;
 	private queued = false;
@@ -14,6 +18,10 @@ export class WorkspaceCheckpoints {
 		private readonly onError: (error: unknown) => void
 	) {}
 
+	/**
+	 * Save a fresh snapshot. A save requested while another is running is queued, and all such
+	 * requests share one follow-up save. Unchanged layouts are not written again.
+	 */
 	save(): Promise<void> {
 		if (this.disposed) {
 			return Promise.resolve();
@@ -54,10 +62,12 @@ export class WorkspaceCheckpoints {
 		return this.pending;
 	}
 
+	/** Resolves once no save is running, so shutdown can wait for the last write. */
 	idle(): Promise<void> {
 		return this.pending ?? Promise.resolve();
 	}
 
+	/** Stop saving; later save() calls do nothing. */
 	dispose(): void {
 		this.disposed = true;
 	}

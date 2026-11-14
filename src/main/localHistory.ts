@@ -4,12 +4,18 @@ import { join, resolve } from 'node:path';
 import { historyLimits, type HistoryContent, type HistoryVersion } from '../shared/history';
 import { parseWslPath } from '../shared/wsl';
 
+// The on-disk store of Time Machine. Each file with a history has one JSON file named by the
+// hash of its path, holding its newest versions first.
+
+/** A stored version together with its text. */
 interface Revision extends HistoryVersion, HistoryContent {}
+/** The contents of one history file. */
 interface HistoryFile {
 	version: 1;
 	path: string;
 	revisions: Revision[];
 }
+/** A parsed history file, with each revision's JSON kept for the next write. */
 interface CachedHistory {
 	size: number;
 	mtimeMs: number;
@@ -37,13 +43,17 @@ function checkedLineCount(content: HistoryContent): number {
 	return lines;
 }
 
+// Number of parsed history files kept in memory.
 const cachedFiles = 3;
 // Parsed revisions and their encodings roughly double a file in memory.
 const cachedBytes = 48 * 1024 * 1024;
 
+/** The history files in one folder, with the limits from historyLimits. */
 export class LocalHistory {
+	// The tail of the write queue.
 	private pending: Promise<unknown> = Promise.resolve();
 	private ready?: Promise<void>;
+	// Size and last write time of every history file, for pruning.
 	private entries = new Map<string, { bytes: number; time: number }>();
 	// Recently validated files, reused only while size and mtime match, so external edits and
 	// damage are still detected without re-parsing large histories on every capture.
@@ -59,6 +69,7 @@ export class LocalHistory {
 		} = historyLimits
 	) {}
 
+	/** The history file name for a path. Windows paths compare case-insensitively; WSL paths do not. */
 	private key(path: string): string {
 		const normalized = resolve(path).replaceAll('\\', '/');
 		const remote = parseWslPath(path);
@@ -73,6 +84,7 @@ export class LocalHistory {
 			.digest('hex');
 	}
 
+	/** Create the folder and index the existing history files, once. */
 	private initialize(): Promise<void> {
 		this.ready ??= (async () => {
 			await mkdir(this.directory, { recursive: true });
@@ -92,6 +104,7 @@ export class LocalHistory {
 		return this.ready;
 	}
 
+	/** The history of a file, validated; an empty history when there is none yet. */
 	private async read(path: string): Promise<HistoryFile> {
 		await this.initialize();
 		const name = `${this.key(path)}.json`;
@@ -151,6 +164,7 @@ export class LocalHistory {
 		}
 	}
 
+	/** Cache a parsed file as the most recently used, evicting the oldest beyond the limits. */
 	private remember(name: string, entry: CachedHistory): void {
 		this.cache.delete(name);
 		this.cache.set(name, entry);
@@ -167,6 +181,7 @@ export class LocalHistory {
 		}
 	}
 
+	/** The listing of revisions, without their text. */
 	private versions(revisions: Revision[]): HistoryVersion[] {
 		return revisions.map(({ id, timestamp, kind, bytes, lines }) => ({
 			id,
@@ -177,17 +192,20 @@ export class LocalHistory {
 		}));
 	}
 
+	/** The stored versions of a file, newest first. */
 	async list(path: string): Promise<HistoryVersion[]> {
 		await this.pending;
 		return this.versions((await this.read(path)).revisions);
 	}
 
+	/** Whether a file has any stored versions. */
 	async has(path: string): Promise<boolean> {
 		await this.pending;
 		await this.initialize();
 		return this.entries.has(`${this.key(path)}.json`);
 	}
 
+	/** One stored version with its text. */
 	async version(path: string, id: string): Promise<Revision> {
 		await this.pending;
 		const revision = (await this.read(path)).revisions.find((revision) => revision.id === id);
@@ -197,6 +215,7 @@ export class LocalHistory {
 		return revision;
 	}
 
+	/** Store a new version of a file and return it. */
 	record(
 		path: string,
 		content: HistoryContent,
@@ -205,6 +224,7 @@ export class LocalHistory {
 		return this.commit(path, content, kind, (revision) => revision);
 	}
 
+	/** Store a new version of a file and return all of its versions. */
 	recordAndList(
 		path: string,
 		content: HistoryContent,

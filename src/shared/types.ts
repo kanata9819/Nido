@@ -4,9 +4,14 @@ import type { HistoryList, HistoryPreview } from './history';
 import type { LanguagePackSnapshot } from './languagePacks';
 import type { SearchOptions, ReplacementPreview, ReplacementResult } from './search';
 
+// Types shared by the main process, the preload script and the renderer. NidoAPI at the bottom
+// is the API the preload script exposes to the renderer as `window.nido`.
+
+/** Shells a terminal workspace can start; `auto` picks the best one installed. */
 export const terminalShells = ['auto', 'pwsh', 'powershell.exe', 'cmd.exe', 'wsl.exe'] as const;
 export type TerminalShell = (typeof terminalShells)[number];
 
+/** Color themes for Nido's own UI. */
 export const uiThemes = ['dark', 'acrylic', 'comfort', 'neon'] as const;
 export type UITheme = (typeof uiThemes)[number];
 
@@ -14,6 +19,7 @@ export interface WindowState {
 	maximized: boolean;
 }
 
+/** Progress of the auto-updater, shown by the update button. */
 export interface UpdateState {
 	status:
 		| 'disabled'
@@ -32,9 +38,12 @@ export interface UpdateState {
 }
 export type UpdateAction = 'check' | 'download' | 'install';
 
+/** An open workspace: a folder (editor) or a shell (terminal), each backed by its own Neovim. */
 export interface Workspace {
+	/** WSL distribution, when the folder lives inside WSL. */
 	wsl?: string;
 	kind?: 'editor' | 'terminal';
+	/** For an editor's terminal: the id of the terminal workspace that runs it. */
 	terminalId?: string;
 	id: string;
 	root: string;
@@ -42,17 +51,21 @@ export interface Workspace {
 	/** Neovim is stopped to save resources; waking restores the saved files and cursors. */
 	sleeping?: boolean;
 }
+/** A folder the user pinned in the workspace list. */
 export interface FavoriteWorkspace {
 	root: string;
 	name: string;
 	kind: 'editor' | 'terminal';
 }
+/** What is saved so a workspace can be reopened: its open files, cursors and untitled buffers. */
 export interface SavedWorkspace {
 	kind?: 'editor' | 'terminal';
+	/** Whether the workspace's terminal was open. */
 	terminal?: boolean;
 	root: string;
 	files: { path: string; line: number; column: number }[];
 	current: string;
+	/** Unsaved untitled buffers, kept so their text survives a restart. */
 	untitled?: {
 		id?: string;
 		index?: number;
@@ -62,8 +75,10 @@ export interface SavedWorkspace {
 		line: number;
 		column: number;
 	}[];
+	/** Index into `untitled` of the current buffer, when the current buffer is untitled. */
 	currentUntitled?: number;
 }
+/** An open buffer, shown as a tab. */
 export interface BufferInfo {
 	id: number;
 	name: string;
@@ -73,8 +88,14 @@ export interface Indentation {
 	spaces: boolean;
 	size: number;
 }
+/**
+ * Editor state that Neovim reports and the renderer shows (status bar, tabs, panels). The main
+ * process sends it whole as a `state` event or in parts as `statePatch` events.
+ */
 export interface SessionState {
+	/** The active `/` search and its match count, or false when there is none. */
 	search?: false | { pattern: string; current: number; total: number; incomplete: number };
+	/** Diagnostics of all open files, shown in the Problems panel. */
 	problems?: {
 		path: string;
 		line: number;
@@ -83,9 +104,11 @@ export interface SessionState {
 		message: string;
 		source: string;
 	}[];
+	/** Grows when `problems` changes, so an index into an outdated list is not opened. */
 	diagnosticsVersion?: number;
 	scrollCursor?: { row: number; column: number };
 	scrollPercent?: number;
+	/** Number of diagnostics per severity, shown in the status bar. */
 	diagnostics?: Record<string, number>;
 	references?: ReferenceList;
 	symbols?: DocumentSymbolList;
@@ -93,16 +116,23 @@ export interface SessionState {
 	lineEnding?: 'LF' | 'CRLF' | 'Mixed' | 'CR';
 	/** Indentation of the current file: spaces or tabs, and the indent width. */
 	indentation?: Indentation;
+	/** Names of the language servers attached to the current buffer. */
 	lsp?: string;
 	lspProgress?: string;
+	/** Whether no file is open, so the welcome screen is shown. */
 	empty?: boolean;
 	buffers: BufferInfo[];
+	/** Id of the current buffer. */
 	current: number;
 	mode: string;
 	line: number;
 	column: number;
 	filetype: string;
 }
+/**
+ * Results of "find references". `version` grows with every request so the renderer can tell
+ * results apart and the main process can reject requests for outdated lists.
+ */
 export interface ReferenceList {
 	version: number;
 	search?: number;
@@ -110,6 +140,7 @@ export interface ReferenceList {
 	error: string;
 	items: { path: string; line: number; column: number; text: string }[];
 }
+/** Symbols of the current buffer, for the symbol palette. */
 export interface DocumentSymbolList {
 	version: number;
 	buffer: number;
@@ -123,11 +154,16 @@ export interface DocumentSymbolList {
 		column: number;
 	}[];
 }
+/** Highlighted source lines around a reference, as runs of text with a color each. */
 export interface ReferencePreview {
 	first: number;
 	line: number;
 	lines: { text: string; color: string }[][];
 }
+/**
+ * Sticky scroll: the headers of the scopes (functions, classes, ...) that contain the top of
+ * the window, drawn pinned above the editor. Positions are in grid cells.
+ */
 export interface StickyScrollState {
 	window: number;
 	buffer: number;
@@ -149,8 +185,10 @@ export interface StickyScrollState {
 		endText: (ReferencePreview['lines'][number][number] & { cells?: number })[];
 	}[];
 }
+/** Actions of the Run and Debug panel. */
 export type DebugAction =
 	'start' | 'breakpoint' | 'over' | 'into' | 'out' | 'pause' | 'stop' | 'launch' | 'variable';
+/** A row of the debugger's variable tree; `depth` and `parent` place it in the tree. */
 export interface DebugVariable {
 	id: number;
 	parent?: number;
@@ -165,6 +203,7 @@ export interface DebugVariable {
 	loading: boolean;
 	error?: string;
 }
+/** State of the Run and Debug panel. */
 export interface DebugState {
 	kind?: 'run' | 'debug';
 	terminal?: string;
@@ -175,10 +214,12 @@ export interface DebugState {
 	variables: DebugVariable[];
 	targets: { name: string; path: string }[];
 }
+/** A file or folder in the explorer, the folder picker or file search. */
 export interface FileEntry {
 	name: string;
 	path: string;
 	directory: boolean;
+	/** Whether .gitignore excludes it, so it is shown dimmed. */
 	ignored?: boolean;
 }
 export interface SearchMatch {
@@ -187,18 +228,23 @@ export interface SearchMatch {
 	column: number;
 	text: string;
 }
+/** Results of a workspace-wide text search. `token` lets a replacement refer to them. */
 export interface SearchResults {
 	matches: SearchMatch[];
 	truncated: boolean;
 	token?: string;
 }
+/** The current buffer's text for the Markdown preview; `text` is absent when it has not changed. */
 export interface MarkdownSnapshot {
 	token: string;
 	path: string;
 	text?: string;
 }
+/** File operations from the explorer. */
 export type FileAction = 'createFile' | 'createDirectory' | 'rename' | 'copy' | 'delete';
+/** Batched Neovim `redraw` notifications: an event name followed by its argument lists. */
 export type Redraw = [string, ...unknown[][]][];
+/** A diagnostic shown in the diagnostic popup. */
 export interface DiagnosticDetails {
 	path: string;
 	line: number;
@@ -208,6 +254,10 @@ export interface DiagnosticDetails {
 	code: string;
 	message: string;
 }
+/**
+ * Events the main process sends to the renderer. Events with an `id` belong to that workspace;
+ * the others concern the whole app.
+ */
 export type NidoEvent =
 	| { type: 'update'; id?: never; state: UpdateState }
 	| { type: 'windowState'; id?: never; state: WindowState }
@@ -235,6 +285,7 @@ export type NidoEvent =
 	| { type: 'statePatch'; id: string; state: Partial<SessionState> }
 	| { type: 'exit'; id: string }
 	| { type: 'error'; id: string; message: string };
+/** A changed file in Git status. `original` is the old path of a renamed file. */
 export interface GitChange {
 	path: string;
 	original?: string;
@@ -248,6 +299,10 @@ export interface GitStatus {
 	changes: GitChange[];
 }
 
+/**
+ * The API the preload script exposes as `window.nido`. Most methods take the workspace id
+ * first and are forwarded to that workspace's Session in the main process.
+ */
 export interface NidoAPI {
 	languagePacks(id?: string): Promise<LanguagePackSnapshot>;
 	setLanguagePackEnabled(id: string, enabled: boolean): Promise<void>;

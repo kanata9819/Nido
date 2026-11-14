@@ -4,14 +4,18 @@ import type { GitChange, GitStatus, GitCommitEntry, GitBranchEntry } from '../sh
 import { parseWslPath, wslHostPath } from '../shared/wsl';
 import { wslArguments } from './wsl';
 
+// Git commands for the Git panel and Git browser. Every command runs the git executable, or
+// git inside WSL for a WSL workspace, and returns parsed results.
 const exec = promisify(execFile);
 // The preview parser needs the leading space on unchanged blank lines in a unified diff.
 const diffConfig = ['-c', 'diff.suppressBlankEmpty=false'];
 
+/** The top folder of the repository containing `cwd`. */
 export async function gitRoot(cwd: string): Promise<string> {
 	return (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
 }
 
+/** One page (up to 100 commits) of HEAD's history, starting `skip` commits back, and the total. */
 export async function gitHistory(
 	cwd: string,
 	skip: number
@@ -55,6 +59,7 @@ export async function gitHistory(
 	return { commits, total: Number(count.trim()) };
 }
 
+/** `hash` when it is a full SHA-1 or SHA-256 commit hash; throws otherwise. */
 function commitHash(hash: string): string {
 	if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(hash)) {
 		throw new Error('Invalid commit.');
@@ -62,8 +67,9 @@ function commitHash(hash: string): string {
 	return hash;
 }
 
+/** Paths of the files a commit changed. */
 export async function gitCommitFiles(cwd: string, hash: string): Promise<string[]> {
-	const root = (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
+	const root = await gitRoot(cwd);
 	return (
 		await git(root, [
 			'show',
@@ -80,11 +86,12 @@ export async function gitCommitFiles(cwd: string, hash: string): Promise<string[
 		.filter(Boolean);
 }
 
+/** The diff of one file in a commit, with the whole file as context for the preview. */
 export async function gitCommitDiff(cwd: string, hash: string, path: string): Promise<string> {
 	if (!(await gitCommitFiles(cwd, hash)).includes(path)) {
 		throw new Error('File is not part of this commit.');
 	}
-	const root = (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
+	const root = await gitRoot(cwd);
 	return git(root, [
 		...diffConfig,
 		'show',
@@ -101,6 +108,7 @@ export async function gitCommitDiff(cwd: string, hash: string, path: string): Pr
 	]);
 }
 
+/** Local and remote branches. Symbolic refs such as origin/HEAD are left out. */
 export async function gitBranches(cwd: string): Promise<GitBranchEntry[]> {
 	const output = await git(cwd, [
 		'for-each-ref',
@@ -127,6 +135,10 @@ export async function gitBranches(cwd: string): Promise<GitBranchEntry[]> {
 		});
 }
 
+/**
+ * Switch branches. With `create`, `name` is a new branch name; otherwise it is the full ref of
+ * an existing branch, and a remote branch is checked out as a new tracking branch.
+ */
 export async function gitSwitch(cwd: string, name: string, create: boolean): Promise<void> {
 	if (!name || name.startsWith('-') || name.length > 1000) {
 		throw new Error('Invalid branch name.');
@@ -156,6 +168,11 @@ export async function gitSwitch(cwd: string, name: string, create: boolean): Pro
 	);
 }
 
+/**
+ * Run git and return its stdout. Never prompts for credentials. `allowExitOne` treats exit
+ * status 1 as success (git diff --no-index and check-ignore use it for "differences found" and
+ * "nothing ignored"). `input` is written to git's stdin.
+ */
 async function git(
 	cwd: string,
 	args: string[],
@@ -213,6 +230,7 @@ async function git(
 	}
 }
 
+/** The paths among `paths` that .gitignore excludes. */
 export async function gitIgnored(cwd: string, paths: string[]): Promise<Set<string>> {
 	if (!paths.length) {
 		return new Set();
@@ -229,8 +247,12 @@ export async function gitIgnored(cwd: string, paths: string[]): Promise<Set<stri
 	return new Set(paths.filter((_path, index) => ignored.has(normalized[index])));
 }
 
+/**
+ * The branch and changed files. A file changed both in the index and in the work tree appears
+ * twice: once staged and once unstaged.
+ */
 export async function gitStatus(cwd: string): Promise<GitStatus> {
-	const root = (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
+	const root = await gitRoot(cwd);
 	// Branch identity and worktree status are independent reads; avoid a serial process round trip.
 	const [branch, output] = await Promise.all([
 		git(root, ['symbolic-ref', '--short', 'HEAD']).then(
@@ -239,6 +261,8 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 		),
 		git(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all'])
 	]);
+	// Each record is "XY path", where X is the index status and Y the work tree status. A rename
+	// or copy is followed by a record with the original path.
 	const records = output.split('\0');
 	const changes: GitChange[] = [];
 	for (let i = 0; i < records.length; i++) {
@@ -271,6 +295,7 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 	return { root, branch, changes };
 }
 
+/** The change for `path` on the chosen side; throws when it is gone since the list was shown. */
 async function selectedChange(
 	cwd: string,
 	path: string,
@@ -284,6 +309,7 @@ async function selectedChange(
 	return { root: status.root, change };
 }
 
+/** The diff of one change, with the whole file as context. Untracked files diff against nothing. */
 export async function gitDiff(cwd: string, path: string, staged: boolean): Promise<string> {
 	const { root, change } = await selectedChange(cwd, path, staged);
 	const options = ['--no-ext-diff', '--no-textconv', '--no-color', '--unified=2147483647'];
@@ -305,6 +331,10 @@ export async function gitDiff(cwd: string, path: string, staged: boolean): Promi
 	]);
 }
 
+/**
+ * Stage an unstaged change, or unstage a staged one (`staged` true). Before the first commit
+ * there is no HEAD to reset to, so unstaging removes the file from the index instead.
+ */
 export async function gitStage(cwd: string, path: string, staged: boolean): Promise<void> {
 	const { root, change } = await selectedChange(cwd, path, staged);
 	const paths = [change.path, ...(change.original ? [change.original] : [])];
@@ -324,11 +354,13 @@ export async function gitStage(cwd: string, path: string, staged: boolean): Prom
 	);
 }
 
+/** Stage every change in the repository. */
 export async function gitStageAll(cwd: string): Promise<void> {
-	const root = (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
+	const root = await gitRoot(cwd);
 	await git(root, ['add', '-A', '--', '.']);
 }
 
+/** Commit the staged changes and return git's output. */
 export async function gitCommit(cwd: string, message: string): Promise<string> {
 	if (!message.trim() || message.length > 10_000) {
 		throw new Error('Enter a commit message (up to 10,000 characters).');

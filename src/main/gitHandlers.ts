@@ -16,6 +16,7 @@ import {
 	gitRoot
 } from './git';
 
+/** IPC handlers for the Git panel and Git browser. */
 export function registerGitHandlers({
 	handle,
 	session,
@@ -29,9 +30,12 @@ export function registerGitHandlers({
 	sessions: Map<string, Session>;
 	send: (event: NidoEvent) => void;
 }): void {
+	// Concurrent status requests for one folder share a single `git status` run.
 	const statusRequests = new Map<string, ReturnType<typeof gitStatus>>();
 	const previews = new WeakMap<Session, object>();
 	const pendingPreviews = new WeakMap<Session, Promise<string>>();
+	// Show one diff at a time per session: a new preview supersedes the previous request, and
+	// previews wait for each other so git processes do not pile up while moving through a list.
 	function preview(current: Session, read: () => Promise<string>): Promise<string> {
 		const request = {};
 		previews.set(current, request);
@@ -57,6 +61,8 @@ export function registerGitHandlers({
 			.catch(() => {});
 		return pending;
 	}
+	// After Git changes files or the index, refresh the change marks in the editor and the
+	// explorer of each session.
 	async function refreshGitState(selected: Iterable<Session> = sessions.values()): Promise<void> {
 		for (const open of selected) {
 			statusRequests.delete(open.workspace.root);
@@ -99,6 +105,8 @@ export function registerGitHandlers({
 		return preview(current, () => gitCommitDiff(current.workspace.root, commit, file));
 	});
 	handle('gitBranches', (id) => gitBranches(session(id).workspace.root));
+	// Switch (or create and switch to) a branch. Refuses while any session that has files from
+	// this repository open has unsaved changes, since switching rewrites those files.
 	handle('gitSwitch', async (id, name, create) => {
 		const current = session(id);
 		if (typeof create !== 'boolean') {
@@ -138,24 +146,27 @@ export function registerGitHandlers({
 		}
 		await refreshGitState(affected);
 	});
-	for (const [name, action] of [
-		['gitDiff', gitDiff],
-		['gitStage', gitStage]
-	] as const) {
-		handle(name, async (id, path, staged) => {
-			if (typeof staged !== 'boolean') {
-				throw new Error('Invalid Git selection.');
-			}
-			const current = session(id);
-			const file = text(path);
-			if (name === 'gitDiff') {
-				return preview(current, () => action(current.workspace.root, file, staged));
-			}
-			const result = await action(current.workspace.root, file, staged);
-			await refreshGitState();
-			return result;
-		});
+	// `staged` chooses between the staged and the unstaged side of a file.
+	function stagedFlag(value: unknown): boolean {
+		if (typeof value !== 'boolean') {
+			throw new Error('Invalid Git selection.');
+		}
+		return value;
 	}
+	// Show the diff of one changed file.
+	handle('gitDiff', (id, path, staged) => {
+		const isStaged = stagedFlag(staged);
+		const current = session(id);
+		const file = text(path);
+		return preview(current, () => gitDiff(current.workspace.root, file, isStaged));
+	});
+	// Toggle one change: stage it when it is unstaged, unstage it when `staged` is true.
+	handle('gitStage', async (id, path, staged) => {
+		const isStaged = stagedFlag(staged);
+		const current = session(id);
+		await gitStage(current.workspace.root, text(path), isStaged);
+		await refreshGitState();
+	});
 	handle('gitStageAll', async (id) => {
 		await gitStageAll(session(id).workspace.root);
 		await refreshGitState();

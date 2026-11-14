@@ -293,6 +293,7 @@ export class Session {
 		]);
 	}
 
+	/** Whether each language pack's server runs in this workspace. */
 	async languagePacks(): Promise<LanguagePackRuntime[]> {
 		return this.client.request('nvim_exec_lua', [
 			"return require('nido_language_packs').snapshot()",
@@ -307,12 +308,14 @@ export class Session {
 		return this.ui.attach(columns, rows);
 	}
 
+	/** Tell Neovim whether the window has focus (FocusGained/FocusLost autocommands). */
 	setFocus(focused: boolean): void {
 		if (!this.stopped) {
 			this.ui.setFocus(focused);
 		}
 	}
 
+	/** Start (or restart) the shell of a terminal workspace. */
 	async startTerminal(shell = 'auto'): Promise<void> {
 		return this.interaction.enqueue(async () => {
 			if (!terminalShells.includes(shell as TerminalShell)) {
@@ -375,6 +378,9 @@ export class Session {
 		return this.terminalStarting;
 	}
 
+	// Editor options (see SessionOptions).
+
+	/** Resize the UI grid to the editor's size in cells. */
 	resize(columns: number, rows: number): Promise<void> {
 		return this.ui.resize(columns, rows);
 	}
@@ -403,6 +409,7 @@ export class Session {
 		return this.options.setEditorConfig(enabled);
 	}
 
+	// Keyboard, mouse and scrolling (see SessionInteraction).
 	input(keys: string): Promise<void> {
 		return this.interaction.input(keys);
 	}
@@ -427,6 +434,7 @@ export class Session {
 		return this.interaction.paste(text);
 	}
 
+	/** Save the current file; `format` formats it with its language server first. */
 	async save(format = false): Promise<void> {
 		await this.interaction.write('write', format);
 	}
@@ -439,6 +447,7 @@ export class Session {
 		return this.interaction.scroll(lines, follow, pixel, columns);
 	}
 
+	/** Run a Run and Debug panel action; `target` selects a launch target or a variable. */
 	async debug(action: DebugAction, target?: number): Promise<void> {
 		await this.interaction.restoreScroll();
 		const [channel] = (await this.client.request('nvim_get_api_info', [])) as [number, unknown];
@@ -448,6 +457,7 @@ export class Session {
 		]);
 	}
 
+	// The current file's line endings and indentation (see SessionBuffers).
 	setLineEnding(format: 'LF' | 'CRLF'): Promise<void> {
 		return this.buffers.setLineEnding(format);
 	}
@@ -456,12 +466,14 @@ export class Session {
 		return this.buffers.setIndentation(indentation, rewrite);
 	}
 
+	// Saving and restoring what the workspace has open (see SessionPersistence).
 	snapshot(
 		options: { restoreScroll?: boolean; includeUntitled?: boolean } = {}
 	): Promise<SavedWorkspace> {
 		return this.persistence.snapshot(options);
 	}
 
+	/** Reopen a saved workspace's files, terminal and drafts. Returns errors for files that failed. */
 	async restore(saved: SavedWorkspace, shell = 'auto'): Promise<string[]> {
 		if (saved.kind === 'terminal') {
 			await this.startTerminal(shell);
@@ -488,6 +500,7 @@ end`,
 		]);
 	}
 
+	/** Redraw the Git change marks in the sign column, after Git changed the repository. */
 	async refreshGitSigns(): Promise<void> {
 		await this.client.request('nvim_exec_lua', [
 			`local signs = require('nido_git_signs')
@@ -498,6 +511,7 @@ end`,
 		]);
 	}
 
+	/** Whether any file has unsaved changes. */
 	modified(): Promise<boolean> {
 		return this.buffers.modified();
 	}
@@ -524,10 +538,12 @@ end`,
 		return !(await this.modified());
 	}
 
+	/** Save every modified file. */
 	async saveAll(): Promise<void> {
 		await this.interaction.write('wall');
 	}
 
+	// Tabs (see SessionBuffers).
 	selectBuffer(buffer: number): Promise<void> {
 		return this.buffers.selectBuffer(buffer);
 	}
@@ -548,6 +564,7 @@ end`,
 		return this.buffers.bufferModified(buffer);
 	}
 
+	// Files, explorer, search and replacement (see SessionFiles).
 	async path(relativePath: string): Promise<string> {
 		return this.fileService.path(relativePath);
 	}
@@ -576,6 +593,7 @@ end`,
 		);
 	}
 
+	// Code navigation: references, symbols and problems (see SessionNavigation).
 	openReference(index: number, version: number): Promise<void> {
 		return this.navigation.openReference(index, version);
 	}
@@ -604,6 +622,7 @@ end`,
 		return this.navigation.highlightSources(path, before, after);
 	}
 
+	/** List a folder for the explorer, after directory watchers caught up with recent changes. */
 	async files(relativePath: string): Promise<FileEntry[]> {
 		await this.directoryWatcher.ready();
 		return this.fileService.files(relativePath);
@@ -613,6 +632,7 @@ end`,
 		return this.stopped ? Promise.resolve() : this.directoryWatcher.set(paths);
 	}
 
+	// Time Machine (see SessionHistory).
 	historySnapshots(tokens: HistoryToken[]): Promise<HistorySnapshot[]> {
 		return this.history.historySnapshots(tokens);
 	}
@@ -629,6 +649,7 @@ end`,
 		return this.history.historyRestore(path, token, content);
 	}
 
+	// Search and replacement. Replacement runs in the input queue, so it never interleaves with typing.
 	async findFiles(query = ''): Promise<FileEntry[]> {
 		return this.fileService.findFiles(query);
 	}

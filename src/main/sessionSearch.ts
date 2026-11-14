@@ -9,9 +9,10 @@ import { SearchMatcher } from './searchMatcher';
 import { searchLineEnding } from './searchLines';
 import { WorkspaceReplacement } from './workspaceReplacement';
 
-/** Folders of dependencies and build output that text search never enters. */
+/** Folders of dependencies and build output that text and file search never enter. */
 const skippedDirectories = ['node_modules', 'dist', 'out', 'build', 'target', '.next'];
 
+/** Whether a file system error has one of `codes`, such as ENOENT. */
 function hasErrorCode(error: unknown, ...codes: string[]): boolean {
 	return codes.includes((error as NodeJS.ErrnoException).code || '');
 }
@@ -85,9 +86,15 @@ function literalMatches(path: string, text: string, query: string): SearchResult
 	return found;
 }
 
+/**
+ * Workspace text search and file search (the quick open list). A new search cancels the one
+ * running; `searchGeneration` tells a cancelled search to stop and return nothing.
+ */
 export class SessionSearch {
 	private searchMatcher?: SearchMatcher;
 	private searchGeneration = 0;
+	// Recently listed folders, reused for up to 2 seconds while their mtime is unchanged, so
+	// typing a file search query does not list the whole workspace again for every key.
 	private searchDirectories = new Map<
 		string,
 		{ mtime: number; checked: number; entries: FileEntry[] }
@@ -103,16 +110,23 @@ export class SessionSearch {
 		private readonly replacements: WorkspaceReplacement
 	) {}
 
+	/** Forget cached folder listings, after files were created, moved or deleted. */
 	clearDirectories(): void {
 		this.searchDirectories.clear();
 	}
 
+	/** Cancel the running search and forget the results a replacement could refer to. */
 	cancelFindFiles(): void {
 		this.searchGeneration++;
 		this.searchMatcher?.close();
 		this.replacements.clear();
 	}
 
+	/**
+	 * Search the text of the workspace's files (skipping ignored and build folders), up to 200
+	 * matching lines. Without `options` this is a plain case-sensitive search that no replacement
+	 * can refer to. With `options`, results get a token for WorkspaceReplacement.
+	 */
 	async searchText(query: string, options?: SearchOptions): Promise<SearchResults> {
 		const generation = ++this.searchGeneration;
 		this.searchMatcher?.close();
@@ -185,6 +199,7 @@ export class SessionSearch {
 		}
 	}
 
+	/** Walk the folders and search their files. */
 	private async searchTextFiles(
 		query: string,
 		options: SearchOptions,
@@ -344,6 +359,7 @@ export class SessionSearch {
 		}));
 	}
 
+	/** Up to 100 files whose name or path contains `query`, ignoring case. */
 	async findFiles(query = ''): Promise<FileEntry[]> {
 		const generation = ++this.searchGeneration;
 		// Windows paths use backslashes, but a query such as src/main is typed with slashes.
@@ -355,21 +371,7 @@ export class SessionSearch {
 			if (generation !== this.searchGeneration) {
 				return [];
 			}
-			const directory = directories.pop()!;
-			let entries: FileEntry[];
-			try {
-				entries = await this.directoryEntries(directory);
-			} catch (error) {
-				if (
-					directory &&
-					['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM'].includes(
-						(error as NodeJS.ErrnoException).code || ''
-					)
-				) {
-					continue;
-				}
-				throw error;
-			}
+			const entries = await this.searchableEntries(directories.pop()!);
 			if (generation !== this.searchGeneration) {
 				return [];
 			}
@@ -389,11 +391,7 @@ export class SessionSearch {
 					if (result.length >= 100) {
 						break;
 					}
-				} else if (
-					!['node_modules', 'dist', 'out', 'build', 'target', '.next'].includes(
-						entry.name
-					)
-				) {
+				} else if (!skippedDirectories.includes(entry.name)) {
 					children.push(entry.path);
 				}
 			}
@@ -404,6 +402,7 @@ export class SessionSearch {
 		return result;
 	}
 
+	/** List a folder for searching, from the cache when it is still fresh. */
 	private async directoryEntries(directory: string): Promise<FileEntry[]> {
 		const info = await stat(await this.path(directory));
 		const cached = this.searchDirectories.get(directory);

@@ -31,11 +31,15 @@ const rendererGridEvents = new Set([
 // flush so the renderer never paints a partial frame. SessionState, such as the cursor
 // position and open buffers, is published from here too.
 export class SessionEvents {
+	// The latest editor state; publishState() sends what changed.
 	state: SessionState = { buffers: [], current: 0, mode: 'n', line: 1, column: 1, filetype: '' };
+	// Redraw events of the frame being received, sent at its flush.
 	private pendingRedraw: Redraw = [];
+	// While true (during a scroll request) frames and state are held and sent together at the end.
 	private isBatchingScroll = false;
 	private pendingState = false;
 	private publishedState?: SessionState;
+	// The command line, messages and completion menu, drawn by the renderer as Nido's own UI.
 	private neovimUI = emptyNeovimUI();
 	private publishedUI?: typeof this.neovimUI;
 	private pendingUI = false;
@@ -46,10 +50,12 @@ export class SessionEvents {
 		private filePath?: (path: string) => string
 	) {}
 
+	/** Hold redraws and state until endScrollBatch(), so a scroll appears as one frame. */
 	beginScrollBatch(): void {
 		this.isBatchingScroll = true;
 	}
 
+	/** Send everything held since beginScrollBatch() as one frame. */
 	endScrollBatch(): void {
 		this.isBatchingScroll = false;
 		if (this.pendingRedraw.length) {
@@ -63,6 +69,7 @@ export class SessionEvents {
 		}
 	}
 
+	/** Send the pending frame, then any Neovim UI change that came with it. */
 	private publishPendingRedraw(): void {
 		const completedFrame = this.pendingRedraw;
 		this.pendingRedraw = [];
@@ -73,11 +80,13 @@ export class SessionEvents {
 		}
 	}
 
+	/** Send the whole Neovim UI state, for example after the renderer reloaded. */
 	replayUI(): void {
 		this.publishedUI = this.neovimUI;
 		this.sendToRenderer({ type: 'neovimUI', id: this.workspaceId, state: this.neovimUI });
 	}
 
+	/** Send only the parts of the Neovim UI state that changed since the last publish. */
 	private publishUI(): void {
 		const previous = this.publishedUI;
 		const current = this.neovimUI;
@@ -99,6 +108,7 @@ export class SessionEvents {
 		}
 	}
 
+	/** Whether Neovim waits for an answer in the command line or a confirm/hit-enter prompt. */
 	get hasInputPrompt(): boolean {
 		return (
 			Object.keys(this.neovimUI.commands).length > 0 ||
@@ -108,6 +118,7 @@ export class SessionEvents {
 		);
 	}
 
+	/** Send the state to the renderer: whole when a large collection changed, else as a patch. */
 	private publishState(): void {
 		if (this.isBatchingScroll) {
 			this.pendingState = true;

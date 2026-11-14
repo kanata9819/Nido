@@ -2,6 +2,7 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { NeovimClient } from 'neovim';
 import { getLogger } from 'neovim/lib/utils/logger';
 
+// The RPC client that talks to one Neovim process over its stdin and stdout (msgpack-rpc).
 type ClientLogger = NonNullable<
 	NonNullable<ConstructorParameters<typeof NeovimClient>[0]>['logger']
 >;
@@ -126,6 +127,7 @@ export class SessionClient extends NeovimClient {
 		this.pending.clear();
 	}
 
+	/** Ask Neovim to quit without saving. */
 	quit(): void {
 		// Shutdown is the sole write allowed after cancelling regular RPC requests.
 		if (

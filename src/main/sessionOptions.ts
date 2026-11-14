@@ -8,6 +8,7 @@ export class SessionOptions {
 		private readonly workspace: Workspace
 	) {}
 
+	/** Share yank and paste with the system clipboard. */
 	async setClipboardSharing(enabled: boolean): Promise<void> {
 		await this.client.request('nvim_set_option_value', [
 			'clipboard',
@@ -32,6 +33,7 @@ end`,
 		]);
 	}
 
+	/** Draw a line between functions. */
 	async setMethodSeparators(enabled: boolean): Promise<void> {
 		if (this.workspace.kind === 'terminal') {
 			return;
@@ -60,6 +62,7 @@ end`,
 		]);
 	}
 
+	/** Apply settings from .editorconfig files. */
 	async setEditorConfig(enabled: boolean): Promise<void> {
 		if (this.workspace.kind === 'terminal') {
 			return;
