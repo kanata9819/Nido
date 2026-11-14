@@ -1,5 +1,9 @@
 import type { FileEntry } from '../../shared/types';
 
+/**
+ * The explorer rows in display order: each folder's entries, followed by the contents of the
+ * expanded ones. `position` and `siblings` describe the row for assistive technology.
+ */
 export function getVisibleEntries(
 	entries: Record<string, FileEntry[]>,
 	expanded: Set<string>
