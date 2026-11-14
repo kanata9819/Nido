@@ -32,17 +32,11 @@ function updateLabel(
 	}
 }
 
-/** The icon for an update state that is not busy. */
-function updateIcon(status: UpdateState['status'] | undefined): LucideIcon {
-	switch (status) {
-		case 'current':
-			return Check;
-		case 'available':
-			return ArrowDownToLine;
-		default:
-			return RefreshCw;
-	}
-}
+/** Icons for update states that are not busy; others show RefreshCw. */
+const statusIcons: Partial<Record<UpdateState['status'], LucideIcon>> = {
+	current: Check,
+	available: ArrowDownToLine
+};
 
 /**
  * The update button in the title bar. It follows the main process's update state and runs
@@ -82,7 +76,7 @@ export default function UpdateButton(): React.JSX.Element {
 	const status = update?.status;
 	const busy = !update || ['checking', 'downloading', 'installing'].includes(update.status);
 	const label = updateLabel(t, status, update?.percent);
-	const Icon = busy ? LoaderCircle : updateIcon(status);
+	const Icon = busy ? LoaderCircle : ((status && statusIcons[status]) ?? RefreshCw);
 	const currentVersion = update?.currentVersion
 		? t('Nido version {version}', { version: update.currentVersion })
 		: '';
