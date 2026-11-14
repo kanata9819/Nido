@@ -122,12 +122,32 @@ local function move_lines(delta, visual)
   -- :move carries the selection marks along with the lines.
   if visual then vim.cmd.normal({args={'gv'}, bang=true}) end
 end
+--- Copy the current line, or the selected lines, above or below, as Shift+Alt+Up/Down do in VS Code.
+--- The cursor and selection stay on the copy in the given direction.
+local function copy_lines(delta, visual)
+  local first, last = vim.fn.line('.'), vim.fn.line('.')
+  if visual then first, last = vim.fn.line("'<"), vim.fn.line("'>") end
+  local row, column = unpack(vim.api.nvim_win_get_cursor(0))
+  local lines = vim.api.nvim_buf_get_lines(0, first - 1, last, false)
+  vim.api.nvim_buf_set_lines(0, last, last, false, lines)
+  local shift = delta > 0 and #lines or 0
+  if visual then
+    vim.fn.setpos("'<", {0, first + shift, vim.fn.col("'<"), 0})
+    vim.fn.setpos("'>", {0, last + shift, vim.fn.col("'>"), 0})
+    vim.cmd.normal({args={'gv'}, bang=true})
+  else
+    vim.api.nvim_win_set_cursor(0, {row + shift, column})
+  end
+end
 for key, delta in pairs({['<M-Up>']=-1, ['<M-Down>']=1}) do
-  vim.keymap.set({'n', 'i'}, key, function() move_lines(delta, false) end, {silent=true})
-  vim.keymap.set('x', key, function()
-    vim.cmd.normal({args={vim.keycode('<Esc>')}, bang=true})
-    move_lines(delta, true)
-  end, {silent=true})
+  local copy = '<M-S-' .. key:sub(4)
+  for lhs, action in pairs({[key]=move_lines, [copy]=copy_lines}) do
+    vim.keymap.set({'n', 'i'}, lhs, function() action(delta, false) end, {silent=true})
+    vim.keymap.set('x', lhs, function()
+      vim.cmd.normal({args={vim.keycode('<Esc>')}, bang=true})
+      action(delta, true)
+    end, {silent=true})
+  end
 end
 -- As in VS Code, Ctrl+Enter starts a new line below without splitting the current one,
 -- and Ctrl+Shift+Enter one above.

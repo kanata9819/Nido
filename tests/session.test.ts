@@ -2305,6 +2305,38 @@ vim.api.nvim_win_set_cursor(0, {1, 1})`);
 	}
 });
 
+test('Alt Shift Up and Alt Shift Down copy the current or selected lines', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-copy-lines-'));
+	const session = await Session.create(root, () => {});
+	const lua = (code: string): ReturnType<Session['client']['request']> =>
+		session.client.request('nvim_exec_lua', [code, []]);
+	const lines = async (): Promise<unknown> =>
+		await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)');
+	try {
+		await lua(`vim.api.nvim_buf_set_lines(0, 0, -1, false, {'one', 'two', 'three'})
+vim.api.nvim_win_set_cursor(0, {1, 1})`);
+		await session.input('<M-S-Down>');
+		assert.deepEqual(await lines(), ['one', 'one', 'two', 'three']);
+		assert.deepEqual(await lua('return vim.api.nvim_win_get_cursor(0)'), [2, 1]);
+		await session.input('u<M-S-Up>');
+		assert.deepEqual(await lines(), ['one', 'one', 'two', 'three']);
+		assert.deepEqual(await lua('return vim.api.nvim_win_get_cursor(0)'), [1, 1]);
+		await session.input('u');
+		// The selection stays on the copy in the direction of the key.
+		await session.input('jVj<M-S-Down>');
+		assert.deepEqual(await lines(), ['one', 'two', 'three', 'two', 'three']);
+		assert.equal(await lua('return vim.fn.mode()'), 'V');
+		await session.input('<Esc>');
+		assert.deepEqual(await lua('return {vim.fn.line("\'<"), vim.fn.line("\'>")}'), [4, 5]);
+		await session.input('4G0ia<M-S-Up>X');
+		assert.equal(await lua('return vim.fn.mode()'), 'i');
+		assert.deepEqual(await lines(), ['one', 'two', 'three', 'aXtwo', 'atwo', 'three']);
+	} finally {
+		await session.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('Ctrl Enter and Ctrl Shift Enter open a line without splitting the current one', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-insert-line-'));
 	const session = await Session.create(root, () => {});
