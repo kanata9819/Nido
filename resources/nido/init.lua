@@ -113,6 +113,16 @@ vim.keymap.set('i', '<Tab>', function()
   end
   return '<Tab>'
 end, { expr = true, silent = true })
+vim.api.nvim_create_autocmd('ModeChanged', {
+  pattern = '[is]*:n',
+  callback = function()
+    if not vim.snippet.active() then return end
+    -- Expanding or jumping to a placeholder briefly enters Normal mode.
+    vim.schedule(function()
+      if vim.fn.mode(1) == 'n' then vim.snippet.stop() end
+    end)
+  end,
+})
 local completion_scheduled
 local completion_context
 --- Tell the UI whether the completion menu is waiting for refreshed items.

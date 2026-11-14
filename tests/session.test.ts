@@ -2366,6 +2366,48 @@ test('completion navigation leaves text unchanged until Tab accepts', async () =
 	}
 });
 
+test('snippet highlighting clears on Escape or click and Tab still advances', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-snippet-'));
+	const session = await Session.create(root, () => {});
+	const lua = (code: string): ReturnType<Session['client']['request']> =>
+		session.client.request('nvim_exec_lua', [code, []]);
+	const highlights = (): ReturnType<typeof lua> =>
+		lua(
+			"return #vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_create_namespace('nvim.snippet'), 0, -1, {})"
+		);
+	try {
+		await session.attach(80, 24);
+		for (const action of ['<Esc>', 'click', '<Tab>']) {
+			await session.input('<Esc>');
+			await lua(`vim.api.nvim_buf_set_lines(0, 0, -1, false, {'', 'next line'})
+vim.api.nvim_win_set_cursor(0, {1, 0})`);
+			await session.input("i<Cmd>lua vim.snippet.expand('Ok(${1:()})$0')<CR>");
+			assert.equal(await session.inputMode(), 's');
+			assert.ok(Number(await highlights()) > 0);
+			if (action === 'click') await session.click(1, 10);
+			else await session.input(action);
+			assert.equal(await session.inputMode(), action === '<Tab>' ? 'i' : 'n');
+			assert.equal(await highlights(), 0, action);
+			assert.equal(
+				await lua('return vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]'),
+				'Ok(())'
+			);
+		}
+		await session.input("<Cmd>lua vim.snippet.expand('pair(${1:a}, ${2:b})$0')<CR>");
+		assert.equal(await session.inputMode(), 's');
+		await session.input('<Tab>');
+		assert.equal(await session.inputMode(), 's');
+		assert.equal(await lua('return vim.snippet.active()'), true);
+		await session.input('value');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'Ok(())pair(a, value)');
+		await session.input('<Esc>');
+		assert.equal(await highlights(), 0);
+	} finally {
+		await session.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('typing brackets inserts pairs, skips closing brackets and deletes empty pairs without changing paste', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-auto-brackets-'));
 	let session: Session | undefined;
