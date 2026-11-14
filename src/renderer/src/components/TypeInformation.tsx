@@ -7,8 +7,14 @@ import remarkGfm from 'remark-gfm';
 import styles from '../assets/TypeInformation.module.css';
 import type { NidoEvent } from '../../../shared/types';
 import OverlayPresence from './OverlayPresence';
+import { placeNearCursor } from '../popupPosition';
 import { vimKey } from '../keyboard';
 
+/**
+ * The hover card (K in the editor): the language server's Markdown documentation for the
+ * symbol under the cursor, with code blocks highlighted like the editor. It takes focus, so
+ * it can be scrolled with the keyboard; Esc returns to the editor.
+ */
 export default function TypeInformation({
 	id,
 	input,
@@ -24,7 +30,9 @@ export default function TypeInformation({
 	const errorMessage = useErrorMessage();
 	const [info, setInfo] = useState<Extract<NidoEvent, { type: 'hover' }>>();
 	const [linkError, setLinkError] = useState('');
+	// Grows when the card closes or changes, so a slow link opened from an older card is ignored.
 	const linkRequest = useRef({ generation: 0 });
+	// Hiding the editor (for example behind a dialog) closes the card.
 	const [previousHidden, setPreviousHidden] = useState(hidden);
 	if (hidden !== previousHidden) {
 		setPreviousHidden(hidden);
@@ -40,6 +48,7 @@ export default function TypeInformation({
 		input.current?.focus();
 	};
 
+	// Show hover results for this workspace. A diagnostics popup replaces the card.
 	useEffect(() => {
 		if (hidden) {
 			return;
@@ -70,6 +79,7 @@ export default function TypeInformation({
 		};
 	}, [id, input, hidden]);
 
+	// Position the card, focus it, and close it on a click outside.
 	useLayoutEffect(() => {
 		const element = card.current;
 		const anchor = input.current;
@@ -77,20 +87,7 @@ export default function TypeInformation({
 			return;
 		}
 		const host = element.parentElement!;
-		const position = (): void => {
-			const below = anchor.offsetTop + anchor.offsetHeight + 10;
-			const above = anchor.offsetTop - element.offsetHeight - 10;
-			element.style.left = `${Math.max(12, Math.min(anchor.offsetLeft, host.clientWidth - element.offsetWidth - 12))}px`;
-			element.style.top = `
-        ${Math.max(
-			12,
-			Math.min(
-				below + element.offsetHeight <= host.clientHeight - 12 ? below : above,
-				host.clientHeight - element.offsetHeight - 12
-			)
-		)}px
-      `;
-		};
+		const position = (): void => placeNearCursor(element, anchor, host);
 		position();
 		body.current?.focus();
 		const observer = new ResizeObserver(position);
@@ -131,6 +128,8 @@ export default function TypeInformation({
 				data-type-information
 				onClick={(event) => event.stopPropagation()}
 				onWheel={(event) => event.stopPropagation()}
+				// Esc or Ctrl+C/K close, Ctrl+D/U/F/B scroll, h/l scroll wide code sideways, Tab cycles
+				// focus, and j/k and the page keys scroll.
 				onKeyDown={(event) => {
 					event.stopPropagation();
 					const key = event.key.toLowerCase();

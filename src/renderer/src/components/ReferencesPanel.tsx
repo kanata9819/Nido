@@ -26,9 +26,11 @@ interface PreviewContent {
 	error?: string;
 }
 
+// Rows are drawn virtually: only the visible rows and `overscan` rows around them exist.
 const rowHeight = 30;
 const overscan = 8;
 
+/** The highlighted source around a reference, shown in the editor area while the list has focus. */
 function ReferencePreviewContent({
 	item,
 	data,
@@ -65,6 +67,10 @@ function ReferencePreviewContent({
 	);
 }
 
+/**
+ * The references panel below the editor: every reference to the symbol under the cursor.
+ * While it has focus, the selected reference is previewed over the editor; Enter opens it.
+ */
 export default function ReferencesPanel({
 	workspaceId,
 	blocked = false,
@@ -82,6 +88,7 @@ export default function ReferencesPanel({
 	const [selected, setSelected] = useState(0);
 	const [focused, setFocused] = useState(false);
 	const [preview, setPreview] = useState<PreviewContent>();
+	// A new search (or workspace) starts again at the top of the list.
 	const selectionKey = `${workspaceId}:${state.version}`;
 	const [viewport, setViewport] = useState({ key: selectionKey, top: 0 });
 	const [height, setHeight] = useState(200);
@@ -89,6 +96,7 @@ export default function ReferencesPanel({
 	const first = Math.max(0, Math.floor(top / rowHeight) - overscan);
 	const last = Math.min(state.items.length, Math.ceil((top + height) / rowHeight) + overscan);
 	const indices = Array.from({ length: last - first }, (_, index) => first + index);
+	// Keep the selected row rendered even when it scrolled out of the drawn range.
 	if (state.items[selected] && (selected < first || selected >= last)) {
 		indices.push(selected);
 	}
@@ -99,9 +107,11 @@ export default function ReferencesPanel({
 	}
 	const currentContent = useRef<HTMLDivElement>(null);
 	const displayedContent = useRef<PreviewContent | undefined>(undefined);
+	// Set after Space, so Space d closes the panel like it does from the editor.
 	const closePrefix = useRef(false);
 	const item = state.items[selected];
 	const previewKey = `${state.version}:${selected}`;
+	// The preview is drawn into this element over the editor.
 	const previewHost = document.getElementById('editor-preview-host');
 	const previewEnabled = visible && focused && !!item;
 	const [previousPreviewEnabled, setPreviousPreviewEnabled] = useState(previewEnabled);
@@ -111,6 +121,7 @@ export default function ReferencesPanel({
 			setPreview(undefined);
 		}
 	}
+	// Load the selected reference's preview shortly after the selection settles.
 	useEffect(() => {
 		if (!visible || !focused || !item) {
 			return;
@@ -136,6 +147,7 @@ export default function ReferencesPanel({
 			window.clearTimeout(timer);
 		};
 	}, [workspaceId, selected, previewKey, state.version, state.loading, visible, focused, item]);
+	// Slide the new preview in the direction the selection moved.
 	useLayoutEffect(() => {
 		const previous = displayedContent.current;
 		displayedContent.current = preview;
@@ -164,11 +176,13 @@ export default function ReferencesPanel({
 			reducedMotion.removeEventListener('change', finish);
 		};
 	}, [preview, animations]);
+	// Focus the list when the panel is shown or asked to take focus.
 	useEffect(() => {
 		if (visible) {
 			list.current?.focus();
 		}
 	}, [focusTick, visible]);
+	// Keep the selected row in view and remember the scroll position for virtual rendering.
 	useLayoutEffect(() => {
 		const node = list.current;
 		if (!node || !visible) {
@@ -182,6 +196,7 @@ export default function ReferencesPanel({
 		}
 		setViewport({ key: selectionKey, top: node.scrollTop });
 	}, [selected, selectionKey, visible]);
+	// Track the list height to know how many rows are visible.
 	useEffect(() => {
 		const node = list.current;
 		if (!node) {

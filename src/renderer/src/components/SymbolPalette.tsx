@@ -5,6 +5,7 @@ import { useFocusGuard } from '../hooks/useFocusGuard';
 import { useErrorMessage, useI18n } from '../i18n';
 import PaletteItems from './PaletteItems';
 
+/** The palette of the current file's symbols (functions, classes, ...) from its language server. */
 export default function SymbolPalette({
 	workspaceId,
 	buffer,
@@ -23,6 +24,7 @@ export default function SymbolPalette({
 	const [selection, setSelection] = useState(0);
 	const [failure, setFailure] = useState('');
 	const captureFocus = useFocusGuard(workspaceId);
+	// Request the symbols; they arrive later through the session state with this version.
 	useEffect(() => {
 		let cancelled = false;
 		void window.nido
