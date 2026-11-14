@@ -108,6 +108,27 @@ vim.keymap.set({'n', 'x', 'i'}, '<Home>', function()
   end
   vim.api.nvim_win_set_cursor(0, {row, column == indent and 0 or indent})
 end, {silent=true})
+--- Move the current line, or the selected lines, one line up or down, as Alt+Up/Down do in VS Code.
+local function move_lines(delta, visual)
+  local first, last = vim.fn.line('.'), vim.fn.line('.')
+  if visual then first, last = vim.fn.line("'<"), vim.fn.line("'>") end
+  local column = vim.api.nvim_win_get_cursor(0)[2]
+  if (delta < 0 and first > 1) or (delta > 0 and last < vim.api.nvim_buf_line_count(0)) then
+    vim.cmd(string.format('silent keepjumps %d,%dmove %d', first, last, delta < 0 and first - 2 or last + 1))
+    if not visual then
+      vim.api.nvim_win_set_cursor(0, {first + delta, column})
+    end
+  end
+  -- :move carries the selection marks along with the lines.
+  if visual then vim.cmd.normal({args={'gv'}, bang=true}) end
+end
+for key, delta in pairs({['<M-Up>']=-1, ['<M-Down>']=1}) do
+  vim.keymap.set({'n', 'i'}, key, function() move_lines(delta, false) end, {silent=true})
+  vim.keymap.set('x', key, function()
+    vim.cmd.normal({args={vim.keycode('<Esc>')}, bang=true})
+    move_lines(delta, true)
+  end, {silent=true})
+end
 -- As in VS Code, Ctrl+Enter starts a new line below without splitting the current one,
 -- and Ctrl+Shift+Enter one above.
 vim.keymap.set('i', '<C-CR>', '<C-o>o', {silent=true})

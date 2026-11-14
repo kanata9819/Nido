@@ -2273,6 +2273,38 @@ vim.api.nvim_win_set_cursor(0, {1, 6})`);
 	}
 });
 
+test('Alt Up and Alt Down move the current or selected lines in every mode', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-move-lines-'));
+	const session = await Session.create(root, () => {});
+	const lua = (code: string): ReturnType<Session['client']['request']> =>
+		session.client.request('nvim_exec_lua', [code, []]);
+	const lines = async (): Promise<unknown> =>
+		await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)');
+	try {
+		await lua(`vim.api.nvim_buf_set_lines(0, 0, -1, false, {'one', 'two', 'three', 'four'})
+vim.api.nvim_win_set_cursor(0, {1, 1})`);
+		await session.input('<M-Down>');
+		assert.deepEqual(await lines(), ['two', 'one', 'three', 'four']);
+		assert.deepEqual(await lua('return vim.api.nvim_win_get_cursor(0)'), [2, 1]);
+		await session.input('<M-Up><M-Up>');
+		assert.deepEqual(await lines(), ['one', 'two', 'three', 'four']);
+		await session.input('a<M-Down>X');
+		assert.deepEqual(await lines(), ['two', 'onXe', 'three', 'four']);
+		assert.equal(await lua('return vim.fn.mode()'), 'i');
+		await session.input('<Esc>Vj<M-Down>');
+		assert.deepEqual(await lines(), ['two', 'four', 'onXe', 'three']);
+		assert.equal(await lua('return vim.fn.mode()'), 'V');
+		// The selection follows the moved lines.
+		await session.input('d');
+		assert.deepEqual(await lines(), ['two', 'four']);
+		await session.input('u');
+		assert.deepEqual(await lines(), ['two', 'four', 'onXe', 'three']);
+	} finally {
+		await session.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('Ctrl Enter and Ctrl Shift Enter open a line without splitting the current one', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-insert-line-'));
 	const session = await Session.create(root, () => {});
