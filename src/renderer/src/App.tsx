@@ -350,6 +350,12 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 				restartShell(id);
 			}
 		},
+		terminalCopyMode: () => {
+			const id = workspace?.kind === 'terminal' ? active : workspace?.terminalId;
+			if (id) {
+				run(window.nido.terminalCopyMode(id));
+			}
+		},
 		toggleTerminal,
 		closeReferences,
 		showDebugger: panels.showDebugger,
@@ -520,6 +526,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 										}
 										blocked={!!panel || leader}
 										focusTick={panels.terminalFocusTick}
+										copyMode={states[w.terminalId!]?.copyMode}
 										settings={settings}
 										restartShell={restartShell}
 										onError={report}

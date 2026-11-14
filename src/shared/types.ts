@@ -125,6 +125,8 @@ export interface SessionState {
 	/** Names of the language servers attached to the current buffer. */
 	lsp?: string;
 	lspProgress?: string;
+	/** Whether a terminal is in copy mode, where keys move and select instead of typing. */
+	copyMode?: boolean;
 	/** Whether no file is open, so the welcome screen is shown. */
 	empty?: boolean;
 	buffers: BufferInfo[];
@@ -393,6 +395,8 @@ export interface NidoAPI {
 	prefetchScroll(id: string, down?: boolean): Promise<void>;
 	jumpSticky(id: string, window: number, buffer: number, line: number): Promise<void>;
 	paste(id: string, text: string): Promise<void>;
+	/** Put a terminal in copy mode (Ctrl+Shift+C). */
+	terminalCopyMode(id: string): Promise<void>;
 	pasteClipboard(id: string): Promise<void>;
 	files(id: string, relative: string): Promise<FileEntry[]>;
 	watchDirectories(id: string, paths: string[]): Promise<void>;

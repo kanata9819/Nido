@@ -43,6 +43,7 @@ import { SessionOptions } from './sessionOptions';
 import { SessionBuffers } from './sessionBuffers';
 import { SessionNavigation } from './sessionNavigation';
 import { spawnNeovim } from './neovimProcess';
+import { clipboardWriter } from './clipboardWriter';
 import { neovimBundle } from './neovimBundle';
 
 export class Session {
@@ -148,6 +149,17 @@ export class Session {
 		this.client.on('notification', (method: string, args: unknown[]) => {
 			if (method === 'nido:terminal_exit') {
 				void this.stop();
+				return;
+			}
+			// Text yanked in terminal copy mode goes to the system clipboard, and the yank
+			// returns to the shell (nido_terminal.lua).
+			if (method === 'nido:yank') {
+				this.interaction.forgetCopyMode();
+				void clipboardWriter
+					.write(String(args[0] ?? ''))
+					.catch((error: unknown) =>
+						this.emit({ type: 'error', id: this.workspace.id, message: String(error) })
+					);
 				return;
 			}
 			if (
@@ -319,6 +331,7 @@ export class Session {
 	/** Start (or restart) the shell of a terminal workspace. */
 	async startTerminal(shell = 'auto'): Promise<void> {
 		return this.interaction.enqueue(async () => {
+			this.interaction.forgetCopyMode();
 			if (!terminalShells.includes(shell as TerminalShell)) {
 				throw new Error('Invalid terminal shell.');
 			}
@@ -433,6 +446,11 @@ export class Session {
 
 	paste(text: string | (() => Promise<string>)): Promise<void> {
 		return this.interaction.paste(text);
+	}
+
+	/** Put a terminal in copy mode, where Vim motions, v and y work on its output. */
+	enterCopyMode(): Promise<void> {
+		return this.interaction.enterCopyMode();
 	}
 
 	/** Save the current file; `format` formats it with its language server first. */

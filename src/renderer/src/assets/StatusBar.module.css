@@ -131,6 +131,9 @@
 .mode[data-mode='COMMAND'] {
 	background: #dbb98b;
 }
+.mode[data-mode='COPY'] {
+	background: #e6a6b6;
+}
 .statusGap {
 	flex: 1;
 }

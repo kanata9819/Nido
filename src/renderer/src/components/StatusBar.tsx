@@ -68,7 +68,8 @@ export default function StatusBar({
 	onSearch
 }: StatusBarProps): React.JSX.Element {
 	const t = useI18n();
-	const displayMode = modeLabel(state.mode);
+	// A terminal in copy mode is in Normal mode, but the user should see that keys select.
+	const displayMode = state.copyMode ? 'COPY' : modeLabel(state.mode);
 	return (
 		<footer className={styles.statusbar}>
 			<button
