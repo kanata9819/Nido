@@ -237,11 +237,12 @@ vim.cmd('redraw!')`);
 				),
 				['typeAlias', 'const']
 			);
+			// As in VS Code: consts use the constant blue, statics the variable blue.
 			assert.deepEqual(
 				await lua(
-					"return {vim.api.nvim_get_hl(0, {name='@lsp.type.typeAlias.rust', link=false}).fg, vim.api.nvim_get_hl(0, {name='@lsp.type.const.rust', link=false}).fg}"
+					"return {vim.api.nvim_get_hl(0, {name='@lsp.type.typeAlias.rust', link=false}).fg, vim.api.nvim_get_hl(0, {name='@lsp.type.const.rust', link=false}).fg, vim.api.nvim_get_hl(0, {name='@lsp.type.static.rust', link=false}).fg}"
 				),
-				[0x4ec9b0, 0x4fc1ff]
+				[0x4ec9b0, 0x4fc1ff, 0x9cdcfe]
 			);
 			await session.openFile('src/lib.rs');
 			const mutabilitySamples = [
