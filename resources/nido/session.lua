@@ -1,6 +1,7 @@
--- Run by the main process right after Neovim starts. It sends the session state (buffers, cursor, mode, search,
--- diagnostics, language server status) to the main process as `nido:state` notifications,
--- and reports edits and viewport movement as they happen. `channel` is the UI's RPC channel.
+-- Run by the main process right after Neovim starts. It sends the session state (buffers,
+-- cursor, mode, search, diagnostics, language server status) to the main process as
+-- `nido:state` notifications, and reports edits and viewport movement as they happen.
+-- `channel` is the main process's RPC channel.
 local channel = ...
 vim.g.nido_channel = channel
 -- Keep plugin/LSP notices out of the grid and avoid Neovim's hit-enter prompt.
