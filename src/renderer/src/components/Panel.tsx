@@ -13,6 +13,7 @@ import SymbolPalette from './SymbolPalette';
 import OverlayPresence from './OverlayPresence';
 import { useState } from 'react';
 
+// The modal panel over the editor that hosts the palettes, Git, Time Machine, search and settings.
 interface PanelProps {
 	settings: SettingsPanelProps;
 	workspaceId: string;
@@ -38,6 +39,7 @@ interface PanelProps {
 	setSelection: React.Dispatch<React.SetStateAction<number>>;
 }
 
+/** The heading of each panel. */
 const panelTitles = {
 	history: 'Time Machine',
 	markdown: 'Markdown preview',
@@ -53,6 +55,7 @@ const panelTitles = {
 	commands: 'All commands'
 };
 
+/** Shows the open panel in a modal dialog; clicking outside it returns to the editor. */
 export function Panel({
 	settings,
 	workspaceId,
@@ -78,6 +81,7 @@ export function Panel({
 	setSelection
 }: PanelProps): React.JSX.Element | null {
 	const t = useI18n();
+	// Each opening gets a new key, so a panel that is still fading out is not reused.
 	const [opening, setOpening] = useState({ panel, generation: 0 });
 	if (opening.panel !== panel) {
 		// A fading panel is a visual snapshot, not the next opening's live state.
@@ -87,6 +91,7 @@ export function Panel({
 		return <OverlayPresence>{null}</OverlayPresence>;
 	}
 
+	// The panels with their own component; the rest are palettes listing `filtered` items.
 	let content: React.JSX.Element;
 	switch (panel) {
 		case 'symbols':

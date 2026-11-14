@@ -5,26 +5,12 @@ import styles from '../assets/GitPanel.module.css';
 import GitDiff from './GitDiff';
 import FileIcon from './FileIcon';
 import { gitChangeKey as key, useGitPanel } from '../hooks/useGitPanel';
+import { listIndex } from '../listNavigation';
 
 /** The file name of a repository path (Git uses / on every platform). */
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
 /** The folder of a repository path. */
 const folderName = (path: string): string => path.slice(0, path.lastIndexOf('/'));
-
-/**
- * The list index that a navigation key selects: Home and End jump to the ends, j/ArrowDown
- * and k/ArrowUp move by one without wrapping.
- */
-function listIndex(key: string, index: number, length: number): number {
-	if (key === 'Home') {
-		return 0;
-	}
-	if (key === 'End') {
-		return length - 1;
-	}
-	const step = ['j', 'ArrowDown'].includes(key) ? 1 : -1;
-	return Math.max(0, Math.min(length - 1, index + step));
-}
 
 /**
  * The Git panel: commit message, changed files (staged first) and the diff of the selected

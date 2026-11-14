@@ -3,6 +3,7 @@ import type { LanguagePackSnapshot } from '../../../shared/languagePacks';
 import { useErrorMessage, useI18n } from '../i18n';
 import styles from '../assets/ExtensionsPage.module.css';
 
+/** Text for each language pack status. */
 const statusLabels = {
 	disabled: 'Disabled',
 	ready: 'Available',
@@ -12,6 +13,10 @@ const statusLabels = {
 	error: 'Failed to start'
 } as const;
 
+/**
+ * The language packs of one category on the Extensions page, filtered by the search, with a
+ * switch to enable each. Statuses are polled every 2 seconds while the window is visible.
+ */
 export default function LanguagePacksPanel({
 	workspaceId,
 	query,
@@ -29,8 +34,11 @@ export default function LanguagePacksPanel({
 	const [busy, setBusy] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const alive = useRef(false);
+	// True while enabling or disabling a pack; polling pauses meanwhile.
 	const changing = useRef(false);
+	// Grows with every request, so only the latest response is shown.
 	const sequence = useRef({ value: 0 });
+	// Load the packs and their status in the current workspace.
 	const refresh = useCallback(async () => {
 		if (!alive.current) {
 			return;
@@ -83,6 +91,7 @@ export default function LanguagePacksPanel({
 			document.removeEventListener('visibilitychange', resume);
 		};
 	}, [refresh]);
+	// Run a change (enable, disable, install), then reload.
 	const perform = async (action: () => Promise<void>): Promise<void> => {
 		if (changing.current || !alive.current) {
 			return;
@@ -107,6 +116,7 @@ export default function LanguagePacksPanel({
 			}
 		}
 	};
+	// Packs matching the search in their name, description, id, filetypes or languages.
 	const needle = query.trim().toLocaleLowerCase();
 	const packs = snapshot.packs.filter(
 		(pack) =>

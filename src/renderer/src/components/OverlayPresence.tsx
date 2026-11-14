@@ -3,6 +3,7 @@ import type { HTMLAttributes, ReactElement } from 'react';
 import { OverlayMotionContext, overlayMotionDuration } from '../overlayMotion';
 import '../assets/OverlayMotion.css';
 
+/** The attributes OverlayPresence sets on its child for the CSS animations. */
 interface OverlayAttributes extends HTMLAttributes<HTMLElement> {
 	'data-overlay-motion'?: boolean;
 	'data-overlay-phase'?: 'open' | 'closing';

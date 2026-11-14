@@ -18,6 +18,7 @@ interface Props {
 	onOpen: (index: number) => void;
 }
 
+/** The preview shown for one reference; `key` identifies the reference it belongs to. */
 interface PreviewContent {
 	key: string;
 	index: number;
