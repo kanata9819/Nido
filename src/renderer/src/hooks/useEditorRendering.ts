@@ -3,6 +3,7 @@ import { useEffect, useRef, type RefObject } from 'react';
 import type { Grid } from '../grid';
 import { EditorRenderer } from '../editorRenderer';
 
+// Connects an Editor component to its EditorRenderer, which draws the Neovim grid on a canvas.
 interface UseEditorRenderingOptions {
 	backgroundOpacity: number;
 	animations: boolean;
@@ -33,6 +34,11 @@ interface UseEditorRenderingOptions {
 	fontFamily: string;
 }
 
+/**
+ * Create the EditorRenderer for an editor and keep it in sync with the settings. Settings
+ * that only change how frames are drawn go through refs, so the renderer keeps running;
+ * the rest create a new renderer.
+ */
 export function useEditorRendering({
 	backgroundOpacity,
 	animations,
@@ -80,6 +86,7 @@ export function useEditorRendering({
 		errorRef.current = onError;
 	}, [onError, errorRef]);
 
+	// Create the renderer; paintRef and scrollRef let the rest of the editor drive it.
 	useEffect(() => {
 		const renderer = new EditorRenderer(
 			{
@@ -136,6 +143,7 @@ export function useEditorRendering({
 		scrollCompletionRef
 	]);
 
+	// Focus the active editor when it becomes usable or is asked to take focus.
 	useEffect(() => {
 		if (active && !blocked) {
 			inputRef.current?.focus();

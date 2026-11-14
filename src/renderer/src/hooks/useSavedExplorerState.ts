@@ -8,6 +8,10 @@ import {
 } from 'react';
 import { readExplorerState, writeExplorerState } from '../explorerState';
 
+/**
+ * The explorer's expanded folders, selection and scroll position for a workspace, restored
+ * from localStorage and saved again (at most every 150 ms, and when the page closes).
+ */
 export function useSavedExplorerState(root: string): {
 	expanded: Set<string>;
 	setExpanded: Dispatch<SetStateAction<Set<string>>>;

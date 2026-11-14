@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 
+// The prefix Electron adds to an error from the main process.
 const remoteErrorPrefix = /^Error: Error invoking remote method '[^']+': Error: /;
 
 export interface ErrorNotice {

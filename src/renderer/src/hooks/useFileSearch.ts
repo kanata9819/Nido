@@ -3,6 +3,10 @@ import type { FileEntry } from '../../../shared/types';
 import type { Panel } from '../types';
 import { onNidoEvent } from '../nidoEvents';
 
+/**
+ * The files matching `query` while the file palette is open. The search runs 75 ms after the
+ * query changes, and again when files change or the window gains focus.
+ */
 export function useFileSearch(
 	panel: Panel,
 	active: string,

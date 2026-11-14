@@ -1,11 +1,15 @@
 import { parseWslPath } from '../../shared/wsl';
 
+// The explorer's state per workspace folder, saved in localStorage.
+
+/** Paths are relative to the workspace folder. */
 export interface SavedExplorerState {
 	expanded: string[];
 	selected: string;
 	scrollTop: number;
 }
 
+/** A folder path normalized for use as a key: Windows paths compare case-insensitively. */
 function pathKey(root: string): string {
 	const remote = parseWslPath(root);
 	const path = remote
@@ -20,6 +24,7 @@ function storageKey(root: string): string {
 	return `nido.explorer.${pathKey(root)}`;
 }
 
+/** The path of `file` relative to `root`, with the root's separator; empty when outside it. */
 export function explorerFilePath(root: string, file: string): string {
 	const prefix = `${pathKey(root)}/`;
 	const path = pathKey(file);
@@ -27,6 +32,7 @@ export function explorerFilePath(root: string, file: string): string {
 	return relativePath(relative) ? relative.replaceAll('/', root.includes('\\') ? '\\' : '/') : '';
 }
 
+/** Whether a saved value is a safe relative path (no absolute path, `.` or `..`). */
 function relativePath(value: unknown): value is string {
 	return (
 		typeof value === 'string' &&
@@ -37,6 +43,7 @@ function relativePath(value: unknown): value is string {
 	);
 }
 
+/** The saved state of a workspace folder; anything invalid is dropped. */
 export function readExplorerState(root: string): SavedExplorerState {
 	const empty = { expanded: [], selected: '', scrollTop: 0 };
 	try {
@@ -59,6 +66,7 @@ export function readExplorerState(root: string): SavedExplorerState {
 	}
 }
 
+/** Save the state of a workspace folder. */
 export function writeExplorerState(root: string, state: SavedExplorerState): void {
 	try {
 		localStorage.setItem(storageKey(root), JSON.stringify({ version: 1, ...state }));

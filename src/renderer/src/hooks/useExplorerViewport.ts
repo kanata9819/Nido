@@ -1,10 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject, type UIEvent } from 'react';
 import type { getVisibleEntries } from '../sidebarTree';
 
+// Explorer rows are drawn virtually: only the visible rows and `overscan` rows around them exist.
 export const explorerRowHeight = 26;
 const rowHeight = explorerRowHeight;
 const overscan = 8;
 
+/**
+ * The explorer rows to draw for the current scroll position, restoring the saved scroll
+ * position and keeping the selected row in view.
+ */
 export function useExplorerViewport({
 	initialScrollTop,
 	selected,

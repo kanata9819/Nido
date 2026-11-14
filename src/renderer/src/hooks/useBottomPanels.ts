@@ -21,6 +21,10 @@ interface Options {
 	run: (promise: Promise<unknown>) => void;
 }
 
+/**
+ * The panels below the editor (Run and Debug, references, terminal). Only `bottomPanel` is
+ * shown at a time; each `*FocusTick` grows to ask that panel to take focus.
+ */
 export interface BottomPanels {
 	bottomPanel: 'debug' | 'references' | 'terminal';
 	debugVisible: boolean;
@@ -58,14 +62,17 @@ export function useBottomPanels({
 	const [debugVisible, setDebugVisible] = useState(false);
 	const [debugFocusTick, setDebugFocusTick] = useState(0);
 	const [referencesVisible, setReferencesVisible] = useState(false);
+	// Per workspace, the references search the user closed, so it does not reopen by itself.
 	const [dismissedReferences, setDismissedReferences] = useState<Record<string, number>>({});
 	const [referencesFocusTick, setReferencesFocusTick] = useState(0);
 	const [bottomPanel, setBottomPanel] = useState<'debug' | 'references' | 'terminal'>('debug');
 	const [terminalVisible, setTerminalVisible] = useState(false);
 	const [terminalFocusTick, setTerminalFocusTick] = useState(0);
+	// Terminals being started per workspace, and whether to show them once they are running.
 	const startingTerminals = useRef(new Map<string, { show: boolean; canFocus: () => boolean }>());
 	const terminalId = workspace?.terminalId;
 	const previousTerminal = useRef({ active, terminalId });
+	// When a workspace's terminal goes away (its shell exited), hide the panel.
 	useEffect(() => {
 		const previous = previousTerminal.current;
 		previousTerminal.current = { active, terminalId };
@@ -83,6 +90,8 @@ export function useBottomPanels({
 	const hasDebugger = !!state.debug;
 	const referenceVersion = state.references?.search ?? state.references?.version;
 	const debugStatus = state.debug?.status;
+	// Open panels when the session reports something new: references results, a debugger, or a
+	// build or run starting.
 	const [previous, setPrevious] = useState({
 		active,
 		referenceVersion,
@@ -118,6 +127,7 @@ export function useBottomPanels({
 		}
 	}
 
+	// Show or hide the references, remembering a closed search so it stays closed.
 	const setReferencesOpen = (visible: boolean): void => {
 		setReferencesVisible(visible);
 		setDismissedReferences((old) => {
@@ -151,6 +161,14 @@ export function useBottomPanels({
 		setTerminalVisible(false);
 		focusEditor();
 	};
+	/** Show the terminal panel and focus it. */
+	const revealTerminal = (): void => {
+		setBottomPanel('terminal');
+		setTerminalVisible(true);
+		setTerminalFocusTick((value) => value + 1);
+	};
+	// Show the workspace's terminal, starting it first when it has none. A terminal workspace
+	// is a terminal itself, so it only gets focus.
 	const showTerminal = (): void => {
 		if (!active) {
 			return;
@@ -161,9 +179,7 @@ export function useBottomPanels({
 		}
 		dismissLeader();
 		if (workspace?.terminalId) {
-			setBottomPanel('terminal');
-			setTerminalVisible(true);
-			setTerminalFocusTick((value) => value + 1);
+			revealTerminal();
 			return;
 		}
 		const owner = active;
@@ -183,9 +199,7 @@ export function useBottomPanels({
 						old.map((w) => (w.id === owner ? { ...w, terminalId: terminal.id } : w))
 					);
 					if (request.show && request.canFocus()) {
-						setBottomPanel('terminal');
-						setTerminalVisible(true);
-						setTerminalFocusTick((value) => value + 1);
+						revealTerminal();
 					}
 				})
 				.finally(() => {
@@ -193,6 +207,7 @@ export function useBottomPanels({
 				})
 		);
 	};
+	/** Ctrl+@: show or hide the terminal. While it starts, this toggles whether it will be shown. */
 	const toggleTerminal = (): void => {
 		const starting = startingTerminals.current.get(active);
 		if (starting) {
@@ -206,6 +221,7 @@ export function useBottomPanels({
 			showTerminal();
 		}
 	};
+	/** Restart a terminal's shell, then focus it again. */
 	const restartShell = useCallback(
 		(id: string): void => {
 			const canFocus = captureFocus();
@@ -224,12 +240,14 @@ export function useBottomPanels({
 		},
 		[run, terminalShell, active, focusEditor, captureFocus]
 	);
+	/** Show and focus the Run and Debug panel. */
 	const openDebugger = (): void => {
 		closeOverlay();
 		setBottomPanel('debug');
 		setDebugVisible(true);
 		setDebugFocusTick((value) => value + 1);
 	};
+	/** Focus the bottom panel that is most relevant now: terminal, references or Run and Debug. */
 	const showDebugger = (): void => {
 		dismissLeader();
 		if (
@@ -254,6 +272,7 @@ export function useBottomPanels({
 		setReferencesOpen(bottomPanel !== 'references' || !referencesVisible);
 		setReferencesFocusTick((value) => value + 1);
 	};
+	/** Open a reference and return to the editor. */
 	const openReference = (index: number): void => {
 		const canFocus = captureFocus();
 		run(

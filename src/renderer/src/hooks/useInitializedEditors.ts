@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { onNidoEvent } from '../nidoEvents';
 
+/** The workspaces whose editor has drawn its first frame; a workspace that exits is forgotten. */
 export function useInitializedEditors(): {
 	initializedEditors: ReadonlySet<string>;
 	finishEditorLoading: (id: string) => void;

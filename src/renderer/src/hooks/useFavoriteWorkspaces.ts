@@ -8,6 +8,7 @@ interface FavoriteWorkspaces {
 	toggleFavorite: (workspace: Workspace | FavoriteWorkspace) => void;
 }
 
+/** The favorite workspaces, loaded from the main process, and a toggle that saves a change. */
 export function useFavoriteWorkspaces(report: (message: string) => void): FavoriteWorkspaces {
 	const [favorites, setFavorites] = useState<FavoriteWorkspace[]>([]);
 	const [ready, setReady] = useState(false);
