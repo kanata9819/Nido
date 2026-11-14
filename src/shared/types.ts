@@ -363,9 +363,11 @@ export interface NidoAPI {
 	closeWorkspace(id: string): Promise<boolean>;
 	/**
 	 * Stop a background workspace's Neovim if nothing would be lost. Resolves true when it
-	 * slept, or why it could not (false when it is selected, already asleep or the app closes).
+	 * slept, or everything that keeps it running (false when it is selected, already asleep
+	 * or the app closes). With `resolve`, a running terminal is closed and unsaved files are
+	 * saved first.
 	 */
-	sleepWorkspace(id: string): Promise<true | false | SleepBlocker>;
+	sleepWorkspace(id: string, resolve?: boolean): Promise<boolean | SleepBlocker[]>;
 	/** Restart a sleeping workspace's Neovim and restore its files. */
 	wakeWorkspace(id: string): Promise<{ workspace: Workspace; errors: string[] }>;
 	attach(id: string, columns: number, rows: number): Promise<void>;

@@ -473,8 +473,15 @@ export const japanese: Record<string, string> = {
 		'↑ ↓ または Ctrl+j / k で移動 · Ctrl+S でスリープ',
 	'{name} cannot sleep: it has unsaved changes. Save them first.':
 		'{name} は未保存の変更があるためスリープできません。先に保存してください。',
-	'{name} cannot sleep while its terminal runs. Hiding the terminal keeps the shell running; type exit in it to close it.':
-		'{name} はターミナルが動いているためスリープできません。ターミナルを隠してもシェルは動き続けます。閉じるにはターミナルで exit を実行してください。',
+	'{name} cannot sleep while its terminal runs.':
+		'{name} はターミナルが動いているためスリープできません。',
+	'{name}: its terminal will be closed and its unsaved changes saved before it sleeps.':
+		'{name}: ターミナルを閉じ、未保存の変更を保存してからスリープします。',
+	'{name}: its terminal will be closed before it sleeps.':
+		'{name}: ターミナルを閉じてからスリープします。',
+	'{name}: its unsaved changes will be saved before it sleeps.':
+		'{name}: 未保存の変更を保存してからスリープします。',
+	'Enter to continue · Any other key to cancel': 'Enter で実行 · ほかのキーでキャンセル',
 	'{name} cannot sleep while Run and Debug is running. Stop it first.':
 		'{name} は実行・デバッグ中のためスリープできません。先に停止してください。',
 	'{name} cannot sleep while it is outside Normal mode or waiting for a key. Switch to it and press Esc first.':

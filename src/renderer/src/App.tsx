@@ -33,7 +33,7 @@ import { useGitFileStatus } from './hooks/useGitFileStatus';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { usePointerVisibility } from './hooks/usePointerVisibility';
 import { initialSessionState, useWorkspaceSessions } from './hooks/useWorkspaceSessions';
-import type { SleepResult } from './hooks/useWorkspaceSleep';
+import type { SleepBlocker } from '../../shared/types';
 import { useFocusGuard } from './hooks/useFocusGuard';
 import { useInitializedEditors } from './hooks/useInitializedEditors';
 import { useWorkspaceSleep } from './hooks/useWorkspaceSleep';
@@ -45,15 +45,27 @@ import { useErrorNotice } from './hooks/useErrorNotice';
 import { useNativePreferences } from './hooks/useNativePreferences';
 import { usePalette } from './hooks/usePalette';
 
-/** Why a workspace could not sleep, by the reason the main process gave. */
-const sleepBlockerMessages: Partial<Record<SleepResult, string>> = {
+/** Blockers that sleeping on request can clear, after the user confirms. */
+const resolvableBlockers: SleepBlocker[] = ['terminal', 'modified'];
+
+/** Why a workspace cannot sleep, for the blockers that sleeping cannot clear by itself. */
+const sleepBlockerMessages: Record<SleepBlocker, string> = {
 	modified: '{name} cannot sleep: it has unsaved changes. Save them first.',
-	terminal:
-		'{name} cannot sleep while its terminal runs. Hiding the terminal keeps the shell running; type exit in it to close it.',
+	terminal: '{name} cannot sleep while its terminal runs.',
 	debug: '{name} cannot sleep while Run and Debug is running. Stop it first.',
 	mode: '{name} cannot sleep while it is outside Normal mode or waiting for a key. Switch to it and press Esc first.',
 	unavailable: '{name} cannot sleep.'
 };
+
+/** What confirming will do before sleeping, for the blockers it clears. */
+function sleepConfirmationMessage(blockers: SleepBlocker[]): string {
+	if (blockers.includes('terminal') && blockers.includes('modified')) {
+		return '{name}: its terminal will be closed and its unsaved changes saved before it sleeps.';
+	}
+	return blockers.includes('terminal')
+		? '{name}: its terminal will be closed before it sleeps.'
+		: '{name}: its unsaved changes will be saved before it sleeps.';
+}
 
 // Provide the language and animation settings to every component.
 export default function App(): React.JSX.Element {
@@ -227,6 +239,38 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 		run
 	});
 
+	// A sleep from the workspace list that waits for the user to confirm closing the
+	// terminal and saving files (Enter), or to cancel (Esc, or choosing another workspace).
+	const [sleepConfirmation, setSleepConfirmation] = useState<{
+		id: string;
+		name: string;
+		blockers: SleepBlocker[];
+	}>();
+	const requestSleep = (id: string, resolve = false): void => {
+		const name = workspaces.find((w) => w.id === id)?.name ?? '';
+		setSleepConfirmation(undefined);
+		run(
+			sleepNow(id, resolve).then((result) => {
+				if (!Array.isArray(result)) {
+					return;
+				}
+				const blocking = result.filter((blocker) => !resolvableBlockers.includes(blocker));
+				if (blocking.length || resolve) {
+					// Report the first thing confirming cannot clear.
+					report(t(sleepBlockerMessages[blocking[0] ?? result[0]], { name }));
+				} else {
+					setSleepConfirmation({ id, name, blockers: result });
+				}
+			})
+		);
+	};
+	if (
+		sleepConfirmation &&
+		(panel !== 'workspaces' || !workspaces.some((w) => w.id === sleepConfirmation.id))
+	) {
+		setSleepConfirmation(undefined);
+	}
+
 	const openFile = useCallback(
 		(path: string): void => runThenFocus(() => window.nido.openFile(active, path)),
 		[active, runThenFocus]
@@ -289,17 +333,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 					toggleFavorite(workspace);
 				}
 			},
-			sleepWorkspace: (id) => {
-				const name = workspaces.find((w) => w.id === id)?.name ?? '';
-				run(
-					sleepNow(id).then((result) => {
-						const reason = sleepBlockerMessages[result];
-						if (reason) {
-							report(t(reason, { name }));
-						}
-					})
-				);
-			},
+			sleepWorkspace: (id) => requestSleep(id),
 			isFavorite: favorites.some(
 				(f) => f.root === workspace?.root && f.kind === (workspace?.kind || 'editor')
 			)
@@ -570,6 +604,15 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 				focusEditor={focusEditor}
 				setQuery={palette.setQuery}
 				setSelection={palette.setSelection}
+				confirmation={
+					sleepConfirmation && {
+						message: t(sleepConfirmationMessage(sleepConfirmation.blockers), {
+							name: sleepConfirmation.name
+						}),
+						confirm: () => requestSleep(sleepConfirmation.id, true),
+						cancel: () => setSleepConfirmation(undefined)
+					}
+				}
 			/>
 		</div>
 	);

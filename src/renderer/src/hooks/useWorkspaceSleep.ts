@@ -13,7 +13,7 @@ import { vimKey } from '../keyboard';
  * The outcome of a request to sleep a workspace: it slept, the request did not apply, or
  * what keeps it running.
  */
-export type SleepResult = 'slept' | 'ignored' | SleepBlocker;
+export type SleepResult = 'slept' | 'ignored' | SleepBlocker[];
 
 /** A background workspace sleeps after this long without being selected. */
 export const sleepDelay = 5 * 60 * 1000;
@@ -44,7 +44,7 @@ export function useWorkspaceSleep({
 	failed: ReadonlyMap<string, string>;
 	retry: (id: string) => void;
 	/** Put a background workspace to sleep now. */
-	sleep: (id: string) => Promise<SleepResult>;
+	sleep: (id: string, resolve?: boolean) => Promise<SleepResult>;
 } {
 	// When each background workspace was last selected (or first seen).
 	const lastSelected = useRef(new Map<string, number>());
@@ -91,10 +91,11 @@ export function useWorkspaceSleep({
 	 * Put a background workspace to sleep. Resolves what keeps it running when it cannot
 	 * sleep now (unsaved edits, a terminal, a prompt), and `ignored` for the selected
 	 * workspace, a sleeping one, or one already being put to sleep. A workspace that did not
-	 * sleep is tried again after another delay.
+	 * sleep is tried again after another delay. With `resolve`, its terminal is closed and
+	 * its files saved first.
 	 */
 	const sleepWorkspace = useCallback(
-		async (id: string): Promise<SleepResult> => {
+		async (id: string, resolve = false): Promise<SleepResult> => {
 			const workspace = latest.current.workspaces.find((w) => w.id === id);
 			if (
 				!workspace ||
@@ -106,7 +107,10 @@ export function useWorkspaceSleep({
 			}
 			sleeping.current.add(id);
 			try {
-				const result = await window.nido.sleepWorkspace(id);
+				// Ask to clear blockers only when the user confirmed it.
+				const result = await (resolve
+					? window.nido.sleepWorkspace(id, true)
+					: window.nido.sleepWorkspace(id));
 				if (result !== true) {
 					lastSelected.current.set(id, Date.now());
 					return result || 'ignored';

@@ -518,35 +518,52 @@ end`,
 	}
 
 	/**
-	 * What keeps this workspace from sleeping, or undefined when stopping Neovim now and
+	 * Everything that keeps this workspace from sleeping; empty when stopping Neovim now and
 	 * restoring a snapshot later loses nothing: no unsaved edits, shells, debug sessions or
 	 * pending prompts.
 	 */
-	async sleepBlocker(): Promise<SleepBlocker | undefined> {
+	async sleepBlockers(): Promise<SleepBlocker[]> {
 		if (this.stopped || this.workspace.kind === 'terminal') {
-			return 'unavailable';
+			return ['unavailable'];
 		}
+		const blockers: SleepBlocker[] = [];
 		// A hidden terminal panel still runs its shell.
 		if (this.terminal) {
-			return 'terminal';
+			blockers.push('terminal');
 		}
 		const debug = this.state.debug?.status;
 		if (debug && !['idle', 'finished', 'error'].includes(debug)) {
-			return 'debug';
+			blockers.push('debug');
 		}
 		const mode = (await this.client.request('nvim_get_mode', [])) as {
 			mode: string;
 			blocking: boolean;
 		};
 		if (mode.blocking || mode.mode !== 'n') {
-			return 'mode';
+			// Asking about buffers would wait for the key Neovim expects.
+			blockers.push('mode');
+		} else if (await this.modified()) {
+			blockers.push('modified');
 		}
-		return (await this.modified()) ? 'modified' : undefined;
+		return blockers;
 	}
 
-	/** Whether the workspace can sleep now (see sleepBlocker). */
+	/** Whether the workspace can sleep now (see sleepBlockers). */
 	async canSleep(): Promise<boolean> {
-		return (await this.sleepBlocker()) === undefined;
+		return (await this.sleepBlockers()).length === 0;
+	}
+
+	/** Stop this workspace's terminal, even when its panel is hidden. */
+	async closeTerminal(): Promise<void> {
+		const terminal = this.terminal;
+		if (!terminal) {
+			return;
+		}
+		await terminal.stop();
+		if (this.terminal === terminal) {
+			this.terminal = undefined;
+			this.workspace.terminalId = undefined;
+		}
 	}
 
 	/** Save every modified file. */

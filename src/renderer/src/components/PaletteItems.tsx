@@ -7,6 +7,13 @@ import FileIcon from './FileIcon';
 
 // The filter field and result list shared by the palettes (commands, files, workspaces,
 // open files, problems, symbols and text search).
+/** An action waiting in the palette for Enter (confirm) or any other key (cancel). */
+export interface PaletteConfirmation {
+	message: string;
+	confirm: () => void;
+	cancel: () => void;
+}
+
 interface PaletteItemsProps {
 	panel: Exclude<Panel, null>;
 	filtered: Item[];
@@ -16,6 +23,7 @@ interface PaletteItemsProps {
 	message?: string;
 	setQuery: (value: string) => void;
 	setSelection: React.Dispatch<React.SetStateAction<number>>;
+	confirmation?: PaletteConfirmation;
 }
 
 /** The icon of an item in palettes that have no file to show an icon for. */
@@ -105,7 +113,8 @@ export default function PaletteItems({
 	loading,
 	message,
 	setQuery,
-	setSelection
+	setSelection,
+	confirmation
 }: PaletteItemsProps): React.JSX.Element {
 	const t = useI18n();
 	const results = useRef<HTMLDivElement>(null);
@@ -200,6 +209,17 @@ export default function PaletteItems({
 					if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
 						return;
 					}
+					// A pending confirmation takes Enter; any other key cancels it and acts as usual.
+					if (confirmation) {
+						if (event.key === 'Enter') {
+							event.preventDefault();
+							confirmation.confirm();
+							return;
+						}
+						if (!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) {
+							confirmation.cancel();
+						}
+					}
 					if (event.key === 'ArrowDown' || (event.ctrlKey && event.key === 'j')) {
 						event.preventDefault();
 						setSelection((n) => Math.min(n + 1, filtered.length - 1));
@@ -226,6 +246,12 @@ export default function PaletteItems({
 					}
 				}}
 			/>
+			{confirmation && (
+				<div className={styles.paletteConfirmation} role="alert">
+					<span>{confirmation.message}</span>
+					<small>{t('Enter to continue · Any other key to cancel')}</small>
+				</div>
+			)}
 			<div
 				className={styles.paletteItems}
 				id={panel === 'symbols' ? 'symbol-results' : undefined}

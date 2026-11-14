@@ -2,7 +2,7 @@ import { useI18n } from '../i18n';
 import SettingsPanel, { type SettingsPanelProps } from './SettingsPanel';
 import type { Panel, Item } from '../types';
 import { Command, X } from 'lucide-react';
-import PaletteItems from './PaletteItems';
+import PaletteItems, { type PaletteConfirmation } from './PaletteItems';
 import WorkspaceSearch from './WorkspaceSearch';
 import styles from '../assets/Palette.module.css';
 import FolderPicker from './FolderPicker';
@@ -37,6 +37,8 @@ interface PanelProps {
 	focusEditor: () => void;
 	setQuery: (value: string) => void;
 	setSelection: React.Dispatch<React.SetStateAction<number>>;
+	/** A pending action in the workspace list that Enter confirms. */
+	confirmation?: PaletteConfirmation;
 }
 
 /** The heading of each panel. */
@@ -78,7 +80,8 @@ export function Panel({
 	modal,
 	focusEditor,
 	setQuery,
-	setSelection
+	setSelection,
+	confirmation
 }: PanelProps): React.JSX.Element | null {
 	const t = useI18n();
 	// Each opening gets a new key, so a panel that is still fading out is not reused.
@@ -151,6 +154,7 @@ export function Panel({
 					loading={loading}
 					setQuery={setQuery}
 					setSelection={setSelection}
+					confirmation={panel === 'workspaces' ? confirmation : undefined}
 				/>
 			);
 	}

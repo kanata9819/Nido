@@ -74,7 +74,7 @@ async function fixture(context: TestContext): Promise<WakeFixture> {
 	const previous = {
 		workspace,
 		canSleep: async () => true,
-		sleepBlocker: async () => undefined,
+		sleepBlockers: async () => [],
 		snapshot: async () => snapshot,
 		stop: async () => {}
 	} as unknown as Session;
@@ -289,7 +289,7 @@ async function restorationFixture(context: TestContext): Promise<{
 			setFocus: () => {},
 			modified: async () => false,
 			canSleep: async () => true,
-			sleepBlocker: async () => undefined,
+			sleepBlockers: async () => [],
 			snapshot: async () => ({ root, files: [], current: '' }),
 			client: { request: async () => ({ blocking: false }) },
 			stop: async () => {}

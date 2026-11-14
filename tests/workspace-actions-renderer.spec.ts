@@ -190,8 +190,8 @@ test('Ctrl+S in the workspace list puts a background workspace to sleep', async 
 	expect(await sleeps()).toEqual([['beta']]);
 });
 
-test('a workspace that cannot sleep explains why', async ({ page }) => {
-	await restoreWorkspaces(page, 'sleepWorkspace');
+/** Open the workspace list, select Beta and press Ctrl+S; resolves once the request is pending. */
+async function requestBetaSleep(page: Page): Promise<void> {
 	await page.getByRole('button', { name: 'Workspaces', exact: true }).click();
 	await page.keyboard.press('ArrowDown');
 	await page.keyboard.press('Control+s');
@@ -202,12 +202,62 @@ test('a workspace that cannot sleep explains why', async ({ page }) => {
 			)
 		)
 		.toBe(true);
-	// A hidden terminal still runs its shell; the message says how to close it.
-	await page.evaluate(() => window.rendererTest.settle('sleepWorkspace', 0, 'terminal'));
-	await expect(page.getByRole('alert')).toContainText(
-		'Beta cannot sleep while its terminal runs.'
+}
+
+const sleepRequests = (page: Page): Promise<unknown[][]> =>
+	page.evaluate(() =>
+		window.rendererTest.calls
+			.filter((call) => call.method === 'sleepWorkspace')
+			.map((call) => call.args)
 	);
-	await expect(page.getByRole('alert')).toContainText('type exit in it');
+
+test('a busy terminal and unsaved files are cleared with Enter before sleeping', async ({
+	page
+}) => {
+	await restoreWorkspaces(page, 'sleepWorkspace');
+	await requestBetaSleep(page);
+	await page.evaluate(() =>
+		window.rendererTest.settle('sleepWorkspace', 0, ['terminal', 'modified'])
+	);
+	const list = page.getByRole('dialog', { name: 'workspaces palette', exact: true });
+	const prompt = list.getByRole('alert');
+	await expect(prompt).toContainText(
+		'Beta: its terminal will be closed and its unsaved changes saved before it sleeps.'
+	);
+	// Nothing is closed or saved until Enter.
+	expect(await sleepRequests(page)).toEqual([['beta']]);
+	await page.keyboard.press('Enter');
+	await expect.poll(() => sleepRequests(page)).toEqual([['beta'], ['beta', true]]);
+	await expect(prompt).toHaveCount(0);
+	await page.evaluate(() => window.rendererTest.settle('sleepWorkspace', 0, true));
+	await expect(
+		page.getByRole('tab', { name: 'Workspace Beta', exact: true })
+	).toHaveAccessibleDescription('Sleeping');
+});
+
+test('any other key cancels the sleep prompt', async ({ page }) => {
+	await restoreWorkspaces(page, 'sleepWorkspace');
+	await requestBetaSleep(page);
+	await page.evaluate(() => window.rendererTest.settle('sleepWorkspace', 0, ['modified']));
+	const list = page.getByRole('dialog', { name: 'workspaces palette', exact: true });
+	await expect(list.getByRole('alert')).toContainText(
+		'Beta: its unsaved changes will be saved before it sleeps.'
+	);
+	await page.keyboard.press('ArrowUp');
+	await expect(list.getByRole('alert')).toHaveCount(0);
+	expect(await sleepRequests(page)).toEqual([['beta']]);
+});
+
+test('a workspace that cannot be cleared for sleep explains why', async ({ page }) => {
+	await restoreWorkspaces(page, 'sleepWorkspace');
+	await requestBetaSleep(page);
+	// Insert mode is not something sleeping can clear, so there is no prompt.
+	await page.evaluate(() =>
+		window.rendererTest.settle('sleepWorkspace', 0, ['terminal', 'mode'])
+	);
+	await expect(page.getByRole('alert').filter({ hasText: 'Normal mode' })).toContainText(
+		'Beta cannot sleep while it is outside Normal mode or waiting for a key.'
+	);
 	await expect(
 		page.getByRole('tab', { name: 'Workspace Beta', exact: true })
 	).not.toHaveAttribute('aria-description', 'Sleeping');

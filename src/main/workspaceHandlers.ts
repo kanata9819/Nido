@@ -28,6 +28,11 @@ interface PrestartedLayout {
 	starts: ({ created: Promise<Session>; claim: () => void } | undefined)[];
 }
 
+/** Blockers that sleeping on request can clear: a terminal is closed, files are saved. */
+export function resolvableBlocker(blocker: SleepBlocker): boolean {
+	return blocker === 'terminal' || blocker === 'modified';
+}
+
 /**
  * Whether a saved workspace can start asleep: anything but the selected tab, unless it
  * runs a shell or carries unsaved untitled text that only a running Neovim holds.
@@ -479,25 +484,35 @@ export function registerWorkspaceHandlers({
 	});
 
 	// Stop a background workspace's Neovim, keeping its tab and a snapshot to wake from.
-	// Resolves true when it slept, or what keeps it running.
-	handle('sleep', (id) => {
+	// Resolves true when it slept, or what keeps it running. With `resolve` (the user agreed),
+	// a running terminal is closed and unsaved files are saved first.
+	handle('sleep', (id, resolve) => {
 		const key = text(id);
-		return exclusive(key, async (): Promise<boolean | SleepBlocker> => {
+		return exclusive(key, async (): Promise<boolean | SleepBlocker[]> => {
 			const s = sessions.get(key);
 			if (!s || key === state.active || state.prompting || state.closing) {
 				return false;
 			}
-			const blocker = await s.sleepBlocker();
-			if (blocker) {
-				return blocker;
+			let blockers = await s.sleepBlockers();
+			if (resolve === true && blockers.length && blockers.every(resolvableBlocker)) {
+				if (blockers.includes('terminal')) {
+					await s.closeTerminal();
+				}
+				if (blockers.includes('modified')) {
+					await s.saveAll();
+				}
+				blockers = await s.sleepBlockers();
+			}
+			if (blockers.length) {
+				return blockers;
 			}
 			const saved = await s.snapshot({ includeUntitled: true });
 			await captureHistory(s);
 			// Snapshot and history capture yield to editor activity. A new edit, prompt,
 			// debugger or shell must keep the workspace running instead of being discarded.
-			const lateBlocker = await s.sleepBlocker();
-			if (lateBlocker) {
-				return lateBlocker;
+			const lateBlockers = await s.sleepBlockers();
+			if (lateBlockers.length) {
+				return lateBlockers;
 			}
 			// Check again after the last await: the workspace may have been selected meanwhile.
 			if (
