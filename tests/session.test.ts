@@ -2243,6 +2243,36 @@ vim.api.nvim_buf_set_lines(0,0,-1,false,{'one','    日本語','last'})`);
 	}
 });
 
+test('Home moves to the first non-blank character, then to the start of the line', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-smart-home-'));
+	const session = await Session.create(root, () => {});
+	const lua = (code: string): ReturnType<Session['client']['request']> =>
+		session.client.request('nvim_exec_lua', [code, []]);
+	const cursor = async (): Promise<unknown> => await lua('return vim.api.nvim_win_get_cursor(0)');
+	try {
+		await lua(`vim.api.nvim_buf_set_lines(0, 0, -1, false, {'    foo'})
+vim.api.nvim_win_set_cursor(0, {1, 6})`);
+		await session.input('<Home>');
+		assert.deepEqual(await cursor(), [1, 4]);
+		await session.input('<Home>');
+		assert.deepEqual(await cursor(), [1, 0]);
+		await session.input('<Home>');
+		assert.deepEqual(await cursor(), [1, 4]);
+		await session.input('Abar<Home>x');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '    xfoobar');
+		await session.input('<Home><Home>y');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'y    xfoobar');
+		// Each Home starts a new undo step, as the built-in key does.
+		await session.input('<Esc>u');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '    xfoobar');
+		await session.input('u');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '    foobar');
+	} finally {
+		await session.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('Ctrl Backspace and Ctrl Delete remove words in insert mode', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-word-delete-'));
 	const session = await Session.create(root, () => {});

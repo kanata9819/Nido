@@ -94,6 +94,20 @@ for _, key in ipairs({'<C-/>', '<C-_>'}) do
   vim.keymap.set('i', key, toggle_comment_in_insert, {silent=true})
 end
 vim.keymap.set('i', '<S-Tab>', '<C-d>', {silent=true})
+-- As in VS Code, Home moves to the first non-blank character, then to the start of the line.
+vim.keymap.set({'n', 'x', 'i'}, '<Home>', function()
+  local row, column = unpack(vim.api.nvim_win_get_cursor(0))
+  local line = vim.api.nvim_get_current_line()
+  local indent = #line:match('^%s*')
+  if vim.fn.mode() == 'i' then
+    -- Like the built-in Home, start a new undo step.
+    vim.bo.undolevels = vim.bo.undolevels
+  else
+    -- Outside Insert mode the cursor cannot pass the last character.
+    indent = math.min(indent, math.max(0, #line - 1))
+  end
+  vim.api.nvim_win_set_cursor(0, {row, column == indent and 0 or indent})
+end, {silent=true})
 -- As in VS Code, Ctrl+Backspace and Ctrl+Delete remove a word instead of a character.
 vim.keymap.set('i', '<C-BS>', '<C-w>', {silent=true})
 vim.keymap.set('i', '<C-Del>', function()
