@@ -1,6 +1,10 @@
 import type { Grid } from './grid';
 import { scrollOffset } from './scroll';
 
+/**
+ * An animated scroll of a region of the editor (rows top..bottom, columns left..right): the
+ * old frame slides out by `distance` pixels (`distanceX` sideways) while the new one slides in.
+ */
 export interface FrameMotion {
 	top: number;
 	bottom: number;
@@ -15,6 +19,7 @@ export interface FrameMotion {
 	offsetX?: number;
 }
 
+/** The state paintEditorMotion needs; `previousFrame` and `targetFrame` are offscreen copies. */
 interface Options {
 	motion?: FrameMotion;
 	grid: Grid;

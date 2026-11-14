@@ -1,5 +1,6 @@
 import type { Grid } from './grid';
 
+/** A bracket guide's rectangle on the canvas, and its extent in document pixels. */
 interface GuideRect {
 	x: number;
 	top: number;

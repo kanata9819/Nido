@@ -13,6 +13,7 @@ export interface ViewportScroll {
 	columns: number;
 }
 
+/** Name the fields of a nido_scroll call. */
 function viewportScroll(call: number[]): ViewportScroll {
 	const [grid, top, bottom, left, right, rows, columns] = call;
 	return { grid, top, bottom, left, right, rows, columns };
@@ -40,6 +41,7 @@ export interface RedrawSummary {
 	descriptionChanged: boolean;
 }
 
+/** Work out what a redraw batch changed, so the renderer can decide how to paint it. */
 export function summarizeRedraw(events: Redraw): RedrawSummary {
 	const names = new Set(events.map(([name]) => name));
 	const callsOf = (target: string): unknown[][] =>

@@ -3,6 +3,9 @@ import type { FileEntry, SessionState, Workspace } from '../../shared/types';
 import { createTranslator, type Translator } from '../../shared/i18n';
 import { buildCommands, type CommandsCallbacks } from './commandItems';
 
+// Builds the items that each palette lists.
+
+/** The Problems palette: diagnostics of all open files, errors first. */
 export function buildProblemItems(
 	problems: SessionState['problems'],
 	open: (index: number) => void,
@@ -19,6 +22,7 @@ export function buildProblemItems(
 		.sort((a, b) => a.severity - b.severity || a.detail.localeCompare(b.detail));
 }
 
+/** Items whose title or detail contains `query`, ignoring case. */
 export function filterItems(items: Item[], query: string): Item[] {
 	// Windows paths use backslashes, but a query such as src/main is typed with slashes.
 	const comparable = (text: string): string => text.toLowerCase().replaceAll('\\', '/');
@@ -26,6 +30,10 @@ export function filterItems(items: Item[], query: string): Item[] {
 	return items.filter((item) => comparable(`${item.title} ${item.detail}`).includes(needle));
 }
 
+/**
+ * The commands, plus the items and filtered items of the open palette. The problems items can
+ * be passed in when they were already built for the current diagnostics.
+ */
 export function buildItems(
 	active: string,
 	panel: Panel,
@@ -110,4 +118,5 @@ export function buildItems(
 	return { commands, items, filtered };
 }
 
+/** The file name of a path. */
 export const filename = (path: string): string => path.split(/[\\/]/).pop() || '[Untitled]';

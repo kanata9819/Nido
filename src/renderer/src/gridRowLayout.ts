@@ -1,5 +1,6 @@
 import type { Cell, Highlight } from './gridTypes';
 
+/** Non-blank cells of a row: in CodeLens highlights and in other text. */
 interface RowContent {
 	lenses: number;
 	text: number;
@@ -11,6 +12,7 @@ export class GridRowLayout {
 
 	constructor(private readonly highlights: Map<number, Highlight>) {}
 
+	/** Whether a row holds only CodeLens text, which is drawn in a shorter row. */
 	compact(row: Cell[]): boolean {
 		let content = this.rows.get(row);
 		if (!content) {
@@ -23,6 +25,7 @@ export class GridRowLayout {
 		return content.lenses > 0 && content.text === 0;
 	}
 
+	/** Update the counts after one cell of `row` changed. */
 	replace(row: Cell[], before: Cell | undefined, after: Cell): void {
 		const content = this.rows.get(row);
 		if (content) {
@@ -31,6 +34,7 @@ export class GridRowLayout {
 		}
 	}
 
+	/** Give a copied row the counts of the row it was copied from. */
 	clone(before: Cell[], after: Cell[]): void {
 		const content = this.rows.get(before);
 		if (content) {
@@ -38,6 +42,7 @@ export class GridRowLayout {
 		}
 	}
 
+	/** Count a row (or every row) again, for example after a highlight changed. */
 	invalidate(row?: Cell[]): void {
 		if (row) {
 			this.rows.delete(row);
