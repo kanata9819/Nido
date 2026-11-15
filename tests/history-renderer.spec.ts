@@ -164,6 +164,33 @@ test('ten thousand diff rows stay bounded in the DOM while scrolling and jumping
 	console.log(`10,000-row diff: ${mounted} mounted rows across both panes (previously 20,000).`);
 });
 
+test('side-by-side diffs mirror horizontal scrolling from either pane', async ({ page }) => {
+	await page.goto(`${origin}?view=highlight`);
+	await page.evaluate(() =>
+		window.rendererTest.render({
+			diff: `@@ -1 +1 @@\n-old\n+${'long line '.repeat(40)}`
+		})
+	);
+	const before = page.locator('[data-git-scroll="before"]');
+	const after = page.locator('[data-git-scroll="after"]');
+	const offsets = (): Promise<number[]> =>
+		page
+			.locator('pre[data-git-scroll]')
+			.evaluateAll((panes) => panes.map((pane) => pane.scrollLeft));
+	await before.evaluate((pane) => {
+		pane.scrollLeft = 160;
+	});
+	await expect.poll(offsets).toEqual([160, 160]);
+	await after.evaluate((pane) => {
+		pane.scrollLeft = 80;
+	});
+	await expect.poll(offsets).toEqual([80, 80]);
+	await after.press('v');
+	await expect(before).toHaveCount(0);
+	await after.press('v');
+	await expect.poll(offsets).toEqual([80, 80]);
+});
+
 test('diff syntax colors follow excerpt positions when a hunk starts far into the file', async ({
 	page
 }) => {

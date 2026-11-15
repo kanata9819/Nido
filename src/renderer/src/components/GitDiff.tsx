@@ -161,8 +161,9 @@ export default function GitDiff({
 	const error = currentHighlight?.error || '';
 	const before = useRef<HTMLPreElement>(null);
 	const after = useRef<HTMLPreElement>(null);
-	// The scroll position set on a pane by code, so its scroll event is not mirrored back.
+	// The vertical position set by code, so its scroll event is not mirrored back.
 	const synchronized = useRef(new WeakMap<HTMLPreElement, number>());
+	const horizontalPositions = useRef(new WeakMap<HTMLPreElement, number>());
 
 	/** Scroll both panes to the next (1) or previous (-1) change. */
 	function jump(direction: number): void {
@@ -201,6 +202,10 @@ export default function GitDiff({
 			return;
 		}
 		layoutAnchor.current = undefined;
+		if (before.current && after.current) {
+			before.current.scrollLeft = after.current.scrollLeft;
+			horizontalPositions.current.set(before.current, before.current.scrollLeft);
+		}
 		after.current?.focus({ preventScroll: true });
 		scrollToRow(row);
 		// Runs only when the layout changes; scrollToRow reads the new rows of this render.
@@ -222,6 +227,7 @@ export default function GitDiff({
 		return () => observer.disconnect();
 	}, [hasLines]);
 	useEffect(() => {
+		horizontalPositions.current = new WeakMap();
 		before.current?.scrollTo({ top: 0, left: 0 });
 		after.current?.scrollTo({ top: 0, left: 0 });
 	}, [diff]);
@@ -483,6 +489,16 @@ export default function GitDiff({
 						}}
 						onScroll={(event) => {
 							const pane = event.currentTarget;
+							const other = side === 'before' ? after.current : before.current;
+							const left = pane.scrollLeft;
+							if (left !== (horizontalPositions.current.get(pane) ?? 0)) {
+								horizontalPositions.current.set(pane, left);
+								if (other && other.scrollLeft !== left) {
+									other.scrollLeft = left;
+									// Record the applied offset in case this pane has a shorter scroll range.
+									horizontalPositions.current.set(other, other.scrollLeft);
+								}
+							}
 							const expected = synchronized.current.get(pane);
 							// A delayed programmatic event must not overwrite a newer gesture in the other pane.
 							if (
@@ -496,7 +512,6 @@ export default function GitDiff({
 							setViewport((old) =>
 								old.diff === diff && old.row === row ? old : { diff, row }
 							);
-							const other = side === 'before' ? after.current : before.current;
 							if (other && Math.abs(other.scrollTop - pane.scrollTop) > 1) {
 								other.scrollTop = pane.scrollTop;
 								synchronized.current.set(other, other.scrollTop);
