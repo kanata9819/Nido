@@ -3,9 +3,9 @@ import { test, type TestContext } from 'node:test';
 import { mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LocalHistory } from '../src/main/localHistory';
-import { HistoryService } from '../src/main/historyService';
-import { Session } from '../src/main/session';
+import { LocalHistory } from '../src/main/history/localHistory';
+import { HistoryService } from '../src/main/history/historyService';
+import { Session } from '../src/main/session/session';
 import {
 	historyLimits,
 	type HistoryContent,

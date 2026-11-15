@@ -17,13 +17,18 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { Session } from '../src/main/session';
-import { neovimBundle } from '../src/main/neovimBundle';
-import { Grid } from '../src/renderer/src/grid';
-import { vimKey } from '../src/renderer/src/keyboard';
-import { accumulateScroll, scrollOffset } from '../src/renderer/src/scroll';
-import { readFavorites, readLayout, writeFavorites, writeLayout } from '../src/main/persistence';
-import { fileDecorations, gitFileKey } from '../src/renderer/src/fileDecorations';
+import { Session } from '../src/main/session/session';
+import { neovimBundle } from '../src/main/neovim/neovimBundle';
+import { Grid } from '../src/renderer/src/grid/grid';
+import { vimKey } from '../src/renderer/src/keyboard/keyboard';
+import { accumulateScroll, scrollOffset } from '../src/renderer/src/editor/scroll';
+import {
+	readFavorites,
+	readLayout,
+	writeFavorites,
+	writeLayout
+} from '../src/main/workspace/persistence';
+import { fileDecorations, gitFileKey } from '../src/renderer/src/explorer/fileDecorations';
 import type { NidoEvent, Redraw, SessionState } from '../src/shared/types';
 import { emptyNeovimUI, patchNeovimUI } from '../src/shared/neovimUI';
 

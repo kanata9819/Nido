@@ -4,10 +4,10 @@ import { mkdtemp, readdir, readFile, realpath, rename, rm, writeFile } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { Session } from '../src/main/session';
+import { Session } from '../src/main/session/session';
 import type { NidoEvent } from '../src/shared/types';
-import { SessionFiles } from '../src/main/sessionFiles';
-import { neovimError } from '../src/main/sessionClient';
+import { SessionFiles } from '../src/main/session/sessionFiles';
+import { neovimError } from '../src/main/session/sessionClient';
 
 // The neovim package replaces console methods for the process when its logger is created.
 const consoleAtStart = { ...console };
@@ -853,7 +853,7 @@ test(
 );
 
 test('prestarted workspace events wait for the renderer and keep their order', async () => {
-	const { bufferedEmitter } = await import('../src/main/workspaceHandlers');
+	const { bufferedEmitter } = await import('../src/main/ipc/workspaceHandlers');
 	const delivered: string[] = [];
 	const events = bufferedEmitter((event) => delivered.push(event.type));
 	events.emit({ type: 'notification', id: 'a', title: '', message: 'first', severity: 'info' });
@@ -867,7 +867,7 @@ test('prestarted workspace events wait for the renderer and keep their order', a
 });
 
 test('only background editors without shells or untitled drafts start asleep', async () => {
-	const { startsAsleep } = await import('../src/main/workspaceHandlers');
+	const { startsAsleep } = await import('../src/main/ipc/workspaceHandlers');
 	const editor = { root: '/project', files: [], current: '' };
 	assert.equal(startsAsleep(editor, 1, 0), true);
 	assert.equal(startsAsleep(editor, 0, 0), false, 'The selected workspace starts');

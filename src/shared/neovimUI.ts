@@ -1,7 +1,7 @@
 // External Neovim UI content stays separate from the editor grid and workspace state.
 // Neovim draws its command line, messages and popup menu through ext_cmdline, ext_messages
 // and ext_popupmenu events; the main process folds them into a NeovimUIState
-// (applyNeovimUI), and the renderer draws that state (components/NeovimUI.tsx).
+// (applyNeovimUI), and the renderer draws that state (renderer/src/neovim/NeovimUI.tsx).
 
 /** A run of message text in one highlight group. */
 export type MessageChunk = [highlight: number, text: string];

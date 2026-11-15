@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { neovimBundle } from '../src/main/neovimBundle';
+import { neovimBundle } from '../src/main/neovim/neovimBundle';
 
 const exec = promisify(execFile);
 const nvim = resolve('resources', neovimBundle().executable);

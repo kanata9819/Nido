@@ -4,9 +4,9 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rename, rm, writeFile, mkdir, symlink, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { splitDiff } from '../src/renderer/src/gitDiff';
-import { registerGitHandlers } from '../src/main/gitHandlers';
-import type { Session } from '../src/main/session';
+import { splitDiff } from '../src/renderer/src/git/gitDiff';
+import { registerGitHandlers } from '../src/main/ipc/gitHandlers';
+import type { Session } from '../src/main/session/session';
 import type { NidoEvent } from '../src/shared/types';
 import {
 	gitStatus,
@@ -20,7 +20,7 @@ import {
 	gitBranches,
 	gitSwitch,
 	gitIgnored
-} from '../src/main/git';
+} from '../src/main/git/git';
 
 test('Git IPC shares pending status reads but refreshes after changes and failures', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-status-sharing-'));

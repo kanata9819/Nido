@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Session } from '../src/main/session';
+import { Session } from '../src/main/session/session';
 
 test('bracket index agrees with a full scan for nested pairs, cursor boundaries and viewport ranges', async () => {
 	const session = await Session.create(process.cwd(), () => {});

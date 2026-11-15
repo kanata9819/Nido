@@ -1,14 +1,14 @@
 // Entry point of the Electron main process. It creates the window, registers the IPC
-// handlers (handlers.ts) and loads the renderer.
+// handlers (ipc/handlers.ts) and loads the renderer.
 import { app, BrowserWindow, Menu, screen } from 'electron';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { autoUpdater } from 'electron-updater';
-import { Updates } from './updater';
-import { Session } from './session';
-import { registerHandlers, type AppState } from './handlers';
+import { Updates } from './platform/updater';
+import { Session } from './session/session';
+import { registerHandlers, type AppState } from './ipc/handlers';
 import type { NidoEvent } from '../shared/types';
-import { readLayout } from './persistence';
+import { readLayout } from './workspace/persistence';
 
 // Running workspaces, keyed by workspace ID. Each Session owns one Neovim process.
 const sessions = new Map<string, Session>();

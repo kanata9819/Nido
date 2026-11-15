@@ -3,9 +3,9 @@ import { test } from 'node:test';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Session } from '../src/main/session';
-import { Grid } from '../src/renderer/src/grid';
-import { EditorCursor } from '../src/renderer/src/editorCursor';
+import { Session } from '../src/main/session/session';
+import { Grid } from '../src/renderer/src/grid/grid';
+import { EditorCursor } from '../src/renderer/src/editor/editorCursor';
 import { setTimeout as delay } from 'node:timers/promises';
 
 test('hover rejects edited text and cancels obsolete requests across cursor, window and buffer changes', async (context) => {

@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createServer } from 'node:http';
-import { Session } from '../src/main/session';
-import { Grid } from '../src/renderer/src/grid';
+import { Session } from '../src/main/session/session';
+import { Grid } from '../src/renderer/src/grid/grid';
 
 test('Deno markers select one server per file, including mixed workspaces and nested Node projects', async () => {
 	// CI's Windows temp directory can use an 8.3 alias; match Session and Neovim's real paths.

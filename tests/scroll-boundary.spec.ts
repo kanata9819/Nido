@@ -113,7 +113,7 @@ test('upward touchpad gestures stop at the first row while replies are delayed',
 	const root = await mkdtemp(join(tmpdir(), 'nido-scroll-boundary-'));
 	const profile = join(root, 'profile');
 	const file = join(root, 'ReferencesPanel.tsx');
-	const source = await readFile('src/renderer/src/components/ReferencesPanel.tsx', 'utf8');
+	const source = await readFile('src/renderer/src/panels/ReferencesPanel.tsx', 'utf8');
 	const startLine =
 		source.split('\n').findIndex((line) => line.includes('referencesToolbar')) + 1;
 	expect(startLine).toBeGreaterThan(100);

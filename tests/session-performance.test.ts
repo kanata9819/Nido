@@ -3,9 +3,9 @@ import { test } from 'node:test';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Session } from '../src/main/session';
-import { SessionEvents } from '../src/main/sessionEvents';
-import { Grid } from '../src/renderer/src/grid';
+import { Session } from '../src/main/session/session';
+import { SessionEvents } from '../src/main/session/sessionEvents';
+import { Grid } from '../src/renderer/src/grid/grid';
 import type { NidoEvent, SessionState, Redraw } from '../src/shared/types';
 
 test('cursor state publications enumerate LSP clients once without caching their lifecycle', async (context) => {

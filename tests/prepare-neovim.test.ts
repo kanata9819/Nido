@@ -14,7 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
-import { neovimBundle } from '../src/main/neovimBundle';
+import { neovimBundle } from '../src/main/neovim/neovimBundle';
 import { neovimReleases } from '../scripts/prepare-neovim';
 
 const powershell = process.platform === 'win32' ? 'powershell.exe' : 'pwsh';

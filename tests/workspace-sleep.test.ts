@@ -5,8 +5,8 @@ import { createRequire, Module } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
-import type { Session } from '../src/main/session';
-import type { AppState } from '../src/main/handlers';
+import type { Session } from '../src/main/session/session';
+import type { AppState } from '../src/main/ipc/handlers';
 
 // These tests exercise the real IPC handler without launching an Electron window.
 const testRequire = createRequire(__filename);
@@ -32,8 +32,8 @@ async function fixture(context: TestContext): Promise<{
 }> {
 	const root = await mkdtemp(join(tmpdir(), 'nido-sleep-handler-'));
 	userData = root;
-	const { registerWorkspaceHandlers } = await import('../src/main/workspaceHandlers');
-	const { Session } = await import('../src/main/session');
+	const { registerWorkspaceHandlers } = await import('../src/main/ipc/workspaceHandlers');
+	const { Session } = await import('../src/main/session/session');
 	const busy = { modified: false, mode: 'n' };
 	const state: AppState = {
 		order: ['background'],

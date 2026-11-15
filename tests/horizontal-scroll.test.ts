@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { HorizontalScroll } from '../src/renderer/src/horizontalScroll';
+import { HorizontalScroll } from '../src/renderer/src/editor/horizontalScroll';
 
 test('fine horizontal input requests an edge immediately and preserves fractional positions through pauses', () => {
 	const scroll = new HorizontalScroll();
@@ -205,14 +205,14 @@ test('discarding recreated lookahead frames requests fresh pixels for the next f
 
 async function withEditorScroll(
 	run: (harness: {
-		scroll: import('../src/renderer/src/editorScroll').EditorScroll;
-		grid: import('../src/renderer/src/grid').Grid;
+		scroll: import('../src/renderer/src/editor/editorScroll').EditorScroll;
+		grid: import('../src/renderer/src/grid/grid').Grid;
 		calls: { lines: number; columns: number; follow: boolean; resolve: () => void }[];
 		completions: Promise<void>[];
 	}) => Promise<void>,
 	enabled = (): boolean => true
 ): Promise<void> {
-	const { EditorScroll } = await import('../src/renderer/src/editorScroll');
+	const { EditorScroll } = await import('../src/renderer/src/editor/editorScroll');
 	const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
 	const calls: { lines: number; columns: number; follow: boolean; resolve: () => void }[] = [];
 	const completions: Promise<void>[] = [];
@@ -237,7 +237,7 @@ async function withEditorScroll(
 		scrolling: false,
 		columns: 80,
 		horizontalGutter: 6
-	} as import('../src/renderer/src/grid').Grid;
+	} as import('../src/renderer/src/grid/grid').Grid;
 	const scroll = new EditorScroll({
 		id: 'editor',
 		grid,

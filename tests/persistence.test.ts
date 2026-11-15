@@ -3,10 +3,10 @@ import { test, type TestContext } from 'node:test';
 import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readLayout, writeLayout, type SavedLayout } from '../src/main/persistence';
-import { WorkspaceCheckpoints } from '../src/main/workspaceCheckpoints';
-import { Session } from '../src/main/session';
-import { explorerFilePath } from '../src/renderer/src/explorerState';
+import { readLayout, writeLayout, type SavedLayout } from '../src/main/workspace/persistence';
+import { WorkspaceCheckpoints } from '../src/main/workspace/workspaceCheckpoints';
+import { Session } from '../src/main/session/session';
+import { explorerFilePath } from '../src/renderer/src/explorer/explorerState';
 
 test('Explorer resolves workspace files across Windows separators and WSL aliases', () => {
 	for (const [root, file, expected] of [

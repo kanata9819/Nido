@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { NeovimClient } from 'neovim';
-import { SessionFiles } from '../src/main/sessionFiles';
-import { SearchMatcher } from '../src/main/searchMatcher';
+import { SessionFiles } from '../src/main/session/sessionFiles';
+import { SearchMatcher } from '../src/main/search/searchMatcher';
 import { defaultSearchOptions } from '../src/shared/search';
 
 for (const action of ['rename', 'copy'] as const) {

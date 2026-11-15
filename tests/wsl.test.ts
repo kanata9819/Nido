@@ -6,14 +6,19 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { editorPath, hostPath, parseWslPath, wslHostPath } from '../src/shared/wsl';
-import { decodeWslOutput, resolveWslFolder, wslArguments, wslDistributions } from '../src/main/wsl';
-import { workspaceRelative } from '../src/main/workspacePaths';
-import { SessionEvents } from '../src/main/sessionEvents';
-import { Session } from '../src/main/session';
-import { LocalHistory } from '../src/main/localHistory';
-import { HistoryService } from '../src/main/historyService';
-import { gitIgnored, gitStatus } from '../src/main/git';
-import { gitFileKey } from '../src/renderer/src/fileDecorations';
+import {
+	decodeWslOutput,
+	resolveWslFolder,
+	wslArguments,
+	wslDistributions
+} from '../src/main/platform/wsl';
+import { workspaceRelative } from '../src/main/workspace/workspacePaths';
+import { SessionEvents } from '../src/main/session/sessionEvents';
+import { Session } from '../src/main/session/session';
+import { LocalHistory } from '../src/main/history/localHistory';
+import { HistoryService } from '../src/main/history/historyService';
+import { gitIgnored, gitStatus } from '../src/main/git/git';
+import { gitFileKey } from '../src/renderer/src/explorer/fileDecorations';
 import type { NidoEvent } from '../src/shared/types';
 import { defaultSearchOptions } from '../src/shared/search';
 

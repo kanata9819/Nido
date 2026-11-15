@@ -4,9 +4,9 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { Session } from '../src/main/session';
-import { discoverLanguagePacks } from '../src/main/languagePacks';
-import { wslArguments } from '../src/main/wsl';
+import { Session } from '../src/main/session/session';
+import { discoverLanguagePacks } from '../src/main/languagePacks/languagePacks';
+import { wslArguments } from '../src/main/platform/wsl';
 import { wslHostPath } from '../src/shared/wsl';
 
 test(

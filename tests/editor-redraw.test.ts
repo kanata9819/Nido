@@ -6,8 +6,8 @@ import {
 	isHorizontalStep,
 	scrollMotion,
 	summarizeRedraw
-} from '../src/renderer/src/editorRedraw';
-import { debugActionFor, isCtrl, isCtrlShift } from '../src/renderer/src/shortcutKeys';
+} from '../src/renderer/src/editor/editorRedraw';
+import { debugActionFor, isCtrl, isCtrlShift } from '../src/renderer/src/keyboard/shortcutKeys';
 
 test('redraw summaries expose a single viewport scroll and the buffer column', () => {
 	const redraw = summarizeRedraw([

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Grid } from '../src/renderer/src/grid';
+import { Grid } from '../src/renderer/src/grid/grid';
 
 test('pixel-scrolled code uses the full viewport and keeps bottom clicks in document rows', () => {
 	for (const height of [72, 77, 77.6, 90]) {

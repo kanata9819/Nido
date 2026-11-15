@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { Session } from '../src/main/session';
-import { availableTerminalShells, resolveTerminalShell } from '../src/main/terminalShells';
+import { Session } from '../src/main/session/session';
+import { availableTerminalShells, resolveTerminalShell } from '../src/main/platform/terminalShells';
 
 const environmentKeys = [
 	'PATH',

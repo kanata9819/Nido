@@ -120,7 +120,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 					previousShift = shift;
 				}
 				return { rawPitch, comparisons, mismatches, failures };
-			}, '/src/grid.ts');
+			}, '/src/grid/grid.ts');
 			expect(Math.abs(result.rawPitch - Math.round(result.rawPitch))).toBeGreaterThan(0.001);
 			expect(result.comparisons).toBe(16);
 			expect(result.mismatches, JSON.stringify(result)).toBe(0);
@@ -263,7 +263,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 							CanvasRenderingContext2D.prototype.fillText = native;
 						}
 					},
-					{ opacity, moduleUrl: '/src/grid.ts' }
+					{ opacity, moduleUrl: '/src/grid/grid.ts' }
 				);
 				expect(result.mismatches, JSON.stringify(result.differences)).toBe(0);
 				expect(
@@ -428,7 +428,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 								CanvasRenderingContext2D.prototype.fillText = native;
 							}
 						},
-						{ opacity, width, moduleUrl: '/src/grid.ts' }
+						{ opacity, width, moduleUrl: '/src/grid/grid.ts' }
 					);
 					expect(result.mismatches, JSON.stringify(result.differences)).toBe(0);
 					if (width === 1200) {

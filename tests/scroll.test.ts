@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ScrollQueue, editorWheelMotion, scrollOffset } from '../src/renderer/src/scroll';
-import { EditorScroll } from '../src/renderer/src/editorScroll';
-import { Grid } from '../src/renderer/src/grid';
+import { ScrollQueue, editorWheelMotion, scrollOffset } from '../src/renderer/src/editor/scroll';
+import { EditorScroll } from '../src/renderer/src/editor/editorScroll';
+import { Grid } from '../src/renderer/src/grid/grid';
 
 test('zero-duration motion settles even before the first clock tick', () => {
 	assert.equal(scrollOffset(12, 0, 0), 0);

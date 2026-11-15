@@ -4,9 +4,9 @@ import { mkdtemp, writeFile, readFile, rm, mkdir, symlink } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { Session } from '../src/main/session';
+import { Session } from '../src/main/session/session';
 import { execFileSync } from 'node:child_process';
-import { Grid } from '../src/renderer/src/grid';
+import { Grid } from '../src/renderer/src/grid/grid';
 
 test(
 	'LSP Node launchers hide native child consoles, including ESM imports',

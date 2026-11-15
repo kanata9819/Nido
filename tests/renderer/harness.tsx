@@ -8,25 +8,25 @@ import type {
 	ReferenceList,
 	Workspace
 } from '../../src/shared/types';
-import App from '../../src/renderer/src/App';
+import App from '../../src/renderer/src/app/App';
 import typescriptPack from '../../resources/nido/language-packs/typescript/pack.json';
 import rustPack from '../../resources/nido/language-packs/rust/pack.json';
 import denoPack from '../../resources/nido/language-packs/deno/pack.json';
-import ExplorerCommands from '../../src/renderer/src/components/ExplorerCommands';
-import FolderPicker from '../../src/renderer/src/components/FolderPicker';
-import GitBrowser from '../../src/renderer/src/components/GitBrowser';
-import GitDiff from '../../src/renderer/src/components/GitDiff';
-import FileIcon from '../../src/renderer/src/components/FileIcon';
-import FolderIcon from '../../src/renderer/src/components/FolderIcon';
-import TimeMachine from '../../src/renderer/src/components/TimeMachine';
-import Notification from '../../src/renderer/src/components/Notification';
-import ReferencesPanel from '../../src/renderer/src/components/ReferencesPanel';
-import DebugPanel from '../../src/renderer/src/components/DebugPanel';
-import MarkdownPreview from '../../src/renderer/src/components/MarkdownPreview';
-import PaletteItems from '../../src/renderer/src/components/PaletteItems';
+import ExplorerCommands from '../../src/renderer/src/explorer/ExplorerCommands';
+import FolderPicker from '../../src/renderer/src/workspace/FolderPicker';
+import GitBrowser from '../../src/renderer/src/git/GitBrowser';
+import GitDiff from '../../src/renderer/src/git/GitDiff';
+import FileIcon from '../../src/renderer/src/ui/FileIcon';
+import FolderIcon from '../../src/renderer/src/ui/FolderIcon';
+import TimeMachine from '../../src/renderer/src/history/TimeMachine';
+import Notification from '../../src/renderer/src/app/Notification';
+import ReferencesPanel from '../../src/renderer/src/panels/ReferencesPanel';
+import DebugPanel from '../../src/renderer/src/panels/DebugPanel';
+import MarkdownPreview from '../../src/renderer/src/panels/MarkdownPreview';
+import PaletteItems from '../../src/renderer/src/palette/PaletteItems';
 import type { Item } from '../../src/renderer/src/types';
 import { Favorites, GitBadges, Completion, Settings, SessionUpdates } from './Probes';
-import type { SessionSettings } from '../../src/renderer/src/hooks/useSessionSettings';
+import type { SessionSettings } from '../../src/renderer/src/settings/useSessionSettings';
 import '../../src/renderer/src/assets/global.css';
 import '../../src/renderer/src/assets/themes.css';
 

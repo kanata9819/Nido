@@ -3,8 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { Session } from '../src/main/session';
-import { clipboardWriter } from '../src/main/clipboardWriter';
+import { Session } from '../src/main/session/session';
+import { clipboardWriter } from '../src/main/platform/clipboardWriter';
 import type { NidoEvent, SessionState } from '../src/shared/types';
 
 const shell = process.platform === 'win32' ? 'cmd.exe' : 'auto';

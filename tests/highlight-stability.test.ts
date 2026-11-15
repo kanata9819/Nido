@@ -3,8 +3,8 @@ import { test } from 'node:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Session } from '../src/main/session';
-import { Grid } from '../src/renderer/src/grid';
+import { Session } from '../src/main/session/session';
+import { Grid } from '../src/renderer/src/grid/grid';
 
 for (const language of ['rust', 'typescript'] as const) {
 	test(

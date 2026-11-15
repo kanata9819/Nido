@@ -3,13 +3,13 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
-import { registerFileHandlers } from '../src/main/fileHandlers';
-import { windowsDrives } from '../src/main/folderBrowserHandlers';
-import type { Session } from '../src/main/session';
-import { SessionSearch } from '../src/main/sessionSearch';
-import type { WorkspaceReplacement } from '../src/main/workspaceReplacement';
+import { registerFileHandlers } from '../src/main/ipc/fileHandlers';
+import { windowsDrives } from '../src/main/ipc/folderBrowserHandlers';
+import type { Session } from '../src/main/session/session';
+import { SessionSearch } from '../src/main/search/sessionSearch';
+import type { WorkspaceReplacement } from '../src/main/search/workspaceReplacement';
 import type { FileEntry, NidoEvent } from '../src/shared/types';
-import { filterItems } from '../src/renderer/src/commands';
+import { filterItems } from '../src/renderer/src/palette/commands';
 
 test('file IPC validates requests and protects files open in other workspace sessions', async () => {
 	const root = resolve('file-handler-fixture');

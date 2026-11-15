@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { Session } from '../src/main/session';
+import { Session } from '../src/main/session/session';
 import type { NidoEvent } from '../src/shared/types';
 
 test(
