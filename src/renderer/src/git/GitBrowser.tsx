@@ -10,6 +10,9 @@ import GitBrowserList from './GitBrowserList';
 import { CommitDetails, BranchDetails } from './GitDetails';
 import { useGitBrowserKeyboard } from './useGitBrowserKeyboard';
 import GitDiff from './GitDiff';
+import { useGitAction } from './browser/useGitAction';
+import { useGitLists } from './browser/useGitLists';
+import { useCommitDiff } from './browser/useCommitDiff';
 import styles from '../assets/GitPanel.module.css';
 
 /**
@@ -29,179 +32,53 @@ export default function GitBrowser({
 	const [message, setMessage] = useState('');
 	// Grows to reload the history or branches view.
 	const [revision, setRevision] = useState(0);
-	const [history, setHistory] = useState<GitCommitEntry[]>([]);
-	const [commitCount, setCommitCount] = useState<number>();
-	const [branches, setBranches] = useState<GitBranchEntry[]>([]);
 	// The commit opened from the history; its changed files replace the history in the list.
 	const [commit, setCommit] = useState<GitCommitEntry>();
 	const [files, setFiles] = useState<string[]>([]);
 	const [index, setIndex] = useState(0);
-	const [diffResult, setDiffResult] = useState<{
-		workspaceId: string;
-		commit: GitCommitEntry;
-		path: string;
-		value: string;
-		failed?: boolean;
-	}>();
 	const [newBranchName, setNewBranchName] = useState('');
 	const [creating, setCreating] = useState(false);
-	const [working, setBusy] = useState(false);
-	// The view and revision whose data has loaded; the browser is busy until it matches.
-	const [loadedView, setLoadedView] = useState<{ view: GitView; revision: number }>();
-	const busy =
-		working ||
-		(view !== 'changes' && (loadedView?.view !== view || loadedView.revision !== revision));
-	const [error, setError] = useState('');
-	const [hasMoreHistory, setHasMoreHistory] = useState(false);
-	const [branchName, setBranchName] = useState('');
 	const list = useRef<HTMLDivElement>(null);
 	const branchInput = useRef<HTMLInputElement>(null);
-	// Set while an action runs, so a second one cannot start before React re-renders.
-	const locked = useRef(false);
-
-	/** Run one Git action at a time and show its error. */
-	async function run(action: () => Promise<void>): Promise<void> {
-		if (locked.current) {
-			return;
-		}
-		locked.current = true;
-		setBusy(true);
-		setError('');
-		try {
-			await action();
-		} catch (failure) {
-			setError(String(failure));
-		} finally {
-			locked.current = false;
-			setBusy(false);
-		}
-	}
-
-	/** Load the first page of history, or with `append` the next older page. */
-	async function loadHistory(append = false): Promise<void> {
-		const { commits: entries, total } = await window.nido.gitHistory(
-			workspaceId,
-			append ? history.length : 0
-		);
-		setHistory(append ? [...history, ...entries] : entries);
-		setCommitCount(total);
-		setHasMoreHistory((append ? history.length : 0) + entries.length < total);
-	}
+	const action = useGitAction();
+	const { run, error, setError } = action;
 
 	useEffect(() => {
 		if (creating) {
 			branchInput.current?.focus();
 		}
 	}, [creating]);
-
-	// Load the history or branches whenever the view changes or is refreshed.
-	useEffect(() => {
-		if (view === 'changes') {
-			return;
-		}
-		let cancelled = false;
-		async function load(): Promise<void> {
-			try {
-				const status = await window.nido.gitStatus(workspaceId);
-				if (view === 'history') {
-					const { commits: entries, total } = await window.nido.gitHistory(
-						workspaceId,
-						0
-					);
-					if (!cancelled) {
-						setHistory(entries);
-						setCommitCount(total);
-						setHasMoreHistory(entries.length < total);
-					}
-				} else {
-					const entries = await window.nido.gitBranches(workspaceId);
-					if (!cancelled) {
-						setBranches(entries);
-					}
-				}
-				if (!cancelled) {
-					setBranchName(status.branch);
-				}
-			} catch (failure) {
-				if (!cancelled) {
-					setCommitCount(undefined);
-					setError(String(failure));
-				}
-			} finally {
-				if (!cancelled) {
-					setLoadedView({ view, revision });
-				}
-			}
-		}
-		void load();
-		list.current?.focus();
-		return () => {
-			cancelled = true;
-		};
-	}, [view, revision, workspaceId]);
-
-	// The diff of the selected file of the open commit. A loaded result only counts for the
-	// commit and file it was loaded for.
+	const lists = useGitLists({
+		workspaceId,
+		view,
+		revision,
+		setError,
+		focusList: () => list.current?.focus()
+	});
+	const { history, branches } = lists;
+	// The browser is busy while an action runs, or until the view's data has loaded.
+	const busy = action.working || (view !== 'changes' && !lists.loaded);
 	const path = files[index];
-	const loaded =
-		!!commit &&
-		diffResult?.workspaceId === workspaceId &&
-		diffResult.commit === commit &&
-		diffResult.path === path;
-	let diff: string;
-	if (!commit || !path) {
-		diff = t('Select a commit and press Enter to browse its changed files.');
-	} else if (!loaded) {
-		diff = t('Loading diff…');
-	} else {
-		diff = diffResult.failed ? errorMessage(diffResult.value) : diffResult.value;
+	const diff = useCommitDiff(workspaceId, commit, path);
+
+	/** Leave the open commit, selecting it again in the history. */
+	function closeCommit(entry: GitCommitEntry): void {
+		setIndex(
+			Math.max(
+				0,
+				history.findIndex((candidate) => candidate.hash === entry.hash)
+			)
+		);
+		setCommit(undefined);
+		setFiles([]);
 	}
-	useEffect(() => {
-		let cancelled = false;
-		if (!commit || !path) {
-			return;
-		}
-		window.nido
-			.gitCommitDiff(workspaceId, commit.hash, path)
-			.then((value) => {
-				if (!cancelled) {
-					setDiffResult({
-						workspaceId,
-						commit,
-						path,
-						value: value || 'No textual changes.'
-					});
-				}
-			})
-			.catch((failure) => {
-				if (!cancelled) {
-					setDiffResult({
-						workspaceId,
-						commit,
-						path,
-						value: String(failure),
-						failed: true
-					});
-				}
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [workspaceId, commit, path]);
 
 	/** Esc: close the new branch form, leave the open commit, or close the browser. */
 	function returnToPreviousView(): void {
 		if (creating) {
 			setCreating(false);
 		} else if (commit) {
-			setIndex(
-				Math.max(
-					0,
-					history.findIndex((entry) => entry.hash === commit.hash)
-				)
-			);
-			setCommit(undefined);
-			setFiles([]);
+			closeCommit(commit);
 		} else {
 			onClose();
 			return;
@@ -225,14 +102,23 @@ export default function GitBrowser({
 		setError('');
 	}
 
+	/** Reload the current view from the start. */
+	function refresh(): void {
+		setCommit(undefined);
+		setFiles([]);
+		setIndex(0);
+		setError('');
+		setRevision((value) => value + 1);
+	}
+
 	/** Switch to (or with `create`, create) a branch, then reload the branch list. */
 	function switchBranch(branch: string, create: boolean): void {
 		void run(async () => {
 			await window.nido.gitSwitch(workspaceId, branch, create);
 			setCreating(false);
 			setNewBranchName('');
-			setBranches(await window.nido.gitBranches(workspaceId));
-			setBranchName((await window.nido.gitStatus(workspaceId)).branch);
+			lists.setBranches(await window.nido.gitBranches(workspaceId));
+			lists.setBranchName((await window.nido.gitStatus(workspaceId)).branch);
 			list.current?.focus();
 		});
 	}
@@ -254,49 +140,15 @@ export default function GitBrowser({
 		}
 	}
 
-	// The text of each list row, also used as its key and title.
-	let labels: string[];
-	if (view === 'branches') {
-		labels = branches.map(
-			(branch) =>
-				`${branch.current ? '● ' : ''}${branch.remote ? '[remote] ' : ''}${branch.name}`
-		);
-	} else if (commit) {
-		labels = files;
-	} else {
-		labels = history.map((entry) => `${entry.hash.slice(0, 8)}  ${entry.subject}`);
-	}
-	let listLabel = t('Commit history');
-	if (view === 'branches') {
-		listLabel = t('Branches');
-	} else if (commit) {
-		listLabel = t('Commit files');
-	}
+	const labels = listLabels(view, commit, files, history, branches);
+	const listLabel =
+		view === 'branches' ? t('Branches') : commit ? t('Commit files') : t('Commit history');
 
 	useGitBrowserKeyboard({ busy, back: returnToPreviousView, changeView });
 
 	// The views sit in the panel's heading, beside its title, to leave more room for the diff.
 	const heading = useContext(PanelHeadingSlot);
-	const views = (
-		<nav className={styles.viewTabs} aria-label={t('Git views')}>
-			{(
-				[
-					{ view: 'changes', title: t('Changes') },
-					{ view: 'history', title: t('History') },
-					{ view: 'branches', title: t('Branches') }
-				] as const
-			).map(({ view: tab, title }, shortcutIndex) => (
-				<button
-					key={title}
-					disabled={busy}
-					aria-current={view === tab ? 'page' : undefined}
-					onClick={() => changeView(tab)}
-				>
-					{shortcutIndex + 1} {title}
-				</button>
-			))}
-		</nav>
-	);
+	const views = <ViewTabs view={view} busy={busy} changeView={changeView} />;
 
 	return (
 		<div className={styles.panel}>
@@ -304,16 +156,16 @@ export default function GitBrowser({
 			{view === 'changes' ? (
 				<GitPanel
 					workspaceId={workspaceId}
-					onBusyChange={setBusy}
+					onBusyChange={action.setWorking}
 					message={message}
 					setMessage={setMessage}
 				/>
 			) : (
 				<section aria-label={t('Git browser')} aria-busy={busy}>
 					<div className={styles.toolbar}>
-						<strong>{branchName}</strong>
-						{view === 'history' && !busy && commitCount !== undefined && (
-							<small>{t('Commits: {count}', { count: commitCount })}</small>
+						<strong>{lists.branchName}</strong>
+						{view === 'history' && !busy && lists.commitCount !== undefined && (
+							<small>{t('Commits: {count}', { count: lists.commitCount })}</small>
 						)}
 						<span>
 							{commit
@@ -330,16 +182,7 @@ export default function GitBrowser({
 								{t('Back (Esc)')}
 							</button>
 						)}
-						<button
-							disabled={busy}
-							onClick={() => {
-								setCommit(undefined);
-								setFiles([]);
-								setIndex(0);
-								setError('');
-								setRevision((value) => value + 1);
-							}}
-						>
+						<button disabled={busy} onClick={refresh}>
 							{t('Refresh')}
 						</button>
 					</div>
@@ -382,15 +225,7 @@ export default function GitBrowser({
 									open={openSelection}
 								/>
 							) : (
-								<div className={styles.emptyPreview} tabIndex={0} aria-busy={busy}>
-									{!busy &&
-										(view === 'branches' ? (
-											<GitBranch size={34} aria-hidden="true" />
-										) : (
-											<GitCommitHorizontal size={34} aria-hidden="true" />
-										))}
-									{!busy && <p>{t('Nothing to preview yet.')}</p>}
-								</div>
+								<EmptyPreview view={view} busy={busy} />
 							)}
 						</div>
 					</div>
@@ -402,10 +237,10 @@ export default function GitBrowser({
 									: t('Switch branch (Enter)')}
 							</button>
 						)}
-						{view === 'history' && !commit && hasMoreHistory && (
+						{view === 'history' && !commit && lists.hasMoreHistory && (
 							<button
 								disabled={busy}
-								onClick={() => void run(() => loadHistory(true))}
+								onClick={() => void run(lists.loadOlderHistory)}
 							>
 								{t('Load older commits')}
 							</button>
@@ -449,6 +284,70 @@ export default function GitBrowser({
 					</footer>
 				</section>
 			)}
+		</div>
+	);
+}
+
+/** The text of each list row, also used as its key and title. */
+function listLabels(
+	view: GitView,
+	commit: GitCommitEntry | undefined,
+	files: string[],
+	history: GitCommitEntry[],
+	branches: GitBranchEntry[]
+): string[] {
+	if (view === 'branches') {
+		return branches.map(
+			(branch) =>
+				`${branch.current ? '● ' : ''}${branch.remote ? '[remote] ' : ''}${branch.name}`
+		);
+	}
+	if (commit) {
+		return files;
+	}
+	return history.map((entry) => `${entry.hash.slice(0, 8)}  ${entry.subject}`);
+}
+
+/** The buttons of the changes, history and branches views, with their 1/2/3 shortcuts. */
+function ViewTabs({
+	view,
+	busy,
+	changeView
+}: {
+	view: GitView;
+	busy: boolean;
+	changeView: (view: GitView) => void;
+}): React.JSX.Element {
+	const t = useI18n();
+	const tabs = [
+		{ view: 'changes', title: t('Changes') },
+		{ view: 'history', title: t('History') },
+		{ view: 'branches', title: t('Branches') }
+	] as const;
+	return (
+		<nav className={styles.viewTabs} aria-label={t('Git views')}>
+			{tabs.map(({ view: tab, title }, shortcutIndex) => (
+				<button
+					key={title}
+					disabled={busy}
+					aria-current={view === tab ? 'page' : undefined}
+					onClick={() => changeView(tab)}
+				>
+					{shortcutIndex + 1} {title}
+				</button>
+			))}
+		</nav>
+	);
+}
+
+/** The preview when nothing is selected. */
+function EmptyPreview({ view, busy }: { view: GitView; busy: boolean }): React.JSX.Element {
+	const t = useI18n();
+	const Icon = view === 'branches' ? GitBranch : GitCommitHorizontal;
+	return (
+		<div className={styles.emptyPreview} tabIndex={0} aria-busy={busy}>
+			{!busy && <Icon size={34} aria-hidden="true" />}
+			{!busy && <p>{t('Nothing to preview yet.')}</p>}
 		</div>
 	);
 }
