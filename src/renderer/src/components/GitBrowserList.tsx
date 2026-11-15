@@ -108,6 +108,7 @@ export default function GitBrowserList({
 					aria-selected={index === position}
 					className={`${styles.change} ${entryRows ? styles.historyEntry : ''}`}
 					title={label}
+					aria-label={commit && view === 'history' ? label : undefined}
 					ref={(node) => {
 						if (node && index === position) {
 							node.scrollIntoView({ block: 'nearest' });
@@ -145,6 +146,8 @@ export default function GitBrowserList({
 								)}
 							</div>
 						</>
+					) : commit ? (
+						<FileLabel path={label} />
 					) : (
 						<span>{label}</span>
 					)}
@@ -160,5 +163,21 @@ export default function GitBrowserList({
 				</p>
 			)}
 		</div>
+	);
+}
+
+/** A changed file of a commit: its name first, then the folder it is in, dimmed. */
+function FileLabel({ path }: { path: string }): React.JSX.Element {
+	const slash = path.lastIndexOf('/');
+	return (
+		<span className={styles.filePath}>
+			<strong>{path.slice(slash + 1)}</strong>
+			{/* Long folders are cut at the start, keeping the part nearest the file. */}
+			{slash > 0 && (
+				<small>
+					<bdi>{path.slice(0, slash)}</bdi>
+				</small>
+			)}
+		</span>
 	);
 }

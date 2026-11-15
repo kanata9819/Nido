@@ -208,3 +208,64 @@ test('diff syntax colors follow excerpt positions when a hunk starts far into th
 	);
 	await expect(page.locator('[data-git-scroll="after"]')).toContainText('80');
 });
+
+test('diffs mark skipped lines and changed words, and v switches to an inline layout that is remembered', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=highlight`);
+	await page.evaluate(() => localStorage.removeItem('nido.diffLayout'));
+	await page.evaluate(() =>
+		window.rendererTest.render({
+			diff:
+				'@@ -10,3 +10,4 @@ function setup()\n' +
+				' keep one\n-const wrap = false;\n+const wrap = true;\n+const extra = 1;\n keep two\n' +
+				'@@ -40,2 +41,2 @@ function later()\n-old tail\n+new tail\n keep three'
+		})
+	);
+	const after = page.locator('[data-git-scroll="after"]');
+	const before = page.locator('[data-git-scroll="before"]');
+	await expect(after).toContainText('const extra = 1;');
+	// Separators say how many unchanged lines each hunk skips, with Git's context.
+	await expect(after).toContainText('9 unchanged lines');
+	await expect(after).toContainText('function setup()');
+	await expect(after).toContainText('27 unchanged lines');
+	await expect(after).toContainText('function later()');
+	// Only the changed words of a replaced line are marked.
+	await expect(before.locator('[class*="emphasis"]')).toHaveText(['false', 'old']);
+	await expect(after.locator('[class*="emphasis"]')).toHaveText(['true', 'new']);
+	await expect(page.getByRole('button', { name: 'Side by side' })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	await after.focus();
+	await after.press('v');
+	// Inline, one pane shows the removed line above the added ones, with both line numbers.
+	await expect(before).toHaveCount(0);
+	await expect(after).toBeFocused();
+	await expect(page.getByRole('button', { name: 'Inline' })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	const lines = await after
+		.locator('[data-diff-row] code')
+		.evaluateAll((nodes) => nodes.map((node) => node.textContent));
+	expect(lines).toEqual([
+		'keep one',
+		'const wrap = false;',
+		'const wrap = true;',
+		'const extra = 1;',
+		'keep two',
+		'old tail',
+		'new tail',
+		'keep three'
+	]);
+	await after.press('n');
+	await expect(after.locator('[data-diff-active="true"]')).toContainText('const wrap = false;');
+	expect(await page.evaluate(() => localStorage.getItem('nido.diffLayout'))).toBe('unified');
+	await page.reload();
+	await page.evaluate(() => window.rendererTest.render({ diff: '@@ -1 +1 @@\n-a\n+b' }));
+	await expect(page.locator('[data-git-scroll="before"]')).toHaveCount(0);
+	await page.getByRole('button', { name: 'Side by side' }).click();
+	await expect(page.locator('[data-git-scroll="before"]')).toHaveCount(1);
+	expect(await page.evaluate(() => localStorage.getItem('nido.diffLayout'))).toBe('split');
+});

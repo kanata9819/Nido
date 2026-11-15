@@ -224,6 +224,28 @@
 .change[aria-selected='true'] {
 	background: #303a40;
 }
+.filePath {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+.filePath strong {
+	flex-shrink: 0;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: #e3e8ed;
+	font-weight: 500;
+}
+.change .filePath small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	direction: rtl;
+	text-align: left;
+	color: #7f8e99;
+	font-size: 11px;
+}
 .historyList {
 	width: clamp(240px, 27vw, 360px);
 }
@@ -357,12 +379,30 @@
 	tab-size: 4;
 }
 .splitDiff {
+	/* Diff colors: a soft tint for changed lines, a stronger one for the changed characters
+	   and the gutter, and a sign so changes do not rely on color alone. */
+	--diff-added: #3fb95019;
+	--diff-added-gutter: #3fb95033;
+	--diff-added-strong: #3fb95052;
+	--diff-added-sign: #7ee787;
+	--diff-removed: #f8514919;
+	--diff-removed-gutter: #f8514933;
+	--diff-removed-strong: #f8514952;
+	--diff-removed-sign: #ff9a94;
+	--diff-gutter: #15181b;
+	--diff-number: #6b7a86;
+	--diff-separator: #80bad5;
+	--diff-active: #80bad5;
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	flex: 1;
 	min-height: 0;
 	height: 100%;
 	overflow: hidden;
+	background: #111315;
+}
+.splitDiff[data-layout='unified'] {
+	grid-template-columns: minmax(0, 1fr);
 }
 .diffPane {
 	display: flex;
@@ -370,22 +410,24 @@
 	min-width: 0;
 	min-height: 0;
 }
-.diffPane:first-child {
+.splitDiff[data-layout='split'] .diffPane:first-child {
 	border-right: 1px solid #30363d;
 }
 .diffHeading {
 	display: flex;
 	align-items: center;
 	min-width: 0;
-	height: 44px;
+	height: 38px;
 	gap: 8px;
-	padding: 10px 16px;
+	padding: 0 8px 0 16px;
 	border-bottom: 1px solid #30363d;
 	font-size: 12px;
 	flex-shrink: 0;
 }
 .diffHeading strong {
 	flex-shrink: 0;
+	font-weight: 600;
+	color: #d8dee4;
 }
 .diffHeading > span {
 	min-width: 0;
@@ -396,11 +438,17 @@
 .diffHeading span {
 	color: #93a2ad;
 }
+.diffTools {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-left: auto;
+	min-width: 0;
+}
 .diffNavigation {
 	display: flex;
 	align-items: center;
-	gap: 4px;
-	margin-left: auto;
+	gap: 2px;
 	min-width: 0;
 	white-space: nowrap;
 }
@@ -408,15 +456,38 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	font-size: 11px;
+	margin-right: 4px;
 }
 .panel .diffNavigation button,
-.diffNavigation button {
+.diffNavigation button,
+.panel .layoutSwitch button,
+.layoutSwitch button {
 	display: inline-flex;
 	align-items: center;
-	padding: 3px;
+	justify-content: center;
+	padding: 4px;
 	border: 0;
 	border-radius: 4px;
 	flex-shrink: 0;
+	color: #93a2ad;
+}
+.diffNavigation button:hover,
+.layoutSwitch button:hover {
+	color: #e3e8ed;
+	background: #ffffff0d;
+}
+.layoutSwitch {
+	display: inline-flex;
+	gap: 2px;
+	padding: 2px;
+	border: 1px solid #30363d;
+	border-radius: 6px;
+	flex-shrink: 0;
+}
+.panel .layoutSwitch button[aria-pressed='true'],
+.layoutSwitch button[aria-pressed='true'] {
+	color: #a5ce91;
+	background: #a5ce911f;
 }
 .diffPane pre {
 	flex: 1;
@@ -425,13 +496,14 @@
 	margin: 0;
 	font:
 		13px/22px Consolas,
+		'Cascadia Mono',
 		monospace;
 	tab-size: 4;
 	padding: 0 0 12px;
-	font-size: 13px;
 	overflow: scroll;
 	overflow-anchor: none;
 	scrollbar-gutter: stable;
+	color: #c8d1d9;
 }
 .diffLine {
 	display: flex;
@@ -440,37 +512,126 @@
 	height: 22px;
 }
 .diffLine code {
+	flex: 1;
 	padding: 0 16px 0 10px;
 	font: inherit;
 }
-.lineNumber {
+/* Line numbers and the +/- sign stay in view while scrolling sideways. */
+.gutter {
 	position: sticky;
 	left: 0;
-	flex: 0 0 54px;
-	padding-right: 12px;
-	text-align: right;
-	color: #70808c;
-	background: #191c1f;
+	z-index: 1;
+	display: flex;
+	flex-shrink: 0;
+	padding-right: 18px;
+	color: var(--diff-number);
+	background: var(--diff-gutter);
+	box-shadow: inset -1px 0 #ffffff0a;
 	user-select: none;
 }
-.emptyLine {
-	background: #ffffff03;
+.gutter > span {
+	width: 46px;
+	text-align: right;
 }
-.diffLine[data-diff-active='true'] {
-	box-shadow: inset 0 2px #80bad5;
+.splitDiff[data-layout='unified'] .gutter > span {
+	width: 42px;
+}
+.gutter::after {
+	position: absolute;
+	right: 4px;
+	width: 10px;
+	text-align: center;
+	font-weight: 700;
+}
+.added code {
+	background: var(--diff-added);
+}
+.added .gutter {
+	color: var(--diff-added-sign);
+	background:
+		linear-gradient(var(--diff-added-gutter), var(--diff-added-gutter)), var(--diff-gutter);
+}
+.added .gutter::after {
+	content: '+';
+}
+.removed code {
+	background: var(--diff-removed);
+}
+.removed .gutter {
+	color: var(--diff-removed-sign);
+	background:
+		linear-gradient(var(--diff-removed-gutter), var(--diff-removed-gutter)), var(--diff-gutter);
+}
+.removed .gutter::after {
+	content: '−';
+}
+/* Without syntax colors, changed lines keep a readable tint of their own. */
+.added code > span:not([style*='color']) {
+	color: #b4dcae;
+}
+.removed code > span:not([style*='color']) {
+	color: #f0b8b4;
+}
+.added .emphasis {
+	background: var(--diff-added-strong);
+	border-radius: 2px;
+}
+.removed .emphasis {
+	background: var(--diff-removed-strong);
+	border-radius: 2px;
+}
+/* The other side has no line here: a hatch reads as "nothing" rather than a blank line. */
+.emptyLine code {
+	background: repeating-linear-gradient(-45deg, transparent 0 5px, #ffffff09 5px 6px);
+}
+.emptyLine .gutter {
+	background: var(--diff-gutter);
+}
+/* Unchanged lines that the diff leaves out between hunks. */
+.separator {
+	color: var(--diff-separator);
+	background: #80bad50d;
+	box-shadow:
+		inset 0 1px #80bad51f,
+		inset 0 -1px #80bad51f;
+}
+.separator .gutter {
+	justify-content: center;
+	width: 64px;
+	padding-right: 0;
+	color: var(--diff-separator);
+	background: #80bad514;
+	letter-spacing: 2px;
+}
+.splitDiff[data-layout='unified'] .separator .gutter {
+	width: 102px;
+}
+.separatorText {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding-left: 10px;
+	font:
+		12px system-ui,
+		sans-serif;
+	white-space: nowrap;
+}
+.separatorText code {
+	flex: none;
+	padding: 0;
+	color: #93a2ad;
+	font:
+		12px Consolas,
+		'Cascadia Mono',
+		monospace;
+}
+.diffLine[data-diff-active='true'] .gutter {
+	box-shadow: inset 3px 0 var(--diff-active);
 }
 .preview pre:focus-visible,
 .list:focus-visible {
 	outline: 1px solid #9fc68e;
 	outline-offset: -1px;
-}
-.added {
-	color: #a5ce91;
-	background: #243024;
-}
-.removed {
-	color: #e59b96;
-	background: #352324;
 }
 .hunk {
 	color: #80bad5;
@@ -543,7 +704,7 @@
 }
 :global(:root[data-theme='neon']) .sidebar,
 :global(:root[data-theme='neon']) .list,
-:global(:root[data-theme='neon']) .diffPane:first-child {
+:global(:root[data-theme='neon']) .splitDiff[data-layout='split'] .diffPane:first-child {
 	border-right-color: var(--ui-border);
 }
 :global(:root[data-theme='neon']) .panel button,
@@ -599,11 +760,28 @@
 :global(:root[data-theme='neon']) .list:focus-visible {
 	outline-color: var(--ui-accent);
 }
-:global(:root[data-theme='neon']) .lineNumber {
-	background: #0a0b0f;
+:global(:root[data-theme='neon']) .splitDiff {
+	--diff-gutter: #0a0b0f;
+	--diff-number: #5d6b85;
+	--diff-separator: #b4a6ff;
+	--diff-active: var(--neon-violet);
+	background: #07080bcc;
 }
-:global(:root[data-theme='neon']) .diffLine[data-diff-active='true'] {
-	box-shadow: inset 0 2px var(--neon-violet);
+:global(:root[data-theme='neon']) .separator {
+	background: #8b7bff0f;
+	box-shadow:
+		inset 0 1px #8b7bff29,
+		inset 0 -1px #8b7bff29;
+}
+:global(:root[data-theme='neon']) .separator .gutter {
+	background: #8b7bff1a;
+}
+:global(:root[data-theme='neon']) .layoutSwitch {
+	border-color: var(--ui-border);
+}
+:global(:root[data-theme='neon']) .layoutSwitch button[aria-pressed='true'] {
+	color: var(--ui-accent);
+	background: var(--ui-accent-soft);
 }
 :global(:root[data-theme='neon']) .hunk {
 	color: var(--neon-violet);
