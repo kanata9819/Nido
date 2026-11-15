@@ -1,10 +1,55 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { Clock3, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react';
-import type { HistoryList, HistoryPreview } from '../../../shared/history';
-import { remoteErrorText, useI18n } from '../i18n';
+import type { HistoryList } from '../../../shared/history';
+import { useI18n } from '../i18n';
 import { filename } from '../palette/commands';
 import GitDiff from '../git/GitDiff';
+import { useTimeMachine } from './useTimeMachine';
 import styles from '../assets/TimeMachine.module.css';
+
+/** A version's time in the UI language, to the second. */
+function versionTime(timestamp: number): string {
+	return new Date(timestamp).toLocaleString(document.documentElement.lang, {
+		month: 'short',
+		day: 'numeric',
+		hour: '2-digit',
+		minute: '2-digit',
+		second: '2-digit'
+	});
+}
+
+/** The focused diff pane's scroll keys: j/k by three lines, Ctrl+D/U by half a page. */
+function scrollPane(event: React.KeyboardEvent): void {
+	const pane = event.target as HTMLElement;
+	const key = event.key.toLowerCase();
+	const offset =
+		event.ctrlKey && ['d', 'u'].includes(key)
+			? (pane.clientHeight / 2) * (key === 'd' ? 1 : -1)
+			: !event.ctrlKey && ['j', 'k'].includes(key)
+				? 66 * (key === 'j' ? 1 : -1)
+				: 0;
+	if (offset) {
+		event.preventDefault();
+		pane.scrollBy({ top: offset, behavior: 'instant' });
+	}
+}
+
+/** The version a list key moves to, or undefined for a key the list does not handle. */
+function versionKey(key: string, index: number, count: number): number | undefined {
+	if (['ArrowDown', 'j'].includes(key)) {
+		return Math.min(index + 1, count - 1);
+	}
+	if (['ArrowUp', 'k'].includes(key)) {
+		return Math.max(index - 1, 0);
+	}
+	if (key === 'Home' || key === 'g') {
+		return 0;
+	}
+	if (key === 'End' || key === 'G') {
+		return count - 1;
+	}
+	return undefined;
+}
 
 /**
  * Time Machine (Ctrl+Shift+H): the stored versions of the current file and a diff of the
@@ -18,177 +63,68 @@ export default function TimeMachine({
 	onClose: () => void;
 }): React.JSX.Element {
 	const t = useI18n();
-	const [data, setData] = useState<HistoryList>();
-	const [selected, setSelected] = useState('');
-	const [preview, setPreview] = useState<{
-		list: HistoryList;
-		id: string;
-		value?: HistoryPreview;
-		error?: string;
-	}>();
-	const [busy, setBusy] = useState<'list' | 'restore' | null>('list');
-	const [error, setError] = useState('');
-	// False once the panel has unmounted.
-	const alive = useRef(false);
-	// Grows with each list request, so a late answer to an older one is ignored.
-	const request = useRef(0);
 	const list = useRef<HTMLDivElement>(null);
 	const content = useRef<HTMLDivElement>(null);
-	// The preview only counts for the list and version it was loaded for.
-	const current =
-		preview && preview.list === data && preview.id === selected ? preview : undefined;
+	const { data, selected, select, busy, error, current, refresh, restore } = useTimeMachine({
+		workspaceId,
+		listRef: list,
+		onRestored: onClose
+	});
 	const value = current?.value;
-	// Load the versions of the current file.
-	const requestHistory = useCallback(
-		async (generation: number): Promise<void> => {
-			try {
-				const result = await window.nido.history(workspaceId);
-				if (!alive.current || request.current !== generation) {
-					return;
-				}
-				setData(result);
-				// Start on the previous draft so the first view shows an actual change.
-				setSelected((old) =>
-					result.versions.some((version) => version.id === old)
-						? old
-						: result.versions[1]?.id || result.versions[0]?.id || ''
-				);
-			} catch (failure) {
-				if (alive.current && request.current === generation) {
-					setError(remoteErrorText(failure));
-				}
-			} finally {
-				if (alive.current && request.current === generation) {
-					setBusy(null);
-				}
-			}
-		},
-		[workspaceId]
-	);
-	const refresh = (): void => {
-		setBusy('list');
-		setError('');
-		void requestHistory(++request.current);
-	};
-	useEffect(() => {
-		alive.current = true;
-		list.current?.focus();
-		void requestHistory(++request.current);
-		return () => {
-			alive.current = false;
-		};
-	}, [requestHistory]);
-	// Preview the selected version shortly after the selection settles, so moving quickly
-	// through the list does not request every version.
-	useEffect(() => {
-		if (!data || !selected) {
-			return;
-		}
-		let cancelled = false;
-		const timer = window.setTimeout(
-			() =>
-				void window.nido.historyPreview(workspaceId, data.path, selected).then(
-					(value) => {
-						if (!cancelled) {
-							setPreview({ list: data, id: selected, value });
-						}
-					},
-					(failure) => {
-						if (!cancelled) {
-							setPreview({
-								list: data,
-								id: selected,
-								error: remoteErrorText(failure)
-							});
-						}
-					}
-				),
-			75
-		);
-		list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
-		return () => {
-			cancelled = true;
-			window.clearTimeout(timer);
-		};
-	}, [workspaceId, data, selected]);
+	const focusDiff = (): void =>
+		content.current?.querySelector<HTMLElement>('[data-git-scroll="after"]')?.focus();
 
-	/** Restore the previewed version into the editor, then close Time Machine. */
-	const restore = async (): Promise<void> => {
-		if (busy || !value || value.identical) {
+	const panelKeyDown = (event: React.KeyboardEvent): void => {
+		if (event.nativeEvent.isComposing || event.altKey || event.metaKey) {
 			return;
 		}
-		setBusy('restore');
-		setError('');
-		try {
-			await window.nido.historyRestore(
-				workspaceId,
-				value.path,
-				value.version.id,
-				value.token
-			);
-			if (alive.current) {
-				onClose();
+		if (event.ctrlKey && event.key === 'Enter') {
+			event.preventDefault();
+			void restore();
+			return;
+		}
+		if (event.ctrlKey && ['h', 'l'].includes(event.key.toLowerCase())) {
+			event.preventDefault();
+			if (event.key.toLowerCase() === 'h') {
+				list.current?.focus();
+			} else {
+				focusDiff();
 			}
-		} catch (failure) {
-			if (alive.current) {
-				setError(remoteErrorText(failure));
-			}
-		} finally {
-			if (alive.current) {
-				setBusy(null);
-			}
+			return;
+		}
+		if ((event.target as HTMLElement).hasAttribute('data-git-scroll')) {
+			scrollPane(event);
 		}
 	};
-	/** A version's time in the UI language, to the second. */
-	const time = (timestamp: number): string =>
-		new Date(timestamp).toLocaleString(document.documentElement.lang, {
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit',
-			second: '2-digit'
-		});
+
+	const listKeyDown = (event: React.KeyboardEvent): void => {
+		if (
+			event.ctrlKey ||
+			event.altKey ||
+			event.metaKey ||
+			event.nativeEvent.isComposing ||
+			!data
+		) {
+			return;
+		}
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			focusDiff();
+			return;
+		}
+		const index = data.versions.findIndex((version) => version.id === selected);
+		const next = versionKey(event.key, index, data.versions.length);
+		if (next === undefined) {
+			return;
+		}
+		event.preventDefault();
+		if (!busy && data.versions[next]) {
+			select(data.versions[next].id);
+		}
+	};
+
 	return (
-		<section
-			className={styles.panel}
-			ref={content}
-			aria-busy={!!busy}
-			onKeyDown={(event) => {
-				if (event.nativeEvent.isComposing || event.altKey || event.metaKey) {
-					return;
-				}
-				if (event.ctrlKey && event.key === 'Enter') {
-					event.preventDefault();
-					void restore();
-					return;
-				}
-				if (event.ctrlKey && ['h', 'l'].includes(event.key.toLowerCase())) {
-					event.preventDefault();
-					if (event.key.toLowerCase() === 'h') {
-						list.current?.focus();
-					} else {
-						content.current
-							?.querySelector<HTMLElement>('[data-git-scroll="after"]')
-							?.focus();
-					}
-					return;
-				}
-				if ((event.target as HTMLElement).hasAttribute('data-git-scroll')) {
-					const pane = event.target as HTMLElement;
-					const key = event.key.toLowerCase();
-					const offset =
-						event.ctrlKey && ['d', 'u'].includes(key)
-							? (pane.clientHeight / 2) * (key === 'd' ? 1 : -1)
-							: !event.ctrlKey && ['j', 'k'].includes(key)
-								? 66 * (key === 'j' ? 1 : -1)
-								: 0;
-					if (offset) {
-						event.preventDefault();
-						pane.scrollBy({ top: offset, behavior: 'instant' });
-					}
-				}
-			}}
-		>
+		<section className={styles.panel} ref={content} aria-busy={!!busy} onKeyDown={panelKeyDown}>
 			<header className={styles.toolbar}>
 				<div>
 					<Clock3 size={18} />
@@ -230,78 +166,20 @@ export default function TimeMachine({
 					tabIndex={0}
 					aria-activedescendant={selected ? `history-${selected}` : undefined}
 					ref={list}
-					onKeyDown={(event) => {
-						if (
-							event.ctrlKey ||
-							event.altKey ||
-							event.metaKey ||
-							event.nativeEvent.isComposing ||
-							!data
-						) {
-							return;
-						}
-						const index = data.versions.findIndex((version) => version.id === selected);
-						let next = index;
-						if (['ArrowDown', 'j'].includes(event.key)) {
-							next = Math.min(index + 1, data.versions.length - 1);
-						} else if (['ArrowUp', 'k'].includes(event.key)) {
-							next = Math.max(index - 1, 0);
-						} else if (event.key === 'Home' || event.key === 'g') {
-							next = 0;
-						} else if (event.key === 'End' || event.key === 'G') {
-							next = data.versions.length - 1;
-						} else if (event.key === 'Enter') {
-							event.preventDefault();
-							content.current
-								?.querySelector<HTMLElement>('[data-git-scroll="after"]')
-								?.focus();
-							return;
-						} else {
-							return;
-						}
-						event.preventDefault();
-						if (!busy && data.versions[next]) {
-							setSelected(data.versions[next].id);
-						}
-					}}
+					onKeyDown={listKeyDown}
 				>
-					{data?.versions.map((version, index) => (
-						<div
-							key={version.id}
-							id={`history-${version.id}`}
-							role="option"
-							aria-selected={version.id === selected}
-							data-history-version={version.id}
-							className={styles.version}
-							onClick={() => {
+					{data && (
+						<Versions
+							data={data}
+							selected={selected}
+							onSelect={(id) => {
 								if (!busy) {
-									setSelected(version.id);
+									select(id);
 								}
 								list.current?.focus();
 							}}
-						>
-							<span className={styles.dot} />
-							<div>
-								<strong>
-									{t(
-										version.kind === 'draft'
-											? 'Unsaved draft'
-											: version.kind === 'restored'
-												? 'Restored edit'
-												: 'Saved content'
-									)}
-								</strong>
-								<time dateTime={new Date(version.timestamp).toISOString()}>
-									{time(version.timestamp)}
-								</time>
-								<small>
-									#{data.versions.length - index} ·{' '}
-									{t('{count} lines', { count: version.lines })} ·{' '}
-									{(version.bytes / 1024).toFixed(1)} KB
-								</small>
-							</div>
-						</div>
-					))}
+						/>
+					)}
 					{busy === 'list' && !data && <p role="status">{t('Loading history…')}</p>}
 				</div>
 				<div className={styles.preview}>
@@ -318,7 +196,7 @@ export default function TimeMachine({
 								path={value.path}
 								diff={value.diff}
 								label={t('Time Machine diff')}
-								beforeLabel={time(value.version.timestamp)}
+								beforeLabel={versionTime(value.version.timestamp)}
 								afterLabel={t('Current edits')}
 							/>
 						</>
@@ -345,4 +223,48 @@ export default function TimeMachine({
 			</footer>
 		</section>
 	);
+}
+
+/** The versions in the timeline, newest first. */
+function Versions({
+	data,
+	selected,
+	onSelect
+}: {
+	data: HistoryList;
+	selected: string;
+	onSelect: (id: string) => void;
+}): React.JSX.Element[] {
+	const t = useI18n();
+	return data.versions.map((version, index) => (
+		<div
+			key={version.id}
+			id={`history-${version.id}`}
+			role="option"
+			aria-selected={version.id === selected}
+			data-history-version={version.id}
+			className={styles.version}
+			onClick={() => onSelect(version.id)}
+		>
+			<span className={styles.dot} />
+			<div>
+				<strong>
+					{t(
+						version.kind === 'draft'
+							? 'Unsaved draft'
+							: version.kind === 'restored'
+								? 'Restored edit'
+								: 'Saved content'
+					)}
+				</strong>
+				<time dateTime={new Date(version.timestamp).toISOString()}>
+					{versionTime(version.timestamp)}
+				</time>
+				<small>
+					#{data.versions.length - index} · {t('{count} lines', { count: version.lines })}{' '}
+					· {(version.bytes / 1024).toFixed(1)} KB
+				</small>
+			</div>
+		</div>
+	));
 }
