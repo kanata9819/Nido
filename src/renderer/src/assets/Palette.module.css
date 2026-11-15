@@ -10,13 +10,29 @@
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
+/* Styled like the selects in Settings instead of the platform's own control. */
 .folderActions select {
 	margin-left: 8px;
-	padding: 4px 8px;
-	background: #20262a;
-	color: inherit;
-	border: 1px solid var(--ui-border-strong, #536359);
-	border-radius: 4px;
+	padding: 6px 32px 6px 10px;
+	appearance: none;
+	color-scheme: dark;
+	color: #e0e7eb;
+	font: inherit;
+	font-size: 12px;
+	background: var(--surface-input, #121416)
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23a3cc94' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+		no-repeat right 10px center;
+	border: 1px solid var(--ui-border-strong, #3f5145);
+	border-radius: 6px;
+	cursor: pointer;
+}
+.folderActions select:hover,
+.folderActions select:focus-visible {
+	border-color: var(--ui-accent, #a3cc94);
+}
+.folderActions select:focus-visible {
+	outline: 1px solid var(--ui-focus, #a3cc9460);
+	outline-offset: 2px;
 }
 .scrim {
 	position: absolute;
@@ -145,9 +161,6 @@
 .paletteInput[data-palette-filter]:not(:focus) {
 	opacity: 0.72;
 }
-.paletteItems:focus {
-	outline: none;
-}
 .paletteItems:focus .selectedItem {
 	box-shadow: inset 2px 0 var(--ui-accent, #a3bb9b);
 }
@@ -159,6 +172,7 @@
 .paletteItems > button {
 	display: flex;
 	align-items: center;
+	min-height: 46px;
 	gap: 11px;
 	width: 100%;
 	text-align: left;
@@ -182,8 +196,15 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
-.paletteItems kbd {
+.itemKeys {
+	display: flex;
+	flex-shrink: 0;
+	gap: 4px;
 	margin-left: auto;
+}
+.itemKeys kbd {
+	font-size: 10.5px;
+	letter-spacing: 0.2px;
 }
 /* The workspace list marks the selected workspace and the ones that are asleep. */
 .workspaceStatus {
@@ -198,7 +219,7 @@
 .workspaceStatus[data-status='current'] {
 	color: var(--ui-accent, #a3cc94);
 }
-.workspaceStatus + kbd {
+.workspaceStatus + .itemKeys {
 	margin-left: 8px;
 }
 .paletteItems button[data-workspace-status='sleeping'] > span:nth-child(2) {

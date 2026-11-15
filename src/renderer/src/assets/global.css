@@ -38,6 +38,15 @@ input:focus-visible,
 button:hover {
 	background: #ffffff08;
 }
+/* A focused list (palettes, Git, search results, folders) is already marked by its
+   highlighted row, so its frame stays faint instead of a bright ring around the whole list.
+   The doubled :root outranks the lists' own focus rules. */
+:root:root
+	:is([role='listbox'], [role='group'], [role='tree'], [role='grid'])[tabindex]:focus-visible,
+:root:root :is([role='listbox'], [role='group'], [role='tree'], [role='grid'])[tabindex]:focus {
+	outline: 1px solid color-mix(in srgb, var(--ui-accent, #a8cf9e) 28%, transparent);
+	outline-offset: -1px;
+}
 kbd {
 	font:
 		11px 'Segoe UI',
