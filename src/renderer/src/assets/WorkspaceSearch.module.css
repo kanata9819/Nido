@@ -180,3 +180,29 @@
 :global(:root[data-theme='neon']) .diff pre:last-child {
 	background: #0b1f24;
 }
+
+/* Labels the dialog title already makes clear stay available to screen readers only. */
+.hiddenLabel {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+/* Without its visible label, the folder field shows a folder icon. */
+.fields input[data-field='folder'] {
+	padding-left: 32px;
+	background: var(--surface-input, #121416)
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2382919d' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z'/%3E%3C/svg%3E")
+		no-repeat 11px center;
+}
+.footerRow {
+	display: flex;
+	justify-content: space-between;
+	gap: 16px;
+}
+.footerNote {
+	color: #7a8a96;
+	text-align: right;
+}

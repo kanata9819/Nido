@@ -407,6 +407,9 @@
 	color: #7e8b97;
 	line-height: 1.9;
 }
+.keepTogether {
+	white-space: nowrap;
+}
 .main {
 	flex: 1;
 	min-width: 0;

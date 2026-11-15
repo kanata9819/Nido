@@ -352,8 +352,13 @@ function Sidebar({
 					<p className={styles.emptyTree}>
 						{t('No files yet.')}
 						<br />
-						{t('Press')} <kbd>a</kbd> {t('for a file or')} <kbd>A</kbd>{' '}
-						{t('for a folder.')}
+						{/* Each key stays on a line with what it does. */}
+						<span className={styles.keepTogether}>
+							{t('Press')} <kbd>a</kbd> {t('for a file or')}
+						</span>{' '}
+						<span className={styles.keepTogether}>
+							<kbd>A</kbd> {t('for a folder.')}
+						</span>
 					</p>
 				)}
 			</div>

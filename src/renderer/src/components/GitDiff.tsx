@@ -207,16 +207,20 @@ export default function GitDiff({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [layout]);
 
-	// Track the pane height to know how many rows are visible.
+	// A diff without any source lines is only a message (loading, an error, a binary file).
+	const hasLines = rows.some((row) => row.before || row.after);
+	// Track the pane height to know how many rows are visible. The pane appears once a
+	// message such as "Loading diff…" gives way to lines.
 	useEffect(() => {
 		const pane = after.current;
 		if (!pane) {
 			return;
 		}
+		setHeight(pane.clientHeight);
 		const observer = new ResizeObserver(() => setHeight(pane.clientHeight));
 		observer.observe(pane);
 		return () => observer.disconnect();
-	}, []);
+	}, [hasLines]);
 	useEffect(() => {
 		before.current?.scrollTo({ top: 0, left: 0 });
 		after.current?.scrollTo({ top: 0, left: 0 });
@@ -347,6 +351,23 @@ export default function GitDiff({
 					{numbers}
 				</span>
 				<code>{content}</code>
+			</div>
+		);
+	}
+
+	// Without lines, the message is centered across the diff instead of repeated in each pane.
+	if (!hasLines) {
+		return (
+			<div
+				className={styles.diffMessage}
+				tabIndex={0}
+				role="region"
+				aria-label={label}
+				data-git-scroll="after"
+			>
+				{rows.map((row, index) => (
+					<p key={index}>{row.heading}</p>
+				))}
 			</div>
 		);
 	}

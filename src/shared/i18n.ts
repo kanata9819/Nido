@@ -795,6 +795,7 @@ export const japanese: Record<string, string> = {
 	'Syntax highlighting unavailable': '構文の強調表示を利用できません',
 	Before: '変更前',
 	After: '変更後',
+	'Nothing to preview yet.': 'まだ表示する内容はありません。',
 	'{count} unchanged lines': '変更なし {count} 行',
 	'Diff layout (v)': '差分の表示方法 (v)',
 	'Side by side': '左右に並べる',

@@ -73,9 +73,19 @@
 	color: #b9c7bd;
 	font-size: 12px;
 }
-.paletteHeading button {
+.paletteHeading > button {
 	margin-left: auto;
 	color: #7d8b97;
+}
+/* Controls that a panel puts into its heading, such as the Git views. */
+.headingSlot {
+	display: flex;
+	align-items: center;
+	min-width: 0;
+	margin-left: 14px;
+}
+.headingSlot:empty {
+	display: none;
 }
 .explorerDialog {
 	position: fixed;
@@ -322,4 +332,17 @@
 }
 .paletteConfirmation small {
 	color: #82919d;
+}
+
+/* The folder picker's key hints: one hint per item, wrapping between hints. */
+.folderKeys {
+	gap: 4px 16px;
+	padding-top: 12px;
+	padding-bottom: 14px;
+	border-top: 1px solid var(--ui-border, #313c43);
+	color: #7a8a96;
+	font-size: 11px;
+}
+.folderKeys > span {
+	white-space: nowrap;
 }
