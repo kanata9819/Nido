@@ -315,7 +315,9 @@ test('messages raised by the main process and the editor have Japanese translati
 	const messages = new Map<string, string>();
 	for (const file of [
 		...sourceFiles('src/main', '.ts'),
-		...sourceFiles('src/shared', '.ts').filter((file) => !file.endsWith('i18n.ts')),
+		...sourceFiles('src/shared', '.ts').filter(
+			(file) => !file.endsWith('i18n.ts') && !file.includes('locales')
+		),
 		...sourceFiles('resources/nido', '.lua')
 	]) {
 		const text = readFileSync(file, 'utf8');
