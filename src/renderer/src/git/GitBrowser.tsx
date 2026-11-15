@@ -308,7 +308,7 @@ function listLabels(
 	return history.map((entry) => `${entry.hash.slice(0, 8)}  ${entry.subject}`);
 }
 
-/** The buttons of the changes, history and branches views, with their 1/2/3 shortcuts. */
+/** The buttons of the changes, history and branches views, each with its key (1, 2 or 3). */
 function ViewTabs({
 	view,
 	busy,
@@ -331,9 +331,11 @@ function ViewTabs({
 					key={title}
 					disabled={busy}
 					aria-current={view === tab ? 'page' : undefined}
+					aria-keyshortcuts={String(shortcutIndex + 1)}
 					onClick={() => changeView(tab)}
 				>
-					{shortcutIndex + 1} {title}
+					{title}
+					<kbd aria-hidden="true">{shortcutIndex + 1}</kbd>
 				</button>
 			))}
 		</nav>

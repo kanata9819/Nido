@@ -3039,9 +3039,9 @@ test('Japanese command search and keyboard navigation keep working after a langu
 	await expect(
 		page.getByRole('listbox', { name: '変更されたファイル', exact: true })
 	).toBeFocused();
-	await expect(page.getByRole('button', { name: '3 ブランチ', exact: true })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'ブランチ', exact: true })).toBeEnabled();
 	await page.keyboard.press('3');
-	await expect(page.getByRole('button', { name: '3 ブランチ', exact: true })).toHaveAttribute(
+	await expect(page.getByRole('button', { name: 'ブランチ', exact: true })).toHaveAttribute(
 		'aria-current',
 		'page'
 	);
@@ -3156,7 +3156,7 @@ test('Explorer and editor tabs use the same log icon without changing file acces
 
 test('Git shortcuts use the enabled state as soon as loading finishes', async ({ page }) => {
 	await page.goto(`${origin}?view=git&defer=gitStatus`);
-	const branches = page.getByRole('button', { name: '3 Branches', exact: true });
+	const branches = page.getByRole('button', { name: 'Branches', exact: true });
 	const list = page.getByRole('listbox', { name: 'Changed files' });
 	await expect(branches).toBeDisabled();
 	await expect(list).toBeFocused();
@@ -4099,7 +4099,7 @@ test('Git commit failures preserve the draft and it survives switching views', a
 	await expect(page.getByRole('alert')).toHaveText('Commit hook rejected the message.');
 	await expect(input).toHaveValue('Rename the module');
 	await expect(input).not.toHaveAttribute('readonly', '');
-	await page.getByRole('button', { name: '2 History', exact: true }).click();
+	await page.getByRole('button', { name: 'History', exact: true }).click();
 	await expect
 		.poll(() =>
 			page.evaluate(
@@ -4112,7 +4112,7 @@ test('Git commit failures preserve the draft and it survives switching views', a
 	await page.evaluate(() =>
 		window.rendererTest.settle('gitStatus', 0, { root: '/alpha', branch: 'main', changes: [] })
 	);
-	await page.getByRole('button', { name: '1 Changes', exact: true }).click();
+	await page.getByRole('button', { name: 'Changes', exact: true }).click();
 	await page.evaluate(() =>
 		window.rendererTest.settle('gitStatus', 0, { root: '/alpha', branch: 'main', changes: [] })
 	);
@@ -4167,7 +4167,7 @@ test('Git keyboard help stays in the modal focus cycle', async ({ page }) => {
 	const dialog = page.locator('[data-panel="git"]');
 	const help = dialog.locator('summary');
 	// The views sit in the heading, so the cycle wraps from the help to the first view.
-	const first = dialog.getByRole('button', { name: '1 Changes', exact: true });
+	const first = dialog.getByRole('button', { name: 'Changes', exact: true });
 	await expect(
 		dialog.locator('[class*="paletteHeading"]').getByRole('navigation', { name: 'Git views' })
 	).toBeVisible();
@@ -4187,7 +4187,7 @@ test('Git history counts all commits and supports paging without reloading the f
 }) => {
 	await page.goto(`${origin}?view=git&defer=gitHistory`);
 	await page.addStyleTag({ content: '#root { display: flex; flex-direction: column; }' });
-	await page.getByRole('button', { name: '2 History', exact: true }).click();
+	await page.getByRole('button', { name: 'History', exact: true }).click();
 	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate(() =>
 		window.rendererTest.settle('gitHistory', 0, {
@@ -4254,15 +4254,15 @@ test('Git history counts all commits and supports paging without reloading the f
 			() => window.rendererTest.calls.filter((call) => call.method === 'gitHistory').length
 		)
 	).toBe(2);
-	await page.getByRole('button', { name: '1 Changes', exact: true }).click();
+	await page.getByRole('button', { name: 'Changes', exact: true }).click();
 	await expect(page.getByRole('listbox', { name: 'Changed files' })).toBeVisible();
-	await page.getByRole('button', { name: '2 History', exact: true }).click();
+	await page.getByRole('button', { name: 'History', exact: true }).click();
 	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending[0]?.args[1])).toBe(0);
-	await expect(page.getByRole('button', { name: '2 History', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'History', exact: true })).toBeDisabled();
 	await page.evaluate(() =>
 		window.rendererTest.settle('gitHistory', 0, { commits: [], total: 0 })
 	);
-	await expect(page.getByRole('button', { name: '2 History', exact: true })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'History', exact: true })).toBeEnabled();
 	await expect(page.getByText('Commits: 0', { exact: true })).toBeVisible();
 	await list.press('Control+d');
 	await expect(list).not.toHaveAttribute('aria-activedescendant');
