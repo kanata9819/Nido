@@ -2,7 +2,7 @@ import { onNidoEvent } from '../../nidoEvents';
 import { useErrorMessage, useI18n } from '../../i18n';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Braces, X } from 'lucide-react';
-import styles from '../../assets/TypeInformation.module.css';
+import styles from './TypeInformation.module.css';
 import type { NidoEvent } from '../../../../shared/types';
 import OverlayPresence from '../../ui/OverlayPresence';
 import { placeNearCursor } from '../../ui/popupPosition';

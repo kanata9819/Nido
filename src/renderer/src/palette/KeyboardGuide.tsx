@@ -1,7 +1,7 @@
 import { useI18n } from '../i18n';
 import { X } from 'lucide-react';
 import type { Item } from '../types';
-import styles from '../assets/KeyboardGuide.module.css';
+import styles from './KeyboardGuide.module.css';
 import OverlayPresence from '../ui/OverlayPresence';
 
 /** The leader keys the guide lists; Space again opens the full command palette. */

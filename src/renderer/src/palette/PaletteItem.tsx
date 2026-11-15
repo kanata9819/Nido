@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { Command, FolderOpen, FileCode2, CircleAlert, TriangleAlert, Info } from 'lucide-react';
 import { useI18n } from '../i18n';
 import type { Panel, Item } from '../types';
-import styles from '../assets/Palette.module.css';
+import styles from './Palette.module.css';
 import FileIcon from '../ui/FileIcon';
 import { commandKeys } from './paletteShortcuts';
 import { hasOptions, paletteOptionId } from './paletteRows';

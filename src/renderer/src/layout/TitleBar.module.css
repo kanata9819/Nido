@@ -1,0 +1,235 @@
+.titlebar {
+	height: 38px;
+	flex-shrink: 0;
+	display: flex;
+	align-items: stretch;
+	background: var(--surface-title, #0e1012);
+	border-bottom: 1px solid var(--ui-border, #282c30);
+	user-select: none;
+}
+:global(.nido-app)[data-compact='true'] .titlebar {
+	height: 24px;
+}
+:global(.nido-app)[data-compact='true'] .workspaceTab kbd,
+:global(.nido-app)[data-compact='true'] .brand span {
+	display: none;
+}
+:global(.nido-app)[data-compact='true'] .brand {
+	width: 40px;
+}
+:global(.nido-app)[data-compact='true'] .brand svg {
+	width: 16px;
+}
+:global(.nido-app)[data-compact='true'] .workspaces {
+	gap: 4px;
+	padding-top: 0;
+}
+:global(.nido-app)[data-compact='true'] .workspaceTab {
+	min-width: 100px;
+	border-radius: 0;
+	font-size: 12px;
+}
+:global(.nido-app)[data-compact='true'] .workspaceTab > button:first-child {
+	gap: 6px;
+	padding: 0 8px;
+}
+:global(.nido-app)[data-compact='true'] .titlebar .tabClose {
+	padding: 0 5px;
+}
+:global(.nido-app)[data-compact='true'] .addWorkspace {
+	width: 28px;
+}
+:global(.nido-app)[data-compact='true'] .addWorkspace svg,
+:global(.nido-app)[data-compact='true'] .titlebarActions svg {
+	width: 16px;
+	height: 16px;
+}
+:global(.nido-app)[data-compact='true'] .titlebarActions button {
+	height: 22px;
+}
+.brand {
+	width: 115px;
+	flex-shrink: 0;
+	display: flex;
+	gap: 11px;
+	align-items: center;
+	padding-left: 14px;
+	font-size: 15px;
+	font-weight: 600;
+	-webkit-app-region: drag;
+}
+.brand svg {
+	color: var(--ui-accent, #99c68c);
+	fill: var(--ui-accent-soft, #99c68c22);
+}
+.workspaces {
+	display: flex;
+	align-items: stretch;
+	min-width: 0;
+	overflow-x: auto;
+	gap: 7px;
+	padding-top: 3px;
+}
+.workspaceTab {
+	display: flex;
+	min-width: 146px;
+	max-width: 235px;
+	flex-shrink: 0;
+	border: 1px solid transparent;
+	border-bottom: 0;
+	border-radius: 9px 9px 0 0;
+}
+.workspaceTab > button:first-child {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 0 7px 0 14px;
+	flex: 1;
+	min-width: 0;
+	cursor: grab;
+}
+.workspaceTab > button:first-child > span:nth-child(2) {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 105px;
+}
+.workspaceTab kbd {
+	margin-left: 7px;
+	font-size: 10px;
+}
+.activeWorkspace {
+	border-color: var(--ui-border-strong, #333d44);
+	background: var(--surface-active, #202326);
+	box-shadow: inset 0 2px var(--ui-accent, #a3cc94);
+}
+.workspaceDot {
+	display: inline-block;
+	border-radius: 50%;
+	flex-shrink: 0;
+	width: 8px;
+	height: 8px;
+	background: var(--ui-accent, #a3cc94);
+}
+.tabClose {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0 8px;
+	opacity: 0.5;
+}
+.workspaceTab:hover .tabClose,
+.tabClose:focus-visible {
+	opacity: 1;
+}
+.favoriteToggle[aria-pressed='true'] {
+	color: #d5b77f;
+	opacity: 1;
+}
+.favoriteToggle[aria-pressed='true'] svg {
+	fill: #d5b77f;
+	color: #d5b77f;
+}
+.addWorkspace {
+	width: 39px;
+	flex-shrink: 0;
+}
+.dragArea {
+	flex: 1;
+	min-width: 18px;
+	-webkit-app-region: drag;
+}
+.windowControls {
+	display: flex;
+}
+.titlebarActions {
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+	margin-right: 6px;
+	-webkit-app-region: no-drag;
+}
+.titlebarActions button {
+	display: grid;
+	place-items: center;
+	width: 34px;
+	height: 28px;
+	color: #7e8b97;
+	border-radius: 6px;
+}
+.windowControls button {
+	width: 43px;
+	display: grid;
+	place-items: center;
+}
+.windowControls button:last-child:hover {
+	background: #a83d43;
+}
+.workspaceTab > button:first-child:active {
+	cursor: grabbing;
+}
+.workspaceTab[data-drop-target] {
+	outline: 1px solid var(--ui-accent, #a3cc94);
+	outline-offset: -2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+	:global(.nido-app)[data-animations='true'] .workspaceTab {
+		transition:
+			background-color 100ms ease-out,
+			color 100ms ease-out;
+	}
+}
+@media (max-width: 1050px) {
+	.workspaceTab kbd {
+		display: none;
+	}
+}
+:global(:root[data-theme='acrylic']) .titlebar {
+	box-shadow: var(--glass-highlight);
+}
+:global(:root[data-theme='acrylic']) .activeWorkspace {
+	box-shadow:
+		inset 0 2px var(--ui-accent, #a3cc94),
+		var(--glass-highlight);
+}
+/* Comfort: readable secondary text, quieter tab dividers and accent-led selection. */
+:global(:root[data-theme='comfort']) .titlebarActions button {
+	color: var(--ui-text-secondary);
+}
+/* Neon Noir: gradient signature lines, glow on active items and a gradient wordmark. */
+:global(:root[data-theme='neon']) .titlebar {
+	border-bottom: 1px solid transparent;
+	border-image: var(--neon-line) 1;
+}
+:global(:root[data-theme='neon']) .brand svg {
+	color: var(--ui-accent);
+	fill: #4ee6ff22;
+	filter: drop-shadow(0 0 6px #4ee6ffa6);
+}
+:global(:root[data-theme='neon']) .brand span {
+	background: var(--neon-gradient);
+	background-clip: text;
+	color: transparent;
+	font-weight: 700;
+	letter-spacing: 0.6px;
+}
+:global(:root[data-theme='neon']) .activeWorkspace {
+	background: linear-gradient(180deg, #4ee6ff17, transparent 75%), var(--surface-active);
+	box-shadow:
+		inset 0 2px var(--ui-accent),
+		0 -10px 24px -14px var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .workspaceDot {
+	box-shadow: 0 0 8px var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .titlebarActions button {
+	color: var(--ui-text-secondary);
+}
+/* A sleeping workspace looks inactive until it wakes: dimmed text and a hollow dot. */
+.workspaceTab[data-sleeping] > button:first-child {
+	opacity: 0.55;
+}
+.workspaceTab[data-sleeping] .workspaceDot {
+	background: transparent !important;
+	box-shadow: inset 0 0 0 1.5px #82919d;
+}

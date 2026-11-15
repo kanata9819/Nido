@@ -6,7 +6,7 @@ import { gitFileKey, type Decoration } from '../explorer/fileDecorations';
 import { filename } from '../palette/commands';
 import FileIcon from '../ui/FileIcon';
 import DiagnosticBadges from '../ui/DiagnosticBadges';
-import styles from '../assets/Nido.module.css';
+import styles from './FileHeader.module.css';
 
 // The file tabs and breadcrumb above the editor.
 interface FileHeaderProps {

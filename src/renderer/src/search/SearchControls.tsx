@@ -3,7 +3,7 @@
 import type { RefObject } from 'react';
 import { useI18n } from '../i18n';
 import type { SearchOptions } from '../../../shared/search';
-import styles from '../assets/WorkspaceSearch.module.css';
+import styles from './WorkspaceSearch.module.css';
 
 type OptionKey = 'caseSensitive' | 'regex' | 'wholeWord';
 

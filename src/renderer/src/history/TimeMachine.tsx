@@ -5,7 +5,7 @@ import { useI18n } from '../i18n';
 import { filename } from '../palette/commands';
 import GitDiff from '../git/GitDiff';
 import { useTimeMachine } from './useTimeMachine';
-import styles from '../assets/TimeMachine.module.css';
+import styles from './TimeMachine.module.css';
 
 /** A version's time in the UI language, to the second. */
 function versionTime(timestamp: number): string {

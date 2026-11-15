@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LanguagePackSnapshot } from '../../../shared/languagePacks';
 import { useErrorMessage, useI18n } from '../i18n';
-import styles from '../assets/ExtensionsPage.module.css';
+import styles from './ExtensionsPage.module.css';
 
 /** Text for each language pack status. */
 const statusLabels = {

@@ -1,7 +1,7 @@
 import { useI18n } from '../i18n';
 import type { DebugAction, DebugState, DebugVariable } from '../../../shared/types';
 import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
-import styles from '../assets/DebugPanel.module.css';
+import styles from './DebugPanel.module.css';
 
 /** Sends a Run and Debug action to the main process; `target` picks a launch target or variable. */
 type Action = (value: DebugAction, target?: number) => void;

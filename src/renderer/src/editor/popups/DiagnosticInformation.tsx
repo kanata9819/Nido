@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import type { NidoEvent } from '../../../../shared/types';
 import { useI18n } from '../../i18n';
-import styles from '../../assets/DiagnosticInformation.module.css';
+import styles from './DiagnosticInformation.module.css';
 import OverlayPresence from '../../ui/OverlayPresence';
 import { placeNearCursor } from '../../ui/popupPosition';
 import { vimKey } from '../../keyboard/keyboard';

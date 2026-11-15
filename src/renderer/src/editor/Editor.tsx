@@ -8,7 +8,7 @@ import { useEditorRendering } from './useEditorRendering';
 import { useEditorInput } from './useEditorInput';
 import { useCompositionReset, useEditorWheel } from './useEditorWheel';
 import { clickCell, clickedCell, focusEditorPart } from './editorClick';
-import styles from '../assets/Editor.module.css';
+import styles from './Editor.module.css';
 import TypeInformation from './popups/TypeInformation';
 import DiagnosticInformation from './popups/DiagnosticInformation';
 import CompletionMenu from './popups/CompletionMenu';

@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronUp, Columns2, Rows2 } from 'lucide-react';
 import { useI18n } from '../../i18n';
 import type { DiffLayout } from './diffView';
-import styles from '../../assets/GitPanel.module.css';
+import styles from '../Git.module.css';
 
 /** The change counter with buttons for the previous (N) and next (n) change. */
 export function DiffNavigation({

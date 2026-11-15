@@ -1,0 +1,26 @@
+.terminalPanel {
+	display: flex;
+	flex-direction: column;
+	flex-shrink: 0;
+	height: clamp(180px, 30vh, 420px);
+	min-height: 0;
+	background: var(--surface-editor, #141414);
+	border-top: 1px solid var(--ui-border-strong, #34383c);
+}
+.terminalPanel:focus-within {
+	border-top-color: var(--ui-accent, #a5bd9b);
+}
+.restartShell {
+	font-size: 12px;
+}
+:global(:root[data-theme='neon']) .terminalPanel:focus-within {
+	box-shadow: 0 -1px 14px -6px var(--ui-accent);
+}
+/* The terminal's copy mode hint: keys select output instead of reaching the shell. */
+.copyMode {
+	padding: 1px 8px;
+	border-radius: 999px;
+	background: var(--ui-accent-soft, #a3cc941f);
+	color: var(--ui-accent, #a3cc94);
+	font-weight: 600;
+}

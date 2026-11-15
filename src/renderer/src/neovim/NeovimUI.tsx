@@ -7,7 +7,7 @@ import {
 } from '../../../shared/neovimUI';
 import { useI18n } from '../i18n';
 import { type Grid } from '../grid/grid';
-import styles from '../assets/NeovimUI.module.css';
+import styles from './NeovimUI.module.css';
 import OverlayPresence from '../ui/OverlayPresence';
 import { virtualRows } from '../ui/virtualRows';
 import { useListViewport } from '../ui/useListViewport';

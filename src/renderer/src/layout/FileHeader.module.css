@@ -1,0 +1,185 @@
+:global(.nido-app)[data-compact='true'] .fileTabs {
+	height: 28px;
+}
+:global(.nido-app)[data-compact='true'] .fileTab > button:first-child {
+	gap: 8px;
+	padding: 0 8px 0 12px;
+}
+:global(.nido-app)[data-compact='true'] .fileTab > button:first-child > :first-child {
+	width: 14px;
+	height: 14px;
+}
+.unsaved {
+	display: inline-block;
+	border-radius: 50%;
+	flex-shrink: 0;
+	width: 8px;
+	height: 8px;
+	background: var(--ui-accent, #a3cc94);
+}
+.tabClose {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0 8px;
+	opacity: 0.5;
+}
+.fileTab:hover .tabClose,
+.tabClose:focus-visible {
+	opacity: 1;
+}
+.fileTabs {
+	height: 34px;
+	display: flex;
+	flex-shrink: 0;
+	background: var(--surface-tabs, #1b2126);
+	border-bottom: 1px solid var(--ui-border, #282c30);
+	overflow-x: auto;
+}
+.fileTab {
+	display: flex;
+	flex-shrink: 0;
+	border-right: 1px solid var(--ui-border, #282c30);
+	min-width: 125px;
+	max-width: 290px;
+	border-top: 2px solid transparent;
+}
+.fileTab > button:first-child {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 0 10px 0 17px;
+	min-width: 0;
+	cursor: grab;
+}
+.fileTab > button:first-child:active {
+	cursor: grabbing;
+}
+.fileTab[data-drop-target] {
+	outline: 1px solid var(--ui-accent, #a3cc94);
+	outline-offset: -2px;
+}
+.fileTab > button:first-child > span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.fileTab svg {
+	color: #80b9d9;
+	flex-shrink: 0;
+}
+.gitBadge {
+	flex: none;
+	font-size: 11px;
+	font-weight: 700;
+}
+.gitName[data-status],
+.gitBadge[data-status] {
+	color: #d9b777;
+}
+.gitName[data-status='U'],
+.gitName[data-status='A'],
+.gitBadge[data-status='U'],
+.gitBadge[data-status='A'] {
+	color: #9fc68e;
+}
+.gitName[data-status='D'],
+.gitBadge[data-status='D'] {
+	color: #e59b96;
+}
+.fileTab .tabClose svg {
+	color: #9aa6b0;
+}
+.gitName[data-diagnostic='warning'],
+.gitBadge[data-diagnostic='warning'] {
+	color: #d9b777;
+}
+.gitName[data-diagnostic='error'],
+.gitBadge[data-diagnostic='error'] {
+	color: #e59b96;
+}
+.activeFile {
+	background: var(--surface-editor, #141414);
+	border-top-color: var(--ui-accent, #a3cc94);
+	color: #f0f1f4;
+}
+.unsaved {
+	width: 7px;
+	height: 7px;
+}
+.breadcrumb {
+	height: 35px;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 22px;
+	color: #8996a3;
+	font-size: 12px;
+	white-space: nowrap;
+	overflow: hidden;
+}
+.breadcrumbHint {
+	margin-left: auto;
+	font-size: 10px;
+	color: #5e6b77;
+	letter-spacing: 0.7px;
+}
+.restartShell {
+	font-size: 12px;
+}
+@media (prefers-reduced-motion: no-preference) {
+	:global(.nido-app)[data-animations='true'] .fileTab {
+		transition:
+			background-color 100ms ease-out,
+			color 100ms ease-out;
+	}
+}
+@media (max-width: 1050px) {
+	.breadcrumbHint {
+		display: none;
+	}
+}
+/* Comfort: readable secondary text, quieter tab dividers and accent-led selection. */
+:global(:root[data-theme='comfort']) .breadcrumb {
+	color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='comfort']) .breadcrumbHint {
+	font-size: 11px;
+	letter-spacing: 0.4px;
+	color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='comfort']) .fileTab {
+	border-right-color: transparent;
+	color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='comfort']) .fileTab:hover,
+:global(:root[data-theme='comfort']) .activeFile {
+	color: #f0f1f4;
+}
+:global(:root[data-theme='neon']) .unsaved {
+	box-shadow: 0 0 8px var(--ui-accent);
+}
+:global(:root[data-theme='neon']) .breadcrumb {
+	color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='neon']) .fileTab {
+	border-right-color: transparent;
+	color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='neon']) .fileTab:hover {
+	color: #e8eef7;
+}
+:global(:root[data-theme='neon']) .activeFile {
+	border-top-color: transparent;
+	color: #ffffff;
+	background:
+		var(--neon-gradient) top / 100% 2px no-repeat border-box,
+		linear-gradient(180deg, #4ee6ff12, transparent 70%) border-box,
+		var(--surface-editor);
+}
+:global(:root[data-theme='neon']) .breadcrumbHint {
+	letter-spacing: 2px;
+	color: #86def0;
+	text-shadow: 0 0 10px #4ee6ff73;
+}

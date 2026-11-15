@@ -4,7 +4,7 @@ import type { Panel, Item } from '../types';
 import { Command, X } from 'lucide-react';
 import PaletteItems, { type PaletteConfirmation } from '../palette/PaletteItems';
 import WorkspaceSearch from '../search/WorkspaceSearch';
-import styles from '../assets/Palette.module.css';
+import styles from '../palette/Palette.module.css';
 import FolderPicker from '../workspace/FolderPicker';
 import GitBrowser from '../git/GitBrowser';
 import TimeMachine from '../history/TimeMachine';

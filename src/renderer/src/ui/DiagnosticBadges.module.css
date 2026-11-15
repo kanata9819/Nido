@@ -1,0 +1,17 @@
+.diagnosticCount[data-diagnostic='warning'] {
+	color: #d9b777;
+}
+.diagnosticCount[data-diagnostic='error'] {
+	color: #e59b96;
+}
+.diagnosticCount {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+.diagnosticCount svg {
+	color: currentColor;
+}

@@ -2,7 +2,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useI18n } from '../../../i18n';
 import type { NidoEvent } from '../../../../../shared/types';
-import styles from '../../../assets/TypeInformation.module.css';
+import styles from '../TypeInformation.module.css';
 
 type Hover = Extract<NidoEvent, { type: 'hover' }>;
 

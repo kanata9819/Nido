@@ -4,8 +4,8 @@ import { LanguageContext, useI18n } from '../i18n';
 import { translateMessage } from '../../../shared/i18n';
 import { useNotificationDismissal } from './useNotificationDismissal';
 import OverlayPresence from '../ui/OverlayPresence';
-import styles from '../assets/Nido.module.css';
-import notificationStyles from '../assets/Notification.module.css';
+import styles from './ErrorToast.module.css';
+import notificationStyles from './Notification.module.css';
 
 /** The app-level error toast, for errors not shown in a panel. */
 export default function ErrorToast({

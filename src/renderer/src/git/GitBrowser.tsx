@@ -13,7 +13,7 @@ import GitDiff from './GitDiff';
 import { useGitAction } from './browser/useGitAction';
 import { useGitLists } from './browser/useGitLists';
 import { useCommitDiff } from './browser/useCommitDiff';
-import styles from '../assets/GitPanel.module.css';
+import styles from './Git.module.css';
 
 /**
  * The Git browser (Space g): the changes view (GitPanel), the commit history with each

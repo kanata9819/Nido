@@ -1,7 +1,7 @@
 import { cloneElement, useContext, useLayoutEffect, useState } from 'react';
 import type { HTMLAttributes, ReactElement } from 'react';
 import { OverlayMotionContext, overlayMotionDuration } from './overlayMotion';
-import '../assets/OverlayMotion.css';
+import './OverlayMotion.css';
 
 /** The attributes OverlayPresence sets on its child for the CSS animations. */
 interface OverlayAttributes extends HTMLAttributes<HTMLElement> {

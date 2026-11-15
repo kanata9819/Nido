@@ -3,7 +3,7 @@ import { useErrorMessage, useI18n } from '../i18n';
 import { createPortal } from 'react-dom';
 import type { ReferenceList, ReferencePreview } from '../../../shared/types';
 import FileIcon from '../ui/FileIcon';
-import styles from '../assets/ReferencesPanel.module.css';
+import styles from './ReferencesPanel.module.css';
 import OverlayPresence from '../ui/OverlayPresence';
 
 interface Props {

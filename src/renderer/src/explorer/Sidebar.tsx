@@ -11,7 +11,7 @@ import { explorerRowHeight as rowHeight, useExplorerViewport } from './useExplor
 import { toggle } from './sidebarToggle';
 import type { getVisibleEntries } from './sidebarTree';
 import { createExplorerKeyHandler } from './sidebarKeyboard';
-import styles from '../assets/Nido.module.css';
+import styles from './Sidebar.module.css';
 import { gitFileKey, type Decoration } from '../git/useGitFileStatus';
 
 /** A row of the tree. */
