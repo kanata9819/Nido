@@ -1,7 +1,7 @@
 import { useI18n } from '../i18n';
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { splitDiff } from './gitDiff';
-import { diffViewRows, rowEmphasis, type DiffLayout } from './diffView';
+import { splitDiff } from './diff/splitDiff';
+import { diffViewRows, rowEmphasis, type DiffLayout } from './diff/diffView';
 import {
 	changeStarts,
 	firstPositions,

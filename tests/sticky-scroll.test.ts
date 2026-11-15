@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Session } from '../src/main/session/session';
 import { Grid } from '../src/renderer/src/grid/grid';
-import { stickyRows } from '../src/renderer/src/editor/stickyScroll';
+import { stickyRows } from '../src/renderer/src/editor/stickyHeaders';
 import type { StickyScrollState } from '../src/shared/types';
 
 const span = [{ text: 'scope {', color: '#d4d4d4' }];

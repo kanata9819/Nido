@@ -1,6 +1,6 @@
 // Turns the rows of a split diff into the rows the diff view draws: hunk separators between the
 // lines, and either side-by-side rows or a unified (inline) list of lines.
-import type { DiffLine, DiffRow } from './gitDiff';
+import type { DiffLine, DiffRow } from './splitDiff';
 
 /** How a diff is laid out: two panes side by side, or one pane with lines inline. */
 export type DiffLayout = 'split' | 'unified';

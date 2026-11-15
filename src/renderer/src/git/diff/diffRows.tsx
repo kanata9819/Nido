@@ -1,8 +1,8 @@
 // Draws the rows of a diff pane: separators, the lines of one side, and inline lines.
 import type { ReferencePreview } from '../../../../shared/types';
 import type { Translator } from '../../../../shared/i18n';
-import type { DiffRow } from '../gitDiff';
-import type { DiffEmphasis, DiffViewRow } from '../diffView';
+import type { DiffRow } from './splitDiff';
+import type { DiffEmphasis, DiffViewRow } from './diffView';
 import type { SideSource } from './diffModel';
 import type { HighlightedSides } from './useDiffHighlight';
 import type { Side } from './usePaneSync';

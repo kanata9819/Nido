@@ -1,7 +1,7 @@
 // What the diff view derives from the rows of a split diff. Pure functions, so GitDiff only
 // memoizes them.
-import type { DiffRow } from '../gitDiff';
-import type { DiffLayout, DiffViewRow } from '../diffView';
+import type { DiffRow } from './splitDiff';
+import type { DiffLayout, DiffViewRow } from './diffView';
 
 const layoutKey = 'nido.diffLayout';
 

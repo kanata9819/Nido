@@ -2,7 +2,7 @@ import { useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { StickyScrollState } from '../../../shared/types';
 import type { Grid } from '../grid/grid';
-import { stickyRows, type StickyRow } from './stickyScroll';
+import { stickyRows, type StickyRow } from './stickyHeaders';
 import styles from '../assets/StickyScroll.module.css';
 import { listIndex } from '../ui/listNavigation';
 

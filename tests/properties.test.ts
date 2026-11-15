@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { forAll, forAllAsync, trickyCharacters, type Random } from './helpers/property';
-import { splitDiff } from '../src/renderer/src/git/gitDiff';
+import { splitDiff } from '../src/renderer/src/git/diff/splitDiff';
 import { isAltGraph, vimKey } from '../src/renderer/src/keyboard/keyboard';
 import { editorPath, hostPath, parseWslPath, wslHostPath } from '../src/shared/wsl';
 import { accumulateScroll, ScrollQueue, scrollOffset } from '../src/renderer/src/editor/scroll';
@@ -12,7 +12,7 @@ import { fileDecorations, gitFileKey } from '../src/renderer/src/explorer/fileDe
 import { listIndex } from '../src/renderer/src/ui/listNavigation';
 import { navigateSearchList } from '../src/renderer/src/search/workspaceSearchNavigation';
 import { getVisibleEntries } from '../src/renderer/src/explorer/sidebarTree';
-import { stickyRows } from '../src/renderer/src/editor/stickyScroll';
+import { stickyRows } from '../src/renderer/src/editor/stickyHeaders';
 import { emptyNeovimUI, patchNeovimUI, type NeovimUIState } from '../src/shared/neovimUI';
 import { explorerFilePath } from '../src/renderer/src/explorer/explorerState';
 import { searchLineEnding } from '../src/main/search/searchLines';

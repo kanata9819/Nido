@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ReferencePreview } from '../../../../shared/types';
-import type { DiffRow } from '../gitDiff';
+import type { DiffRow } from './splitDiff';
 import { hasLines, type SideSource } from './diffModel';
 
 /** Syntax-highlighted lines of the before and after sides. */

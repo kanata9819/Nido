@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rename, rm, writeFile, mkdir, symlink, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { splitDiff } from '../src/renderer/src/git/gitDiff';
+import { splitDiff } from '../src/renderer/src/git/diff/splitDiff';
 import { registerGitHandlers } from '../src/main/ipc/gitHandlers';
 import type { Session } from '../src/main/session/session';
 import type { NidoEvent } from '../src/shared/types';
