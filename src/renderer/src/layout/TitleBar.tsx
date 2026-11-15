@@ -14,7 +14,7 @@ import {
 	X
 } from 'lucide-react';
 import type { FavoriteWorkspace, Workspace } from '../../../shared/types';
-import styles from '../assets/Nido.module.css';
+import styles from './TitleBar.module.css';
 import UpdateButton from './UpdateButton';
 
 interface TitleBarProps {

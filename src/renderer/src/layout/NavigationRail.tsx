@@ -2,7 +2,7 @@ import { useI18n } from '../i18n';
 import { Blocks, Files, GitBranch, History, Search, Square } from 'lucide-react';
 import type { Panel } from '../types';
 import type { ActivityBarPosition } from '../settings/useEditorSettings';
-import styles from '../assets/Nido.module.css';
+import styles from './NavigationRail.module.css';
 
 /** The vertical activity bar with buttons for the explorer, search, Git, Time Machine and more. */
 export default function NavigationRail({

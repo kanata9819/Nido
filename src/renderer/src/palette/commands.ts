@@ -2,6 +2,7 @@ import type { Panel, Item } from '../types';
 import type { FileEntry, SessionState, Workspace } from '../../../shared/types';
 import { createTranslator, type Translator } from '../../../shared/i18n';
 import { buildCommands, type CommandsCallbacks } from './commandItems';
+import { byRecentUse, recentCommandIds } from './recentCommands';
 
 // Builds the items that each palette lists.
 
@@ -148,7 +149,8 @@ export function buildItems(
 			}));
 			break;
 		default:
-			items = commands;
+			// Without a query, the commands run last come first, so Enter repeats the last one.
+			items = query ? commands : byRecentUse(commands, recentCommandIds());
 	}
 
 	const filtered =

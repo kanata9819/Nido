@@ -4,7 +4,7 @@ import type { NeovimMessage } from '../../../shared/neovimUI';
 import type { Grid } from '../grid/grid';
 import { useI18n } from '../i18n';
 import { vimKey } from '../keyboard/keyboard';
-import styles from '../assets/NeovimUI.module.css';
+import styles from './NeovimUI.module.css';
 import Chunks from './NeovimUIChunks';
 import OverlayPresence from '../ui/OverlayPresence';
 

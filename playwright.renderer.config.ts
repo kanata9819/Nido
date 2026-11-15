@@ -8,7 +8,17 @@ export default defineConfig({
 		{
 			name: 'lifecycle',
 			testMatch: [
-				'renderer-lifecycle.spec.ts',
+				'renderer-lifecycle-file-tabs.spec.ts',
+				'renderer-lifecycle-folder-picker.spec.ts',
+				'renderer-lifecycle-git.spec.ts',
+				'renderer-lifecycle-input.spec.ts',
+				'renderer-lifecycle-layout-settings.spec.ts',
+				'renderer-lifecycle-neovim-ui.spec.ts',
+				'renderer-lifecycle-panels-focus.spec.ts',
+				'renderer-lifecycle-popups.spec.ts',
+				'renderer-lifecycle-rendering.spec.ts',
+				'renderer-lifecycle-state.spec.ts',
+				'renderer-lifecycle-workspaces.spec.ts',
 				'history-renderer.spec.ts',
 				'workspace-search-renderer.spec.ts',
 				'workspace-actions-renderer.spec.ts'
@@ -17,7 +27,9 @@ export default defineConfig({
 		{
 			name: 'performance',
 			testMatch: [
-				'renderer-performance.spec.ts',
+				'renderer-performance-paint.spec.ts',
+				'renderer-performance-scroll.spec.ts',
+				'renderer-performance-ui.spec.ts',
 				'renderer-horizontal.spec.ts',
 				'feature-performance.spec.ts',
 				'document-symbols.spec.ts',

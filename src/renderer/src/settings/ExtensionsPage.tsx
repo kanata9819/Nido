@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Blocks, Search, X } from 'lucide-react';
 import { useI18n } from '../i18n';
-import styles from '../assets/ExtensionsPage.module.css';
+import styles from './ExtensionsPage.module.css';
 import LanguagePacksPanel from './LanguagePacksPanel';
 
 /** The tabs of the Extensions page. */

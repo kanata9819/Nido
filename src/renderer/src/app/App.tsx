@@ -25,7 +25,7 @@ import type { SessionState, Workspace } from '../../../shared/types';
 import { useFocusGuard } from './useFocusGuard';
 import { useInitializedEditors } from '../editor/useInitializedEditors';
 import { useWorkspaceSleep } from '../workspace/useWorkspaceSleep';
-import styles from '../assets/Nido.module.css';
+import styles from './App.module.css';
 import { OverlayMotionContext, useReducedMotion } from '../ui/overlayMotion';
 import ErrorToast from './ErrorToast';
 import { useErrorNotice } from './useErrorNotice';
@@ -264,7 +264,9 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 	const blocked = !!panel || leader;
 	return (
 		<div
-			className={styles.app}
+			// nido-app and nido-body let other components' styles depend on these elements'
+			// attributes, such as compact mode, from their own CSS modules.
+			className={`${styles.app} nido-app`}
 			data-animations={settings.animations}
 			data-pointer-hidden={pointerHidden}
 			data-compact={settings.compactMode}
@@ -286,7 +288,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 				run={run}
 			/>
 			<div
-				className={styles.body}
+				className={`${styles.body} nido-body`}
 				data-navigation-position={settings.activityBarPosition}
 				data-explorer-visible={explorerVisible}
 				style={

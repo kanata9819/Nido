@@ -1,9 +1,9 @@
-import sharedStyles from '../assets/Nido.module.css';
+import pickerStyles from './FolderPicker.module.css';
 import { useErrorMessage, useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Star, X } from 'lucide-react';
 import type { FavoriteWorkspace, FileEntry } from '../../../shared/types';
-import styles from '../assets/Palette.module.css';
+import styles from '../palette/Palette.module.css';
 import { parseWslPath, wslHostPath } from '../../../shared/wsl';
 import {
 	useFolderBrowser,
@@ -207,7 +207,7 @@ export default function FolderPicker({
 					{busy ? t('Opening…') : t('Open current folder')}
 				</button>
 				<button aria-pressed={showFavorites} onClick={toggleFavorites}>
-					<Star size={13} className={sharedStyles.favoriteStar} /> {t('Favorites')}
+					<Star size={13} className={pickerStyles.favoriteStar} /> {t('Favorites')}
 				</button>
 			</div>
 			{distribution && (
@@ -346,7 +346,7 @@ function FavoriteChoices({
 						}}
 						title={favorite.root}
 					>
-						<Star size={16} className={sharedStyles.favoriteStar} />
+						<Star size={16} className={pickerStyles.favoriteStar} />
 						<span>
 							<strong>{favorite.name}</strong>
 							<small>

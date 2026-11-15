@@ -1,6 +1,6 @@
 import { CircleX, TriangleAlert } from 'lucide-react';
 import type { Decoration } from '../explorer/fileDecorations';
-import styles from '../assets/Nido.module.css';
+import styles from './DiagnosticBadges.module.css';
 import { useI18n } from '../i18n';
 
 /** Error and warning counts shown next to a file or folder in the explorer and tabs. */

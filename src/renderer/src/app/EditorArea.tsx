@@ -14,7 +14,7 @@ import type { Decoration } from '../explorer/fileDecorations';
 import type { BottomPanels } from '../panels/useBottomPanels';
 import type { Item, Panel } from '../types';
 import type { SessionState, Workspace } from '../../../shared/types';
-import styles from '../assets/Nido.module.css';
+import styles from './EditorArea.module.css';
 
 /** The workspace editors' startup: which drew a frame, and which failed to wake. */
 export interface EditorStartup {

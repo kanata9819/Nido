@@ -81,6 +81,10 @@ pnpm test:renderer
       `workspace/`, `neovim/`, `keyboard/` — the features with those names.
     - `layout/` — the title bar, status bar, activity bar and file tabs.
     - `ui/` — small building blocks shared by features (icons, overlay motion, list navigation).
+    - `styles/` — the global stylesheet and the UI themes. Each component's CSS module sits
+      beside it. A rule that depends on the app's state, such as compact mode, reaches it
+      through the global `nido-app` and `nido-body` classes.
+    - `assets/` — the file and folder icons.
 - `src/shared/` — shared interfaces and types.
 - `tests/` — automated tests.
 - `scripts/` — setup and development helpers.

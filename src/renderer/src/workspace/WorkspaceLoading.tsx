@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n';
-import styles from '../assets/Progress.module.css';
+import styles from '../ui/Progress.module.css';
 
 /** Shown while saved workspaces are being restored at startup. */
 export default function WorkspaceLoading(): React.JSX.Element | null {

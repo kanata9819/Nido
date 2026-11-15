@@ -229,7 +229,17 @@
 .workspaceStatus[data-status='current'] {
 	color: var(--ui-accent, #a3cc94);
 }
-.workspaceStatus + .itemKeys {
+.recentTag {
+	margin-left: auto;
+	padding: 1px 7px;
+	border-radius: 999px;
+	font-size: 10px;
+	white-space: nowrap;
+	color: var(--ui-accent, #a3cc94);
+	background: var(--ui-accent-soft, #a3cc9412);
+}
+.workspaceStatus + .itemKeys,
+.recentTag + .itemKeys {
 	margin-left: 8px;
 }
 .paletteItems button[data-workspace-status='sleeping'] > span:nth-child(2) {

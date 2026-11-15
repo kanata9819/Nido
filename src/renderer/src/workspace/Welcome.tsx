@@ -1,6 +1,6 @@
 import { useI18n } from '../i18n';
 import { ArrowRight, FolderOpen, Leaf } from 'lucide-react';
-import styles from '../assets/Welcome.module.css';
+import styles from './Welcome.module.css';
 
 /** Shown in a workspace with no open file. */
 export function WorkspaceWelcome({ onOpen }: { onOpen: () => void }): React.JSX.Element {

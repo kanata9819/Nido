@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 're
 import type { StickyScrollState } from '../../../shared/types';
 import type { Grid } from '../grid/grid';
 import { stickyRows, type StickyRow } from './stickyHeaders';
-import styles from '../assets/StickyScroll.module.css';
+import styles from './StickyScroll.module.css';
 import { listIndex } from '../ui/listNavigation';
 
 /** What the sticky header draws, in pixels, computed from the grid on every paint. */

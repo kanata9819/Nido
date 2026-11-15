@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { Command, FolderOpen, FileCode2, CircleAlert, TriangleAlert, Info } from 'lucide-react';
 import { useI18n } from '../i18n';
 import type { Panel, Item } from '../types';
-import styles from '../assets/Palette.module.css';
+import styles from './Palette.module.css';
 import FileIcon from '../ui/FileIcon';
 import { commandKeys } from './paletteShortcuts';
 import { hasOptions, paletteOptionId } from './paletteRows';
@@ -78,6 +78,7 @@ export default memo(function PaletteItem({
 				<strong>{item.title}</strong>
 				{detail && <small>{detail}</small>}
 			</span>
+			{item.recent && <span className={styles.recentTag}>{t('Recent')}</span>}
 			{item.status && (
 				<span className={styles.workspaceStatus} data-status={item.status}>
 					{item.status === 'current' ? t('Current') : t('Sleeping')}

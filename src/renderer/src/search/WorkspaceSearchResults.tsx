@@ -1,7 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { SearchResults } from '../../../shared/types';
 import { useI18n } from '../i18n';
-import styles from '../assets/WorkspaceSearch.module.css';
+import styles from './WorkspaceSearch.module.css';
 import { navigateSearchList as navigate } from './workspaceSearchNavigation';
 
 /** A search match with its index in the results and the text shown for it. */

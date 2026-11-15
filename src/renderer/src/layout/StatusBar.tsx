@@ -1,9 +1,9 @@
-import progressStyles from '../assets/Progress.module.css';
+import progressStyles from '../ui/Progress.module.css';
 import { useI18n } from '../i18n';
 import type { Translator } from '../../../shared/i18n';
 import { Code2, Search, ChevronUp, ChevronDown, X, SquareTerminal } from 'lucide-react';
 import type { Workspace, SessionState } from '../../../shared/types';
-import styles from '../assets/StatusBar.module.css';
+import styles from './StatusBar.module.css';
 import { indentationLabel } from '../palette/commandItems';
 
 interface StatusBarProps {
@@ -99,9 +99,8 @@ export default function StatusBar({
 					{t('References')}
 				</button>
 			)}
-			<span className={styles.statusWorkspace}>
-				{workspace?.name || t('Welcome to Nido')}
-			</span>
+			{/* The workspace's name is on its tab in the title bar; without one, greet instead. */}
+			{!workspace && <span className={styles.statusWorkspace}>{t('Welcome to Nido')}</span>}
 			{state.search && (
 				<span
 					className={styles.searchStatus}

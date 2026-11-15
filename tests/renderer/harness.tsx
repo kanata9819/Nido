@@ -27,8 +27,8 @@ import PaletteItems from '../../src/renderer/src/palette/PaletteItems';
 import type { Item } from '../../src/renderer/src/types';
 import { Favorites, GitBadges, Completion, Settings, SessionUpdates } from './Probes';
 import type { SessionSettings } from '../../src/renderer/src/settings/useSessionSettings';
-import '../../src/renderer/src/assets/global.css';
-import '../../src/renderer/src/assets/themes.css';
+import '../../src/renderer/src/styles/global.css';
+import '../../src/renderer/src/styles/themes.css';
 
 interface HarnessProps {
 	debugState?: DebugState;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n';
 import type { EditorSettings } from './useEditorSettings';
-import styles from '../assets/SettingsPanel.module.css';
+import styles from './SettingsPanel.module.css';
 import { settingsKeyDown } from './settingsKeyboard';
 import TerminalSettings from './TerminalSettings';
 import { Choice, Hint, NumberField, Toggle } from './fields/SettingFields';

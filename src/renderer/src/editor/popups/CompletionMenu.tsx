@@ -2,7 +2,7 @@ import { useI18n } from '../../i18n';
 import { useRef, useState, type RefObject } from 'react';
 import { Braces, Text } from 'lucide-react';
 import type { Grid } from '../../grid/grid';
-import styles from '../../assets/CompletionMenu.module.css';
+import styles from './CompletionMenu.module.css';
 import OverlayPresence from '../../ui/OverlayPresence';
 import { virtualRows } from '../../ui/virtualRows';
 import { kindIcons } from './completion/kindIcons';

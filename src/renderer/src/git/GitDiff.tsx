@@ -15,7 +15,7 @@ import { useDiffHighlight } from './diff/useDiffHighlight';
 import { rowHeight, usePaneSync, type Side } from './diff/usePaneSync';
 import { renderDiffRow, type DiffRowContext } from './diff/diffRows';
 import { DiffNavigation, LayoutSwitch, PaneHeading } from './diff/DiffToolbar';
-import styles from '../assets/GitPanel.module.css';
+import styles from './Git.module.css';
 
 // Rows are drawn virtually: only the visible rows and `overscan` rows around them exist.
 const overscan = 20;

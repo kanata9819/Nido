@@ -1,7 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { ReplacementPreview } from '../../../shared/search';
 import { useI18n } from '../i18n';
-import styles from '../assets/WorkspaceSearch.module.css';
+import styles from './WorkspaceSearch.module.css';
 import { navigateSearchList as navigate } from './workspaceSearchNavigation';
 
 /**

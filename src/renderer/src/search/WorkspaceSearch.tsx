@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { defaultSearchOptions } from '../../../shared/search';
 import { useI18n } from '../i18n';
-import styles from '../assets/WorkspaceSearch.module.css';
+import styles from './WorkspaceSearch.module.css';
 import { useFocusGuard } from '../app/useFocusGuard';
 import { useWorkspaceSearch } from './useWorkspaceSearch';
 import { isLeaveTypingKey, navigateSearchList as navigate } from './workspaceSearchNavigation';

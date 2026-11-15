@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Command, X } from 'lucide-react';
 import type { FileAction } from '../../../shared/types';
-import styles from '../assets/Palette.module.css';
+import styles from '../palette/Palette.module.css';
 import OverlayPresence from '../ui/OverlayPresence';
 
 /** A file operation waiting for the user to enter a path (or confirm a delete). */

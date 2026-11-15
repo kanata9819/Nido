@@ -1,7 +1,7 @@
 import { useContext } from 'react';
 import { LanguageContext, useI18n } from '../i18n';
 import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
-import styles from '../assets/GitPanel.module.css';
+import styles from './Git.module.css';
 
 // The summary cards the Git browser shows beside the list for the selected commit or branch.
 

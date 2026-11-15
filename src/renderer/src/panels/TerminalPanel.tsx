@@ -1,8 +1,8 @@
-import referenceStyles from '../assets/ReferencesPanel.module.css';
+import referenceStyles from './ReferencesPanel.module.css';
 import { useI18n } from '../i18n';
 import Editor from '../editor/Editor';
 import { defaultFontFamily, type EditorSettings } from '../settings/useEditorSettings';
-import styles from '../assets/Nido.module.css';
+import styles from './TerminalPanel.module.css';
 
 /**
  * The terminal below the editor (Ctrl+@). It is an Editor showing the terminal workspace's

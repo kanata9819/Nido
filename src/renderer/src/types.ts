@@ -28,6 +28,10 @@ export interface Item {
 	title: string;
 	detail: string;
 	run: () => void;
+	/** Identifies a command across languages, to list recently run ones first. */
+	id?: string;
+	/** Whether the command ran recently, which the palette marks. */
+	recent?: boolean;
 	/** In the workspace list: the selected workspace, or one that is asleep. */
 	status?: 'current' | 'sleeping';
 	/** In the workspace list: put this workspace to sleep (Ctrl+S); absent when it cannot. */

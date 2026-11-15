@@ -6,7 +6,7 @@ import type { DiffEmphasis, DiffViewRow } from './diffView';
 import type { SideSource } from './diffModel';
 import type { HighlightedSides } from './useDiffHighlight';
 import type { Side } from './usePaneSync';
-import styles from '../../assets/GitPanel.module.css';
+import styles from '../Git.module.css';
 
 type Spans = ReferencePreview['lines'][number];
 

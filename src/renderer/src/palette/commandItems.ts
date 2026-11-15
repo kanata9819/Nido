@@ -1,6 +1,7 @@
 import type { Panel, Item } from '../types';
 import type { DebugAction, Indentation, SessionState, Workspace } from '../../../shared/types';
 import type { Translator } from '../../../shared/i18n';
+import { rememberCommand } from './recentCommands';
 
 // The command palette's commands (Ctrl+Shift+P). Titles are English and translated when shown.
 
@@ -484,7 +485,12 @@ export function buildCommands(
 		...windowCommands(context)
 	].map((command) => ({
 		...command,
+		id: command.title,
 		title: t(command.title),
-		detail: t(command.detail)
+		detail: t(command.detail),
+		run: () => {
+			rememberCommand(command.title);
+			command.run();
+		}
 	}));
 }

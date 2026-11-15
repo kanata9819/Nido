@@ -1,7 +1,7 @@
 import { useI18n } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { Panel, Item } from '../types';
-import styles from '../assets/Palette.module.css';
+import styles from './Palette.module.css';
 import PaletteItem from './PaletteItem';
 import { hasOptions, paletteOptionId } from './paletteRows';
 import { emptyMessage, hint, placeholder } from './paletteText';

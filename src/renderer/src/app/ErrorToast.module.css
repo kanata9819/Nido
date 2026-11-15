@@ -1,0 +1,20 @@
+.error {
+	position: absolute;
+	bottom: 49px;
+	right: 22px;
+	max-width: 580px;
+	display: flex;
+	align-items: center;
+	gap: 17px;
+	background: #382b2b;
+	color: #e6bfbb;
+	border: 1px solid #79514d;
+	padding: 17px;
+	border-radius: 8px;
+	z-index: 20;
+	line-height: 1.6;
+	overflow-wrap: anywhere;
+}
+.error button {
+	flex-shrink: 0;
+}

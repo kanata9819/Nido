@@ -2,7 +2,7 @@ import { useErrorMessage, useI18n } from '../i18n';
 import { useEffect, useId, useLayoutEffect, useRef, type RefObject } from 'react';
 import type { GitChange } from '../../../shared/types';
 import { Check, GitBranch, RefreshCw } from 'lucide-react';
-import styles from '../assets/GitPanel.module.css';
+import styles from './Git.module.css';
 import GitDiff from './GitDiff';
 import FileIcon from '../ui/FileIcon';
 import { gitChangeKey as key, useGitPanel } from './useGitPanel';

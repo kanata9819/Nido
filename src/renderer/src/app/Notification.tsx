@@ -3,7 +3,7 @@ import { useI18n } from '../i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { CircleAlert, Info, X } from 'lucide-react';
 import type { NidoEvent } from '../../../shared/types';
-import styles from '../assets/Notification.module.css';
+import styles from './Notification.module.css';
 import { useNotificationDismissal } from './useNotificationDismissal';
 import OverlayPresence from '../ui/OverlayPresence';
 

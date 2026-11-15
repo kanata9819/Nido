@@ -2,7 +2,7 @@ import { useI18n } from '../i18n';
 import type { GitView } from '../types';
 import type { RefObject } from 'react';
 import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
-import styles from '../assets/GitPanel.module.css';
+import styles from './Git.module.css';
 
 /**
  * The keyboard-driven list of the Git browser: commits, the files of a commit, or branches.

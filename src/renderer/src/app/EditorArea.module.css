@@ -1,0 +1,32 @@
+:global(.nido-body)[data-navigation-position='top'] > .main {
+	grid-column: 1;
+	grid-row: 2;
+}
+:global(.nido-body)[data-navigation-position='top'][data-explorer-visible='true'] > .main {
+	grid-column: 2;
+	grid-row: 1 / 3;
+}
+.main {
+	flex: 1;
+	min-width: 0;
+	position: relative;
+	display: flex;
+	flex-direction: column;
+}
+.editorContent {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+.editorSplit {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	min-width: 0;
+}
+:global(:root[data-theme='neon']) .main {
+	background: var(--surface-editor);
+}

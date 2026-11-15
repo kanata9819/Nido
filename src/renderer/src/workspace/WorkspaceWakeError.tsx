@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { CircleAlert } from 'lucide-react';
 import { useI18n } from '../i18n';
-import styles from '../assets/Progress.module.css';
+import styles from '../ui/Progress.module.css';
 
 /** Shown in place of a sleeping workspace's editor when it could not be restarted. */
 export default function WorkspaceWakeError({

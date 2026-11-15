@@ -1,0 +1,84 @@
+.rail {
+	width: 42px;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 8px 0;
+	gap: 8px;
+	background: var(--surface-rail, #101214);
+	border-right: 1px solid var(--ui-border, #25292d);
+}
+.rail button {
+	position: relative;
+	width: 34px;
+	height: 34px;
+	display: grid;
+	place-items: center;
+	color: #7e8b97;
+	border-radius: 7px;
+}
+.rail .railActive {
+	background: var(--ui-accent-soft, #a3cc9410);
+	color: var(--ui-accent, #a3cc94);
+}
+.railActive::before {
+	content: '';
+	position: absolute;
+	height: 28px;
+	width: 3px;
+	left: -4px;
+	background: var(--ui-accent, #a3cc94);
+	border-radius: 0 2px 2px 0;
+}
+:global(.nido-body)[data-navigation-position='top'] > .rail {
+	grid-column: 1;
+	grid-row: 1;
+}
+.rail[data-position='top'] {
+	width: 100%;
+	flex-direction: row;
+	flex-wrap: wrap;
+	gap: 2px;
+	padding: 5px 6px;
+	border-right: 0;
+	border-bottom: 1px solid var(--ui-border, #25292d);
+	background: var(--surface-panel, #17191b);
+}
+.rail[data-position='top'] button {
+	width: 26px;
+	height: 28px;
+	flex-shrink: 0;
+}
+.rail[data-position='top'] svg {
+	width: 19px;
+	height: 19px;
+}
+.rail[data-position='top'] .railActive::before {
+	width: 18px;
+	height: 2px;
+	left: 4px;
+	bottom: -3px;
+	border-radius: 2px;
+}
+/* Comfort: readable secondary text, quieter tab dividers and accent-led selection. */
+:global(:root[data-theme='comfort']) .rail button {
+	color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='comfort']) .rail .railActive {
+	color: var(--ui-accent, #a3cc94);
+}
+:global(:root[data-theme='neon']) .rail button {
+	color: var(--ui-text-secondary);
+}
+:global(:root[data-theme='neon']) .rail .railActive {
+	color: var(--ui-accent);
+	background: var(--ui-accent-soft);
+}
+:global(:root[data-theme='neon']) .rail .railActive svg {
+	filter: drop-shadow(0 0 5px #4ee6ffb3);
+}
+:global(:root[data-theme='neon']) .railActive::before {
+	background: linear-gradient(180deg, var(--ui-accent), var(--neon-violet));
+	box-shadow: 0 0 10px var(--ui-accent);
+}

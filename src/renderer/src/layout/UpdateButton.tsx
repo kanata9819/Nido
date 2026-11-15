@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { ArrowDownToLine, Check, LoaderCircle, RefreshCw, type LucideIcon } from 'lucide-react';
 import type { Translator } from '../../../shared/i18n';
 import type { UpdateAction, UpdateState } from '../../../shared/types';
-import styles from '../assets/UpdateButton.module.css';
+import styles from './UpdateButton.module.css';
 
 /** What the button does in each update state, as its accessible name and tooltip. */
 function updateLabel(
