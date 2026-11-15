@@ -1,6 +1,6 @@
 // Bridge between the renderer and the main process. The renderer cannot use Node.js or
 // Electron directly, so it calls window.nido.<name>, which sends the 'nido:<name>' IPC that
-// handle('<name>') in src/main/handlers.ts and related files receives. Types: NidoAPI in
+// handle('<name>') in src/main/ipc/handlers.ts and related files receives. Types: NidoAPI in
 // src/shared/types.ts.
 import { contextBridge, ipcRenderer } from 'electron';
 import type { NidoAPI, NidoEvent } from '../shared/types';

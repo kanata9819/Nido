@@ -7,8 +7,8 @@ import {
 	LanguagePacks,
 	discoverLanguagePacks,
 	validateLanguagePack
-} from '../src/main/languagePacks';
-import { Session } from '../src/main/session';
+} from '../src/main/languagePacks/languagePacks';
+import { Session } from '../src/main/session/session';
 import type { LanguagePackManifest } from '../src/shared/languagePacks';
 
 const resources = resolve('resources');

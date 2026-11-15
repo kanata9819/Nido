@@ -65,8 +65,22 @@ pnpm test:renderer
 ### Code layout
 
 - `src/main/` — Electron main-process code.
+    - `ipc/` — IPC handlers, one file per area (files, Git, history, workspaces, ...).
+    - `session/` — one workspace's Neovim session and its parts (buffers, events, files, UI).
+    - `workspace/` — workspace lifecycle (restore, sleep, wake), layout persistence and checkpoints.
+    - `search/`, `git/`, `history/`, `languagePacks/`, `neovim/` — the features with those names.
+    - `platform/` — OS integration: WSL, terminal shells, clipboard and the updater.
 - `src/preload/` — the bridge between Electron and the UI.
-- `src/renderer/src/` — React-based editor UI.
+- `src/renderer/src/` — React-based editor UI, grouped by feature. Each folder holds the
+  components, hooks and plain logic of that feature.
+    - `app/` — the root component, the overlay panel host, toasts and app-wide hooks.
+    - `editor/` — the canvas editor, scrolling and cursor motion; `editor/popups/` holds
+      completion, hover and diagnostic popups.
+    - `grid/` — Neovim's screen grid and its canvas painter.
+    - `explorer/`, `git/`, `search/`, `palette/`, `panels/`, `settings/`, `history/`,
+      `workspace/`, `neovim/`, `keyboard/` — the features with those names.
+    - `layout/` — the title bar, status bar, activity bar and file tabs.
+    - `ui/` — small building blocks shared by features (icons, overlay motion, list navigation).
 - `src/shared/` — shared interfaces and types.
 - `tests/` — automated tests.
 - `scripts/` — setup and development helpers.

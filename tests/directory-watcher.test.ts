@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, realpath, rename, rm, unlink, writeFile } from 'node:fs
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { DirectoryWatcher } from '../src/main/directoryWatcher';
+import { DirectoryWatcher } from '../src/main/workspace/directoryWatcher';
 
 async function until(predicate: () => boolean, message: string): Promise<void> {
 	const deadline = Date.now() + 6000;

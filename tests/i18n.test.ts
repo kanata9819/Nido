@@ -11,7 +11,7 @@ import {
 	translate,
 	translateMessage
 } from '../src/shared/i18n';
-import { buildItems } from '../src/renderer/src/commands';
+import { buildItems } from '../src/renderer/src/palette/commands';
 import type { SessionState, Workspace } from '../src/shared/types';
 
 test('missing or unsupported saved languages keep the existing English default', () => {

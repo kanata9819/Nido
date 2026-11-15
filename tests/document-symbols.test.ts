@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { Session } from '../src/main/session';
+import { Session } from '../src/main/session/session';
 import type { DocumentSymbolList } from '../src/shared/types';
 
 async function finished(session: Session, after = 0): Promise<DocumentSymbolList> {

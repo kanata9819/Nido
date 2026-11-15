@@ -4,8 +4,8 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { Session } from '../src/main/session';
-import { SearchMatcher } from '../src/main/searchMatcher';
+import { Session } from '../src/main/session/session';
+import { SearchMatcher } from '../src/main/search/searchMatcher';
 import { defaultSearchOptions } from '../src/shared/search';
 
 async function fixture(check: (session: Session, root: string) => Promise<void>): Promise<void> {

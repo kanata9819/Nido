@@ -1,0 +1,361 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useErrorMessage, useI18n } from '../i18n';
+import { createPortal } from 'react-dom';
+import type { ReferenceList, ReferencePreview } from '../../../shared/types';
+import FileIcon from '../ui/FileIcon';
+import styles from '../assets/ReferencesPanel.module.css';
+import OverlayPresence from '../ui/OverlayPresence';
+
+interface Props {
+	workspaceId: string;
+	blocked?: boolean;
+	state: ReferenceList;
+	root: string;
+	visible: boolean;
+	focusTick: number;
+	animations: boolean;
+	onClose: () => void;
+	onOpen: (index: number) => void;
+}
+
+/** The preview shown for one reference; `key` identifies the reference it belongs to. */
+interface PreviewContent {
+	key: string;
+	index: number;
+	item: ReferenceList['items'][number];
+	data?: ReferencePreview;
+	error?: string;
+}
+
+// Rows are drawn virtually: only the visible rows and `overscan` rows around them exist.
+const rowHeight = 30;
+const overscan = 8;
+
+/** The highlighted source around a reference, shown in the editor area while the list has focus. */
+function ReferencePreviewContent({
+	item,
+	data,
+	error
+}: Omit<PreviewContent, 'key' | 'index'>): React.JSX.Element {
+	const t = useI18n();
+	const errorMessage = useErrorMessage();
+	return (
+		<>
+			<header>
+				<FileIcon path={item.path} />
+				<strong title={item.path}>{item.path.replaceAll('\\', '/')}</strong>
+				<span>{t('Ln {line} · Enter to jump', { line: item.line })}</span>
+			</header>
+			<div className={styles.referencePreviewCode}>
+				{data ? (
+					data.lines.map((spans, index) => (
+						<div key={index} data-current={data.first + index === data.line}>
+							<span aria-hidden="true">{data.first + index}</span>
+							<code>
+								{spans.map((span, part) => (
+									<span key={part} style={{ color: span.color }}>
+										{span.text || ' '}
+									</span>
+								))}
+							</code>
+						</div>
+					))
+				) : (
+					<p>{error ? errorMessage(error) : t('Loading preview…')}</p>
+				)}
+			</div>
+		</>
+	);
+}
+
+/**
+ * The references panel below the editor: every reference to the symbol under the cursor.
+ * While it has focus, the selected reference is previewed over the editor; Enter opens it.
+ */
+export default function ReferencesPanel({
+	workspaceId,
+	blocked = false,
+	state,
+	root,
+	visible,
+	focusTick,
+	animations,
+	onClose,
+	onOpen
+}: Props): React.JSX.Element {
+	const t = useI18n();
+	const errorMessage = useErrorMessage();
+	const list = useRef<HTMLDivElement>(null);
+	const [selected, setSelected] = useState(0);
+	const [focused, setFocused] = useState(false);
+	const [preview, setPreview] = useState<PreviewContent>();
+	// A new search (or workspace) starts again at the top of the list.
+	const selectionKey = `${workspaceId}:${state.version}`;
+	const [viewport, setViewport] = useState({ key: selectionKey, top: 0 });
+	const [height, setHeight] = useState(200);
+	const top = viewport.key === selectionKey ? viewport.top : 0;
+	const first = Math.max(0, Math.floor(top / rowHeight) - overscan);
+	const last = Math.min(state.items.length, Math.ceil((top + height) / rowHeight) + overscan);
+	const indices = Array.from({ length: last - first }, (_, index) => first + index);
+	// Keep the selected row rendered even when it scrolled out of the drawn range.
+	if (state.items[selected] && (selected < first || selected >= last)) {
+		indices.push(selected);
+	}
+	const [previousSelectionKey, setPreviousSelectionKey] = useState(selectionKey);
+	if (selectionKey !== previousSelectionKey) {
+		setPreviousSelectionKey(selectionKey);
+		setSelected(0);
+	}
+	const currentContent = useRef<HTMLDivElement>(null);
+	const displayedContent = useRef<PreviewContent | undefined>(undefined);
+	// Set after Space, so Space then d closes the panel.
+	const closePrefix = useRef(false);
+	const item = state.items[selected];
+	const previewKey = `${state.version}:${selected}`;
+	// The preview is drawn into this element over the editor.
+	const previewHost = document.getElementById('editor-preview-host');
+	const previewEnabled = visible && focused && !!item;
+	const [previousPreviewEnabled, setPreviousPreviewEnabled] = useState(previewEnabled);
+	if (previewEnabled !== previousPreviewEnabled) {
+		setPreviousPreviewEnabled(previewEnabled);
+		if (!previewEnabled) {
+			setPreview(undefined);
+		}
+	}
+	// Load the selected reference's preview shortly after the selection settles.
+	useEffect(() => {
+		if (!visible || !focused || !item) {
+			return;
+		}
+		let cancelled = false;
+		const show = (data?: ReferencePreview, error?: string): void => {
+			if (cancelled) {
+				return;
+			}
+			// Keep the old preview (including its header) until the next result is ready.
+			setPreview({ key: previewKey, index: selected, item, data, error });
+		};
+		const timer = window.setTimeout(
+			() =>
+				void window.nido.previewReference(workspaceId, selected + 1, state.version).then(
+					(result) => show(result),
+					(error) => show(undefined, String(error))
+				),
+			75
+		);
+		return () => {
+			cancelled = true;
+			window.clearTimeout(timer);
+		};
+	}, [workspaceId, selected, previewKey, state.version, state.loading, visible, focused, item]);
+	// Slide the new preview in the direction the selection moved.
+	useLayoutEffect(() => {
+		const previous = displayedContent.current;
+		displayedContent.current = preview;
+		if (!preview || !previous || preview.key === previous.key || !currentContent.current) {
+			return;
+		}
+		const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+		if (!animations || reducedMotion.matches) {
+			return;
+		}
+		const direction = preview.index >= previous.index ? 1 : -1;
+		// Animate only the new content; overlapping old text creates visible ghosting.
+		const incoming = currentContent.current.animate(
+			[
+				{ opacity: 0.7, transform: `translateY(${direction * 4}px)` },
+				{ opacity: 1, transform: 'translateY(0)' }
+			],
+			{ duration: 150, easing: 'cubic-bezier(0.2, 0, 0, 1)' }
+		);
+		const finish = (): void => {
+			incoming.cancel();
+		};
+		reducedMotion.addEventListener('change', finish);
+		return () => {
+			incoming.cancel();
+			reducedMotion.removeEventListener('change', finish);
+		};
+	}, [preview, animations]);
+	// Focus the list when the panel is shown or asked to take focus.
+	useEffect(() => {
+		if (visible) {
+			list.current?.focus();
+		}
+	}, [focusTick, visible]);
+	// Keep the selected row in view and remember the scroll position for virtual rendering.
+	useLayoutEffect(() => {
+		const node = list.current;
+		if (!node || !visible) {
+			return;
+		}
+		const top = selected * rowHeight + 5;
+		if (top < node.scrollTop) {
+			node.scrollTop = top;
+		} else if (top + rowHeight > node.scrollTop + node.clientHeight) {
+			node.scrollTop = top + rowHeight - node.clientHeight;
+		}
+		setViewport({ key: selectionKey, top: node.scrollTop });
+	}, [selected, selectionKey, visible]);
+	// Track the list height to know how many rows are visible.
+	useEffect(() => {
+		const node = list.current;
+		if (!node) {
+			return;
+		}
+		const observer = new ResizeObserver(() => setHeight(node.clientHeight));
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, []);
+
+	return (
+		<section
+			className={styles.referencesPanel}
+			inert={blocked}
+			data-references-panel
+			aria-label={t('References')}
+			hidden={!visible}
+			onFocus={() => setFocused(true)}
+			onBlur={(event) => {
+				if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+					closePrefix.current = false;
+					setFocused(false);
+				}
+			}}
+			onKeyDown={(event) => {
+				if (
+					event.nativeEvent.isComposing ||
+					event.ctrlKey ||
+					event.altKey ||
+					event.metaKey
+				) {
+					return;
+				}
+				const closing = closePrefix.current && event.key === 'd';
+				closePrefix.current = event.key === ' ';
+				if (closing || event.key === 'Escape') {
+					event.preventDefault();
+					onClose();
+				} else if (event.key === ' ') {
+					event.preventDefault();
+				}
+			}}
+		>
+			{previewHost &&
+				createPortal(
+					<OverlayPresence>
+						{previewEnabled ? (
+							<section
+								className={styles.referencePreview}
+								inert={blocked}
+								aria-label={t('Reference preview')}
+								aria-busy={preview?.key !== previewKey}
+							>
+								<div
+									ref={currentContent}
+									className={styles.referencePreviewContent}
+								>
+									<ReferencePreviewContent {...(preview ?? { item })} />
+								</div>
+							</section>
+						) : null}
+					</OverlayPresence>,
+					previewHost
+				)}
+			<div className={styles.referencesToolbar}>
+				<strong>
+					{t('References')}{' '}
+					<span>{state.loading ? t('Searching…') : state.items.length}</span>
+				</strong>
+				<span>{t('j/k Select · Enter Jump · Ctrl+J Return · Esc / Space d Close')}</span>
+				<button aria-label={t('Hide references')} onClick={onClose}>
+					×
+				</button>
+			</div>
+			<div
+				ref={list}
+				className={styles.referencesList}
+				role="listbox"
+				aria-label={t('Reference results')}
+				data-reference-version={state.version}
+				tabIndex={0}
+				aria-busy={state.loading}
+				onScroll={(event) =>
+					setViewport({ key: selectionKey, top: event.currentTarget.scrollTop })
+				}
+				aria-activedescendant={state.items[selected] ? `reference-${selected}` : undefined}
+				onKeyDown={(event) => {
+					if (
+						event.nativeEvent.isComposing ||
+						event.ctrlKey ||
+						event.altKey ||
+						event.metaKey
+					) {
+						return;
+					}
+					if (['j', 'k', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+						event.preventDefault();
+						const last = Math.max(0, state.items.length - 1);
+						if (event.key === 'Home') {
+							setSelected(0);
+						} else if (event.key === 'End') {
+							setSelected(last);
+						} else {
+							const direction = ['j', 'ArrowDown'].includes(event.key) ? 1 : -1;
+							setSelected((index) => Math.max(0, Math.min(last, index + direction)));
+						}
+					} else if (event.key === 'Enter' && state.items[selected]) {
+						event.preventDefault();
+						onOpen(selected + 1);
+					}
+				}}
+			>
+				<div style={{ height: state.items.length * rowHeight, position: 'relative' }}>
+					{indices.map((index) => {
+						const item = state.items[index];
+						const path = item.path.replaceAll('\\', '/');
+						const prefix = root.replaceAll('\\', '/').replace(/\/$/, '') + '/';
+						const relative = path.toLowerCase().startsWith(prefix.toLowerCase())
+							? path.slice(prefix.length)
+							: path;
+						return (
+							<div
+								key={`${item.path}:${item.line}:${item.column}`}
+								id={`reference-${index}`}
+								role="option"
+								aria-posinset={index + 1}
+								aria-setsize={state.items.length}
+								style={{
+									position: 'absolute',
+									top: index * rowHeight,
+									left: 0,
+									right: 0
+								}}
+								aria-selected={selected === index}
+								className={styles.referenceRow}
+								onClick={() => {
+									setSelected(index);
+									list.current?.focus();
+								}}
+								onDoubleClick={() => onOpen(index + 1)}
+							>
+								<FileIcon path={item.path} />
+								<span className={styles.referencePath} title={item.path}>
+									{relative}
+								</span>
+								<span className={styles.referencePosition}>
+									{item.line}:{item.column}
+								</span>
+								<code>{item.text.trim()}</code>
+							</div>
+						);
+					})}
+				</div>
+				{state.error && <p role="alert">{errorMessage(state.error)}</p>}
+				{!state.loading && !state.error && !state.items.length && (
+					<p>{t('No references found.')}</p>
+				)}
+			</div>
+		</section>
+	);
+}

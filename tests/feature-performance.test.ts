@@ -4,11 +4,11 @@ import { mkdtemp, mkdir, writeFile, rm, unlink, utimes, realpath } from 'node:fs
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { Session } from '../src/main/session';
-import { SessionFiles } from '../src/main/sessionFiles';
-import { HistoryService } from '../src/main/historyService';
-import type { LocalHistory } from '../src/main/localHistory';
-import { SearchMatcher } from '../src/main/searchMatcher';
+import { Session } from '../src/main/session/session';
+import { SessionFiles } from '../src/main/session/sessionFiles';
+import { HistoryService } from '../src/main/history/historyService';
+import type { LocalHistory } from '../src/main/history/localHistory';
+import { SearchMatcher } from '../src/main/search/searchMatcher';
 import { defaultSearchOptions } from '../src/shared/search';
 
 test('consecutive searches reuse directory listings but read current contents and ignore rules', async () => {

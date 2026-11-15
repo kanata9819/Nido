@@ -5,8 +5,8 @@ import { createRequire, Module } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
-import type { Session } from '../src/main/session';
-import type { AppState } from '../src/main/handlers';
+import type { Session } from '../src/main/session/session';
+import type { AppState } from '../src/main/ipc/handlers';
 import type { LanguagePackConfiguration } from '../src/shared/languagePacks';
 import type { NidoEvent, Workspace } from '../src/shared/types';
 
@@ -44,10 +44,10 @@ interface WakeFixture {
 async function fixture(context: TestContext): Promise<WakeFixture> {
 	const root = await mkdtemp(join(tmpdir(), 'nido-wake-packs-'));
 	userData = root;
-	const { Session } = await import('../src/main/session');
-	const { LanguagePacks } = await import('../src/main/languagePacks');
-	const { registerWorkspaceHandlers } = await import('../src/main/workspaceHandlers');
-	const { registerLanguagePackHandlers } = await import('../src/main/languagePackHandlers');
+	const { Session } = await import('../src/main/session/session');
+	const { LanguagePacks } = await import('../src/main/languagePacks/languagePacks');
+	const { registerWorkspaceHandlers } = await import('../src/main/ipc/workspaceHandlers');
+	const { registerLanguagePackHandlers } = await import('../src/main/ipc/languagePackHandlers');
 	const resources = join(root, 'resources');
 	const bundled = join(resources, 'nido/language-packs');
 	await mkdir(bundled, { recursive: true });
@@ -259,8 +259,8 @@ async function restorationFixture(context: TestContext): Promise<{
 		join(root, 'workspaces.json'),
 		JSON.stringify({ version: 1, workspaces: [{ root, files: [], current: '' }], active: 0 })
 	);
-	const { Session } = await import('../src/main/session');
-	const { registerWorkspaceHandlers } = await import('../src/main/workspaceHandlers');
+	const { Session } = await import('../src/main/session/session');
+	const { registerWorkspaceHandlers } = await import('../src/main/ipc/workspaceHandlers');
 	const sessions = new Map<string, Session>();
 	const state: AppState = {
 		order: [],

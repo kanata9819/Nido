@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Session } from '../src/main/session';
+import { Session } from '../src/main/session/session';
 
 test(
 	'Rust runnables execute main, individual tests and modules without CodeLens rows',

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { test } from 'node:test';
-import { Updates, type UpdateBackend } from '../src/main/updater';
+import { Updates, type UpdateBackend } from '../src/main/platform/updater';
 import type { UpdateState } from '../src/shared/types';
 
 class Backend extends EventEmitter implements UpdateBackend {

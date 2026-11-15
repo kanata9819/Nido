@@ -1,5 +1,5 @@
-import { Grid } from '../../src/renderer/src/grid';
-import type { Cell } from '../../src/renderer/src/gridTypes';
+import { Grid } from '../../src/renderer/src/grid/grid';
+import type { Cell } from '../../src/renderer/src/grid/gridTypes';
 import type { Redraw } from '../../src/shared/types';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#canvas')!;

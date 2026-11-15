@@ -2,8 +2,8 @@ import { test, expect } from './helpers/renderer-test';
 import type { ViteDevServer } from 'vite';
 import { harnessWarmupTimeout, startHarnessServer } from './helpers/harness-server';
 import { viteFsUrl } from './helpers/vite-fs-url';
-import type { Grid as EditorGrid } from '../src/renderer/src/grid';
-import type { FrameMotion } from '../src/renderer/src/editorMotion';
+import type { Grid as EditorGrid } from '../src/renderer/src/grid/grid';
+import type { FrameMotion } from '../src/renderer/src/editor/editorMotion';
 import type {} from './renderer/harness';
 import { requireWebGLCorrection } from './helpers/row-image-probe';
 
@@ -88,7 +88,7 @@ test('wrapped row redraws retain the bitmaps of unchanged shifted text', async (
 				} finally {
 					CanvasRenderingContext2D.prototype.fillText = fillText;
 				}
-			}, viteFsUrl('src/renderer/src/grid.ts'));
+			}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 			console.log('wrapped-row-cache', JSON.stringify({ scale, ...result }));
 			expect(result.mismatches).toBe(0);
 			for (const glyphs of result.redrawGlyphs) expect(glyphs).toBeLessThanOrEqual(2 * 64);
@@ -159,7 +159,7 @@ for (const scale of [1, 1.25, 1.5]) {
 					}
 				}
 				return results;
-			}, viteFsUrl('src/renderer/src/grid.ts'));
+			}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 			for (const result of results) {
 				// Windows CI rounds RGB readback by up to two levels; an unpainted row differs far more.
 				for (const [channel, expected] of [32, 64, 96].entries()) {
@@ -288,7 +288,7 @@ test('prefetch strips preserve visible row bitmaps and repaint actual content ch
 		} finally {
 			CanvasRenderingContext2D.prototype.fillText = text;
 		}
-	}, viteFsUrl('src/renderer/src/grid.ts'));
+	}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 	expect(result.prefetchGlyphs).toBe(0);
 	expect(result.unchanged).toBe(true);
 	expect(result.retained).toBe(true);
@@ -348,7 +348,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 						return { samples, blurred: difference(paint(false), baseline) };
 					},
 					{
-						moduleUrl: viteFsUrl('src/renderer/src/grid.ts'),
+						moduleUrl: viteFsUrl('src/renderer/src/grid/grid.ts'),
 						opacity
 					}
 				);
@@ -462,7 +462,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 						return { work, mismatches };
 					},
 					{
-						moduleUrl: viteFsUrl('src/renderer/src/grid.ts'),
+						moduleUrl: viteFsUrl('src/renderer/src/grid/grid.ts'),
 						opacity
 					}
 				);
@@ -630,8 +630,8 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 						return { mismatches, cachedPaints, referencePaints };
 					},
 					{
-						gridUrl: viteFsUrl('src/renderer/src/grid.ts'),
-						motionUrl: viteFsUrl('src/renderer/src/editorMotion.ts'),
+						gridUrl: viteFsUrl('src/renderer/src/grid/grid.ts'),
+						motionUrl: viteFsUrl('src/renderer/src/editor/editorMotion.ts'),
 						opacity
 					}
 				);
@@ -697,7 +697,7 @@ test('edits and decoration row shifts paint their final positions without a scro
 				['flush']
 			]
 		});
-	}, viteFsUrl('src/renderer/src/grid.ts'));
+	}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 	await page.clock.runFor(32);
 	for (const change of [
 		{ name: 'dd', edited: true, viewport: false, rows: 1 },
@@ -752,7 +752,7 @@ test('j/k viewport scrolling reuses frames until a redraw, while editing interru
 			probe.grid = this;
 			return original.apply(this, args);
 		};
-	}, viteFsUrl('src/renderer/src/grid.ts'));
+	}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 	await input.press('j');
 	await page.clock.runFor(32);
 	const scroll = async (): Promise<void> => {
@@ -1113,8 +1113,8 @@ test('direct horizontal frames retain fractional positions and fixed gutters thr
 			return results;
 		},
 		{
-			gridUrl: viteFsUrl('src/renderer/src/grid.ts'),
-			motionUrl: viteFsUrl('src/renderer/src/editorMotion.ts')
+			gridUrl: viteFsUrl('src/renderer/src/grid/grid.ts'),
+			motionUrl: viteFsUrl('src/renderer/src/editor/editorMotion.ts')
 		}
 	);
 	expect(results).toEqual(Array(16).fill(0));
@@ -1412,7 +1412,7 @@ test('row text reuses styles without leaking CodeLens, bold, italic or underline
 			proto.fillText = text;
 			Number.prototype.toString = numberToString;
 		}
-	}, viteFsUrl('src/renderer/src/grid.ts'));
+	}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 	expect(result.styles.L.font).toContain('12px');
 	expect(result.styles.b.font).toMatch(/bold|700/);
 	expect(result.styles.b.color).toBe('#ff0000');
@@ -1564,7 +1564,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 					coldMs,
 					p95Ms: durations[Math.floor(durations.length * 0.95)]
 				};
-			}, viteFsUrl('src/renderer/src/grid.ts'));
+			}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 			const metrics = { scale, softwareGpu, ...work };
 			console.log('dense-scroll-work', metrics);
 			await test.info().attach('dense-scroll-work', {
@@ -1722,7 +1722,7 @@ test('row rasterization preserves native dark and light text pixels', async ({ b
 					}
 				}
 				return reports;
-			}, viteFsUrl('src/renderer/src/grid.ts'));
+			}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 			console.log('native-row-pixels', JSON.stringify({ scale, reports }));
 			for (const report of reports) {
 				expect(report.partialClip).toBe(true);
@@ -1786,7 +1786,7 @@ test('new highlight IDs preserve cached rows while existing highlight changes re
 		} finally {
 			CanvasRenderingContext2D.prototype.fillText = text;
 		}
-	}, viteFsUrl('src/renderer/src/grid.ts'));
+	}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 	expect(result.newIdGlyphs).toBe(0);
 	expect(result.unchanged).toBe(true);
 	expect(result.changedIdGlyphs).toBeGreaterThan(0);
@@ -2027,7 +2027,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 						return { failures, warmGlyphs, compared };
 					},
 					{
-						moduleUrl: viteFsUrl('src/renderer/src/grid.ts'),
+						moduleUrl: viteFsUrl('src/renderer/src/grid/grid.ts'),
 						opacity
 					}
 				);
@@ -2151,7 +2151,7 @@ test('numeric row damage preserves overhanging text and decorations across repea
 					}
 				}
 				return failures;
-			}, viteFsUrl('src/renderer/src/grid.ts'));
+			}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 			expect(failures, `numeric damage at ${scale * 100}% scale`).toEqual([]);
 		} finally {
 			await context.close();
@@ -2334,7 +2334,7 @@ for (const rows of [4, 8]) {
 						return reports;
 					},
 					{
-						moduleUrl: viteFsUrl('src/renderer/src/grid.ts'),
+						moduleUrl: viteFsUrl('src/renderer/src/grid/grid.ts'),
 						rows,
 						direction
 					}
@@ -2534,7 +2534,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 					gpu.deleteTexture = remove;
 					HTMLCanvasElement.prototype.getContext = context;
 				}
-			}, viteFsUrl('src/renderer/src/grid.ts'));
+			}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 			console.log('stationary-editor-work', JSON.stringify({ scale, ...work }));
 			await test.info().attach('stationary-editor-work', {
 				body: JSON.stringify({ scale, ...work }, null, 2),
@@ -3243,7 +3243,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 						};
 					},
 					{
-						moduleUrl: viteFsUrl('src/renderer/src/grid.ts'),
+						moduleUrl: viteFsUrl('src/renderer/src/grid/grid.ts'),
 						opacity
 					}
 				);
@@ -3454,7 +3454,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 						return { geometryReads, mismatches, comparisons, mismatchCases };
 					},
 					{
-						moduleUrl: viteFsUrl('src/renderer/src/grid.ts'),
+						moduleUrl: viteFsUrl('src/renderer/src/grid/grid.ts'),
 						referenceModuleUrl: process.env.NIDO_GRID_REFERENCE_MODULE
 							? viteFsUrl(process.env.NIDO_GRID_REFERENCE_MODULE)
 							: undefined,

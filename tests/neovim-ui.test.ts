@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { Session } from '../src/main/session';
-import { SessionEvents } from '../src/main/sessionEvents';
+import { Session } from '../src/main/session/session';
+import { SessionEvents } from '../src/main/session/sessionEvents';
 import {
 	applyNeovimUI,
 	emptyNeovimUI,

@@ -6,7 +6,7 @@ import { readSavedFile } from './helpers/files';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { electron } from './helpers/electron';
-import { wslArguments } from '../src/main/wsl';
+import { wslArguments } from '../src/main/platform/wsl';
 import { parseWslPath, wslHostPath } from '../src/shared/wsl';
 
 test('connect to WSL from the picker, edit with the keyboard and restore after restart', async () => {

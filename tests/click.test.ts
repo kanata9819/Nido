@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Session } from '../src/main/session';
+import { Session } from '../src/main/session/session';
 
 for (const resume of ['keyboard', 'buffer switch'] as const) {
 	test(`clicks preserve the viewport and restore cursor margins on ${resume}`, async () => {

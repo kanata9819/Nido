@@ -118,7 +118,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 						blank: rgb(Math.round(lineHeight * 6.5 * devicePixelRatio))
 					};
 				});
-			}, viteFsUrl('src/renderer/src/grid.ts'));
+			}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 			for (const result of results) {
 				expect(result.added.every((pixel) => pixel.join() === '46,160,67')).toBe(true);
 				expect(result.changed.every((pixel) => pixel.join() === '0,120,212')).toBe(true);
@@ -289,7 +289,7 @@ for (const [scale, size, family] of [
 						}))
 					};
 				},
-				{ url: viteFsUrl('src/renderer/src/grid.ts'), size, family }
+				{ url: viteFsUrl('src/renderer/src/grid/grid.ts'), size, family }
 			);
 			const columns = [
 				0,
@@ -442,7 +442,7 @@ for (const scale of [1, 1.25, 1.5]) {
 				grid.mode = 'insert';
 				draw();
 				return { border, read, write, margins, erased, widths, cellWidth };
-			}, viteFsUrl('src/renderer/src/grid.ts'));
+			}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 			expect(result.border).toEqual([137, 137, 137]);
 			expect(result.margins).toEqual(Array.from({ length: 4 }, () => [18, 18, 18]));
 			expect(result.erased).toEqual([18, 18, 18]);
@@ -529,7 +529,7 @@ for (const scale of [1, 1.25, 1.5]) {
 						prototype.fillRect = fill;
 					}
 				});
-			}, viteFsUrl('src/renderer/src/grid.ts'));
+			}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 			for (const result of results) {
 				expect(result.gap).toBeGreaterThanOrEqual(1);
 				expect(result.gap).toBeLessThanOrEqual(2);
@@ -607,7 +607,7 @@ test('diagnostic undercurls stay continuous across spaces and wide characters', 
 				span: red.slice(width, 6 * width),
 				after: red.slice(6 * width)
 			};
-		}, viteFsUrl('src/renderer/src/grid.ts'));
+		}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 		expect(before.every((y) => y === -1)).toBe(true);
 		expect(span.every((y) => y >= 0)).toBe(true);
 		expect(new Set(span).size).toBeGreaterThan(1);
@@ -729,7 +729,7 @@ for (const scale of [1, 1.25, 1.5]) {
 						};
 					},
 					{
-						moduleUrl: viteFsUrl('src/renderer/src/grid.ts'),
+						moduleUrl: viteFsUrl('src/renderer/src/grid/grid.ts'),
 						opacity
 					}
 				);
@@ -1728,7 +1728,7 @@ for (const scale of [1, 1.25, 1.5]) {
 							bounds.bottom <= parent.bottom
 					};
 				});
-			}, viteFsUrl('src/renderer/src/canvasSurface.ts'));
+			}, viteFsUrl('src/renderer/src/editor/canvasSurface.ts'));
 			for (const sample of samples) {
 				for (const edge of sample.edges)
 					expect(Math.abs(edge - Math.round(edge))).toBeLessThan(0.025);
@@ -1815,7 +1815,7 @@ for (const scale of [1, 1.25, 1.5]) {
 				} finally {
 					CanvasRenderingContext2D.prototype.fillText = fillText;
 				}
-			}, viteFsUrl('src/renderer/src/grid.ts'));
+			}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 			expect(result.lighter).toEqual(result.initial);
 			expect(result.lighterCalls.map(({ text, x, y }) => ({ text, x, y }))).toEqual(
 				result.initialCalls.map(({ text, x, y }) => ({ text, x, y }))
@@ -1938,7 +1938,7 @@ for (const scale of [1, 1.25, 1.5]) {
 					mismatches,
 					nativeRows: paintedRows.every((row, index) => row === originalRows[index])
 				};
-			}, viteFsUrl('src/renderer/src/grid.ts'));
+			}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 			expect(samples.copies).toBe(10);
 			expect(
 				samples.nativeRows,
@@ -2059,7 +2059,7 @@ for (const scale of [1, 1.25, 1.5]) {
 					CanvasRenderingContext2D.prototype.fillText = fillText;
 				}
 				return { positions, glyphs, initialGlyphs, nativeMismatches };
-			}, viteFsUrl('src/renderer/src/grid.ts'));
+			}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 			const steps = samples.positions
 				.slice(1)
 				.map((y, index) => samples.positions[index] - y);
@@ -2185,7 +2185,7 @@ for (const scale of [1, 1.25, 1.5]) {
 					origins.push(grid.scrollOrigin);
 				}
 				return { inkVariation, settlingPixels, settlingDistance, steps, origins };
-			}, viteFsUrl('src/renderer/src/grid.ts'));
+			}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 			expect(samples.inkVariation, 'moving glyphs keep their total coverage').toBeLessThan(
 				0.01
 			);
@@ -2339,7 +2339,7 @@ for (const scale of [1, 1.25, 1.5]) {
 					});
 				}
 				return results;
-			}, viteFsUrl('src/renderer/src/grid.ts'));
+			}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 			console.log('fractional-text-light', JSON.stringify({ scale, results }));
 			for (const result of results) {
 				expect(
@@ -2453,7 +2453,7 @@ for (const failure of ['unavailable', 'lost'] as const) {
 				}
 			},
 			{
-				moduleUrl: viteFsUrl('src/renderer/src/grid.ts'),
+				moduleUrl: viteFsUrl('src/renderer/src/grid/grid.ts'),
 				failure
 			}
 		);

@@ -1,14 +1,14 @@
 import { useLayoutEffect, useRef } from 'react';
 import type { Workspace } from '../../src/shared/types';
-import { Grid } from '../../src/renderer/src/grid';
-import CompletionMenu from '../../src/renderer/src/components/CompletionMenu';
-import { useFavoriteWorkspaces } from '../../src/renderer/src/hooks/useFavoriteWorkspaces';
-import { useGitFileStatus } from '../../src/renderer/src/hooks/useGitFileStatus';
+import { Grid } from '../../src/renderer/src/grid/grid';
+import CompletionMenu from '../../src/renderer/src/editor/popups/CompletionMenu';
+import { useFavoriteWorkspaces } from '../../src/renderer/src/workspace/useFavoriteWorkspaces';
+import { useGitFileStatus } from '../../src/renderer/src/git/useGitFileStatus';
 import {
 	useSessionSettings,
 	type SessionSettings
-} from '../../src/renderer/src/hooks/useSessionSettings';
-import { useWorkspaceSessions } from '../../src/renderer/src/hooks/useWorkspaceSessions';
+} from '../../src/renderer/src/settings/useSessionSettings';
+import { useWorkspaceSessions } from '../../src/renderer/src/workspace/useWorkspaceSessions';
 
 const noop = (): void => {};
 export function Favorites({ workspace }: { workspace: Workspace }): React.JSX.Element {

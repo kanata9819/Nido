@@ -4,8 +4,8 @@ import { mkdtemp, mkdir, realpath, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { Session } from '../src/main/session';
-import { Grid } from '../src/renderer/src/grid';
+import { Session } from '../src/main/session/session';
+import { Grid } from '../src/renderer/src/grid/grid';
 
 test(
 	'Rust syntax and real rust-analyzer navigation, completion and diagnostics',

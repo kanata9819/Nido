@@ -3,9 +3,9 @@ import { test } from 'node:test';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { Session } from '../src/main/session';
-import { Grid } from '../src/renderer/src/grid';
-import { stickyRows } from '../src/renderer/src/stickyScroll';
+import { Session } from '../src/main/session/session';
+import { Grid } from '../src/renderer/src/grid/grid';
+import { stickyRows } from '../src/renderer/src/editor/stickyHeaders';
 import type { StickyScrollState } from '../src/shared/types';
 
 const span = [{ text: 'scope {', color: '#d4d4d4' }];

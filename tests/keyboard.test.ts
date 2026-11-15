@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { vimKey } from '../src/renderer/src/keyboard';
-import { useEditorInput as createEditorInput } from '../src/renderer/src/hooks/useEditorInput';
-import { useKeyboardShortcuts as createKeyboardHandler } from '../src/renderer/src/hooks/useKeyboardShortcuts';
-import { buildCommands, type CommandsCallbacks } from '../src/renderer/src/commandItems';
-import { commandKeys } from '../src/renderer/src/paletteShortcuts';
+import { vimKey } from '../src/renderer/src/keyboard/keyboard';
+import { useEditorInput as createEditorInput } from '../src/renderer/src/editor/useEditorInput';
+import { useKeyboardShortcuts as createKeyboardHandler } from '../src/renderer/src/keyboard/useKeyboardShortcuts';
+import { buildCommands, type CommandsCallbacks } from '../src/renderer/src/palette/commandItems';
+import { commandKeys } from '../src/renderer/src/palette/paletteShortcuts';
 import { createTranslator } from '../src/shared/i18n';
 import type { SessionState, Workspace } from '../src/shared/types';
 

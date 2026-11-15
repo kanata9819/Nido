@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SessionInteraction } from '../src/main/sessionInteraction';
-import type { SessionClient } from '../src/main/sessionClient';
-import type { SessionEvents } from '../src/main/sessionEvents';
+import { SessionInteraction } from '../src/main/session/sessionInteraction';
+import type { SessionClient } from '../src/main/session/sessionClient';
+import type { SessionEvents } from '../src/main/session/sessionEvents';
 
 test('input split inside a UTF-8 character delivers the remaining bytes unchanged', async () => {
 	const keys = 'aあい';
