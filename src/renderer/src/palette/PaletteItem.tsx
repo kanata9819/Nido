@@ -78,6 +78,7 @@ export default memo(function PaletteItem({
 				<strong>{item.title}</strong>
 				{detail && <small>{detail}</small>}
 			</span>
+			{item.recent && <span className={styles.recentTag}>{t('Recent')}</span>}
 			{item.status && (
 				<span className={styles.workspaceStatus} data-status={item.status}>
 					{item.status === 'current' ? t('Current') : t('Sleeping')}

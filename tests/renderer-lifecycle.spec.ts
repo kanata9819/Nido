@@ -7016,3 +7016,40 @@ test('diagnostic cards scroll with their own keys and hand any other key to the 
 	await expect(popup).toBeVisible();
 	await expect(settings).toBeFocused();
 });
+
+test('the command palette lists the commands run last first and marks them', async ({ page }) => {
+	await page.goto(origin);
+	await page.evaluate(() => localStorage.clear());
+	await page.goto(`${origin}?view=app`);
+	const list = page.getByRole('group', { name: 'Palette results' });
+	const firstTitle = (): Promise<string | null> =>
+		list.getByRole('button').first().locator('strong').textContent();
+
+	await page.keyboard.press('Control+Shift+P');
+	await expect(list).toBeFocused();
+	await expect.poll(firstTitle).toBe('Connect to WSL');
+	await expect(list.getByText('Recent', { exact: true })).toHaveCount(0);
+
+	// Run Settings from the filtered list, then Problems.
+	for (const title of ['Settings', 'Problems']) {
+		await page.keyboard.press('Control+Shift+P');
+		await page.keyboard.press('i');
+		await page.keyboard.type(title);
+		await page.keyboard.press('Enter');
+		await page.keyboard.press('Escape');
+	}
+
+	await page.keyboard.press('Control+Shift+P');
+	await expect(list).toBeFocused();
+	await expect
+		.poll(() => list.getByRole('button').locator('strong').allTextContents())
+		.toEqual(expect.arrayContaining(['Problems', 'Settings']));
+	const titles = await list.getByRole('button').locator('strong').allTextContents();
+	expect(titles.slice(0, 3)).toEqual(['Problems', 'Settings', 'Connect to WSL']);
+	await expect(list.getByText('Recent', { exact: true })).toHaveCount(2);
+
+	// A query lists the commands in their usual order again.
+	await page.keyboard.press('i');
+	await page.keyboard.type('s');
+	await expect.poll(firstTitle).not.toBe('Problems');
+});

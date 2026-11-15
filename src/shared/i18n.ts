@@ -472,6 +472,7 @@ export const japanese: Record<string, string> = {
 	'Remove favorite {name} ({kind})': 'お気に入り {name}（{kind}）を解除',
 	'Remove favorite': 'お気に入りを解除',
 	Sleeping: 'スリープ中',
+	Recent: '最近',
 	'Sleeping · Opens when selected': 'スリープ中 · 選択すると再開します',
 	'Could not reopen {name}': '{name} を再開できませんでした',
 	Retry: '再試行',
