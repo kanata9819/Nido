@@ -41,6 +41,7 @@ interface UseKeyboardShortcutsParams {
 	active: string;
 	workspaces: Workspace[];
 	nextWorkspace: (offset: number) => void;
+	moveWorkspace: (offset: number) => void;
 	showExplorer: () => void;
 	showDebugger: () => void;
 	closeReferences: () => void;
@@ -74,6 +75,7 @@ export function useKeyboardShortcuts({
 	active,
 	workspaces,
 	nextWorkspace,
+	moveWorkspace,
 	showExplorer,
 	showDebugger,
 	closeReferences,
@@ -210,6 +212,20 @@ export function useKeyboardShortcuts({
 	 */
 	const handleWorkspaceShortcuts = (shortcut: Shortcut): boolean => {
 		const { event, key, consume, focusedInput, terminalFocused, editorWorkspace } = shortcut;
+		if (
+			active &&
+			event.altKey &&
+			event.shiftKey &&
+			!event.ctrlKey &&
+			!event.metaKey &&
+			(key === 'pageup' || key === 'pagedown')
+		) {
+			consume();
+			if (!event.repeat) {
+				moveWorkspace(key === 'pageup' ? -1 : 1);
+			}
+			return true;
+		}
 		if (
 			active &&
 			!terminalFocused &&

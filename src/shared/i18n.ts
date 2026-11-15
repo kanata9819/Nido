@@ -27,6 +27,8 @@ export const japanese: Record<string, string> = {
 	'Reorder file tabs · Ctrl+Shift+PageDown': 'ファイルタブを並び替え · Ctrl+Shift+PageDown',
 	'Drag to reorder · Ctrl+Shift+PageUp / PageDown':
 		'ドラッグで並び替え · Ctrl+Shift+PageUp / PageDown',
+	'Drag to reorder · Alt+Shift+PageUp / PageDown':
+		'ドラッグで並び替え · Alt+Shift+PageUp / PageDown',
 	Connection: '接続先',
 	'This computer': 'このPC',
 	'WSL unavailable': 'WSLを利用できません',
@@ -582,7 +584,10 @@ export const japanese: Record<string, string> = {
 	'Navigate with j / k / h / l': 'j / k / h / lで移動',
 	'Save file': 'ファイルを保存',
 	'Move workspace left': 'ワークスペースを左へ移動',
-	'Reorder the workspace tabs': 'ワークスペースのタブを並べ替え',
+	'Reorder workspace tabs · Alt+Shift+PageUp':
+		'ワークスペースのタブを並べ替え · Alt+Shift+PageUp',
+	'Reorder workspace tabs · Alt+Shift+PageDown':
+		'ワークスペースのタブを並べ替え · Alt+Shift+PageDown',
 	'Move workspace right': 'ワークスペースを右へ移動',
 	'Close workspace': 'ワークスペースを閉じる',
 	'Prompts for unsaved changes': '未保存の変更がある場合に確認',

@@ -31,6 +31,7 @@ interface WorkspaceActions {
 	openFavorite: (favorite: FavoriteWorkspace) => Promise<void>;
 	nextWorkspace: (offset: number) => void;
 	moveWorkspace: (offset: number) => void;
+	reorderWorkspace: (id: string, targetId: string) => void;
 	closeWorkspace: (id: string) => void;
 }
 
@@ -110,17 +111,25 @@ export function useWorkspaceActions({
 			].id
 		);
 	};
-	const moveWorkspace = (offset: number): void => {
+	const reorderWorkspace = (id: string, targetId: string): void => {
 		setWorkspaces((old) => {
-			const index = old.findIndex((w) => w.id === active);
-			const target = index + offset;
-			if (target < 0 || target >= old.length) {
+			const index = old.findIndex((w) => w.id === id);
+			const target = old.findIndex((w) => w.id === targetId);
+			if (index < 0 || target < 0 || index === target) {
 				return old;
 			}
 			const next = [...old];
-			[next[index], next[target]] = [next[target], next[index]];
+			next.splice(index, 1);
+			next.splice(target, 0, old[index]);
 			return next;
 		});
+	};
+	const moveWorkspace = (offset: number): void => {
+		const index = workspaces.findIndex((w) => w.id === active);
+		const target = workspaces[index + offset];
+		if (index >= 0 && target) {
+			reorderWorkspace(active, target.id);
+		}
 		focusEditor();
 	};
 	const closeWorkspace = (id: string): void => {
@@ -144,6 +153,7 @@ export function useWorkspaceActions({
 		openFavorite,
 		nextWorkspace,
 		moveWorkspace,
+		reorderWorkspace,
 		closeWorkspace
 	};
 }

@@ -2758,7 +2758,7 @@ test('compact mode migrates the old setting and respects a saved disabled value 
 	await expect(page.getByRole('contentinfo')).toHaveCSS('height', '32px');
 });
 
-test('compact mode scrolls the active session into view in a narrow window with many sessions', async ({
+test('compact mode scrolls the active session into view after selection or reordering', async ({
 	page
 }) => {
 	await page.setViewportSize({ width: 720, height: 600 });
@@ -2778,8 +2778,13 @@ test('compact mode scrolls the active session into view in a narrow window with 
 	);
 	const tabs = page.getByRole('tablist', { name: 'Workspaces', exact: true });
 	await expect(tabs.getByRole('tab')).toHaveCount(12);
-	for (const index of [11, 0, 8]) {
-		if (index !== 11) await page.keyboard.press(`Alt+${index + 1}`);
+	for (const [index, key] of [
+		[11, ''],
+		[0, 'Alt+1'],
+		[8, 'Alt+9'],
+		[8, 'Alt+Shift+PageDown']
+	] as const) {
+		if (key) await page.keyboard.press(key);
 		const selected = tabs.getByRole('tab', {
 			name: `Workspace Session ${index + 1}`,
 			exact: true
@@ -2795,6 +2800,7 @@ test('compact mode scrolls the active session into view in a narrow window with 
 			)
 			.toBe(true);
 	}
+	await expect(tabs.getByRole('tab').nth(9)).toHaveAccessibleName('Workspace Session 9');
 	await expect(page.getByRole('banner')).toHaveCSS('height', '24px');
 });
 
@@ -6031,6 +6037,56 @@ test('late reference results keep command palette focus and remain reachable aft
 	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
 	await page.keyboard.press('Control+j');
 	await expect(page.getByRole('listbox', { name: 'Reference results' })).toBeFocused();
+});
+
+test('workspace tabs move by keyboard and drag while keeping their colors and selection', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+	await page.evaluate(() =>
+		window.rendererTest.settle('restoreWorkspaces', 0, {
+			workspaces: [
+				{ id: 'alpha', root: '/alpha', name: 'Alpha' },
+				{ id: 'beta', root: '/beta', name: 'Beta' },
+				{ id: 'gamma', root: '/gamma', name: 'Gamma' }
+			],
+			active: 'beta',
+			errors: []
+		})
+	);
+	const tabs = page.getByRole('tablist', { name: 'Workspaces', exact: true });
+	const [alpha, beta, gamma] = ['Alpha', 'Beta', 'Gamma'].map((name) =>
+		tabs.getByRole('tab', { name: `Workspace ${name}`, exact: true })
+	);
+	const colors = (): Promise<string[]> =>
+		Promise.all(
+			[alpha, beta, gamma].map((tab) =>
+				tab
+					.locator('span')
+					.first()
+					.evaluate((dot) => getComputedStyle(dot).backgroundColor)
+			)
+		);
+	const layout = (): Promise<unknown[] | undefined> =>
+		page.evaluate(
+			() =>
+				window.rendererTest.calls.filter((call) => call.method === 'workspaceLayout').at(-1)
+					?.args
+		);
+	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+	const initialColors = await colors();
+	expect(new Set(initialColors).size).toBe(3);
+
+	await page.keyboard.press('Alt+Shift+PageUp');
+	await expect(tabs.getByRole('tab')).toHaveText([/Beta/, /Alpha/, /Gamma/]);
+	expect(await colors()).toEqual(initialColors);
+	await page.keyboard.press('Alt+Shift+PageDown');
+	await expect(tabs.getByRole('tab')).toHaveText([/Alpha/, /Beta/, /Gamma/]);
+	await gamma.dragTo(alpha);
+	await expect(tabs.getByRole('tab')).toHaveText([/Gamma/, /Alpha/, /Beta/]);
+	await expect(beta).toHaveAttribute('aria-selected', 'true');
+	expect(await colors()).toEqual(initialColors);
+	await expect.poll(layout).toEqual([['gamma', 'alpha', 'beta'], 'beta']);
 });
 
 const fileTabBuffers = [11, 22, 33].map((id, index) => ({

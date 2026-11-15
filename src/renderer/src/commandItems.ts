@@ -363,13 +363,13 @@ export function buildCommands(
 					{
 						key: 'H',
 						title: 'Move workspace left',
-						detail: 'Reorder the workspace tabs',
+						detail: 'Reorder workspace tabs · Alt+Shift+PageUp',
 						run: () => moveWorkspace(-1)
 					},
 					{
 						key: 'L',
 						title: 'Move workspace right',
-						detail: 'Reorder the workspace tabs',
+						detail: 'Reorder workspace tabs · Alt+Shift+PageDown',
 						run: () => moveWorkspace(1)
 					},
 					{

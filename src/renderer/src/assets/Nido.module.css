@@ -107,6 +107,7 @@
 	padding: 0 7px 0 14px;
 	flex: 1;
 	min-width: 0;
+	cursor: grab;
 }
 .workspaceTab > button:first-child > span:nth-child(2) {
 	overflow: hidden;
@@ -455,9 +456,11 @@
 	min-width: 0;
 	cursor: grab;
 }
+.workspaceTab > button:first-child:active,
 .fileTab > button:first-child:active {
 	cursor: grabbing;
 }
+.workspaceTab[data-drop-target],
 .fileTab[data-drop-target] {
 	outline: 1px solid var(--ui-accent, #a3cc94);
 	outline-offset: -2px;
