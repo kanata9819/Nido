@@ -160,7 +160,7 @@ vim.keymap.set('i', '<C-Del>', function()
   -- Whitespace, then a run of word characters or of other non-blank characters.
   local word = vim.fn.matchstr(after, [[^\s*\%(\k\+\|\%(\k\@!\S\)\+\)\?]])
   -- At the end of a line, join the next one.
-  return string.rep('<Del>', math.max(1, vim.fn.strchars(word)))
+  return string.rep('<Del>', math.max(1, vim.fn.strchars(word, 1)))
 end, {expr=true, silent=true})
 vim.keymap.set('x', '<Tab>', '>gv', {silent=true})
 vim.keymap.set('x', '<S-Tab>', '<gv', {silent=true})

@@ -2375,6 +2375,7 @@ test('Ctrl Backspace and Ctrl Delete remove words in insert mode', async () => {
 			['foo bar', 3, '<C-Del>', ['foo', '  b']],
 			['foo.bar', 1, '<C-Del>', ['f.bar', '  b']],
 			['x 日本語 y', 1, '<C-Del>', ['x y', '  b']],
+			['e\u0301+x', 0, '<C-Del>', ['+x', '  b']],
 			// At the end of a line, Ctrl+Delete joins the next one.
 			['a', 1, '<C-Del>', ['a  b']]
 		] as const) {
