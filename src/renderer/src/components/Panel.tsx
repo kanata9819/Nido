@@ -155,6 +155,7 @@ export function Panel({
 					setQuery={setQuery}
 					setSelection={setSelection}
 					confirmation={panel === 'workspaces' ? confirmation : undefined}
+					onClose={focusEditor}
 				/>
 			);
 	}

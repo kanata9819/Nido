@@ -225,6 +225,8 @@ test('Problems reopened during its fade returns keyboard input to the results', 
 	await page.getByRole('textbox', { name: 'Filter items' }).fill('Sample error');
 	await expect(problems.getByRole('option')).toHaveCount(1);
 	await page.keyboard.press('Escape');
+	await expect(problems).toBeFocused();
+	await page.keyboard.press('Escape');
 	await expect(
 		page.locator('[data-overlay-phase="closing"]:has([data-panel="problems"])')
 	).toHaveCount(1);

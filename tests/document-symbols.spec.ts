@@ -120,7 +120,8 @@ test('file symbols filter names and containers and keyboard selection opens the 
 	const palette = page.getByRole('dialog', { name: 'symbols palette' });
 	const filter = palette.getByRole('combobox', { name: 'Filter items' });
 	const results = palette.getByRole('listbox', { name: 'File symbols' });
-	await expect(filter).toBeFocused();
+	// The palette opens on its list, as in Vim's Normal mode.
+	await expect(results).toBeFocused();
 	await expect(filter).toHaveAttribute('placeholder', 'Type a symbol name…');
 	await expect(filter).toHaveAttribute('aria-expanded', 'true');
 	await expect(filter).toHaveAttribute('aria-controls', 'symbol-results');
@@ -140,8 +141,13 @@ test('file symbols filter names and containers and keyboard selection opens the 
 	await expect(palette.getByText('render', { exact: true })).toBeVisible();
 	await expect(palette.getByText('helper', { exact: true })).toHaveCount(0);
 	await page.keyboard.press('ArrowDown');
-	await page.keyboard.press('Control+j');
-	await page.keyboard.press('Control+k');
+	// Escape leaves the filter for the list and keeps the filter text; j/k then move.
+	await page.keyboard.press('Escape');
+	await expect(results).toBeFocused();
+	await expect(filter).toHaveValue('widget');
+	await page.keyboard.press('j');
+	await page.keyboard.press('k');
+	await expect(results).toHaveAttribute('aria-activedescendant', 'symbol-1');
 	await expect(filter).toHaveAttribute('aria-activedescendant', 'symbol-1');
 	await expect(results.getByRole('option', { selected: true })).toHaveAccessibleName(/^run\b/);
 	await page.keyboard.press('Enter');
@@ -159,7 +165,7 @@ test('large symbol palettes reuse prepared items while selecting and filtering',
 	await page.keyboard.press('Control+Shift+o');
 	const palette = page.getByRole('dialog', { name: 'symbols palette' });
 	const filter = palette.getByRole('combobox', { name: 'Filter items' });
-	await expect(filter).toBeFocused();
+	await expect(palette.getByRole('listbox', { name: 'File symbols' })).toBeFocused();
 	await expect.poll(() => calls(page, 'findSymbols')).toEqual([['alpha']]);
 	await page.evaluate(() => {
 		const metrics = { names: 0 };
@@ -367,8 +373,9 @@ test('Japanese symbol search explains empty and unsupported files without openin
 }) => {
 	await open(page, 'ja');
 	await page.keyboard.press('Control+Shift+o');
-	const filter = page.getByPlaceholder('シンボル名を入力…');
-	await expect(filter).toBeFocused();
+	await expect(
+		page.getByRole('listbox', { name: 'ファイル内のシンボル', exact: true })
+	).toBeFocused();
 	await expect(page.getByText('ファイル内のシンボル', { exact: true })).toBeVisible();
 	await publish(page, 1, { items: [] });
 	await expect(

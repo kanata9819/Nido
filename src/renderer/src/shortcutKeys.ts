@@ -33,7 +33,11 @@ const selfHandledRegions =
  */
 export function isOwnedByFocusedElement(event: KeyboardEvent, checkingMode: boolean): boolean {
 	const focused = document.activeElement;
-	if (event.key === 'Escape' && focused?.closest('[data-workspace-search]')) {
+	// Escape in a palette's filter field returns to its list instead of closing the palette.
+	if (
+		event.key === 'Escape' &&
+		focused?.closest('[data-workspace-search], [data-palette-filter]')
+	) {
 		return true;
 	}
 	if (

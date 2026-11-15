@@ -69,8 +69,10 @@ export const japanese: Record<string, string> = {
 	'Replacement would not change any files.': '置換による変更はありません。',
 	'j/k Files · Enter/l Diff · h Back · Ctrl+Enter Focus apply · Esc Back':
 		'j/k ファイル選択 · Enter/l 差分へ · h 戻る · Ctrl+Enter 反映ボタンへ · Esc 戻る',
-	'Esc Results/close · j/k Move · / Search · r Replace · f Folder · Space Include · a All · Ctrl+Enter Preview':
-		'Esc 結果へ／閉じる · j/k 移動 · / 検索 · r 置換 · f フォルダー · Space 対象切替 · a 全選択切替 · Ctrl+Enter 確認',
+	'Esc Results/close · j/k Move · i / Search · r Replace · f Folder · Space Include · a All · Ctrl+Enter Preview':
+		'Esc 結果へ／閉じる · j/k 移動 · i / 検索 · r 置換 · f フォルダー · Space 対象切替 · a 全選択切替 · Ctrl+Enter 確認',
+	'Esc Results/close · j/k Move · i a / Search · r Replace · f Folder · Ctrl+Enter Preview':
+		'Esc 結果へ／閉じる · j/k 移動 · i a / 検索 · r 置換 · f フォルダー · Ctrl+Enter 確認',
 	'Saved UTF-8 files up to 1 MiB · Git ignores respected · Replacements stay unsaved':
 		'保存済みUTF-8・1 MiB以内 · Gitの除外設定を反映 · 置換は未保存の編集',
 	'Invalid regular expression.': '正規表現が正しくありません。',
@@ -102,7 +104,6 @@ export const japanese: Record<string, string> = {
 		'このファイルのリネームに対応する言語サーバーがありません。',
 	'Enter a single-line search up to 1,000 characters.':
 		'検索文字列は改行なし・1,000文字以内で入力してください。',
-	'↑ ↓ or Ctrl+j / k to navigate': '↑ ↓ または Ctrl+j / k で移動',
 	'Time Machine': '編集タイムマシン',
 	'Time Machine only supports text files.':
 		'編集タイムマシンはテキストファイルに対応しています。',
@@ -399,7 +400,12 @@ export const japanese: Record<string, string> = {
 	'Looking through your project…': 'プロジェクトを検索中…',
 	'No problems reported.': '問題は報告されていません。',
 	'No matching items.': '一致する項目がありません。',
-	'{count} problems · j/k Select · / Filter': '問題 {count} 件 · j/k：選択 · /：絞り込み',
+	'{count} problems · j/k Select · i / Filter': '問題 {count} 件 · j/k：選択 · i /：絞り込み',
+	'j/k Move · i / Filter': 'j/k：移動 · i /：絞り込み',
+	'j/k Move · i / Filter · Ctrl+S Sleep': 'j/k：移動 · i /：絞り込み · Ctrl+S：スリープ',
+	'Typing · ↑ ↓ Move · Esc / Ctrl+C Back to the list':
+		'入力中 · ↑ ↓：移動 · Esc / Ctrl+C：リストへ戻る',
+	'Palette results': '候補',
 	'Enter to select · Esc to return': 'Enter：選択 · Esc：戻る',
 	'Keyboard commands': 'キーボードコマンド',
 	'Where to?': 'どこへ移動しますか？',
@@ -469,8 +475,6 @@ export const japanese: Record<string, string> = {
 	'Choose a saved project · Ctrl+F in the folder picker':
 		'登録したプロジェクトを選択 · フォルダー選択画面ではCtrl+F',
 	'Current workspace · Cannot sleep': '現在のワークスペース · スリープできません',
-	'↑ ↓ or Ctrl+j / k to navigate · Ctrl+S Sleep':
-		'↑ ↓ または Ctrl+j / k で移動 · Ctrl+S でスリープ',
 	'{name} cannot sleep: it has unsaved changes. Save them first.':
 		'{name} は未保存の変更があるためスリープできません。先に保存してください。',
 	'{name} cannot sleep while its terminal runs.':

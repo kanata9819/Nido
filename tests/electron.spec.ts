@@ -2679,6 +2679,8 @@ test('window commands minimize, maximize, restore and close from the keyboard wi
 		const guide = page.getByRole('dialog', { name: 'Keyboard commands' });
 		const command = async (title: string): Promise<void> => {
 			await page.keyboard.press('Control+Shift+p');
+			// The palette opens on its list; i starts typing the filter.
+			await page.keyboard.press('i');
 			await expect(page.getByRole('textbox', { name: 'Filter items' })).toBeFocused();
 			await page.keyboard.type(title);
 			await page.keyboard.press('Enter');

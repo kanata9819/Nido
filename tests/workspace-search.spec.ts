@@ -33,6 +33,8 @@ test('Vim-key replacement previews two files, saves with :wall and supports undo
 		const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
 		await expect(input).toBeFocused();
 		await page.keyboard.press('Control+Shift+f');
+		// The search opens on its results; i starts typing the query.
+		await page.keyboard.press('i');
 		await page.keyboard.type('needle');
 		const search = page.getByRole('dialog', { name: 'search palette', exact: true });
 		await expect(search.getByRole('status')).toHaveText('2 matching lines');
@@ -124,7 +126,8 @@ test('Ctrl+Shift+F searches and jumps; F2 renames related symbols from Insert mo
 		await page.keyboard.press('Control+Shift+f');
 		const search = page.getByRole('dialog', { name: 'search palette' });
 		const query = search.getByRole('textbox', { name: 'Search in files' });
-		await expect(query).toBeFocused();
+		const results = search.getByRole('listbox', { name: 'Search results' });
+		await expect(results).toBeFocused();
 		await query.fill('missing-text');
 		await expect(search.getByText('No matching lines.', { exact: true })).toBeVisible();
 		await query.fill('needle.*');
@@ -140,7 +143,7 @@ test('Ctrl+Shift+F searches and jumps; F2 renames related symbols from Insert mo
 			.poll(() => readSavedFile(join(root, 'notes.txt')))
 			.toBe('intro\n日本語 Xneedle.*\nlast\n');
 		await page.keyboard.press('Control+Shift+f');
-		await expect(query).toBeFocused();
+		await expect(results).toBeFocused();
 		await query.fill('needle.*');
 		await expect(search.getByRole('status')).toHaveText('2 matching lines');
 		await query.dispatchEvent('keydown', { key: 'Enter', isComposing: true });
@@ -171,7 +174,10 @@ test('Ctrl+Shift+F searches and jumps; F2 renames related symbols from Insert mo
 		await expect(page.getByRole('button', { name: /Rename symbol/ })).toBeVisible({
 			timeout: 20000
 		});
+		// Escape leaves the filter for the list; the second one closes the palette.
 		await page.keyboard.press('Escape');
+		await page.keyboard.press('Escape');
+		await expect(input).toBeFocused();
 		await page.keyboard.press('F2');
 		const rename = page.getByRole('dialog', { name: 'Neovim command line' });
 		await expect(rename).toContainText('New Name:');
