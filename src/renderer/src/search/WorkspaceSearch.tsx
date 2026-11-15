@@ -7,6 +7,10 @@ import { useWorkspaceSearch } from './useWorkspaceSearch';
 import { isLeaveTypingKey, navigateSearchList as navigate } from './workspaceSearchNavigation';
 import ReplacementPreviewPanel from './ReplacementPreviewPanel';
 import WorkspaceSearchResults from './WorkspaceSearchResults';
+import { ReplacementActions, SearchFooter, SearchOptionButtons } from './SearchControls';
+
+/** Alt+C, Alt+W and Alt+R: the option each toggles. */
+const optionShortcuts = { c: 'caseSensitive', w: 'wholeWord', r: 'regex' } as const;
 
 /**
  * Workspace text search with replace (Ctrl+Shift+F). Search state and requests live in
@@ -145,6 +149,34 @@ export default function WorkspaceSearch({
 			})),
 		[result]
 	);
+	/** Move through the results from the query field; Enter opens the selected match. */
+	const queryKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+		if (event.nativeEvent.isComposing || event.keyCode === 229) {
+			return;
+		}
+		if (
+			(event.ctrlKey && ['j', 'k'].includes(event.key)) ||
+			['ArrowDown', 'ArrowUp'].includes(event.key)
+		) {
+			navigate(event, rows.length, setSelection);
+		} else if (event.key === 'Enter' && !event.ctrlKey) {
+			event.preventDefault();
+			if (replace) {
+				results.current?.focus();
+			} else if (loading) {
+				pendingEnter.current = query;
+			} else {
+				open(selection);
+			}
+		}
+	};
+	const toggleReplace = (): void => {
+		invalidate();
+		setReplace(!replace);
+		if (!replace) {
+			focus('replace');
+		}
+	};
 	const keyboard = (event: KeyboardEvent<HTMLDivElement>): void => {
 		if (event.nativeEvent.isComposing || event.keyCode === 229) {
 			return;
@@ -173,11 +205,7 @@ export default function WorkspaceSearch({
 		}
 		if (event.altKey && !event.ctrlKey && !event.metaKey && ['c', 'w', 'r'].includes(key)) {
 			event.preventDefault();
-			changeOption(
-				({ c: 'caseSensitive', w: 'wholeWord', r: 'regex' } as const)[
-					key as 'c' | 'w' | 'r'
-				]
-			);
+			changeOption(optionShortcuts[key as keyof typeof optionShortcuts]);
 		} else if (event.ctrlKey && event.key === 'Enter') {
 			event.preventDefault();
 			if (preview) {
@@ -219,25 +247,7 @@ export default function WorkspaceSearch({
 						onBlur={() => {
 							pendingEnter.current = undefined;
 						}}
-						onKeyDown={(event) => {
-							if (event.nativeEvent.isComposing || event.keyCode === 229) {
-								return;
-							}
-							if (event.ctrlKey && ['j', 'k'].includes(event.key)) {
-								navigate(event, rows.length, setSelection);
-							} else if (['ArrowDown', 'ArrowUp'].includes(event.key)) {
-								navigate(event, rows.length, setSelection);
-							} else if (event.key === 'Enter' && !event.ctrlKey) {
-								event.preventDefault();
-								if (replace) {
-									results.current?.focus();
-								} else if (loading) {
-									pendingEnter.current = query;
-								} else {
-									open(selection);
-								}
-							}
-						}}
+						onKeyDown={queryKeyDown}
 					/>
 				</label>
 				<label>
@@ -254,37 +264,13 @@ export default function WorkspaceSearch({
 						}}
 					/>
 				</label>
-				<div className={styles.options}>
-					{(
-						[
-							['caseSensitive', 'Match case', 'Alt+C'],
-							['wholeWord', 'Whole word', 'Alt+W'],
-							['regex', 'Regular expression', 'Alt+R']
-						] as const
-					).map(([key, label, shortcut]) => (
-						<button
-							key={key}
-							disabled={busy}
-							aria-pressed={options[key]}
-							onClick={() => changeOption(key)}
-						>
-							{t(label)} <kbd>{shortcut}</kbd>
-						</button>
-					))}
-					<button
-						disabled={busy}
-						aria-pressed={replace}
-						onClick={() => {
-							invalidate();
-							setReplace(!replace);
-							if (!replace) {
-								focus('replace');
-							}
-						}}
-					>
-						{t('Replace')}
-					</button>
-				</div>
+				<SearchOptionButtons
+					options={options}
+					replace={replace}
+					busy={busy}
+					changeOption={changeOption}
+					toggleReplace={toggleReplace}
+				/>
 				{replace && (
 					<label>
 						{t('Replace with')}
@@ -311,25 +297,16 @@ export default function WorkspaceSearch({
 					</label>
 				)}
 				{replace && (
-					<div className={styles.actions}>
-						<button
-							disabled={
-								busy || loading || !result.token || excluded.size === rows.length
-							}
-							onClick={() => void prepare()}
-						>
-							{t('Preview replacement')} <kbd>Ctrl+Enter</kbd>
-						</button>
-						{preview && (
-							<button
-								ref={applyButton}
-								disabled={busy || !preview.count}
-								onClick={() => void apply()}
-							>
-								{t('Apply replacement')} <kbd>Enter</kbd>
-							</button>
-						)}
-					</div>
+					<ReplacementActions
+						canPreview={
+							!busy && !loading && !!result.token && excluded.size !== rows.length
+						}
+						preview={preview}
+						busy={busy}
+						applyButton={applyButton}
+						prepare={() => void prepare()}
+						apply={() => void apply()}
+					/>
 				)}
 			</div>
 			{error && (
@@ -367,41 +344,14 @@ export default function WorkspaceSearch({
 					/>
 				)}
 			</div>
-			{/* The result count and what the search covers share one line. */}
-			<div className={`${styles.footer} ${styles.footerRow}`}>
-				<span role="status">
-					{notice ||
-						(busy
-							? t('Working…')
-							: preview
-								? t(
-										'{count} replacements in {files} files · Review before applying',
-										{
-											count: preview.count,
-											files: preview.files.length
-										}
-									)
-								: result.truncated
-									? t('Showing the first 200 matching lines.')
-									: t('{count} matching lines', { count: rows.length }))}
-				</span>
-				<span className={styles.footerNote}>
-					{t(
-						'Saved UTF-8 files up to 1 MiB · Git ignores respected · Replacements stay unsaved'
-					)}
-				</span>
-			</div>
-			<div className={styles.footer}>
-				{preview
-					? t('j/k Files · Enter/l Diff · h Back · Ctrl+Enter Focus apply · Esc Back')
-					: replace
-						? t(
-								'Esc Results/close · j/k Move · i / Search · r Replace · f Folder · Space Include · a All · Ctrl+Enter Preview'
-							)
-						: t(
-								'Esc Results/close · j/k Move · i a / Search · r Replace · f Folder · Ctrl+Enter Preview'
-							)}
-			</div>
+			<SearchFooter
+				notice={notice}
+				busy={busy}
+				preview={preview}
+				truncated={result.truncated}
+				count={rows.length}
+				replace={replace}
+			/>
 		</div>
 	);
 }
