@@ -4,6 +4,7 @@ import { Command, FolderOpen, FileCode2, CircleAlert, TriangleAlert, Info } from
 import type { Panel, Item } from '../types';
 import styles from '../assets/Palette.module.css';
 import FileIcon from './FileIcon';
+import { commandKeys } from '../paletteShortcuts';
 import {
 	isLeaveTypingKey,
 	isStartTypingKey,
@@ -79,6 +80,11 @@ const PaletteItem = memo(function PaletteItem({
 	// Problems and symbols are listboxes; their rows are options with ids that
 	// aria-activedescendant refers to. Rows are not tab stops: the list itself has focus.
 	const option = hasOptions(panel);
+	// Commands show their shortcuts as keys beside them; other rows show their key as is.
+	const { text: detail, keys } =
+		panel === 'commands'
+			? commandKeys(item.detail, item.key)
+			: { text: item.detail, keys: item.key ? [item.key] : [] };
 	return (
 		<button
 			id={option ? paletteOptionId(panel, index) : undefined}
@@ -105,14 +111,20 @@ const PaletteItem = memo(function PaletteItem({
 			</span>
 			<span>
 				<strong>{item.title}</strong>
-				<small>{item.detail}</small>
+				{detail && <small>{detail}</small>}
 			</span>
 			{item.status && (
 				<span className={styles.workspaceStatus} data-status={item.status}>
 					{item.status === 'current' ? t('Current') : t('Sleeping')}
 				</span>
 			)}
-			{item.key && <kbd>{item.key}</kbd>}
+			{keys.length > 0 && (
+				<span className={styles.itemKeys}>
+					{keys.map((key) => (
+						<kbd key={key}>{key}</kbd>
+					))}
+				</span>
+			)}
 		</button>
 	);
 });

@@ -6,13 +6,25 @@
 	color: var(--ui-text, #d5ded8);
 }
 .fields {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
+	/* The search text and folder share a row, so the results start higher. */
+	display: grid;
+	grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+	gap: 10px 12px;
 	padding: 0 16px 12px;
 	flex-shrink: 0;
 	max-height: 50%;
 	overflow-y: auto;
+}
+.fields > * {
+	grid-column: 1 / -1;
+}
+.fields > label:nth-child(-n + 2) {
+	grid-column: auto;
+}
+@media (max-width: 760px) {
+	.fields > label:nth-child(-n + 2) {
+		grid-column: 1 / -1;
+	}
 }
 .fields label {
 	display: flex;
@@ -109,6 +121,28 @@
 	color: #84939e;
 	font-size: 12px;
 	padding: 16px;
+}
+/* With nothing to list, the hint sits in the middle of the results under a search icon. */
+.list > p:only-child {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	height: 100%;
+	min-height: 140px;
+	padding: 24px;
+	font-size: 13px;
+	text-align: center;
+}
+.list > p:only-child::before {
+	content: '';
+	width: 36px;
+	height: 36px;
+	background: currentColor;
+	opacity: 0.45;
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E")
+		center / contain no-repeat;
 }
 .body:has(.diff) .list {
 	flex: 0 0 30%;

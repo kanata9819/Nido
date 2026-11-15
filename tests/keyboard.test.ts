@@ -6,6 +6,7 @@ import { vimKey } from '../src/renderer/src/keyboard';
 import { useEditorInput as createEditorInput } from '../src/renderer/src/hooks/useEditorInput';
 import { useKeyboardShortcuts as createKeyboardHandler } from '../src/renderer/src/hooks/useKeyboardShortcuts';
 import { buildCommands, type CommandsCallbacks } from '../src/renderer/src/commandItems';
+import { commandKeys } from '../src/renderer/src/paletteShortcuts';
 import { createTranslator } from '../src/shared/i18n';
 import type { SessionState, Workspace } from '../src/shared/types';
 
@@ -322,4 +323,27 @@ test('editor input sends AltGr characters without invoking clipboard shortcuts',
 			Reflect.deleteProperty(globalThis, 'window');
 		}
 	}
+});
+
+test('the command palette shows leader keys and trailing shortcuts as keys, not in the detail', () => {
+	assert.deepEqual(commandKeys('Errors, warnings and hints · Ctrl+Shift+M', 'm'), {
+		text: 'Errors, warnings and hints',
+		keys: ['Space m', 'Ctrl+Shift+M']
+	});
+	assert.deepEqual(commandKeys('Ctrl+Z'), { text: '', keys: ['Ctrl+Z'] });
+	assert.deepEqual(commandKeys(':w · Ctrl+S', 's'), { text: ':w', keys: ['Space s', 'Ctrl+S'] });
+	// "Space then Shift+D" already names the leader key, so it is shown once.
+	assert.deepEqual(commandKeys('Focus debugger · Space then Shift+D', 'D'), {
+		text: 'Focus debugger',
+		keys: ['Space Shift+D']
+	});
+	// A shortcut in the middle of a sentence stays part of it.
+	assert.deepEqual(commandKeys('Choose a saved project · Ctrl+F in the folder picker'), {
+		text: 'Choose a saved project · Ctrl+F in the folder picker',
+		keys: []
+	});
+	assert.deepEqual(commandKeys('Independent Neovim sessions', 'w'), {
+		text: 'Independent Neovim sessions',
+		keys: ['Space w']
+	});
 });
