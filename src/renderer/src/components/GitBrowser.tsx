@@ -1,6 +1,9 @@
 import { useErrorMessage, useI18n } from '../i18n';
 import type { GitView } from '../types';
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { GitBranch, GitCommitHorizontal } from 'lucide-react';
+import { PanelHeadingSlot } from '../panelHeading';
 import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
 import GitPanel from './GitPanel';
 import GitBrowserList from './GitBrowserList';
@@ -272,26 +275,32 @@ export default function GitBrowser({
 
 	useGitBrowserKeyboard({ busy, back: returnToPreviousView, changeView });
 
+	// The views sit in the panel's heading, beside its title, to leave more room for the diff.
+	const heading = useContext(PanelHeadingSlot);
+	const views = (
+		<nav className={styles.viewTabs} aria-label={t('Git views')}>
+			{(
+				[
+					{ view: 'changes', title: t('Changes') },
+					{ view: 'history', title: t('History') },
+					{ view: 'branches', title: t('Branches') }
+				] as const
+			).map(({ view: tab, title }, shortcutIndex) => (
+				<button
+					key={title}
+					disabled={busy}
+					aria-current={view === tab ? 'page' : undefined}
+					onClick={() => changeView(tab)}
+				>
+					{shortcutIndex + 1} {title}
+				</button>
+			))}
+		</nav>
+	);
+
 	return (
 		<div className={styles.panel}>
-			<nav className={styles.toolbar} aria-label={t('Git views')}>
-				{(
-					[
-						{ view: 'changes', title: t('Changes') },
-						{ view: 'history', title: t('History') },
-						{ view: 'branches', title: t('Branches') }
-					] as const
-				).map(({ view: tab, title }, shortcutIndex) => (
-					<button
-						key={title}
-						disabled={busy}
-						aria-current={view === tab ? 'page' : undefined}
-						onClick={() => changeView(tab)}
-					>
-						{shortcutIndex + 1} {title}
-					</button>
-				))}
-			</nav>
+			{heading ? createPortal(views, heading) : views}
 			{view === 'changes' ? (
 				<GitPanel
 					workspaceId={workspaceId}
@@ -373,7 +382,15 @@ export default function GitBrowser({
 									open={openSelection}
 								/>
 							) : (
-								<pre tabIndex={0} />
+								<div className={styles.emptyPreview} tabIndex={0} aria-busy={busy}>
+									{!busy &&
+										(view === 'branches' ? (
+											<GitBranch size={34} aria-hidden="true" />
+										) : (
+											<GitCommitHorizontal size={34} aria-hidden="true" />
+										))}
+									{!busy && <p>{t('Nothing to preview yet.')}</p>}
+								</div>
 							)}
 						</div>
 					</div>

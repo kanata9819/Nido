@@ -202,8 +202,10 @@ export default function WorkspaceSearch({
 			aria-busy={busy || loading}
 		>
 			<div className={styles.fields}>
+				{/* The dialog's title already says what the field is for; the label stays for
+				    screen readers, and the placeholder shows the rest. */}
 				<label>
-					{t('Search in files')}
+					<span className={styles.hiddenLabel}>{t('Search in files')}</span>
 					<input
 						ref={queryInput}
 						value={query}
@@ -239,9 +241,10 @@ export default function WorkspaceSearch({
 					/>
 				</label>
 				<label>
-					{t('Search folder')}
+					<span className={styles.hiddenLabel}>{t('Search folder')}</span>
 					<input
 						ref={folderInput}
+						data-field="folder"
 						value={options.folder}
 						disabled={busy}
 						placeholder={t('Entire workspace (for example: src)')}
@@ -364,18 +367,29 @@ export default function WorkspaceSearch({
 					/>
 				)}
 			</div>
-			<div className={styles.footer} role="status">
-				{notice ||
-					(busy
-						? t('Working…')
-						: preview
-							? t('{count} replacements in {files} files · Review before applying', {
-									count: preview.count,
-									files: preview.files.length
-								})
-							: result.truncated
-								? t('Showing the first 200 matching lines.')
-								: t('{count} matching lines', { count: rows.length }))}
+			{/* The result count and what the search covers share one line. */}
+			<div className={`${styles.footer} ${styles.footerRow}`}>
+				<span role="status">
+					{notice ||
+						(busy
+							? t('Working…')
+							: preview
+								? t(
+										'{count} replacements in {files} files · Review before applying',
+										{
+											count: preview.count,
+											files: preview.files.length
+										}
+									)
+								: result.truncated
+									? t('Showing the first 200 matching lines.')
+									: t('{count} matching lines', { count: rows.length }))}
+				</span>
+				<span className={styles.footerNote}>
+					{t(
+						'Saved UTF-8 files up to 1 MiB · Git ignores respected · Replacements stay unsaved'
+					)}
+				</span>
 			</div>
 			<div className={styles.footer}>
 				{preview
@@ -387,11 +401,6 @@ export default function WorkspaceSearch({
 						: t(
 								'Esc Results/close · j/k Move · i a / Search · r Replace · f Folder · Ctrl+Enter Preview'
 							)}
-			</div>
-			<div className={styles.footer}>
-				{t(
-					'Saved UTF-8 files up to 1 MiB · Git ignores respected · Replacements stay unsaved'
-				)}
 			</div>
 		</div>
 	);

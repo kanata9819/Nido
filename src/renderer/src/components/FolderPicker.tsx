@@ -484,10 +484,15 @@ export default function FolderPicker({
 					</>
 				)}
 			</div>
-			<p className={styles.folderActions}>
+			{/* Each key and what it does wraps as a unit, rather than mid-hint. */}
+			<p className={`${styles.folderActions} ${styles.folderKeys}`}>
 				{t(
 					'Tab / Shift+Tab Move focus · j/k Select · h/l Browse · Enter Open selected · Ctrl+Enter Open current · Ctrl+L Path · Ctrl+F Favorites · Esc Cancel'
-				)}
+				)
+					.split(' · ')
+					.map((hint) => (
+						<span key={hint}>{hint}</span>
+					))}
 			</p>
 		</div>
 	);

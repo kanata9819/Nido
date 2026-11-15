@@ -4160,15 +4160,19 @@ test('Git keyboard help stays in the modal focus cycle', async ({ page }) => {
 		.click();
 	const dialog = page.locator('[data-panel="git"]');
 	const help = dialog.locator('summary');
-	const close = dialog.getByRole('button', { name: 'Close palette', exact: true });
+	// The views sit in the heading, so the cycle wraps from the help to the first view.
+	const first = dialog.getByRole('button', { name: '1 Changes', exact: true });
+	await expect(
+		dialog.locator('[class*="paletteHeading"]').getByRole('navigation', { name: 'Git views' })
+	).toBeVisible();
 	await page.getByLabel('Git diff', { exact: true }).focus();
 	await page.keyboard.press('Tab');
 	await expect(help).toBeFocused();
 	await help.press('Enter');
 	await expect(dialog.locator('details')).toHaveAttribute('open', '');
 	await help.press('Tab');
-	await expect(close).toBeFocused();
-	await close.press('Shift+Tab');
+	await expect(first).toBeFocused();
+	await first.press('Shift+Tab');
 	await expect(help).toBeFocused();
 });
 

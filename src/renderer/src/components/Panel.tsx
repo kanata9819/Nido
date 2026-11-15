@@ -12,6 +12,7 @@ import type { DocumentSymbolList, FavoriteWorkspace } from '../../../shared/type
 import SymbolPalette from './SymbolPalette';
 import OverlayPresence from './OverlayPresence';
 import { useState } from 'react';
+import { PanelHeadingSlot } from '../panelHeading';
 
 // The modal panel over the editor that hosts the palettes, Git, Time Machine, search and settings.
 interface PanelProps {
@@ -86,6 +87,8 @@ export function Panel({
 	const t = useI18n();
 	// Each opening gets a new key, so a panel that is still fading out is not reused.
 	const [opening, setOpening] = useState({ panel, generation: 0 });
+	// The heading's slot for controls of the panel's content (see PanelHeadingSlot).
+	const [headingSlot, setHeadingSlot] = useState<HTMLElement | null>(null);
 	if (opening.panel !== panel) {
 		// A fading panel is a visual snapshot, not the next opening's live state.
 		setOpening({ panel, generation: opening.generation + Number(!!panel) });
@@ -188,11 +191,14 @@ export function Panel({
 									: panelTitles[panel]
 							)}
 						</span>
+						<div className={styles.headingSlot} ref={setHeadingSlot} />
 						<button aria-label={t('Close palette')} onClick={focusEditor}>
 							<X size={17} />
 						</button>
 					</div>
-					{content}
+					<PanelHeadingSlot.Provider value={headingSlot}>
+						{content}
+					</PanelHeadingSlot.Provider>
 				</div>
 			</div>
 		</OverlayPresence>
