@@ -99,9 +99,8 @@ export default function StatusBar({
 					{t('References')}
 				</button>
 			)}
-			<span className={styles.statusWorkspace}>
-				{workspace?.name || t('Welcome to Nido')}
-			</span>
+			{/* The workspace's name is on its tab in the title bar; without one, greet instead. */}
+			{!workspace && <span className={styles.statusWorkspace}>{t('Welcome to Nido')}</span>}
 			{state.search && (
 				<span
 					className={styles.searchStatus}

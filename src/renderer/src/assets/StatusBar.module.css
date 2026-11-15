@@ -34,9 +34,9 @@
 	white-space: nowrap;
 }
 /*
- * When the window is narrow, the workspace name, then the Rust server status give way, in
+ * When the window is narrow, the welcome text, then the Rust server status give way, in
  * that order, and the least useful labels are hidden, so the cursor position on the right
- * stays on screen. Shrinking is proportional to these factors: the name empties first.
+ * stays on screen. Shrinking is proportional to these factors: the welcome empties first.
  */
 .statusbar {
 	overflow: hidden;
