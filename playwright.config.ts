@@ -3,7 +3,7 @@ export default defineConfig({
 	testDir: './tests',
 	testMatch: '**/*.spec.ts',
 	testIgnore: [
-		'**/renderer-lifecycle.spec.ts',
+		'**/renderer-lifecycle-*.spec.ts',
 		'**/renderer-performance.spec.ts',
 		'**/windows/**'
 	],
