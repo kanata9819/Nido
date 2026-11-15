@@ -4,9 +4,10 @@
 import { useI18n } from '../i18n';
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Grid } from '../grid/grid';
-import { accumulateScroll, editorWheelMotion } from './scroll';
 import { useEditorRendering } from './useEditorRendering';
 import { useEditorInput } from './useEditorInput';
+import { useCompositionReset, useEditorWheel } from './useEditorWheel';
+import { clickCell, clickedCell, focusEditorPart } from './editorClick';
 import styles from '../assets/Editor.module.css';
 import TypeInformation from './popups/TypeInformation';
 import DiagnosticInformation from './popups/DiagnosticInformation';
@@ -70,9 +71,6 @@ function Editor({
 	const grid = useRef(editorGrid);
 	const composing = useRef(false);
 	const attached = useRef(false);
-	// Wheel movement smaller than a line or column, carried over to the next wheel event.
-	const wheel = useRef({ remainder: 0, time: 0 });
-	const horizontalWheel = useRef({ remainder: 0, time: 0 });
 	// Functions the renderer installs: repaint, the sticky scroll repaint, and scroll.
 	const paint = useRef<() => void>(() => {});
 	const stickyPaint = useRef<(motionOffset: number) => void>(() => {});
@@ -83,37 +81,20 @@ function Editor({
 	const scrollCompletion = useRef<Promise<void>>(Promise.resolve());
 	const error = useRef(onError);
 
-	// Drop leftover wheel movement when the editor or its font changes.
-	useEffect(() => {
-		wheel.current = { remainder: 0, time: 0 };
-		horizontalWheel.current = { remainder: 0, time: 0 };
-	}, [active, blocked, lineHeight, fontSize, fontFamily]);
-
-	// End an IME composition that the window losing focus or becoming hidden interrupted.
-	useEffect(() => {
-		const resetComposition = (): void => {
-			composing.current = false;
-			if (input.current) {
-				input.current.value = '';
-				input.current.removeAttribute('data-composing');
-			}
-		};
-		if (!active || blocked) {
-			resetComposition();
-			return;
-		}
-		const visibilityChanged = (): void => {
-			if (document.hidden) {
-				resetComposition();
-			}
-		};
-		window.addEventListener('blur', resetComposition);
-		document.addEventListener('visibilitychange', visibilityChanged);
-		return () => {
-			window.removeEventListener('blur', resetComposition);
-			document.removeEventListener('visibilitychange', visibilityChanged);
-		};
-	}, [active, blocked]);
+	const send = (promise: Promise<unknown>): void => {
+		void promise.catch((e) => error.current(String(e)));
+	};
+	const wheelScroll = useEditorWheel({
+		id,
+		terminal,
+		lineHeight,
+		scrollFollowCursor,
+		gridRef: grid,
+		scrollRef: scroll,
+		send,
+		reset: [active, blocked, lineHeight, fontSize, fontFamily]
+	});
+	useCompositionReset(input, composing, active && !blocked);
 
 	useEffect(() => {
 		error.current = onError;
@@ -155,146 +136,39 @@ function Editor({
 		onError
 	});
 
-	const send = (promise: Promise<unknown>): void => {
-		void promise.catch((e) => error.current(String(e)));
-	};
-
-	/** Editors scroll smoothly by pixels and sideways by columns. */
-	const scrollEditor = (event: React.WheelEvent<HTMLDivElement>): void => {
-		const { horizontalWheel: nextWheel, motion } = editorWheelMotion(
-			event,
-			{ surface: event.currentTarget, lineHeight, cellWidth: grid.current.cellWidth },
-			horizontalWheel.current,
-			performance.now()
-		);
-		horizontalWheel.current = nextWheel;
-		if (motion) {
-			scroll.current(motion.lines, scrollFollowCursor, motion.discrete, motion.columns);
+	/** A click moves Neovim's cursor to the clicked cell. */
+	const pointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
+		if (
+			event.button !== 0 ||
+			blocked ||
+			!active ||
+			composing.current ||
+			event.target !== canvas.current
+		) {
+			return;
+		}
+		event.preventDefault();
+		input.current?.focus();
+		if (terminal) {
+			return;
+		}
+		const cell = clickedCell(grid.current, canvas.current, event.clientX, event.clientY);
+		if (cell) {
+			send(clickCell(id, grid.current, cell, scrollCompletion.current, () => !!host.current));
 		}
 	};
 
-	/** Terminals scroll by whole lines, carrying the remainder between nearby events. */
-	const scrollTerminal = (event: React.WheelEvent<HTMLDivElement>): void => {
-		const now = performance.now();
-		const result = accumulateScroll(
-			now - wheel.current.time > 200 ? 0 : wheel.current.remainder,
-			event.deltaY * 0.5,
-			event.deltaMode,
-			lineHeight,
-			event.currentTarget.clientHeight
-		);
-		wheel.current = { remainder: result.remainder, time: now };
-		if (result.lines) {
-			send(window.nido.scroll(id, Math.max(-1000, Math.min(1000, result.lines)), true));
-		}
-	};
 	return (
 		<div
 			ref={host}
 			className={styles.editor}
 			hidden={!active}
 			onKeyDownCapture={(event) => {
-				// Alt+Shift+M focuses Neovim's messages and Alt+Shift+S the sticky headers.
-				if (blocked || !event.altKey || !event.shiftKey) {
-					return;
-				}
-				const key = event.key.toLowerCase();
-				let selector: string | undefined;
-				if (key === 'm') {
-					selector = '[data-neovim-ui] [tabindex="0"]';
-				} else if (key === 's') {
-					selector = '[data-sticky-scroll] button';
-				}
-				const target = selector && host.current?.querySelector<HTMLElement>(selector);
-				if (target) {
-					event.preventDefault();
-					event.stopPropagation();
-					target.focus();
+				if (!blocked) {
+					focusEditorPart(event, host.current);
 				}
 			}}
-			onPointerDown={(event) => {
-				// A click moves Neovim's cursor to the clicked cell. It waits for scrolling to
-				// finish and maps the position through any sideways offset first.
-				if (
-					event.button !== 0 ||
-					blocked ||
-					!active ||
-					composing.current ||
-					event.target !== canvas.current
-				) {
-					return;
-				}
-
-				event.preventDefault();
-				input.current?.focus();
-				if (terminal) {
-					return;
-				}
-
-				const { cellWidth, cellHeight, columns } = grid.current;
-				if (!cellWidth || !cellHeight) {
-					return;
-				}
-
-				const bounds = canvas.current.getBoundingClientRect();
-				const x = event.clientX - bounds.left;
-				const horizontalColumn = grid.current.horizontalColumn;
-				const horizontalOffset = grid.current.horizontalOffset;
-				const gutter = grid.current.horizontalGutter;
-				const body = x >= gutter * cellWidth;
-				const column = Math.floor((x - (body ? horizontalOffset : 0)) / cellWidth);
-				const y = event.clientY - bounds.top;
-				if (x < 0 || x >= columns * cellWidth) {
-					return;
-				}
-				send(
-					(async () => {
-						await scrollCompletion.current;
-						await new Promise<void>((resolve) =>
-							requestAnimationFrame(() => resolve())
-						);
-						if (!host.current) {
-							return;
-						}
-						const row = grid.current.rowAt(y);
-						if (row >= 0) {
-							const currentGutter = grid.current.horizontalGutter;
-							if (Math.abs(horizontalOffset) > cellWidth) {
-								const delta =
-									Math.max(
-										0,
-										Math.floor(horizontalColumn - horizontalOffset / cellWidth)
-									) - grid.current.horizontalColumn;
-								if (delta) {
-									await window.nido.scroll(id, 0, false, true, delta);
-									await new Promise<void>((resolve) =>
-										requestAnimationFrame(() => resolve())
-									);
-								}
-							}
-							let target = body
-								? column -
-									gutter +
-									currentGutter +
-									horizontalColumn -
-									grid.current.horizontalColumn
-								: column;
-							if (body && target < currentGutter) {
-								// The leftmost partial cell can still belong to the previous native frame.
-								await window.nido.scroll(
-									id,
-									0,
-									false,
-									true,
-									target - currentGutter
-								);
-								target = currentGutter;
-							}
-							await window.nido.click(id, row, Math.max(0, target));
-						}
-					})()
-				);
-			}}
+			onPointerDown={pointerDown}
 			onWheel={(event) => {
 				if (
 					blocked ||
@@ -307,11 +181,7 @@ function Editor({
 				) {
 					return;
 				}
-				if (terminal) {
-					scrollTerminal(event);
-				} else {
-					scrollEditor(event);
-				}
+				wheelScroll(event);
 			}}
 		>
 			<canvas
