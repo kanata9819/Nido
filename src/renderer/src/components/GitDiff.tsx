@@ -1,30 +1,69 @@
 import { useI18n } from '../i18n';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReferencePreview } from '../../../shared/types';
-import { ChevronDown, ChevronUp } from 'lucide-react';
-import { splitDiff, type DiffRow } from '../gitDiff';
+import { ChevronDown, ChevronUp, Columns2, Rows2 } from 'lucide-react';
+import { splitDiff } from '../gitDiff';
+import {
+	diffViewRows,
+	rowEmphasis,
+	type DiffEmphasis,
+	type DiffLayout,
+	type DiffViewRow
+} from '../diffView';
 import styles from '../assets/GitPanel.module.css';
 
 // Rows are drawn virtually: only the visible rows and `overscan` rows around them exist.
 const rowHeight = 22;
 const overscan = 20;
+const layoutKey = 'nido.diffLayout';
 
 type Side = 'before' | 'after';
+type Spans = ReferencePreview['lines'][number];
 
-/** The style of a row on one side: a hunk heading, a removed or added line, or a gap. */
-function rowClass(row: DiffRow, side: Side): string {
-	if (row.heading) {
-		return styles.hunk;
+/** The saved layout of diffs, side by side unless the inline layout was chosen. */
+function savedLayout(): DiffLayout {
+	try {
+		return localStorage.getItem(layoutKey) === 'unified' ? 'unified' : 'split';
+	} catch {
+		return 'split';
 	}
-	if (row[side]?.changed) {
-		return side === 'before' ? styles.removed : styles.added;
-	}
-	return row[side] ? '' : styles.emptyLine;
 }
 
 /**
- * A side-by-side diff with syntax highlighting. Both panes scroll together, and n/N jump
- * between changes.
+ * Split syntax-highlighted spans so the characters in [start, end) are marked as the changed
+ * part of a replaced line.
+ */
+function emphasize(spans: Spans, [start, end]: [number, number]): React.ReactNode[] {
+	const nodes: React.ReactNode[] = [];
+	let offset = 0;
+	spans.forEach((span, spanIndex) => {
+		const text = span.text;
+		const cuts = [0, start - offset, end - offset, text.length]
+			.map((cut) => Math.max(0, Math.min(text.length, cut)))
+			.filter((cut, index, all) => index === 0 || cut > all[index - 1]);
+		for (let part = 0; part < cuts.length - 1; part++) {
+			const from = cuts[part];
+			const to = cuts[part + 1];
+			const marked = offset + from >= start && offset + to <= end && start < end;
+			nodes.push(
+				<span
+					key={`${spanIndex}:${from}`}
+					style={{ color: span.color }}
+					className={marked ? styles.emphasis : undefined}
+				>
+					{text.slice(from, to)}
+				</span>
+			);
+		}
+		offset += text.length;
+	});
+	return nodes;
+}
+
+/**
+ * A diff with syntax highlighting, side by side or inline (v switches). Side by side, both
+ * panes scroll together. n/N jump between changes, and a separator marks the unchanged lines
+ * between hunks.
  */
 export default function GitDiff({
 	workspaceId,
@@ -43,6 +82,19 @@ export default function GitDiff({
 }): React.JSX.Element {
 	const t = useI18n();
 	const rows = useMemo(() => splitDiff(diff), [diff]);
+	const [layout, setLayout] = useState<DiffLayout>(savedLayout);
+	const display = useMemo(() => diffViewRows(rows, layout), [rows, layout]);
+	const emphasis = useMemo(() => rowEmphasis(rows), [rows]);
+	// The first drawn row of each diff row, to scroll to a change.
+	const displayIndex = useMemo(() => {
+		const first = new Map<number, number>();
+		display.forEach((entry, position) => {
+			if (entry.kind !== 'separator' && !first.has(entry.index)) {
+				first.set(entry.index, position);
+			}
+		});
+		return first;
+	}, [display]);
 	// The text of each side, for syntax highlighting, and for each row its line in that text.
 	const sources = useMemo(
 		() =>
@@ -89,8 +141,8 @@ export default function GitDiff({
 	const [height, setHeight] = useState(600);
 	const topRow = viewport.diff === diff ? viewport.row : 0;
 	const first = Math.max(0, topRow - overscan);
-	const last = Math.min(rows.length, topRow + Math.ceil(height / rowHeight) + overscan);
-	const visible = rows.slice(first, last);
+	const last = Math.min(display.length, topRow + Math.ceil(height / rowHeight) + overscan);
+	const visible = display.slice(first, last);
 	const [selectedChange, setSelectedChange] = useState<{ diff: string; row: number }>();
 	const activeChange = selectedChange?.diff === diff ? changes.indexOf(selectedChange.row) : -1;
 	const [highlighted, setHighlighted] = useState<{
@@ -126,14 +178,34 @@ export default function GitDiff({
 		}
 		const row = changes[next];
 		setSelectedChange({ diff, row });
-		setViewport({ diff, row });
+		scrollToRow(row);
+	}
+
+	/** Scroll both panes to show a diff row at the top. */
+	function scrollToRow(row: number): void {
+		const position = displayIndex.get(row) ?? 0;
+		setViewport({ diff, row: position });
 		for (const pane of [before.current, after.current]) {
-			pane?.scrollTo({ top: row * rowHeight, behavior: 'instant' });
+			pane?.scrollTo({ top: position * rowHeight, behavior: 'instant' });
 			if (pane) {
 				synchronized.current.set(pane, pane.scrollTop);
 			}
 		}
 	}
+
+	// After switching layouts, keep the same diff row at the top and focus stays in the diff.
+	const layoutAnchor = useRef<number | undefined>(undefined);
+	useLayoutEffect(() => {
+		const row = layoutAnchor.current;
+		if (row === undefined) {
+			return;
+		}
+		layoutAnchor.current = undefined;
+		after.current?.focus({ preventScroll: true });
+		scrollToRow(row);
+		// Runs only when the layout changes; scrollToRow reads the new rows of this render.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [layout]);
 
 	// Track the pane height to know how many rows are visible.
 	useEffect(() => {
@@ -175,64 +247,192 @@ export default function GitDiff({
 			cancelled = true;
 		};
 	}, [workspaceId, path, diff, rows, sources]);
-	// A row's text on one side: highlighted when highlighting has loaded, plain otherwise.
-	// A space keeps empty rows at full height.
-	function lineContent(row: DiffRow, side: Side, index: number): React.ReactNode {
-		const line = row[side];
+	// A line's text: highlighted when highlighting has loaded, plain otherwise, with the
+	// changed part of a replaced line marked. A space keeps empty rows at full height.
+	function lineContent(side: Side, index: number): React.ReactNode {
+		const line = rows[index][side];
 		if (!line) {
-			return row.heading || ' ';
+			return ' ';
 		}
 		const sideIndex = side === 'before' ? 0 : 1;
-		const spans = currentHighlight?.lines?.[sideIndex]?.[sources[sideIndex].positions[index]];
+		const spans = currentHighlight?.lines?.[sideIndex]?.[
+			sources[sideIndex].positions[index]
+		] || [{ text: line.text, color: '' }];
+		const range = (emphasis[index] as DiffEmphasis | undefined)?.[side];
+		if (!line.text) {
+			return ' ';
+		}
+		if (range) {
+			return emphasize(spans, range);
+		}
+		return spans.map((span, column) => (
+			<span key={column} style={{ color: span.color || undefined }}>
+				{span.text || ' '}
+			</span>
+		));
+	}
+
+	/** Switch between the side-by-side and inline layouts, keeping the first visible row. */
+	function toggleLayout(): void {
+		const next: DiffLayout = layout === 'split' ? 'unified' : 'split';
+		const shown = display[topRow];
+		setLayout(next);
+		try {
+			localStorage.setItem(layoutKey, next);
+		} catch {
+			// The layout is a convenience; it still switches for this diff.
+		}
+		layoutAnchor.current = shown && shown.kind !== 'separator' ? shown.index : 0;
+	}
+
+	/** One drawn row in a pane: a separator, a line of one side, or an inline line. */
+	function renderRow(entry: DiffViewRow, position: number, side: Side): React.JSX.Element {
+		if (entry.kind === 'separator') {
+			return (
+				<div key={position} className={`${styles.diffLine} ${styles.separator}`}>
+					<span className={styles.gutter} aria-hidden="true">
+						⋯
+					</span>
+					<span className={styles.separatorText}>
+						{entry.hidden > 0 && (
+							<span>{t('{count} unchanged lines', { count: entry.hidden })}</span>
+						)}
+						{entry.context && <code>{entry.context}</code>}
+					</span>
+				</div>
+			);
+		}
+		const active =
+			selectedChange?.diff === diff &&
+			selectedChange.row === entry.index &&
+			displayIndex.get(entry.index) === position;
+		let className = '';
+		let numbers: React.ReactNode;
+		let content: React.ReactNode;
+		if (entry.kind === 'row') {
+			const { row } = entry;
+			const line = row[side];
+			if (row.heading) {
+				className = styles.hunk;
+				content = row.heading;
+			} else {
+				if (line?.changed) {
+					className = side === 'before' ? styles.removed : styles.added;
+				} else if (!line) {
+					className = styles.emptyLine;
+				}
+				content = lineContent(side, entry.index);
+			}
+			numbers = <span>{line?.number}</span>;
+		} else {
+			if (entry.side !== 'both') {
+				className = entry.side === 'before' ? styles.removed : styles.added;
+			}
+			numbers = (
+				<>
+					<span>{entry.before}</span>
+					<span>{entry.after}</span>
+				</>
+			);
+			content = lineContent(entry.side === 'before' ? 'before' : 'after', entry.index);
+		}
 		return (
-			spans?.map((span, column) => (
-				<span key={column} style={{ color: span.color }}>
-					{span.text || ' '}
+			<div
+				key={position}
+				data-diff-row={entry.index}
+				data-diff-active={active ? 'true' : undefined}
+				className={`${styles.diffLine} ${className}`}
+			>
+				<span className={styles.gutter} aria-hidden="true">
+					{numbers}
 				</span>
-			)) ||
-			line.text ||
-			' '
+				<code>{content}</code>
+			</div>
 		);
 	}
 
+	const panes: Side[] = layout === 'split' ? ['before', 'after'] : ['after'];
+	const navigation = changes.length > 0 && (
+		<div className={styles.diffNavigation}>
+			<span>
+				{activeChange < 0
+					? t('{count} changes', { count: changes.length })
+					: t('Change {current} / {total}', {
+							current: activeChange + 1,
+							total: changes.length
+						})}{' '}
+				· n / N
+			</span>
+			{[
+				{
+					direction: -1,
+					title: t('Previous change (N)'),
+					Icon: ChevronUp
+				},
+				{ direction: 1, title: t('Next change (n)'), Icon: ChevronDown }
+			].map(({ direction, title, Icon }) => (
+				<button
+					key={direction}
+					aria-label={title}
+					title={title}
+					onClick={() => {
+						jump(direction);
+						after.current?.focus({ preventScroll: true });
+					}}
+				>
+					<Icon size={16} aria-hidden="true" />
+				</button>
+			))}
+		</div>
+	);
+	const layoutSwitch = (
+		<div className={styles.layoutSwitch} role="group" aria-label={t('Diff layout (v)')}>
+			{(
+				[
+					{ value: 'split', title: t('Side by side'), Icon: Columns2 },
+					{ value: 'unified', title: t('Inline'), Icon: Rows2 }
+				] as const
+			).map(({ value, title, Icon }) => (
+				<button
+					key={value}
+					aria-label={title}
+					title={`${title} (v)`}
+					aria-pressed={layout === value}
+					onClick={() => {
+						if (layout !== value) {
+							toggleLayout();
+						}
+					}}
+				>
+					<Icon size={15} aria-hidden="true" />
+				</button>
+			))}
+		</div>
+	);
+
 	return (
-		<div className={styles.splitDiff}>
-			{(['before', 'after'] as const).map((side) => (
+		<div className={styles.splitDiff} data-layout={layout}>
+			{panes.map((side) => (
 				<div key={side} className={styles.diffPane}>
 					<div className={styles.diffHeading}>
-						<strong>{side === 'before' ? t('Before') : t('After')}</strong>
-						<span>{side === 'before' ? beforeLabel : afterLabel}</span>
-						{side === 'after' && changes.length > 0 && (
-							<div className={styles.diffNavigation}>
-								<span>
-									{activeChange < 0
-										? t('{count} changes', { count: changes.length })
-										: t('Change {current} / {total}', {
-												current: activeChange + 1,
-												total: changes.length
-											})}{' '}
-									· n / N
-								</span>
-								{[
-									{
-										direction: -1,
-										title: t('Previous change (N)'),
-										Icon: ChevronUp
-									},
-									{ direction: 1, title: t('Next change (n)'), Icon: ChevronDown }
-								].map(({ direction, title, Icon }) => (
-									<button
-										key={direction}
-										aria-label={title}
-										title={title}
-										onClick={() => {
-											jump(direction);
-											after.current?.focus({ preventScroll: true });
-										}}
-									>
-										<Icon size={16} aria-hidden="true" />
-									</button>
-								))}
+						{layout === 'split' ? (
+							<>
+								<strong>{side === 'before' ? t('Before') : t('After')}</strong>
+								<span>{side === 'before' ? beforeLabel : afterLabel}</span>
+							</>
+						) : (
+							<>
+								<strong>{t('Before')}</strong>
+								<span>{beforeLabel}</span>
+								<span aria-hidden="true">→</span>
+								<strong>{t('After')}</strong>
+								<span>{afterLabel}</span>
+							</>
+						)}
+						{side === 'after' && (
+							<div className={styles.diffTools}>
+								{navigation}
+								{layoutSwitch}
 							</div>
 						)}
 						{side === 'after' && error && <span role="status">{t(error)}</span>}
@@ -248,13 +448,17 @@ export default function GitDiff({
 								event.altKey ||
 								event.metaKey ||
 								event.nativeEvent.isComposing ||
-								!['n', 'N'].includes(event.key)
+								!['n', 'N', 'v'].includes(event.key)
 							) {
 								return;
 							}
 							event.preventDefault();
 							event.stopPropagation();
-							jump(event.shiftKey || event.key === 'N' ? -1 : 1);
+							if (event.key === 'v') {
+								toggleLayout();
+							} else {
+								jump(event.shiftKey || event.key === 'N' ? -1 : 1);
+							}
 						}}
 						onScroll={(event) => {
 							const pane = event.currentTarget;
@@ -280,32 +484,12 @@ export default function GitDiff({
 					>
 						<div
 							style={{
-								height: rows.length * rowHeight,
-								minWidth: `calc(${width}ch + 90px)`,
+								height: display.length * rowHeight,
+								minWidth: `calc(${width}ch + ${layout === 'split' ? 96 : 140}px)`,
 								paddingTop: first * rowHeight
 							}}
 						>
-							{visible.map((row, offset) => {
-								const index = first + offset;
-								return (
-									<div
-										key={index}
-										data-diff-row={index}
-										data-diff-active={
-											selectedChange?.diff === diff &&
-											selectedChange.row === index
-												? 'true'
-												: undefined
-										}
-										className={`${styles.diffLine} ${rowClass(row, side)}`}
-									>
-										<span className={styles.lineNumber} aria-hidden="true">
-											{row[side]?.number}
-										</span>
-										<code>{lineContent(row, side, index)}</code>
-									</div>
-								);
-							})}
+							{visible.map((entry, offset) => renderRow(entry, first + offset, side))}
 						</div>
 					</pre>
 				</div>
