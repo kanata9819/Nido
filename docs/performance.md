@@ -121,7 +121,7 @@ pnpm test:renderer --grep 'Explorer refresh bounds|expanding a folder during ref
 ```powershell
 pnpm exec tsx --test tests/bracket-performance.test.ts tests/grid-performance.test.ts tests/editor-highlights.test.ts
 pnpm test:renderer --grep 'editor descriptions stay current' --repeat-each 3
-pnpm test:e2e tests/bracket-guides.spec.ts tests/canvas-sharpness.spec.ts tests/scroll-cadence.spec.ts tests/electron.spec.ts --grep 'bracket pair guides|cached editor text preserves|continuous wheel scrolling|keyboard-only workspace switching'
+pnpm test:e2e tests/bracket-guides.spec.ts tests/canvas-sharpness.spec.ts tests/scroll-cadence.spec.ts tests/electron-workspaces.spec.ts --grep 'bracket pair guides|cached editor text preserves|continuous wheel scrolling|keyboard-only workspace switching'
 ```
 
 ## 再実行
