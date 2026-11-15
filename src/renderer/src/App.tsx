@@ -221,6 +221,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 		openFavorite,
 		nextWorkspace,
 		moveWorkspace,
+		reorderWorkspace,
 		closeWorkspace
 	} = useWorkspaceActions({
 		workspaces,
@@ -317,6 +318,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 			save,
 			showPanel,
 			moveWorkspace,
+			reorderWorkspace,
 			run,
 			focusEditor,
 			captureFocus,
@@ -369,6 +371,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 		active,
 		workspaces,
 		nextWorkspace,
+		moveWorkspace,
 		showExplorer,
 		create,
 		showPanel,
@@ -402,6 +405,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 				active={active}
 				creating={creating || restoring}
 				activate={activate}
+				reorderWorkspace={reorderWorkspace}
 				closeWorkspace={closeWorkspace}
 				create={create}
 				createTerminal={createTerminal}

@@ -26,6 +26,7 @@ interface TitleBarProps {
 	active: string;
 	creating: boolean;
 	activate: (id: string) => void;
+	reorderWorkspace: (id: string, targetId: string) => void;
 	closeWorkspace: (id: string) => void;
 	create: () => Promise<void>;
 	createTerminal: () => Promise<void>;
@@ -33,7 +34,7 @@ interface TitleBarProps {
 	run: (promise: Promise<unknown>) => void;
 }
 
-/** Colors of the dots that tell workspace tabs apart, used in turn. */
+/** Colors of the dots that tell workspace tabs apart. */
 const workspaceColors = ['#a3cc94', '#b5a0dd', '#d5b77f', '#83bcd0'];
 
 /**
@@ -49,6 +50,7 @@ export default function TitleBar({
 	active,
 	creating,
 	activate,
+	reorderWorkspace,
 	closeWorkspace,
 	create,
 	createTerminal,
@@ -58,11 +60,30 @@ export default function TitleBar({
 	const t = useI18n();
 	const header = useRef<HTMLElement>(null);
 	const selectedTab = useRef<HTMLDivElement>(null);
+	const activeIndex = workspaces.findIndex((workspace) => workspace.id === active);
+	const draggedTab = useRef<string | null>(null);
+	const [dropTarget, setDropTarget] = useState<string | null>(null);
+	const [tabColors, setTabColors] = useState(() => new Map<string, string>());
 	const [maximized, setMaximized] = useState(false);
+	// Reordering leaves existing tab colors assigned to the same sessions.
+	if (tabColors.size !== workspaces.length || workspaces.some((w) => !tabColors.has(w.id))) {
+		const next = new Map([...tabColors].filter(([id]) => workspaces.some((w) => w.id === id)));
+		const used = new Set(next.values());
+		for (const { id } of workspaces) {
+			if (!next.has(id)) {
+				const color =
+					workspaceColors.find((color) => !used.has(color)) ??
+					workspaceColors[next.size % workspaceColors.length];
+				next.set(id, color);
+				used.add(color);
+			}
+		}
+		setTabColors(next);
+	}
 	// Keep the selected workspace tab scrolled into view.
 	useLayoutEffect(() => {
 		selectedTab.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-	}, [active, compact]);
+	}, [active, activeIndex, compact]);
 	// In compact mode the tabs are small; Alt+Shift+W moves focus to them.
 	useEffect(() => {
 		if (!compact) {
@@ -123,25 +144,62 @@ export default function TitleBar({
 						ref={active === w.id ? selectedTab : undefined}
 						className={`${styles.workspaceTab} ${active === w.id ? styles.activeWorkspace : ''}`}
 						data-sleeping={w.sleeping || undefined}
+						data-drop-target={dropTarget === w.id || undefined}
+						onDragOver={(event) => {
+							if (!draggedTab.current || draggedTab.current === w.id) {
+								return;
+							}
+							event.preventDefault();
+							event.dataTransfer.dropEffect = 'move';
+							setDropTarget(w.id);
+						}}
+						onDragLeave={(event) => {
+							if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+								setDropTarget(null);
+							}
+						}}
+						onDrop={(event) => {
+							const id = draggedTab.current;
+							if (id) {
+								event.preventDefault();
+								draggedTab.current = null;
+								setDropTarget(null);
+								reorderWorkspace(id, w.id);
+							}
+						}}
 					>
 						<button
 							role="tab"
 							aria-selected={active === w.id}
 							aria-label={t('Workspace {name}', { name: w.name })}
 							aria-description={w.sleeping ? t('Sleeping') : undefined}
-							title={
+							aria-keyshortcuts="Alt+Shift+PageUp Alt+Shift+PageDown"
+							title={[
 								compact
 									? t('Session tabs (Alt+Shift+W)')
 									: w.sleeping
 										? t('Sleeping · Opens when selected')
-										: undefined
-							}
+										: '',
+								t('Drag to reorder · Alt+Shift+PageUp / PageDown')
+							]
+								.filter(Boolean)
+								.join(' · ')}
+							draggable
+							onDragStart={(event) => {
+								draggedTab.current = w.id;
+								event.dataTransfer.effectAllowed = 'move';
+								event.dataTransfer.setData('text/plain', w.name);
+							}}
+							onDragEnd={() => {
+								draggedTab.current = null;
+								setDropTarget(null);
+							}}
 							onClick={() => activate(w.id)}
 						>
 							<span
 								className={styles.workspaceDot}
 								style={{
-									background: workspaceColors[i % workspaceColors.length]
+									background: tabColors.get(w.id)
 								}}
 							/>
 							<span>{w.name}</span>

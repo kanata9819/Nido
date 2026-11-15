@@ -41,12 +41,20 @@ export function buildItems(
 	fileList: FileEntry[],
 	state: SessionState,
 	query: string,
-	callbacks: CommandsCallbacks,
+	callbacks: CommandsCallbacks & { reorderWorkspace: (id: string, target: string) => void },
 	t: Translator = createTranslator('en'),
 	preparedProblems?: { items: Item[]; filtered: Item[] }
 ): { commands: Item[]; items: Item[]; filtered: Item[] } {
-	const { run, focusEditor, captureFocus, create, openFile, activate, sleepWorkspace } =
-		callbacks;
+	const {
+		run,
+		focusEditor,
+		captureFocus,
+		create,
+		openFile,
+		activate,
+		sleepWorkspace,
+		reorderWorkspace
+	} = callbacks;
 
 	const commands = buildCommands(active, workspaces, state, callbacks, t);
 
@@ -81,6 +89,14 @@ export function buildItems(
 						title: w.name,
 						detail: w.root,
 						run: () => activate(w.id),
+						tab: {
+							id: w.id,
+							moveTo: (target: string | number) => {
+								if (typeof target === 'string') {
+									reorderWorkspace(w.id, target);
+								}
+							}
+						},
 						status: current
 							? ('current' as const)
 							: w.sleeping
@@ -114,6 +130,17 @@ export function buildItems(
 				key: b.modified ? '●' : '',
 				title: b.name ? filename(b.name) : t('[Untitled]'),
 				detail: b.name || t('Untitled buffer'),
+				tab: {
+					id: b.id,
+					moveTo: (target): void | Promise<void> => {
+						if (typeof target !== 'number') {
+							return;
+						}
+						const request = window.nido.moveBuffer(active, b.id, target);
+						run(request);
+						return request;
+					}
+				},
 				run: () => {
 					run(window.nido.selectBuffer(active, b.id));
 					focusEditor();
