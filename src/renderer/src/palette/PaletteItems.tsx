@@ -1,10 +1,11 @@
 import { useI18n } from '../i18n';
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Command, FolderOpen, FileCode2, CircleAlert, TriangleAlert, Info } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { Panel, Item } from '../types';
 import styles from '../assets/Palette.module.css';
-import FileIcon from '../ui/FileIcon';
-import { commandKeys } from './paletteShortcuts';
+import PaletteItem from './PaletteItem';
+import { hasOptions, paletteOptionId } from './paletteRows';
+import { emptyMessage, hint, placeholder } from './paletteText';
+import { useTabSelection } from './useTabSelection';
 import {
 	isLeaveTypingKey,
 	isStartTypingKey,
@@ -34,101 +35,6 @@ interface PaletteItemsProps {
 	onClose?: () => void;
 }
 
-/** Whether a palette's rows are listbox options (Problems and symbols). */
-const hasOptions = (panel: Exclude<Panel, null>): boolean =>
-	panel === 'problems' || panel === 'symbols';
-
-/** The id of a Problems or symbols row, which aria-activedescendant refers to. */
-const paletteOptionId = (panel: Exclude<Panel, null>, index: number): string =>
-	`${panel === 'problems' ? 'problem' : 'symbol'}-${index}`;
-
-/** The icon of an item in palettes that have no file to show an icon for. */
-function itemIcon(panel: Exclude<Panel, null>, severity: number | undefined): React.JSX.Element {
-	switch (panel) {
-		case 'problems':
-			switch (severity) {
-				case 1:
-					return <CircleAlert size={18} />;
-				case 2:
-					return <TriangleAlert size={18} />;
-				default:
-					return <Info size={18} />;
-			}
-		case 'workspaces':
-			return <FolderOpen size={18} />;
-		case 'symbols':
-		case 'search':
-			return <FileCode2 size={18} />;
-		default:
-			return <Command size={17} />;
-	}
-}
-
-/** One row of a palette. */
-const PaletteItem = memo(function PaletteItem({
-	panel,
-	item,
-	index,
-	selected
-}: {
-	panel: Exclude<Panel, null>;
-	item: Item;
-	index: number;
-	selected: boolean;
-}): React.JSX.Element {
-	const t = useI18n();
-	// Problems and symbols are listboxes; their rows are options with ids that
-	// aria-activedescendant refers to. Rows are not tab stops: the list itself has focus.
-	const option = hasOptions(panel);
-	// Commands show their shortcuts as keys beside them; other rows show their key as is.
-	const { text: detail, keys } =
-		panel === 'commands'
-			? commandKeys(item.detail, item.key)
-			: { text: item.detail, keys: item.key ? [item.key] : [] };
-	return (
-		<button
-			id={option ? paletteOptionId(panel, index) : undefined}
-			role={option ? 'option' : undefined}
-			aria-selected={option ? selected : undefined}
-			tabIndex={-1}
-			data-severity={item.severity}
-			className={selected ? styles.selectedItem : ''}
-			data-workspace-status={item.status}
-			title={item.status === 'current' ? t('Current workspace · Cannot sleep') : undefined}
-			ref={(node) => {
-				if (node && selected) {
-					node.scrollIntoView({ block: 'nearest' });
-				}
-			}}
-			onClick={item.run}
-		>
-			<span className={styles.itemIcon}>
-				{panel === 'files' || panel === 'buffers' ? (
-					<FileIcon path={item.detail} />
-				) : (
-					itemIcon(panel, item.severity)
-				)}
-			</span>
-			<span>
-				<strong>{item.title}</strong>
-				{detail && <small>{detail}</small>}
-			</span>
-			{item.status && (
-				<span className={styles.workspaceStatus} data-status={item.status}>
-					{item.status === 'current' ? t('Current') : t('Sleeping')}
-				</span>
-			)}
-			{keys.length > 0 && (
-				<span className={styles.itemKeys}>
-					{keys.map((key) => (
-						<kbd key={key}>{key}</kbd>
-					))}
-				</span>
-			)}
-		</button>
-	);
-});
-
 /**
  * A palette's filter field and results. A palette opens on its list, as in Vim's Normal mode:
  * j/k move, Enter runs the selected item, and i, a or / start typing in the filter field.
@@ -152,37 +58,14 @@ export default function PaletteItems({
 	const results = useRef<HTMLDivElement>(null);
 	const filter = useRef<HTMLInputElement>(null);
 	const pendingEnter = useRef<string | undefined>(undefined);
-	const pendingMove = useRef<{
-		source: string | number;
-		target: string | number;
-		offset: number;
-	}>(undefined);
-	const [selectedTab, setSelectedTab] = useState<string | number>();
-	const selectedIndex =
-		selectedTab === undefined ? -1 : filtered.findIndex((item) => item.tab?.id === selectedTab);
-	const selection = selectedIndex < 0 ? fallbackSelection : selectedIndex;
-	const reorderable = panel === 'workspaces' || panel === 'buffers';
-	const setSelection: PaletteItemsProps['setSelection'] = (value) => {
-		if (reorderable) {
-			const index = typeof value === 'function' ? value(selection) : value;
-			setSelectedTab(filtered[index]?.tab?.id);
-			setFallbackSelection(index);
-		} else {
-			setFallbackSelection(value);
-		}
-	};
+	const { selection, setSelection, reorderable, reorderTab, clearTab } = useTabSelection({
+		panel,
+		filtered,
+		fallbackSelection,
+		setFallbackSelection
+	});
 	// Whether the filter field has focus: typing, rather than moving through the list.
 	const [typing, setTyping] = useState(false);
-	useLayoutEffect(() => {
-		const move = pendingMove.current;
-		if (move) {
-			const source = filtered.findIndex((item) => item.tab?.id === move.source);
-			const target = filtered.findIndex((item) => item.tab?.id === move.target);
-			if (source < 0 || target < 0 || (target - source) * move.offset < 0) {
-				pendingMove.current = undefined;
-			}
-		}
-	}, [filtered]);
 	// Run the Enter pressed while loading, unless the query changed or focus left the palette.
 	useEffect(() => {
 		if (!loading && pendingEnter.current === query) {
@@ -254,77 +137,6 @@ export default function PaletteItems({
 		return false;
 	};
 
-	const reorderTab = (event: React.KeyboardEvent): boolean => {
-		if (
-			!reorderable ||
-			!event.shiftKey ||
-			event.ctrlKey ||
-			event.altKey ||
-			event.metaKey ||
-			(event.key !== 'J' && event.key !== 'K')
-		) {
-			return false;
-		}
-		event.preventDefault();
-		const offset = event.key === 'K' ? -1 : 1;
-		const tab = filtered[selection]?.tab;
-		const target = filtered[selection + offset]?.tab;
-		if (tab && target && !pendingMove.current) {
-			// Buffer order is published asynchronously. Wait for it before targeting another row.
-			const move = { source: tab.id, target: target.id, offset };
-			pendingMove.current = move;
-			setSelectedTab(tab.id);
-			void tab.moveTo(target.id)?.catch(() => {
-				if (pendingMove.current === move) {
-					pendingMove.current = undefined;
-				}
-			});
-		}
-		return true;
-	};
-
-	const placeholder = (): string => {
-		switch (panel) {
-			case 'files':
-				return t('Type a filename…');
-			case 'symbols':
-				return t('Type a symbol name…');
-			case 'search':
-				return t('Type text to grep…');
-			default:
-				return t('Type to search…');
-		}
-	};
-	// Shown instead of the list when nothing matches: progress, an error, or a hint.
-	const emptyMessage = (): string => {
-		if (loading) {
-			return panel === 'symbols' ? t('Loading symbols…') : t('Looking through your project…');
-		}
-		if (message) {
-			return t(message);
-		}
-		if (panel === 'search') {
-			return query ? t('No matching lines.') : t('Enter text to search this workspace.');
-		}
-		return panel === 'problems' && !query
-			? t('No problems reported.')
-			: t('No matching items.');
-	};
-	// The help for the list (Normal mode) and for typing in the filter field.
-	const hint = (): string => {
-		if (typing) {
-			return t('Typing · ↑ ↓ Move · Esc / Ctrl+C Back to the list');
-		}
-		if (panel === 'problems') {
-			return t('{count} problems · j/k Select · i / Filter', { count: filtered.length });
-		}
-		if (panel === 'workspaces') {
-			return t('j/k Select · Shift+J/K Reorder · i / Filter · Ctrl+S Sleep');
-		}
-		return reorderable
-			? t('j/k Select · Shift+J/K Reorder · i / Filter')
-			: t('j/k Move · i / Filter');
-	};
 	const optionId = (index: number): string => paletteOptionId(panel, index);
 
 	return (
@@ -341,12 +153,12 @@ export default function PaletteItems({
 					panel === 'symbols' && filtered[selection] ? optionId(selection) : undefined
 				}
 				aria-label={panel === 'search' ? t('Search in files') : t('Filter items')}
-				placeholder={placeholder()}
+				placeholder={placeholder(panel, t)}
 				value={query}
 				onChange={(event) => {
 					pendingEnter.current = undefined;
 					setQuery(event.target.value);
-					setSelectedTab(undefined);
+					clearTab();
 					setFallbackSelection(0);
 				}}
 				onFocus={() => setTyping(true)}
@@ -445,10 +257,14 @@ export default function PaletteItems({
 						selected={i === selection}
 					/>
 				))}
-				{!filtered.length && <p className={styles.noResults}>{emptyMessage()}</p>}
+				{!filtered.length && (
+					<p className={styles.noResults}>
+						{emptyMessage({ panel, loading, message, query }, t)}
+					</p>
+				)}
 			</div>
 			<div className={styles.paletteFooter}>
-				<span>{hint()}</span>
+				<span>{hint({ panel, typing, count: filtered.length }, t)}</span>
 				<span>{t('Enter to select · Esc to return')}</span>
 			</div>
 		</>
