@@ -56,6 +56,7 @@ test('translated command searches keep shortcut keys and actions, and preserve p
 			panels.push(panel);
 		},
 		moveWorkspace: noop,
+		reorderWorkspace: noop,
 		run: noop,
 		focusEditor: noop,
 		captureFocus: () => () => true,

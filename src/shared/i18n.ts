@@ -404,7 +404,10 @@ export const japanese: Record<string, string> = {
 	'No matching items.': '一致する項目がありません。',
 	'{count} problems · j/k Select · i / Filter': '問題 {count} 件 · j/k：選択 · i /：絞り込み',
 	'j/k Move · i / Filter': 'j/k：移動 · i /：絞り込み',
-	'j/k Move · i / Filter · Ctrl+S Sleep': 'j/k：移動 · i /：絞り込み · Ctrl+S：スリープ',
+	'j/k Select · Shift+J/K Reorder · i / Filter':
+		'j/k：選択 · Shift+J/K：並び替え · i /：絞り込み',
+	'j/k Select · Shift+J/K Reorder · i / Filter · Ctrl+S Sleep':
+		'j/k：選択 · Shift+J/K：並び替え · i /：絞り込み · Ctrl+S：スリープ',
 	'Typing · ↑ ↓ Move · Esc / Ctrl+C Back to the list':
 		'入力中 · ↑ ↓：移動 · Esc / Ctrl+C：リストへ戻る',
 	'Palette results': '候補',

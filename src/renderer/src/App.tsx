@@ -318,6 +318,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 			save,
 			showPanel,
 			moveWorkspace,
+			reorderWorkspace,
 			run,
 			focusEditor,
 			captureFocus,

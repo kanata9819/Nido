@@ -6089,6 +6089,47 @@ test('workspace tabs move by keyboard and drag while keeping their colors and se
 	await expect.poll(layout).toEqual([['gamma', 'alpha', 'beta'], 'beta']);
 });
 
+test('workspace palette reorders the highlighted session without switching sessions', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+	await page.evaluate(() =>
+		window.rendererTest.settle('restoreWorkspaces', 0, {
+			workspaces: [
+				{ id: 'alpha', root: '/alpha', name: 'Alpha' },
+				{ id: 'beta', root: '/beta', name: 'Beta' }
+			],
+			active: 'alpha',
+			errors: []
+		})
+	);
+	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+	await page.keyboard.press('Space');
+	await page.keyboard.press('w');
+	const palette = page.getByRole('dialog', { name: 'workspaces palette' });
+	const list = palette.getByRole('group', { name: 'Palette results' });
+	const selected = list.locator('button[class*="selectedItem"]');
+	const layout = (): Promise<unknown[] | undefined> =>
+		page.evaluate(
+			() =>
+				window.rendererTest.calls.filter((call) => call.method === 'workspaceLayout').at(-1)
+					?.args
+		);
+	await expect(list).toBeFocused();
+	await page.keyboard.press('j');
+	await expect(selected).toContainText('Beta');
+	await page.keyboard.press('Shift+K');
+	await expect(list.getByRole('button').first()).toContainText('Beta');
+	await expect(selected).toContainText('Beta');
+	await expect.poll(layout).toEqual([['beta', 'alpha'], 'alpha']);
+	await expect(list).toBeFocused();
+
+	await page.keyboard.press('Shift+J');
+	await expect(list.getByRole('button').first()).toContainText('Alpha');
+	await expect(selected).toContainText('Beta');
+	await expect.poll(layout).toEqual([['alpha', 'beta'], 'alpha']);
+});
+
 const fileTabBuffers = [11, 22, 33].map((id, index) => ({
 	id,
 	name: `/alpha/${['first', 'second', 'third'][index]}.ts`,
@@ -6109,6 +6150,48 @@ async function showFileTabs(page: Page): Promise<void> {
 		page.getByRole('tablist', { name: 'Files', exact: true }).getByRole('tab')
 	).toHaveCount(3);
 }
+
+test('file palette reorders the highlighted buffer and follows its published position', async ({
+	page
+}) => {
+	await showFileTabs(page);
+	await page.keyboard.press('Space');
+	await page.keyboard.press('b');
+	const palette = page.getByRole('dialog', { name: 'buffers palette' });
+	const list = palette.getByRole('group', { name: 'Palette results' });
+	const selected = list.locator('button[class*="selectedItem"]');
+	const bufferCalls = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => ['moveBuffer', 'selectBuffer'].includes(call.method))
+				.map((call) => [call.method, ...call.args])
+		);
+	await expect(list).toBeFocused();
+	await expect(selected).toContainText('first.ts');
+	await page.keyboard.press('Shift+J');
+	await expect.poll(bufferCalls).toEqual([['moveBuffer', 'alpha', 11, 22]]);
+	await page.keyboard.press('Shift+J');
+	await page.evaluate((buffers) => {
+		window.rendererTest.emit({
+			type: 'statePatch',
+			id: 'alpha',
+			state: { buffers: [buffers[1], buffers[0], buffers[2]] }
+		});
+	}, fileTabBuffers);
+	await expect(list.getByRole('button')).toHaveText([/second\.ts/, /first\.ts/, /third\.ts/]);
+	await expect(selected).toContainText('first.ts');
+	await expect(list).toBeFocused();
+	await expect(
+		page
+			.getByRole('tablist', { name: 'Files', exact: true })
+			.getByRole('tab', { selected: true })
+	).toHaveText('second.ts');
+	await page.keyboard.press('Shift+K');
+	await expect.poll(bufferCalls).toEqual([
+		['moveBuffer', 'alpha', 11, 22],
+		['moveBuffer', 'alpha', 11, 22]
+	]);
+});
 
 test('file tabs drag to another position and buffer navigation follows the published order', async ({
 	page

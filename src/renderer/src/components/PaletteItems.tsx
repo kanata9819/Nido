@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Command, FolderOpen, FileCode2, CircleAlert, TriangleAlert, Info } from 'lucide-react';
 import type { Panel, Item } from '../types';
 import styles from '../assets/Palette.module.css';
@@ -139,12 +139,12 @@ const PaletteItem = memo(function PaletteItem({
 export default function PaletteItems({
 	panel,
 	filtered,
-	selection,
+	selection: fallbackSelection,
 	query,
 	loading,
 	message,
 	setQuery,
-	setSelection,
+	setSelection: setFallbackSelection,
 	confirmation,
 	onClose
 }: PaletteItemsProps): React.JSX.Element {
@@ -152,8 +152,37 @@ export default function PaletteItems({
 	const results = useRef<HTMLDivElement>(null);
 	const filter = useRef<HTMLInputElement>(null);
 	const pendingEnter = useRef<string | undefined>(undefined);
+	const pendingMove = useRef<{
+		source: string | number;
+		target: string | number;
+		offset: number;
+	}>(undefined);
+	const [selectedTab, setSelectedTab] = useState<string | number>();
+	const selectedIndex =
+		selectedTab === undefined ? -1 : filtered.findIndex((item) => item.tab?.id === selectedTab);
+	const selection = selectedIndex < 0 ? fallbackSelection : selectedIndex;
+	const reorderable = panel === 'workspaces' || panel === 'buffers';
+	const setSelection: PaletteItemsProps['setSelection'] = (value) => {
+		if (reorderable) {
+			const index = typeof value === 'function' ? value(selection) : value;
+			setSelectedTab(filtered[index]?.tab?.id);
+			setFallbackSelection(index);
+		} else {
+			setFallbackSelection(value);
+		}
+	};
 	// Whether the filter field has focus: typing, rather than moving through the list.
 	const [typing, setTyping] = useState(false);
+	useLayoutEffect(() => {
+		const move = pendingMove.current;
+		if (move) {
+			const source = filtered.findIndex((item) => item.tab?.id === move.source);
+			const target = filtered.findIndex((item) => item.tab?.id === move.target);
+			if (source < 0 || target < 0 || (target - source) * move.offset < 0) {
+				pendingMove.current = undefined;
+			}
+		}
+	}, [filtered]);
 	// Run the Enter pressed while loading, unless the query changed or focus left the palette.
 	useEffect(() => {
 		if (!loading && pendingEnter.current === query) {
@@ -168,8 +197,8 @@ export default function PaletteItems({
 		results.current?.focus();
 	}, [panel]);
 	useEffect(() => {
-		setSelection((index) => Math.max(0, Math.min(index, filtered.length - 1)));
-	}, [panel, filtered.length, setSelection]);
+		setFallbackSelection((index) => Math.max(0, Math.min(index, filtered.length - 1)));
+	}, [panel, filtered.length, setFallbackSelection]);
 	// Keep the selected item in view while the list resizes.
 	useEffect(() => {
 		const node = results.current;
@@ -225,6 +254,35 @@ export default function PaletteItems({
 		return false;
 	};
 
+	const reorderTab = (event: React.KeyboardEvent): boolean => {
+		if (
+			!reorderable ||
+			!event.shiftKey ||
+			event.ctrlKey ||
+			event.altKey ||
+			event.metaKey ||
+			(event.key !== 'J' && event.key !== 'K')
+		) {
+			return false;
+		}
+		event.preventDefault();
+		const offset = event.key === 'K' ? -1 : 1;
+		const tab = filtered[selection]?.tab;
+		const target = filtered[selection + offset]?.tab;
+		if (tab && target && !pendingMove.current) {
+			// Buffer order is published asynchronously. Wait for it before targeting another row.
+			const move = { source: tab.id, target: target.id, offset };
+			pendingMove.current = move;
+			setSelectedTab(tab.id);
+			void tab.moveTo(target.id)?.catch(() => {
+				if (pendingMove.current === move) {
+					pendingMove.current = undefined;
+				}
+			});
+		}
+		return true;
+	};
+
 	const placeholder = (): string => {
 		switch (panel) {
 			case 'files':
@@ -260,8 +318,11 @@ export default function PaletteItems({
 		if (panel === 'problems') {
 			return t('{count} problems · j/k Select · i / Filter', { count: filtered.length });
 		}
-		return panel === 'workspaces'
-			? t('j/k Move · i / Filter · Ctrl+S Sleep')
+		if (panel === 'workspaces') {
+			return t('j/k Select · Shift+J/K Reorder · i / Filter · Ctrl+S Sleep');
+		}
+		return reorderable
+			? t('j/k Select · Shift+J/K Reorder · i / Filter')
 			: t('j/k Move · i / Filter');
 	};
 	const optionId = (index: number): string => paletteOptionId(panel, index);
@@ -285,7 +346,8 @@ export default function PaletteItems({
 				onChange={(event) => {
 					pendingEnter.current = undefined;
 					setQuery(event.target.value);
-					setSelection(0);
+					setSelectedTab(undefined);
+					setFallbackSelection(0);
 				}}
 				onFocus={() => setTyping(true)}
 				onBlur={() => {
@@ -335,6 +397,7 @@ export default function PaletteItems({
 							: t('Palette results')
 				}
 				aria-busy={panel === 'symbols' ? loading : undefined}
+				aria-keyshortcuts={reorderable ? 'Shift+J Shift+K' : undefined}
 				aria-activedescendant={
 					hasOptions(panel) && filtered[selection] ? optionId(selection) : undefined
 				}
@@ -347,7 +410,7 @@ export default function PaletteItems({
 					if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
 						return;
 					}
-					if (confirmed(event) || shared(event)) {
+					if (confirmed(event) || reorderTab(event) || shared(event)) {
 						return;
 					}
 					if (
