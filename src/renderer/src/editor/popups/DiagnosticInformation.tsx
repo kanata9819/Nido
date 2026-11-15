@@ -15,6 +15,7 @@ import styles from '../../assets/DiagnosticInformation.module.css';
 import OverlayPresence from '../../ui/OverlayPresence';
 import { placeNearCursor } from '../../ui/popupPosition';
 import { vimKey } from '../../keyboard/keyboard';
+import { cycleFocus, lineKeys, scrollLines, scrollPage } from '../../ui/popupKeys';
 
 /** LSP diagnostic severities 1 to 4, with their label and icon. */
 const severities = [
@@ -38,6 +39,121 @@ function Message({ text, fontFamily }: { text: string; fontFamily: string }): Re
 				)
 			)}
 		</>
+	);
+}
+
+/**
+ * The card's keys. Esc or Ctrl+C (without a selection) close it, Ctrl+K closes it and opens
+ * Neovim's hover, and [d / ]d with an optional count jump on; the keys typed so far of such
+ * a jump wait in `pendingRef`. Ctrl+D/U/F/B, h/l, j/k and the page keys scroll and Tab cycles
+ * focus. Any other key closes the card and goes on to the editor, after a pending count.
+ */
+function diagnosticKeyDown(
+	event: React.KeyboardEvent,
+	{
+		body,
+		card,
+		pendingRef,
+		close,
+		jump
+	}: {
+		body: HTMLElement;
+		card: HTMLElement;
+		pendingRef: RefObject<string>;
+		close: () => void;
+		jump: (sequence: string) => void;
+	}
+): void {
+	event.stopPropagation();
+	if (event.nativeEvent.isComposing) {
+		return;
+	}
+	const key = event.key.toLowerCase();
+	const ctrl = event.ctrlKey && !event.altKey && !event.metaKey;
+	const plain = !event.ctrlKey && !event.altKey && !event.metaKey;
+	const typed = pendingRef.current;
+	if (key === 'escape' || (ctrl && key === 'c' && !window.getSelection()?.toString())) {
+		event.preventDefault();
+		close();
+	} else if (ctrl && key === 'k') {
+		event.preventDefault();
+		close();
+		jump('<C-k>');
+	} else if (plain && /^[0-9]$/.test(key) && !/\[|\]/.test(typed) && (key !== '0' || typed)) {
+		event.preventDefault();
+		pendingRef.current = (typed + key).slice(0, 6);
+	} else if (plain && ['[', ']'].includes(key)) {
+		event.preventDefault();
+		pendingRef.current = typed.replace(/(\[|\])$/, '') + key;
+	} else if (plain && key === 'd' && /(\[|\])$/.test(typed)) {
+		event.preventDefault();
+		jump(typed + 'd');
+	} else {
+		pendingRef.current = '';
+		if (ctrl && ['d', 'u', 'f', 'b'].includes(key)) {
+			event.preventDefault();
+			scrollPage(body, key);
+		} else if (key === 'tab') {
+			event.preventDefault();
+			cycleFocus([body, ...card.querySelectorAll<HTMLElement>('button')], event.shiftKey);
+		} else if (plain && ['h', 'l', 'arrowleft', 'arrowright'].includes(key)) {
+			// Long messages wrap; a wide code span can still scroll sideways.
+			event.preventDefault();
+			body.scrollLeft += ['l', 'arrowright'].includes(key) ? 48 : -48;
+		} else if (plain && lineKeys.includes(key)) {
+			event.preventDefault();
+			scrollLines(body, key);
+		} else if (
+			!event.defaultPrevented &&
+			event.nativeEvent.keyCode !== 229 &&
+			// Ctrl+C with a selection copies the selected message text.
+			!(ctrl && key === 'c') &&
+			// Enter and Space still press a focused button.
+			!(['Enter', ' '].includes(event.key) && (event.target as HTMLElement).closest('button'))
+		) {
+			// Any other key goes back to the editor, with a pending count or bracket.
+			const keys = vimKey(event.nativeEvent);
+			if (keys) {
+				event.preventDefault();
+				close();
+				jump(typed + keys);
+			}
+		}
+	}
+}
+
+/** One diagnostic: its severity, source and code, and its message. */
+function DiagnosticItem({
+	item,
+	fontFamily
+}: {
+	item: Extract<NidoEvent, { type: 'diagnostics' }>['items'][number];
+	fontFamily: string;
+}): React.JSX.Element {
+	const t = useI18n();
+	const severity = severities[item.severity - 1] || severities[0];
+	const Icon = severity.icon;
+	const [headline, ...details] = item.message.split('\n');
+	return (
+		<article className={styles.item} data-severity={severity.name}>
+			<div className={styles.metadata}>
+				<span className={styles.severity}>
+					<Icon size={13} />
+					{t(severity.label)}
+				</span>
+				{item.source && <span>{item.source}</span>}
+				{item.code && <code style={{ fontFamily }}>{item.code}</code>}
+				<span className={styles.column}>{t('Col {column}', { column: item.column })}</span>
+			</div>
+			<h3>
+				<Message text={headline} fontFamily={fontFamily} />
+			</h3>
+			{details.length > 0 && (
+				<p>
+					<Message text={details.join('\n')} fontFamily={fontFamily} />
+				</p>
+			)}
+		</article>
 	);
 }
 
@@ -163,106 +279,15 @@ export default function DiagnosticInformation({
 				data-diagnostic-information
 				onClick={(event) => event.stopPropagation()}
 				onWheel={(event) => event.stopPropagation()}
-				onKeyDown={(event) => {
-					event.stopPropagation();
-					if (event.nativeEvent.isComposing) {
-						return;
-					}
-					const key = event.key.toLowerCase();
-					const ctrl = event.ctrlKey && !event.altKey && !event.metaKey;
-					const plain = !event.ctrlKey && !event.altKey && !event.metaKey;
-					if (
-						key === 'escape' ||
-						(ctrl && key === 'c' && !window.getSelection()?.toString())
-					) {
-						event.preventDefault();
-						close();
-					} else if (ctrl && key === 'k') {
-						event.preventDefault();
-						close();
-						jump('<C-k>');
-					} else if (
-						plain &&
-						/^[0-9]$/.test(key) &&
-						!/\[|\]/.test(keys.current) &&
-						(key !== '0' || keys.current)
-					) {
-						event.preventDefault();
-						keys.current = (keys.current + key).slice(0, 6);
-					} else if (plain && ['[', ']'].includes(key)) {
-						event.preventDefault();
-						keys.current = keys.current.replace(/(\[|\])$/, '') + key;
-					} else if (plain && key === 'd' && /(\[|\])$/.test(keys.current)) {
-						event.preventDefault();
-						jump(keys.current + 'd');
-					} else {
-						const pending = keys.current;
-						keys.current = '';
-						const content = body.current!;
-						if (ctrl && ['d', 'u', 'f', 'b'].includes(key)) {
-							event.preventDefault();
-							content.scrollTop +=
-								(['d', 'f'].includes(key) ? 1 : -1) *
-								content.clientHeight *
-								(['d', 'u'].includes(key) ? 0.5 : 1);
-						} else if (key === 'tab') {
-							event.preventDefault();
-							const nodes = [
-								content,
-								...card.current!.querySelectorAll<HTMLElement>('button')
-							];
-							const index = nodes.indexOf(document.activeElement as HTMLElement);
-							nodes[
-								(index + (event.shiftKey ? -1 : 1) + nodes.length) % nodes.length
-							]?.focus();
-						} else if (plain && ['h', 'l', 'arrowleft', 'arrowright'].includes(key)) {
-							// Long messages wrap; a wide code span can still scroll sideways.
-							event.preventDefault();
-							content.scrollLeft += ['l', 'arrowright'].includes(key) ? 48 : -48;
-						} else if (
-							plain &&
-							[
-								'j',
-								'k',
-								'arrowdown',
-								'arrowup',
-								'pagedown',
-								'pageup',
-								'home',
-								'end'
-							].includes(key)
-						) {
-							event.preventDefault();
-							if (key === 'home') {
-								content.scrollTop = 0;
-							} else if (key === 'end') {
-								content.scrollTop = content.scrollHeight;
-							} else {
-								content.scrollTop +=
-									(['j', 'arrowdown', 'pagedown'].includes(key) ? 1 : -1) *
-									(key.startsWith('page') ? content.clientHeight * 0.8 : 32);
-							}
-						} else if (
-							!event.defaultPrevented &&
-							event.nativeEvent.keyCode !== 229 &&
-							// Ctrl+C with a selection copies the selected message text.
-							!(ctrl && key === 'c') &&
-							// Enter and Space still press a focused button.
-							!(
-								['Enter', ' '].includes(event.key) &&
-								(event.target as HTMLElement).closest('button')
-							)
-						) {
-							// Any other key goes back to the editor, with a pending count or bracket.
-							const typed = vimKey(event.nativeEvent);
-							if (typed) {
-								event.preventDefault();
-								close();
-								jump(pending + typed);
-							}
-						}
-					}
-				}}
+				onKeyDown={(event) =>
+					diagnosticKeyDown(event, {
+						body: body.current!,
+						card: card.current!,
+						pendingRef: keys,
+						close,
+						jump
+					})
+				}
 			>
 				<header className={styles.header}>
 					<CircleAlert size={15} />
@@ -306,41 +331,9 @@ export default function DiagnosticInformation({
 					tabIndex={0}
 					aria-label={t('Diagnostic content')}
 				>
-					{info.items.map((item, index) => {
-						const severity = severities[item.severity - 1] || severities[0];
-						const Icon = severity.icon;
-						const [headline, ...details] = item.message.split('\n');
-						return (
-							<article
-								key={index}
-								className={styles.item}
-								data-severity={severity.name}
-							>
-								<div className={styles.metadata}>
-									<span className={styles.severity}>
-										<Icon size={13} />
-										{t(severity.label)}
-									</span>
-									{item.source && <span>{item.source}</span>}
-									{item.code && <code style={{ fontFamily }}>{item.code}</code>}
-									<span className={styles.column}>
-										{t('Col {column}', { column: item.column })}
-									</span>
-								</div>
-								<h3>
-									<Message text={headline} fontFamily={fontFamily} />
-								</h3>
-								{details.length > 0 && (
-									<p>
-										<Message
-											text={details.join('\n')}
-											fontFamily={fontFamily}
-										/>
-									</p>
-								)}
-							</article>
-						);
-					})}
+					{info.items.map((item, index) => (
+						<DiagnosticItem key={index} item={item} fontFamily={fontFamily} />
+					))}
 				</div>
 				<footer className={styles.footer}>
 					<span>{t('[d / ]d · Previous / Next')}</span>

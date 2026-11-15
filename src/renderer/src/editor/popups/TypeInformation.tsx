@@ -2,13 +2,92 @@ import { onNidoEvent } from '../../nidoEvents';
 import { useErrorMessage, useI18n } from '../../i18n';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Braces, X } from 'lucide-react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import styles from '../../assets/TypeInformation.module.css';
 import type { NidoEvent } from '../../../../shared/types';
 import OverlayPresence from '../../ui/OverlayPresence';
 import { placeNearCursor } from '../../ui/popupPosition';
 import { vimKey } from '../../keyboard/keyboard';
+import { cycleFocus, scrollLines, scrollPage } from '../../ui/popupKeys';
+import HoverMarkdown from './hover/HoverMarkdown';
+
+/** The keys that scroll the card by lines; letters only in lower case. */
+const lineKeys = ['j', 'k', 'ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'];
+
+/** The first code block or table in view that is wider than the card, to scroll sideways. */
+function wideBlockInView(body: HTMLElement): HTMLElement | undefined {
+	const bounds = body.getBoundingClientRect();
+	return [...body.querySelectorAll<HTMLElement>('pre, table')].find((node) => {
+		const rect = node.getBoundingClientRect();
+		return (
+			node.scrollWidth > node.clientWidth &&
+			rect.bottom > bounds.top &&
+			rect.top < bounds.bottom
+		);
+	});
+}
+
+/**
+ * The card's keys: Esc or Ctrl+C/K close, Ctrl+D/U/F/B scroll, h/l scroll wide code
+ * sideways, Tab cycles focus, and j/k and the page keys scroll. Any other key closes the card
+ * and goes on to the editor, like moving away from a hover.
+ */
+function hoverKeyDown(
+	event: React.KeyboardEvent,
+	{
+		body,
+		card,
+		close,
+		send
+	}: { body: HTMLElement; card: HTMLElement; close: () => void; send: (keys: string) => void }
+): void {
+	event.stopPropagation();
+	const key = event.key.toLowerCase();
+	const ctrl = event.ctrlKey && !event.altKey && !event.metaKey;
+	if (event.key === 'Escape' || (ctrl && ['c', 'k'].includes(key))) {
+		event.preventDefault();
+		close();
+	} else if (ctrl && ['d', 'u', 'f', 'b'].includes(key)) {
+		event.preventDefault();
+		scrollPage(body, key);
+	} else if (
+		!event.ctrlKey &&
+		!event.altKey &&
+		!event.metaKey &&
+		!event.nativeEvent.isComposing &&
+		['h', 'l', 'ArrowLeft', 'ArrowRight'].includes(event.key)
+	) {
+		event.preventDefault();
+		const block = wideBlockInView(body);
+		if (block) {
+			block.scrollLeft += ['l', 'ArrowRight'].includes(event.key) ? 48 : -48;
+		}
+	} else if (event.key === 'Tab') {
+		event.preventDefault();
+		cycleFocus(
+			[body, ...card.querySelectorAll<HTMLElement>('button, a[href]')],
+			event.shiftKey
+		);
+	} else if (!event.ctrlKey && !event.altKey && lineKeys.includes(event.key)) {
+		event.preventDefault();
+		scrollLines(body, key);
+	} else if (
+		!event.defaultPrevented &&
+		!event.nativeEvent.isComposing &&
+		event.nativeEvent.keyCode !== 229 &&
+		// Enter and Space still activate a focused link or the close button.
+		!(
+			['Enter', ' '].includes(event.key) &&
+			(event.target as HTMLElement).closest('a[href], button')
+		)
+	) {
+		const keys = vimKey(event.nativeEvent);
+		if (keys) {
+			event.preventDefault();
+			close();
+			send(keys);
+		}
+	}
+}
 
 /**
  * The hover card (K in the editor): the language server's Markdown documentation for the
@@ -109,13 +188,15 @@ export default function TypeInformation({
 	if (!info || hidden) {
 		return <OverlayPresence>{null}</OverlayPresence>;
 	}
-	// Match existing Neovim highlights to source positions, leaving other Markdown code blocks as plain text.
-	const highlights = new Map(
-		[...info.markdown.matchAll(/^```([^\n]*)\n([\s\S]*?)^```[ \t]*$/gm)].map((match, index) => [
-			match.index,
-			info.codeBlocks[index]
-		])
-	);
+	/** Open a documentation link; a failure shows only while the card stays as it is. */
+	const openLink = (href: string): void => {
+		const request = ++linkRequest.current.generation;
+		void window.nido.openDocumentation(href).catch((error) => {
+			if (request === linkRequest.current.generation) {
+				setLinkError(String(error));
+			}
+		});
+	};
 	return (
 		<OverlayPresence>
 			<div
@@ -128,100 +209,14 @@ export default function TypeInformation({
 				data-type-information
 				onClick={(event) => event.stopPropagation()}
 				onWheel={(event) => event.stopPropagation()}
-				// Esc or Ctrl+C/K close, Ctrl+D/U/F/B scroll, h/l scroll wide code sideways, Tab cycles
-				// focus, and j/k and the page keys scroll.
-				onKeyDown={(event) => {
-					event.stopPropagation();
-					const key = event.key.toLowerCase();
-					const ctrl = event.ctrlKey && !event.altKey && !event.metaKey;
-					if (event.key === 'Escape' || (ctrl && ['c', 'k'].includes(key))) {
-						event.preventDefault();
-						close();
-					} else if (ctrl && ['d', 'u', 'f', 'b'].includes(key)) {
-						event.preventDefault();
-						const content = body.current!;
-						content.scrollTop +=
-							(['d', 'f'].includes(key) ? 1 : -1) *
-							content.clientHeight *
-							(['d', 'u'].includes(key) ? 0.5 : 1);
-					} else if (
-						!event.ctrlKey &&
-						!event.altKey &&
-						!event.metaKey &&
-						!event.nativeEvent.isComposing &&
-						['h', 'l', 'ArrowLeft', 'ArrowRight'].includes(event.key)
-					) {
-						event.preventDefault();
-						const bounds = body.current!.getBoundingClientRect();
-						const content = [
-							...body.current!.querySelectorAll<HTMLElement>('pre, table')
-						].find((node) => {
-							const rect = node.getBoundingClientRect();
-							return (
-								node.scrollWidth > node.clientWidth &&
-								rect.bottom > bounds.top &&
-								rect.top < bounds.bottom
-							);
-						});
-						if (content) {
-							content.scrollLeft += ['l', 'ArrowRight'].includes(event.key)
-								? 48
-								: -48;
-						}
-					} else if (event.key === 'Tab') {
-						event.preventDefault();
-						const nodes = [
-							body.current!,
-							...card.current!.querySelectorAll<HTMLElement>('button, a[href]')
-						];
-						const index = nodes.indexOf(document.activeElement as HTMLElement);
-						nodes[
-							(index + (event.shiftKey ? -1 : 1) + nodes.length) % nodes.length
-						]?.focus();
-					} else if (
-						!event.ctrlKey &&
-						!event.altKey &&
-						[
-							'j',
-							'k',
-							'ArrowDown',
-							'ArrowUp',
-							'PageDown',
-							'PageUp',
-							'Home',
-							'End'
-						].includes(event.key)
-					) {
-						event.preventDefault();
-						const content = body.current!;
-						if (event.key === 'Home') {
-							content.scrollTop = 0;
-						} else if (event.key === 'End') {
-							content.scrollTop = content.scrollHeight;
-						} else {
-							content.scrollTop +=
-								(['j', 'ArrowDown', 'PageDown'].includes(event.key) ? 1 : -1) *
-								(event.key.startsWith('Page') ? content.clientHeight * 0.8 : 32);
-						}
-					} else if (
-						!event.defaultPrevented &&
-						!event.nativeEvent.isComposing &&
-						event.nativeEvent.keyCode !== 229 &&
-						// Enter and Space still activate a focused link or the close button.
-						!(
-							['Enter', ' '].includes(event.key) &&
-							(event.target as HTMLElement).closest('a[href], button')
-						)
-					) {
-						// Any other key goes back to the editor, like moving away from a hover.
-						const keys = vimKey(event.nativeEvent);
-						if (keys) {
-							event.preventDefault();
-							close();
-							void window.nido.input(id, keys).catch(() => {});
-						}
-					}
-				}}
+				onKeyDown={(event) =>
+					hoverKeyDown(event, {
+						body: body.current!,
+						card: card.current!,
+						close,
+						send: (keys) => void window.nido.input(id, keys).catch(() => {})
+					})
+				}
 			>
 				<header>
 					<Braces size={15} />
@@ -242,72 +237,11 @@ export default function TypeInformation({
 					aria-label={t('Type information content')}
 				>
 					<div className={styles.prose}>
-						<Markdown
-							remarkPlugins={[remarkGfm]}
-							skipHtml
-							components={{
-								img: ({ alt }) => <span>{alt}</span>,
-								a: ({ href, children }) =>
-									href && /^https?:\/\//i.test(href) ? (
-										<a
-											href={href}
-											onClick={(event) => {
-												event.preventDefault();
-												const request = ++linkRequest.current.generation;
-												void window.nido
-													.openDocumentation(href)
-													.catch((error) => {
-														if (
-															request ===
-															linkRequest.current.generation
-														) {
-															setLinkError(String(error));
-														}
-													});
-											}}
-										>
-											{children}
-										</a>
-									) : (
-										<span>{children}</span>
-									),
-								pre: ({ node, children }) => {
-									const lines = highlights.get(
-										node?.position?.start.offset ?? -1
-									);
-									return (
-										<section className={styles.code}>
-											<pre>
-												{lines?.length ? (
-													<code>
-														{lines.map((line, row) => (
-															<span key={row}>
-																{row > 0 && '\n'}
-																{line.map((span, col) => (
-																	<span
-																		key={col}
-																		style={{
-																			color: span.color
-																		}}
-																	>
-																		{span.text}
-																	</span>
-																))}
-															</span>
-														))}
-													</code>
-												) : (
-													children
-												)}
-											</pre>
-										</section>
-									);
-								}
-							}}
-						>
-							{/* Nido's own notices, such as "No type information at this position." */}
-							{t(info.markdown)}
-						</Markdown>
+						<HoverMarkdown
+							markdown={info.markdown}
+							codeBlocks={info.codeBlocks}
+							openLink={openLink}
+						/>
 					</div>
 					{linkError && <p role="alert">{errorMessage(linkError)}</p>}
 				</div>
