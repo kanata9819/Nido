@@ -2243,6 +2243,160 @@ vim.api.nvim_buf_set_lines(0,0,-1,false,{'one','    日本語','last'})`);
 	}
 });
 
+test('Home moves to the first non-blank character, then to the start of the line', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-smart-home-'));
+	const session = await Session.create(root, () => {});
+	const lua = (code: string): ReturnType<Session['client']['request']> =>
+		session.client.request('nvim_exec_lua', [code, []]);
+	const cursor = async (): Promise<unknown> => await lua('return vim.api.nvim_win_get_cursor(0)');
+	try {
+		await lua(`vim.api.nvim_buf_set_lines(0, 0, -1, false, {'    foo'})
+vim.api.nvim_win_set_cursor(0, {1, 6})`);
+		await session.input('<Home>');
+		assert.deepEqual(await cursor(), [1, 4]);
+		await session.input('<Home>');
+		assert.deepEqual(await cursor(), [1, 0]);
+		await session.input('<Home>');
+		assert.deepEqual(await cursor(), [1, 4]);
+		await session.input('Abar<Home>x');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '    xfoobar');
+		await session.input('<Home><Home>y');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'y    xfoobar');
+		// Each Home starts a new undo step, as the built-in key does.
+		await session.input('<Esc>u');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '    xfoobar');
+		await session.input('u');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '    foobar');
+	} finally {
+		await session.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('Alt Up and Alt Down move the current or selected lines in every mode', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-move-lines-'));
+	const session = await Session.create(root, () => {});
+	const lua = (code: string): ReturnType<Session['client']['request']> =>
+		session.client.request('nvim_exec_lua', [code, []]);
+	const lines = async (): Promise<unknown> =>
+		await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)');
+	try {
+		await lua(`vim.api.nvim_buf_set_lines(0, 0, -1, false, {'one', 'two', 'three', 'four'})
+vim.api.nvim_win_set_cursor(0, {1, 1})`);
+		await session.input('<M-Down>');
+		assert.deepEqual(await lines(), ['two', 'one', 'three', 'four']);
+		assert.deepEqual(await lua('return vim.api.nvim_win_get_cursor(0)'), [2, 1]);
+		await session.input('<M-Up><M-Up>');
+		assert.deepEqual(await lines(), ['one', 'two', 'three', 'four']);
+		await session.input('a<M-Down>X');
+		assert.deepEqual(await lines(), ['two', 'onXe', 'three', 'four']);
+		assert.equal(await lua('return vim.fn.mode()'), 'i');
+		await session.input('<Esc>Vj<M-Down>');
+		assert.deepEqual(await lines(), ['two', 'four', 'onXe', 'three']);
+		assert.equal(await lua('return vim.fn.mode()'), 'V');
+		// The selection follows the moved lines.
+		await session.input('d');
+		assert.deepEqual(await lines(), ['two', 'four']);
+		await session.input('u');
+		assert.deepEqual(await lines(), ['two', 'four', 'onXe', 'three']);
+	} finally {
+		await session.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('Alt Shift Up and Alt Shift Down copy the current or selected lines', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-copy-lines-'));
+	const session = await Session.create(root, () => {});
+	const lua = (code: string): ReturnType<Session['client']['request']> =>
+		session.client.request('nvim_exec_lua', [code, []]);
+	const lines = async (): Promise<unknown> =>
+		await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)');
+	try {
+		await lua(`vim.api.nvim_buf_set_lines(0, 0, -1, false, {'one', 'two', 'three'})
+vim.api.nvim_win_set_cursor(0, {1, 1})`);
+		await session.input('<M-S-Down>');
+		assert.deepEqual(await lines(), ['one', 'one', 'two', 'three']);
+		assert.deepEqual(await lua('return vim.api.nvim_win_get_cursor(0)'), [2, 1]);
+		await session.input('u<M-S-Up>');
+		assert.deepEqual(await lines(), ['one', 'one', 'two', 'three']);
+		assert.deepEqual(await lua('return vim.api.nvim_win_get_cursor(0)'), [1, 1]);
+		await session.input('u');
+		// The selection stays on the copy in the direction of the key.
+		await session.input('jVj<M-S-Down>');
+		assert.deepEqual(await lines(), ['one', 'two', 'three', 'two', 'three']);
+		assert.equal(await lua('return vim.fn.mode()'), 'V');
+		await session.input('<Esc>');
+		assert.deepEqual(await lua('return {vim.fn.line("\'<"), vim.fn.line("\'>")}'), [4, 5]);
+		await session.input('4G0ia<M-S-Up>X');
+		assert.equal(await lua('return vim.fn.mode()'), 'i');
+		assert.deepEqual(await lines(), ['one', 'two', 'three', 'aXtwo', 'atwo', 'three']);
+	} finally {
+		await session.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('Ctrl Enter and Ctrl Shift Enter open a line without splitting the current one', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-insert-line-'));
+	const session = await Session.create(root, () => {});
+	const lua = (code: string): ReturnType<Session['client']['request']> =>
+		session.client.request('nvim_exec_lua', [code, []]);
+	try {
+		for (const [keys, expected] of [
+			['<C-CR>', ['  abc', '  x', 'end']],
+			['<C-S-CR>', ['  x', '  abc', 'end']]
+		] as const) {
+			await session.input('<Esc>');
+			await lua(`vim.api.nvim_buf_set_lines(0, 0, -1, false, {'  abc', 'end'})
+vim.api.nvim_win_set_cursor(0, {1, 3})`);
+			await session.input(`i${keys}x`);
+			assert.deepEqual(
+				await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)'),
+				expected
+			);
+			assert.equal(await lua('return vim.fn.mode()'), 'i');
+		}
+	} finally {
+		await session.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('Ctrl Backspace and Ctrl Delete remove words in insert mode', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-word-delete-'));
+	const session = await Session.create(root, () => {});
+	const lua = (code: string): ReturnType<Session['client']['request']> =>
+		session.client.request('nvim_exec_lua', [code, []]);
+	try {
+		for (const [line, column, keys, expected] of [
+			['foo bar', 7, '<C-BS>', ['foo ', '  b']],
+			['foo bar', 0, '<C-Del>', [' bar', '  b']],
+			['foo bar', 3, '<C-Del>', ['foo', '  b']],
+			['foo.bar', 1, '<C-Del>', ['f.bar', '  b']],
+			['x 日本語 y', 1, '<C-Del>', ['x y', '  b']],
+			['e\u0301+x', 0, '<C-Del>', ['+x', '  b']],
+			// At the end of a line, Ctrl+Delete joins the next one.
+			['a', 1, '<C-Del>', ['a  b']]
+		] as const) {
+			await session.input('<Esc>');
+			await lua(`vim.fn.setreg('"', 'keep')
+vim.api.nvim_buf_set_lines(0, 0, -1, false, {'${line}', '  b'})
+vim.api.nvim_win_set_cursor(0, {1, ${column}})`);
+			await session.input(`${column === line.length ? 'A' : 'i'}${keys}`);
+			assert.deepEqual(
+				await lua('return vim.api.nvim_buf_get_lines(0, 0, -1, false)'),
+				expected,
+				`${line} ${keys}`
+			);
+			assert.equal(await lua("return vim.fn.getreg('\"')"), 'keep');
+		}
+	} finally {
+		await session.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('Ctrl slash toggles language comments on the current line and selected lines', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-comment-keys-'));
 	const session = await Session.create(root, () => {});
@@ -2272,8 +2426,17 @@ vim.api.nvim_win_set_cursor(0,{1,2})`);
 				`  ${prefix} first()`
 			);
 			assert.equal(await lua('return vim.fn.mode()'), 'i');
+			// The cursor stays on the same text as the marker is added and removed.
 			await session.input('<C-/>');
 			assert.equal(await lua('return vim.api.nvim_get_current_line()'), '  first()');
+			await session.input('<Esc>0f(i<C-/>X');
+			assert.equal(
+				await lua('return vim.api.nvim_get_current_line()'),
+				`  ${prefix} firstX()`
+			);
+			await session.input('<BS><C-/>Y');
+			assert.equal(await lua('return vim.api.nvim_get_current_line()'), '  firstY()');
+			await session.input('<BS>');
 			await session.input('<Esc>ggVj<C-/>');
 			assert.deepEqual(await lua('return vim.api.nvim_buf_get_lines(0,0,-1,false)'), [
 				`  ${prefix} first()`,
@@ -2408,7 +2571,7 @@ vim.api.nvim_win_set_cursor(0, {1, 0})`);
 	}
 });
 
-test('typing brackets and double quotes inserts pairs, skips closers and deletes empty pairs', async () => {
+test('typing brackets and quotes inserts pairs, skips closers and deletes empty pairs', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-auto-brackets-'));
 	let session: Session | undefined;
 	try {
@@ -2469,13 +2632,45 @@ test('typing brackets and double quotes inserts pairs, skips closers and deletes
 		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '// (""');
 		await session.input('<BS>');
 		assert.equal(await lua('return vim.api.nvim_get_current_line()'), '// ("');
+		// A quote right after a word character does not pair, as in VS Code.
+		await reset();
+		await session.input('say"');
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), 'say"');
+		// Single quotes and backticks pair where they are string delimiters.
+		await reset();
+		await lua("vim.bo.filetype = 'typescript'");
+		for (const quote of ["'", '`']) {
+			await reset();
+			await session.input(`a = ${quote}`);
+			assert.equal(
+				await lua('return vim.api.nvim_get_current_line()'),
+				`a = ${quote}${quote}`
+			);
+			await session.input(`x${quote};`);
+			assert.equal(
+				await lua('return vim.api.nvim_get_current_line()'),
+				`a = ${quote}x${quote};`
+			);
+			await reset();
+			await session.input(`${quote}<BS>`);
+			assert.equal(await lua('return vim.api.nvim_get_current_line()'), '');
+		}
+		await reset();
+		await session.input("it's");
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), "it's");
+		// Elsewhere they are apostrophes or Rust lifetimes.
+		await reset();
+		await lua("vim.bo.filetype = 'rust'");
+		await session.input("fn f<LT>'a");
+		assert.equal(await lua('return vim.api.nvim_get_current_line()'), "fn f<'a");
+		await lua("vim.bo.filetype = ''");
 	} finally {
 		await session?.stop();
 		await rm(root, { recursive: true, force: true });
 	}
 });
 
-test('Enter inside braces opens an indented body and aligns the closing brace', async () => {
+test('Enter inside brackets opens an indented body and aligns the closing bracket', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-brace-enter-'));
 	let session: Session | undefined;
 	try {
@@ -2486,7 +2681,9 @@ test('Enter inside braces opens an indented body and aligns the closing brace', 
 			['rust', 'fn main() {}', 11, true, ['fn main() {', '    ', '}']],
 			['typescript', '  if (true) {  }', 14, true, ['  if (true) {', '    ', '  }']],
 			['', '{}', 1, true, ['{', '  ', '}']],
-			['', '\t{}', 2, false, ['\t{', '\t\t', '\t}']]
+			['', '\t{}', 2, false, ['\t{', '\t\t', '\t}']],
+			['typescript', '  call()', 7, true, ['  call(', '    ', '  )']],
+			['rust', 'let a = [];', 9, true, ['let a = [', '    ', '];']]
 		] as const) {
 			await session.input('<Esc>');
 			await session.client.request('nvim_exec_lua', [

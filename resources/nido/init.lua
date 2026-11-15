@@ -76,12 +76,92 @@ vim.keymap.set('i', '<C-z>', '<C-o>u', {remap=true, silent=true})
 vim.keymap.set('n', '<C-S-z>', '<C-r>', {remap=true, silent=true})
 vim.keymap.set('x', '<C-S-z>', '<Esc><C-r>', {remap=true, silent=true})
 vim.keymap.set('i', '<C-S-z>', '<C-o><C-r>', {remap=true, silent=true})
+--- Toggle the current line's comment in Insert mode, keeping the cursor on the same text.
+local function toggle_comment_in_insert()
+  local row, column = unpack(vim.api.nvim_win_get_cursor(0))
+  local length = #vim.api.nvim_get_current_line()
+  local indent = #vim.api.nvim_get_current_line():match('^%s*')
+  vim.cmd.normal({args={'gcc'}, mods={silent=true}})
+  -- The comment marker is added or removed after the indentation.
+  if column >= indent then
+    column = math.max(indent, column + #vim.api.nvim_get_current_line() - length)
+  end
+  vim.api.nvim_win_set_cursor(0, {row, column})
+end
 for _, key in ipairs({'<C-/>', '<C-_>'}) do
   vim.keymap.set('n', key, 'gcc', {remap=true, silent=true})
   vim.keymap.set('x', key, 'gc', {remap=true, silent=true})
-  vim.keymap.set('i', key, '<C-o>gcc', {remap=true, silent=true})
+  vim.keymap.set('i', key, toggle_comment_in_insert, {silent=true})
 end
 vim.keymap.set('i', '<S-Tab>', '<C-d>', {silent=true})
+-- As in VS Code, Home moves to the first non-blank character, then to the start of the line.
+vim.keymap.set({'n', 'x', 'i'}, '<Home>', function()
+  local row, column = unpack(vim.api.nvim_win_get_cursor(0))
+  local line = vim.api.nvim_get_current_line()
+  local indent = #line:match('^%s*')
+  if vim.fn.mode() == 'i' then
+    -- Like the built-in Home, start a new undo step.
+    vim.bo.undolevels = vim.bo.undolevels
+  else
+    -- Outside Insert mode the cursor cannot pass the last character.
+    indent = math.min(indent, math.max(0, #line - 1))
+  end
+  vim.api.nvim_win_set_cursor(0, {row, column == indent and 0 or indent})
+end, {silent=true})
+--- Move the current line, or the selected lines, one line up or down, as Alt+Up/Down do in VS Code.
+local function move_lines(delta, visual)
+  local first, last = vim.fn.line('.'), vim.fn.line('.')
+  if visual then first, last = vim.fn.line("'<"), vim.fn.line("'>") end
+  local column = vim.api.nvim_win_get_cursor(0)[2]
+  if (delta < 0 and first > 1) or (delta > 0 and last < vim.api.nvim_buf_line_count(0)) then
+    vim.cmd(string.format('silent keepjumps %d,%dmove %d', first, last, delta < 0 and first - 2 or last + 1))
+    if not visual then
+      vim.api.nvim_win_set_cursor(0, {first + delta, column})
+    end
+  end
+  -- :move carries the selection marks along with the lines.
+  if visual then vim.cmd.normal({args={'gv'}, bang=true}) end
+end
+--- Copy the current line, or the selected lines, above or below, as Shift+Alt+Up/Down do in VS Code.
+--- The cursor and selection stay on the copy in the given direction.
+local function copy_lines(delta, visual)
+  local first, last = vim.fn.line('.'), vim.fn.line('.')
+  if visual then first, last = vim.fn.line("'<"), vim.fn.line("'>") end
+  local row, column = unpack(vim.api.nvim_win_get_cursor(0))
+  local lines = vim.api.nvim_buf_get_lines(0, first - 1, last, false)
+  vim.api.nvim_buf_set_lines(0, last, last, false, lines)
+  local shift = delta > 0 and #lines or 0
+  if visual then
+    vim.fn.setpos("'<", {0, first + shift, vim.fn.col("'<"), 0})
+    vim.fn.setpos("'>", {0, last + shift, vim.fn.col("'>"), 0})
+    vim.cmd.normal({args={'gv'}, bang=true})
+  else
+    vim.api.nvim_win_set_cursor(0, {row + shift, column})
+  end
+end
+for key, delta in pairs({['<M-Up>']=-1, ['<M-Down>']=1}) do
+  local copy = '<M-S-' .. key:sub(4)
+  for lhs, action in pairs({[key]=move_lines, [copy]=copy_lines}) do
+    vim.keymap.set({'n', 'i'}, lhs, function() action(delta, false) end, {silent=true})
+    vim.keymap.set('x', lhs, function()
+      vim.cmd.normal({args={vim.keycode('<Esc>')}, bang=true})
+      action(delta, true)
+    end, {silent=true})
+  end
+end
+-- As in VS Code, Ctrl+Enter starts a new line below without splitting the current one,
+-- and Ctrl+Shift+Enter one above.
+vim.keymap.set('i', '<C-CR>', '<C-o>o', {silent=true})
+vim.keymap.set('i', '<C-S-CR>', '<C-o>O', {silent=true})
+-- As in VS Code, Ctrl+Backspace and Ctrl+Delete remove a word instead of a character.
+vim.keymap.set('i', '<C-BS>', '<C-w>', {silent=true})
+vim.keymap.set('i', '<C-Del>', function()
+  local after = vim.api.nvim_get_current_line():sub(vim.fn.col('.'))
+  -- Whitespace, then a run of word characters or of other non-blank characters.
+  local word = vim.fn.matchstr(after, [[^\s*\%(\k\+\|\%(\k\@!\S\)\+\)\?]])
+  -- At the end of a line, join the next one.
+  return string.rep('<Del>', math.max(1, vim.fn.strchars(word, 1)))
+end, {expr=true, silent=true})
 vim.keymap.set('x', '<Tab>', '>gv', {silent=true})
 vim.keymap.set('x', '<S-Tab>', '<gv', {silent=true})
 vim.o.showtabline = 0
