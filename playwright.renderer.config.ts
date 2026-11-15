@@ -27,7 +27,9 @@ export default defineConfig({
 		{
 			name: 'performance',
 			testMatch: [
-				'renderer-performance.spec.ts',
+				'renderer-performance-paint.spec.ts',
+				'renderer-performance-scroll.spec.ts',
+				'renderer-performance-ui.spec.ts',
 				'renderer-horizontal.spec.ts',
 				'feature-performance.spec.ts',
 				'document-symbols.spec.ts',

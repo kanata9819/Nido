@@ -52,7 +52,7 @@ Git変更マークはリポジトリ・ファイル名・HEADの一致を確認�
 
 ファイルタブは表示に必要なバッファ一覧・選択・装飾だけを受け取り、カーソル位置の更新で再描画しません。選択・未保存マーク・Gitバッジは引き続き更新します。
 
-`tests/session.test.ts` では未変更更新10回で本文再取得・全文読み取り・差分計算が0回であること、末尾改行だけの変更、外部コミット、ステージ、無視設定の変更、HEADがまだないリポジトリを確認します。`tests/renderer-performance.spec.ts` は100ファイルでの不要な再描画と実際のタブ更新・選択操作を検証します。
+`tests/session.test.ts` では未変更更新10回で本文再取得・全文読み取り・差分計算が0回であること、末尾改行だけの変更、外部コミット、ステージ、無視設定の変更、HEADがまだないリポジトリを確認します。`tests/renderer-performance-ui.spec.ts` は100ファイルでの不要な再描画と実際のタブ更新・選択操作を検証します。
 
 変更があるバッファの差分は引き続き全文で計算します。読み込まれた追跡ファイルのHEAD本文を保持する分、メモリは増えます。上表は処理回数の比較であり、アプリ全体の速度や起動時間の改善率ではありません。
 
@@ -114,7 +114,7 @@ pnpm test:renderer --grep 'Explorer refresh bounds|expanding a folder during ref
 
 上表は検証ケースでの処理回数です。索引内の探索回数や全文解析の時間を表すものではなく、アプリ全体の応答時間が同じ割合で短くなる意味ではありません。文字列の行結合と、編集後の括弧の全文解析は引き続き行います。
 
-`tests/grid-performance.test.ts` は読み取り数、Unicode、ハイライト変更、キャッシュを伴うスクロール、部分スクロール、リサイズとクリアを検証します。`tests/bracket-performance.test.ts` は入れ子・カーソル境界・表示範囲で従来の全件検索と結果を比較し、実Neovimでのカーソル移動の処理量と編集中の解析中断を検証します。`tests/renderer-performance.spec.ts` は画面説明が編集・スクロール・クリアに追従し、色変更だけではDOMを更新しないことを検証します。
+`tests/grid-performance.test.ts` は読み取り数、Unicode、ハイライト変更、キャッシュを伴うスクロール、部分スクロール、リサイズとクリアを検証します。`tests/bracket-performance.test.ts` は入れ子・カーソル境界・表示範囲で従来の全件検索と結果を比較し、実Neovimでのカーソル移動の処理量と編集中の解析中断を検証します。`tests/renderer-performance-ui.spec.ts` は画面説明が編集・スクロール・クリアに追従し、色変更だけではDOMを更新しないことを検証します。
 
 この変更では `pnpm test` 159件、`pnpm test:renderer` 92件、実Electronの括弧ガイド・100%/125%/150%倍率の画素一致・キーボードでの編集と保存・連続スクロールの6件が成功しました。画面説明の新規テストも3回連続で成功しています。lint、アプリの型チェック、`pnpm exec electron-vite build` も成功しました。
 
@@ -136,7 +136,7 @@ pnpm build:unpack
 pnpm test:windows
 ```
 
-`tests/renderer-performance.spec.ts` が描画回数と画素比較、`tests/grid-performance.test.ts` が行配置、`tests/bracket-performance.test.ts` が実際のNeovimの通知・extmark回数を検証します。通常のCIでも回数制限と画素一致を確認します。
+`tests/renderer-performance-*.spec.ts` が描画回数と画素比較、`tests/grid-performance.test.ts` が行配置、`tests/bracket-performance.test.ts` が実際のNeovimの通知・extmark回数を検証します。通常のCIでも回数制限と画素一致を確認します。
 
 配布ビルドでは生成中のログと検証用ドキュメントを除外します。サイズが変わるログが梱包途中に読み込まれるとASARのファイル位置がずれ、起動時にpackage.jsonを読み出せなくなるケースを再現したためです。
 
@@ -173,12 +173,12 @@ pnpm test:windows
 
 GPUの画面クリアと描画設定は、実際に小数ピクセル位置の明るさ補正が必要な行を描くときだけ実行します。通常位置の文字は従来どおりネイティブ画像を使い、スクロール開始に備えた画像の準備も維持します。編集で不要になった行画像はGPUキャッシュから即座に解放し、同じ行の古い版が、表示中の変更されていない行を追い出さないようにします。キャッシュ全体は引き続き2画面分までです。
 
-これは処理回数と保持画像数の比較です。CPU側の描画時間はこのケースで同程度で、アプリ全体のCPU使用率や入力遅延が半分になるという結果ではありません。`tests/renderer-performance.spec.ts` の `stationary editor` がこれらの回数と、最初のスクロールでも画像を再利用できることを検証します。
+これは処理回数と保持画像数の比較です。CPU側の描画時間はこのケースで同程度で、アプリ全体のCPU使用率や入力遅延が半分になるという結果ではありません。`tests/renderer-performance-paint.spec.ts` の `stationary editor` がこれらの回数と、最初のスクロールでも画像を再利用できることを検証します。
 
 文字の描画・明るさ・微小スクロールの連続性、GPUが利用できない場合とコンテキスト喪失時の代替描画も検証します。100〜200%倍率と半透明テーマの部分再描画は、全画面再描画との画素不一致が0でした。
 
 ```powershell
-pnpm exec playwright test --config playwright.renderer.config.ts tests/renderer-performance.spec.ts --grep 'stationary editor' --output test-results/editor-gpu-performance/recheck
+pnpm exec playwright test --config playwright.renderer.config.ts tests/renderer-performance-paint.spec.ts --grep 'stationary editor' --output test-results/editor-gpu-performance/recheck
 ```
 
 ## エクスプローラーの外部変更同期
