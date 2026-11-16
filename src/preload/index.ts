@@ -64,6 +64,11 @@ const api: NidoAPI = {
 	createWorkspace: (path, kind, shell) => ipcRenderer.invoke('nido:create', path, kind, shell),
 	openTerminal: (id, shell) => ipcRenderer.invoke('nido:openTerminal', id, shell),
 	restartTerminal: (id, shell) => ipcRenderer.invoke('nido:restartTerminal', id, shell),
+	addTerminalShell: (id, shell) => ipcRenderer.invoke('nido:addTerminalShell', id, shell),
+	selectTerminalShell: (id, position) =>
+		ipcRenderer.invoke('nido:selectTerminalShell', id, position),
+	closeTerminalShell: (id, position) =>
+		ipcRenderer.invoke('nido:closeTerminalShell', id, position),
 	browseFolders: (path, distribution) =>
 		ipcRenderer.invoke('nido:browseFolders', path, distribution),
 	windowsDrives: () => ipcRenderer.invoke('nido:windowsDrives'),

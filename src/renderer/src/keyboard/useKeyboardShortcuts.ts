@@ -35,6 +35,10 @@ export interface UseKeyboardShortcutsParams {
 	restartShell: () => void;
 	/** Put the focused terminal in copy mode. */
 	terminalCopyMode: () => void;
+	/** In the terminal panel: start, stop or switch shells. */
+	terminalShell: (action: 'add' | 'close' | 'next' | 'previous') => void;
+	/** Let the terminal panel cover the editor, or return it to its height. */
+	toggleTerminalMaximized: () => void;
 	create: () => Promise<void>;
 	showPanel: (value: Panel) => void;
 	commands: Item[];

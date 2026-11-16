@@ -176,15 +176,22 @@ function TerminalPanels({
 			<TerminalPanel
 				key={w.id}
 				id={w.terminalId!}
-				name={w.name}
 				active={
 					w.id === active && panels.terminalVisible && panels.bottomPanel === 'terminal'
 				}
 				blocked={blocked}
 				focusTick={panels.terminalFocusTick}
 				copyMode={states[w.terminalId!]?.copyMode}
+				shells={states[w.terminalId!]?.terminalShells}
+				height={panels.terminalHeight}
+				maximized={panels.terminalMaximized}
 				settings={settings}
 				restartShell={panels.restartShell}
+				addShell={panels.addShell}
+				selectShell={panels.selectShell}
+				closeShell={panels.closeShell}
+				resize={panels.resizeTerminal}
+				toggleMaximized={panels.toggleTerminalMaximized}
 				onError={report}
 				onClose={panels.closeTerminal}
 			/>

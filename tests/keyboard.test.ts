@@ -99,6 +99,8 @@ test('leader h opens history and leader Shift+H/L reorder workspaces', () => {
 		function KeyboardProbe(): null {
 			handler = createKeyboardHandler({
 				terminalCopyMode: () => {},
+				terminalShell: () => {},
+				toggleTerminalMaximized: () => {},
 				save: () => {},
 				panel: null,
 				leader: true,
@@ -233,6 +235,8 @@ test('global shortcuts leave AltGr input available to the editor', () => {
 		function KeyboardProbe(): null {
 			handler = createKeyboardHandler({
 				terminalCopyMode: unexpected,
+				terminalShell: unexpected,
+				toggleTerminalMaximized: unexpected,
 				save: unexpected,
 				panel: null,
 				leader: false,
