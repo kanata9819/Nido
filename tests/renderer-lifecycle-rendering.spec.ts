@@ -595,7 +595,10 @@ for (const scale of [1, 1.25, 1.5]) {
 							fillText.apply(this, args);
 						};
 						const roundRect = CanvasRenderingContext2D.prototype.roundRect;
-						CanvasRenderingContext2D.prototype.roundRect = function (...args) {
+						CanvasRenderingContext2D.prototype.roundRect = function (
+							this: CanvasRenderingContext2D,
+							...args: Parameters<typeof roundRect>
+						) {
 							roundedShapes++;
 							roundRect.apply(this, args);
 						};
@@ -1358,7 +1361,10 @@ for (const failure of ['unavailable', 'lost'] as const) {
 				const { Grid } = await import(moduleUrl);
 				const getContext = HTMLCanvasElement.prototype.getContext;
 				let gpu: WebGL2RenderingContext | undefined;
-				HTMLCanvasElement.prototype.getContext = function (...args) {
+				HTMLCanvasElement.prototype.getContext = function (
+					this: HTMLCanvasElement,
+					...args: unknown[]
+				) {
 					if (args[0] === 'webgl2' && failure === 'unavailable') return null;
 					const context = Reflect.apply(getContext, this, args);
 					if (args[0] === 'webgl2' && context) gpu = context;

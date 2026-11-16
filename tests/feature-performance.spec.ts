@@ -1164,7 +1164,7 @@ test('workspace grep keeps its result list while navigating and receives fresh r
 		}));
 		const map = matches.map;
 		Object.assign(window, { searchMaps: 0 });
-		matches.map = function (...args: Parameters<typeof map>) {
+		matches.map = function (this: typeof matches, ...args: Parameters<typeof map>) {
 			(window as unknown as { searchMaps: number }).searchMaps++;
 			return map.apply(this, args);
 		} as typeof map;
@@ -1456,9 +1456,17 @@ test('Problems refresh data, versions, workspace targets and translated labels',
 						line: 1,
 						column: 1,
 						severity: 2,
-						message: 'Warning item'
+						message: 'Warning item',
+						source: ''
 					},
-					{ path: '/alpha/a.rs', line: 2, column: 1, severity: 1, message: 'Error item' }
+					{
+						path: '/alpha/a.rs',
+						line: 2,
+						column: 1,
+						severity: 1,
+						message: 'Error item',
+						source: ''
+					}
 				]
 			}
 		})
@@ -1503,7 +1511,14 @@ test('Problems refresh data, versions, workspace targets and translated labels',
 			state: {
 				diagnosticsVersion: 3,
 				problems: [
-					{ path: '/alpha/new.rs', line: 3, column: 2, severity: 1, message: 'New data' }
+					{
+						path: '/alpha/new.rs',
+						line: 3,
+						column: 2,
+						severity: 1,
+						message: 'New data',
+						source: ''
+					}
 				]
 			}
 		})
@@ -1524,7 +1539,8 @@ test('Problems refresh data, versions, workspace targets and translated labels',
 						line: 4,
 						column: 3,
 						severity: 1,
-						message: 'Beta data'
+						message: 'Beta data',
+						source: ''
 					}
 				]
 			}

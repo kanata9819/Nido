@@ -342,7 +342,7 @@ test('cursor-only state updates leave file tabs untouched while real tab changes
 		}));
 		const map = buffers.map;
 		Object.assign(window, { tabMaps: 0, performanceBuffers: buffers });
-		buffers.map = function (...args: Parameters<typeof map>) {
+		buffers.map = function (this: typeof buffers, ...args: Parameters<typeof map>) {
 			(window as unknown as { tabMaps: number }).tabMaps++;
 			return map.apply(this, args);
 		} as typeof map;
