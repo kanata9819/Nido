@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { GitPullRequest } from 'lucide-react';
 import { useErrorMessage, useI18n } from '../i18n';
@@ -14,7 +14,7 @@ import gitStyles from '../git/Git.module.css';
 import styles from './GitHub.module.css';
 
 /**
- * The GitHub page (Space G): the pull requests and issues of the workspace's repository, and
+ * The GitHub page (Space Shift+G): the pull requests and issues of the workspace's repository, and
  * a form to open a pull request from the checked-out branch. It uses the GitHub CLI (gh) and
  * its sign-in; until gh is installed and signed in, it explains how.
  */
@@ -34,6 +34,7 @@ export default function GitHubBrowser({
 	const [notice, setNotice] = useState('');
 	const action = useGitAction();
 	const backRef = useRef<() => boolean>(undefined);
+	const keysRef = useRef<Record<string, () => void>>(undefined);
 	const ready = !!status?.authenticated && !!status.repository;
 
 	const refreshStatus = useCallback(async () => {
@@ -73,6 +74,32 @@ export default function GitHubBrowser({
 		views: githubViews
 	});
 
+	// The views' action keys work wherever focus is on the page, except while typing.
+	useLayoutEffect(() => {
+		const keydown = (event: KeyboardEvent): void => {
+			const target = event.target as HTMLElement;
+			if (
+				event.defaultPrevented ||
+				event.ctrlKey ||
+				event.altKey ||
+				event.metaKey ||
+				event.isComposing ||
+				action.working ||
+				!target.closest('[data-panel="github"]') ||
+				target.matches('input, textarea, select, [contenteditable="true"]')
+			) {
+				return;
+			}
+			const run = keysRef.current?.[event.key];
+			if (run) {
+				event.preventDefault();
+				run();
+			}
+		};
+		document.addEventListener('keydown', keydown);
+		return () => document.removeEventListener('keydown', keydown);
+	});
+
 	const heading = useContext(PanelHeadingSlot);
 	const tabs = ready && (
 		<nav className={gitStyles.viewTabs} aria-label={t('GitHub views')}>
@@ -97,6 +124,7 @@ export default function GitHubBrowser({
 		action,
 		notify: setNotice,
 		backRef,
+		keysRef,
 		refreshStatus
 	};
 	return (

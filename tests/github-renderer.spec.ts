@@ -222,7 +222,7 @@ test('without a signed-in gh, the page explains how to sign in', async ({ page }
 	expect((await calls(page, 'githubStatus')).length).toBe(2);
 });
 
-test('the GitHub extension is off until enabled, then opens from the activity bar and Space G', async ({
+test('the GitHub extension is off until enabled, then opens from the activity bar and Space Shift+G', async ({
 	page
 }) => {
 	await page.goto(`${origin}?view=app`);
@@ -255,10 +255,53 @@ test('the GitHub extension is off until enabled, then opens from the activity ba
 	await expect(dialog).toHaveCount(0);
 
 	await page.keyboard.press('Space');
+	// The Space menu lists it.
+	await expect(page.getByRole('button', { name: /Shift\+G\s*GitHub/ })).toBeVisible();
 	await page.keyboard.press('Shift+G');
 	await expect(
 		page.getByRole('dialog', { name: 'github palette' }).getByRole('listbox', {
 			name: 'Pull requests'
 		})
 	).toBeFocused();
+});
+
+test('the overview and the issue preview take focus and their keys work there', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=github`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	const files = page.getByRole('listbox', { name: 'Pull request files' });
+	await expect(files).toBeFocused();
+	// Enter on Overview moves into it; Ctrl+H returns to the list and Ctrl+L comes back.
+	await page.keyboard.press('Enter');
+	const overview = page.getByRole('region', { name: 'Pull request overview' });
+	await expect(overview).toBeFocused();
+	await page.keyboard.press('Control+h');
+	await expect(files).toBeFocused();
+	await page.keyboard.press('Control+l');
+	await expect(overview).toBeFocused();
+	// The pull request's keys work from the overview.
+	await page.keyboard.press('v');
+	await expect(page.getByRole('textbox', { name: 'Review summary' })).toBeFocused();
+	await page.keyboard.press('Escape');
+	await overview.focus();
+	await page.keyboard.press('c');
+	await expect(page.getByRole('textbox', { name: 'Comment on the pull request' })).toBeFocused();
+	// While typing, the keys are text.
+	await page.keyboard.type('mov');
+	await expect(page.getByRole('textbox', { name: 'Comment on the pull request' })).toHaveValue(
+		'mov'
+	);
+	await expect(page.getByRole('form', { name: 'Merge pull request' })).toHaveCount(0);
+	expect(await calls(page, 'githubCheckout')).toEqual([]);
+
+	await page.keyboard.press('Escape');
+	await page.keyboard.press('Escape');
+	await page.keyboard.press('2');
+	await expect(page.getByRole('listbox', { name: 'Issues' })).toBeFocused();
+	await page.keyboard.press('Control+l');
+	await expect(page.getByRole('region', { name: 'Issue' })).toBeFocused();
+	await page.keyboard.press('x');
+	await expect(page.getByRole('status')).toHaveText('Issue closed.');
 });

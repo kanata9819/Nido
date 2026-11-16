@@ -14,6 +14,7 @@ export default function NewPullRequest({
 	action,
 	notify,
 	backRef,
+	keysRef,
 	created
 }: GitHubViewProps & { created: () => void }): React.JSX.Element {
 	const t = useI18n();
@@ -25,6 +26,7 @@ export default function NewPullRequest({
 	const titleInput = useRef<HTMLInputElement>(null);
 	useLayoutEffect(() => {
 		backRef.current = () => false;
+		keysRef.current = undefined;
 	});
 
 	// Start from the last commit's subject, unless the user has typed a title meanwhile.

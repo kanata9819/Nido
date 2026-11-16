@@ -14,8 +14,8 @@ export interface GitHubRow {
 
 /**
  * The keyboard-driven list of the GitHub page (pull requests, issues, or a pull request's
- * files). j/k and the arrows move, Ctrl+D/U and Ctrl+F/B page, Enter opens, and `keys` maps
- * further single keys, such as f for the filter, to actions.
+ * files). j/k and the arrows move, Ctrl+D/U and Ctrl+F/B page, and Enter opens. The views'
+ * other keys, such as f for the filter, work across the page (see GitHubBrowser).
  */
 export default function GitHubList({
 	rows,
@@ -25,7 +25,6 @@ export default function GitHubList({
 	setIndex,
 	listRef,
 	open,
-	keys = {},
 	empty
 }: {
 	rows: GitHubRow[];
@@ -35,7 +34,6 @@ export default function GitHubList({
 	setIndex: (index: number) => void;
 	listRef: RefObject<HTMLDivElement | null>;
 	open: () => void;
-	keys?: Record<string, () => void>;
 	empty: string;
 }): React.JSX.Element {
 	return (
@@ -51,15 +49,7 @@ export default function GitHubList({
 				if (busy) {
 					return;
 				}
-				if (handleListKey(event, { count: rows.length, index, setIndex, open })) {
-					return;
-				}
-				const action =
-					!event.ctrlKey && !event.altKey && !event.metaKey ? keys[event.key] : undefined;
-				if (action) {
-					event.preventDefault();
-					action();
-				}
+				handleListKey(event, { count: rows.length, index, setIndex, open });
 			}}
 		>
 			{rows.map((row, position) => (

@@ -16,6 +16,8 @@ export interface GitHubViewProps {
 	notify: (message: string) => void;
 	/** The view's own Esc step (closing a form or an opened item); false when it has none. */
 	backRef: { current: (() => boolean) | undefined };
+	/** The view's single-key actions, such as c to comment, wherever focus is on the page. */
+	keysRef: { current: Record<string, () => void> | undefined };
 	/** Read gh's status again, after a checkout changed the branch. */
 	refreshStatus: () => Promise<void>;
 }

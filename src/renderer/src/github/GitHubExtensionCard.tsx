@@ -54,7 +54,7 @@ export default function GitHubExtensionCard({
 				</div>
 				<p>
 					{t(
-						'Review, comment on, check out, create and merge pull requests, and work with issues, through the GitHub CLI. Open it with Space G.'
+						'Review, comment on, check out, create and merge pull requests, and work with issues, through the GitHub CLI. Open it with Space Shift+G.'
 					)}
 				</p>
 				<div className={styles.packControls}>

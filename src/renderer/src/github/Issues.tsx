@@ -28,7 +28,8 @@ export default function Issues({
 	status,
 	action,
 	notify,
-	backRef
+	backRef,
+	keysRef
 }: GitHubViewProps): React.JSX.Element {
 	const t = useI18n();
 	const { run, working } = action;
@@ -128,6 +129,16 @@ export default function Issues({
 		}
 	};
 
+	useLayoutEffect(() => {
+		keysRef.current = {
+			f: () => setFilter(filters[(filters.indexOf(filter) + 1) % filters.length]),
+			c: comment,
+			x: toggleOpen,
+			b: () => selected && void window.nido.openDocumentation(selected.url),
+			r: () => setRevision((value) => value + 1)
+		};
+	});
+
 	const rows: GitHubRow[] = issues.map((issue) => ({
 		key: String(issue.number),
 		title: issue.title,
@@ -177,13 +188,6 @@ export default function Issues({
 					setIndex={setIndex}
 					listRef={list}
 					open={() => void open()}
-					keys={{
-						f: () => setFilter(filters[(filters.indexOf(filter) + 1) % filters.length]),
-						c: comment,
-						x: toggleOpen,
-						b: () => selected && void window.nido.openDocumentation(selected.url),
-						r: () => setRevision((value) => value + 1)
-					}}
 					empty={t(loaded ? 'No issues.' : 'Loading…')}
 				/>
 				<div className={`${gitStyles.preview} ${styles.preview}`} data-git-preview>

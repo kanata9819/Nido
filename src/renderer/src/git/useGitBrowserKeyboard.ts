@@ -16,7 +16,7 @@ function focusPane(event: KeyboardEvent, dialog: Element | null): boolean {
 	const selector =
 		key === 'h'
 			? '[role="listbox"]'
-			: '[data-git-scroll="after"], [data-git-preview] > [tabindex]';
+			: '[data-git-scroll="after"], [data-git-preview] > [tabindex], [data-git-preview] [data-git-summary]';
 	dialog?.querySelector<HTMLElement>(selector)?.focus();
 	return true;
 }

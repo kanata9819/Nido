@@ -1023,7 +1023,7 @@ export const japanese: Record<string, string> = {
 	// GitHub
 	GitHub: 'GitHub',
 	'GitHub views': 'GitHubの表示',
-	'GitHub (Space G)': 'GitHub (Space G)',
+	'GitHub (Space Shift+G)': 'GitHub (Space Shift+G)',
 	'Connecting to GitHub…': 'GitHubに接続しています…',
 	'Pull requests': 'プルリクエスト',
 	Issues: 'Issue',
@@ -1158,8 +1158,8 @@ export const japanese: Record<string, string> = {
 	'Issue reopened.': 'Issueを再オープンしました。',
 	'GitHub CLI': 'GitHub CLI',
 	'GitHub Pull Requests and Issues': 'GitHub プルリクエストとIssue',
-	'Review, comment on, check out, create and merge pull requests, and work with issues, through the GitHub CLI. Open it with Space G.':
-		'GitHub CLIを使って、プルリクエストのレビュー・コメント・チェックアウト・作成・マージや、Issueの操作ができます。Space Gで開きます。',
+	'Review, comment on, check out, create and merge pull requests, and work with issues, through the GitHub CLI. Open it with Space Shift+G.':
+		'GitHub CLIを使って、プルリクエストのレビュー・コメント・チェックアウト・作成・マージや、Issueの操作ができます。Space Shift+Gで開きます。',
 	'Signed in as {user} · {repository}': '{user}としてサインイン中 · {repository}',
 	'Signed in': 'サインイン済み',
 	'Pull requests, reviews and issues': 'プルリクエスト、レビュー、Issue',

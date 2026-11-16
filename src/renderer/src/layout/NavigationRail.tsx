@@ -60,7 +60,7 @@ export default function NavigationRail({
 			{github && (
 				<button
 					aria-label={t('GitHub')}
-					title={t('GitHub (Space G)')}
+					title={t('GitHub (Space Shift+G)')}
 					disabled={!active}
 					onClick={() => showPanel('github')}
 				>

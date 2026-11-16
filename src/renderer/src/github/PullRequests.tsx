@@ -33,6 +33,7 @@ export default function PullRequests({
 	action,
 	notify,
 	backRef,
+	keysRef,
 	refreshStatus
 }: GitHubViewProps): React.JSX.Element {
 	const t = useI18n();
@@ -191,6 +192,9 @@ export default function PullRequests({
 				b: openInBrowser,
 				r: () => setRevision((value) => value + 1)
 			};
+	useLayoutEffect(() => {
+		keysRef.current = keys;
+	});
 
 	const file = opened && entry > 0 ? opened.files[entry - 1] : undefined;
 	return (
@@ -245,15 +249,17 @@ export default function PullRequests({
 					open={() => {
 						if (!opened && prs[index]) {
 							void open(prs[index].number);
-						} else if (opened && entry > 0) {
+						} else if (opened) {
+							// Enter moves into the overview or the file's diff.
 							document
 								.querySelector<HTMLElement>(
-									'[data-panel="github"] [data-git-scroll="after"]'
+									entry > 0
+										? '[data-panel="github"] [data-git-scroll="after"]'
+										: '[data-panel="github"] [data-git-summary]'
 								)
 								?.focus();
 						}
 					}}
-					keys={keys}
 					empty={t(loaded ? 'No pull requests.' : 'Loading…')}
 				/>
 				<div className={`${gitStyles.preview} ${styles.preview}`} data-git-preview>
