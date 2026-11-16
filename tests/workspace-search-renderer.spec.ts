@@ -241,3 +241,20 @@ test('Japanese search shows translated controls and regex errors within a small 
 	expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(720);
 	await page.screenshot({ path: test.info().outputPath('search-japanese.png') });
 });
+
+test('Space s opens Search in files, and the Space menu lists it', async ({ page }) => {
+	await page.goto(`${origin}?view=app`);
+	const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+	await expect(editor).toBeFocused();
+	await page.keyboard.press('Space');
+	await expect(page.getByRole('button', { name: /^s\s*Search in files$/ })).toBeVisible();
+	await page.keyboard.press('s');
+	const search = page.getByRole('dialog', { name: 'search palette', exact: true });
+	await expect(search).toBeVisible();
+	// Space s no longer saves; Ctrl+S and :w do.
+	expect(
+		await page.evaluate(
+			() => window.rendererTest.calls.filter((call) => call.method === 'save').length
+		)
+	).toBe(0);
+});
