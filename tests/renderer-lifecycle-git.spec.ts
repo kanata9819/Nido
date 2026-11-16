@@ -16,6 +16,51 @@ test.afterAll(async () => {
 	await server?.close();
 });
 
+test('Git shows remote actions and refreshes the upstream after publishing', async ({ page }) => {
+	await page.goto(`${origin}?view=git&defer=gitStatus,gitRemoteAction`);
+	const panel = page.getByRole('region', { name: 'Git changes' });
+	const refresh = panel.getByRole('button', { name: 'Refresh' });
+	const fetch = panel.getByRole('button', { name: 'Fetch all' });
+	const pull = panel.getByRole('button', { name: 'Pull' });
+	const publish = panel.getByRole('button', { name: 'Publish branch' });
+	const status = { root: '/alpha', branch: 'main', changes: [] };
+	const remote = { branch: 'main', remote: 'origin', upstream: '' };
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
+	await page.evaluate((next) => window.rendererTest.settle('gitStatus', 0, next), status);
+	await expect(refresh).toBeEnabled();
+	await expect(fetch).toHaveCount(0);
+	await expect(publish).toHaveCount(0);
+
+	await refresh.click();
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate((next) => window.rendererTest.settle('gitStatus', 0, next), {
+		...status,
+		remote
+	});
+	await expect(fetch).toBeEnabled();
+	await expect(pull).toBeDisabled();
+	await publish.click();
+	await expect(publish).toBeDisabled();
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					window.rendererTest.calls.find(({ method }) => method === 'gitRemoteAction')
+						?.args
+			)
+		)
+		.toEqual(['alpha', 'push', remote]);
+	await page.evaluate(() => window.rendererTest.settle('gitRemoteAction', 0, undefined));
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate((next) => window.rendererTest.settle('gitStatus', 0, next), {
+		...status,
+		remote: { ...remote, upstream: 'refs/heads/main' }
+	});
+	await expect(panel.getByRole('button', { name: 'Push' })).toBeEnabled();
+	await expect(pull).toBeEnabled();
+	await expect(panel.getByText('origin/main', { exact: true })).toBeVisible();
+});
+
 test('Git shortcuts use the enabled state as soon as loading finishes', async ({ page }) => {
 	await page.goto(`${origin}?view=git&defer=gitStatus`);
 	const branches = page.getByRole('button', { name: 'Branches', exact: true });

@@ -306,7 +306,16 @@ export interface GitStatus {
 	root: string;
 	branch: string;
 	changes: GitChange[];
+	remote?: GitRemoteInfo;
 }
+
+export interface GitRemoteInfo {
+	branch: string;
+	remote: string;
+	upstream: string;
+}
+
+export type GitRemoteAction = 'fetch' | 'pull' | 'push';
 
 export interface GitCommitEntry {
 	hash: string;

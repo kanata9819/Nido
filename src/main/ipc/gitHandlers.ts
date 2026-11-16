@@ -13,6 +13,8 @@ import {
 	gitCommitDiff,
 	gitBranches,
 	gitSwitch,
+	gitRemoteInfo,
+	gitRemoteAction,
 	gitRoot
 } from '../git/git';
 
@@ -78,7 +80,7 @@ export function registerGitHandlers({
 			send({ type: 'filesChanged', id: open.workspace.id });
 		}
 	}
-	handle('gitStatus', (id) => {
+	handle('gitStatus', (id, includeRemote) => {
 		const root = session(id).workspace.root;
 		let pending = statusRequests.get(root);
 		if (!pending) {
@@ -89,7 +91,12 @@ export function registerGitHandlers({
 			});
 			statusRequests.set(root, pending);
 		}
-		return pending;
+		return includeRemote === true
+			? Promise.all([pending, gitRemoteInfo(root)]).then(([status, remote]) => ({
+					...status,
+					remote
+				}))
+			: pending;
 	});
 	handle('gitHistory', (id, skip) => {
 		if (typeof skip !== 'number') {
@@ -106,11 +113,14 @@ export function registerGitHandlers({
 	});
 	handle('gitBranches', (id) => gitBranches(session(id).workspace.root));
 	/**
-	 * Run `change`, which rewrites the files of the repository of `current` (a branch switch
-	 * or a pull request checkout). Refuses while any session that has files from this
-	 * repository open has unsaved changes, then reloads those sessions' files.
+	 * Run `change`, which can rewrite the files of the repository of `current`. Refuses while
+	 * any session with files from that repository has unsaved changes, then reloads the files.
 	 */
-	async function changeBranch(current: Session, change: () => Promise<void>): Promise<void> {
+	async function changeBranch(
+		current: Session,
+		change: () => Promise<void>,
+		unsavedMessage = 'Save unsaved editor changes before switching branches.'
+	): Promise<void> {
 		const root = await gitRoot(current.workspace.root);
 		const affected: Session[] = [];
 		for (const open of sessions.values()) {
@@ -136,7 +146,7 @@ export function registerGitHandlers({
 			}
 			affected.push(open);
 			if (await open.modified()) {
-				throw new Error('Save unsaved editor changes before switching branches.');
+				throw new Error(unsavedMessage);
 			}
 		}
 		await change();
@@ -152,6 +162,26 @@ export function registerGitHandlers({
 			throw new Error('Invalid branch action.');
 		}
 		await changeBranch(current, () => gitSwitch(current.workspace.root, text(name), create));
+	});
+	handle('gitRemoteAction', (id, action, expected) => {
+		if (
+			(action !== 'fetch' && action !== 'pull' && action !== 'push') ||
+			!expected ||
+			typeof expected !== 'object' ||
+			!('branch' in expected && 'remote' in expected && 'upstream' in expected)
+		) {
+			throw new Error('Invalid Git selection.');
+		}
+		const current = session(id);
+		const target = {
+			branch: text(expected.branch),
+			remote: text(expected.remote),
+			upstream: text(expected.upstream)
+		};
+		const change = (): Promise<void> => gitRemoteAction(current.workspace.root, action, target);
+		return action === 'pull'
+			? changeBranch(current, change, 'Save unsaved editor changes before pulling.')
+			: change();
 	});
 	// `staged` chooses between the staged and the unstaged side of a file.
 	function stagedFlag(value: unknown): boolean {

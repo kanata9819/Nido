@@ -831,6 +831,18 @@ export const japanese: Record<string, string> = {
 		'ステージ済みの {count} ファイルだけをコミットします。',
 	'Keyboard shortcuts': 'キーボード操作',
 	'Commit staged': 'ステージ済みの変更をコミット',
+	'Fetch all': 'すべてフェッチ',
+	Pull: 'プル',
+	Push: 'プッシュ',
+	'Publish branch': 'ブランチを公開',
+	'Fetch complete.': 'フェッチしました。',
+	'Pull complete.': 'プルしました。',
+	'Push complete.': 'プッシュしました。',
+	'The Git branch or remote changed. Refresh and try again.':
+		'Gitブランチかリモートが変わりました。更新してから再試行してください。',
+	'Choose a branch with a remote first.': '先にリモートのあるブランチを選んでください。',
+	'Save unsaved editor changes before pulling.':
+		'プルする前にエディターの未保存の変更を保存してください。',
 	'j/k Select · s Stage · S Stage all · u Unstage · r Refresh · c Message · Esc Close':
 		'j/k：選択 · s：ステージ · S：すべてステージ · u：ステージを解除 · r：更新 · c：メッセージ · Esc：閉じる',
 	'Ctrl+H/L List / Diff · j/k Scroll diff · Ctrl+D/U Half page · Ctrl+F/B Page · g/G Top / Bottom · n/N Next / Previous change':

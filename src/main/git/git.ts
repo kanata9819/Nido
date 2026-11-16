@@ -1,6 +1,13 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { GitChange, GitStatus, GitCommitEntry, GitBranchEntry } from '../../shared/types';
+import type {
+	GitChange,
+	GitStatus,
+	GitCommitEntry,
+	GitBranchEntry,
+	GitRemoteAction,
+	GitRemoteInfo
+} from '../../shared/types';
 import { parseWslPath, wslHostPath } from '../../shared/wsl';
 import { wslArguments } from '../platform/wsl';
 
@@ -175,29 +182,94 @@ export async function gitSwitch(cwd: string, name: string, create: boolean): Pro
  * own name instead. Returns the branch's name.
  */
 export async function gitPushBranch(cwd: string, base?: string): Promise<string> {
+	const { branch, remote, upstream } = await branchDestination(cwd);
+	if (upstream && (!remote || !upstream.startsWith('refs/heads/'))) {
+		throw new Error('Invalid branch name.');
+	}
+	await pushBranch(cwd, {
+		branch,
+		remote: remote || 'origin',
+		upstream: upstream === `refs/heads/${base}` ? '' : upstream
+	});
+	return branch;
+}
+
+async function branchDestination(cwd: string): Promise<GitRemoteInfo> {
 	const branch = (await git(cwd, ['branch', '--show-current'])).trim();
+	if (!branch) {
+		return { branch: '', remote: '', upstream: '' };
+	}
+	const record = (
+		await git(cwd, [
+			'for-each-ref',
+			'--format=%(upstream:remotename)%00%(upstream:remoteref)',
+			`refs/heads/${branch}`
+		])
+	).trim();
+	const [remote = '', upstream = ''] = record.split('\0');
+	return { branch: record ? branch : '', remote, upstream };
+}
+
+async function pushBranch(cwd: string, { branch, remote, upstream }: GitRemoteInfo): Promise<void> {
 	if (!branch) {
 		throw new Error('Check out a branch first.');
 	}
 	const ref = `refs/heads/${branch}`;
-	const [remote, upstream] = (
-		await git(cwd, [
-			'for-each-ref',
-			'--format=%(upstream:remotename)%00%(upstream:remoteref)',
-			ref
-		])
-	)
-		.trim()
-		.split('\0');
-	if (upstream && (!remote || !upstream.startsWith('refs/heads/'))) {
-		throw new Error('Invalid branch name.');
-	}
-	const destination =
-		upstream && upstream !== `refs/heads/${base}`
-			? ['--', remote, `${ref}:${upstream}`]
-			: ['--set-upstream', '--', remote || 'origin', `${ref}:${ref}`];
+	const destination = upstream
+		? ['--', remote, `${ref}:${upstream}`]
+		: ['--set-upstream', '--', remote, `${ref}:${ref}`];
 	await git(cwd, ['push', '--no-follow-tags', ...destination]);
-	return branch;
+}
+
+/** The remote controls for this working tree. An ambiguous publishing destination stays unset. */
+export async function gitRemoteInfo(cwd: string): Promise<GitRemoteInfo | undefined> {
+	const remotes = (await git(cwd, ['remote'])).trim().split(/\r?\n/).filter(Boolean);
+	if (!remotes.length) {
+		return undefined;
+	}
+	const target = await branchDestination(cwd);
+	const remote =
+		target.remote ||
+		(remotes.includes('origin') ? 'origin' : remotes.length === 1 ? remotes[0] : '');
+	const usable = !target.upstream || (target.remote && target.upstream.startsWith('refs/heads/'));
+	return { ...target, remote: usable && remotes.includes(remote) ? remote : '' };
+}
+
+/** A remote action from the Git panel. Resolve the displayed destination again before using it. */
+export async function gitRemoteAction(
+	cwd: string,
+	action: GitRemoteAction,
+	expected: GitRemoteInfo
+): Promise<void> {
+	if (action === 'fetch') {
+		await git(cwd, ['fetch', '--all']);
+		return;
+	}
+	const target = await gitRemoteInfo(cwd);
+	if (
+		!target ||
+		target.branch !== expected.branch ||
+		target.remote !== expected.remote ||
+		target.upstream !== expected.upstream
+	) {
+		throw new Error('The Git branch or remote changed. Refresh and try again.');
+	}
+	if (!target.branch || !target.remote || (action === 'pull' && !target.upstream)) {
+		throw new Error('Choose a branch with a remote first.');
+	}
+	if (action === 'push') {
+		await pushBranch(cwd, target);
+	} else {
+		await git(cwd, [
+			'pull',
+			'--ff-only',
+			'--no-rebase',
+			'--no-autostash',
+			'--',
+			target.remote,
+			target.upstream
+		]);
+	}
 }
 
 /**
