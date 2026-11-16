@@ -166,17 +166,7 @@ export class SessionEvents {
 				break;
 			}
 			case 'nido:bracket_guides': {
-				if (args[1] === true && !this.isBatchingScroll) {
-					this.sendToRenderer({
-						type: 'redraw',
-						id: this.workspaceId,
-						events: [
-							['nido_bracket_guides', [args[0]]],
-							['flush', []]
-						]
-					});
-					break;
-				}
+				// CursorMoved can see the next viewport before Neovim sends its grid rows.
 				this.pendingRedraw.push(['nido_bracket_guides', args]);
 				break;
 			}
