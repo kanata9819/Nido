@@ -244,7 +244,13 @@ test('the GitHub extension is off until enabled, then opens from the activity ba
 
 	await rail.getByRole('button', { name: 'GitHub' }).click();
 	const dialog = page.getByRole('dialog', { name: 'github palette' });
-	await expect(dialog.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	const list = dialog.getByRole('listbox', { name: 'Pull requests' });
+	await expect(list).toBeFocused();
+	// Esc steps back out of an opened pull request before it closes the page.
+	await page.keyboard.press('Enter');
+	await expect(dialog.getByRole('listbox', { name: 'Pull request files' })).toBeFocused();
+	await page.keyboard.press('Escape');
+	await expect(list).toBeFocused();
 	await page.keyboard.press('Escape');
 	await expect(dialog).toHaveCount(0);
 

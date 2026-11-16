@@ -53,7 +53,8 @@ export function handleEscape(context: ShortcutContext, shortcut: Shortcut): bool
 	if (event.key !== 'Escape') {
 		return false;
 	}
-	if (panel === 'git') {
+	// The Git browser and the GitHub page handle Escape themselves, stepping back first.
+	if (panel === 'git' || panel === 'github') {
 		return true;
 	}
 	if (terminalFocused && !panel) {

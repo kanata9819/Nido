@@ -138,7 +138,7 @@ export default function Issues({
 				<IssueState state={issue.state} />
 				<span>{issue.author}</span>
 				{issue.comments > 0 && (
-					<span>{t('{count} comments', { count: issue.comments })}</span>
+					<span>{t('Comments: {count}', { count: issue.comments })}</span>
 				)}
 			</>
 		)

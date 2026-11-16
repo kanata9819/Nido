@@ -1123,7 +1123,7 @@ export const japanese: Record<string, string> = {
 	'Reply to the thread': 'スレッドに返信',
 	'Issues of the repository': 'リポジトリのIssue',
 	'No issues.': 'Issueはありません。',
-	'{count} comments': 'コメント{count}件',
+	'Comments: {count}': 'コメント：{count}',
 	Issue: 'Issue',
 	'ISSUE #{number}': 'ISSUE #{number}',
 	'Opened by {author}': '作成者：{author}',
