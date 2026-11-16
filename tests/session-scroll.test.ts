@@ -27,6 +27,7 @@ test('gutter numbers and current-line colors stay based on the edit anchor durin
 		await session.input('80Gzz');
 		const checkGutter = (anchor: number, relative: boolean): void => {
 			let checked = 0;
+			const ends = new Set<number>();
 			for (const row of grid.cells) {
 				const text = row.map((cell) => cell.text).join('');
 				const match = text.match(/^\s*(\d+)\s+line (\d+)\s*$/);
@@ -38,6 +39,8 @@ test('gutter numbers and current-line colors stay based on the edit anchor durin
 					`gutter for line ${line}`
 				);
 				const first = text.indexOf(match[1]);
+				// Every number ends in the same column, the cursor line's included.
+				ends.add(first + match[1].length);
 				for (const cell of row.slice(first, first + match[1].length)) {
 					assert.equal(
 						grid.highlights.get(cell.highlight)?.foreground,
@@ -48,7 +51,12 @@ test('gutter numbers and current-line colors stay based on the edit anchor durin
 				checked++;
 			}
 			assert.ok(checked > 10);
+			assert.equal(ends.size, 1, `line numbers end in columns ${[...ends].join(', ')}`);
 		};
+		const numberColumn = await session.client.request('nvim_exec_lua', [
+			"return require('nido_scroll').number_column",
+			[]
+		]);
 		for (const relative of [true, false, true]) {
 			await session.setRelativeLineNumbers(relative);
 			await new Promise((done) => setTimeout(done, 30));
@@ -69,12 +77,12 @@ test('gutter numbers and current-line colors stay based on the edit anchor durin
 		await session.input('j');
 		await session.client.request('nvim_eval', ['1']);
 		assert.equal(await session.client.request('nvim_eval', ["line('.')"]), 81);
-		assert.equal(await session.client.request('nvim_eval', ['&statuscolumn']), '');
+		assert.equal(await session.client.request('nvim_eval', ['&statuscolumn']), numberColumn);
 		await new Promise((done) => setTimeout(done, 30));
 		checkGutter(81, true);
 		await session.scroll(30, false, true);
 		await session.scroll(1, true, true);
-		assert.equal(await session.client.request('nvim_eval', ['&statuscolumn']), '');
+		assert.equal(await session.client.request('nvim_eval', ['&statuscolumn']), numberColumn);
 	} finally {
 		await session?.stop();
 		await rm(root, { recursive: true, force: true });

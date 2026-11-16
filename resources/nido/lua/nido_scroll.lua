@@ -78,11 +78,16 @@ function M.screen_cursor()
   return { row = screen.row == 0 and -1 or screen.row - 1, column = screen.col - 1 }
 end
 
+--- The 'statuscolumn' of editor windows: signs, folds, then the line number, right-aligned.
+--- With 'number' and 'relativenumber', Vim's own column (and %l) left-aligns the cursor
+--- line's number, which then jumped to the right as soon as detached scrolling drew it.
+M.number_column = "%s%C%=%{v:virtnum ? '' : (&rnu && (v:relnum || !&nu) ? v:relnum : v:lnum)} "
+
 --- The 'statuscolumn' while detached: line numbers stay relative to the anchored cursor.
 function M.statuscolumn()
   local pos = M.cursor()
   if not pos or api.nvim_get_current_win() ~= anchor.window then
-    return '%s%C%=%l '
+    return M.number_column
   end
   -- Neovim moves its internal cursor to keep it visible; relative numbers use the edit anchor.
   if vim.v.virtnum ~= 0 then
