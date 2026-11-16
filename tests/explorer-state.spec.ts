@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { electron } from './helpers/electron';
+import { launchEnv } from './helpers/launch-env';
 
 async function openWorkspace(page: Page, path: string): Promise<void> {
 	await page.keyboard.press('Control+Shift+n');
@@ -31,7 +32,7 @@ test('Explorer restores each project expansion, selection and viewport after hid
 			writeFile(join(project, `file-${String(index).padStart(2, '0')}.txt`), 'sample\n')
 		)
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const options = { args: ['.', `--user-data-dir=${join(root, 'profile')}`], env };
 	let running: Awaited<ReturnType<typeof electron.launch>> | undefined;

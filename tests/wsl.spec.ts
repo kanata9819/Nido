@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { electron } from './helpers/electron';
 import { wslArguments } from '../src/main/platform/wsl';
 import { parseWslPath, wslHostPath } from '../src/shared/wsl';
+import { launchEnv } from './helpers/launch-env';
 
 test('connect to WSL from the picker, edit with the keyboard and restore after restart', async () => {
 	const distro = process.env.NIDO_TEST_WSL_DISTRO;
@@ -24,7 +25,7 @@ test('connect to WSL from the picker, edit with the keyboard and restore after r
 	const linuxRoot = `${fixture}/日本語 Project`;
 	const root = wslHostPath(distro!, linuxRoot);
 	const profile = await mkdtemp(join(tmpdir(), 'nido-wsl-ui-profile-'));
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const options = { args: ['.', `--user-data-dir=${profile}`], env };
 	let running: Awaited<ReturnType<typeof electron.launch>> | undefined;

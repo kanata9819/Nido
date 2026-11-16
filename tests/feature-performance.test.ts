@@ -113,10 +113,10 @@ test('worker search returns byte columns without splitting matching files again 
 	try {
 		await writeFile(join(root, 'match.txt'), text);
 		const files = new SessionFiles(root, {} as Session['client']);
-		String.prototype.split = function (...args) {
+		String.prototype.split = function (this: string, ...args: unknown[]) {
 			if (String(this) === text) mainSplits++;
-			return split.apply(this, args);
-		};
+			return Reflect.apply(split, this, args);
+		} as typeof split;
 		const result = await files.searchText('needle', defaultSearchOptions);
 		assert.deepEqual(result.matches, [
 			{ path: 'match.txt', line: 10001, column: 16, text: '日本語 🦊 needle' }

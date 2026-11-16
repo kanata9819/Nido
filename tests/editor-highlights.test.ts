@@ -952,7 +952,7 @@ test('cursor width follows wide cells and interpolates in both directions and du
 		grid.cursor.column = 0;
 		assert.equal(update(350, false), 1);
 		grid.cursor.column = 1;
-		media.matches = true;
+		(media as { matches: boolean }).matches = true;
 		assert.equal(update(360), 2, 'Reduced motion skips interpolation');
 	} finally {
 		if (original) Object.defineProperty(globalThis, 'document', original);

@@ -4,6 +4,7 @@ import { readSavedFile } from './helpers/files';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { launchEnv } from './helpers/launch-env';
 
 test('clipboard reads keep pasted text before following typing and saving', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-clipboard-order-'));
@@ -19,7 +20,7 @@ test('clipboard reads keep pasted text before following typing and saving', asyn
 			workspaces: [{ root, current: file, files: [{ path: file, line: 1, column: 0 }] }]
 		})
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
 	try {
@@ -65,7 +66,7 @@ test('rapid terminal toggles preserve editing and saving and reuse the started s
 			workspaces: [{ root, current: file, files: [{ path: file, line: 1, column: 0 }] }]
 		})
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
 	try {

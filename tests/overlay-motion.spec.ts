@@ -386,8 +386,14 @@ test('hover, diagnostics, messages and manually dismissed notifications share op
 	await openApp(page);
 	const scenarios: { open: NidoEvent; close: NidoEvent; selector: string }[] = [
 		{
-			open: { type: 'hover', id: 'alpha', markdown: 'A helpful type', codeBlocks: [] },
-			close: { type: 'hover', id: 'alpha', markdown: '', codeBlocks: [] },
+			open: {
+				type: 'hover',
+				id: 'alpha',
+				markdown: 'A helpful type',
+				filetype: '',
+				codeBlocks: []
+			},
+			close: { type: 'hover', id: 'alpha', markdown: '', filetype: '', codeBlocks: [] },
 			selector: '[data-type-information]'
 		},
 		{
@@ -401,7 +407,9 @@ test('hover, diagnostics, messages and manually dismissed notifications share op
 						line: 1,
 						column: 1,
 						severity: 1,
-						message: 'A diagnostic'
+						message: 'A diagnostic',
+						source: '',
+						code: ''
 					}
 				]
 			},

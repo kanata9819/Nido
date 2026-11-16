@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.web.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "types": ["node"]
+  },
+  "include": [
+    "../src/renderer/src/env.d.ts",
+    "../src/preload/*.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    "../playwright*.config.ts"
+  ]
+}

@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { Updates, type UpdateBackend } from '../src/main/platform/updater';
 import type { UpdateState } from '../src/shared/types';
 
-class Backend extends EventEmitter implements UpdateBackend {
+class Backend extends EventEmitter {
 	autoDownload = true;
 	autoInstallOnAppQuit = true;
 	allowPrerelease = true;
@@ -46,7 +46,8 @@ function fixture(enabled = true): {
 	let permit = false;
 	let prepared = 0;
 	let recovered = 0;
-	const updates = new Updates(backend, {
+	// EventEmitter's on() returns the fake rather than an AppUpdater; the rest matches.
+	const updates = new Updates(backend as unknown as UpdateBackend, {
 		currentVersion: '0.2.0',
 		enabled,
 		publish: (state) => states.push(state),

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { chooseWorkspace } from './helpers/electron-shared';
+import { launchEnv } from './helpers/launch-env';
 
 test('Git changes can be reviewed, staged and committed with the keyboard', async () => {
 	const testInfo = test.info();
@@ -26,7 +27,7 @@ test('Git changes can be reviewed, staged and committed with the keyboard', asyn
 				''
 			)
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
 	let diagnosticPage: Page | undefined;
@@ -390,7 +391,7 @@ test('stage all keeps HEAD gutter marks until commit and preserves unsaved edits
 	await writeFile(join(workspace, 'main.txt'), 'changed\n');
 	await writeFile(join(workspace, 'new.txt'), 'new\n');
 	await rm(join(workspace, 'deleted.txt'));
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],

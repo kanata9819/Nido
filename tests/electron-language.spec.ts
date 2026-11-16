@@ -6,6 +6,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chooseWorkspace } from './helpers/electron-shared';
+import { launchEnv } from './helpers/launch-env';
 
 test('Rust Run and Debug work from shortcuts and the command menu without CodeLens rows', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-runnable-ui-'));
@@ -21,7 +22,7 @@ test('Rust Run and Debug work from shortcuts and the command menu without CodeLe
 		'fn main() {\n    println!("keyboard-run"); std::fs::write("main-ran", "yes").unwrap();\n}\n#[test]\nfn keyboard_test() { println!("keyboard-test"); }\n' +
 			Array.from({ length: 4 }, (_, index) => `#[test]\nfn extra_${index}() {}\n`).join('')
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],
@@ -41,7 +42,9 @@ test('Rust Run and Debug work from shortcuts and the command menu without CodeLe
 		await expect(canvas).toHaveAttribute('aria-description', /fn main/);
 		const readyFile = join(root, 'runnables-ready');
 		const id = await page.evaluate(
-			() => (window as Window & { editorDiagnostics: { id: string } }).editorDiagnostics.id
+			() =>
+				(window as unknown as Window & { editorDiagnostics: { id: string } })
+					.editorDiagnostics.id
 		);
 		await page.evaluate(({ id, keys }) => window.nido.input(id, keys), {
 			id,
@@ -86,7 +89,7 @@ end; ready()<CR>`.replaceAll('\n', ' ')
 			const draw = ctx.drawImage.bind(ctx);
 			ctx.drawImage = ((...args: Parameters<typeof draw>) => {
 				draw(...args);
-				if (args.length !== 5) return;
+				if ((args as unknown[]).length !== 5) return;
 				for (const { value, x, y: localY, font } of pointsByImage.get(
 					args[0] as HTMLCanvasElement
 				) || []) {
@@ -126,7 +129,7 @@ end; ready()<CR>`.replaceAll('\n', ' ')
 		await canvas.click({ position: { x: testFunction.x + 2, y: testFunction.y - 4 } });
 		await expect(page.getByText('Ln 5, Col 1', { exact: true })).toBeVisible();
 		await expect
-			.poll(() => input.evaluate((node) => node.offsetTop))
+			.poll(() => input.evaluate((node) => (node as HTMLElement).offsetTop))
 			.toBeCloseTo(testFunction.y - (lineHeight + main.font) / 2 + 3, 0);
 		await expect(input).toBeFocused();
 		await page.keyboard.type('gg');
@@ -181,7 +184,7 @@ for (const animations of [true, false]) {
 		const workspace = join(root, 'workspace');
 		await mkdir(workspace);
 		await writeFile(join(workspace, 'notes.txt'), 'hello\n');
-		const env = { ...process.env };
+		const env = launchEnv();
 		delete env.ELECTRON_RUN_AS_NODE;
 		const running = await electron.launch({
 			args: ['.', `--user-data-dir=${join(root, 'profile')}`],
@@ -293,7 +296,7 @@ test('Ctrl star and hash searches show readable matches, counts and controls', a
 	const workspace = join(root, 'workspace');
 	await mkdir(workspace);
 	await writeFile(join(workspace, 'words.txt'), 'alpha beta alpha\nalpha\n');
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],
@@ -351,7 +354,7 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
 		join(workspace, 'main.ts'),
 		'const amount = 1;\nconst getOldUser = 1;\nconst getUserName = 1;\nconst getUser = 1;\n'
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],
@@ -396,7 +399,7 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
 			await expect(host.getByLabel('3 warnings', { exact: true })).toBeVisible();
 		}
 		await page.evaluate(() => {
-			const state = window as Window & { completionLatency: Promise<number> };
+			const state = window as unknown as Window & { completionLatency: Promise<number> };
 			state.completionLatency = new Promise((resolve) => {
 				let start = 0;
 				const onKey = (event: KeyboardEvent): void => {
@@ -416,7 +419,9 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
 		const menu = page.getByRole('listbox', { name: 'Code completion' });
 		await expect(menu).toBeVisible({ timeout: 15000 });
 		const completionMs = await page.evaluate(
-			() => (window as Window & { completionLatency: Promise<number> }).completionLatency
+			() =>
+				(window as unknown as Window & { completionLatency: Promise<number> })
+					.completionLatency
 		);
 		console.log(`Automatic completion: ${completionMs.toFixed(1)} ms`);
 		await expect(menu.getByRole('option').first()).toContainText('amount');
@@ -424,15 +429,18 @@ test('completion opens on typing and Ctrl Space, accepts with Tab, and files sho
 			() => document.documentElement.dataset.completionSession!
 		);
 		await expect(canvas).toHaveAttribute('aria-description', /\bam[ \t]+(?:ERROR[^\n]*)?\n/);
-		const inputTop = await input.evaluate((node) => node.offsetTop);
+		const inputTop = await input.evaluate((node) => (node as HTMLElement).offsetTop);
 		const menuTop = await menu.evaluate((node) => node.parentElement!.offsetTop);
 		await page.evaluate(({ id, keys }) => window.nido.input(id, keys), {
 			id: sessionId,
 			keys: "<Cmd>lua vim.api.nvim_buf_set_extmark(0, vim.api.nvim_create_namespace('completion-lens-test'), 1, 0, {virt_lines={{{'Run Tests', 'NidoCodeLens'}}}, virt_lines_above=true})<CR>"
 		});
 		await expect(canvas).toHaveAttribute('aria-description', /Run Tests/);
-		await expect.poll(() => input.evaluate((node) => node.offsetTop)).toBeGreaterThan(inputTop);
-		const lensHeight = (await input.evaluate((node) => node.offsetTop)) - inputTop;
+		await expect
+			.poll(() => input.evaluate((node) => (node as HTMLElement).offsetTop))
+			.toBeGreaterThan(inputTop);
+		const lensHeight =
+			(await input.evaluate((node) => (node as HTMLElement).offsetTop)) - inputTop;
 		await expect
 			.poll(() => menu.evaluate((node) => node.parentElement!.offsetTop))
 			.toBe(menuTop + lensHeight);
@@ -560,7 +568,7 @@ test('Markdown preview renders unsaved edits and supports keyboard scrolling and
 		'# Preview\n\n**Bold** and *italic*.\n\n| Name | Value |\n| --- | --- |\n| Nido | 42 |\n\n```ts\nconst value = 42;\n```\n\n- [x] Done\n\n[Unsafe](javascript:alert(1))\n<script>window.previewUnsafe = true</script>\n\n' +
 		Array.from({ length: 50 }, (_, index) => `Paragraph ${index + 1}.\n\n`).join('');
 	await writeFile(join(workspace, 'preview.md'), source);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],
@@ -631,7 +639,7 @@ test('diagnostic jumps show native cards with severity, keyboard navigation and 
 	await mkdir(workspace);
 	const source = 'fn main() {\n    let byte = 42u8;\n    let text = String::from(byte);\n}\n';
 	await writeFile(join(workspace, 'main.rs'), source);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],
@@ -790,7 +798,7 @@ test('type information is a selectable Nido card with keyboard scrolling and dis
 			''
 		].join('\n')
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],
@@ -931,7 +939,7 @@ test('Problems can be selected, filtered, opened and cleared with the keyboard',
 		join(root, 'sample.txt'),
 		'first line\nsecond line\nthird line\nfourth line\nfifth line\n'
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const executablePath = process.env.NIDO_PACKAGED_EXE;
 	const running = await electron.launch({
@@ -988,7 +996,7 @@ test('references stay accessible after jumping and can be closed with the keyboa
 	test.setTimeout(120000);
 	const testInfo = test.info();
 	const root = await mkdtemp(join(tmpdir(), 'nido-references-'));
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
 	let diagnosticPage: Page | undefined;
@@ -1036,8 +1044,8 @@ test('references stay accessible after jumping and can be closed with the keyboa
 		await expect(async () => {
 			const before = await page.evaluate(
 				() =>
-					(window as Window & { referenceState: { version: number } }).referenceState
-						.version
+					(window as unknown as Window & { referenceState: { version: number } })
+						.referenceState.version
 			);
 			// Ctrl+K requests hover when the editor is already focused.
 			await page.keyboard.press('Control+l');
@@ -1047,8 +1055,8 @@ test('references stay accessible after jumping and can be closed with the keyboa
 				.poll(() =>
 					page.evaluate(() =>
 						window.nido.inputMode(
-							(window as Window & { referenceState: { id: string } }).referenceState
-								.id
+							(window as unknown as Window & { referenceState: { id: string } })
+								.referenceState.id
 						)
 					)
 				)
@@ -1057,15 +1065,15 @@ test('references stay accessible after jumping and can be closed with the keyboa
 				.poll(() =>
 					page.evaluate(
 						() =>
-							(window as Window & { referenceState: { version: number } })
+							(window as unknown as Window & { referenceState: { version: number } })
 								.referenceState.version
 					)
 				)
 				.toBeGreaterThan(before);
 			const version = await page.evaluate(
 				() =>
-					(window as Window & { referenceState: { version: number } }).referenceState
-						.version
+					(window as unknown as Window & { referenceState: { version: number } })
+						.referenceState.version
 			);
 			const results = page.getByRole('listbox', { name: 'Reference results' });
 			await expect(results).toHaveAttribute('data-reference-version', String(version));
@@ -1135,7 +1143,7 @@ test('references stay accessible after jumping and can be closed with the keyboa
 test('Rust debugger keyboard controls stop, inspect and step in the packaged app', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-debug-ui-'));
 	let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	try {
 		await mkdir(join(root, 'src'));

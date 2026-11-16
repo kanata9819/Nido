@@ -3,9 +3,12 @@ import type { ViteDevServer } from 'vite';
 import { harnessWarmupTimeout, startHarnessServer } from './helpers/harness-server';
 import { viteFsUrl } from './helpers/vite-fs-url';
 import type { Grid as EditorGrid } from '../src/renderer/src/grid/grid';
+import type { Redraw } from '../src/shared/types';
 import type { FrameMotion } from '../src/renderer/src/editor/editorMotion';
 import type {} from './renderer/harness';
 import { requireWebGLCorrection } from './helpers/row-image-probe';
+
+type RedrawEvent = Redraw[number];
 
 let server: ViteDevServer;
 let origin: string;
@@ -40,7 +43,7 @@ test('wrapped row redraws retain the bitmaps of unchanged shifted text', async (
 					);
 				const setup = [
 					['grid_resize', [1, 64, 9]],
-					...Array.from({ length: 8 }, (_, row) => [
+					...Array.from({ length: 8 }, (_, row): RedrawEvent => [
 						'grid_line',
 						[1, row, 0, cells(row)]
 					]),
@@ -68,7 +71,7 @@ test('wrapped row redraws retain the bitmaps of unchanged shifted text', async (
 						first += direction;
 						grid.apply([
 							['nido_scroll', [1, 0, 8, 0, 64, direction, 0]],
-							...Array.from({ length: 8 }, (_, row) => [
+							...Array.from({ length: 8 }, (_, row): RedrawEvent => [
 								'grid_line',
 								[1, row, 0, cells(first + row)]
 							]),
@@ -82,7 +85,7 @@ test('wrapped row redraws retain the bitmaps of unchanged shifted text', async (
 						reference.pixelScrollEnabled = true;
 						reference.apply([
 							['grid_resize', [1, 64, 9]],
-							...Array.from({ length: 8 }, (_, row) => [
+							...Array.from({ length: 8 }, (_, row): RedrawEvent => [
 								'grid_line',
 								[1, row, 0, cells(first + row)]
 							]),
@@ -142,7 +145,7 @@ for (const scale of [1, 1.25, 1.5]) {
 								'hl_attr_define',
 								[2, { background: 0x204060 }, {}, [{ hi_name: 'NidoCodeLens' }]]
 							],
-							...Array.from({ length: rows - 1 }, (_, row) => [
+							...Array.from({ length: rows - 1 }, (_, row): RedrawEvent => [
 								'grid_line',
 								[1, row, 0, [[' ', 1, 20]]]
 							]),
@@ -199,7 +202,7 @@ test('editor allocates full-height document rows plus command and scroll oversca
 	await expect
 		.poll(() =>
 			canvas.evaluate((element) => {
-				const height = element.height / devicePixelRatio;
+				const height = (element as HTMLCanvasElement).height / devicePixelRatio;
 				const call = window.rendererTest?.calls
 					.filter(({ method }) => method === 'attach' || method === 'resize')
 					.at(-1);
@@ -229,7 +232,10 @@ test('prefetch strips preserve visible row bitmaps and repaint actual content ch
 		const setup = [
 			['grid_resize', [1, 60, 8]],
 			['hl_attr_define', [1, { foreground: 0x60a0ff }, {}, []]],
-			...Array.from({ length: 7 }, (_, row) => ['grid_line', [1, row, 0, cells(row, row)]]),
+			...Array.from({ length: 7 }, (_, row): RedrawEvent => [
+				'grid_line',
+				[1, row, 0, cells(row, row)]
+			]),
 			['flush']
 		];
 		grid.apply(setup);
@@ -254,13 +260,16 @@ test('prefetch strips preserve visible row bitmaps and repaint actual content ch
 		const roundTrip = (direction: number): unknown[][] => [
 			['nido_scroll', [1, 0, 7, 0, 60, direction, 0]],
 			['grid_scroll', [1, 0, 7, 0, 60, direction, 0]],
-			...Array.from({ length: 7 }, (_, row) => [
+			...Array.from({ length: 7 }, (_, row): RedrawEvent => [
 				'grid_line',
 				[1, row, 0, cells(row + direction, row)]
 			]),
 			['nido_scroll', [1, 0, 7, 0, 60, -direction, 0]],
 			['grid_scroll', [1, 0, 7, 0, 60, -direction, 0]],
-			...Array.from({ length: 7 }, (_, row) => ['grid_line', [1, row, 0, cells(row, row)]]),
+			...Array.from({ length: 7 }, (_, row): RedrawEvent => [
+				'grid_line',
+				[1, row, 0, cells(row, row)]
+			]),
 			['nido_scroll_cache', [false, false, false, true]]
 		];
 		try {
@@ -390,7 +399,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 							value.backgroundOpacity = opacity;
 							value.apply([
 								['grid_resize', [1, 80, 40]],
-								...Array.from({ length: 40 }, (_, row) => [
+								...Array.from({ length: 40 }, (_, row): RedrawEvent => [
 									'grid_line',
 									[
 										1,
@@ -522,7 +531,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 									grid.cursor = { row: 2, column: 5 };
 									grid.apply([
 										['grid_resize', [1, 32, 8]],
-										...Array.from({ length: 7 }, (_, row) => [
+										...Array.from({ length: 7 }, (_, row): RedrawEvent => [
 											'grid_line',
 											[
 												1,
@@ -670,7 +679,7 @@ test('edits and decoration row shifts paint their final positions without a scro
 		const original = Grid.prototype.draw;
 		const probe = { grid: undefined as EditorGrid | undefined };
 		let arguments_: Parameters<EditorGrid['draw']>;
-		Grid.prototype.draw = function (...args) {
+		Grid.prototype.draw = function (...args: Parameters<EditorGrid['draw']>) {
 			probe.grid = this;
 			arguments_ = args;
 			return original.apply(this, args);
@@ -698,7 +707,7 @@ test('edits and decoration row shifts paint their final positions without a scro
 			id: 'alpha',
 			events: [
 				['grid_resize', [1, 60, 8]],
-				...Array.from({ length: 7 }, (_, row) => [
+				...Array.from({ length: 7 }, (_, row): RedrawEvent => [
 					'grid_line',
 					[1, row, 0, Array.from(`row ${row} 日本語 text`, (text) => [text, 0])]
 				]),
@@ -726,7 +735,7 @@ test('edits and decoration row shifts paint their final positions without a scro
 					['grid_scroll', scroll],
 					['grid_line', [1, rows > 0 ? 6 : 2, 0, [['new row', 0]]]],
 					['flush']
-				]
+				] as Redraw
 			});
 		}, change);
 		for (const elapsed of [16, 32, 96]) {
@@ -1031,7 +1040,7 @@ test('new highlight IDs preserve cached rows while existing highlight changes re
 		grid.apply([
 			['grid_resize', [1, 80, 5]],
 			['hl_attr_define', [1, { foreground: 0x60a0ff }, {}, []]],
-			...Array.from({ length: 4 }, (_, row) => [
+			...Array.from({ length: 4 }, (_, row): RedrawEvent => [
 				'grid_line',
 				[1, row, 0, Array.from(`const value${row} = example(42);`, (text) => [text, 1])]
 			]),
@@ -1120,7 +1129,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 								['hl_attr_define', [2, { background: 0x24364a }, {}, []]],
 								['hl_attr_define', [3, { background: 0x304020 }, {}, []]],
 								['hl_attr_define', [4, { italic: true }, {}, []]],
-								...Array.from({ length: 7 }, (_, row) => [
+								...Array.from({ length: 7 }, (_, row): RedrawEvent => [
 									'grid_line',
 									[1, row, 0, cells(row)]
 								]),
@@ -1196,7 +1205,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 										value.apply([
 											['nido_scroll', [1, 0, 7, 0, 32, 1, 0]],
 											['grid_scroll', [1, 0, 7, 0, 32, 1, 0]],
-											...Array.from({ length: 7 }, (_, row) => [
+											...Array.from({ length: 7 }, (_, row): RedrawEvent => [
 												'grid_line',
 												[1, row, 0, [[String(row), 0]]]
 											]),
@@ -1461,7 +1470,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 				grid.cursor = { row: 17, column: 10 };
 				grid.apply([
 					['grid_resize', [1, 140, 40]],
-					...Array.from({ length: 39 }, (_, row) => [
+					...Array.from({ length: 39 }, (_, row): RedrawEvent => [
 						'grid_line',
 						[
 							1,
@@ -1551,7 +1560,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 									])
 								]
 							],
-							...Array.from({ length: 39 }, (_, row) => [
+							...Array.from({ length: 39 }, (_, row): RedrawEvent => [
 								'grid_line',
 								[
 									1,
@@ -1666,7 +1675,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 						grid.apply([
 							['grid_resize', [1, 140, 40]],
 							['hl_attr_define', [1, { foreground: 0x70b5ff }, {}, []]],
-							...Array.from({ length: 39 }, (_, row) => [
+							...Array.from({ length: 39 }, (_, row): RedrawEvent => [
 								'grid_line',
 								[
 									1,
@@ -1907,7 +1916,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 							grid.apply([
 								['nido_scroll', [1, 0, 39, 0, 140, direction, 0]],
 								['grid_scroll', [1, 0, 39, 0, 140, direction, 0]],
-								...Array.from({ length: 39 }, (_, row) => [
+								...Array.from({ length: 39 }, (_, row): RedrawEvent => [
 									'grid_line',
 									[
 										1,
@@ -1993,7 +2002,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 									'hl_attr_define',
 									[2, { foreground: 0x99aacc }, {}, [{ hi_name: 'NidoCodeLens' }]]
 								],
-								...Array.from({ length: 40 }, (_, row) => [
+								...Array.from({ length: 40 }, (_, row): RedrawEvent => [
 									'grid_line',
 									[
 										1,

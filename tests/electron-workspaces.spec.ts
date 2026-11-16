@@ -8,10 +8,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { chooseWorkspace } from './helpers/electron-shared';
+import { launchEnv } from './helpers/launch-env';
 
 test('Ctrl+S preserves inline diagnostics, file tabs and Git badges throughout saving', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-save-display-'));
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	await mkdir(join(root, 'src'));
 	await writeFile(join(root, '.gitignore'), '/target/\n/profile/\n');
@@ -48,7 +49,9 @@ test('Ctrl+S preserves inline diagnostics, file tabs and Git badges throughout s
 		await chooseWorkspace(page, root);
 		await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
 		const id = await page.evaluate(
-			() => (window as Window & { editorDiagnostics: { id: string } }).editorDiagnostics.id
+			() =>
+				(window as unknown as Window & { editorDiagnostics: { id: string } })
+					.editorDiagnostics.id
 		);
 		await page.evaluate(async (id) => {
 			await window.nido.openFile(id, 'Cargo.toml');
@@ -103,8 +106,9 @@ test('Ctrl+S preserves inline diagnostics, file tabs and Git badges throughout s
 				});
 				if (samples.length < 240) requestAnimationFrame(observe);
 			};
-			(window as Window & { saveDisplaySamples?: typeof samples }).saveDisplaySamples =
-				samples;
+			(
+				window as unknown as Window & { saveDisplaySamples?: typeof samples }
+			).saveDisplaySamples = samples;
 			requestAnimationFrame(observe);
 		});
 		for (let i = 0; i < 3; i++) {
@@ -118,7 +122,7 @@ test('Ctrl+S preserves inline diagnostics, file tabs and Git badges throughout s
 		const samples = await page.evaluate(
 			() =>
 				(
-					window as Window & {
+					window as unknown as Window & {
 						saveDisplaySamples: {
 							tabs: string[];
 							selected: string | null;
@@ -160,7 +164,7 @@ test('favorite workspaces support keyboard access, existing tabs, restart and mi
 	await mkdir(alpha);
 	await mkdir(beta);
 	const profile = join(root, 'profile');
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	let running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
 	try {
@@ -278,7 +282,7 @@ test('window commands minimize, maximize, restore and close from the keyboard wi
 	const root = await mkdtemp(join(tmpdir(), 'nido-window-keyboard-'));
 	const path = join(root, 'notes.txt');
 	await writeFile(path, 'original\n');
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],
@@ -400,7 +404,7 @@ test('window commands minimize, maximize, restore and close from the keyboard wi
 
 test('window size and maximized state survive restart', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-window-'));
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const executablePath = process.env.NIDO_PACKAGED_EXE;
 	const options = {
@@ -494,7 +498,7 @@ test('window size and maximized state survive restart', async () => {
 
 test('terminal toggle, focus, background execution and standalone terminal sessions', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-terminal-ui-'));
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
 	try {
@@ -660,7 +664,7 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
 
 test('normal shutdown restores workspace order, active file and cursors', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-restart-'));
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const executablePath = process.env.NIDO_PACKAGED_EXE;
 	if (executablePath) {
@@ -970,7 +974,7 @@ test('keyboard-only workspace switching, editing, saving and dirty-close guard',
 		join(root, 'Nido', 'App.tsx'),
 		'export default function App() { return null }\n'
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const executablePath = process.env.NIDO_PACKAGED_EXE;
 	if (executablePath) {
@@ -1142,7 +1146,7 @@ test('an untitled draft returns after an abrupt exit without writing a file', as
 	const workspace = join(root, 'workspace');
 	const profile = join(root, 'profile');
 	await mkdir(workspace);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
 	try {
@@ -1198,7 +1202,7 @@ test('oversized untitled drafts show a localized recovery warning', async () => 
 	const root = await mkdtemp(join(tmpdir(), 'nido-untitled-limit-'));
 	const workspace = join(root, 'workspace');
 	await mkdir(workspace);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],
@@ -1234,7 +1238,7 @@ test('disabled automatic history excludes untitled drafts from workspace checkpo
 	const workspace = join(root, 'workspace');
 	const profile = join(root, 'profile');
 	await mkdir(workspace);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
 	try {

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promi
 import { homedir, tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { electron } from './helpers/electron';
+import { launchEnv } from './helpers/launch-env';
 
 for (const existing of [false, true]) {
 	test(`new terminal session selects ${existing ? 'another folder from an active workspace' : 'home'} and restores`, async () => {
@@ -21,7 +22,7 @@ for (const existing of [false, true]) {
 				})
 			);
 		}
-		const env = { ...process.env };
+		const env = launchEnv();
 		delete env.ELECTRON_RUN_AS_NODE;
 		const options = { args: ['.', `--user-data-dir=${profile}`], env };
 		let running: Awaited<ReturnType<typeof electron.launch>> | undefined;

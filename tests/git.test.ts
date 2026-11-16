@@ -196,7 +196,7 @@ test('branch switches protect sessions in the same repository and leave other pr
 				refreshed.push(id);
 			},
 			refreshGitSigns: async (): Promise<void> => {}
-		}) as Session;
+		}) as unknown as Session;
 	try {
 		await Promise.all([nested, other, plain].map((path) => mkdir(path, { recursive: true })));
 		for (const cwd of [repository, other]) {
