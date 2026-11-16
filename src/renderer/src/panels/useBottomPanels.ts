@@ -1,6 +1,7 @@
 import {
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useRef,
 	useState,
 	type Dispatch,
@@ -89,6 +90,10 @@ export function useBottomPanels({
 	}, [active, terminalId, terminalVisible, bottomPanel, focusEditor]);
 	const hasDebugger = !!state.debug;
 	const referenceVersion = state.references?.search ?? state.references?.version;
+	const latestReferenceSearch = useRef({ active, referenceVersion });
+	useLayoutEffect(() => {
+		latestReferenceSearch.current = { active, referenceVersion };
+	}, [active, referenceVersion]);
 	const debugStatus = state.debug?.status;
 	// Open panels when the session reports something new: references results, a debugger, or a
 	// build or run starting.
@@ -272,11 +277,15 @@ export function useBottomPanels({
 		setReferencesOpen(bottomPanel !== 'references' || !referencesVisible);
 		setReferencesFocusTick((value) => value + 1);
 	};
-	/** Open a reference and return to the editor. */
+	/** Open a reference and close its result list after the jump succeeds. */
 	const openReference = (index: number): void => {
 		const canFocus = captureFocus();
 		run(
 			window.nido.openReference(active, index, state.references!.version).then(() => {
+				const latest = latestReferenceSearch.current;
+				if (latest.active !== active || latest.referenceVersion !== referenceVersion)
+					return;
+				setReferencesOpen(false);
 				if (canFocus()) {
 					focusEditor();
 				}
