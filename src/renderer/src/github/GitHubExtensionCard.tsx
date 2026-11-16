@@ -43,52 +43,48 @@ export default function GitHubExtensionCard({
 				? { status: 'missing', title: 'Setup required' }
 				: { status: 'running', title: 'Signed in' };
 	return (
-		<ul className={styles.grid}>
-			<li className={styles.card} data-pack="github">
-				<div className={styles.cardHeading}>
-					<div>
-						<h4>{t('GitHub Pull Requests and Issues')}</h4>
-						<code className={styles.extensions}>gh · {t('GitHub CLI')}</code>
-					</div>
-					<span className={styles.neutralBadge}>{t('Built-in')}</span>
+		<li className={styles.card} data-pack="github">
+			<div className={styles.cardHeading}>
+				<div>
+					<h4>{t('GitHub Pull Requests and Issues')}</h4>
+					<code className={styles.extensions}>gh · {t('GitHub CLI')}</code>
 				</div>
+				<span className={styles.neutralBadge}>{t('Built-in')}</span>
+			</div>
+			<p>
+				{t(
+					'Review, comment on, check out, create and merge pull requests, and work with issues, through the GitHub CLI. Open it with Space Shift+G.'
+				)}
+			</p>
+			<div className={styles.packControls}>
+				<span role="status" className={styles.badge} data-status={badge.status}>
+					{t(badge.title)}
+				</span>
+				<label>
+					<input
+						type="checkbox"
+						checked={enabled}
+						aria-label={t('Enable {name}', { name: 'GitHub' })}
+						onChange={(event) => setEnabled(event.currentTarget.checked)}
+					/>
+					{t('Enabled')}
+				</label>
+			</div>
+			{shown?.authenticated && shown.repository && (
 				<p>
-					{t(
-						'Review, comment on, check out, create and merge pull requests, and work with issues, through the GitHub CLI. Open it with Space Shift+G.'
-					)}
+					{t('Signed in as {user} · {repository}', {
+						user: shown.user ?? '',
+						repository: shown.repository
+					})}
 				</p>
-				<div className={styles.packControls}>
-					<span role="status" className={styles.badge} data-status={badge.status}>
-						{t(badge.title)}
-					</span>
-					<label>
-						<input
-							type="checkbox"
-							checked={enabled}
-							aria-label={t('Enable {name}', { name: 'GitHub' })}
-							onChange={(event) => setEnabled(event.currentTarget.checked)}
-						/>
-						{t('Enabled')}
-					</label>
-				</div>
-				{shown?.authenticated && shown.repository && (
-					<p>
-						{t('Signed in as {user} · {repository}', {
-							user: shown.user ?? '',
-							repository: shown.repository
-						})}
-					</p>
-				)}
-				{shown?.message && (
-					<p className={styles.packError}>{errorMessage(shown.message)}</p>
-				)}
-				{shown && !shown.installed && (
-					<code className={styles.installCommand}>winget install --id GitHub.cli</code>
-				)}
-				{shown?.installed && !shown.authenticated && (
-					<code className={styles.installCommand}>gh auth login</code>
-				)}
-			</li>
-		</ul>
+			)}
+			{shown?.message && <p className={styles.packError}>{errorMessage(shown.message)}</p>}
+			{shown && !shown.installed && (
+				<code className={styles.installCommand}>winget install --id GitHub.cli</code>
+			)}
+			{shown?.installed && !shown.authenticated && (
+				<code className={styles.installCommand}>gh auth login</code>
+			)}
+		</li>
 	);
 }

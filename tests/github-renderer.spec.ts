@@ -237,6 +237,19 @@ test('the GitHub extension is off until enabled, then opens from the activity ba
 	await search.fill('pull request');
 	const card = extensions.locator('[data-pack="github"]');
 	await expect(card).toBeVisible();
+	// The card sits in the same grid as the other extensions, below their buttons.
+	await search.fill('');
+	const deno = extensions.locator('[data-pack="deno"]');
+	const [cardBox, denoBox, actionsBox] = await Promise.all([
+		card.boundingBox(),
+		deno.boundingBox(),
+		extensions.getByRole('button', { name: 'Install extension' }).boundingBox()
+	]);
+	expect(cardBox!.y).toBe(denoBox!.y);
+	expect(cardBox!.y).toBeGreaterThan(actionsBox!.y + actionsBox!.height);
+	expect(Math.abs(cardBox!.width - denoBox!.width)).toBeLessThan(1);
+	expect(cardBox!.x).toBeGreaterThanOrEqual(actionsBox!.x);
+	await search.fill('pull request');
 	await expect(extensions.getByText('No extensions match your search.')).toHaveCount(0);
 	await card.getByRole('checkbox', { name: 'Enable GitHub' }).check();
 	await expect(card).toContainText('Signed in as octocat · octo/alpha');
