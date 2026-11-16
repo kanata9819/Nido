@@ -53,6 +53,7 @@ export function buildItems(
 		create,
 		openFile,
 		activate,
+		closeWorkspace,
 		sleepWorkspace,
 		reorderWorkspace
 	} = callbacks;
@@ -90,6 +91,7 @@ export function buildItems(
 						title: w.name,
 						detail: w.root,
 						run: () => activate(w.id),
+						close: () => closeWorkspace(w.id),
 						tab: {
 							id: w.id,
 							moveTo: (target: string | number) => {
