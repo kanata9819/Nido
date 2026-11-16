@@ -263,10 +263,8 @@ function M.open(index, expected_version)
   jump(get_item(index, expected_version))
 end
 
---- Show where a go-to request (definition, type definition, implementation) leads, as the
---- `on_list` of vim.lsp.buf.definition and its kin: jump to a single location, or list several
---- in the references panel. Without this, Neovim lists them in its own quickfix window.
-function M.go_to(kind, options)
+local function show_locations(kind, options, win, tag)
+  if not vim.api.nvim_win_is_valid(win) then return end
   local found, seen = {}, {}
   for _, item in ipairs(options.items or {}) do
     local key = item.filename .. ':' .. item.lnum .. ':' .. item.col
@@ -276,7 +274,10 @@ function M.go_to(kind, options)
     end
   end
   if #found == 1 then
-    jump(found[1])
+    vim.api.nvim_win_call(win, function()
+      jump(found[1])
+      vim.fn.settagstack(win, { items = { tag } }, 't')
+    end)
     return
   end
   local current = start_list()
@@ -286,6 +287,16 @@ function M.go_to(kind, options)
     table.insert(state.items, { path = item.filename, line = item.lnum, column = item.col, text = item.text or '' })
   end
   publish(state)
+end
+
+--- List several go-to results in the references panel. A single result keeps the
+--- originating window and Neovim's tag stack, even if focus changes before the reply.
+function M.go_to(method, kind)
+  local win = vim.api.nvim_get_current_win()
+  local from = vim.fn.getpos('.')
+  from[1] = vim.api.nvim_win_get_buf(win)
+  local tag = { tagname = vim.fn.expand('<cword>'), from = from }
+  vim.lsp.buf[method]({ on_list = function(options) show_locations(kind, options, win, tag) end })
 end
 
 return M

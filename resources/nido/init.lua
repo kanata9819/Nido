@@ -409,7 +409,7 @@ vim.keymap.set('i', '<F2>', '<C-o><Cmd>NidoRename<CR>')
 --- in the references panel rather than in Neovim's quickfix window.
 local function go_to(method, kind)
   return function()
-    vim.lsp.buf[method]({ on_list = function(options) require('nido_references').go_to(kind, options) end })
+    require('nido_references').go_to(method, kind)
   end
 end
 vim.api.nvim_create_autocmd('LspAttach', {
