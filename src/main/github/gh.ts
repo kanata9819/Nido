@@ -17,7 +17,9 @@ export function useGhExecutable(command: string, args: string[] = []): void {
 export class GhError extends Error {
 	constructor(
 		message: string,
-		readonly missing = false
+		readonly missing = false,
+		/** gh's exit status; 4 means it needs `gh auth login`. */
+		readonly exitCode?: number
 	) {
 		super(message);
 	}
@@ -71,7 +73,8 @@ export function gh(cwd: string, args: string[], input?: string): Promise<string>
 					return;
 				}
 				const message = stderr.trim() || stdout.trim() || error.message;
-				reject(new GhError(message.replace(/^(?:error|GraphQL): /i, '')));
+				const exitCode = typeof error.code === 'number' ? error.code : undefined;
+				reject(new GhError(message.replace(/^(?:error|GraphQL): /i, ''), false, exitCode));
 			}
 		);
 		// gh can exit before it reads its input; its exit status reports that.

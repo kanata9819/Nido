@@ -53,14 +53,29 @@ function requiredText(value: string, what: string): string {
 	return value;
 }
 
+/** Whether gh failed because it is not signed in (exit status 4, or GitHub answered 401). */
+function signedOut(error: GhError): boolean {
+	return error.exitCode === 4 || /\b401\b|gh auth login|not logged in/i.test(error.message);
+}
+
 /** Whether gh is installed and signed in, and the repository and branch of `cwd`. */
 export async function githubStatus(cwd: string): Promise<GitHubStatus> {
+	repositories.delete(cwd);
 	let user: string;
 	try {
 		user = (await gh(cwd, ['api', 'user', '--jq', '.login'])).trim();
 	} catch (error) {
 		if (error instanceof GhError && error.missing) {
 			return { installed: false, authenticated: false, message: error.message };
+		}
+		// Offline, a proxy or a rate limit is not fixed by signing in again.
+		if (error instanceof GhError && !signedOut(error)) {
+			return {
+				installed: true,
+				authenticated: false,
+				unreachable: true,
+				message: error.message
+			};
 		}
 		return {
 			installed: true,
@@ -136,19 +151,34 @@ export async function pullRequest(cwd: string, number: number): Promise<PullRequ
 	return parsePullRequestDetails(details, threads);
 }
 
+/** Each folder's repository, read once; githubStatus reads it again. */
+const repositories = new Map<string, Promise<{ owner: string; name: string }>>();
+
 /** The owner and name of the workspace's repository. */
-async function repositoryName(cwd: string): Promise<{ owner: string; name: string }> {
-	const { nameWithOwner } = await ghJson<{ nameWithOwner?: string }>(cwd, [
-		'repo',
-		'view',
-		'--json',
-		'nameWithOwner'
-	]);
-	const [owner, name] = (nameWithOwner ?? '').split('/');
-	if (!owner || !name) {
-		throw new GhError('This folder has no GitHub repository.');
+function repositoryName(cwd: string): Promise<{ owner: string; name: string }> {
+	let pending = repositories.get(cwd);
+	if (!pending) {
+		pending = ghJson<{ nameWithOwner?: string }>(cwd, [
+			'repo',
+			'view',
+			'--json',
+			'nameWithOwner'
+		]).then(({ nameWithOwner }) => {
+			const [owner, name] = (nameWithOwner ?? '').split('/');
+			if (!owner || !name) {
+				throw new GhError('This folder has no GitHub repository.');
+			}
+			return { owner, name };
+		});
+		repositories.set(cwd, pending);
+		// A failed read is tried again next time.
+		pending.catch(() => {
+			if (repositories.get(cwd) === pending) {
+				repositories.delete(cwd);
+			}
+		});
 	}
-	return { owner, name };
+	return pending;
 }
 
 /** The pull request's diff, one entry per changed file, as [path, diff] pairs. */
@@ -255,11 +285,20 @@ export async function commentOnLine(
 	]);
 }
 
-/** Open a pull request from the checked-out branch, which must already be pushed. */
-export async function createPullRequest(cwd: string, draft: PullRequestDraft): Promise<string> {
-	if (!/^[\w./-]+$/.test(draft.base) || draft.base.startsWith('-')) {
+/**
+ * Open a pull request from the checked-out branch. The draft is checked first, then `publish`
+ * (pushing the branch) runs, so an invalid draft pushes nothing.
+ */
+export async function createPullRequest(
+	cwd: string,
+	draft: PullRequestDraft,
+	publish: () => Promise<unknown> = async () => {}
+): Promise<string> {
+	if (!/^[\w./#+-]+$/.test(draft.base) || draft.base.startsWith('-')) {
 		throw new Error('Choose a base branch.');
 	}
+	requiredText(draft.title, 'title');
+	await publish();
 	const args = [
 		'pr',
 		'create',
@@ -280,13 +319,14 @@ export async function createPullRequest(cwd: string, draft: PullRequestDraft): P
 /**
  * Merge a pull request. With `deleteBranch`, the head branch is deleted on GitHub only; the
  * local checkout is left alone, so unsaved editor changes and the working tree are safe.
+ * A branch that cannot be deleted does not undo the merge: its error is returned instead.
  */
 export async function mergePullRequest(
 	cwd: string,
 	number: number,
 	method: MergeMethod,
 	deleteBranch: boolean
-): Promise<void> {
+): Promise<{ branchError?: string }> {
 	if (method !== 'squash' && method !== 'merge' && method !== 'rebase') {
 		throw new Error('Invalid merge method.');
 	}
@@ -296,13 +336,21 @@ export async function mergePullRequest(
 	}>(cwd, ['pr', 'view', String(number), '--json', 'headRefName,isCrossRepository']);
 	await gh(cwd, ['pr', 'merge', String(number), `--${method}`]);
 	if (deleteBranch && headRefName && !isCrossRepository) {
-		await gh(cwd, [
-			'api',
-			'--method',
-			'DELETE',
-			`repos/{owner}/{repo}/git/refs/heads/${encodeURI(headRefName)}`
-		]);
+		// Each part is escaped: a '#' or '?' in a branch name must not end the path early and
+		// delete another branch.
+		const ref = headRefName.split('/').map(encodeURIComponent).join('/');
+		try {
+			await gh(cwd, [
+				'api',
+				'--method',
+				'DELETE',
+				`repos/{owner}/{repo}/git/refs/heads/${ref}`
+			]);
+		} catch (error) {
+			return { branchError: error instanceof Error ? error.message : String(error) };
+		}
 	}
+	return {};
 }
 
 /** Up to 100 issues: open ones, those assigned to the user, the user's, or closed. */

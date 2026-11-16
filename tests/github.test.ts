@@ -16,7 +16,14 @@ import {
 	replyToThread,
 	reviewPullRequest
 } from '../src/main/github/github';
-import { combinedChecks, parseCheck, splitPullRequestDiff } from '../src/main/github/parse';
+import {
+	combinedChecks,
+	diffPath,
+	parseCheck,
+	splitPullRequestDiff
+} from '../src/main/github/parse';
+import { execFileSync } from 'node:child_process';
+import { mkdir } from 'node:fs/promises';
 
 // A fake gh: it records each call's arguments and input, and answers from a table of replies
 // keyed by the first arguments.
@@ -372,4 +379,125 @@ test('gh errors come back with gh’s own message', async () => {
 			/^Error: Could not resolve to a Repository$/
 		)
 	);
+});
+
+test('diffs of files with spaces or non-ASCII names are found under their real paths', async () => {
+	const repo = join(folder, 'paths');
+	await mkdir(join(repo, 'docs'), { recursive: true });
+	const git = (...args: string[]): string =>
+		execFileSync('git', args, { cwd: repo, encoding: 'utf8', windowsHide: true });
+	git('init', '-q');
+	git('config', 'user.name', 'Nido Test');
+	git('config', 'user.email', 'test@example.invalid');
+	git('config', 'commit.gpgsign', 'false');
+	// Names Windows allows; quotes and control characters are covered by diffPath below.
+	const names = ['my file.txt', '日本語.ts', 'docs/two  spaces.md', 'old.txt'];
+	for (const name of names) {
+		await writeFile(join(repo, name), 'before\n');
+	}
+	git('add', '.');
+	git('commit', '-qm', 'Initial');
+	for (const name of names.slice(0, 3)) {
+		await writeFile(join(repo, name), 'after\n');
+	}
+	git('mv', 'old.txt', 'renamed é.txt');
+	// Git's own header format, with core.quotePath left at its default, as GitHub uses it.
+	const files = splitPullRequestDiff(git('diff', 'HEAD', '-M', '--no-color'));
+	assert.deepEqual([...files.keys()].sort(), [
+		'docs/two  spaces.md',
+		'my file.txt',
+		'renamed é.txt',
+		'日本語.ts'
+	]);
+	assert.match(files.get('日本語.ts')!, /\+after/);
+});
+
+test('deleting a merged branch escapes its name, and a failed deletion keeps the merge', async () => {
+	let calls = await withReplies(
+		{ 'pr view 6': { headRefName: 'fix#12/a?b', isCrossRepository: false } },
+		async () => assert.deepEqual(await mergePullRequest(folder, 6, 'squash', true), {})
+	);
+	assert.deepEqual(calls[2].args.at(-1), 'repos/{owner}/{repo}/git/refs/heads/fix%2312/a%3Fb');
+	calls = await withReplies(
+		{
+			'pr view 6': { headRefName: 'protected', isCrossRepository: false },
+			'api --method DELETE': { error: 'HTTP 422: Reference does not exist' }
+		},
+		async () =>
+			assert.deepEqual(await mergePullRequest(folder, 6, 'merge', true), {
+				branchError: 'HTTP 422: Reference does not exist'
+			})
+	);
+	assert.deepEqual(calls[1].args, ['pr', 'merge', '6', '--merge']);
+});
+
+test('creating a pull request checks the draft before the branch is pushed', async () => {
+	const pushes: string[] = [];
+	const publish = async (): Promise<void> => {
+		pushes.push('push');
+	};
+	await assert.rejects(
+		createPullRequest(folder, { title: ' ', body: '', base: 'main', draft: false }, publish),
+		/Write a title first/
+	);
+	await assert.rejects(
+		createPullRequest(folder, { title: 'T', body: '', base: '-x', draft: false }, publish),
+		/Choose a base branch/
+	);
+	assert.equal(pushes.length, 0);
+	const calls = await withReplies({ 'pr create': 'https://github.com/octo/app/pull/1' }, () =>
+		createPullRequest(
+			folder,
+			{ title: 'T', body: '', base: 'release/1.0', draft: false },
+			async () => {
+				pushes.push('push');
+				assert.equal(
+					(await readFile(log, 'utf8')).trim(),
+					'',
+					'pushed before gh pr create'
+				);
+			}
+		)
+	);
+	assert.deepEqual(pushes, ['push']);
+	assert.equal(calls[0].args[1], 'create');
+});
+
+test('status tells a signed-out gh from a GitHub it cannot reach', async () => {
+	await withReplies({ 'api user': { error: 'HTTP 401: Bad credentials' } }, async () => {
+		const status = await githubStatus(folder);
+		assert.equal(status.unreachable, undefined);
+		assert.match(status.message!, /gh auth login/);
+	});
+	await withReplies({ 'api user': { error: 'error connecting to api.github.com' } }, async () => {
+		const status = await githubStatus(folder);
+		assert.equal(status.authenticated, false);
+		assert.equal(status.unreachable, true);
+		assert.equal(status.message, 'error connecting to api.github.com');
+	});
+});
+
+test('a pull request reads its repository once per folder until status is read again', async () => {
+	const replies = {
+		'pr view 12': { number: 12, title: 'A', author: { login: 'a' }, state: 'OPEN' },
+		'repo view': { nameWithOwner: 'octo/app' },
+		'api graphql': { data: {} },
+		'api user': 'octocat'
+	};
+	const calls = await withReplies(replies, async () => {
+		await githubStatus(folder);
+		await pullRequest(folder, 12);
+		await pullRequest(folder, 12);
+	});
+	// One repo view for the status and one shared by both pull requests.
+	assert.equal(calls.filter((call) => call.args[0] === 'repo').length, 2);
+});
+
+test("diff paths undo git's quoting and keep folders named a or b", () => {
+	assert.equal(diffPath('"b/docs/a \\"quoted\\" name.md"'), 'docs/a "quoted" name.md');
+	assert.equal(diffPath('"b/tab\\tname.txt"'), 'tab\tname.txt');
+	assert.equal(diffPath('"b/\\346\\227\\245.ts"'), '日.ts');
+	assert.equal(diffPath('b/my file.txt\t'), 'my file.txt');
+	assert.equal(diffPath('a/b/c.ts'), 'b/c.ts');
+	assert.equal(diffPath('a/c.ts', false), 'a/c.ts');
 });

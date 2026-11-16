@@ -11,7 +11,6 @@ import PullRequestOverview, { type PullRequestForm } from './PullRequestOverview
 import PullRequestFile from './PullRequestFile';
 import { PullRequestCard } from './PullRequestCard';
 import type { GitHubViewProps } from './githubModel';
-import { isLoaded } from './githubModel';
 import gitStyles from '../git/Git.module.css';
 import styles from './GitHub.module.css';
 
@@ -44,7 +43,7 @@ export default function PullRequests({
 	// The filter and refresh count the shown list was loaded for.
 	const [loadedKey, setLoadedKey] = useState<string>();
 	const listKey = `${filter}:${revision}`;
-	const loaded = isLoaded(loadedKey, listKey);
+	const loaded = loadedKey === listKey;
 	const [index, setIndex] = useState(0);
 	// The opened pull request, its diff per file, and the entry selected in it (0: overview).
 	const [opened, setOpened] = useState<PullRequestDetails>();
@@ -81,7 +80,7 @@ export default function PullRequests({
 	}, [workspaceId, filter, revision, listKey]);
 
 	/** Load (or reload) a pull request with its diff, keeping the selected entry. */
-	function open(number: number, keepEntry = false): Promise<void> {
+	function open(number: number, keepEntry = false): Promise<boolean> {
 		return run(async () => {
 			const [details, files] = await Promise.all([
 				window.nido.githubPullRequest(workspaceId, number),
@@ -123,16 +122,21 @@ export default function PullRequests({
 			void window.nido.openDocumentation(selected.url);
 		}
 	};
-	/** Run a pull request action, then reload it and confirm with `message`. */
-	const act = (change: () => Promise<unknown>, message: string): Promise<void> =>
+	/**
+	 * Run a pull request action, then reload it and the list behind it, and confirm with
+	 * `message`, or with the text the action returns instead.
+	 */
+	const act = (change: () => Promise<unknown>, message: string): Promise<boolean> =>
 		run(async () => {
-			await change();
+			const note = await change();
 			setForm(undefined);
 			if (opened) {
 				const details = await window.nido.githubPullRequest(workspaceId, opened.number);
 				setOpened(details);
 			}
-			notify(message);
+			// A merge, review or checkout changes the PR's state, checks or review in the list.
+			setRevision((value) => value + 1);
+			notify(typeof note === 'string' ? note : message);
 			list.current?.focus();
 		});
 	const checkout = (): void => {

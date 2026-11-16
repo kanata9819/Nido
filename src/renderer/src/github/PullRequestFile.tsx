@@ -27,7 +27,7 @@ export default function PullRequestFile({
 	busy: boolean;
 	commenting: boolean;
 	setCommenting: (commenting: boolean) => void;
-	act: (change: () => Promise<unknown>, message: string) => Promise<void>;
+	act: (change: () => Promise<unknown>, message: string) => Promise<boolean>;
 }): React.JSX.Element {
 	const t = useI18n();
 	const threads = pr.threads.filter((thread) => thread.path === path);
@@ -137,7 +137,7 @@ function Thread({
 	workspaceId: string;
 	thread: ReviewThread;
 	busy: boolean;
-	act: (change: () => Promise<unknown>, message: string) => Promise<void>;
+	act: (change: () => Promise<unknown>, message: string) => Promise<boolean>;
 }): React.JSX.Element {
 	const t = useI18n();
 	const [replying, setReplying] = useState(false);

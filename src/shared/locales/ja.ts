@@ -1031,6 +1031,11 @@ export const japanese: Record<string, string> = {
 	'Pull requests': 'プルリクエスト',
 	Issues: 'Issue',
 	'New pull request': '新しいプルリクエスト',
+	'Cannot reach GitHub': 'GitHubに接続できません',
+	'Check the network or proxy, then refresh.':
+		'ネットワークやプロキシを確認してから、更新してください。',
+	'Pull request merged, but its branch could not be deleted: {reason}':
+		'プルリクエストはマージしましたが、ブランチを削除できませんでした：{reason}',
 	'Install the GitHub CLI': 'GitHub CLIをインストールしてください',
 	'Sign in to GitHub': 'GitHubにサインインしてください',
 	'No GitHub repository': 'GitHubのリポジトリがありません',

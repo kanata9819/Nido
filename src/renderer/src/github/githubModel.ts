@@ -51,11 +51,3 @@ export function githubMatches(query: string, translated: string[]): boolean {
 		term.toLocaleLowerCase().includes(needle)
 	);
 }
-
-/**
- * A list loaded for `key` (such as a filter and a refresh count): `loaded` is true once the
- * reply for the current key has arrived.
- */
-export function isLoaded(loadedKey: string | undefined, key: string): boolean {
-	return loadedKey === key;
-}

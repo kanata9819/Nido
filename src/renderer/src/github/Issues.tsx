@@ -7,7 +7,6 @@ import { GitHubMarkdown } from './GitHubMarkdown';
 import { Timeline } from './Timeline';
 import { FormattedDate, IssueState } from './format';
 import type { GitHubViewProps } from './githubModel';
-import { isLoaded } from './githubModel';
 import gitStyles from '../git/Git.module.css';
 import styles from './GitHub.module.css';
 
@@ -39,7 +38,7 @@ export default function Issues({
 	// The filter and refresh count the shown list was loaded for.
 	const [loadedKey, setLoadedKey] = useState<string>();
 	const listKey = `${filter}:${revision}`;
-	const loaded = isLoaded(loadedKey, listKey);
+	const loaded = loadedKey === listKey;
 	const [index, setIndex] = useState(0);
 	const [opened, setOpened] = useState<IssueDetails>();
 	const [commenting, setCommenting] = useState(false);
@@ -76,12 +75,13 @@ export default function Issues({
 	const selected = issues[index];
 	const shown = opened && opened.number === selected?.number ? opened : undefined;
 
-	const open = (): Promise<void> =>
+	/** Load the selected issue's description and comments; resolves to whether it loaded. */
+	const open = (): Promise<boolean> =>
 		selected
 			? run(async () => {
 					setOpened(await window.nido.githubIssue(workspaceId, selected.number));
 				})
-			: Promise.resolve();
+			: Promise.resolve(false);
 
 	useLayoutEffect(() => {
 		backRef.current = () => {
@@ -100,7 +100,7 @@ export default function Issues({
 	});
 
 	/** Change the issue, reload it and the list, and confirm with `message`. */
-	const act = (change: () => Promise<unknown>, message: string): Promise<void> =>
+	const act = (change: () => Promise<unknown>, message: string): Promise<boolean> =>
 		run(async () => {
 			await change();
 			setCommenting(false);
@@ -120,12 +120,14 @@ export default function Issues({
 						selected.state !== 'OPEN'
 					),
 				selected.state === 'OPEN' ? 'Issue closed.' : 'Issue reopened.'
-			).then(() => setRevision((value) => value + 1));
+			).then((done) => done && setRevision((value) => value + 1));
 		}
 	};
 	const comment = (): void => {
 		if (selected) {
-			void (shown ? Promise.resolve() : open()).then(() => setCommenting(true));
+			void (shown ? Promise.resolve(true) : open()).then(
+				(loaded) => loaded && setCommenting(true)
+			);
 		}
 	};
 

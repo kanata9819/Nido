@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useI18n } from '../i18n';
+import { useErrorMessage, useI18n } from '../i18n';
 import type { MergeMethod, PullRequestDetails, ReviewEvent } from '../../../shared/github';
 import { Composer } from './Composer';
 import { GitHubMarkdown } from './GitHubMarkdown';
@@ -31,7 +31,7 @@ export default function PullRequestOverview({
 	busy: boolean;
 	form: PullRequestForm | undefined;
 	setForm: (form: PullRequestForm | undefined) => void;
-	act: (change: () => Promise<unknown>, message: string) => Promise<void>;
+	act: (change: () => Promise<unknown>, message: string) => Promise<boolean>;
 	checkout: () => void;
 	openInBrowser: () => void;
 }): React.JSX.Element {
@@ -178,7 +178,7 @@ function ReviewForm({
 	workspaceId: string;
 	pr: PullRequestDetails;
 	busy: boolean;
-	act: (change: () => Promise<unknown>, message: string) => Promise<void>;
+	act: (change: () => Promise<unknown>, message: string) => Promise<boolean>;
 	cancel: () => void;
 }): React.JSX.Element {
 	const t = useI18n();
@@ -224,10 +224,11 @@ function MergeForm({
 	workspaceId: string;
 	pr: PullRequestDetails;
 	busy: boolean;
-	act: (change: () => Promise<unknown>, message: string) => Promise<void>;
+	act: (change: () => Promise<unknown>, message: string) => Promise<boolean>;
 	cancel: () => void;
 }): React.JSX.Element {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	const [method, setMethod] = useState<MergeMethod>('squash');
 	const [deleteBranch, setDeleteBranch] = useState(!pr.isCrossRepository);
 	return (
@@ -236,10 +237,20 @@ function MergeForm({
 			aria-label={t('Merge pull request')}
 			onSubmit={(event) => {
 				event.preventDefault();
-				void act(
-					() => window.nido.githubMerge(workspaceId, pr.number, method, deleteBranch),
-					'Pull request merged.'
-				);
+				void act(async () => {
+					const { branchError } = await window.nido.githubMerge(
+						workspaceId,
+						pr.number,
+						method,
+						deleteBranch
+					);
+					// The merge happened even when the branch on GitHub could not be deleted.
+					return branchError
+						? t('Pull request merged, but its branch could not be deleted: {reason}', {
+								reason: errorMessage(branchError)
+							})
+						: undefined;
+				}, 'Pull request merged.');
 			}}
 		>
 			<p>

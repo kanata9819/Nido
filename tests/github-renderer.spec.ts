@@ -319,3 +319,66 @@ test('the overview and the issue preview take focus and their keys work there', 
 	await page.keyboard.press('x');
 	await expect(page.getByRole('status')).toHaveText('Issue closed.');
 });
+
+test('a merge refreshes the list behind the pull request and reports a branch it could not delete', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=github&defer=githubMerge`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(page.getByRole('listbox', { name: 'Pull request files' })).toBeFocused();
+	await page.keyboard.press('m');
+	await page.getByRole('button', { name: 'Merge', exact: true }).click();
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubMerge', 0, { branchError: 'HTTP 422: protected' })
+	);
+	await expect(page.getByRole('status')).toHaveText(
+		'Pull request merged, but its branch could not be deleted: HTTP 422: protected'
+	);
+	// The list behind the pull request is read again, so its state is current after Esc.
+	expect((await calls(page, 'githubPullRequests')).length).toBe(2);
+});
+
+test('a comment that fails to send keeps its text', async ({ page }) => {
+	await page.goto(`${origin}?view=github&defer=githubComment`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(page.getByRole('listbox', { name: 'Pull request files' })).toBeFocused();
+	await page.keyboard.press('c');
+	const box = page.getByRole('textbox', { name: 'Comment on the pull request' });
+	await page.keyboard.type('Important review notes');
+	await page.keyboard.press('Control+Enter');
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubComment', 0, new Error('HTTP 502: Bad gateway'), true)
+	);
+	await expect(page.getByRole('alert')).toContainText('HTTP 502');
+	await expect(box).toHaveValue('Important review notes');
+});
+
+test('an issue that fails to load opens no comment form', async ({ page }) => {
+	await page.goto(`${origin}?view=github&defer=githubIssue`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('2');
+	await expect(page.getByRole('listbox', { name: 'Issues' })).toBeFocused();
+	await page.keyboard.press('c');
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubIssue', 0, new Error('HTTP 404: Not Found'), true)
+	);
+	await expect(page.getByRole('alert')).toContainText('HTTP 404');
+	await expect(page.getByRole('textbox', { name: 'Comment on the issue' })).toHaveCount(0);
+});
+
+test('a GitHub that cannot be reached is not reported as signed out', async ({ page }) => {
+	await page.goto(`${origin}?view=github&defer=githubStatus`);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubStatus', 0, {
+			installed: true,
+			authenticated: false,
+			unreachable: true,
+			message: 'error connecting to api.github.com'
+		})
+	);
+	await expect(page.getByRole('heading', { name: 'Cannot reach GitHub' })).toBeVisible();
+	await expect(page.getByText('error connecting to api.github.com')).toBeVisible();
+	await expect(page.getByText('gh auth login', { exact: true })).toHaveCount(0);
+});

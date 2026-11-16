@@ -21,7 +21,8 @@ export function Composer({
 	/** Whether sending without text is allowed, as for an approval. */
 	allowEmpty?: boolean;
 	controls?: ReactNode;
-	onSubmit: (body: string) => Promise<void>;
+	/** Send the text; resolves to whether it was sent, so a failed send keeps the text. */
+	onSubmit: (body: string) => Promise<boolean>;
 	onCancel: () => void;
 }): React.JSX.Element {
 	const t = useI18n();
@@ -31,7 +32,7 @@ export function Composer({
 	const canSend = !busy && (allowEmpty || !!body.trim());
 	const send = (): void => {
 		if (canSend) {
-			void onSubmit(body).then(() => setBody(''));
+			void onSubmit(body).then((sent) => sent && setBody(''));
 		}
 	};
 	return (

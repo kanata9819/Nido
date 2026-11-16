@@ -170,9 +170,11 @@ export async function gitSwitch(cwd: string, name: string, create: boolean): Pro
 
 /**
  * Push only the checked-out branch, to its upstream when it has one, or else to `origin`, setting
- * that as its upstream. Returns the branch's name.
+ * that as its upstream. An upstream that is `base`, the branch a pull request will merge into
+ * (as for a branch made from origin/main), is not pushed to: the branch is published under its
+ * own name instead. Returns the branch's name.
  */
-export async function gitPushBranch(cwd: string): Promise<string> {
+export async function gitPushBranch(cwd: string, base?: string): Promise<string> {
 	const branch = (await git(cwd, ['branch', '--show-current'])).trim();
 	if (!branch) {
 		throw new Error('Check out a branch first.');
@@ -190,9 +192,10 @@ export async function gitPushBranch(cwd: string): Promise<string> {
 	if (upstream && (!remote || !upstream.startsWith('refs/heads/'))) {
 		throw new Error('Invalid branch name.');
 	}
-	const destination = upstream
-		? ['--', remote, `${ref}:${upstream}`]
-		: ['--set-upstream', '--', 'origin', `${ref}:${ref}`];
+	const destination =
+		upstream && upstream !== `refs/heads/${base}`
+			? ['--', remote, `${ref}:${upstream}`]
+			: ['--set-upstream', '--', remote || 'origin', `${ref}:${ref}`];
 	await git(cwd, ['push', '--no-follow-tags', ...destination]);
 	return branch;
 }
