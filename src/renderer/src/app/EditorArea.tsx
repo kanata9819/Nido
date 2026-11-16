@@ -193,6 +193,7 @@ function TerminalPanels({
 				closeShell={panels.closeShell}
 				resize={panels.resizeTerminal}
 				toggleMaximized={panels.toggleTerminalMaximized}
+				restoreSize={panels.restoreTerminalSize}
 				onError={report}
 				onClose={panels.closeTerminal}
 			/>

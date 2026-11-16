@@ -160,9 +160,21 @@ end
 function M.add(choice, command)
   command = resolve(choice, command)
   local shell = {}
+  local previous = current
   table.insert(shells, shell)
   current = #shells
-  spawn(shell, command)
+  local ok, err = pcall(spawn, shell, command)
+  if not ok then
+    -- A shell that did not start leaves no tab; the previous one is shown again.
+    table.remove(shells)
+    if shell.buffer and vim.api.nvim_buf_is_valid(shell.buffer) then
+      vim.api.nvim_buf_delete(shell.buffer, { force = true })
+    end
+    if shells[previous] then
+      show(previous)
+    end
+    error(err, 0)
+  end
   publish()
 end
 

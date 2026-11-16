@@ -7,6 +7,10 @@
 	background: var(--surface-editor, #141414);
 	border-top: 1px solid var(--ui-border-strong, #34383c);
 }
+/* A height chosen in a taller window still leaves the editor visible after it shrinks. */
+.terminalPanel:not([data-maximized]) {
+	max-height: calc(100% - 140px);
+}
 /* Maximized, the terminal covers the editor without resizing it. */
 .terminalPanel[data-maximized] {
 	position: absolute;

@@ -385,6 +385,46 @@ test('the terminal panel shows a tab per shell, switches them by key, resizes an
 	await expect.poll(async () => (await panel.boundingBox())!.height).toBe(before + 40);
 });
 
+test('a terminal height saved in a taller window leaves the editor visible in a shorter one', async ({
+	page
+}) => {
+	await page.addInitScript(() => localStorage.setItem('nido.terminalHeight', '600'));
+	await restoreWorkspaces(page, '');
+	await page.keyboard.press('Control+`');
+	const panel = page.getByRole('region', { name: 'Terminal', exact: true });
+	await expect(panel).toBeVisible();
+	await page.setViewportSize({ width: 1000, height: 420 });
+	const editor = page.locator('canvas[aria-label="Neovim editor display"]:visible');
+	await expect
+		.poll(async () => (await panel.boundingBox())!.y + (await panel.boundingBox())!.height)
+		.toBeLessThanOrEqual(420);
+	expect((await editor.boundingBox())!.height).toBeGreaterThan(40);
+	// Resizing starts from the drawn height, so the first step up is visible.
+	const before = (await panel.boundingBox())!.height;
+	await panel.getByRole('separator', { name: 'Terminal height' }).focus();
+	await page.keyboard.press('ArrowDown');
+	await expect.poll(async () => (await panel.boundingBox())!.height).toBe(before - 20);
+});
+
+test('moving focus to the editor restores a maximized terminal so the editor can be seen', async ({
+	page
+}) => {
+	await restoreWorkspaces(page, '');
+	await page.keyboard.press('Control+`');
+	const input = page.getByRole('textbox', { name: 'Terminal input', exact: true });
+	await expect(input).toBeFocused();
+	const panel = page.getByRole('region', { name: 'Terminal', exact: true });
+	await page.keyboard.press('Control+Shift+Enter');
+	await expect(panel.getByRole('button', { name: 'Restore terminal size' })).toBeVisible();
+	await page.keyboard.press('Control+k');
+	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+	await expect(panel.getByRole('button', { name: 'Maximize terminal' })).toBeVisible();
+	// Going back to the terminal leaves it at its normal size.
+	await page.keyboard.press('Control+j');
+	await expect(input).toBeFocused();
+	await expect(panel.getByRole('button', { name: 'Maximize terminal' })).toBeVisible();
+});
+
 /** Open the workspace list with Space w from the editor. */
 async function openWorkspaceList(page: Page): Promise<void> {
 	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();

@@ -48,6 +48,8 @@ export function useGitFileStatus(
 		let timer: number | undefined;
 		let interval = 3000;
 		let snapshot: string | undefined;
+		// The snapshot of a failed refresh, which matches no successful status.
+		const failed = '\0failed';
 		const refresh = async (activity = false): Promise<void> => {
 			if (cancelled) {
 				return;
@@ -105,7 +107,10 @@ export function useGitFileStatus(
 				}
 			} catch {
 				// A failed refresh says nothing about file status; keep the last successful snapshot.
-				interval = 3000;
+				// Outside a repository every refresh fails, so failures back off like an unchanged
+				// status instead of starting Git every 3 seconds; activity still refreshes at once.
+				interval = snapshot === failed ? Math.min(30_000, interval * 2) : 3000;
+				snapshot = failed;
 			} finally {
 				pending = false;
 				if (queued) {

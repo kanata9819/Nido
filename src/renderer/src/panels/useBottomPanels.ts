@@ -44,6 +44,8 @@ export interface BottomPanels {
 	resizeTerminal: (height: number) => void;
 	terminalMaximized: boolean;
 	toggleTerminalMaximized: () => void;
+	/** Return a maximized terminal to its height without moving focus. */
+	restoreTerminalSize: () => void;
 	/** Start another shell in a terminal, show one by its 1-based position, or stop one. */
 	addShell: (id: string) => void;
 	selectShell: (id: string, position: number) => void;
@@ -369,6 +371,7 @@ export function useBottomPanels({
 		resizeTerminal,
 		terminalMaximized,
 		toggleTerminalMaximized,
+		restoreTerminalSize: () => setTerminalMaximized(false),
 		addShell,
 		selectShell,
 		closeShell,
