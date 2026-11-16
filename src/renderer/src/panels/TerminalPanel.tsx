@@ -10,6 +10,7 @@ import styles from './TerminalPanel.module.css';
  */
 export default function TerminalPanel({
 	id,
+	name,
 	active,
 	blocked,
 	focusTick,
@@ -28,6 +29,8 @@ export default function TerminalPanel({
 	onError
 }: {
 	id: string;
+	/** Name of the workspace whose terminal this is. */
+	name: string;
 	active: boolean;
 	blocked: boolean;
 	focusTick: number;
@@ -60,6 +63,7 @@ export default function TerminalPanel({
 		>
 			{!maximized && <ResizeHandle height={height} onResize={resize} />}
 			<div className={styles.toolbar}>
+				<strong className={styles.name}>{name}</strong>
 				<div className={styles.tabs} role="tablist" aria-label={t('Shells')}>
 					{names.map((name, index) => {
 						const position = index + 1;

@@ -44,6 +44,16 @@
 	font-size: 12px;
 	container-type: inline-size;
 }
+.name {
+	flex-shrink: 1;
+	min-width: 0;
+	max-width: 30%;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	color: #dce4eb;
+	font-weight: 600;
+}
 .tabs {
 	display: flex;
 	align-items: center;

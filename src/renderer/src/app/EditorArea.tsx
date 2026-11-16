@@ -176,6 +176,7 @@ function TerminalPanels({
 			<TerminalPanel
 				key={w.id}
 				id={w.terminalId!}
+				name={w.name}
 				active={
 					w.id === active && panels.terminalVisible && panels.bottomPanel === 'terminal'
 				}
