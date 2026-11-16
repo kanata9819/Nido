@@ -14,6 +14,7 @@ export type Panel =
 	| 'settings'
 	| 'folders'
 	| 'git'
+	| 'github'
 	| 'problems'
 	| 'markdown'
 	| 'extensions'

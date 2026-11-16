@@ -177,9 +177,7 @@ export async function gitPushBranch(cwd: string): Promise<string> {
 	if (!branch) {
 		throw new Error('Check out a branch first.');
 	}
-	const upstream = await git(cwd, ['rev-parse', '--abbrev-ref', '@{upstream}']).catch(
-		() => ''
-	);
+	const upstream = await git(cwd, ['rev-parse', '--abbrev-ref', '@{upstream}']).catch(() => '');
 	await git(cwd, upstream.trim() ? ['push'] : ['push', '--set-upstream', 'origin', branch]);
 	return branch;
 }

@@ -1,0 +1,376 @@
+/* The GitHub page. It reuses the Git browser's layout (Git.module.css) and adds pull request,
+   issue and review styles. */
+.page {
+	position: relative;
+}
+.list {
+	width: clamp(240px, 26vw, 380px);
+}
+.preview {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+.dim {
+	color: #93a2ad;
+	font-size: 12px;
+}
+.notice {
+	padding: 6px 16px;
+	font-size: 12px;
+	color: var(--ui-accent, #a5ce91);
+	border-top: 1px solid #30363d;
+	overflow-wrap: anywhere;
+}
+.added {
+	color: #a5ce91;
+}
+.removed {
+	color: #e59b96;
+}
+.folder {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	direction: rtl;
+	color: #7f8e99;
+}
+.filter {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	color: #93a2ad;
+}
+.filter select,
+.filter input,
+.newPullRequest input,
+.newPullRequest textarea,
+.composer textarea {
+	background: #111315;
+	color: inherit;
+	border: 1px solid #465047;
+	border-radius: 5px;
+	padding: 6px 8px;
+	font: inherit;
+	font-size: 12px;
+}
+.filter select:focus-visible,
+.filter input:focus-visible,
+.newPullRequest input:focus-visible,
+.newPullRequest textarea:focus-visible,
+.composer textarea:focus-visible {
+	outline: 1px solid var(--ui-accent, #a5ce91);
+	outline-offset: 0;
+}
+.check {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+}
+.badges {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin: -12px 0 18px;
+}
+.label,
+.state {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 1px 8px;
+	border: 1px solid #3a434a;
+	border-radius: 10px;
+	font-size: 11px;
+	color: #b6c2ca;
+	white-space: nowrap;
+}
+.label[data-tone='danger'] {
+	color: #e59b96;
+	border-color: #6b3a37;
+}
+.state[data-state='OPEN'] {
+	color: #a5ce91;
+	border-color: #3f5a38;
+}
+.state[data-state='MERGED'] {
+	color: #c4a7e7;
+	border-color: #574a6b;
+}
+.state[data-state='CLOSED'] {
+	color: #e59b96;
+	border-color: #6b3a37;
+}
+.state[data-state='DRAFT'] {
+	color: #93a2ad;
+}
+.checks {
+	display: inline-flex;
+	align-items: center;
+}
+.checks[data-checks='success'] {
+	color: #a5ce91;
+}
+.checks[data-checks='failure'] {
+	color: #e59b96;
+}
+.checks[data-checks='pending'] {
+	color: #e5c07b;
+}
+.overview {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+}
+.summary {
+	max-width: none;
+}
+.summary > p {
+	margin: 0 0 18px;
+}
+.sectionTitle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 28px 0 10px;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.5px;
+	color: #c8cdd3;
+}
+.checkList {
+	display: grid;
+	gap: 4px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-size: 12px;
+}
+.checkList li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.checkList small {
+	margin-left: auto;
+	color: #7f8e99;
+}
+.checkList a {
+	color: inherit;
+}
+.checkDot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #e5c07b;
+	flex-shrink: 0;
+}
+[data-check='success'] > .checkDot {
+	background: #a5ce91;
+}
+[data-check='failure'] > .checkDot {
+	background: #e59b96;
+}
+[data-check='skipped'] > .checkDot,
+[data-check='neutral'] > .checkDot {
+	background: #5c6770;
+}
+.timeline {
+	display: grid;
+	gap: 12px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.timeline li {
+	padding: 10px 14px;
+	border: 1px solid #30363d;
+	border-radius: 6px;
+	background: #ffffff04;
+}
+.timeline header {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	margin-bottom: 6px;
+	font-size: 12px;
+}
+.timeline header time {
+	margin-left: auto;
+	color: #7f8e99;
+	font-size: 11px;
+}
+.reviewState {
+	color: #93a2ad;
+}
+.reviewState[data-review='APPROVED'] {
+	color: #a5ce91;
+}
+.reviewState[data-review='CHANGES_REQUESTED'] {
+	color: #e59b96;
+}
+.actions {
+	border-top: 1px solid #30363d;
+	border-bottom: 0;
+}
+.actions > span,
+.composerControls > span {
+	flex: 1;
+}
+.composer {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px 16px;
+	border-top: 1px solid #30363d;
+	flex-shrink: 0;
+}
+.composer p {
+	margin: 0;
+	font-size: 12px;
+}
+.composer textarea {
+	min-height: 84px;
+	max-height: 40vh;
+	resize: vertical;
+}
+.composerControls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+}
+.panelButton,
+.primary {
+	font-weight: 600;
+}
+.page .primary:not(:disabled) {
+	background: var(--ui-accent, #a5ce91);
+	border-color: var(--ui-accent, #a5ce91);
+	color: #182017;
+}
+.fileView {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+}
+.diff {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 120px;
+}
+.threads {
+	max-height: 45%;
+	overflow: auto;
+	border-top: 1px solid #30363d;
+	flex-shrink: 0;
+}
+.threadsHeading {
+	position: sticky;
+	top: 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 8px 16px;
+	background: var(--app-background, #141414);
+	font-size: 12px;
+}
+.threadsHeading span {
+	margin-left: 4px;
+	color: #7f8e99;
+}
+.thread {
+	margin: 0 16px 12px;
+	padding: 10px 12px;
+	border: 1px solid #30363d;
+	border-radius: 6px;
+}
+.thread[data-resolved] {
+	opacity: 0.7;
+}
+.thread > header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+	font-size: 12px;
+}
+.thread > header > span:empty {
+	flex: 1;
+}
+.thread .composer {
+	padding: 10px 0 0;
+}
+.lineInput {
+	width: 64px;
+}
+.newPullRequest {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	flex: 1;
+	min-height: 0;
+	padding: 18px 24px;
+	overflow: auto;
+}
+.newPullRequest > label {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	font-size: 12px;
+	color: #93a2ad;
+}
+.newPullRequest > label > input {
+	font-size: 14px;
+	color: #e3e8ed;
+}
+.grow {
+	flex: 1;
+	min-height: 160px;
+}
+.grow textarea {
+	flex: 1;
+	resize: none;
+}
+.branchInput {
+	width: 180px;
+}
+.gate {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	flex: 1;
+	padding: 40px;
+	text-align: center;
+	color: #93a2ad;
+}
+.gate svg {
+	color: var(--ui-accent, #a5ce91);
+}
+.gate h2 {
+	margin: 0;
+	font-size: 18px;
+	color: #e3e8ed;
+}
+.gate p {
+	max-width: 520px;
+	margin: 0;
+	line-height: 1.6;
+}
+.gate code {
+	padding: 6px 12px;
+	border-radius: 5px;
+	background: #111315;
+	color: #e3e8ed;
+	user-select: text;
+}
