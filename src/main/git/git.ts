@@ -169,7 +169,7 @@ export async function gitSwitch(cwd: string, name: string, create: boolean): Pro
 }
 
 /**
- * Push the checked-out branch, to its upstream when it has one, or else to `origin`, setting
+ * Push only the checked-out branch, to its upstream when it has one, or else to `origin`, setting
  * that as its upstream. Returns the branch's name.
  */
 export async function gitPushBranch(cwd: string): Promise<string> {
@@ -177,8 +177,23 @@ export async function gitPushBranch(cwd: string): Promise<string> {
 	if (!branch) {
 		throw new Error('Check out a branch first.');
 	}
-	const upstream = await git(cwd, ['rev-parse', '--abbrev-ref', '@{upstream}']).catch(() => '');
-	await git(cwd, upstream.trim() ? ['push'] : ['push', '--set-upstream', 'origin', branch]);
+	const ref = `refs/heads/${branch}`;
+	const [remote, upstream] = (
+		await git(cwd, [
+			'for-each-ref',
+			'--format=%(upstream:remotename)%00%(upstream:remoteref)',
+			ref
+		])
+	)
+		.trim()
+		.split('\0');
+	if (upstream && (!remote || !upstream.startsWith('refs/heads/'))) {
+		throw new Error('Invalid branch name.');
+	}
+	const destination = upstream
+		? ['--', remote, `${ref}:${upstream}`]
+		: ['--set-upstream', '--', 'origin', `${ref}:${ref}`];
+	await git(cwd, ['push', '--no-follow-tags', ...destination]);
 	return branch;
 }
 
