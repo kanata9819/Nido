@@ -92,7 +92,10 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 	const modal = useRef<HTMLDivElement>(null);
 	const state = states[active] || initialSessionState;
 	const workspace = workspaces.find((w) => w.id === active);
-	const gitFiles = useGitFileStatus(workspace?.sleeping ? '' : active, state.buffers);
+	const { decorations: gitFiles, branch } = useGitFileStatus(
+		workspace?.sleeping ? '' : active,
+		state.buffers
+	);
 	const explorerVisible = sidebar && !!workspace && workspace.kind !== 'terminal';
 	const captureFocus = useFocusGuard(active);
 	const decorations = useMemo(
@@ -368,6 +371,8 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 				workspace={workspace}
 				state={state}
 				sessionCount={workspaces.length}
+				branch={workspace?.kind === 'terminal' ? undefined : branch}
+				onBranch={() => showPanel('git')}
 				onToggleTerminal={panels.toggleTerminal}
 				onToggleDebugger={panels.toggleDebugger}
 				onToggleReferences={panels.toggleReferences}

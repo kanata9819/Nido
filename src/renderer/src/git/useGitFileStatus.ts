@@ -20,17 +20,18 @@ const statusLabels: Record<string, string> = {
 };
 
 /**
- * Git status marks for the explorer and tabs, keyed by gitFileKey. Polls git status every 3
- * seconds, slowing down to 30 seconds while nothing changes, and refreshes at once when the
- * window gains focus or files change.
+ * Git status marks for the explorer and tabs, keyed by gitFileKey, and the checked-out branch
+ * for the status bar. Polls git status every 3 seconds, slowing down to 30 seconds while
+ * nothing changes, and refreshes at once when the window gains focus or files change.
  */
 export function useGitFileStatus(
 	workspaceId: string,
 	buffers: BufferInfo[]
-): Record<string, Decoration> {
+): { decorations: Record<string, Decoration>; branch: string | undefined } {
 	const [result, setResult] = useState<{
 		workspaceId: string;
 		decorations: Record<string, Decoration>;
+		branch: string;
 	}>();
 	const files = useMemo(
 		() => JSON.stringify(buffers.map(({ name, modified }) => [name, modified])),
@@ -81,13 +82,15 @@ export function useGitFileStatus(
 					};
 				}
 				if (!cancelled) {
-					const signature = JSON.stringify(next);
+					// A branch switch changes the status bar even when no file changed.
+					const signature = JSON.stringify([status.branch, next]);
 					interval = signature === snapshot ? Math.min(30_000, interval * 2) : 3000;
 					snapshot = signature;
 					setResult((previous) => {
 						const paths = Object.keys(next);
 						if (
 							previous?.workspaceId === workspaceId &&
+							previous.branch === status.branch &&
 							Object.keys(previous.decorations).length === paths.length &&
 							paths.every(
 								(path) =>
@@ -97,7 +100,7 @@ export function useGitFileStatus(
 						) {
 							return previous;
 						}
-						return { workspaceId, decorations: next };
+						return { workspaceId, decorations: next, branch: status.branch };
 					});
 				}
 			} catch {
@@ -135,5 +138,7 @@ export function useGitFileStatus(
 		};
 	}, [workspaceId, files]);
 
-	return result?.workspaceId === workspaceId ? result.decorations : emptyDecorations;
+	return result?.workspaceId === workspaceId
+		? { decorations: result.decorations, branch: result.branch || undefined }
+		: { decorations: emptyDecorations, branch: undefined };
 }
