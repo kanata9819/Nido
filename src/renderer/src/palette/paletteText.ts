@@ -52,7 +52,7 @@ export function hint(
 		return t('{count} problems · j/k Select · i / Filter', { count });
 	}
 	if (panel === 'workspaces') {
-		return t('j/k Select · Shift+J/K Reorder · i / Filter · Ctrl+S Sleep');
+		return t('j/k Select · Shift+J/K Reorder · x Close · i / Filter · Ctrl+S Sleep');
 	}
 	return panel === 'buffers'
 		? t('j/k Select · Shift+J/K Reorder · i / Filter')

@@ -36,6 +36,47 @@ async function restoreWorkspaces(page: Page, deferred: string): Promise<void> {
 	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
 }
 
+test('x closes the highlighted workspace from the list and can be typed into the filter', async ({
+	page
+}) => {
+	await restoreWorkspaces(page, 'closeWorkspace');
+	await page.keyboard.press('Space');
+	await page.keyboard.press('w');
+	const palette = page.getByRole('dialog', { name: 'workspaces palette' });
+	const list = palette.getByRole('group', { name: 'Palette results' });
+	const filter = palette.getByRole('textbox', { name: 'Filter items' });
+	const closeCalls = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'closeWorkspace')
+				.map((call) => call.args)
+		);
+	await expect(list).toBeFocused();
+	await page.keyboard.press('i');
+	await filter.press('x');
+	await expect(filter).toHaveValue('x');
+	expect(await closeCalls()).toEqual([]);
+	await filter.fill('');
+	await filter.press('Escape');
+	await expect(list).toBeFocused();
+	await page.keyboard.press('j');
+	await expect(list.locator('button[class*="selectedItem"]')).toContainText('Beta');
+	await list.dispatchEvent('keydown', { key: 'x', repeat: true, bubbles: true });
+	expect(await closeCalls()).toEqual([]);
+	await page.keyboard.press('x');
+	await expect.poll(closeCalls).toEqual([['beta']]);
+	await page.evaluate(() => {
+		window.rendererTest.emit({ type: 'exit', id: 'beta' });
+		window.rendererTest.settle('closeWorkspace', 0, true);
+	});
+	await expect(page.getByRole('tab', { name: 'Workspace Beta', exact: true })).toHaveCount(0);
+	await expect(page.getByRole('tab', { name: 'Workspace Alpha', exact: true })).toHaveAttribute(
+		'aria-selected',
+		'true'
+	);
+	await expect(list).toBeFocused();
+});
+
 test('a delayed workspace close preserves a newer terminal interaction', async ({ page }) => {
 	await restoreWorkspaces(page, 'closeWorkspace');
 	await page.getByRole('button', { name: 'Close workspace Beta', exact: true }).click();
