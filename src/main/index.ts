@@ -39,8 +39,12 @@ const send = (event: NidoEvent): void => {
  * the title bar), so without a renderer it could not even be closed.
  */
 function failToStart(error: unknown): void {
-	// A window closed while it loaded aborts the load; that is quitting, not a failure.
-	if (window?.isDestroyed()) {
+	// A window closed while it loaded aborts the load; that is quitting, not a failure. A
+	// reload or another navigation started meanwhile aborts it too, and loads the page itself.
+	if (
+		window?.isDestroyed() ||
+		(error as { code?: unknown } | undefined)?.code === 'ERR_ABORTED'
+	) {
 		return;
 	}
 	const language = app.getLocale().toLowerCase().startsWith('ja') ? 'ja' : 'en';
