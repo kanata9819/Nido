@@ -164,7 +164,7 @@ test('Ctrl+S in the workspace list puts a background workspace to sleep', async 
 				.filter((call) => call.method === 'sleepWorkspace')
 				.map((call) => call.args)
 		);
-	await page.getByRole('button', { name: 'Workspaces', exact: true }).click();
+	await openWorkspaceList(page);
 	const list = page.getByRole('dialog', { name: 'workspaces palette', exact: true });
 	const alpha = list.getByRole('button', { name: /Alpha/ });
 	const beta = list.getByRole('button', { name: /Beta/ });
@@ -192,7 +192,7 @@ test('Ctrl+S in the workspace list puts a background workspace to sleep', async 
 
 /** Open the workspace list, select Beta and press Ctrl+S; resolves once the request is pending. */
 async function requestBetaSleep(page: Page): Promise<void> {
-	await page.getByRole('button', { name: 'Workspaces', exact: true }).click();
+	await openWorkspaceList(page);
 	await page.keyboard.press('ArrowDown');
 	await page.keyboard.press('Control+s');
 	await expect
@@ -306,3 +306,13 @@ test('Ctrl+Shift+C puts the focused terminal in copy mode and shows it', async (
 	await expect(panel.getByRole('status')).toHaveCount(0);
 	await expect(panel).toContainText('Ctrl+Shift+C Copy mode');
 });
+
+/** Open the workspace list with Space w from the editor. */
+async function openWorkspaceList(page: Page): Promise<void> {
+	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+	await page.keyboard.press('Space');
+	await page.keyboard.press('w');
+	await expect(
+		page.getByRole('dialog', { name: 'workspaces palette', exact: true })
+	).toBeVisible();
+}
