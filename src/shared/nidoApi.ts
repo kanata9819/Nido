@@ -98,6 +98,12 @@ export interface WorkspaceAPI {
 	): Promise<Workspace | null>;
 	openTerminal(id: string, shell?: TerminalShell): Promise<Workspace>;
 	restartTerminal(id: string, shell?: TerminalShell): Promise<void>;
+	/** Start another shell in a terminal workspace and show it. */
+	addTerminalShell(id: string, shell?: TerminalShell): Promise<void>;
+	/** Show a terminal workspace's shell by its 1-based position. */
+	selectTerminalShell(id: string, position: number): Promise<void>;
+	/** Stop a terminal workspace's shell by its 1-based position. */
+	closeTerminalShell(id: string, position: number): Promise<void>;
 	browseFolders(
 		path?: string,
 		distribution?: string

@@ -66,6 +66,13 @@ function registerGridHandlers({ handle, session, syncFocus }: EditorHandlerDeps)
 		}
 		return s.startTerminal(shellChoice(shell));
 	});
+	handle('addTerminalShell', (id, shell) => session(id).addTerminalShell(shellChoice(shell)));
+	handle('selectTerminalShell', (id, position) =>
+		session(id).selectTerminalShell(integer(position, 100))
+	);
+	handle('closeTerminalShell', (id, position) =>
+		session(id).closeTerminalShell(integer(position, 100))
+	);
 	handle('terminalCopyMode', (id) => session(id).enterCopyMode());
 }
 

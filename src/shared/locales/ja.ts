@@ -645,9 +645,21 @@ export const japanese: Record<string, string> = {
 	'Go to line {line}': '{line} 行に移動',
 	'Jump to this scope · Shift: ending line · Alt+Shift+S: focus headers':
 		'このスコープに移動 · Shift：末尾の行 · Alt+Shift+S：見出しにフォーカス',
-	'Terminal ·': 'ターミナル ·',
-	'Ctrl+@ Toggle · Ctrl+K Editor · Ctrl+Shift+C Copy mode':
-		'Ctrl+@：切り替え · Ctrl+K：エディター · Ctrl+Shift+C：コピーモード',
+	'Ctrl+K Editor · Ctrl+Shift+C Copy mode': 'Ctrl+K：エディター · Ctrl+Shift+C：コピーモード',
+	Shells: 'シェル',
+	'No such shell.': 'そのシェルはありません。',
+	'Ctrl+Shift+PageUp / PageDown: switch shells': 'Ctrl+Shift+PageUp / PageDown：シェルを切り替え',
+	'Close shell {name}': 'シェル {name} を閉じる',
+	'Close shell (Ctrl+Shift+W)': 'シェルを閉じる（Ctrl+Shift+W）',
+	'New shell': '新しいシェル',
+	'New shell (Ctrl+Shift+T)': '新しいシェル（Ctrl+Shift+T）',
+	'Restore terminal size': 'ターミナルを元のサイズに戻す',
+	'Maximize terminal': 'ターミナルを最大化',
+	'Restore size (Ctrl+Shift+Enter)': '元のサイズに戻す（Ctrl+Shift+Enter）',
+	'Maximize (Ctrl+Shift+Enter)': '最大化（Ctrl+Shift+Enter）',
+	'Hide terminal (Ctrl+@)': 'ターミナルを非表示（Ctrl+@）',
+	'Terminal height': 'ターミナルの高さ',
+	'Drag to resize · ↑ / ↓': 'ドラッグでサイズ変更 · ↑ / ↓',
 	'COPY · v Select · y Copy · q Back to the shell':
 		'コピーモード · v：選択 · y：コピー · q：シェルに戻る',
 	'Hide terminal': 'ターミナルを非表示',
@@ -1092,6 +1104,8 @@ export const japanese: Record<string, string> = {
 	Skipped: 'スキップ',
 	Neutral: '中立',
 	'#{number} · {title}': '#{number} · {title}',
+	'Branch: {branch} · Source control (Ctrl+Shift+G)':
+		'ブランチ：{branch} · ソース管理（Ctrl+Shift+G）',
 	'Branch: {branch}': 'ブランチ：{branch}',
 	'Pull request files': 'プルリクエストのファイル',
 	'No pull requests.': 'プルリクエストはありません。',

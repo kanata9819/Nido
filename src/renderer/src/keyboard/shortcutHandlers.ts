@@ -300,9 +300,31 @@ export function handleEditorShortcuts(context: ShortcutContext, shortcut: Shortc
 	}
 }
 
-/** Shortcuts while a terminal has focus: restart its shell, or enter copy mode. */
+/**
+ * Shortcuts while a terminal has focus: restart its shell or enter copy mode, and in the
+ * terminal panel start, close or switch shells and maximize the panel.
+ */
 export function handleTerminalShortcuts(context: ShortcutContext, shortcut: Shortcut): void {
-	const { event, consume } = shortcut;
+	const { event, key, consume, editorWorkspace } = shortcut;
+	if (editorWorkspace && isCtrlShift(event, 't', 'w', 'pageup', 'pagedown', 'enter')) {
+		consume();
+		if (!event.repeat) {
+			if (key === 'enter') {
+				context.toggleTerminalMaximized();
+			} else {
+				context.terminalShell(
+					key === 't'
+						? 'add'
+						: key === 'w'
+							? 'close'
+							: key === 'pageup'
+								? 'previous'
+								: 'next'
+				);
+			}
+		}
+		return;
+	}
 	if (isCtrlShift(event, 'r')) {
 		consume();
 		if (!event.repeat) {

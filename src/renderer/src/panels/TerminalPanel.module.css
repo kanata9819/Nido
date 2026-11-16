@@ -1,26 +1,134 @@
 .terminalPanel {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	flex-shrink: 0;
-	height: clamp(180px, 30vh, 420px);
 	min-height: 0;
 	background: var(--surface-editor, #141414);
 	border-top: 1px solid var(--ui-border-strong, #34383c);
 }
+/* Maximized, the terminal covers the editor without resizing it. */
+.terminalPanel[data-maximized] {
+	position: absolute;
+	inset: 0;
+	z-index: 4;
+	border-top: none;
+}
 .terminalPanel:focus-within {
 	border-top-color: var(--ui-accent, #a5bd9b);
-}
-.restartShell {
-	font-size: 12px;
 }
 :global(:root[data-theme='neon']) .terminalPanel:focus-within {
 	box-shadow: 0 -1px 14px -6px var(--ui-accent);
 }
+.resize {
+	position: absolute;
+	top: -4px;
+	left: 0;
+	right: 0;
+	height: 7px;
+	z-index: 2;
+	cursor: row-resize;
+	touch-action: none;
+}
+.resize:hover,
+.resize:focus-visible {
+	background: var(--ui-focus, #a3cc9450);
+}
+.toolbar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+	padding: 4px 8px 4px 10px;
+	border-bottom: 1px solid var(--ui-border, #292e32);
+	font-size: 12px;
+	container-type: inline-size;
+}
+.name {
+	flex-shrink: 1;
+	min-width: 0;
+	max-width: 30%;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	color: #dce4eb;
+	font-weight: 600;
+}
+.tabs {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	min-width: 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.tab {
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+	border-radius: 6px;
+	color: #8897a5;
+}
+.tab[data-selected='true'] {
+	background: var(--ui-selection, #25302c);
+	color: #dce4eb;
+}
+.tab button {
+	padding: 3px 4px 3px 8px;
+	font-size: 12px;
+	color: inherit;
+}
+.tab small {
+	margin-right: 5px;
+	color: var(--ui-accent, #a8cf9e);
+}
+.tab .closeShell {
+	padding: 3px 6px;
+	font-size: 14px;
+	line-height: 1;
+	opacity: 0;
+}
+.tab:hover .closeShell,
+.tab[data-selected='true'] .closeShell,
+.closeShell:focus-visible {
+	opacity: 0.7;
+}
+.iconButton {
+	flex-shrink: 0;
+	min-width: 26px;
+	height: 24px;
+	padding: 0 6px;
+	font-size: 15px;
+	line-height: 1;
+	color: #8897a5;
+}
+.iconButton:hover {
+	color: #dce4eb;
+}
+.hint {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	text-align: right;
+	color: #6f7c88;
+}
 /* The terminal's copy mode hint: keys select output instead of reaching the shell. */
 .copyMode {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
 	padding: 1px 8px;
 	border-radius: 999px;
 	background: var(--ui-accent-soft, #a3cc941f);
 	color: var(--ui-accent, #a3cc94);
 	font-weight: 600;
+}
+@container (max-width: 520px) {
+	.hint {
+		visibility: hidden;
+	}
 }

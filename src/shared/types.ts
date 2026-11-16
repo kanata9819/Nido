@@ -126,6 +126,8 @@ export interface SessionState {
 	lspProgress?: string;
 	/** Whether a terminal is in copy mode, where keys move and select instead of typing. */
 	copyMode?: boolean;
+	/** The shells of a terminal workspace, by name, and the 1-based position of the shown one. */
+	terminalShells?: { names: string[]; current: number };
 	/** Whether no file is open, so the welcome screen is shown. */
 	empty?: boolean;
 	buffers: BufferInfo[];
