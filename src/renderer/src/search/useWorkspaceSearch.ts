@@ -17,6 +17,8 @@ interface Options {
 	options: SearchOptions;
 	replacement: string;
 	focus: (target: 'results' | 'files') => void;
+	/** The result to select when the first search finishes. */
+	restoreSelection?: number;
 }
 
 /** Search results, the replacement preview and the actions on them. */
@@ -54,12 +56,16 @@ export function useWorkspaceSearch({
 	query,
 	options,
 	replacement,
-	focus
+	focus,
+	restoreSelection
 }: Options): WorkspaceSearch {
 	const t = useI18n();
 	const [selection, setSelection] = useState(0);
+	// The result to select once the first search finishes, as when the panel reopens.
+	const restoring = useRef(restoreSelection);
 	const [excluded, setExcluded] = useState(new Set<number>());
-	const [loading, setLoading] = useState(false);
+	// A query the panel opens with is searched at once.
+	const [loading, setLoading] = useState(() => !!query);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState('');
 	const [notice, setNotice] = useState('');
@@ -92,7 +98,10 @@ export function useWorkspaceSearch({
 					if (!cancelled) {
 						setResult(result);
 						setExcluded(new Set());
-						setSelection(0);
+						setSelection(
+							Math.max(0, Math.min(restoring.current ?? 0, result.matches.length - 1))
+						);
+						restoring.current = undefined;
 					}
 				})
 				.catch((error) => {
@@ -124,6 +133,8 @@ export function useWorkspaceSearch({
 	};
 	/** Clear the results until the new search finishes. */
 	const reset = (): void => {
+		// A changed search starts at its first result.
+		restoring.current = undefined;
 		setResult({ matches: [], truncated: false });
 		setSelection(0);
 		setLoading(!!query);

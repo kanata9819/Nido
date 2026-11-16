@@ -9,6 +9,21 @@ import ReplacementPreviewPanel from './ReplacementPreviewPanel';
 import WorkspaceSearchResults from './WorkspaceSearchResults';
 import { ReplacementActions, SearchFooter, SearchOptionButtons } from './SearchControls';
 
+/**
+ * Each workspace's last search, so reopening the panel continues it: the query, options and
+ * replacement, and the result that was selected, ready for j to go on to the next one.
+ */
+const lastSearches = new Map<
+	string,
+	{
+		query: string;
+		options: typeof defaultSearchOptions;
+		replacement: string;
+		replace: boolean;
+		selection: number;
+	}
+>();
+
 /** Alt+C, Alt+W and Alt+R: the option each toggles. */
 const optionShortcuts = { c: 'caseSensitive', w: 'wholeWord', r: 'regex' } as const;
 
@@ -25,10 +40,11 @@ export default function WorkspaceSearch({
 }): React.JSX.Element {
 	const t = useI18n();
 	const captureFocus = useFocusGuard(workspaceId);
-	const [query, setQuery] = useState('');
-	const [replacement, setReplacement] = useState('');
-	const [replace, setReplace] = useState(false);
-	const [options, setOptions] = useState(defaultSearchOptions);
+	const [last] = useState(() => lastSearches.get(workspaceId));
+	const [query, setQuery] = useState(last?.query ?? '');
+	const [replacement, setReplacement] = useState(last?.replacement ?? '');
+	const [replace, setReplace] = useState(last?.replace ?? false);
+	const [options, setOptions] = useState(last?.options ?? defaultSearchOptions);
 	const queryInput = useRef<HTMLInputElement>(null);
 	const replaceInput = useRef<HTMLInputElement>(null);
 	const folderInput = useRef<HTMLInputElement>(null);
@@ -65,7 +81,17 @@ export default function WorkspaceSearch({
 		reset,
 		prepare,
 		apply
-	} = useWorkspaceSearch({ workspaceId, query, options, replacement, focus });
+	} = useWorkspaceSearch({
+		workspaceId,
+		query,
+		options,
+		replacement,
+		focus,
+		restoreSelection: last?.selection
+	});
+	useEffect(() => {
+		lastSearches.set(workspaceId, { query, options, replacement, replace, selection });
+	}, [workspaceId, query, options, replacement, replace, selection]);
 	// Move focus to the requested element after each render.
 	useLayoutEffect(() => {
 		const target = focusTarget.current;

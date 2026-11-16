@@ -242,6 +242,42 @@ test('Japanese search shows translated controls and regex errors within a small 
 	await page.screenshot({ path: test.info().outputPath('search-japanese.png') });
 });
 
+test('reopening the search continues it: the query, and j goes on from the result opened', async ({
+	page
+}) => {
+	await open(page);
+	const query = page.getByRole('textbox', { name: 'Search in files', exact: true });
+	const results = page.getByRole('listbox', { name: 'Search results', exact: true });
+	await page.keyboard.press('i');
+	await page.keyboard.type('joke');
+	await page.waitForTimeout(180);
+	await matches(page);
+	await page.keyboard.press('Escape');
+	await page.keyboard.press('j');
+	await page.keyboard.press('Enter');
+	await expect(results).toHaveCount(0);
+	const opened = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'openFile')
+				.map((call) => call.args.slice(1))
+		);
+	await expect.poll(opened).toEqual([['src/second.txt', 2, 1]]);
+
+	// The search reopens with its query and searches again, on the result opened last.
+	await page.keyboard.press('Control+Shift+f');
+	await expect(query).toHaveValue('joke');
+	await matches(page);
+	await expect(results).toBeFocused();
+	await expect(results.getByRole('option').nth(1)).toHaveAttribute('aria-selected', 'true');
+	await page.keyboard.press('k');
+	await page.keyboard.press('Enter');
+	await expect.poll(opened).toEqual([
+		['src/second.txt', 2, 1],
+		['src/first.txt', 1, 1]
+	]);
+});
+
 test('Space s opens Search in files, and the Space menu lists it', async ({ page }) => {
 	await page.goto(`${origin}?view=app`);
 	const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });

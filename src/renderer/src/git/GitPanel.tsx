@@ -63,7 +63,10 @@ export default function GitPanel({
 		list.current?.focus();
 	}, [workspaceId]);
 
-	/** j/k select, s/u stage or unstage, S stages all, r refreshes and c edits the message. */
+	/**
+	 * j/k select, s/u stage or unstage, S stages all, r refreshes and c edits the message.
+	 * With a remote, f fetches, p pulls and P pushes, as in lazygit.
+	 */
 	const listKeyDown = (event: React.KeyboardEvent): void => {
 		if (event.ctrlKey || event.altKey || event.metaKey || event.nativeEvent.isComposing) {
 			return;
@@ -107,6 +110,21 @@ export default function GitPanel({
 				input.current?.focus();
 				break;
 			}
+			case 'f':
+			case 'p':
+			case 'P': {
+				event.preventDefault();
+				const action = event.key === 'f' ? 'fetch' : event.key === 'p' ? 'pull' : 'push';
+				if (
+					!busy &&
+					remote &&
+					(action === 'fetch' || destination) &&
+					(action !== 'pull' || remote.upstream)
+				) {
+					remoteAction(action);
+				}
+				break;
+			}
 		}
 	};
 
@@ -148,22 +166,28 @@ export default function GitPanel({
 				{remote && (
 					<>
 						{destination && <span title={destination}>{destination}</span>}
-						<button disabled={busy} onClick={() => remoteAction('fetch')}>
-							{t('Fetch all')}
+						<button
+							disabled={busy}
+							aria-keyshortcuts="f"
+							onClick={() => remoteAction('fetch')}
+						>
+							{t('Fetch all')} <kbd>f</kbd>
 						</button>
 						<button
 							disabled={busy || !destination || !remote.upstream}
 							title={destination}
+							aria-keyshortcuts="p"
 							onClick={() => remoteAction('pull')}
 						>
-							{t('Pull')}
+							{t('Pull')} <kbd>p</kbd>
 						</button>
 						<button
 							disabled={busy || !destination}
 							title={destination}
+							aria-keyshortcuts="Shift+P"
 							onClick={() => remoteAction('push')}
 						>
-							{remote.upstream ? t('Push') : t('Publish branch')}
+							{remote.upstream ? t('Push') : t('Publish branch')} <kbd>P</kbd>
 						</button>
 					</>
 				)}
@@ -382,7 +406,7 @@ function ShortcutsFooter(): React.JSX.Element {
 				<div>
 					<p>
 						{t(
-							'j/k Select · s Stage · S Stage all · u Unstage · r Refresh · c Message · Esc Close'
+							'j/k Select · s Stage · S Stage all · u Unstage · r Refresh · c Message · f Fetch · p Pull · P Push · Esc Close'
 						)}
 					</p>
 					<p>
