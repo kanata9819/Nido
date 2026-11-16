@@ -1,10 +1,13 @@
 import { useI18n } from '../i18n';
-import { Blocks, Files, GitBranch, GitPullRequest, History, Search, Square } from 'lucide-react';
+import { Blocks, Files, GitBranch, GitPullRequest, History, Search } from 'lucide-react';
 import type { Panel } from '../types';
 import type { ActivityBarPosition } from '../settings/useEditorSettings';
 import styles from './NavigationRail.module.css';
 
-/** The vertical activity bar with buttons for the explorer, search, Git, Time Machine and more. */
+/**
+ * The vertical activity bar with buttons for the explorer, search, Git, Time Machine and more.
+ * The workspace list has none: Space w opens it, and the title bar's tabs show the workspaces.
+ */
 export default function NavigationRail({
 	position,
 	sidebar,
@@ -41,13 +44,6 @@ export default function NavigationRail({
 				onClick={() => showPanel('files')}
 			>
 				<Search size={22} />
-			</button>
-			<button
-				aria-label={t('Workspaces')}
-				title={t('Workspaces (Space w)')}
-				onClick={() => showPanel('workspaces')}
-			>
-				<Square size={20} />
 			</button>
 			<button
 				aria-label={t('Source control')}
