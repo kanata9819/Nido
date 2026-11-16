@@ -113,13 +113,15 @@ test('Reference selection resets with a new result and old previews cannot repla
 		.toEqual([1, 2]);
 });
 
-for (const dismiss of ['button', 'Escape', 'toggle'] as const) {
+for (const dismiss of ['button', 'Escape', 'toggle', 'jump'] as const) {
 	test(`closed reference searches stay closed across workspace switches after ${dismiss}`, async ({
 		page
 	}) => {
 		const errors: string[] = [];
 		page.on('pageerror', (error) => errors.push(error.message));
-		await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+		const deferred =
+			dismiss === 'jump' ? 'restoreWorkspaces,openReference' : 'restoreWorkspaces';
+		await page.goto(`${origin}?view=app&defer=${deferred}`);
 		await page.evaluate(() =>
 			window.rendererTest.settle('restoreWorkspaces', 0, {
 				workspaces: [
@@ -179,6 +181,10 @@ for (const dismiss of ['button', 'Escape', 'toggle'] as const) {
 			await page.getByRole('button', { name: 'Hide references', exact: true }).click();
 		} else if (dismiss === 'toggle') {
 			await toggle.click();
+		} else if (dismiss === 'jump') {
+			await list.press('Enter');
+			await expect(panel).toBeVisible();
+			await page.evaluate(() => window.rendererTest.settle('openReference', 0, undefined));
 		} else {
 			await page.keyboard.press('Escape');
 		}
