@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Search, Terminal, X } from 'lucide-react';
 import {
 	splitCommandContent,
@@ -102,6 +102,24 @@ export default function NeovimUI({
 		setDismissed({ messages: state.messageVersion, history: state.historyVersion });
 		input.current?.focus();
 	};
+
+	// Esc in the editor also closes the messages, unless Neovim waits at a prompt (answered
+	// through the dialog). The key still reaches Neovim, as it does without messages.
+	const closedVersions = { messages: state.messageVersion, history: state.historyVersion };
+	const closeable = showMessages && !prompt;
+	useEffect(() => {
+		const node = input.current;
+		if (!node || !closeable) {
+			return;
+		}
+		const keydown = (event: KeyboardEvent): void => {
+			if (event.key === 'Escape' && !event.isComposing) {
+				setDismissed(closedVersions);
+			}
+		};
+		node.addEventListener('keydown', keydown);
+		return () => node.removeEventListener('keydown', keydown);
+	});
 
 	// The layout effects run in this order: the completion viewport, the input at the command
 	// cursor, the newest messages scrolled into view, and the completion for assistive technology.

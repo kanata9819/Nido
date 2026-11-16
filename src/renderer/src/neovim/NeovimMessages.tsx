@@ -61,6 +61,11 @@ export default function NeovimMessages({
 						<span className={styles.hint}>
 							<kbd>Alt Shift M</kbd> {t('Focus')}
 						</span>
+						{!prompt && (
+							<span className={styles.hint}>
+								<kbd>Esc</kbd> {t('Close')}
+							</span>
+						)}
 						<button aria-label={t('Close messages')} onClick={closeMessages}>
 							<X size={16} />
 						</button>
