@@ -405,18 +405,25 @@ vim.api.nvim_create_user_command('NidoRename', rename_symbol, {})
 vim.keymap.set('n', '<F2>', '<Cmd>NidoRename<CR>')
 -- Ctrl+O preserves the insertion position; Esc moves off a symbol's first character.
 vim.keymap.set('i', '<F2>', '<C-o><Cmd>NidoRename<CR>')
+--- A go-to command (definition, type definition, implementation) that lists several results
+--- in the references panel rather than in Neovim's quickfix window.
+local function go_to(method, kind)
+  return function()
+    vim.lsp.buf[method]({ on_list = function(options) require('nido_references').go_to(kind, options) end })
+  end
+end
 vim.api.nvim_create_autocmd('LspAttach', {
   callback = function(event)
     local opts = { buffer = event.buf }
-    vim.keymap.set('n', 'gd', vim.lsp.buf.definition, opts)
+    vim.keymap.set('n', 'gd', go_to('definition', 'definitions'), opts)
     vim.keymap.set('n', 'gr', function() require('nido_references').find() end, opts)
     vim.keymap.set('n', '<S-F12>', function() require('nido_references').find() end, opts)
     for _, key in ipairs({ 'K', '<C-k>' }) do
       vim.keymap.set('n', key, show_type_information, opts)
     end
-    vim.keymap.set('n', '<F12>', vim.lsp.buf.definition, opts)
-    vim.keymap.set('n', 'gI', vim.lsp.buf.implementation, opts)
-    vim.keymap.set('n', 'gy', vim.lsp.buf.type_definition, opts)
+    vim.keymap.set('n', '<F12>', go_to('definition', 'definitions'), opts)
+    vim.keymap.set('n', 'gI', go_to('implementation', 'implementations'), opts)
+    vim.keymap.set('n', 'gy', go_to('type_definition', 'type definitions'), opts)
     vim.keymap.set('n', 'gra', vim.lsp.buf.code_action, opts)
     vim.keymap.set('n', 'g=', function() vim.lsp.buf.format({ async = true }) end, opts)
     local client = vim.lsp.get_client_by_id(event.data.client_id)

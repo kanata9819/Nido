@@ -20,11 +20,9 @@ local function publish(state)
   vim.rpcnotify(vim.g.nido_channel, 'nido:references', state)
 end
 
---- Ask the language servers for references to the symbol under the cursor, cancelling the
---- previous search, and publish the results as they arrive.
-function M.find()
+--- Start a new list: cancel the references search still running, if any.
+local function start_list()
   search = search + 1
-  local current = search
   stop_deadline()
   for _, request in ipairs(pending) do
     if not request.done and request.id then
@@ -33,6 +31,13 @@ function M.find()
   end
   pending = {}
   version = version + 1
+  return search
+end
+
+--- Ask the language servers for references to the symbol under the cursor, cancelling the
+--- previous search, and publish the results as they arrive.
+function M.find()
+  local current = start_list()
   local buffer = vim.api.nvim_get_current_buf()
   local clients = vim.lsp.get_clients({ bufnr = buffer, method = 'textDocument/references' })
   local state = { version = version, search = current, items = {}, loading = true, error = '' }
@@ -242,9 +247,8 @@ function M.highlight(buffer, first, lines, syntax_only)
   return highlighted
 end
 
---- Jump to a reference and center it.
-function M.open(index, expected_version)
-  local item = get_item(index, expected_version)
+--- Jump to a quickfix-style item (filename, lnum, col) and center it, keeping the jump list.
+local function jump(item)
   vim.cmd("normal! m'")
   require('nido_eol').open(item.filename)
   local line = math.min(item.lnum, vim.api.nvim_buf_line_count(0))
@@ -252,6 +256,36 @@ function M.open(index, expected_version)
   vim.api.nvim_win_set_cursor(0, { line, math.min(item.col - 1, #text) })
   vim.cmd('normal! zv')
   require('nido_scroll').center()
+end
+
+--- Jump to a reference and center it.
+function M.open(index, expected_version)
+  jump(get_item(index, expected_version))
+end
+
+--- Show where a go-to request (definition, type definition, implementation) leads, as the
+--- `on_list` of vim.lsp.buf.definition and its kin: jump to a single location, or list several
+--- in the references panel. Without this, Neovim lists them in its own quickfix window.
+function M.go_to(kind, options)
+  local found, seen = {}, {}
+  for _, item in ipairs(options.items or {}) do
+    local key = item.filename .. ':' .. item.lnum .. ':' .. item.col
+    if not seen[key] then
+      seen[key] = true
+      table.insert(found, item)
+    end
+  end
+  if #found == 1 then
+    jump(found[1])
+    return
+  end
+  local current = start_list()
+  items = found
+  local state = { version = version, search = current, kind = kind, items = {}, loading = false, error = '' }
+  for _, item in ipairs(items) do
+    table.insert(state.items, { path = item.filename, line = item.lnum, column = item.col, text = item.text or '' })
+  end
+  publish(state)
 end
 
 return M
