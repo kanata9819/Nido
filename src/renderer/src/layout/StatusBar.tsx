@@ -1,7 +1,7 @@
 import progressStyles from '../ui/Progress.module.css';
 import { useI18n } from '../i18n';
 import type { Translator } from '../../../shared/i18n';
-import { Code2, Search, ChevronUp, ChevronDown, X, SquareTerminal } from 'lucide-react';
+import { Code2, Search, ChevronUp, ChevronDown, X, SquareTerminal, GitBranch } from 'lucide-react';
 import type { Workspace, SessionState } from '../../../shared/types';
 import styles from './StatusBar.module.css';
 import { indentationLabel } from '../palette/commandItems';
@@ -11,6 +11,10 @@ interface StatusBarProps {
 	workspace?: Workspace;
 	state: SessionState;
 	sessionCount: number;
+	/** The checked-out Git branch, absent outside a repository. */
+	branch?: string;
+	/** Open Source control, from the branch. */
+	onBranch: () => void;
 	onToggleTerminal: () => void;
 	onConnect: () => void;
 	onToggleDebugger: () => void;
@@ -59,6 +63,8 @@ export default function StatusBar({
 	workspace,
 	state,
 	sessionCount,
+	branch,
+	onBranch,
 	onConnect,
 	onToggleTerminal,
 	onToggleDebugger,
@@ -84,6 +90,17 @@ export default function StatusBar({
 			<span className={styles.mode} data-mode={displayMode}>
 				{displayMode}
 			</span>
+			{branch && (
+				<button
+					className={styles.branch}
+					aria-label={t('Branch: {branch}', { branch })}
+					title={t('Branch: {branch} · Source control (Ctrl+Shift+G)', { branch })}
+					onClick={onBranch}
+				>
+					<GitBranch size={13} aria-hidden="true" />
+					<span>{branch}</span>
+				</button>
+			)}
 			{active && (
 				<button aria-label={t('Toggle terminal')} onClick={onToggleTerminal}>
 					{t('Terminal')}

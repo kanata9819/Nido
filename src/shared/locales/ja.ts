@@ -1080,6 +1080,8 @@ export const japanese: Record<string, string> = {
 	Skipped: 'スキップ',
 	Neutral: '中立',
 	'#{number} · {title}': '#{number} · {title}',
+	'Branch: {branch} · Source control (Ctrl+Shift+G)':
+		'ブランチ：{branch} · ソース管理（Ctrl+Shift+G）',
 	'Branch: {branch}': 'ブランチ：{branch}',
 	'Pull request files': 'プルリクエストのファイル',
 	'No pull requests.': 'プルリクエストはありません。',

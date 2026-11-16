@@ -14,6 +14,18 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
+.branch {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+	max-width: 240px;
+}
+.branch span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .lineEnding:focus-visible {
 	outline: 1px solid var(--ui-accent, #a8cf9e);
 }
