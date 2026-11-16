@@ -22,6 +22,8 @@ import type {
 	FileEntry,
 	GitBranchEntry,
 	GitCommitEntry,
+	GitRemoteAction,
+	GitRemoteInfo,
 	GitStatus,
 	Indentation,
 	MarkdownSnapshot,
@@ -67,7 +69,8 @@ export interface GitAPI {
 	gitCommitDiff(id: string, hash: string, path: string): Promise<string>;
 	gitBranches(id: string): Promise<GitBranchEntry[]>;
 	gitSwitch(id: string, name: string, create: boolean): Promise<void>;
-	gitStatus(id: string): Promise<GitStatus>;
+	gitStatus(id: string, includeRemote?: boolean): Promise<GitStatus>;
+	gitRemoteAction(id: string, action: GitRemoteAction, expected: GitRemoteInfo): Promise<void>;
 	gitDiff(id: string, path: string, staged: boolean): Promise<string>;
 	gitStage(id: string, path: string, staged: boolean): Promise<void>;
 	gitStageAll(id: string): Promise<void>;

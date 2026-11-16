@@ -46,8 +46,14 @@ export default function GitPanel({
 		run,
 		stage,
 		stageAll,
-		commit
+		commit,
+		remoteAction
 	} = useGitPanel({ workspaceId, onBusyChange, message, setMessage });
+	const remote = status?.remote;
+	const destination =
+		remote?.remote && remote.branch
+			? `${remote.remote}/${remote.upstream.replace(/^refs\/heads\//, '') || remote.branch}`
+			: '';
 	const list = useRef<HTMLDivElement>(null);
 	const input = useRef<HTMLTextAreaElement>(null);
 	useLayoutEffect(() => {
@@ -139,6 +145,28 @@ export default function GitPanel({
 				<GitBranch size={16} aria-hidden="true" />
 				<strong>{status?.branch || t('Source control')}</strong>
 				<span title={status?.root}>{status?.root}</span>
+				{remote && (
+					<>
+						{destination && <span title={destination}>{destination}</span>}
+						<button disabled={busy} onClick={() => remoteAction('fetch')}>
+							{t('Fetch all')}
+						</button>
+						<button
+							disabled={busy || !destination || !remote.upstream}
+							title={destination}
+							onClick={() => remoteAction('pull')}
+						>
+							{t('Pull')}
+						</button>
+						<button
+							disabled={busy || !destination}
+							title={destination}
+							onClick={() => remoteAction('push')}
+						>
+							{remote.upstream ? t('Push') : t('Publish branch')}
+						</button>
+					</>
+				)}
 				<button disabled={busy} onClick={() => void run(async () => {})}>
 					<RefreshCw size={14} aria-hidden="true" />
 					{t('Refresh')}
@@ -228,7 +256,7 @@ export default function GitPanel({
 			)}
 			{notice && (
 				<pre className={styles.notice} role="status">
-					{notice}
+					{t(notice)}
 				</pre>
 			)}
 			<ShortcutsFooter />

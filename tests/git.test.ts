@@ -20,6 +20,8 @@ import {
 	gitBranches,
 	gitSwitch,
 	gitPushBranch,
+	gitRemoteInfo,
+	gitRemoteAction,
 	gitIgnored
 } from '../src/main/git/git';
 
@@ -634,6 +636,111 @@ test('a PR branch made from its base branch is published under its own name, not
 		assert.equal(git('rev-parse', '--abbrev-ref', '@{upstream}'), 'origin/feature');
 	} finally {
 		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
+test('Git publishes, fetches without changing HEAD, and pulls only when safe', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'nido-git-remote-'));
+	const root = join(directory, 'local');
+	const remote = join(directory, 'remote.git');
+	const writer = join(directory, 'writer');
+	const git = (cwd: string, ...args: string[]): string =>
+		execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true }).trim();
+	const commit = (cwd: string, message: string): void => {
+		git(
+			cwd,
+			'-c',
+			'user.name=Nido Test',
+			'-c',
+			'user.email=test@example.invalid',
+			'-c',
+			'commit.gpgsign=false',
+			'commit',
+			'-qam',
+			message,
+			'--allow-empty'
+		);
+	};
+	try {
+		git(directory, 'init', '-q', '-b', 'main', root);
+		git(directory, 'init', '-q', '--bare', remote);
+		const file = join(root, 'tracked.txt');
+		await writeFile(file, 'initial');
+		git(root, 'add', '--', 'tracked.txt');
+		commit(root, 'Initial');
+		const initial = git(root, 'rev-parse', 'HEAD');
+		assert.equal(await gitRemoteInfo(root), undefined);
+		git(root, 'remote', 'add', 'review', remote);
+		const firstPush = { branch: 'main', remote: 'review', upstream: '' };
+		assert.deepEqual(await gitRemoteInfo(root), firstPush);
+		await assert.rejects(
+			gitRemoteAction(root, 'push', { ...firstPush, branch: 'other' }),
+			/branch or remote changed/
+		);
+		await gitRemoteAction(root, 'push', firstPush);
+		const tracked = { ...firstPush, upstream: 'refs/heads/main' };
+		assert.deepEqual(await gitRemoteInfo(root), tracked);
+		git(directory, 'clone', '-q', '-b', 'main', remote, writer);
+		await writeFile(join(writer, 'tracked.txt'), 'remote update');
+		commit(writer, 'Remote update');
+		const update = git(writer, 'rev-parse', 'HEAD');
+		git(writer, 'push', '-q', 'origin', 'main');
+		await gitRemoteAction(root, 'fetch', tracked);
+		assert.equal(git(root, 'rev-parse', '@{upstream}'), update);
+		assert.equal(git(root, 'rev-parse', 'HEAD'), initial);
+
+		let unsaved = true;
+		let refreshed = false;
+		const session = {
+			workspace: { id: 'local', root },
+			state: { buffers: [] },
+			modified: async () => unsaved,
+			refreshFiles: async () => {
+				refreshed = true;
+			},
+			refreshGitSigns: async () => {}
+		} as unknown as Session;
+		const handlers = new Map<string, (...args: unknown[]) => unknown>();
+		registerGitHandlers({
+			handle: (name, action) => handlers.set(name, action),
+			session: () => session,
+			text: String,
+			sessions: new Map([['local', session]]),
+			send: () => {}
+		});
+		const pull = (): Promise<void> =>
+			handlers.get('gitRemoteAction')!('local', 'pull', tracked) as Promise<void>;
+		await assert.rejects(pull(), /Save unsaved editor changes before pulling/);
+		assert.equal(await readFile(file, 'utf8'), 'initial');
+		unsaved = false;
+		await pull();
+		assert.equal(await readFile(file, 'utf8'), 'remote update');
+		assert.equal(refreshed, true);
+
+		commit(root, 'Local history');
+		const local = git(root, 'rev-parse', 'HEAD');
+		commit(writer, 'Divergent remote history');
+		git(writer, 'push', '-q', 'origin', 'main');
+		await assert.rejects(pull(), /fast-forward/i);
+		assert.equal(git(root, 'rev-parse', 'HEAD'), local);
+
+		// A branch made from review/main is published under its own name, not pushed to main.
+		const remoteMain = git(root, 'ls-remote', 'review', 'refs/heads/main').split('\t')[0];
+		git(root, 'switch', '-q', '-c', 'feature', '--track', 'review/main');
+		const feature = { branch: 'feature', remote: 'review', upstream: '' };
+		assert.deepEqual(await gitRemoteInfo(root), feature);
+		await gitRemoteAction(root, 'push', feature);
+		assert.equal(
+			git(root, 'ls-remote', 'review', 'refs/heads/main').split('\t')[0],
+			remoteMain
+		);
+		assert.equal(
+			git(root, 'ls-remote', 'review', 'refs/heads/feature').split('\t')[0],
+			git(root, 'rev-parse', 'HEAD')
+		);
+		assert.deepEqual(await gitRemoteInfo(root), { ...feature, upstream: 'refs/heads/feature' });
+	} finally {
+		await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 	}
 });
 
