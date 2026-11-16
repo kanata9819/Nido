@@ -634,3 +634,52 @@ test('the command palette lists the commands run last first and marks them', asy
 	await page.keyboard.type('s');
 	await expect.poll(firstTitle).not.toBe('Problems');
 });
+
+for (const kind of ['definitions', 'type definitions', 'implementations'] as const) {
+	test(`a ${kind} list closes after jumping to one of them`, async ({ page }) => {
+		await page.goto(`${origin}?view=app&defer=openReference`);
+		const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+		await expect(editor).toBeFocused();
+		await page.evaluate(
+			(kind) =>
+				window.rendererTest.emit({
+					type: 'statePatch',
+					id: 'alpha',
+					state: {
+						references: {
+							search: 1,
+							version: 1,
+							kind,
+							loading: false,
+							error: '',
+							items: [1, 2].map((line) => ({
+								path: '/alpha/state.ts',
+								line,
+								column: 1,
+								text: `definition ${line}`
+							}))
+						}
+					}
+				}),
+			kind
+		);
+		const panel = page.locator('[data-references-panel]');
+		const list = page.getByRole('listbox', { name: 'Reference results' });
+		await expect(list).toBeFocused();
+		await list.press('j');
+		await list.press('Enter');
+		// Open until the jump finishes, then closed, with the editor focused.
+		await expect(panel).toBeVisible();
+		await page.evaluate(() => window.rendererTest.settle('openReference', 0, undefined));
+		await expect(panel).toBeHidden();
+		await expect(editor).toBeFocused();
+		expect(
+			await page.evaluate(() =>
+				window.rendererTest.calls
+					.filter((call) => call.method === 'openReference')
+					.map((call) => call.args)
+			)
+			// The second result, numbered from 1 as in Lua.
+		).toEqual([['alpha', 2, 1]]);
+	});
+}
