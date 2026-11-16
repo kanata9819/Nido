@@ -83,10 +83,23 @@ end
 --- line's number, which then jumped to the right as soon as detached scrolling drew it.
 M.number_column = "%s%C%=%{v:virtnum ? '' : (&rnu && (v:relnum || !&nu) ? v:relnum : v:lnum)} "
 
---- The 'statuscolumn' while detached: line numbers stay relative to the anchored cursor.
+--- The 'statuscolumn' editor windows keep: M.number_column, or while detached, line numbers
+--- relative to the anchored cursor. It is never swapped: setting 'statuscolumn' makes Neovim
+--- re-estimate the column's width, and until it grows back the window's text offset is a column
+--- short, which drew bracket guides a column to the left on the first scroll after a move.
+M.column = "%!v:lua.require'nido_scroll'.statuscolumn()"
+
+--- Redraw a window's line numbers after the anchor changed.
+local function redraw_numbers(window)
+  if api.nvim_win_is_valid(window) then
+    pcall(api.nvim__redraw, {win=window, statuscolumn=true})
+  end
+end
+
 function M.statuscolumn()
   local pos = M.cursor()
-  if not pos or api.nvim_get_current_win() ~= anchor.window then
+  local window = vim.g.statusline_winid or api.nvim_get_current_win()
+  if not pos or window ~= anchor.window then
     return M.number_column
   end
   -- Neovim moves its internal cursor to keep it visible; relative numbers use the edit anchor.
@@ -125,8 +138,8 @@ function M.restore(keep_view)
   local pos = M.cursor()
   local saved = anchor
   anchor = nil
-  if saved and api.nvim_win_is_valid(saved.window) then
-    vim.wo[saved.window].statuscolumn = saved.statuscolumn
+  if saved then
+    redraw_numbers(saved.window)
   end
   if saved and api.nvim_buf_is_valid(saved.buffer) then
     api.nvim_buf_clear_namespace(saved.buffer, namespace, 0, -1)
@@ -389,10 +402,9 @@ function M.scroll(lines, follow, pixel, columns)
     anchor = {
       buffer = api.nvim_get_current_buf(), window = api.nvim_get_current_win(),
       view = vim.fn.winsaveview(),
-      statuscolumn = vim.wo.statuscolumn,
       mark = api.nvim_buf_set_extmark(0, namespace, pos[1] - 1, pos[2], {right_gravity=false}),
     }
-    vim.wo.statuscolumn = "%!v:lua.require'nido_scroll'.statuscolumn()"
+    redraw_numbers(anchor.window)
   end
   if pixel then
     local total = fraction + lines

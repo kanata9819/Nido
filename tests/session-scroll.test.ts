@@ -53,10 +53,15 @@ test('gutter numbers and current-line colors stay based on the edit anchor durin
 			assert.ok(checked > 10);
 			assert.equal(ends.size, 1, `line numbers end in columns ${[...ends].join(', ')}`);
 		};
+		// One 'statuscolumn' for good: setting it again makes Neovim re-estimate its width, and
+		// bracket guides published meanwhile were drawn a column to the left.
 		const numberColumn = await session.client.request('nvim_exec_lua', [
-			"return require('nido_scroll').number_column",
+			"return require('nido_scroll').column",
 			[]
 		]);
+		const textOffset = (): Promise<unknown> =>
+			session!.client.request('nvim_eval', ['getwininfo(win_getid())[0].textoff']);
+		const offset = await textOffset();
 		for (const relative of [true, false, true]) {
 			await session.setRelativeLineNumbers(relative);
 			await new Promise((done) => setTimeout(done, 30));
@@ -73,6 +78,11 @@ test('gutter numbers and current-line colors stay based on the edit anchor durin
 			await session.scroll(lines, false, true);
 			await new Promise((done) => setTimeout(done, 30));
 			checkGutter(80, relative);
+			assert.equal(
+				await session.client.request('nvim_eval', ['&statuscolumn']),
+				numberColumn
+			);
+			assert.equal(await textOffset(), offset);
 		}
 		await session.input('j');
 		await session.client.request('nvim_eval', ['1']);
