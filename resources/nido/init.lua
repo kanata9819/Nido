@@ -38,6 +38,10 @@ vim.api.nvim_create_autocmd({ 'BufWinEnter', 'WinEnter' }, {
   callback = function()
     if vim.bo.buftype == '' and vim.api.nvim_win_get_config(0).relative == '' then
       vim.wo.relativenumber = vim.go.relativenumber
+      -- Detached scrolling swaps in its own column and restores this one afterwards.
+      if not vim.wo.statuscolumn:find('nido_scroll', 1, true) then
+        vim.wo.statuscolumn = require('nido_scroll').number_column
+      end
       vim.wo.wrap = vim.go.wrap
       vim.wo.smoothscroll = true
     end
