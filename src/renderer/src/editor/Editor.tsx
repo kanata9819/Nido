@@ -103,7 +103,7 @@ function Editor({
 	useEditorRendering({
 		backgroundOpacity: theme === 'acrylic' ? 0.5 : 1,
 		animations,
-		smoothCursor,
+		smoothCursor: !terminal && smoothCursor,
 		smoothBlink,
 		id,
 		fontSize,
