@@ -72,6 +72,11 @@ test('Debugger focuses arriving variables, restores focus after stepping and res
 test('Reference selection resets with a new result and old previews cannot replace it', async ({
 	page
 }) => {
+	// React warns about mistakes such as a key passed in a spread; none may appear here.
+	const reactErrors: string[] = [];
+	page.on('console', (message) => {
+		if (message.type() === 'error') reactErrors.push(message.text());
+	});
 	await page.goto(`${origin}?view=references&defer=previewReference`);
 	const list = page.getByRole('listbox', { name: 'Reference results' });
 	await expect(list).toBeFocused();
@@ -111,6 +116,7 @@ test('Reference selection resets with a new result and old previews cannot repla
 	await expect
 		.poll(() => page.evaluate(() => window.rendererTest?.pending[0]?.args.slice(1)))
 		.toEqual([1, 2]);
+	expect(reactErrors).toEqual([]);
 });
 
 for (const dismiss of ['button', 'Escape', 'toggle', 'jump'] as const) {

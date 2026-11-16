@@ -263,7 +263,14 @@ export default function ReferencesPanel({
 									ref={currentContent}
 									className={styles.referencePreviewContent}
 								>
-									<ReferencePreviewContent {...(preview ?? { item })} />
+									{/* The key remounts the content for each reference, as the
+									    spread did; React no longer takes a key from a spread. */}
+									<ReferencePreviewContent
+										key={preview?.key}
+										item={preview?.item ?? item}
+										data={preview?.data}
+										error={preview?.error}
+									/>
 								</div>
 							</section>
 						) : null}
