@@ -25,6 +25,7 @@ export default function TerminalPanel({
 	closeShell,
 	resize,
 	toggleMaximized,
+	restoreSize,
 	onClose,
 	onError
 }: {
@@ -47,6 +48,8 @@ export default function TerminalPanel({
 	closeShell: (id: string, position: number) => void;
 	resize: (height: number) => void;
 	toggleMaximized: () => void;
+	/** Leave the maximized size without moving focus. */
+	restoreSize: () => void;
 	onClose: () => void;
 	onError: (message: string) => void;
 }): React.JSX.Element {
@@ -60,6 +63,20 @@ export default function TerminalPanel({
 			style={maximized ? undefined : { height }}
 			aria-label={t('Terminal')}
 			hidden={!active}
+			onBlur={(event) => {
+				// Focus that moves to what the maximized panel covers (the editor, its tabs)
+				// would otherwise go somewhere that cannot be seen.
+				const next = event.relatedTarget;
+				const covered = event.currentTarget.parentElement;
+				if (
+					maximized &&
+					next instanceof Node &&
+					!event.currentTarget.contains(next) &&
+					covered?.contains(next)
+				) {
+					restoreSize();
+				}
+			}}
 		>
 			{!maximized && <ResizeHandle height={height} onResize={resize} />}
 			<div className={styles.toolbar}>
@@ -185,7 +202,8 @@ function ResizeHandle({
 			onKeyDown={(event) => {
 				if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
 					event.preventDefault();
-					onResize(height + (event.key === 'ArrowUp' ? 20 : -20));
+					const drawn = event.currentTarget.parentElement?.getBoundingClientRect().height;
+					onResize(Math.round(drawn ?? height) + (event.key === 'ArrowUp' ? 20 : -20));
 				}
 			}}
 			onPointerDown={(event) => {
@@ -195,7 +213,9 @@ function ResizeHandle({
 				event.preventDefault();
 				event.currentTarget.focus();
 				event.currentTarget.setPointerCapture(event.pointerId);
-				drag.current = { y: event.clientY, height };
+				// Start from the drawn height, which a shorter window can have capped.
+				const drawn = event.currentTarget.parentElement?.getBoundingClientRect().height;
+				drag.current = { y: event.clientY, height: Math.round(drawn ?? height) };
 			}}
 			onPointerMove={(event) => {
 				if (drag.current) {
