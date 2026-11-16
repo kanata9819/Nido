@@ -169,6 +169,22 @@ export async function gitSwitch(cwd: string, name: string, create: boolean): Pro
 }
 
 /**
+ * Push the checked-out branch, to its upstream when it has one, or else to `origin`, setting
+ * that as its upstream. Returns the branch's name.
+ */
+export async function gitPushBranch(cwd: string): Promise<string> {
+	const branch = (await git(cwd, ['branch', '--show-current'])).trim();
+	if (!branch) {
+		throw new Error('Check out a branch first.');
+	}
+	const upstream = await git(cwd, ['rev-parse', '--abbrev-ref', '@{upstream}']).catch(
+		() => ''
+	);
+	await git(cwd, upstream.trim() ? ['push'] : ['push', '--set-upstream', 'origin', branch]);
+	return branch;
+}
+
+/**
  * Run git and return its stdout. Never prompts for credentials. `allowExitOne` treats exit
  * status 1 as success (git diff --no-index and check-ignore use it for "differences found" and
  * "nothing ignored"). `input` is written to git's stdin.

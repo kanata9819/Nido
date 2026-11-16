@@ -9,6 +9,7 @@ import { registerAppHandlers } from './appHandlers';
 import { registerEditorHandlers } from './editorHandlers';
 import { registerFileHandlers } from './fileHandlers';
 import { registerGitHandlers } from './gitHandlers';
+import { registerGithubHandlers } from './githubHandlers';
 import { registerWorkspaceHandlers } from './workspaceHandlers';
 import { registerHistoryHandlers } from './historyHandlers';
 import { registerLanguagePackHandlers } from './languagePackHandlers';
@@ -69,6 +70,7 @@ export function registerHandlers(deps: HandlerDeps & { updates: Updates }): () =
 		send,
 		trash: (file) => shell.trashItem(file)
 	});
-	registerGitHandlers({ handle, session, text, sessions, send });
+	const { changeBranch } = registerGitHandlers({ handle, session, text, sessions, send });
+	registerGithubHandlers({ handle, session, text, changeBranch });
 	return prepareToQuit;
 }
