@@ -374,7 +374,7 @@ function navigationCommands({ callbacks, editor }: CommandContext): Item[] {
 				run: () => showPanel('symbols')
 			},
 			{
-				key: '',
+				key: 's',
 				title: 'Search in files',
 				detail: 'Search project text · Ctrl+Shift+F',
 				run: () => showPanel('search')
@@ -400,7 +400,8 @@ function workspaceCommands({ active, state, callbacks }: CommandContext): Item[]
 	const { run, focusEditor, moveWorkspace } = callbacks;
 	return [
 		{
-			key: 's',
+			// Space s searches in files; saving is Ctrl+S or :w.
+			key: '',
 			title: 'Save file',
 			detail: ':w · Ctrl+S',
 			run: () => {

@@ -92,7 +92,10 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 	const modal = useRef<HTMLDivElement>(null);
 	const state = states[active] || initialSessionState;
 	const workspace = workspaces.find((w) => w.id === active);
-	const gitFiles = useGitFileStatus(workspace?.sleeping ? '' : active, state.buffers);
+	const { decorations: gitFiles, branch } = useGitFileStatus(
+		workspace?.sleeping ? '' : active,
+		state.buffers
+	);
 	const explorerVisible = sidebar && !!workspace && workspace.kind !== 'terminal';
 	const captureFocus = useFocusGuard(active);
 	const decorations = useMemo(
@@ -231,6 +234,22 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 				run(window.nido.terminalCopyMode(terminalId));
 			}
 		},
+		terminalShell: (action) => {
+			const shells = terminalId ? states[terminalId]?.terminalShells : undefined;
+			if (!terminalId || !shells) {
+				return;
+			}
+			const count = shells.names.length;
+			if (action === 'add') {
+				panels.addShell(terminalId);
+			} else if (action === 'close') {
+				panels.closeShell(terminalId, shells.current);
+			} else if (count > 1) {
+				const offset = action === 'next' ? 1 : -1;
+				panels.selectShell(terminalId, ((shells.current - 1 + offset + count) % count) + 1);
+			}
+		},
+		toggleTerminalMaximized: panels.toggleTerminalMaximized,
 		toggleTerminal: panels.toggleTerminal,
 		closeReferences: panels.closeReferences,
 		showDebugger: panels.showDebugger,
@@ -368,6 +387,8 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 				workspace={workspace}
 				state={state}
 				sessionCount={workspaces.length}
+				branch={workspace?.kind === 'terminal' ? undefined : branch}
+				onBranch={() => showPanel('git')}
 				onToggleTerminal={panels.toggleTerminal}
 				onToggleDebugger={panels.toggleDebugger}
 				onToggleReferences={panels.toggleReferences}

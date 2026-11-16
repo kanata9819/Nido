@@ -679,3 +679,43 @@ test('Git errors show their reason alone, translated, in the panel and the diff'
 		'Gitがインストールされていないか、PATHにありません。'
 	);
 });
+
+test('the status bar shows the checked-out branch and opens Source control from it', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=app&defer=gitStatus`);
+	const status = page.locator('footer');
+	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some((call) => call.method === 'gitStatus')
+			)
+		)
+		.toBe(true);
+	// Outside a repository nothing is shown.
+	await page.evaluate(() =>
+		window.rendererTest.settle('gitStatus', 0, new Error('Not a git repository'), true)
+	);
+	await expect(status.getByRole('button', { name: /^Branch:/ })).toHaveCount(0);
+	// A change of files reads the status again, here after a branch switch.
+	await page.evaluate(() => window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' }));
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some((call) => call.method === 'gitStatus')
+			)
+		)
+		.toBe(true);
+	await page.evaluate(() =>
+		window.rendererTest.settle('gitStatus', 0, {
+			root: '/alpha',
+			branch: 'feature/status-bar',
+			changes: []
+		})
+	);
+	const branch = status.getByRole('button', { name: 'Branch: feature/status-bar' });
+	await expect(branch).toContainText('feature/status-bar');
+	await branch.click();
+	await expect(page.locator('[data-panel="git"]')).toBeVisible();
+});

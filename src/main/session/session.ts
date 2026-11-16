@@ -164,6 +164,20 @@ export class Session {
 				void this.stop();
 				return;
 			}
+			// The shells of a terminal workspace and the shown one (nido_terminal.lua).
+			if (method === 'nido:terminal_shells') {
+				const { names, current } = (args[0] ?? {}) as {
+					names?: unknown;
+					current?: unknown;
+				};
+				this.events.updateState({
+					terminalShells: {
+						names: Array.isArray(names) ? names.map(String) : [],
+						current: typeof current === 'number' ? current : 1
+					}
+				});
+				return;
+			}
 			// Text yanked in terminal copy mode goes to the system clipboard, and the yank
 			// returns to the shell (nido_terminal.lua).
 			if (method === 'nido:yank') {
@@ -341,8 +355,46 @@ export class Session {
 		}
 	}
 
-	/** Start (or restart) the shell of a terminal workspace. */
+	/** Start (or restart) the shown shell of a terminal workspace. */
 	async startTerminal(shell = 'auto'): Promise<void> {
+		return this.runTerminalShell('start', shell);
+	}
+
+	/** Start another shell in a terminal workspace and show it. */
+	async addTerminalShell(shell = 'auto'): Promise<void> {
+		if (this.workspace.kind !== 'terminal') {
+			throw new Error('Not a terminal session.');
+		}
+		return this.runTerminalShell('add', shell);
+	}
+
+	/** Show the shell at `position` (1-based) of a terminal workspace. */
+	async selectTerminalShell(position: number): Promise<void> {
+		return this.terminalShellCall('select', position);
+	}
+
+	/** Stop the shell at `position` (1-based); the last one closes the terminal. */
+	async closeTerminalShell(position: number): Promise<void> {
+		return this.terminalShellCall('close', position);
+	}
+
+	private async terminalShellCall(action: 'select' | 'close', position: number): Promise<void> {
+		if (this.workspace.kind !== 'terminal') {
+			throw new Error('Not a terminal session.');
+		}
+		return this.interaction.enqueue(async () => {
+			this.interaction.forgetCopyMode();
+			await this.client.request('nvim_exec_lua', [
+				`require('nido_terminal').${action}(...)`,
+				[position]
+			]);
+			if (action === 'select') {
+				await this.waitForTerminalInput();
+			}
+		});
+	}
+
+	private async runTerminalShell(action: 'start' | 'add', shell: string): Promise<void> {
 		return this.interaction.enqueue(async () => {
 			this.interaction.forgetCopyMode();
 			if (!terminalShells.includes(shell as TerminalShell)) {
@@ -350,22 +402,26 @@ export class Session {
 			}
 			const command = this.workspace.wsl ? [] : await resolveTerminalShell(shell);
 			await this.client.request('nvim_exec_lua', [
-				"require('nido_terminal').start(...)",
+				`require('nido_terminal').${action}(...)`,
 				[shell, command]
 			]);
 			this.workspace.kind = 'terminal';
 			this.workspace.name = `Terminal · ${basename(this.workspace.root)}`;
-			// Buffer replacement leaves terminal mode asynchronously. Queue input until it returns.
-			for (let attempt = 0; attempt < 100; attempt++) {
-				const mode = (await this.client.request('nvim_get_mode', [])) as { mode: string };
-				if (mode.mode === 't') {
-					return;
-				}
-				await this.client.request('nvim_command', ['startinsert']);
-				await new Promise((done) => setTimeout(done, 10));
-			}
-			throw new Error('Terminal input did not become ready.');
+			await this.waitForTerminalInput();
 		});
+	}
+
+	/** Buffer replacement leaves terminal mode asynchronously. Queue input until it returns. */
+	private async waitForTerminalInput(): Promise<void> {
+		for (let attempt = 0; attempt < 100; attempt++) {
+			const mode = (await this.client.request('nvim_get_mode', [])) as { mode: string };
+			if (mode.mode === 't') {
+				return;
+			}
+			await this.client.request('nvim_command', ['startinsert']);
+			await new Promise((done) => setTimeout(done, 10));
+		}
+		throw new Error('Terminal input did not become ready.');
 	}
 
 	// Return the running terminal, wait for one that is starting, or start a new one.

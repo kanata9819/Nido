@@ -205,7 +205,7 @@ test('Ctrl+S in the workspace list puts a background workspace to sleep', async 
 				.filter((call) => call.method === 'sleepWorkspace')
 				.map((call) => call.args)
 		);
-	await page.getByRole('button', { name: 'Workspaces', exact: true }).click();
+	await openWorkspaceList(page);
 	const list = page.getByRole('dialog', { name: 'workspaces palette', exact: true });
 	const alpha = list.getByRole('button', { name: /Alpha/ });
 	const beta = list.getByRole('button', { name: /Beta/ });
@@ -233,7 +233,7 @@ test('Ctrl+S in the workspace list puts a background workspace to sleep', async 
 
 /** Open the workspace list, select Beta and press Ctrl+S; resolves once the request is pending. */
 async function requestBetaSleep(page: Page): Promise<void> {
-	await page.getByRole('button', { name: 'Workspaces', exact: true }).click();
+	await openWorkspaceList(page);
 	await page.keyboard.press('ArrowDown');
 	await page.keyboard.press('Control+s');
 	await expect
@@ -347,3 +347,91 @@ test('Ctrl+Shift+C puts the focused terminal in copy mode and shows it', async (
 	await expect(panel.getByRole('status')).toHaveCount(0);
 	await expect(panel).toContainText('Ctrl+Shift+C Copy mode');
 });
+
+test('the terminal panel shows a tab per shell, switches them by key, resizes and maximizes', async ({
+	page
+}) => {
+	await restoreWorkspaces(page, '');
+	await page.keyboard.press('Control+`');
+	const input = page.getByRole('textbox', { name: 'Terminal input', exact: true });
+	await expect(input).toBeFocused();
+	const panel = page.getByRole('region', { name: 'Terminal', exact: true });
+	const shellCalls = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method.endsWith('TerminalShell'))
+				.map((call) => [call.method, ...call.args])
+		);
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'statePatch',
+			id: 'alpha-shell',
+			state: { terminalShells: { names: ['pwsh', 'cmd'], current: 2 } }
+		})
+	);
+	const tabs = panel.getByRole('tab');
+	await expect(tabs).toHaveText(['1pwsh', '2cmd']);
+	await expect(panel.getByRole('tab', { name: '2cmd' })).toHaveAttribute('aria-selected', 'true');
+
+	await page.keyboard.press('Control+Shift+t');
+	await page.keyboard.press('Control+Shift+PageDown');
+	await page.keyboard.press('Control+Shift+PageUp');
+	await page.keyboard.press('Control+Shift+w');
+	await expect.poll(shellCalls).toEqual([
+		['addTerminalShell', 'alpha-shell', 'auto'],
+		['selectTerminalShell', 'alpha-shell', 1],
+		['selectTerminalShell', 'alpha-shell', 1],
+		['closeTerminalShell', 'alpha-shell', 2]
+	]);
+	await panel.getByRole('tab', { name: '1pwsh' }).click();
+	await panel.getByRole('button', { name: 'Close shell cmd' }).click();
+	await panel.getByRole('button', { name: 'New shell', exact: true }).click();
+	await expect
+		.poll(async () => (await shellCalls()).slice(4))
+		.toEqual([
+			['selectTerminalShell', 'alpha-shell', 1],
+			['closeTerminalShell', 'alpha-shell', 2],
+			['addTerminalShell', 'alpha-shell', 'auto']
+		]);
+	// None of these keys reached the shell.
+	expect(
+		await page.evaluate(() =>
+			window.rendererTest.calls.some(
+				(call) => call.method === 'input' && call.args[0] === 'alpha-shell'
+			)
+		)
+	).toBe(false);
+
+	// The top edge resizes the panel, and the height is kept.
+	const handle = panel.getByRole('separator', { name: 'Terminal height' });
+	const before = (await panel.boundingBox())!.height;
+	await handle.focus();
+	await page.keyboard.press('ArrowUp');
+	await page.keyboard.press('ArrowUp');
+	await expect.poll(async () => (await panel.boundingBox())!.height).toBe(before + 40);
+	expect(await page.evaluate(() => localStorage.getItem('nido.terminalHeight'))).toBe(
+		String(before + 40)
+	);
+
+	// Maximized, the panel covers the editor; Ctrl+Shift+Enter in the shell toggles it.
+	const area = page.locator('main#editor-preview-host');
+	await panel.getByRole('button', { name: 'Maximize terminal' }).click();
+	await expect(handle).toHaveCount(0);
+	await expect
+		.poll(async () => (await panel.boundingBox())!.height)
+		.toBeGreaterThan((await area.boundingBox())!.height - 40);
+	await expect(input).toBeFocused();
+	await page.keyboard.press('Control+Shift+Enter');
+	await expect(panel.getByRole('button', { name: 'Maximize terminal' })).toBeVisible();
+	await expect.poll(async () => (await panel.boundingBox())!.height).toBe(before + 40);
+});
+
+/** Open the workspace list with Space w from the editor. */
+async function openWorkspaceList(page: Page): Promise<void> {
+	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+	await page.keyboard.press('Space');
+	await page.keyboard.press('w');
+	await expect(
+		page.getByRole('dialog', { name: 'workspaces palette', exact: true })
+	).toBeVisible();
+}
