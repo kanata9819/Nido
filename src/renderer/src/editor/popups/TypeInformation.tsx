@@ -10,8 +10,11 @@ import { vimKey } from '../../keyboard/keyboard';
 import { cycleFocus, scrollLines, scrollPage } from '../../ui/popupKeys';
 import HoverMarkdown from './hover/HoverMarkdown';
 
-/** The keys that scroll the card by lines; letters only in lower case. */
-const lineKeys = ['j', 'k', 'ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'];
+/**
+ * The keys that scroll the card by lines, matched by case: Shift+J and Shift+K close the card
+ * and go on to the editor, unlike in the diagnostic card.
+ */
+const hoverLineKeys = ['j', 'k', 'ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'];
 
 /** The first code block or table in view that is wider than the card, to scroll sideways. */
 function wideBlockInView(body: HTMLElement): HTMLElement | undefined {
@@ -67,7 +70,7 @@ function hoverKeyDown(
 			[body, ...card.querySelectorAll<HTMLElement>('button, a[href]')],
 			event.shiftKey
 		);
-	} else if (!event.ctrlKey && !event.altKey && lineKeys.includes(event.key)) {
+	} else if (!event.ctrlKey && !event.altKey && hoverLineKeys.includes(event.key)) {
 		event.preventDefault();
 		scrollLines(body, key);
 	} else if (

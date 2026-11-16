@@ -1,11 +1,11 @@
 import type { Session } from '../session/session';
-import type { SleepBlocker, Workspace } from '../../shared/types';
+import { resolvableSleepBlockers, type SleepBlocker, type Workspace } from '../../shared/types';
 import { assertWindowOpen, type WorkspaceContext } from './workspaceContext';
 import { bufferedEmitter } from './workspaceStartup';
 
 /** Blockers that sleeping on request can clear: a terminal is closed, files are saved. */
 export function resolvableBlocker(blocker: SleepBlocker): boolean {
-	return blocker === 'terminal' || blocker === 'modified';
+	return resolvableSleepBlockers.includes(blocker);
 }
 
 /** Whether `id` must keep running regardless of its own state: it is selected, or the app quits. */

@@ -1,10 +1,11 @@
 import { useCallback, useMemo } from 'react';
 import { useI18n } from '../i18n';
 import { buildItems, buildProblemItems, filterItems } from '../palette/commands';
+import type { CommandsCallbacks } from '../palette/commandItems';
 import type { FileEntry, SessionState, Workspace } from '../../../shared/types';
 import type { Item, Panel } from '../types';
 
-type Callbacks = Parameters<typeof buildItems>[6];
+type Callbacks = CommandsCallbacks & { reorderWorkspace: (id: string, target: string) => void };
 
 /**
  * Every command, and the items of the open palette filtered by its query. The Problems list
