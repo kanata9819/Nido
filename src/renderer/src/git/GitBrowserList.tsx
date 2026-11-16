@@ -2,6 +2,7 @@ import { useI18n } from '../i18n';
 import type { GitView } from '../types';
 import type { RefObject } from 'react';
 import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
+import { handleListKey } from './listKeys';
 import styles from './Git.module.css';
 
 /**
@@ -47,54 +48,14 @@ export default function GitBrowserList({
 			tabIndex={0}
 			aria-activedescendant={labels[index] ? `git-entry-${index}` : undefined}
 			onKeyDown={(event) => {
-				if (
-					busy ||
-					event.altKey ||
-					event.metaKey ||
-					event.nativeEvent.isComposing ||
-					event.keyCode === 229
-				) {
+				if (busy) {
 					return;
 				}
-				const key = event.key.toLowerCase();
-				const halfPage = event.ctrlKey && !event.shiftKey && ['d', 'u'].includes(key);
-				const fullPage =
-					(event.ctrlKey && !event.shiftKey && ['f', 'b'].includes(key)) ||
-					(!event.ctrlKey && ['PageDown', 'PageUp'].includes(event.key));
-				if (halfPage || fullPage) {
-					event.preventDefault();
-					const row = event.currentTarget.querySelector<HTMLElement>('[role="option"]');
-					const step = Math.max(
-						1,
-						Math.floor(
-							event.currentTarget.clientHeight /
-								(row?.getBoundingClientRect().height || 1) /
-								(halfPage ? 2 : 1)
-						)
-					);
-					const direction = ['d', 'f', 'pagedown'].includes(key) ? 1 : -1;
-					setIndex(Math.max(0, Math.min(labels.length - 1, index + direction * step)));
+				const count = labels.length;
+				if (handleListKey(event, { count, index, setIndex, open })) {
 					return;
 				}
-				if (event.ctrlKey) {
-					return;
-				}
-				if (
-					['j', 'k', 'ArrowDown', 'ArrowUp', 'Home', 'End', 'g', 'G'].includes(event.key)
-				) {
-					event.preventDefault();
-					let next = index + (['j', 'ArrowDown'].includes(event.key) ? 1 : -1);
-					if (event.key === 'Home' || event.key === 'g') {
-						next = 0;
-					}
-					if (event.key === 'End' || event.key === 'G') {
-						next = labels.length - 1;
-					}
-					setIndex(Math.max(0, Math.min(labels.length - 1, next)));
-				} else if (event.key === 'Enter') {
-					event.preventDefault();
-					open();
-				} else if (view === 'branches' && event.key === 'n') {
+				if (view === 'branches' && event.key === 'n' && !event.ctrlKey && !event.altKey) {
 					event.preventDefault();
 					setCreating(true);
 				}
