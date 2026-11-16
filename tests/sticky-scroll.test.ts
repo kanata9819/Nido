@@ -132,7 +132,13 @@ for (const server of ['legacy', 'native'] as const) {
 				'}',
 				'export function topLevel() { return 1; }',
 				'export default function () { return 1; }',
-				'backend.on("日本語😀", function () {}); function next() { return 1; }'
+				'backend.on("日本語😀", function () {}); function next() { return 1; }',
+				'export function effect() {',
+				'    return () => console.log(1);',
+				'}',
+				'export function legacy() {',
+				'    return async function () { return 1; };',
+				'}'
 			];
 			const config = join(root, 'lsp.json');
 			await writeFile(join(root, 'sample.ts'), lines.join('\n'));
@@ -182,8 +188,8 @@ local ok, err = pcall(function()
     end
   end, 20), 'The TypeScript outline did not arrive')
   local rows = vim.tbl_map(function(item) return item.line end, latest.separators)
-  assert(vim.deep_equal(rows, {3, 14, 17, 19, 20, 21}),
-    'Callbacks must not separate methods; named local and default functions must remain: ' .. vim.inspect(rows))
+  assert(vim.deep_equal(rows, {3, 14, 17, 19, 20, 21, 22, 25}),
+    'Callbacks and returned functions must not separate methods; named local and default functions must remain: ' .. vim.inspect(rows))
   local callback_scope = false
   for _, scope in ipairs(latest.scopes) do
     if scope.line == 7 and scope.ending == 9 then callback_scope = true end
@@ -236,7 +242,12 @@ api.nvim_buf_set_lines(buffer, 0, -1, false, {
   'export default function () {',
   '  work();',
   '}',
-  'backend.on("日本語😀", function () {}); function next() {}'
+  'backend.on("日本語😀", function () {}); function next() {}',
+  'function effect() {',
+  '  return function () {',
+  '    work();',
+  '  };',
+  '}'
 })
 local original, latest = vim.rpcnotify, nil
 vim.rpcnotify = function(channel, name, state, ...)
@@ -252,7 +263,7 @@ local ok, err = pcall(function()
     api.nvim_exec_autocmds('UIEnter', {})
     sticky.publish(window, buffer)
     local rows = vim.tbl_map(function(item) return item.line end, latest.separators)
-    assert(vim.deep_equal(rows, {1, 15, 19, 22, 25}), filetype .. ': ' .. vim.inspect(rows))
+    assert(vim.deep_equal(rows, {1, 15, 19, 22, 25, 26}), filetype .. ': ' .. vim.inspect(rows))
   end
 end)
 vim.rpcnotify = original

@@ -90,16 +90,29 @@ local function previous_nonspace(text, column)
   return column
 end
 
+--- The column before `column` after skipping `word` (async, return) and spaces, if it is there.
+local function skip_word(text, before, word)
+  local length = #word
+  if before >= length and text:sub(before - length + 1, before) == word
+      and (before == length or not text:sub(before - length, before - length):match('[%w_$]')) then
+    return previous_nonspace(text, before - length), true
+  end
+  return before, false
+end
+
+--- Whether the function starting at `column` is returned as a value, such as a cleanup.
+local function returned_function(text, column)
+  local before = skip_word(text, previous_nonspace(text, column - 1), 'async')
+  local _, found = skip_word(text, before, 'return')
+  return found
+end
+
 local function function_callback(text, from)
   local start = text:find('%f[%w]function%s*%*?%s*[%w_$]*%s*%(', from or 1)
   if not start then return false end
-  local before = previous_nonspace(text, start - 1)
-  if before >= 5 and text:sub(before - 4, before) == 'async'
-      and (before == 5 or not text:sub(before - 5, before - 5):match('[%w_$]')) then
-    before = previous_nonspace(text, before - 5)
-  end
+  local before = skip_word(text, previous_nonspace(text, start - 1), 'async')
   local token = before > 0 and text:sub(before, before) or ''
-  return token == '(' or token == ','
+  return token == '(' or token == ',' or returned_function(text, start)
     or (before == 0 and text:sub(start):match('^function%s*%*?%s*%(')), start
 end
 
@@ -224,7 +237,8 @@ local function refresh(buffer)
                 if not callback then
                   local text = lines[range.start.line + 1] or ''
                   local column = vim.str_byteindex(text, client.offset_encoding or 'utf-16', range.start.character, false)
-                  callback = function_callback(text, column + 1)
+                  -- A returned arrow function, such as an effect's cleanup, is a value too.
+                  callback = function_callback(text, column + 1) or returned_function(text, column + 1)
                 end
               end
               if (item.kind == 6 or item.kind == 9 or item.kind == 12)
