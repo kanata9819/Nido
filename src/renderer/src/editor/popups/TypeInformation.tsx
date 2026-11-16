@@ -3,6 +3,7 @@ import { useErrorMessage, useI18n } from '../../i18n';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Braces, X } from 'lucide-react';
 import styles from './TypeInformation.module.css';
+import proseStyles from '../../ui/Prose.module.css';
 import type { NidoEvent } from '../../../../shared/types';
 import OverlayPresence from '../../ui/OverlayPresence';
 import { placeNearCursor } from '../../ui/popupPosition';
@@ -239,7 +240,7 @@ export default function TypeInformation({
 					tabIndex={0}
 					aria-label={t('Type information content')}
 				>
-					<div className={styles.prose}>
+					<div className={proseStyles.prose}>
 						<HoverMarkdown
 							markdown={info.markdown}
 							codeBlocks={info.codeBlocks}

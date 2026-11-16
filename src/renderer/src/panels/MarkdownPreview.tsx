@@ -3,7 +3,7 @@ import { useErrorMessage, useI18n } from '../i18n';
 import { memo, useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import prose from '../editor/popups/TypeInformation.module.css';
+import prose from '../ui/Prose.module.css';
 import styles from './MarkdownPreview.module.css';
 
 export default memo(MarkdownPreview);
