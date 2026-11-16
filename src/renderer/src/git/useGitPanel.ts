@@ -8,7 +8,7 @@ import {
 	type Dispatch,
 	type SetStateAction
 } from 'react';
-import type { GitChange, GitStatus } from '../../../shared/types';
+import type { GitChange, GitRemoteAction, GitStatus } from '../../../shared/types';
 import { useGitDiff } from './useGitDiff';
 
 /** Identifies a change in the list; a file can be both staged and unstaged. */
@@ -42,6 +42,7 @@ export function useGitPanel({
 	stage: () => void;
 	stageAll: () => void;
 	commit: () => void;
+	remoteAction: (action: GitRemoteAction) => void;
 } {
 	const [status, setStatus] = useState<GitStatus>();
 	const [selected, setSelected] = useState('');
@@ -78,7 +79,7 @@ export function useGitPanel({
 	}, []);
 
 	async function refresh(): Promise<void> {
-		applyStatus(await window.nido.gitStatus(workspaceId));
+		applyStatus(await window.nido.gitStatus(workspaceId, true));
 	}
 
 	/** Run one Git action at a time, then reload the status. */
@@ -110,7 +111,7 @@ export function useGitPanel({
 		let cancelled = false;
 		locked.current = true;
 		void window.nido
-			.gitStatus(workspaceId)
+			.gitStatus(workspaceId, true)
 			.then(
 				(next) => {
 					if (!cancelled) {
@@ -160,6 +161,22 @@ export function useGitPanel({
 		}
 	}
 
+	function remoteAction(action: GitRemoteAction): void {
+		const target = status?.remote;
+		if (target) {
+			void run(async () => {
+				await window.nido.gitRemoteAction(workspaceId, action, target);
+				setNotice(
+					action === 'push'
+						? 'Push complete.'
+						: action === 'pull'
+							? 'Pull complete.'
+							: 'Fetch complete.'
+				);
+			});
+		}
+	}
+
 	return {
 		status,
 		selected,
@@ -175,6 +192,7 @@ export function useGitPanel({
 		run,
 		stage,
 		stageAll,
-		commit
+		commit,
+		remoteAction
 	};
 }

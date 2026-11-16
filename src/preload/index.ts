@@ -28,7 +28,9 @@ const api: NidoAPI = {
 	gitCommitDiff: (id, hash, path) => ipcRenderer.invoke('nido:gitCommitDiff', id, hash, path),
 	gitBranches: (id) => ipcRenderer.invoke('nido:gitBranches', id),
 	gitSwitch: (id, name, create) => ipcRenderer.invoke('nido:gitSwitch', id, name, create),
-	gitStatus: (id) => ipcRenderer.invoke('nido:gitStatus', id),
+	gitStatus: (id, includeRemote) => ipcRenderer.invoke('nido:gitStatus', id, includeRemote),
+	gitRemoteAction: (id, action, expected) =>
+		ipcRenderer.invoke('nido:gitRemoteAction', id, action, expected),
 	gitDiff: (id, path, staged) => ipcRenderer.invoke('nido:gitDiff', id, path, staged),
 	gitStage: (id, path, staged) => ipcRenderer.invoke('nido:gitStage', id, path, staged),
 	gitStageAll: (id) => ipcRenderer.invoke('nido:gitStageAll', id),

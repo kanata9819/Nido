@@ -209,7 +209,9 @@ export default function PaletteItems({
 							: t('Palette results')
 				}
 				aria-busy={panel === 'symbols' ? loading : undefined}
-				aria-keyshortcuts={reorderable ? 'Shift+J Shift+K' : undefined}
+				aria-keyshortcuts={
+					reorderable ? `Shift+J Shift+K${panel === 'workspaces' ? ' X' : ''}` : undefined
+				}
 				aria-activedescendant={
 					hasOptions(panel) && filtered[selection] ? optionId(selection) : undefined
 				}
@@ -226,6 +228,18 @@ export default function PaletteItems({
 						return;
 					}
 					if (
+						panel === 'workspaces' &&
+						event.key === 'x' &&
+						!event.ctrlKey &&
+						!event.altKey &&
+						!event.metaKey &&
+						!event.shiftKey
+					) {
+						event.preventDefault();
+						if (!event.repeat && !confirmation) {
+							filtered[selection]?.close?.();
+						}
+					} else if (
 						event.ctrlKey &&
 						!event.altKey &&
 						!event.metaKey &&
