@@ -53,6 +53,9 @@ export interface Workspace {
  * not in Normal mode (or waiting for a key), or a workspace that cannot sleep at all.
  */
 export type SleepBlocker = 'modified' | 'terminal' | 'debug' | 'mode' | 'unavailable';
+/** Blockers that sleeping on request can clear, after the user confirms: the terminal is
+ * closed, the files are saved. */
+export const resolvableSleepBlockers: readonly SleepBlocker[] = ['terminal', 'modified'];
 
 export interface FavoriteWorkspace {
 	root: string;

@@ -16,9 +16,6 @@ import { sleepWorkspace, wakeWorkspace } from '../workspace/workspaceSleep';
 import { closeWorkspace, prepareToQuit, quitOnWindowClose } from '../workspace/workspaceClosing';
 import { createWorkspace, workspaceRoot } from '../workspace/workspaceCreation';
 
-export { bufferedEmitter, startsAsleep } from '../workspace/workspaceStartup';
-export { resolvableBlocker } from '../workspace/workspaceSleep';
-
 export function registerWorkspaceHandlers({
 	window,
 	sessions,

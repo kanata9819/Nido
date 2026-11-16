@@ -148,9 +148,12 @@ export function buildItems(
 				}
 			}));
 			break;
-		default:
+		case 'commands':
 			// Without a query, the commands run last come first, so Enter repeats the last one.
 			items = query ? commands : byRecentUse(commands, recentCommandIds());
+			break;
+		default:
+			items = commands;
 	}
 
 	const filtered =

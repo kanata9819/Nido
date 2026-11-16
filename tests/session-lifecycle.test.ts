@@ -853,7 +853,7 @@ test(
 );
 
 test('prestarted workspace events wait for the renderer and keep their order', async () => {
-	const { bufferedEmitter } = await import('../src/main/ipc/workspaceHandlers');
+	const { bufferedEmitter } = await import('../src/main/workspace/workspaceStartup');
 	const delivered: string[] = [];
 	const events = bufferedEmitter((event) => delivered.push(event.type));
 	events.emit({ type: 'notification', id: 'a', title: '', message: 'first', severity: 'info' });
@@ -867,7 +867,7 @@ test('prestarted workspace events wait for the renderer and keep their order', a
 });
 
 test('only background editors without shells or untitled drafts start asleep', async () => {
-	const { startsAsleep } = await import('../src/main/ipc/workspaceHandlers');
+	const { startsAsleep } = await import('../src/main/workspace/workspaceStartup');
 	const editor = { root: '/project', files: [], current: '' };
 	assert.equal(startsAsleep(editor, 1, 0), true);
 	assert.equal(startsAsleep(editor, 0, 0), false, 'The selected workspace starts');

@@ -1,11 +1,8 @@
 import { useState } from 'react';
 import { useI18n } from '../i18n';
 import type { Panel } from '../types';
-import type { SleepBlocker, Workspace } from '../../../shared/types';
+import { resolvableSleepBlockers, type SleepBlocker, type Workspace } from '../../../shared/types';
 import type { SleepResult } from '../workspace/useWorkspaceSleep';
-
-/** Blockers that sleeping on request can clear, after the user confirms. */
-const resolvableBlockers: SleepBlocker[] = ['terminal', 'modified'];
 
 /** Why a workspace cannot sleep, for the blockers that sleeping cannot clear by itself. */
 const sleepBlockerMessages: Record<SleepBlocker, string> = {
@@ -65,7 +62,9 @@ export function useSleepConfirmation({
 				if (!Array.isArray(result)) {
 					return;
 				}
-				const blocking = result.filter((blocker) => !resolvableBlockers.includes(blocker));
+				const blocking = result.filter(
+					(blocker) => !resolvableSleepBlockers.includes(blocker)
+				);
 				if (blocking.length || resolve) {
 					// Report the first thing confirming cannot clear.
 					report(t(sleepBlockerMessages[blocking[0] ?? result[0]], { name }));

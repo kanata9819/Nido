@@ -65,6 +65,7 @@ function indentationCommands(
 		},
 		...[2, 4, 8].map((size) => ({
 			key: '',
+			id: `Indent width ${size}`,
 			title: t('Indent width {size}', { size }),
 			detail,
 			run: () => apply({ ...indentation, size })
@@ -84,6 +85,18 @@ function indentationCommands(
 	];
 }
 
+/**
+ * Commands kept off the recent list. The palette selects its first recent command, so after
+ * one of these, Enter on the reopened palette would close or hide something.
+ */
+const unrepeatable = new Set([
+	'Quit Nido',
+	'Close workspace',
+	'Close file',
+	'Minimize window',
+	'Maximize or restore window'
+]);
+
 /** What the command groups below read and run. */
 interface CommandContext {
 	active: string;
@@ -94,11 +107,8 @@ interface CommandContext {
 	t: Translator;
 }
 
-/** A command before its title and detail are translated. */
-type Command = Item;
-
 /** `items` when `condition` holds, nothing otherwise. */
-function when(condition: unknown, items: () => Command[]): Command[] {
+function when(condition: unknown, items: () => Item[]): Item[] {
 	return condition ? items() : [];
 }
 
@@ -108,7 +118,7 @@ function keysCommand(
 	title: string,
 	detail: string,
 	keys: string
-): Command {
+): Item {
 	return {
 		key: '',
 		title,
@@ -121,7 +131,7 @@ function keysCommand(
 }
 
 /** Open, create or switch workspaces; available without a workspace too. */
-function launchCommands({ callbacks }: CommandContext): Command[] {
+function launchCommands({ callbacks }: CommandContext): Item[] {
 	const { create, showPanel } = callbacks;
 	return [
 		{
@@ -164,12 +174,14 @@ function launchCommands({ callbacks }: CommandContext): Command[] {
 }
 
 /** Favorites, Problems, Git, Time Machine and the Markdown preview of the active workspace. */
-function overviewCommands({ state, callbacks, editor }: CommandContext): Command[] {
+function overviewCommands({ state, callbacks, editor }: CommandContext): Item[] {
 	const { showPanel, focusEditor } = callbacks;
 	const namedFile = state.buffers.some((buffer) => buffer.id === state.current && buffer.name);
 	return [
 		{
 			key: '',
+			// One id for both titles, so the command stays recent after it toggles.
+			id: 'Toggle workspace favorite',
 			title: callbacks.isFavorite
 				? 'Remove workspace from favorites'
 				: 'Add workspace to favorites',
@@ -211,7 +223,7 @@ function overviewCommands({ state, callbacks, editor }: CommandContext): Command
 }
 
 /** Comments, undo and redo, file tabs and the debug panel, in an editor workspace. */
-function editingCommands(context: CommandContext): Command[] {
+function editingCommands(context: CommandContext): Item[] {
 	const { active, state, callbacks } = context;
 	const { run, focusEditor } = callbacks;
 	const index = state.buffers.findIndex((buffer) => buffer.id === state.current);
@@ -264,7 +276,7 @@ const debugCommandList: [string, string, DebugAction][] = [
 	['Stop debugging', 'Shift+F5', 'stop']
 ];
 
-function debugCommands({ active, callbacks }: CommandContext): Command[] {
+function debugCommands({ active, callbacks }: CommandContext): Item[] {
 	return debugCommandList.map(([title, detail, action]) => ({
 		key: '',
 		title,
@@ -277,7 +289,7 @@ function debugCommands({ active, callbacks }: CommandContext): Command[] {
 }
 
 /** Indentation and line endings of the current file. */
-function formatCommands(context: CommandContext): Command[] {
+function formatCommands(context: CommandContext): Item[] {
 	const { active, state, callbacks, editor, t } = context;
 	return [
 		...when(state.indentation && editor, () =>
@@ -285,6 +297,7 @@ function formatCommands(context: CommandContext): Command[] {
 		),
 		...(['LF', 'CRLF'] as const).map((format) => ({
 			key: '',
+			id: `Convert line endings to ${format}`,
 			title: t('Convert line endings to {format}', { format }),
 			detail: 'Normalize the current file · Save to apply to disk',
 			run: () => {
@@ -309,7 +322,7 @@ const lspCommandList = [
 ];
 
 /** Rust's run and debug commands, and the language server's, for files that have them. */
-function languageCommands(context: CommandContext): Command[] {
+function languageCommands(context: CommandContext): Item[] {
 	const { state, t } = context;
 	return [
 		...when(state.filetype === 'rust', () =>
@@ -334,7 +347,7 @@ function languageCommands(context: CommandContext): Command[] {
 }
 
 /** Finding files, symbols and text, and switching files. */
-function navigationCommands({ callbacks, editor }: CommandContext): Command[] {
+function navigationCommands({ callbacks, editor }: CommandContext): Item[] {
 	const { showPanel } = callbacks;
 	return [
 		{
@@ -373,7 +386,7 @@ function navigationCommands({ callbacks, editor }: CommandContext): Command[] {
 }
 
 /** Saving, reordering and closing. */
-function workspaceCommands({ active, state, callbacks }: CommandContext): Command[] {
+function workspaceCommands({ active, state, callbacks }: CommandContext): Item[] {
 	const { run, focusEditor, moveWorkspace } = callbacks;
 	return [
 		{
@@ -419,7 +432,7 @@ function workspaceCommands({ active, state, callbacks }: CommandContext): Comman
 }
 
 /** Settings and the window; available without a workspace too. */
-function windowCommands({ callbacks }: CommandContext): Command[] {
+function windowCommands({ callbacks }: CommandContext): Item[] {
 	const { run, focusEditor } = callbacks;
 	const windowAction = (action: 'minimize' | 'maximize' | 'close') => () => {
 		focusEditor();
@@ -483,14 +496,20 @@ export function buildCommands(
 			...workspaceCommands(context)
 		]),
 		...windowCommands(context)
-	].map((command) => ({
-		...command,
-		id: command.title,
-		title: t(command.title),
-		detail: t(command.detail),
-		run: () => {
-			rememberCommand(command.title);
-			command.run();
-		}
-	}));
+	].map((command) => {
+		// A command's id stays the same across languages and states; most use their title.
+		const id = command.id ?? command.title;
+		return {
+			...command,
+			id,
+			title: t(command.title),
+			detail: t(command.detail),
+			run: () => {
+				if (!unrepeatable.has(id)) {
+					rememberCommand(id);
+				}
+				command.run();
+			}
+		};
+	});
 }

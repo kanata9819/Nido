@@ -175,6 +175,8 @@ export default function TitleBar({
 							aria-description={w.sleeping ? t('Sleeping') : undefined}
 							aria-keyshortcuts="Alt+Shift+PageUp Alt+Shift+PageDown"
 							title={[
+								// The tab cuts long names short; its tooltip shows the whole name.
+								w.name,
 								compact
 									? t('Session tabs (Alt+Shift+W)')
 									: w.sleeping

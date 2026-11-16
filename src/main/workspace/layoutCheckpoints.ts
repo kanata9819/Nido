@@ -63,12 +63,16 @@ export class LayoutCheckpoints {
 	async saveFinal(): Promise<void> {
 		await this.checkpoints.idle();
 		const ids = this.registry.orderedIds();
+		// The window as it was when quitting began; it can change or close during the snapshots.
+		const window = this.windowLayout();
 		const workspaces = await Promise.all(
 			ids.map((id) => this.registry.snapshotOf(id, { includeUntitled: false }))
 		);
-		await writeLayout(this.layoutPath, this.layout(ids, this.state.active, workspaces), {
-			replaceBackup: true
-		});
+		await writeLayout(
+			this.layoutPath,
+			this.layout(ids, this.state.active, workspaces, window),
+			{ replaceBackup: true }
+		);
 	}
 
 	private canCheckpoint(): boolean {
@@ -76,18 +80,18 @@ export class LayoutCheckpoints {
 		return this.ready && !state.prompting && !state.closing && !this.window.isDestroyed();
 	}
 
-	private layout(ids: string[], active: string, workspaces: SavedWorkspace[]): SavedLayout {
+	private windowLayout(): NonNullable<SavedLayout['window']> {
 		const bounds = this.window.getNormalBounds();
-		return {
-			version: 1,
-			window: {
-				width: bounds.width,
-				height: bounds.height,
-				maximized: this.window.isMaximized()
-			},
-			workspaces,
-			active: Math.max(0, ids.indexOf(active))
-		};
+		return { width: bounds.width, height: bounds.height, maximized: this.window.isMaximized() };
+	}
+
+	private layout(
+		ids: string[],
+		active: string,
+		workspaces: SavedWorkspace[],
+		window = this.windowLayout()
+	): SavedLayout {
+		return { version: 1, window, workspaces, active: Math.max(0, ids.indexOf(active)) };
 	}
 
 	/** The current layout, or undefined when it should not be saved right now. */
