@@ -402,6 +402,66 @@ test('bracket guides follow the innermost scope, ignore quoted brackets and clea
 	}
 });
 
+test('bracket guides stay on their brackets from cursor movement into pixel scrolling', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-bracket-scroll-'));
+	const grid = new Grid();
+	const misplaced: string[] = [];
+	let checking = false;
+	let checked = 0;
+	let session: Session | undefined;
+	try {
+		const scopes = Array.from({ length: 12 }, (_, index) =>
+			[
+				`fn scope_${index}() {`,
+				'    if ready() {',
+				'        collect(',
+				...Array.from({ length: 6 }, (_, value) => `            value_${value},`),
+				'        );',
+				'    }',
+				'}',
+				''
+			].join('\n')
+		);
+		await writeFile(join(root, 'scopes.rs'), scopes.join('\n'));
+		session = await Session.create(root, (event) => {
+			if (event.type !== 'redraw') return;
+			grid.apply(event.events);
+			if (!checking) return;
+			for (const { top, bottom, opening, closing } of grid.bracketGuides) {
+				for (const [row, column, brackets] of [
+					[top, opening, '([{'],
+					[bottom, closing, ')]}']
+				] as const) {
+					if (column < 0) continue;
+					const text = grid.cells[row]?.[column]?.text;
+					checked++;
+					if (!text || !brackets.includes(text)) misplaced.push(`${row}:${column}`);
+				}
+			}
+		});
+		await session.openFile('scopes.rs');
+		await session.attach(72, 20);
+		await session.client.request('nvim_exec_lua', [
+			`local buffer = vim.api.nvim_get_current_buf()
+assert(vim.wait(5000, function() return require('nido_brackets').ready(buffer) end, 5))
+vim.cmd.redraw({bang=true})`,
+			[]
+		]);
+		checking = true;
+		for (const line of [25, 37, 49]) {
+			await Promise.all([session.input(`${line}Gzzj`), session.scroll(-0.3, false, true)]);
+			await session.scroll(-1.85, false, true);
+			await session.prefetchScroll(true);
+			await Promise.all([session.input('2k'), session.scroll(0.2, false, true)]);
+		}
+		assert.ok(checked > 0, 'The test must see bracket guides while scrolling');
+		assert.equal(misplaced.length, 0, `A guide arrived before its grid row at ${misplaced[0]}`);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
 test('indent guides follow depth, tabs and blank lines without changing text', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-indent-'));
 	const grid = new Grid();
