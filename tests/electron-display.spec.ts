@@ -7,10 +7,11 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chooseWorkspace } from './helpers/electron-shared';
+import { launchEnv } from './helpers/launch-env';
 
 test('typing hides the pointer and moving or clicking restores it', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-pointer-'));
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const executablePath = process.env.NIDO_PACKAGED_EXE;
 	const running = await electron.launch({
@@ -45,7 +46,7 @@ test('relative line numbers update immediately and persist after restarting', as
 	const workspace = join(root, 'workspace');
 	await mkdir(workspace);
 	await writeFile(join(workspace, 'lines.txt'), 'line 1\nline 2\nline 3\nline 4\nline 5\n');
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const options = { args: ['.', `--user-data-dir=${join(root, 'profile')}`], env };
 	let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
@@ -105,7 +106,7 @@ test('word wrap updates long lines immediately and persists after restarting', a
 	const workspace = join(root, 'workspace');
 	await mkdir(workspace);
 	await writeFile(join(workspace, 'long.txt'), `${'x'.repeat(400)}WRAP_END\nnext line\n`);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const options = { args: ['.', `--user-data-dir=${join(root, 'profile')}`], env };
 	let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
@@ -178,7 +179,7 @@ test('touchpad horizontal scrolling reveals long lines and preserves ordinary ed
 			)
 		].join('\n') + '\n'
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],
@@ -228,7 +229,7 @@ test('touchpad horizontal scrolling reveals long lines and preserves ordinary ed
 							unsubscribe();
 							requestAnimationFrame(() =>
 								requestAnimationFrame(() =>
-									resolve({ width, gutter: Number(scroll[3]), pixels })
+									resolve({ width, gutter: Number(scroll![3]), pixels })
 								)
 							);
 						});
@@ -431,7 +432,7 @@ test('font family and line height update the canvas and survive restarting', asy
 			''
 		].join('\n')
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const executablePath = process.env.NIDO_PACKAGED_EXE;
 	const options = {
@@ -469,7 +470,7 @@ test('font family and line height update the canvas and survive restarting', asy
 				fill(x, y, width, height);
 			};
 			context.drawImage = ((...args: Parameters<typeof draw>) => {
-				if (args.length === 5) {
+				if ((args as unknown[]).length === 5) {
 					const y = Number(args[2]);
 					if (firstY === undefined) {
 						firstY = y;
@@ -574,7 +575,7 @@ test('Japanese editor text stays legible at fractional display scales', async ()
 		].join('\n')
 	);
 	await writeFile(join(workspace, 'tsconfig.json'), '{}');
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`, '--force-device-scale-factor=1.25'],
@@ -611,7 +612,7 @@ test('Japanese editor text stays legible at fractional display scales', async ()
 			const draw = ctx.drawImage.bind(ctx);
 			ctx.drawImage = ((...args: Parameters<typeof draw>) => {
 				if (
-					args.length === 5 &&
+					(args as unknown[]).length === 5 &&
 					Math.abs(
 						Number(args[2]) * window.devicePixelRatio -
 							Math.round(Number(args[2]) * window.devicePixelRatio)
@@ -650,7 +651,7 @@ test('Japanese editor text stays legible at fractional display scales', async ()
 
 test('clicking editor glyphs moves the cursor, including wide text and detached pixel scrolling', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-click-'));
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const lines = Array.from({ length: 100 }, (_, index) => `line ${index + 1}`);
 	lines[1] = 'ab日本語xyz';
@@ -719,7 +720,7 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
 			const draw = ctx.drawImage.bind(ctx);
 			ctx.drawImage = ((...args: Parameters<typeof draw>) => {
 				draw(...args);
-				if (args.length !== 5) return;
+				if ((args as unknown[]).length !== 5) return;
 				if (
 					(args[0] as HTMLCanvasElement).height >
 					Math.ceil(Number(localStorage.getItem('nido.lineHeight')) * devicePixelRatio)
@@ -808,7 +809,7 @@ test('activity bar placement switches live and survives restart with editing and
 	const workspace = join(root, 'Project');
 	await mkdir(workspace);
 	await writeFile(join(workspace, 'notes.txt'), 'hello\n');
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const options = { args: ['.', `--user-data-dir=${join(root, 'profile')}`], env };
 	let running = await electron.launch(options);
@@ -907,7 +908,7 @@ test('activity bar placement switches live and survives restart with editing and
 
 test('settings can be navigated and changed entirely with the keyboard', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-settings-keys-'));
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({ args: ['.', `--user-data-dir=${root}`], env });
 	try {
@@ -1064,7 +1065,7 @@ test('settings can be navigated and changed entirely with the keyboard', async (
 
 test('smooth cursor movement and blink animate and persist their settings', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-cursor-'));
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const options = { args: ['.', `--user-data-dir=${join(root, 'profile')}`], env };
 	let running = await electron.launch(options);
@@ -1247,7 +1248,7 @@ test('smooth cursor movement and blink animate and persist their settings', asyn
 
 test('line deletion and undo stay still while viewport navigation animates', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-delete-motion-'));
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	await writeFile(
 		join(root, 'lines.txt'),
@@ -1339,7 +1340,7 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
 		{ length: 200 },
 		(_, index) => `line ${index + 1} ${'text '.repeat(60)}`
 	).join('\n');
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
 	try {
@@ -1380,7 +1381,7 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
 			};
 			const draw = context.drawImage.bind(context);
 			context.drawImage = ((...args: Parameters<typeof draw>) => {
-				if (args.length === 5 && row++ === 0) {
+				if ((args as unknown[]).length === 5 && row++ === 0) {
 					surface.setAttribute(
 						'data-first-line-y',
 						String(
@@ -1485,7 +1486,7 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
 			let firstRow = true;
 			const draw = ctx.drawImage.bind(ctx);
 			ctx.drawImage = ((...args: Parameters<typeof draw>) => {
-				if (firstRow && args.length === 5) {
+				if (firstRow && (args as unknown[]).length === 5) {
 					const source = args[0] as HTMLCanvasElement;
 					const baseline = Number(source.dataset.rowBaseline);
 					const phase = (baseline - Math.floor(baseline)) / devicePixelRatio;
@@ -1654,7 +1655,7 @@ test('viewport movement uses pixel wheel deltas and animates keyboard scrolling'
 
 test('settings navigation crosses the shell selector with Ctrl D and Ctrl U', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-settings-navigation-'));
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],
@@ -1692,7 +1693,7 @@ test('half-page direction changes animate once per press', async () => {
 		join(root, 'scroll.txt'),
 		Array.from({ length: 400 }, (_, i) => `line ${i + 1}`).join('\n')
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],

@@ -562,9 +562,7 @@ test('Git badge polling backs off while idle and refreshes immediately on activi
 	await page.clock.runFor(3000);
 	await settle();
 	expect(await calls()).toBe(3);
-	await page.evaluate(() =>
-		window.rendererTest.emit({ type: 'filesChanged', id: 'alpha', paths: [''] })
-	);
+	await page.evaluate(() => window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' }));
 	await settle();
 	expect(await calls()).toBe(4);
 	await page.clock.runFor(3000);

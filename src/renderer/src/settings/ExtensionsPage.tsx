@@ -126,19 +126,20 @@ export default function ExtensionsPage({
 						/>
 					</label>
 				</div>
-				{githubShown && (
-					<GitHubExtensionCard
-						workspaceId={workspaceId}
-						enabled={githubEnabled}
-						setEnabled={setGithubEnabled}
-					/>
-				)}
 				<LanguagePacksPanel
 					key={workspaceId ?? ''}
 					workspaceId={workspaceId}
 					query={query}
 					category={view === 'languages' ? 'language' : 'other'}
-					builtInShown={githubShown}
+					builtIn={
+						githubShown && (
+							<GitHubExtensionCard
+								workspaceId={workspaceId}
+								enabled={githubEnabled}
+								setEnabled={setGithubEnabled}
+							/>
+						)
+					}
 				/>
 			</div>
 		</section>

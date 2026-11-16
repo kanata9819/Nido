@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, realpath, rename, rm, unlink, writeFile } from 'node:fs
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { electron } from './helpers/electron';
+import { launchEnv } from './helpers/launch-env';
 
 interface ExplorerSyncProbe {
 	paths: string[];
@@ -23,7 +24,7 @@ test('Explorer synchronizes external file changes without losing expansion, sele
 			writeFile(join(project, `file-${String(index).padStart(2, '0')}.txt`), 'sample')
 		)
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],

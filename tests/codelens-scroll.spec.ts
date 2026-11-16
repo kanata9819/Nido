@@ -59,7 +59,7 @@ for (const scale of [1, 1.25, 1.5]) {
 				context.drawImage = ((...args: unknown[]) => {
 					const source = args[0];
 					if (
-						args.length === 5 &&
+						(args as unknown[]).length === 5 &&
 						source instanceof HTMLCanvasElement &&
 						/ROW_110(?:\D|$)/.test(source.dataset.rowText ?? '')
 					) {

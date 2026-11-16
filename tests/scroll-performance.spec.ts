@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { installRowImageProbe } from './helpers/row-image-probe';
+import { launchEnv } from './helpers/launch-env';
 
 test('scroll rendering reuses text and reports GPU and frame timings', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-scroll-performance-'));
@@ -25,7 +26,7 @@ test('scroll rendering reuses text and reports GPU and frame timings', async () 
 			workspaces: [{ root, current: file, files: [{ path: file, line: 1, column: 0 }] }]
 		})
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const executablePath = process.env.NIDO_PACKAGED_EXE;
 	const running = await electron.launch({
@@ -115,7 +116,7 @@ test('wrapped upward scrolling reuses text and avoids continuous cache refills',
 			workspaces: [{ root, current: file, files: [{ path: file, line: 1, column: 0 }] }]
 		})
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
 	try {
@@ -204,7 +205,7 @@ test('non-animated touchpad deltas preview before RPC, coalesce and settle witho
 			workspaces: [{ root, current: file, files: [{ path: file, line: 1, column: 0 }] }]
 		})
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
 	try {
@@ -293,7 +294,7 @@ test('non-animated touchpad deltas preview before RPC, coalesce and settle witho
 			context.drawImage = ((...args: Parameters<typeof draw>) => {
 				// Cursor-only repaints may start several rows down. Track the
 				// actual viewport edge, rather than the first draw in any frame.
-				if (first && args.length === 5 && Number(args[2]) <= 0) {
+				if (first && (args as unknown[]).length === 5 && Number(args[2]) <= 0) {
 					const baseline = Number(
 						(args[0] as HTMLCanvasElement).dataset.rowBaseline ?? 0
 					);
@@ -389,7 +390,11 @@ test('non-animated touchpad deltas preview before RPC, coalesce and settle witho
 			const context = node.getContext('2d')!;
 			const draw = context.drawImage.bind(context);
 			context.drawImage = ((...args: Parameters<typeof draw>) => {
-				if (args.length === 5 && Number(args[2]) > 0 && Number(args[2]) < 3) {
+				if (
+					(args as unknown[]).length === 5 &&
+					Number(args[2]) > 0 &&
+					Number(args[2]) < 3
+				) {
 					const baseline = Number(
 						(args[0] as HTMLCanvasElement).dataset.rowBaseline ?? 0
 					);
@@ -442,7 +447,7 @@ test('non-animated touchpad deltas preview before RPC, coalesce and settle witho
 			const rowText = node.dataset.firstRowText;
 			node.dataset.largeUpPreview = node.dataset.firstY;
 			ctx.drawImage = ((...args: Parameters<typeof draw>) => {
-				if (args.length === 5) {
+				if ((args as unknown[]).length === 5) {
 					const source = args[0] as HTMLCanvasElement;
 					if (source.dataset.rowText === rowText) {
 						const baseline = Number(

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { ScrollQueue, editorWheelMotion, scrollOffset } from '../src/renderer/src/editor/scroll';
 import { EditorScroll } from '../src/renderer/src/editor/editorScroll';
 import { Grid } from '../src/renderer/src/grid/grid';
+import type { Redraw } from '../src/shared/types';
 
 test('zero-duration motion settles even before the first clock tick', () => {
 	assert.equal(scrollOffset(12, 0, 0), 0);
@@ -280,7 +281,10 @@ test('pixel gestures preserve their distance across compact CodeLens rows in bot
 				grid.apply([
 					['grid_resize', [1, 20, 16]],
 					['hl_attr_define', [1, {}, {}, [{ hi_name: 'NidoCodeLens' }]]],
-					...[1, 5, 9].map((row) => ['grid_line', [1, row, 0, [['Run Tests', 1]]]]),
+					...[1, 5, 9].map((row): Redraw[number] => [
+						'grid_line',
+						[1, row, 0, [['Run Tests', 1]]]
+					]),
 					['flush']
 				]);
 				grid.prepareLayout(180, 8, height);

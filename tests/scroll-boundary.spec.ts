@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { installRowImageProbe } from './helpers/row-image-probe';
+import { launchEnv } from './helpers/launch-env';
 
 test('fast gestures reach both file edges without a slow final approach', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-fast-scroll-boundary-'));
@@ -20,7 +21,7 @@ test('fast gestures reach both file edges without a slow final approach', async 
 			workspaces: [{ root, current: file, files: [{ path: file, line: 1, column: 0 }] }]
 		})
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
 	try {
@@ -33,7 +34,7 @@ test('fast gestures reach both file edges without a slow final approach', async 
 			const context = node.getContext('2d')!;
 			const draw = context.drawImage.bind(context);
 			context.drawImage = ((...args: Parameters<typeof draw>) => {
-				if (args.length === 5 && Number(args[2]) + Number(args[4]) > 0) {
+				if ((args as unknown[]).length === 5 && Number(args[2]) + Number(args[4]) > 0) {
 					const source = args[0] as HTMLCanvasElement;
 					const row = source.dataset.rowText?.match(/ROW_(\d+)/);
 					if (row) {
@@ -130,7 +131,7 @@ test('upward touchpad gestures stop at the first row while replies are delayed',
 			]
 		})
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const executablePath = process.env.NIDO_PACKAGED_EXE;
 	const running = await electron.launch({
@@ -168,7 +169,11 @@ test('upward touchpad gestures stop at the first row while replies are delayed',
 				fill(x, y, width, height);
 			};
 			context.drawImage = ((...args: Parameters<typeof draw>) => {
-				if (first && args.length === 5 && Number(args[2]) + Number(args[4]) > 0) {
+				if (
+					first &&
+					(args as unknown[]).length === 5 &&
+					Number(args[2]) + Number(args[4]) > 0
+				) {
 					first = false;
 					const source = args[0] as HTMLCanvasElement;
 					const baseline = Number(source.dataset.rowBaseline);

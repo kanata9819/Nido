@@ -4,11 +4,12 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { supportsHardwareWebGL } from './helpers/row-image-probe';
+import { launchEnv } from './helpers/launch-env';
 
 for (const scale of [1, 1.25, 1.5]) {
 	test(`cached editor text preserves its pixels at ${scale * 100}% scale`, async () => {
 		const root = await mkdtemp(join(tmpdir(), 'nido-sharpness-'));
-		const env = { ...process.env };
+		const env = launchEnv();
 		delete env.ELECTRON_RUN_AS_NODE;
 		await writeFile(
 			join(root, 'sample.txt'),
@@ -78,7 +79,8 @@ for (const scale of [1, 1.25, 1.5]) {
 				const referenceContext = reference.getContext('2d', { alpha: false })!;
 				ctx.drawImage = ((...args: Parameters<typeof draw>) => {
 					draw(...args);
-					if (args.length !== 5 || !(args[0] instanceof HTMLCanvasElement)) return;
+					if ((args as unknown[]).length !== 5 || !(args[0] instanceof HTMLCanvasElement))
+						return;
 					const source = args[0];
 					if (!source.getContext('2d')) {
 						node.dataset.correctedCopies = String(

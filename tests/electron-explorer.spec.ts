@@ -6,13 +6,14 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chooseWorkspace } from './helpers/electron-shared';
+import { launchEnv } from './helpers/launch-env';
 
 test('explorer commands create, rename, copy, move and recycle files from the keyboard', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-explorer-actions-'));
 	const workspace = join(root, 'workspace');
 	await mkdir(workspace);
 	await writeFile(join(workspace, 'original.txt'), 'hello\n');
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],
@@ -113,7 +114,7 @@ test('explorer supports half-page, page and first/last selection with Vim keys',
 			writeFile(join(workspace, `file-${String(index).padStart(2, '0')}.txt`), 'sample\n')
 		)
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const executablePath = process.env.NIDO_PACKAGED_EXE;
 	const running = await electron.launch({
@@ -187,7 +188,7 @@ test('file tabs scroll into view when switching hidden buffers with Shift H and 
 		(_, index) => `file-${String(index).padStart(2, '0')}.txt`
 	);
 	await Promise.all(files.map((file) => writeFile(join(workspace, file), 'sample\n')));
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const executablePath = process.env.NIDO_PACKAGED_EXE;
 	const running = await electron.launch({
@@ -249,7 +250,7 @@ test('explorer zz centers selection without opening or changing files', async ()
 			writeFile(join(workspace, `file${String(i).padStart(3, '0')}.txt`), '')
 		)
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],
@@ -304,7 +305,7 @@ test('file tabs retain reordered positions and the reopened cursor across restar
 	await Promise.all(
 		files.map((file) => writeFile(join(workspace, file), 'line one\nline two\nline three\n'))
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const options = { args: ['.', `--user-data-dir=${join(root, 'profile')}`], env };
 	let running: Awaited<ReturnType<typeof electron.launch>> | undefined;
@@ -356,7 +357,7 @@ test('Explorer opens and reopens literal bracketed file names while preserving o
 	await mkdir(workspace);
 	await writeFile(join(workspace, 'file[1].txt'), 'literal\n');
 	await writeFile(join(workspace, 'file1.txt'), 'other\n');
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({
 		args: ['.', `--user-data-dir=${join(root, 'profile')}`],

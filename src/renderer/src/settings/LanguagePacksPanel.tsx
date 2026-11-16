@@ -21,13 +21,13 @@ export default function LanguagePacksPanel({
 	workspaceId,
 	query,
 	category,
-	builtInShown = false
+	builtIn
 }: {
 	workspaceId?: string;
 	query: string;
 	category: 'language' | 'other';
-	/** Whether a built-in extension (GitHub) is shown above, so the list is not empty. */
-	builtInShown?: boolean;
+	/** Built-in extensions (the GitHub card) listed first, in the same grid as the packs. */
+	builtIn?: React.ReactNode;
 }): React.JSX.Element {
 	const t = useI18n();
 	const errorMessage = useErrorMessage();
@@ -194,6 +194,7 @@ export default function LanguagePacksPanel({
 				</p>
 			)}
 			<ul className={styles.grid}>
+				{builtIn}
 				{packs.map((pack) => (
 					<li key={pack.id} className={styles.card} data-pack={pack.id}>
 						<div className={styles.cardHeading}>
@@ -254,7 +255,7 @@ export default function LanguagePacksPanel({
 					</li>
 				))}
 			</ul>
-			{!loading && !packs.length && !builtInShown && (
+			{!loading && !packs.length && !builtIn && (
 				<p className={styles.empty}>
 					{t(
 						category === 'language'

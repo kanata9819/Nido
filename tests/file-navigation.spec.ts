@@ -2,6 +2,7 @@ import { test, expect, _electron as electron } from '@playwright/test';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { launchEnv } from './helpers/launch-env';
 
 test('gf errors use the existing notification card and leave file navigation usable', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-goto-file-ui-'));
@@ -19,7 +20,7 @@ test('gf errors use the existing notification card and leave file navigation usa
 			workspaces: [{ root, current: file, files: [{ path: file, line: 1, column: 0 }] }]
 		})
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const executablePath = process.env.NIDO_PACKAGED_EXE;
 	const running = await electron.launch({

@@ -98,6 +98,7 @@ test('leader h opens history and leader Shift+H/L reorder workspaces', () => {
 		let handler!: ReturnType<typeof createKeyboardHandler>;
 		function KeyboardProbe(): null {
 			handler = createKeyboardHandler({
+				terminalCopyMode: () => {},
 				save: () => {},
 				panel: null,
 				leader: true,
@@ -231,6 +232,7 @@ test('global shortcuts leave AltGr input available to the editor', () => {
 		let handler!: ReturnType<typeof createKeyboardHandler>;
 		function KeyboardProbe(): null {
 			handler = createKeyboardHandler({
+				terminalCopyMode: unexpected,
 				save: unexpected,
 				panel: null,
 				leader: false,
@@ -308,7 +310,7 @@ test('editor input sends AltGr characters without invoking clipboard shortcuts',
 				...nativeEvent,
 				nativeEvent,
 				preventDefault: (): void => {}
-			} as Parameters<typeof input.onKeyDown>[0]);
+			} as unknown as Parameters<typeof input.onKeyDown>[0]);
 		}
 		assert.deepEqual(sent, ['@', '{', '<LT>', 'v']);
 		assert.equal(clipboardPastes, 0);
@@ -317,7 +319,7 @@ test('editor input sends AltGr characters without invoking clipboard shortcuts',
 			...nativeEvent,
 			nativeEvent,
 			preventDefault: (): void => {}
-		} as Parameters<typeof input.onKeyDown>[0]);
+		} as unknown as Parameters<typeof input.onKeyDown>[0]);
 		assert.equal(clipboardPastes, 1);
 	} finally {
 		if (originalWindow) {
