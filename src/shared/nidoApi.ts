@@ -1,6 +1,17 @@
 // The API the preload script exposes to the renderer as window.nido, one interface per
 // group of IPC handlers in src/main/ipc/.
 import type { Language } from './i18n';
+import type {
+	GitHubStatus,
+	IssueDetails,
+	IssueFilter,
+	IssueSummary,
+	MergeMethod,
+	PullRequestDetails,
+	PullRequestFilter,
+	PullRequestSummary,
+	ReviewEvent
+} from './github';
 import type { HistoryList, HistoryPreview } from './history';
 import type { LanguagePackSnapshot } from './languagePacks';
 import type { SearchOptions, ReplacementPreview, ReplacementResult } from './search';
@@ -167,6 +178,45 @@ export interface BufferAPI {
 	setIndentation(id: string, indentation: Indentation, rewrite?: boolean): Promise<void>;
 }
 
+/** Pull requests and issues of the workspace's GitHub repository (ipc/githubHandlers.ts). */
+export interface GitHubAPI {
+	githubStatus(id: string): Promise<GitHubStatus>;
+	githubPullRequests(id: string, filter: PullRequestFilter): Promise<PullRequestSummary[]>;
+	githubPullRequest(id: string, number: number): Promise<PullRequestDetails>;
+	/** The pull request's diff as [path, diff of that file] pairs. */
+	githubPullRequestDiff(id: string, number: number): Promise<[string, string][]>;
+	githubCheckout(id: string, number: number): Promise<void>;
+	githubComment(id: string, kind: 'pr' | 'issue', number: number, body: string): Promise<void>;
+	githubReview(id: string, number: number, event: ReviewEvent, body: string): Promise<void>;
+	githubReply(id: string, thread: string, body: string): Promise<void>;
+	githubResolve(id: string, thread: string, resolved: boolean): Promise<void>;
+	githubLineComment(
+		id: string,
+		number: number,
+		path: string,
+		line: number,
+		side: 'LEFT' | 'RIGHT',
+		body: string
+	): Promise<void>;
+	/** Push the checked-out branch and open a pull request from it; returns its address. */
+	githubCreatePullRequest(
+		id: string,
+		title: string,
+		body: string,
+		base: string,
+		draft: boolean
+	): Promise<string>;
+	githubMerge(
+		id: string,
+		number: number,
+		method: MergeMethod,
+		deleteBranch: boolean
+	): Promise<void>;
+	githubIssues(id: string, filter: IssueFilter): Promise<IssueSummary[]>;
+	githubIssue(id: string, number: number): Promise<IssueDetails>;
+	githubSetIssueOpen(id: string, number: number, open: boolean): Promise<void>;
+}
+
 /** The app itself: theme, language, window, updates, links and events (ipc/appHandlers.ts). */
 export interface AppAPI {
 	openDocumentation(url: string): Promise<void>;
@@ -189,6 +239,7 @@ export interface NidoAPI
 		LanguagePackAPI,
 		HistoryAPI,
 		GitAPI,
+		GitHubAPI,
 		WorkspaceAPI,
 		EditorAPI,
 		FileAPI,

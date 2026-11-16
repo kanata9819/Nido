@@ -3,6 +3,8 @@ import { Blocks, Search, X } from 'lucide-react';
 import { useI18n } from '../i18n';
 import styles from './ExtensionsPage.module.css';
 import LanguagePacksPanel from './LanguagePacksPanel';
+import GitHubExtensionCard from '../github/GitHubExtensionCard';
+import { githubMatches } from '../github/githubModel';
 
 /** The tabs of the Extensions page. */
 const views = ['languages', 'other'] as const;
@@ -11,10 +13,15 @@ const viewTitles = { languages: 'Languages', other: 'Other extensions' } as cons
 /** The Extensions page (Ctrl+Shift+X): language packs and other extensions, with a search. */
 export default function ExtensionsPage({
 	onClose,
-	workspaceId
+	workspaceId,
+	githubEnabled,
+	setGithubEnabled
 }: {
 	onClose: () => void;
 	workspaceId?: string;
+	/** The built-in GitHub extension, listed with the other extensions. */
+	githubEnabled: boolean;
+	setGithubEnabled: (enabled: boolean) => void;
 }): React.JSX.Element {
 	const t = useI18n();
 	const [view, setView] = useState<(typeof views)[number]>('languages');
@@ -23,6 +30,8 @@ export default function ExtensionsPage({
 	const content = useRef<HTMLDivElement>(null);
 	const tabs = useRef<(HTMLButtonElement | null)[]>([]);
 	useLayoutEffect(() => search.current?.focus(), []);
+	const githubShown =
+		view === 'other' && githubMatches(query, [t('GitHub Pull Requests and Issues')]);
 	// Switch tabs, clearing the search and scrolling back to the top.
 	const selectView = (next: typeof view): void => {
 		setView(next);
@@ -117,11 +126,19 @@ export default function ExtensionsPage({
 						/>
 					</label>
 				</div>
+				{githubShown && (
+					<GitHubExtensionCard
+						workspaceId={workspaceId}
+						enabled={githubEnabled}
+						setEnabled={setGithubEnabled}
+					/>
+				)}
 				<LanguagePacksPanel
 					key={workspaceId ?? ''}
 					workspaceId={workspaceId}
 					query={query}
 					category={view === 'languages' ? 'language' : 'other'}
+					builtInShown={githubShown}
 				/>
 			</div>
 		</section>

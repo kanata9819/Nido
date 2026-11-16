@@ -33,6 +33,29 @@ const api: NidoAPI = {
 	gitStage: (id, path, staged) => ipcRenderer.invoke('nido:gitStage', id, path, staged),
 	gitStageAll: (id) => ipcRenderer.invoke('nido:gitStageAll', id),
 	gitCommit: (id, message) => ipcRenderer.invoke('nido:gitCommit', id, message),
+	githubStatus: (id) => ipcRenderer.invoke('nido:githubStatus', id),
+	githubPullRequests: (id, filter) => ipcRenderer.invoke('nido:githubPullRequests', id, filter),
+	githubPullRequest: (id, number) => ipcRenderer.invoke('nido:githubPullRequest', id, number),
+	githubPullRequestDiff: (id, number) =>
+		ipcRenderer.invoke('nido:githubPullRequestDiff', id, number),
+	githubCheckout: (id, number) => ipcRenderer.invoke('nido:githubCheckout', id, number),
+	githubComment: (id, kind, number, body) =>
+		ipcRenderer.invoke('nido:githubComment', id, kind, number, body),
+	githubReview: (id, number, event, body) =>
+		ipcRenderer.invoke('nido:githubReview', id, number, event, body),
+	githubReply: (id, thread, body) => ipcRenderer.invoke('nido:githubReply', id, thread, body),
+	githubResolve: (id, thread, resolved) =>
+		ipcRenderer.invoke('nido:githubResolve', id, thread, resolved),
+	githubLineComment: (id, number, path, line, side, body) =>
+		ipcRenderer.invoke('nido:githubLineComment', id, number, path, line, side, body),
+	githubCreatePullRequest: (id, title, body, base, draft) =>
+		ipcRenderer.invoke('nido:githubCreatePullRequest', id, title, body, base, draft),
+	githubMerge: (id, number, method, deleteBranch) =>
+		ipcRenderer.invoke('nido:githubMerge', id, number, method, deleteBranch),
+	githubIssues: (id, filter) => ipcRenderer.invoke('nido:githubIssues', id, filter),
+	githubIssue: (id, number) => ipcRenderer.invoke('nido:githubIssue', id, number),
+	githubSetIssueOpen: (id, number, open) =>
+		ipcRenderer.invoke('nido:githubSetIssueOpen', id, number, open),
 	restoreWorkspaces: (shell) => ipcRenderer.invoke('nido:restore', shell),
 	workspaceLayout: (ids, active) => ipcRenderer.invoke('nido:layout', ids, active),
 	favoriteWorkspaces: () => ipcRenderer.invoke('nido:favorites'),

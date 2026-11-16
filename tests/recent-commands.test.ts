@@ -68,7 +68,8 @@ function buildFor(language: 'en' | 'ja', isFavorite: boolean): Item[] {
 		activate: noop,
 		toggleFavorite: noop,
 		sleepWorkspace: noop,
-		isFavorite
+		isFavorite,
+		githubEnabled: false
 	};
 	const workspaces: Workspace[] = [{ id: 'w', root: '/project', name: 'Project' }];
 	const state: SessionState = {

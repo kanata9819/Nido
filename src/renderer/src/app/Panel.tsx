@@ -7,6 +7,7 @@ import WorkspaceSearch from '../search/WorkspaceSearch';
 import styles from '../palette/Palette.module.css';
 import FolderPicker from '../workspace/FolderPicker';
 import GitBrowser from '../git/GitBrowser';
+import GitHubBrowser from '../github/GitHubBrowser';
 import TimeMachine from '../history/TimeMachine';
 import type { DocumentSymbolList, FavoriteWorkspace } from '../../../shared/types';
 import SymbolPalette from '../palette/SymbolPalette';
@@ -48,6 +49,7 @@ const panelTitles = {
 	markdown: 'Markdown preview',
 	problems: 'Problems',
 	git: 'Source control',
+	github: 'GitHub',
 	folders: 'Open a workspace',
 	files: 'Find a file',
 	symbols: 'File symbols',
@@ -130,6 +132,11 @@ export function Panel({
 				<GitBrowser key={workspaceId} workspaceId={workspaceId} onClose={focusEditor} />
 			);
 			break;
+		case 'github':
+			content = (
+				<GitHubBrowser key={workspaceId} workspaceId={workspaceId} onClose={focusEditor} />
+			);
+			break;
 		case 'folders':
 			content = (
 				<FolderPicker
@@ -167,7 +174,7 @@ export function Panel({
 		<OverlayPresence>
 			<div
 				key={opening.generation}
-				className={`${styles.scrim} ${['git', 'history'].includes(panel) ? styles.gitScrim : ''} ${panel === 'search' ? styles.searchScrim : ''}`}
+				className={`${styles.scrim} ${['git', 'github', 'history'].includes(panel) ? styles.gitScrim : ''} ${panel === 'search' ? styles.searchScrim : ''}`}
 				onMouseDown={(event) => {
 					if (event.target === event.currentTarget) {
 						focusEditor();
@@ -175,7 +182,7 @@ export function Panel({
 				}}
 			>
 				<div
-					className={`${styles.palette} ${['git', 'history'].includes(panel) ? styles.gitPalette : ''} ${panel === 'search' ? styles.searchPalette : ''}`}
+					className={`${styles.palette} ${['git', 'github', 'history'].includes(panel) ? styles.gitPalette : ''} ${panel === 'search' ? styles.searchPalette : ''}`}
 					role="dialog"
 					aria-modal="true"
 					aria-label={panel === 'settings' ? t('Settings') : t(`${panel} palette`)}

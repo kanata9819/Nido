@@ -1,0 +1,336 @@
+import type {
+	GitHubStatus,
+	IssueDetails,
+	IssueFilter,
+	IssueSummary,
+	LineComment,
+	MergeMethod,
+	PullRequestDetails,
+	PullRequestDraft,
+	PullRequestFilter,
+	PullRequestSummary,
+	ReviewEvent
+} from '../../shared/github';
+import { gitStatus } from '../git/git';
+import { gh, GhError, ghGraphql, ghJson } from './gh';
+import {
+	parseIssueDetails,
+	parseIssueSummary,
+	parsePullRequestDetails,
+	parsePullRequestSummary,
+	splitPullRequestDiff
+} from './parse';
+
+// Pull requests and issues of a workspace's GitHub repository, through gh. gh finds the
+// repository from the folder's Git remotes, and {owner}/{repo} in `gh api` paths stands for it.
+
+const summaryFields =
+	'number,title,author,state,isDraft,headRefName,baseRefName,reviewDecision,statusCheckRollup,updatedAt,url,labels';
+const detailFields = `${summaryFields},body,headRefOid,isCrossRepository,mergeable,additions,deletions,createdAt,files,comments,reviews`;
+const issueFields = 'number,title,author,state,updatedAt,url,labels,comments';
+
+/** A positive pull request or issue number; throws otherwise. */
+export function issueNumber(value: unknown): number {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+		throw new Error('Invalid pull request or issue number.');
+	}
+	return value;
+}
+
+/** A review thread's node id from GitHub's GraphQL API; throws otherwise. */
+function nodeId(value: string): string {
+	if (!/^[A-Za-z0-9_=-]{1,200}$/.test(value)) {
+		throw new Error('Invalid review thread.');
+	}
+	return value;
+}
+
+/** Text for gh, refusing empty text where GitHub needs some. */
+function requiredText(value: string, what: string): string {
+	if (!value.trim()) {
+		throw new Error(`Write a ${what} first.`);
+	}
+	return value;
+}
+
+/** Whether gh is installed and signed in, and the repository and branch of `cwd`. */
+export async function githubStatus(cwd: string): Promise<GitHubStatus> {
+	let user: string;
+	try {
+		user = (await gh(cwd, ['api', 'user', '--jq', '.login'])).trim();
+	} catch (error) {
+		if (error instanceof GhError && error.missing) {
+			return { installed: false, authenticated: false, message: error.message };
+		}
+		return {
+			installed: true,
+			authenticated: false,
+			message: 'Sign in with `gh auth login`, then refresh.'
+		};
+	}
+	try {
+		const repository = await ghJson<{
+			nameWithOwner?: string;
+			url?: string;
+			defaultBranchRef?: { name?: string };
+		}>(cwd, ['repo', 'view', '--json', 'nameWithOwner,url,defaultBranchRef']);
+		const branch = await gitStatus(cwd).then(
+			(status) => status.branch,
+			() => undefined
+		);
+		return {
+			installed: true,
+			authenticated: true,
+			user,
+			repository: repository.nameWithOwner,
+			url: repository.url,
+			defaultBranch: repository.defaultBranchRef?.name,
+			branch: branch || undefined
+		};
+	} catch (error) {
+		return {
+			installed: true,
+			authenticated: true,
+			user,
+			message: error instanceof Error ? error.message : String(error)
+		};
+	}
+}
+
+/** Up to 100 pull requests: open ones, the user's, those awaiting their review, or closed. */
+export async function listPullRequests(
+	cwd: string,
+	filter: PullRequestFilter
+): Promise<PullRequestSummary[]> {
+	const args = ['pr', 'list', '--limit', '100', '--json', summaryFields];
+	if (filter === 'mine') {
+		args.push('--author', '@me');
+	} else if (filter === 'review') {
+		args.push('--search', 'review-requested:@me');
+	} else if (filter === 'closed') {
+		args.push('--state', 'closed');
+	}
+	return (await ghJson<unknown[]>(cwd, args)).map(parsePullRequestSummary);
+}
+
+const threadQuery = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100) {
+        nodes {
+          id isResolved isOutdated path line originalLine diffSide
+          comments(first: 100) { nodes { id author { login } body createdAt url } }
+        }
+      }
+    }
+  }
+}`;
+
+/** A pull request with its files, checks, conversation and review threads. */
+export async function pullRequest(cwd: string, number: number): Promise<PullRequestDetails> {
+	const [details, repository] = await Promise.all([
+		ghJson<{ url?: string }>(cwd, ['pr', 'view', String(number), '--json', detailFields]),
+		repositoryName(cwd)
+	]);
+	const threads = await ghGraphql<unknown>(cwd, threadQuery, { ...repository, number });
+	return parsePullRequestDetails(details, threads);
+}
+
+/** The owner and name of the workspace's repository. */
+async function repositoryName(cwd: string): Promise<{ owner: string; name: string }> {
+	const { nameWithOwner } = await ghJson<{ nameWithOwner?: string }>(cwd, [
+		'repo',
+		'view',
+		'--json',
+		'nameWithOwner'
+	]);
+	const [owner, name] = (nameWithOwner ?? '').split('/');
+	if (!owner || !name) {
+		throw new GhError('This folder has no GitHub repository.');
+	}
+	return { owner, name };
+}
+
+/** The pull request's diff, one entry per changed file, as [path, diff] pairs. */
+export async function pullRequestDiff(cwd: string, number: number): Promise<[string, string][]> {
+	const diff = await gh(cwd, ['pr', 'diff', String(number), '--color', 'never']);
+	return [...splitPullRequestDiff(diff)];
+}
+
+/** Check out the pull request's branch into the working tree. */
+export async function checkoutPullRequest(cwd: string, number: number): Promise<void> {
+	await gh(cwd, ['pr', 'checkout', String(number)]);
+}
+
+/** Add a comment to the pull request's or issue's conversation. */
+export async function addComment(
+	cwd: string,
+	kind: 'pr' | 'issue',
+	number: number,
+	body: string
+): Promise<void> {
+	await gh(
+		cwd,
+		[kind, 'comment', String(number), '--body-file', '-'],
+		requiredText(body, 'comment')
+	);
+}
+
+/** Approve, request changes on, or comment on a pull request as a review. */
+export async function reviewPullRequest(
+	cwd: string,
+	number: number,
+	event: ReviewEvent,
+	body: string
+): Promise<void> {
+	if (event !== 'approve' && event !== 'request-changes' && event !== 'comment') {
+		throw new Error('Invalid review.');
+	}
+	if (event !== 'approve') {
+		requiredText(body, 'review');
+	}
+	await gh(cwd, ['pr', 'review', String(number), `--${event}`, '--body-file', '-'], body);
+}
+
+/** Reply to a review thread. */
+export async function replyToThread(cwd: string, thread: string, body: string): Promise<void> {
+	await ghGraphql(
+		cwd,
+		`mutation($thread: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $thread, body: $body }) {
+    comment { id }
+  }
+}`,
+		{ thread: nodeId(thread), body: requiredText(body, 'reply') }
+	);
+}
+
+/** Resolve a review thread, or with `resolved` false, reopen it. */
+export async function resolveThread(cwd: string, thread: string, resolved: boolean): Promise<void> {
+	const mutation = resolved ? 'resolveReviewThread' : 'unresolveReviewThread';
+	await ghGraphql(
+		cwd,
+		`mutation($thread: ID!) { ${mutation}(input: { threadId: $thread }) { thread { id } } }`,
+		{ thread: nodeId(thread) }
+	);
+}
+
+/** Start a review thread on a line of the pull request's latest commit. */
+export async function commentOnLine(
+	cwd: string,
+	number: number,
+	comment: LineComment
+): Promise<void> {
+	if (!Number.isSafeInteger(comment.line) || comment.line <= 0) {
+		throw new Error('Choose a line to comment on.');
+	}
+	if (comment.side !== 'LEFT' && comment.side !== 'RIGHT') {
+		throw new Error('Invalid diff side.');
+	}
+	if (!comment.path || comment.path.startsWith('-')) {
+		throw new Error('Invalid file.');
+	}
+	const { headRefOid } = await ghJson<{ headRefOid?: string }>(cwd, [
+		'pr',
+		'view',
+		String(number),
+		'--json',
+		'headRefOid'
+	]);
+	await gh(cwd, [
+		'api',
+		'--method',
+		'POST',
+		`repos/{owner}/{repo}/pulls/${number}/comments`,
+		'-f',
+		`body=${requiredText(comment.body, 'comment')}`,
+		'-f',
+		`commit_id=${headRefOid ?? ''}`,
+		'-f',
+		`path=${comment.path}`,
+		'-F',
+		`line=${comment.line}`,
+		'-f',
+		`side=${comment.side}`
+	]);
+}
+
+/** Open a pull request from the checked-out branch, which must already be pushed. */
+export async function createPullRequest(cwd: string, draft: PullRequestDraft): Promise<string> {
+	if (!/^[\w./-]+$/.test(draft.base) || draft.base.startsWith('-')) {
+		throw new Error('Choose a base branch.');
+	}
+	const args = [
+		'pr',
+		'create',
+		'--title',
+		requiredText(draft.title, 'title'),
+		'--base',
+		draft.base,
+		'--body-file',
+		'-'
+	];
+	if (draft.draft) {
+		args.push('--draft');
+	}
+	// gh prints the new pull request's address.
+	return (await gh(cwd, args, draft.body)).trim().split('\n').pop() ?? '';
+}
+
+/**
+ * Merge a pull request. With `deleteBranch`, the head branch is deleted on GitHub only; the
+ * local checkout is left alone, so unsaved editor changes and the working tree are safe.
+ */
+export async function mergePullRequest(
+	cwd: string,
+	number: number,
+	method: MergeMethod,
+	deleteBranch: boolean
+): Promise<void> {
+	if (method !== 'squash' && method !== 'merge' && method !== 'rebase') {
+		throw new Error('Invalid merge method.');
+	}
+	const { headRefName, isCrossRepository } = await ghJson<{
+		headRefName?: string;
+		isCrossRepository?: boolean;
+	}>(cwd, ['pr', 'view', String(number), '--json', 'headRefName,isCrossRepository']);
+	await gh(cwd, ['pr', 'merge', String(number), `--${method}`]);
+	if (deleteBranch && headRefName && !isCrossRepository) {
+		await gh(cwd, [
+			'api',
+			'--method',
+			'DELETE',
+			`repos/{owner}/{repo}/git/refs/heads/${encodeURI(headRefName)}`
+		]);
+	}
+}
+
+/** Up to 100 issues: open ones, those assigned to the user, the user's, or closed. */
+export async function listIssues(cwd: string, filter: IssueFilter): Promise<IssueSummary[]> {
+	const args = ['issue', 'list', '--limit', '100', '--json', issueFields];
+	if (filter === 'assigned') {
+		args.push('--assignee', '@me');
+	} else if (filter === 'mine') {
+		args.push('--author', '@me');
+	} else if (filter === 'closed') {
+		args.push('--state', 'closed');
+	}
+	return (await ghJson<unknown[]>(cwd, args)).map(parseIssueSummary);
+}
+
+export async function issue(cwd: string, number: number): Promise<IssueDetails> {
+	return parseIssueDetails(
+		await ghJson(cwd, [
+			'issue',
+			'view',
+			String(number),
+			'--json',
+			`${issueFields},body,createdAt,assignees`
+		])
+	);
+}
+
+/** Close an open issue, or reopen a closed one. */
+export async function setIssueOpen(cwd: string, number: number, open: boolean): Promise<void> {
+	await gh(cwd, ['issue', open ? 'reopen' : 'close', String(number)]);
+}

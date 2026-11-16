@@ -25,6 +25,8 @@ export interface CommandsCallbacks {
 	/** Put a background workspace to sleep, from the workspace list. */
 	sleepWorkspace: (id: string) => void;
 	isFavorite: boolean;
+	/** Whether the GitHub extension is on, which adds its command. */
+	githubEnabled: boolean;
 }
 
 /** Status bar label for an indentation, e.g. "Spaces: 4". */
@@ -203,6 +205,14 @@ function overviewCommands({ state, callbacks, editor }: CommandContext): Item[] 
 			detail: 'Git changes, diff and commits · Ctrl+Shift+G',
 			run: () => showPanel('git')
 		},
+		...when(callbacks.githubEnabled && editor, () => [
+			{
+				key: 'G',
+				title: 'GitHub',
+				detail: 'Pull requests, reviews and issues',
+				run: () => showPanel('github')
+			}
+		]),
 		...when(namedFile && editor, () => [
 			{
 				key: 'h',

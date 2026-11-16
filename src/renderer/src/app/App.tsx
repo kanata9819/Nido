@@ -212,7 +212,8 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 			sleepWorkspace: requestSleep,
 			isFavorite: favorites.favorites.some(
 				(f) => f.root === workspace?.root && f.kind === (workspace?.kind || 'editor')
-			)
+			),
+			githubEnabled: settings.githubEnabled
 		}
 	});
 
@@ -302,6 +303,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 					sidebar={sidebar}
 					active={active}
 					panel={panel}
+					github={settings.githubEnabled && workspace?.kind !== 'terminal'}
 					showExplorer={showExplorer}
 					showPanel={showPanel}
 				/>

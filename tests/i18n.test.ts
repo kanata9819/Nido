@@ -70,7 +70,8 @@ test('translated command searches keep shortcut keys and actions, and preserve p
 		activate: noop,
 		toggleFavorite: noop,
 		sleepWorkspace: noop,
-		isFavorite: false
+		isFavorite: false,
+		githubEnabled: false
 	};
 	const workspaces: Workspace[] = [{ id: 'alpha', name: 'Settings', root: '/Settings' }];
 	const state: SessionState = {
