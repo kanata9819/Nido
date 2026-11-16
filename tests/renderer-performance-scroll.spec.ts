@@ -19,6 +19,52 @@ test.afterAll(async () => {
 	await server?.close();
 });
 
+test('Ctrl+@ terminal input places the cursor at its new cell on the first frame', async ({
+	page
+}) => {
+	await page.clock.install({ time: new Date(0) });
+	await page.clock.pauseAt(new Date(1000));
+	await page.addInitScript(() => {
+		localStorage.setItem('nido.language', 'en');
+		localStorage.setItem('nido.smoothCursor', 'true');
+	});
+	await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+	await page.evaluate(() =>
+		window.rendererTest.settle('restoreWorkspaces', 0, {
+			workspaces: [{ id: 'alpha', root: '/alpha', name: 'Alpha', terminalId: 'shell' }],
+			active: 'alpha',
+			errors: []
+		})
+	);
+	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+	await page.keyboard.press('Control+@');
+	await expect(page.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+	await page.clock.runFor(32);
+	await page.evaluate(async (url) => {
+		const { Grid } = (await import(url)) as { Grid: typeof EditorGrid };
+		const original = Grid.prototype.draw;
+		const columns: number[] = [];
+		Object.assign(window, { terminalCursorColumns: columns });
+		Grid.prototype.draw = function (...args) {
+			const position = args[6];
+			if (position && args[0].closest('section[aria-label="Terminal"]')) {
+				columns.push(position.column);
+			}
+			return original.apply(this, args);
+		};
+		window.rendererTest.emit({
+			type: 'redraw',
+			id: 'shell',
+			events: [['grid_cursor_goto', [1, 0, 8]], ['flush']]
+		});
+	}, viteFsUrl('src/renderer/src/grid/grid.ts'));
+	await page.clock.runFor(16);
+	const columns = await page.evaluate(
+		() => (window as unknown as { terminalCursorColumns: number[] }).terminalCursorColumns
+	);
+	expect(columns[0]).toBe(8);
+});
+
 test('j/k viewport scrolling reuses frames until a redraw, while editing interrupts it', async ({
 	page
 }) => {

@@ -110,7 +110,12 @@ export default function EditorArea(props: Props): React.JSX.Element {
 					)}
 			</div>
 			{panel === 'extensions' && (
-				<ExtensionsPage onClose={props.focusEditor} workspaceId={active || undefined} />
+				<ExtensionsPage
+					onClose={props.focusEditor}
+					workspaceId={active || undefined}
+					githubEnabled={props.settings.githubEnabled}
+					setGithubEnabled={props.settings.setGithubEnabled}
+				/>
 			)}
 		</main>
 	);

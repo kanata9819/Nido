@@ -403,3 +403,102 @@ for (const [extension, native, packageName] of [
 		}
 	);
 }
+
+test(
+	'gd lists several definitions in the references panel and jumps to a single one',
+	{ timeout: 60000 },
+	async () => {
+		const root = await mkdtemp(join(tmpdir(), 'nido-ts-definitions-'));
+		let session: Session | undefined;
+		try {
+			await writeFile(
+				join(root, 'tsconfig.json'),
+				JSON.stringify({ compilerOptions: { strict: true } })
+			);
+			// A shorthand property has two definitions: the property of the return type and the
+			// variable it takes its value from.
+			await writeFile(
+				join(root, 'state.ts'),
+				[
+					'export function useOverlay(): {',
+					'\tsetLeader: (open: boolean) => void;',
+					'} {',
+					'\tconst setLeader = (open: boolean): void => void open;',
+					'\treturn {',
+					'\t\tsetLeader',
+					'\t};',
+					'}',
+					'useOverlay();',
+					''
+				].join('\n')
+			);
+			session = await Session.create(root, () => {}, process.env.NIDO_TEST_RESOURCES);
+			const config = join(root, 'lsp.json');
+			await writeFile(config, JSON.stringify({ typescript: { server: 'legacy' } }));
+			await session.client.request('nvim_exec_lua', [
+				"vim.env.NIDO_LSP_CONFIG = ...; require('nido_typescript').setup()",
+				[config]
+			]);
+			await session.openFile('state.ts');
+			await session.attach(120, 30);
+			const lua = (code: string, args: unknown[] = []): Promise<unknown> =>
+				session!.client.request('nvim_exec_lua', [code, args]);
+			assert.equal(
+				await lua(`return vim.wait(20000, function()
+        local c = vim.lsp.get_clients({bufnr=0, name='typescript'})[1]
+        return c and c.initialized
+      end, 50)`),
+				true
+			);
+			/** Run gd on `line` (1-based) at `column` (0-based). */
+			const goToDefinition = (line: number, column: number): Promise<unknown> =>
+				lua(
+					`
+        local line, column = ...
+        vim.api.nvim_win_set_cursor(0, {line, column})
+        vim.fn.maparg('gd', 'n', false, true).callback()`,
+					[line, column]
+				);
+			let references = session.state.references;
+			for (let attempt = 0; attempt < 50 && references?.kind !== 'definitions'; attempt++) {
+				await goToDefinition(6, 3);
+				for (
+					let wait = 0;
+					wait < 20 && session.state.references?.kind !== 'definitions';
+					wait++
+				) {
+					await new Promise((done) => setTimeout(done, 100));
+				}
+				references = session.state.references;
+			}
+			assert.equal(references?.kind, 'definitions');
+			assert.deepEqual(
+				references!.items.map((item) => item.line),
+				[2, 4]
+			);
+			// Neovim's own quickfix window must stay closed.
+			assert.equal(
+				await lua(`for _, window in ipairs(vim.api.nvim_list_wins()) do
+          if vim.bo[vim.api.nvim_win_get_buf(window)].buftype == 'quickfix' then return true end
+        end
+        return false`),
+				false
+			);
+			assert.deepEqual(await lua('return vim.api.nvim_win_get_cursor(0)'), [6, 3]);
+			// A single definition is jumped to, with the jump list kept for Ctrl+O.
+			await goToDefinition(9, 1);
+			assert.equal(
+				await lua(
+					'return vim.wait(15000, function() return vim.api.nvim_win_get_cursor(0)[1] == 1 end, 20)'
+				),
+				true
+			);
+			assert.deepEqual(await lua('return vim.api.nvim_win_get_cursor(0)'), [1, 16]);
+			await lua("vim.cmd('normal! \\x0f')");
+			assert.deepEqual(await lua('return vim.api.nvim_win_get_cursor(0)'), [9, 1]);
+		} finally {
+			await session?.stop();
+			await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+		}
+	}
+);

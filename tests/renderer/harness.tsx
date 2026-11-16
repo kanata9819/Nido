@@ -15,6 +15,7 @@ import denoPack from '../../resources/nido/language-packs/deno/pack.json';
 import ExplorerCommands from '../../src/renderer/src/explorer/ExplorerCommands';
 import FolderPicker from '../../src/renderer/src/workspace/FolderPicker';
 import GitBrowser from '../../src/renderer/src/git/GitBrowser';
+import GitHubBrowser from '../../src/renderer/src/github/GitHubBrowser';
 import GitDiff from '../../src/renderer/src/git/GitDiff';
 import FileIcon from '../../src/renderer/src/ui/FileIcon';
 import FolderIcon from '../../src/renderer/src/ui/FolderIcon';
@@ -104,6 +105,120 @@ const defaults: Record<string, unknown> = {
 	gitDiff: '',
 	gitHistory: { commits: [], total: 0 },
 	gitBranches: [],
+	githubStatus: {
+		installed: true,
+		authenticated: true,
+		user: 'octocat',
+		repository: 'octo/alpha',
+		url: 'https://github.com/octo/alpha',
+		defaultBranch: 'main',
+		branch: 'feature/login'
+	},
+	githubPullRequests: [7, 8].map((number) => ({
+		number,
+		title: number === 7 ? 'Add sign-in' : 'Fix typo',
+		author: number === 7 ? 'dev' : 'writer',
+		state: 'OPEN',
+		isDraft: number === 8,
+		headRefName: number === 7 ? 'feature/login' : 'typo',
+		baseRefName: 'main',
+		reviewDecision: number === 7 ? 'REVIEW_REQUIRED' : '',
+		checks: number === 7 ? 'failure' : 'none',
+		updatedAt: '2026-11-16T10:00:00Z',
+		url: `https://github.com/octo/alpha/pull/${number}`,
+		labels: number === 7 ? ['feature'] : []
+	})),
+	githubPullRequest: {
+		number: 7,
+		title: 'Add sign-in',
+		author: 'dev',
+		state: 'OPEN',
+		isDraft: false,
+		headRefName: 'feature/login',
+		baseRefName: 'main',
+		reviewDecision: 'REVIEW_REQUIRED',
+		checks: 'failure',
+		updatedAt: '2026-11-16T10:00:00Z',
+		url: 'https://github.com/octo/alpha/pull/7',
+		labels: ['feature'],
+		body: 'Adds **sign-in**.',
+		headRefOid: 'abc123',
+		isCrossRepository: false,
+		mergeable: 'MERGEABLE',
+		additions: 3,
+		deletions: 1,
+		createdAt: '2026-11-15T10:00:00Z',
+		files: [{ path: 'src/login.ts', additions: 3, deletions: 1 }],
+		checkRuns: [
+			{ name: 'lint', state: 'success' },
+			{ name: 'e2e', state: 'failure', url: 'https://github.com/octo/alpha/runs/1' }
+		],
+		timeline: [
+			{
+				id: 'c1',
+				author: 'reviewer',
+				body: 'Looks close.',
+				createdAt: '2026-11-15T11:00:00Z'
+			}
+		],
+		threads: [
+			{
+				id: 'PRRT_1',
+				path: 'src/login.ts',
+				line: 2,
+				side: 'RIGHT',
+				isResolved: false,
+				isOutdated: false,
+				comments: [
+					{
+						id: 'k1',
+						author: 'reviewer',
+						body: 'Rename this?',
+						createdAt: '2026-11-15T12:00:00Z'
+					}
+				]
+			}
+		]
+	},
+	githubPullRequestDiff: [
+		[
+			'src/login.ts',
+			'diff --git a/src/login.ts b/src/login.ts\n--- a/src/login.ts\n+++ b/src/login.ts\n@@ -1,2 +1,4 @@\n export {};\n-old\n+next\n+more\n+last\n'
+		]
+	],
+	githubIssues: [
+		{
+			number: 3,
+			title: 'Crash on start',
+			author: 'user',
+			state: 'OPEN',
+			updatedAt: '2026-11-14T10:00:00Z',
+			url: 'https://github.com/octo/alpha/issues/3',
+			labels: ['bug'],
+			comments: 1
+		}
+	],
+	githubIssue: {
+		number: 3,
+		title: 'Crash on start',
+		author: 'user',
+		state: 'OPEN',
+		updatedAt: '2026-11-14T10:00:00Z',
+		url: 'https://github.com/octo/alpha/issues/3',
+		labels: ['bug'],
+		comments: 1,
+		body: 'It crashes.',
+		createdAt: '2026-11-13T10:00:00Z',
+		assignees: ['octocat'],
+		timeline: [
+			{
+				id: 'i1',
+				author: 'dev',
+				body: 'Can you share the log?',
+				createdAt: '2026-11-14T09:00:00Z'
+			}
+		]
+	},
 	highlightSources: [[], []],
 	previewReference: { first: 1, line: 1, lines: [[{ text: 'preview', color: '#fff' }]] },
 	browseFolders: {
@@ -282,6 +397,17 @@ function render(updates: Partial<HarnessProps>): void {
 					workspaceId={props.workspaceId}
 					onClose={noop}
 				/>
+			);
+			break;
+		case 'github':
+			root.render(
+				<div data-panel="github" style={{ display: 'flex', height: '100vh' }}>
+					<GitHubBrowser
+						key={props.workspaceId}
+						workspaceId={props.workspaceId}
+						onClose={() => calls.push({ method: 'onClose', args: [] })}
+					/>
+				</div>
 			);
 			break;
 		case 'highlight':

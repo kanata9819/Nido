@@ -29,7 +29,7 @@ export function registerGitHandlers({
 	text: (value: unknown) => string;
 	sessions: Map<string, Session>;
 	send: (event: NidoEvent) => void;
-}): void {
+}): { changeBranch: (current: Session, change: () => Promise<void>) => Promise<void> } {
 	// Concurrent status requests for one folder share a single `git status` run.
 	const statusRequests = new Map<string, ReturnType<typeof gitStatus>>();
 	const previews = new WeakMap<Session, object>();
@@ -105,13 +105,12 @@ export function registerGitHandlers({
 		return preview(current, () => gitCommitDiff(current.workspace.root, commit, file));
 	});
 	handle('gitBranches', (id) => gitBranches(session(id).workspace.root));
-	// Switch (or create and switch to) a branch. Refuses while any session that has files from
-	// this repository open has unsaved changes, since switching rewrites those files.
-	handle('gitSwitch', async (id, name, create) => {
-		const current = session(id);
-		if (typeof create !== 'boolean') {
-			throw new Error('Invalid branch action.');
-		}
+	/**
+	 * Run `change`, which rewrites the files of the repository of `current` (a branch switch
+	 * or a pull request checkout). Refuses while any session that has files from this
+	 * repository open has unsaved changes, then reloads those sessions' files.
+	 */
+	async function changeBranch(current: Session, change: () => Promise<void>): Promise<void> {
 		const root = await gitRoot(current.workspace.root);
 		const affected: Session[] = [];
 		for (const open of sessions.values()) {
@@ -140,11 +139,19 @@ export function registerGitHandlers({
 				throw new Error('Save unsaved editor changes before switching branches.');
 			}
 		}
-		await gitSwitch(current.workspace.root, text(name), create);
+		await change();
 		for (const open of affected) {
 			await open.refreshFiles();
 		}
 		await refreshGitState(affected);
+	}
+	// Switch (or create and switch to) a branch.
+	handle('gitSwitch', async (id, name, create) => {
+		const current = session(id);
+		if (typeof create !== 'boolean') {
+			throw new Error('Invalid branch action.');
+		}
+		await changeBranch(current, () => gitSwitch(current.workspace.root, text(name), create));
 	});
 	// `staged` chooses between the staged and the unstaged side of a file.
 	function stagedFlag(value: unknown): boolean {
@@ -176,4 +183,5 @@ export function registerGitHandlers({
 		await refreshGitState();
 		return result;
 	});
+	return { changeBranch };
 }

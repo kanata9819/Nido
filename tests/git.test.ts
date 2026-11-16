@@ -19,6 +19,7 @@ import {
 	gitCommitDiff,
 	gitBranches,
 	gitSwitch,
+	gitPushBranch,
 	gitIgnored
 } from '../src/main/git/git';
 
@@ -560,6 +561,50 @@ test('history, first-parent diffs and branch switches preserve conflicting edits
 		await assert.rejects(gitCommitFiles(root, '--all'));
 	} finally {
 		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('pushing a PR branch updates only its upstream even with matching pushes configured', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-push-branch-'));
+	const remote = join(root, 'remote.git');
+	const git = (...args: string[]): string =>
+		execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
+	try {
+		git('init', '-q', '-b', 'feature');
+		git('init', '-q', '--bare', remote);
+		git('config', 'user.name', 'Nido Test');
+		git('config', 'user.email', 'test@example.invalid');
+		git('config', 'commit.gpgsign', 'false');
+		git('remote', 'add', 'origin', remote);
+		git('commit', '-qm', 'Initial', '--allow-empty');
+		const initial = git('rev-parse', 'HEAD');
+		git('branch', 'other');
+		git('push', 'origin', 'refs/heads/other');
+		await gitPushBranch(root);
+		assert.equal(git('rev-parse', '--abbrev-ref', '@{upstream}'), 'origin/feature');
+
+		git('remote', 'add', 'fork', remote);
+		git('push', '--set-upstream', 'fork', 'refs/heads/feature:refs/heads/published');
+		git('config', 'push.default', 'matching');
+		git('config', 'push.followTags', 'true');
+		git('commit', '-qm', 'Update', '--allow-empty');
+		const update = git('rev-parse', 'HEAD');
+		git('branch', '-f', 'other', update);
+		git('-c', 'tag.gpgsign=false', 'tag', '-am', 'Local tag', 'local-tag');
+
+		await gitPushBranch(root);
+		assert.deepEqual(
+			git('--git-dir', remote, 'for-each-ref', '--format=%(refname) %(objectname)').split(
+				/\r?\n/
+			),
+			[
+				`refs/heads/feature ${initial}`,
+				`refs/heads/other ${initial}`,
+				`refs/heads/published ${update}`
+			]
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 	}
 });
 

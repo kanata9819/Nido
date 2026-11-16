@@ -20,11 +20,14 @@ const statusLabels = {
 export default function LanguagePacksPanel({
 	workspaceId,
 	query,
-	category
+	category,
+	builtInShown = false
 }: {
 	workspaceId?: string;
 	query: string;
 	category: 'language' | 'other';
+	/** Whether a built-in extension (GitHub) is shown above, so the list is not empty. */
+	builtInShown?: boolean;
 }): React.JSX.Element {
 	const t = useI18n();
 	const errorMessage = useErrorMessage();
@@ -251,7 +254,7 @@ export default function LanguagePacksPanel({
 					</li>
 				))}
 			</ul>
-			{!loading && !packs.length && (
+			{!loading && !packs.length && !builtInShown && (
 				<p className={styles.empty}>
 					{t(
 						category === 'language'

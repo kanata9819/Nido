@@ -164,7 +164,8 @@ test('Extensions separates language packs from other extensions and supports key
 	await expect(otherTab).toBeFocused();
 	await expect(otherTab).toHaveAttribute('aria-selected', 'true');
 	await expect(extensions.getByRole('tabpanel', { name: 'Other extensions' })).toBeVisible();
-	await expect(extensions.locator('[data-pack]')).toHaveCount(1);
+	await expect(extensions.locator('[data-pack]')).toHaveCount(2);
+	await expect(extensions.locator('[data-pack="github"]')).toBeVisible();
 	await expect(extensions.locator('[data-pack="deno"]')).toBeVisible();
 	const otherSearch = extensions.getByRole('textbox', { name: 'Search other extensions' });
 	await expect(otherSearch).toHaveValue('');

@@ -5,7 +5,7 @@ import styles from './KeyboardGuide.module.css';
 import OverlayPresence from '../ui/OverlayPresence';
 
 /** The leader keys the guide lists; Space again opens the full command palette. */
-const guideKeys = ['w', 'f', 'o', 'b', 'e', 'n', ',', 's', 'x', 'g', 'D', '-', '+', 'q'];
+const guideKeys = ['w', 'f', 'o', 'b', 'e', 'n', ',', 's', 'x', 'g', 'G', 'D', '-', '+', 'q'];
 
 /** The guide shown after pressing Space in the editor: the most used leader commands. */
 export default function KeyboardGuide({
@@ -34,7 +34,7 @@ export default function KeyboardGuide({
 							.filter((c) => guideKeys.includes(c.key))
 							.map((c) => (
 								<button key={c.key} onClick={c.run}>
-									<kbd>{c.key === 'D' ? 'Shift+D' : c.key}</kbd>
+									<kbd>{/^[A-Z]$/.test(c.key) ? `Shift+${c.key}` : c.key}</kbd>
 									{c.title}
 								</button>
 							))}

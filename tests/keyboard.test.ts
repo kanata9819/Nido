@@ -43,7 +43,8 @@ function leaderCommands(
 		activate: noop,
 		toggleFavorite: noop,
 		sleepWorkspace: noop,
-		isFavorite: false
+		isFavorite: false,
+		githubEnabled: false
 	};
 	const workspaces: Workspace[] = [{ id: 'workspace', root: '/project', name: 'Project', kind }];
 	const state: SessionState = {

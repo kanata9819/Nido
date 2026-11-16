@@ -1,0 +1,196 @@
+import { useState } from 'react';
+import { useI18n } from '../i18n';
+import type { PullRequestDetails, ReviewThread } from '../../../shared/github';
+import GitDiff from '../git/GitDiff';
+import { Composer } from './Composer';
+import { Timeline } from './Timeline';
+import styles from './GitHub.module.css';
+
+/**
+ * A file of an opened pull request: its diff, and below it the file's review threads, which
+ * can be replied to and resolved, and a form to start a thread on a line (c).
+ */
+export default function PullRequestFile({
+	workspaceId,
+	pr,
+	path,
+	diff,
+	busy,
+	commenting,
+	setCommenting,
+	act
+}: {
+	workspaceId: string;
+	pr: PullRequestDetails;
+	path: string;
+	diff: string;
+	busy: boolean;
+	commenting: boolean;
+	setCommenting: (commenting: boolean) => void;
+	act: (change: () => Promise<unknown>, message: string) => Promise<void>;
+}): React.JSX.Element {
+	const t = useI18n();
+	const threads = pr.threads.filter((thread) => thread.path === path);
+	const [line, setLine] = useState('');
+	const [side, setSide] = useState<'LEFT' | 'RIGHT'>('RIGHT');
+	return (
+		<div className={styles.fileView}>
+			<div className={styles.diff}>
+				<GitDiff
+					workspaceId={workspaceId}
+					path={path}
+					diff={diff || t('No textual diff for this file.')}
+					label={t('Pull request diff')}
+					beforeLabel={pr.baseRefName}
+					afterLabel={pr.headRefName}
+				/>
+			</div>
+			<section className={styles.threads} aria-label={t('Review threads')}>
+				<header className={styles.threadsHeading}>
+					<strong>
+						{t('Review threads')} <span>{threads.length}</span>
+					</strong>
+					{!commenting && (
+						<button
+							disabled={busy || pr.state !== 'OPEN'}
+							onClick={() => setCommenting(true)}
+						>
+							{t('Comment on a line')} <kbd>c</kbd>
+						</button>
+					)}
+				</header>
+				{commenting && (
+					<Composer
+						label={t('Comment on line {line}', { line: line || '…' })}
+						submitLabel={t('Comment')}
+						busy={busy || !(Number(line) > 0)}
+						controls={
+							<>
+								<label className={styles.filter}>
+									{t('Line')}
+									<input
+										className={styles.lineInput}
+										inputMode="numeric"
+										value={line}
+										aria-label={t('Line number')}
+										onChange={(event) =>
+											setLine(event.currentTarget.value.replace(/\D/g, ''))
+										}
+									/>
+								</label>
+								<label className={styles.filter}>
+									{t('Side')}
+									<select
+										value={side}
+										onChange={(event) =>
+											setSide(event.currentTarget.value as 'LEFT' | 'RIGHT')
+										}
+									>
+										<option value="RIGHT">
+											{t('New ({branch})', { branch: pr.headRefName })}
+										</option>
+										<option value="LEFT">
+											{t('Old ({branch})', { branch: pr.baseRefName })}
+										</option>
+									</select>
+								</label>
+							</>
+						}
+						onSubmit={(body) =>
+							act(
+								() =>
+									window.nido.githubLineComment(
+										workspaceId,
+										pr.number,
+										path,
+										Number(line),
+										side,
+										body
+									),
+								'Comment posted.'
+							)
+						}
+						onCancel={() => setCommenting(false)}
+					/>
+				)}
+				{threads.map((thread) => (
+					<Thread
+						key={thread.id}
+						workspaceId={workspaceId}
+						thread={thread}
+						busy={busy}
+						act={act}
+					/>
+				))}
+			</section>
+		</div>
+	);
+}
+
+/** One review thread: where it is, its comments, and replying or resolving. */
+function Thread({
+	workspaceId,
+	thread,
+	busy,
+	act
+}: {
+	workspaceId: string;
+	thread: ReviewThread;
+	busy: boolean;
+	act: (change: () => Promise<unknown>, message: string) => Promise<void>;
+}): React.JSX.Element {
+	const t = useI18n();
+	const [replying, setReplying] = useState(false);
+	return (
+		<article className={styles.thread} data-resolved={thread.isResolved || undefined}>
+			<header>
+				<strong>
+					{thread.line === undefined
+						? t('Outdated')
+						: t(thread.side === 'LEFT' ? 'Old line {line}' : 'Line {line}', {
+								line: thread.line
+							})}
+				</strong>
+				{thread.isOutdated && thread.line !== undefined && (
+					<span className={styles.label}>{t('Outdated')}</span>
+				)}
+				{thread.isResolved && <span className={styles.label}>{t('Resolved')}</span>}
+				<span />
+				<button disabled={busy} onClick={() => setReplying(true)}>
+					{t('Reply')}
+				</button>
+				<button
+					disabled={busy}
+					onClick={() =>
+						void act(
+							() =>
+								window.nido.githubResolve(
+									workspaceId,
+									thread.id,
+									!thread.isResolved
+								),
+							thread.isResolved ? 'Thread reopened.' : 'Thread resolved.'
+						)
+					}
+				>
+					{t(thread.isResolved ? 'Unresolve' : 'Resolve')}
+				</button>
+			</header>
+			<Timeline comments={thread.comments} />
+			{replying && (
+				<Composer
+					label={t('Reply to the thread')}
+					submitLabel={t('Reply')}
+					busy={busy}
+					onSubmit={(body) =>
+						act(
+							() => window.nido.githubReply(workspaceId, thread.id, body),
+							'Reply posted.'
+						)
+					}
+					onCancel={() => setReplying(false)}
+				/>
+			)}
+		</article>
+	);
+}

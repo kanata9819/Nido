@@ -60,6 +60,8 @@ export function useEditorSettings(): EditorSettings {
 	const [wordWrap, setWordWrap] = useStoredFlag('nido.wordWrap', true);
 	const [historyEnabled, setHistoryEnabled] = useStoredFlag('nido.historyEnabled', true);
 	const [methodSeparators, setMethodSeparators] = useStoredFlag('nido.methodSeparators', false);
+	// The GitHub extension (pull requests and issues) is off until enabled on the Extensions page.
+	const [githubEnabled, setGithubEnabled] = useStoredFlag('nido.githubEnabled', false);
 	const [stickyScroll, setStickyScroll] = useStoredFlag('nido.stickyScroll', true);
 	const [stickyScrollMaxLines, setStickyScrollMaxLines] = useStoredNumber(
 		'nido.stickyScrollMaxLines',
@@ -135,6 +137,8 @@ export function useEditorSettings(): EditorSettings {
 	);
 
 	return {
+		githubEnabled,
+		setGithubEnabled,
 		historyEnabled,
 		setHistoryEnabled,
 		language,
@@ -188,6 +192,9 @@ export function useEditorSettings(): EditorSettings {
 
 /** Every setting with its setter. */
 export interface EditorSettings {
+	/** Whether the GitHub extension (pull requests and issues) is on. */
+	githubEnabled: boolean;
+	setGithubEnabled: Dispatch<SetStateAction<boolean>>;
 	historyEnabled: boolean;
 	setHistoryEnabled: Dispatch<SetStateAction<boolean>>;
 	language: Language;

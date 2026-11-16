@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n';
-import { Blocks, Files, GitBranch, History, Search, Square } from 'lucide-react';
+import { Blocks, Files, GitBranch, GitPullRequest, History, Search, Square } from 'lucide-react';
 import type { Panel } from '../types';
 import type { ActivityBarPosition } from '../settings/useEditorSettings';
 import styles from './NavigationRail.module.css';
@@ -10,6 +10,7 @@ export default function NavigationRail({
 	sidebar,
 	active,
 	panel,
+	github,
 	showExplorer,
 	showPanel
 }: {
@@ -17,6 +18,8 @@ export default function NavigationRail({
 	sidebar: boolean;
 	active: string;
 	panel: Panel;
+	/** Whether to show the GitHub button: the extension is on and an editor is selected. */
+	github: boolean;
 	showExplorer: () => void;
 	showPanel: (panel: Panel) => void;
 }): React.JSX.Element {
@@ -54,6 +57,16 @@ export default function NavigationRail({
 			>
 				<GitBranch size={21} />
 			</button>
+			{github && (
+				<button
+					aria-label={t('GitHub')}
+					title={t('GitHub (Space Shift+G)')}
+					disabled={!active}
+					onClick={() => showPanel('github')}
+				>
+					<GitPullRequest size={21} />
+				</button>
+			)}
 			<button
 				className={panel === 'history' ? styles.railActive : ''}
 				aria-label={t('Time Machine')}

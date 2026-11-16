@@ -1,10 +1,39 @@
+import { execFile } from 'node:child_process';
 import { stat } from 'node:fs/promises';
-import { delimiter, resolve } from 'node:path';
+import { delimiter, isAbsolute, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { terminalShells, type TerminalShell } from '../../shared/types';
 import { wslDistributions } from './wsl';
 
 // Finds the shells installed on this computer for terminal workspaces.
 type InstalledShell = Exclude<TerminalShell, 'auto'>;
+const exec = promisify(execFile);
+
+/** Neovim cannot start an App Execution Alias as a terminal job. Use the registered binary. */
+async function storePowerShell(windows: string): Promise<string[] | undefined> {
+	try {
+		const { stdout } = await exec(
+			resolve(windows, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
+			[
+				'-NoProfile',
+				'-NonInteractive',
+				'-Command',
+				'[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-AppxPackage -Name Microsoft.PowerShell | Select-Object -First 1 -ExpandProperty InstallLocation'
+			],
+			{ encoding: 'utf8', windowsHide: true, timeout: 5000 }
+		);
+		const location = stdout.trim();
+		if (isAbsolute(location)) {
+			const executable = resolve(location, 'pwsh.exe');
+			if ((await stat(executable)).isFile()) {
+				return [executable, '-NoLogo'];
+			}
+		}
+	} catch {
+		// The Store package or its executable is unavailable to this user.
+	}
+	return undefined;
+}
 
 /**
  * The command line that starts `shell`, or undefined when it is not installed. Searches PATH
@@ -16,6 +45,12 @@ async function installedShell(shell: InstalledShell): Promise<string[] | undefin
 		.map((directory) => directory.replace(/^"(.*)"$/, '$1'))
 		.filter(Boolean);
 	const windows = process.env.SystemRoot || process.env.WINDIR;
+	const storeAliases =
+		shell === 'pwsh' &&
+		process.platform === 'win32' &&
+		process.env.LOCALAPPDATA &&
+		resolve(process.env.LOCALAPPDATA, 'Microsoft/WindowsApps').toLowerCase();
+	let storeAliasOnPath = false;
 	if (shell === 'pwsh') {
 		for (const programFiles of [
 			process.env.ProgramFiles,
@@ -35,6 +70,10 @@ async function installedShell(shell: InstalledShell): Promise<string[] | undefin
 		);
 	}
 	for (const directory of new Set(directories)) {
+		if (storeAliases && resolve(directory).toLowerCase() === storeAliases) {
+			storeAliasOnPath = true;
+			continue;
+		}
 		const executable = resolve(directory, shell === 'pwsh' ? 'pwsh.exe' : shell);
 		try {
 			if (!(await stat(executable)).isFile()) {
@@ -51,7 +90,7 @@ async function installedShell(shell: InstalledShell): Promise<string[] | undefin
 			// Missing executables and an unavailable WSL installation are not choices.
 		}
 	}
-	return undefined;
+	return storeAliasOnPath && windows ? storePowerShell(windows) : undefined;
 }
 
 /** The shells the terminal settings can offer, always including `auto`. */
