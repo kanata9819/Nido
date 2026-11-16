@@ -467,3 +467,54 @@ test('Completion keeps pending navigation blocked and closes on punctuation', as
 	await input.press('.');
 	await expect(menu).toHaveCount(0);
 });
+
+test('messages show in the bottom right and Esc in the editor closes them', async ({ page }) => {
+	await page.goto(`${origin}?view=app`);
+	const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+	await expect(input).toBeFocused();
+	let state = applyNeovimUI(emptyNeovimUI(), 'msg_show', ['', [[0, '4 more lines']], false]);
+	const emit = async (): Promise<void> => {
+		await page.evaluate(
+			(state) => window.rendererTest.emit({ type: 'neovimUI', id: 'alpha', state }),
+			state
+		);
+	};
+	await emit();
+	const messages = page.getByRole('dialog', { name: 'Neovim messages', exact: true });
+	await expect(messages).toContainText('4 more lines');
+	await expect(messages).toContainText('Esc');
+	const card = (await messages.boundingBox())!;
+	const editor = (await page.locator('canvas:visible').first().boundingBox())!;
+	// Right-aligned within the editor, clear of its left edge.
+	expect(editor.x + editor.width - (card.x + card.width)).toBeLessThan(40);
+	expect(card.x - editor.x).toBeGreaterThan(40);
+
+	const inputs = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'input')
+				.map((call) => call.args)
+		);
+	const before = (await inputs()).length;
+	await page.keyboard.press('Escape');
+	await expect(messages).toHaveCount(0);
+	await expect(input).toBeFocused();
+	// Neovim still receives the Esc.
+	await expect
+		.poll(async () => (await inputs()).slice(before))
+		.toContainEqual(['alpha', '<Esc>']);
+
+	// A newer message opens the card again.
+	state = applyNeovimUI(state, 'msg_show', ['', [[0, 'Written']], false]);
+	await emit();
+	await expect(messages).toContainText('Written');
+
+	// While Neovim waits at a prompt, Esc is its answer, given through the dialog.
+	state = applyNeovimUI(state, 'msg_show', [
+		'confirm',
+		[[0, 'Save changes? [Y]es, (N)o: ']],
+		false
+	]);
+	await emit();
+	await expect(messages).not.toContainText('Esc Close');
+});
