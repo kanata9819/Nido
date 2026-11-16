@@ -65,6 +65,7 @@ function indentationCommands(
 		},
 		...[2, 4, 8].map((size) => ({
 			key: '',
+			id: `Indent width ${size}`,
 			title: t('Indent width {size}', { size }),
 			detail,
 			run: () => apply({ ...indentation, size })
@@ -83,6 +84,18 @@ function indentationCommands(
 		}
 	];
 }
+
+/**
+ * Commands kept off the recent list. The palette selects its first recent command, so after
+ * one of these, Enter on the reopened palette would close or hide something.
+ */
+const unrepeatable = new Set([
+	'Quit Nido',
+	'Close workspace',
+	'Close file',
+	'Minimize window',
+	'Maximize or restore window'
+]);
 
 /** What the command groups below read and run. */
 interface CommandContext {
@@ -170,6 +183,8 @@ function overviewCommands({ state, callbacks, editor }: CommandContext): Command
 	return [
 		{
 			key: '',
+			// One id for both titles, so the command stays recent after it toggles.
+			id: 'Toggle workspace favorite',
 			title: callbacks.isFavorite
 				? 'Remove workspace from favorites'
 				: 'Add workspace to favorites',
@@ -285,6 +300,7 @@ function formatCommands(context: CommandContext): Command[] {
 		),
 		...(['LF', 'CRLF'] as const).map((format) => ({
 			key: '',
+			id: `Convert line endings to ${format}`,
 			title: t('Convert line endings to {format}', { format }),
 			detail: 'Normalize the current file · Save to apply to disk',
 			run: () => {
@@ -483,14 +499,20 @@ export function buildCommands(
 			...workspaceCommands(context)
 		]),
 		...windowCommands(context)
-	].map((command) => ({
-		...command,
-		id: command.title,
-		title: t(command.title),
-		detail: t(command.detail),
-		run: () => {
-			rememberCommand(command.title);
-			command.run();
-		}
-	}));
+	].map((command) => {
+		// A command's id stays the same across languages and states; most use their title.
+		const id = command.id ?? command.title;
+		return {
+			...command,
+			id,
+			title: t(command.title),
+			detail: t(command.detail),
+			run: () => {
+				if (!unrepeatable.has(id)) {
+					rememberCommand(id);
+				}
+				command.run();
+			}
+		};
+	});
 }

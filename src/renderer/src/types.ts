@@ -28,7 +28,7 @@ export interface Item {
 	title: string;
 	detail: string;
 	run: () => void;
-	/** Identifies a command across languages, to list recently run ones first. */
+	/** Identifies a command across languages and states, to list recently run ones first. */
 	id?: string;
 	/** Whether the command ran recently, which the palette marks. */
 	recent?: boolean;
