@@ -63,7 +63,8 @@ export default function PullRequestFile({
 					<Composer
 						label={t('Comment on line {line}', { line: line || '…' })}
 						submitLabel={t('Comment')}
-						busy={busy || !(Number(line) > 0)}
+						busy={busy}
+						ready={Number(line) > 0}
 						controls={
 							<>
 								<label className={styles.filter}>
@@ -186,7 +187,12 @@ function Thread({
 						act(
 							() => window.nido.githubReply(workspaceId, thread.id, body),
 							'Reply posted.'
-						)
+						).then((sent) => {
+							if (sent) {
+								setReplying(false);
+							}
+							return sent;
+						})
 					}
 					onCancel={() => setReplying(false)}
 				/>

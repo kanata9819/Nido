@@ -95,6 +95,14 @@ test('a pull request file shows its diff and threads, which can be replied to an
 	await expect(reply).toHaveCount(0);
 	await expect(threads).toBeVisible();
 
+	// A sent reply closes its form.
+	await threads.getByRole('button', { name: 'Reply', exact: true }).click();
+	await reply.fill('Done');
+	await page.keyboard.press('Control+Enter');
+	await expect(page.getByRole('status')).toHaveText('Reply posted.');
+	expect(await calls(page, 'githubReply')).toEqual([['alpha', 'PRRT_1', 'Done']]);
+	await expect(reply).toHaveCount(0);
+
 	await threads.getByRole('button', { name: 'Resolve', exact: true }).click();
 	await expect(page.getByRole('status')).toHaveText('Thread resolved.');
 	expect(await calls(page, 'githubResolve')).toEqual([['alpha', 'PRRT_1', true]]);
@@ -105,6 +113,8 @@ test('a pull request file shows its diff and threads, which can be replied to an
 	const send = page.getByRole('button', { name: /^Comment/ });
 	await page.getByRole('textbox', { name: /^Comment on line/ }).fill('Typo here');
 	await expect(send).toBeDisabled();
+	// Without a line yet, the form can still be cancelled with its button.
+	await expect(page.getByRole('button', { name: /^Cancel/ })).toBeEnabled();
 	await page.getByRole('textbox', { name: 'Line number' }).fill('3x');
 	await expect(page.getByRole('textbox', { name: 'Line number' })).toHaveValue('3');
 	await page.getByRole('combobox').selectOption('LEFT');
