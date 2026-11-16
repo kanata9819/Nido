@@ -221,13 +221,21 @@ async function pushBranch(cwd: string, { branch, remote, upstream }: GitRemoteIn
 	await git(cwd, ['push', '--no-follow-tags', ...destination]);
 }
 
-/** The remote controls for this working tree. An ambiguous publishing destination stays unset. */
+/**
+ * The remote controls for this working tree. An ambiguous publishing destination stays unset.
+ * A branch that tracks a remote branch of another name (such as one made from origin/main)
+ * counts as unpublished: like Git's default push, Push must not update that other branch, so
+ * it publishes the branch under its own name instead.
+ */
 export async function gitRemoteInfo(cwd: string): Promise<GitRemoteInfo | undefined> {
 	const remotes = (await git(cwd, ['remote'])).trim().split(/\r?\n/).filter(Boolean);
 	if (!remotes.length) {
 		return undefined;
 	}
 	const target = await branchDestination(cwd);
+	if (target.upstream && target.upstream !== `refs/heads/${target.branch}`) {
+		target.upstream = '';
+	}
 	const remote =
 		target.remote ||
 		(remotes.includes('origin') ? 'origin' : remotes.length === 1 ? remotes[0] : '');

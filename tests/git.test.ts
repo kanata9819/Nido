@@ -723,6 +723,22 @@ test('Git publishes, fetches without changing HEAD, and pulls only when safe', a
 		git(writer, 'push', '-q', 'origin', 'main');
 		await assert.rejects(pull(), /fast-forward/i);
 		assert.equal(git(root, 'rev-parse', 'HEAD'), local);
+
+		// A branch made from review/main is published under its own name, not pushed to main.
+		const remoteMain = git(root, 'ls-remote', 'review', 'refs/heads/main').split('\t')[0];
+		git(root, 'switch', '-q', '-c', 'feature', '--track', 'review/main');
+		const feature = { branch: 'feature', remote: 'review', upstream: '' };
+		assert.deepEqual(await gitRemoteInfo(root), feature);
+		await gitRemoteAction(root, 'push', feature);
+		assert.equal(
+			git(root, 'ls-remote', 'review', 'refs/heads/main').split('\t')[0],
+			remoteMain
+		);
+		assert.equal(
+			git(root, 'ls-remote', 'review', 'refs/heads/feature').split('\t')[0],
+			git(root, 'rev-parse', 'HEAD')
+		);
+		assert.deepEqual(await gitRemoteInfo(root), { ...feature, upstream: 'refs/heads/feature' });
 	} finally {
 		await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 	}
