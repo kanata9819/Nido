@@ -12,6 +12,7 @@ import { toggle } from './sidebarToggle';
 import type { getVisibleEntries } from './sidebarTree';
 import { createExplorerKeyHandler } from './sidebarKeyboard';
 import styles from './Sidebar.module.css';
+import decorationStyles from '../ui/FileDecoration.module.css';
 import { gitFileKey, type Decoration } from '../git/useGitFileStatus';
 
 /** A row of the tree. */
@@ -170,7 +171,7 @@ function Sidebar({
 			<ResizeHandle width={width} onResize={onResize} />
 			<div className={styles.sidebarHeading}>
 				<span
-					className={styles.gitName}
+					className={decorationStyles.gitName}
 					data-status={rootDecoration?.code || undefined}
 					data-diagnostic={rootDecoration?.diagnostic}
 				>
@@ -417,7 +418,7 @@ function TreeRow({
 				<FileIcon path={entry.path} className={styles.fileIcon} />
 			)}
 			<span
-				className={`${styles.treeName} ${styles.gitName}`}
+				className={`${styles.treeName} ${decorationStyles.gitName}`}
 				data-status={decoration?.code || undefined}
 				data-diagnostic={decoration?.diagnostic}
 			>
@@ -426,7 +427,7 @@ function TreeRow({
 			{!entry.directory && <DiagnosticBadges decoration={decoration} />}
 			{!entry.directory && decoration?.code && (
 				<span
-					className={styles.gitBadge}
+					className={decorationStyles.gitBadge}
 					data-status={decoration.code}
 					title={t(decoration.title)}
 					aria-label={t(decoration.title)}

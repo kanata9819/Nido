@@ -7,6 +7,7 @@ import { filename } from '../palette/commands';
 import FileIcon from '../ui/FileIcon';
 import DiagnosticBadges from '../ui/DiagnosticBadges';
 import styles from './FileHeader.module.css';
+import decorationStyles from '../ui/FileDecoration.module.css';
 
 // The file tabs and breadcrumb above the editor.
 interface FileHeaderProps {
@@ -116,7 +117,7 @@ function FileHeader({
 							>
 								<FileIcon path={buffer.name} />
 								<span
-									className={styles.gitName}
+									className={decorationStyles.gitName}
 									data-status={decoration?.code || undefined}
 									data-diagnostic={decoration?.diagnostic}
 								>
@@ -125,7 +126,7 @@ function FileHeader({
 								<DiagnosticBadges decoration={decoration} />
 								{decoration?.code && (
 									<span
-										className={styles.gitBadge}
+										className={decorationStyles.gitBadge}
 										data-status={decoration.code}
 										title={t(decoration.title)}
 										aria-label={t(decoration.title)}

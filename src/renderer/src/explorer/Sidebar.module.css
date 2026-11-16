@@ -146,33 +146,6 @@
 .keepTogether {
 	white-space: nowrap;
 }
-.gitBadge {
-	flex: none;
-	font-size: 11px;
-	font-weight: 700;
-}
-.gitName[data-status],
-.gitBadge[data-status] {
-	color: #d9b777;
-}
-.gitName[data-status='U'],
-.gitName[data-status='A'],
-.gitBadge[data-status='U'],
-.gitBadge[data-status='A'] {
-	color: #9fc68e;
-}
-.gitName[data-status='D'],
-.gitBadge[data-status='D'] {
-	color: #e59b96;
-}
-.gitName[data-diagnostic='warning'],
-.gitBadge[data-diagnostic='warning'] {
-	color: #d9b777;
-}
-.gitName[data-diagnostic='error'],
-.gitBadge[data-diagnostic='error'] {
-	color: #e59b96;
-}
 @media (prefers-reduced-motion: no-preference) {
 	:global(.nido-app)[data-animations='true'] .treeItem {
 		transition:

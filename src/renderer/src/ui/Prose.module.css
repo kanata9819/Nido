@@ -1,0 +1,90 @@
+/* Rendered Markdown: the hover card's documentation and the Markdown preview. */
+.prose {
+	overflow-wrap: anywhere;
+	line-height: 1.6;
+	font-size: 12.5px;
+}
+.prose code {
+	font-family: var(--editor-font, monospace);
+	color: #a9d7f2;
+	background: #ffffff08;
+	border-radius: 3px;
+	padding: 1px 4px;
+}
+.prose > :first-child {
+	margin-top: 0;
+}
+.prose > :last-child {
+	margin-bottom: 0;
+}
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+	font-size: 14px;
+	line-height: 1.4;
+	margin: 12px 0 6px;
+	color: #e2eadf;
+}
+.prose h1 {
+	font-size: 18px;
+}
+.prose h2 {
+	font-size: 16px;
+}
+.prose p,
+.prose ul,
+.prose ol {
+	margin: 6px 0;
+}
+.prose ul,
+.prose ol {
+	padding-left: 24px;
+}
+.prose blockquote {
+	margin: 12px 0;
+	padding-left: 12px;
+	border-left: 3px solid #74906b;
+	color: #b8c5ce;
+}
+.prose a {
+	color: #8bc9f2;
+	text-decoration: underline;
+}
+.prose a:focus-visible {
+	outline: 1px solid #a8cf9e;
+	outline-offset: 3px;
+}
+.prose hr {
+	border: 0;
+	border-top: 1px solid #ffffff20;
+	margin: 14px 0;
+}
+.prose table {
+	display: block;
+	overflow-x: auto;
+	border-collapse: collapse;
+	margin: 12px 0;
+}
+.prose th,
+.prose td {
+	border: 1px solid #ffffff20;
+	padding: 6px 10px;
+	text-align: left;
+}
+.prose th {
+	background: #ffffff08;
+}
+.prose pre code {
+	color: inherit;
+	background: none;
+	padding: 0;
+}
+:global(:root[data-theme='neon']) .prose blockquote {
+	border-left-color: var(--neon-violet);
+}
+:global(:root[data-theme='neon']) .prose a {
+	color: var(--ui-accent);
+}

@@ -3,3 +3,7 @@ allowBuilds:
     esbuild: true
 patchedDependencies:
     app-builder-lib@26.15.3: patches/app-builder-lib@26.15.3.patch
+overrides:
+    # @electron/get, which downloads Electron at install time, pins an undici with known
+    # vulnerabilities; the app itself does not ship it.
+    undici: '^7.30.1'
