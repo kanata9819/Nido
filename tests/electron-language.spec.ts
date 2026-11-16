@@ -1097,7 +1097,7 @@ test('references stay accessible after jumping and can be closed with the keyboa
 		await page.keyboard.press('Enter');
 		await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
 		await expect(preview).toBeHidden();
-		await expect(page.getByRole('region', { name: 'References' })).toBeVisible();
+		await expect(page.getByRole('region', { name: 'References' })).toBeHidden();
 		await page.keyboard.press('Control+j');
 		await expect(list).toBeFocused();
 		await expect(preview).toContainText('println!');

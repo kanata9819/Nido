@@ -1066,7 +1066,9 @@ test('ten thousand references keep bounded DOM and keyboard jumps, and rapid sel
 			() => window.rendererTest.calls.find((call) => call.method === 'openReference')?.args
 		)
 	).toEqual(['alpha', 10000, 10]);
-	await list.focus();
+	await expect(list).toBeHidden();
+	await page.keyboard.press('Control+j');
+	await expect(list).toBeFocused();
 	await list.press('Home');
 	for (let i = 0; i < 20; i++) {
 		await list.press('ArrowDown');

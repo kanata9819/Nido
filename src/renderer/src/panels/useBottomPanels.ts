@@ -283,8 +283,9 @@ export function useBottomPanels({
 		run(
 			window.nido.openReference(active, index, state.references!.version).then(() => {
 				const latest = latestReferenceSearch.current;
-				if (latest.active !== active || latest.referenceVersion !== referenceVersion)
+				if (latest.active !== active || latest.referenceVersion !== referenceVersion) {
 					return;
+				}
 				setReferencesOpen(false);
 				if (canFocus()) {
 					focusEditor();
