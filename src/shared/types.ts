@@ -143,6 +143,8 @@ export interface SessionState {
 export interface ReferenceList {
 	version: number;
 	search?: number;
+	/** What the list holds: references (absent), or where a go-to command (gd) leads. */
+	kind?: 'definitions' | 'type definitions' | 'implementations';
 	loading: boolean;
 	error: string;
 	items: { path: string; line: number; column: number; text: string }[];

@@ -33,6 +33,52 @@ vim.lsp.get_clients = original`,
 	assert.equal(session.state.references?.items.length, 1);
 }
 
+test('a delayed definition jump uses its original window and Ctrl+T returns to the caller', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-definition-window-'));
+	let session: Session | undefined;
+	try {
+		await writeFile(join(root, 'caller.txt'), 'first\n  call()\n');
+		const target = join(root, 'target.txt');
+		await writeFile(target, ' value\n');
+		session = await Session.create(root, () => {});
+		await session.openFile('caller.txt');
+		const jump = await session.client.request('nvim_exec_lua', [
+			`local api = vim.api
+local win, buf = api.nvim_get_current_win(), api.nvim_get_current_buf()
+api.nvim_win_set_cursor(win, { 2, 2 })
+api.nvim_exec_autocmds('LspAttach', { buffer = buf, data = { client_id = 0 } })
+local get_clients = vim.lsp.get_clients
+local reply
+vim.lsp.get_clients = function(opts)
+  if opts and opts.method == 'textDocument/definition' then
+    return {{ offset_encoding = 'utf-16', request = function(_, _, _, callback) reply = callback end }}
+  end
+  return get_clients(opts)
+end
+vim.fn.maparg('gd', 'n', false, true).callback()
+vim.lsp.get_clients = get_clients
+
+vim.cmd.vnew()
+local other_win, other_buf = api.nvim_get_current_win(), api.nvim_get_current_buf()
+local position = { line = 0, character = 1 }
+reply(nil, { uri = vim.uri_from_fname(...), range = { start = position, ['end'] = position } })
+assert(api.nvim_get_current_win() == other_win and api.nvim_get_current_buf() == other_buf,
+  'The definition jump changed the focused split')
+return api.nvim_win_call(win, function()
+  local file = vim.fn.expand('%:t')
+  local cursor = api.nvim_win_get_cursor(win)
+  vim.cmd('normal! ' .. string.char(20))
+  return { file, cursor, api.nvim_get_current_buf() == buf, api.nvim_win_get_cursor(win) }
+end)`,
+			[target]
+		]);
+		assert.deepEqual(jump, ['target.txt', [1, 1], true, [2, 2]]);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
 test('reference previews reload external changes without switching files or changing readonly', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-reference-reload-'));
 	let session: Session | undefined;

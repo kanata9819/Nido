@@ -635,6 +635,9 @@ export const japanese: Record<string, string> = {
 	'Searching…': '検索中…',
 	'j/k Select · Enter Jump · Ctrl+J Return · Esc / Space d Close':
 		'j/k：選択 · Enter：移動 · Ctrl+J：戻る · Esc / Space d：閉じる',
+	Definitions: '定義',
+	'Type definitions': '型定義',
+	Implementations: '実装',
 	'Hide references': '参照を非表示',
 	'Reference results': '参照の検索結果',
 	'No references found.': '参照が見つかりませんでした。',

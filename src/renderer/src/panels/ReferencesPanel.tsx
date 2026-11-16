@@ -72,6 +72,14 @@ function ReferencePreviewContent({
  * The references panel below the editor: every reference to the symbol under the cursor.
  * While it has focus, the selected reference is previewed over the editor; Enter opens it.
  */
+/** The heading of each kind of list the panel shows. */
+const listTitles = {
+	references: 'References',
+	definitions: 'Definitions',
+	'type definitions': 'Type definitions',
+	implementations: 'Implementations'
+} as const;
+
 export default function ReferencesPanel({
 	workspaceId,
 	blocked = false,
@@ -264,7 +272,7 @@ export default function ReferencesPanel({
 				)}
 			<div className={styles.referencesToolbar}>
 				<strong>
-					{t('References')}{' '}
+					{t(listTitles[state.kind ?? 'references'])}{' '}
 					<span>{state.loading ? t('Searching…') : state.items.length}</span>
 				</strong>
 				<span>{t('j/k Select · Enter Jump · Ctrl+J Return · Esc / Space d Close')}</span>
