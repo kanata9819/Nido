@@ -234,6 +234,22 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 				run(window.nido.terminalCopyMode(terminalId));
 			}
 		},
+		terminalShell: (action) => {
+			const shells = terminalId ? states[terminalId]?.terminalShells : undefined;
+			if (!terminalId || !shells) {
+				return;
+			}
+			const count = shells.names.length;
+			if (action === 'add') {
+				panels.addShell(terminalId);
+			} else if (action === 'close') {
+				panels.closeShell(terminalId, shells.current);
+			} else if (count > 1) {
+				const offset = action === 'next' ? 1 : -1;
+				panels.selectShell(terminalId, ((shells.current - 1 + offset + count) % count) + 1);
+			}
+		},
+		toggleTerminalMaximized: panels.toggleTerminalMaximized,
 		toggleTerminal: panels.toggleTerminal,
 		closeReferences: panels.closeReferences,
 		showDebugger: panels.showDebugger,

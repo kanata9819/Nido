@@ -39,6 +39,15 @@ export interface BottomPanels {
 	closeTerminal: () => void;
 	toggleTerminal: () => void;
 	restartShell: (id: string) => void;
+	/** Height of the terminal panel in pixels, and whether it covers the editor. */
+	terminalHeight: number;
+	resizeTerminal: (height: number) => void;
+	terminalMaximized: boolean;
+	toggleTerminalMaximized: () => void;
+	/** Start another shell in a terminal, show one by its 1-based position, or stop one. */
+	addShell: (id: string) => void;
+	selectShell: (id: string, position: number) => void;
+	closeShell: (id: string, position: number) => void;
 	openDebugger: () => void;
 	showDebugger: () => void;
 	toggleDebugger: () => void;
@@ -69,6 +78,8 @@ export function useBottomPanels({
 	const [bottomPanel, setBottomPanel] = useState<'debug' | 'references' | 'terminal'>('debug');
 	const [terminalVisible, setTerminalVisible] = useState(false);
 	const [terminalFocusTick, setTerminalFocusTick] = useState(0);
+	const [terminalHeight, setTerminalHeight] = useState(storedTerminalHeight);
+	const [terminalMaximized, setTerminalMaximized] = useState(false);
 	// Terminals being started per workspace, and whether to show them once they are running.
 	const startingTerminals = useRef(new Map<string, { show: boolean; canFocus: () => boolean }>());
 	const terminalId = workspace?.terminalId;
@@ -164,8 +175,52 @@ export function useBottomPanels({
 			starting.show = false;
 		}
 		setTerminalVisible(false);
+		setTerminalMaximized(false);
 		focusEditor();
 	};
+	const resizeTerminal = useCallback((height: number): void => {
+		const next = clampTerminalHeight(height);
+		setTerminalHeight(next);
+		try {
+			localStorage.setItem(terminalHeightKey, String(next));
+		} catch {
+			// Without storage the height lasts until Nido closes.
+		}
+	}, []);
+	const toggleTerminalMaximized = (): void => {
+		if (terminalVisible && bottomPanel === 'terminal') {
+			setTerminalMaximized((value) => !value);
+			setTerminalFocusTick((value) => value + 1);
+		}
+	};
+	/** Run a shell action of a terminal, then give the terminal focus again. */
+	const shellAction = useCallback(
+		(action: Promise<void>): void => {
+			const canFocus = captureFocus();
+			run(
+				action.then(() => {
+					if (canFocus()) {
+						setTerminalFocusTick((value) => value + 1);
+					}
+				})
+			);
+		},
+		[run, captureFocus]
+	);
+	const addShell = useCallback(
+		(id: string): void => shellAction(window.nido.addTerminalShell(id, terminalShell)),
+		[shellAction, terminalShell]
+	);
+	const selectShell = useCallback(
+		(id: string, position: number): void =>
+			shellAction(window.nido.selectTerminalShell(id, position)),
+		[shellAction]
+	);
+	const closeShell = useCallback(
+		(id: string, position: number): void =>
+			shellAction(window.nido.closeTerminalShell(id, position)),
+		[shellAction]
+	);
 	/** Show the terminal panel and focus it. */
 	const revealTerminal = (): void => {
 		setBottomPanel('terminal');
@@ -310,6 +365,13 @@ export function useBottomPanels({
 		closeTerminal,
 		toggleTerminal,
 		restartShell,
+		terminalHeight,
+		resizeTerminal,
+		terminalMaximized,
+		toggleTerminalMaximized,
+		addShell,
+		selectShell,
+		closeShell,
 		openDebugger,
 		showDebugger,
 		toggleDebugger,
@@ -317,4 +379,22 @@ export function useBottomPanels({
 		openReference,
 		debug
 	};
+}
+
+const terminalHeightKey = 'nido.terminalHeight';
+const defaultTerminalHeight = 280;
+
+/** Keep the terminal between a few rows and most of the window. */
+export function clampTerminalHeight(height: number): number {
+	const max = Math.max(160, (typeof window === 'undefined' ? 900 : window.innerHeight) - 200);
+	return Math.round(Math.max(120, Math.min(max, height)));
+}
+
+function storedTerminalHeight(): number {
+	try {
+		const saved = Number(localStorage.getItem(terminalHeightKey));
+		return saved > 0 ? clampTerminalHeight(saved) : defaultTerminalHeight;
+	} catch {
+		return defaultTerminalHeight;
+	}
 }

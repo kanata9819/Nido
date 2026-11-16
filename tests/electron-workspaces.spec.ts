@@ -580,9 +580,11 @@ test('terminal toggle, focus, background execution and standalone terminal sessi
 			.toBe(true);
 		await page.keyboard.press('Control+@');
 		await expect(terminal.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
-		await expect(terminal.getByRole('button', { name: /Restart shell/ })).toHaveCSS(
-			'font-size',
-			'12px'
+		await expect(terminal.getByRole('button', { name: 'Restart shell' })).toBeVisible();
+		// The panel's tab names the running shell.
+		await expect(terminal.getByRole('tab', { name: /powershell|pwsh/i })).toHaveAttribute(
+			'aria-selected',
+			'true'
 		);
 		await page.keyboard.press('Control+Shift+r');
 		await expect(terminal.locator('canvas')).not.toHaveAttribute(
