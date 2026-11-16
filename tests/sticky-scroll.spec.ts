@@ -2,6 +2,7 @@ import { test, expect, _electron as electron } from '@playwright/test';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { launchEnv } from './helpers/launch-env';
 
 test('Sticky Scroll pins nested headers, jumps by mouse and keyboard, and saves its settings', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-sticky-ui-'));
@@ -31,7 +32,7 @@ test('Sticky Scroll pins nested headers, jumps by mouse and keyboard, and saves 
 			window: { width: 1100, height: 800, maximized: false }
 		})
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
 	try {

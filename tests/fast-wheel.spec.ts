@@ -130,7 +130,11 @@ for (const { delta, history, prefetchFirst, title } of scenarios) {
 					fill(x, y, width, height);
 				};
 				ctx.drawImage = ((...args: unknown[]) => {
-					if (first && args.length === 5 && Number(args[2]) + Number(args[4]) > 0) {
+					if (
+						first &&
+						(args as unknown[]).length === 5 &&
+						Number(args[2]) + Number(args[4]) > 0
+					) {
 						first = false;
 						const source = args[0] as HTMLCanvasElement;
 						const row = source.dataset.rowText?.match(/ROW_(\d+)/);

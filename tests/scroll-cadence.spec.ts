@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { installRowImageProbe } from './helpers/row-image-probe';
+import { launchEnv } from './helpers/launch-env';
 
 test('continuous wheel scrolling keeps painted positions monotonic in both directions', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-scroll-cadence-'));
@@ -25,7 +26,7 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
 			workspaces: [{ root, current: file, files: [{ path: file, line: 1, column: 0 }] }]
 		})
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
 	try {
@@ -70,7 +71,11 @@ test('continuous wheel scrolling keeps painted positions monotonic in both direc
 				fill(x, y, w, h);
 			};
 			ctx.drawImage = ((...args: Parameters<typeof draw>) => {
-				if (first && args.length === 5 && Number(args[2]) + Number(args[4]) > 0) {
+				if (
+					first &&
+					(args as unknown[]).length === 5 &&
+					Number(args[2]) + Number(args[4]) > 0
+				) {
 					const source = args[0] as HTMLCanvasElement;
 					const row = source.dataset?.rowText?.match(/ROW_(\d+)/);
 					if (row) {

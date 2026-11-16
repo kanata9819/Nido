@@ -4,6 +4,7 @@ import { readSavedFile } from './helpers/files';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { electron } from './helpers/electron';
+import { launchEnv } from './helpers/launch-env';
 
 test('language packs install from the manager, run, toggle without losing edits and restore after restart', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-packs-ui-'));
@@ -27,7 +28,7 @@ test('language packs install from the manager, run, toggle without losing edits 
 			command: ['${node}', resolve('tests/fixtures/language-pack-server.mjs')]
 		})
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const options = { args: ['.', `--user-data-dir=${profile}`], env };
 	let running: Awaited<ReturnType<typeof electron.launch>> | undefined;

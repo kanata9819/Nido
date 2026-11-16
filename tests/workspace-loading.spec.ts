@@ -3,6 +3,7 @@ import { electron } from './helpers/electron';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { launchEnv } from './helpers/launch-env';
 
 test('workspace loading stays visible until Neovim paints the restored code', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-workspace-loading-'));
@@ -19,7 +20,7 @@ test('workspace loading stays visible until Neovim paints the restored code', as
 			workspaces: [{ root, current: file, files: [{ path: file, line: 1, column: 0 }] }]
 		})
 	);
-	const env = { ...process.env };
+	const env = launchEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
 	try {

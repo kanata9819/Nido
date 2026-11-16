@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ReferencePreview } from '../src/shared/types';
+import { launchEnv } from './helpers/launch-env';
 
 type PendingPreview = {
 	index: number;
@@ -25,7 +26,7 @@ for (const animations of [true, false]) {
 				workspaces: [{ root, current: file, files: [{ path: file, line: 1, column: 0 }] }]
 			})
 		);
-		const env = { ...process.env };
+		const env = launchEnv();
 		delete env.ELECTRON_RUN_AS_NODE;
 		const executablePath = process.env.NIDO_PACKAGED_EXE;
 		const running = await electron.launch({

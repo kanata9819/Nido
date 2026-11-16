@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Grid } from '../src/renderer/src/grid/grid';
+import type { Redraw } from '../src/shared/types';
+
+type RedrawEvent = Redraw[number];
 
 test('pixel-scrolled code uses the full viewport and keeps bottom clicks in document rows', () => {
 	for (const height of [72, 77, 77.6, 90]) {
@@ -40,13 +43,13 @@ test('editor text snapshots read only changed rows during repeated typing', (con
 	const grid = new Grid();
 	grid.apply([
 		['grid_resize', [1, 160, 45]],
-		...Array.from({ length: 45 }, (_, row) => ['grid_line', [1, row, 0, [['x', 0, 160]]]]),
+		...Array.from({ length: 45 }, (_, row): RedrawEvent => [
+			'grid_line',
+			[1, row, 0, [['x', 0, 160]]]
+		]),
 		['flush']
 	]);
-	const snapshot = (): string =>
-		'description' in grid
-			? (grid.description as string)
-			: grid.cells.map((row) => row.map((cell) => cell.text).join('')).join('\n');
+	const snapshot = (): string => grid.description;
 	snapshot();
 	let reads = 0;
 	for (const row of grid.cells) {
@@ -74,10 +77,7 @@ test('editor text snapshots read only changed rows during repeated typing', (con
 
 test('text snapshots preserve Unicode, highlight changes, cached scrolling, partial scrolling and resize', () => {
 	const grid = new Grid();
-	const snapshot = (): string =>
-		'description' in grid
-			? (grid.description as string)
-			: grid.cells.map((row) => row.map((cell) => cell.text).join('')).join('\n');
+	const snapshot = (): string => grid.description;
 	const check = (): void => {
 		assert.equal(
 			snapshot(),
@@ -91,7 +91,7 @@ test('text snapshots preserve Unicode, highlight changes, cached scrolling, part
 		['flush']
 	]);
 	assert.equal(snapshot().split('\n')[0], '日e\u0301🙂   ');
-	for (const events of [
+	for (const events of <Redraw[]>[
 		[['grid_line', [1, 0, 0, [['日', 2]]]]],
 		[
 			['nido_scroll', [1, 0, 3, 0, 8, 1, 0]],
@@ -117,7 +117,7 @@ test('gutter updates reuse row geometry without scanning unchanged cells', () =>
 	const grid = new Grid();
 	grid.apply([
 		['grid_resize', [1, 160, 45]],
-		...Array.from({ length: 45 }, (_, row) => [
+		...Array.from({ length: 45 }, (_, row): RedrawEvent => [
 			'grid_line',
 			[
 				1,
@@ -146,7 +146,10 @@ test('gutter updates reuse row geometry without scanning unchanged cells', () =>
 	grid.prepareLayout(1260, 8, 28);
 	reads = 0;
 	grid.apply([
-		...Array.from({ length: 45 }, (_, row) => ['grid_line', [1, row, 0, [['8', 0]]]]),
+		...Array.from({ length: 45 }, (_, row): RedrawEvent => [
+			'grid_line',
+			[1, row, 0, [['8', 0]]]
+		]),
 		['flush']
 	]);
 	grid.prepareLayout(1260, 8, 28);
@@ -159,7 +162,7 @@ test('scrolling with relative numbers preserves cached rows without searching th
 		const grid = new Grid();
 		grid.apply([
 			['grid_resize', [1, 160, 50]],
-			...Array.from({ length: 49 }, (_, row) => [
+			...Array.from({ length: 49 }, (_, row): RedrawEvent => [
 				'grid_line',
 				[
 					1,
@@ -192,7 +195,7 @@ test('scrolling with relative numbers preserves cached rows without searching th
 			grid.apply([
 				['nido_scroll', [1, 0, 49, 0, 160, direction * 4, 0]],
 				['grid_scroll', [1, 0, 49, 0, 160, direction * 4, 0]],
-				...Array.from({ length: 4 }, (_, row) => [
+				...Array.from({ length: 4 }, (_, row): RedrawEvent => [
 					'grid_line',
 					[
 						1,
@@ -204,7 +207,7 @@ test('scrolling with relative numbers preserves cached rows without searching th
 						]
 					]
 				]),
-				...Array.from({ length: 49 }, (_, row) => [
+				...Array.from({ length: 49 }, (_, row): RedrawEvent => [
 					'grid_line',
 					[1, row, 0, Array.from(String(row).padStart(4, '0'), (text) => [text, 0])]
 				]),
@@ -238,7 +241,10 @@ test('relative number redraws reuse cache membership and preserve shared scroll 
 	const grid = new Grid();
 	grid.apply([
 		['grid_resize', [1, 20, 40]],
-		...Array.from({ length: 40 }, (_, row) => ['grid_line', [1, row, 0, [['0', 0, 20]]]]),
+		...Array.from({ length: 40 }, (_, row): RedrawEvent => [
+			'grid_line',
+			[1, row, 0, [['0', 0, 20]]]
+		]),
 		['flush']
 	]);
 	let examined = 0;
@@ -252,11 +258,18 @@ test('relative number redraws reuse cache membership and preserve shared scroll 
 			return includes.apply(this, args);
 		};
 		const iterator = rows[Symbol.iterator];
-		rows[Symbol.iterator] = function* () {
-			for (const row of iterator.call(this)) {
-				examined++;
-				yield row;
-			}
+		// Count every row read through iteration, too.
+		rows[Symbol.iterator] = function (this: typeof rows) {
+			const rowsIterator = iterator.call(this);
+			const counted = Object.create(rowsIterator) as typeof rowsIterator;
+			counted.next = () => {
+				const step = rowsIterator.next();
+				if (!step.done) {
+					examined++;
+				}
+				return step;
+			};
+			return counted;
 		};
 		return rows;
 	};
@@ -267,7 +280,7 @@ test('relative number redraws reuse cache membership and preserve shared scroll 
 	grid.cells[0] = upper[0];
 	for (let move = 0; move < 20; move++) {
 		grid.apply([
-			...Array.from({ length: 39 }, (_, row) => [
+			...Array.from({ length: 39 }, (_, row): RedrawEvent => [
 				'grid_line',
 				[1, row, 0, [[String((move + 1) % 10), 0]]]
 			]),
@@ -295,7 +308,7 @@ test('native scrolling reuses unchanged row identities without rereading their b
 		const grid = new Grid();
 		grid.apply([
 			['grid_resize', [1, 160, 50]],
-			...Array.from({ length: 49 }, (_, row) => [
+			...Array.from({ length: 49 }, (_, row): RedrawEvent => [
 				'grid_line',
 				[1, row, 0, [['body', 0, 160]]]
 			]),
@@ -318,7 +331,7 @@ test('native scrolling reuses unchanged row identities without rereading their b
 		grid.apply([
 			['nido_scroll', [1, 0, 49, 0, 160, direction * 4, 0]],
 			['grid_scroll', [1, 0, 49, 0, 160, direction * 4, 0]],
-			...Array.from({ length: 4 }, (_, row) => [
+			...Array.from({ length: 4 }, (_, row): RedrawEvent => [
 				'grid_line',
 				[1, direction > 0 ? 45 + row : row, 0, [['new', 0, 160]]]
 			]),
@@ -363,7 +376,7 @@ test('new highlight IDs retain compact geometry for visible and cached rows', (c
 	grid.apply([
 		['grid_resize', [1, 160, 45]],
 		['hl_attr_define', [1, {}, {}, [{ hi_name: 'NidoCodeLens' }]]],
-		...Array.from({ length: 44 }, (_, row) => [
+		...Array.from({ length: 44 }, (_, row): RedrawEvent => [
 			'grid_line',
 			[1, row, 0, [[row % 2 ? 'lens' : 'body', row % 2 ? 1 : 0, 160]]]
 		]),

@@ -3,6 +3,7 @@ import { electron } from './helpers/electron';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { launchEnv } from './helpers/launch-env';
 
 for (const standalone of [false, true]) {
 	test(`${standalone ? 'standalone' : 'panel'} terminal closes on shell exit and returns focus to the editor`, async () => {
@@ -22,7 +23,7 @@ for (const standalone of [false, true]) {
 				]
 			})
 		);
-		const env = { ...process.env };
+		const env = launchEnv();
 		delete env.ELECTRON_RUN_AS_NODE;
 		const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
 		try {
