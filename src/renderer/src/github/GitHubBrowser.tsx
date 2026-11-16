@@ -184,25 +184,31 @@ function SignIn({
 				{t(
 					!status.installed
 						? 'Install the GitHub CLI'
-						: !status.authenticated
-							? 'Sign in to GitHub'
-							: 'No GitHub repository'
+						: status.unreachable
+							? 'Cannot reach GitHub'
+							: !status.authenticated
+								? 'Sign in to GitHub'
+								: 'No GitHub repository'
 				)}
 			</h2>
 			<p>
 				{t(
 					!status.installed
 						? 'Nido uses the GitHub CLI (gh) and its sign-in. Install it, run gh auth login in a terminal, then refresh.'
-						: !status.authenticated
-							? 'Run gh auth login in a terminal, then refresh.'
-							: 'This workspace has no Git remote on GitHub.'
+						: status.unreachable
+							? 'Check the network or proxy, then refresh.'
+							: !status.authenticated
+								? 'Run gh auth login in a terminal, then refresh.'
+								: 'This workspace has no Git remote on GitHub.'
 				)}
 			</p>
-			{status.message && status.installed && status.authenticated && (
+			{status.message && status.installed && (status.authenticated || status.unreachable) && (
 				<p className={styles.dim}>{errorMessage(status.message)}</p>
 			)}
 			{!status.installed && <code>winget install --id GitHub.cli</code>}
-			{status.installed && !status.authenticated && <code>gh auth login</code>}
+			{status.installed && !status.authenticated && !status.unreachable && (
+				<code>gh auth login</code>
+			)}
 			<button onClick={refresh}>{t('Refresh')}</button>
 		</div>
 	);

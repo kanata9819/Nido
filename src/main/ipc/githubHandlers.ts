@@ -84,13 +84,14 @@ export function registerGithubHandlers({
 	);
 	handle('githubCreatePullRequest', async (id, title, body, base, draft) => {
 		const cwd = root(id);
-		await gitPushBranch(cwd);
-		return createPullRequest(cwd, {
+		const draftPr = {
 			title: text(title),
 			body: text(body),
 			base: text(base),
 			draft: flag(draft)
-		});
+		};
+		// The branch is pushed only once the draft is valid, and never into its base branch.
+		return createPullRequest(cwd, draftPr, () => gitPushBranch(cwd, draftPr.base));
 	});
 	handle('githubMerge', (id, number, method, deleteBranch) =>
 		mergePullRequest(root(id), issueNumber(number), method as never, flag(deleteBranch))

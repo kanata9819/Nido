@@ -188,6 +188,47 @@ export function parseIssueDetails(value: unknown): IssueDetails {
 }
 
 /**
+ * A path as git writes it in a diff header, without its a/ or b/ prefix (`prefixed`). Git quotes a path with
+ * unusual characters ("b/\346\227\245.ts" for 日.ts, octal UTF-8 bytes) and ends a ---/+++ path
+ * that has spaces with a tab.
+ */
+export function diffPath(raw: string, prefixed = true): string {
+	let path = raw.replace(/\t$/, '');
+	if (path.startsWith('"') && path.endsWith('"')) {
+		const bytes: number[] = [];
+		const escapes: Record<string, number> = {
+			n: 10,
+			t: 9,
+			'"': 34,
+			'\\': 92,
+			a: 7,
+			b: 8,
+			f: 12,
+			r: 13,
+			v: 11
+		};
+		const inner = path.slice(1, -1);
+		for (let i = 0; i < inner.length; i++) {
+			const char = inner[i];
+			if (char !== '\\') {
+				bytes.push(...Buffer.from(char, 'utf8'));
+				continue;
+			}
+			const octal = inner.slice(i + 1, i + 4);
+			if (/^[0-7]{3}$/.test(octal)) {
+				bytes.push(parseInt(octal, 8));
+				i += 3;
+			} else {
+				bytes.push(escapes[inner[i + 1]] ?? inner.charCodeAt(i + 1));
+				i += 1;
+			}
+		}
+		path = Buffer.from(bytes).toString('utf8');
+	}
+	return prefixed ? path.replace(/^[ab]\//, '') : path;
+}
+
+/**
  * Split the unified diff of a whole pull request (`gh pr diff`) into one diff per file, keyed
  * by the file's path in the new version, or in the old one for a deleted file.
  */
@@ -195,12 +236,16 @@ export function splitPullRequestDiff(diff: string): Map<string, string> {
 	const files = new Map<string, string>();
 	const parts = diff.split(/^(?=diff --git )/m).filter((part) => part.startsWith('diff --git '));
 	for (const part of parts) {
-		const newPath = part.match(/^\+\+\+ b\/(.*)$/m)?.[1];
-		const oldPath = part.match(/^--- a\/(.*)$/m)?.[1];
-		const renamed = part.match(/^rename to (.*)$/m)?.[1];
-		// Without ---/+++ lines (a binary file or a pure rename), the header names the file.
-		const header = part.match(/^diff --git a\/.* b\/(.*)$/m)?.[1];
-		const path = newPath ?? renamed ?? oldPath ?? header;
+		// Only the header, before the first hunk, names the file; added lines can look alike.
+		const header = part.split(/^@@ /m)[0];
+		const newPath = header.match(/^\+\+\+ ("?b\/.*)$/m)?.[1];
+		const oldPath = header.match(/^--- ("?a\/.*)$/m)?.[1];
+		const renamed = header.match(/^rename to (.*)$/m)?.[1];
+		// Without ---/+++ lines (a binary file or a pure rename), the first line names the file.
+		const named = header.match(/^diff --git (?:"a\/.*" ("b\/.*")|a\/.* (b\/.*))$/m);
+		const raw = newPath ?? oldPath ?? named?.[1] ?? named?.[2];
+		const path =
+			newPath === undefined && renamed ? diffPath(renamed, false) : raw && diffPath(raw);
 		if (path) {
 			files.set(path, part.endsWith('\n') ? part : `${part}\n`);
 		}

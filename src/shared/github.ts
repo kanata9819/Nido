@@ -16,6 +16,8 @@ export interface GitHubStatus {
 	defaultBranch?: string;
 	/** The checked-out branch. */
 	branch?: string;
+	/** gh is signed in as far as we know, but GitHub could not be reached (offline, a proxy). */
+	unreachable?: boolean;
 	/** Why gh cannot be used, when it cannot. */
 	message?: string;
 }

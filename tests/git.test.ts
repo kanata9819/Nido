@@ -608,6 +608,35 @@ test('pushing a PR branch updates only its upstream even with matching pushes co
 	}
 });
 
+test('a PR branch made from its base branch is published under its own name, not pushed to the base', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-push-base-'));
+	const remote = join(root, 'remote.git');
+	const git = (...args: string[]): string =>
+		execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
+	try {
+		git('init', '-q', '-b', 'main');
+		git('init', '-q', '--bare', remote);
+		git('config', 'user.name', 'Nido Test');
+		git('config', 'user.email', 'test@example.invalid');
+		git('config', 'commit.gpgsign', 'false');
+		git('remote', 'add', 'origin', remote);
+		git('commit', '-qm', 'Initial', '--allow-empty');
+		const initial = git('rev-parse', 'HEAD');
+		git('push', '-q', 'origin', 'main');
+		git('fetch', '-q', 'origin');
+		// `git switch -c feature origin/main` makes origin/main the branch's upstream.
+		git('switch', '-q', '-c', 'feature', 'origin/main');
+		git('commit', '-qm', 'Feature work', '--allow-empty');
+		const work = git('rev-parse', 'HEAD');
+		await gitPushBranch(root, 'main');
+		assert.equal(git('--git-dir', remote, 'rev-parse', 'refs/heads/main'), initial);
+		assert.equal(git('--git-dir', remote, 'rev-parse', 'refs/heads/feature'), work);
+		assert.equal(git('rev-parse', '--abbrev-ref', '@{upstream}'), 'origin/feature');
+	} finally {
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
 test('Git stages literal paths, preserves working changes and commits only the index', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-git-'));
 	const git = (...args: string[]): string =>
