@@ -11,6 +11,7 @@ export function Composer({
 	submitLabel,
 	busy,
 	allowEmpty = false,
+	ready = true,
 	controls,
 	onSubmit,
 	onCancel
@@ -20,6 +21,8 @@ export function Composer({
 	busy: boolean;
 	/** Whether sending without text is allowed, as for an approval. */
 	allowEmpty?: boolean;
+	/** Whether the form's other fields are complete; sending waits for them, cancelling does not. */
+	ready?: boolean;
 	controls?: ReactNode;
 	/** Send the text; resolves to whether it was sent, so a failed send keeps the text. */
 	onSubmit: (body: string) => Promise<boolean>;
@@ -29,7 +32,7 @@ export function Composer({
 	const [body, setBody] = useState('');
 	const area = useRef<HTMLTextAreaElement>(null);
 	useEffect(() => area.current?.focus(), []);
-	const canSend = !busy && (allowEmpty || !!body.trim());
+	const canSend = !busy && ready && (allowEmpty || !!body.trim());
 	const send = (): void => {
 		if (canSend) {
 			void onSubmit(body).then((sent) => sent && setBody(''));
