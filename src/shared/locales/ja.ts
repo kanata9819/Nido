@@ -2,6 +2,7 @@
 // key; {name} placeholders are kept as they are and filled in by translate() in ../i18n.ts.
 // English source messages are also the fallback for messages from external tools.
 export const japanese: Record<string, string> = {
+	'Nido could not start': 'Nidoを起動できませんでした',
 	'Toggle line comments': '行コメントを切り替え',
 	Undo: '元に戻す',
 	Redo: 'やり直す',
