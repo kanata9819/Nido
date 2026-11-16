@@ -19,7 +19,7 @@
 		"typecheck:windows": "tsc -p tsconfig.windows-tests.json",
 		"typecheck": "npm run typecheck:node && npm run typecheck:web",
 		"start": "npm run electron:binary && electron-vite preview",
-		"electron:binary": "node -e \"require('electron')\"",
+		"electron:binary": "node -e \"if (!process.env.ELECTRON_EXEC_PATH) require('electron')\"",
 		"preview:text-rendering": "node prototypes/text-rendering/preview.mjs",
 		"prepare:languages": "tsx scripts/prepare-languages.ts",
 		"prepare:neovim:unix": "tsx scripts/prepare-neovim.ts && npm run prepare:languages",
