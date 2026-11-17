@@ -93,6 +93,7 @@ export default function ReferencesPanel({
 }: Props): React.JSX.Element {
 	const t = useI18n();
 	const errorMessage = useErrorMessage();
+	const panel = useRef<HTMLElement>(null);
 	const list = useRef<HTMLDivElement>(null);
 	const [selected, setSelected] = useState(0);
 	const [focused, setFocused] = useState(false);
@@ -101,6 +102,8 @@ export default function ReferencesPanel({
 	const selectionKey = `${workspaceId}:${state.version}`;
 	const [viewport, setViewport] = useState({ key: selectionKey, top: 0 });
 	const [height, setHeight] = useState(200);
+	// The panel covers the editor's bottom; the preview is centered in the editor above it.
+	const [panelHeight, setPanelHeight] = useState(0);
 	const top = viewport.key === selectionKey ? viewport.top : 0;
 	const first = Math.max(0, Math.floor(top / rowHeight) - overscan);
 	const last = Math.min(state.items.length, Math.ceil((top + height) / rowHeight) + overscan);
@@ -205,19 +208,25 @@ export default function ReferencesPanel({
 		}
 		setViewport({ key: selectionKey, top: node.scrollTop });
 	}, [selected, selectionKey, visible]);
-	// Track the list height to know how many rows are visible.
+	// Track the list height to know how many rows are visible, and the panel's height.
 	useEffect(() => {
 		const node = list.current;
-		if (!node) {
+		const section = panel.current;
+		if (!node || !section) {
 			return;
 		}
-		const observer = new ResizeObserver(() => setHeight(node.clientHeight));
+		const observer = new ResizeObserver(() => {
+			setHeight(node.clientHeight);
+			setPanelHeight(section.offsetHeight);
+		});
 		observer.observe(node);
+		observer.observe(section);
 		return () => observer.disconnect();
 	}, []);
 
 	return (
 		<section
+			ref={panel}
 			className={styles.referencesPanel}
 			inert={blocked}
 			data-references-panel
@@ -255,6 +264,11 @@ export default function ReferencesPanel({
 						{previewEnabled ? (
 							<section
 								className={styles.referencePreview}
+								style={
+									{
+										'--references-panel-height': `${panelHeight}px`
+									} as React.CSSProperties
+								}
 								inert={blocked}
 								aria-label={t('Reference preview')}
 								aria-busy={preview?.key !== previewKey}
