@@ -300,6 +300,26 @@ export default function ReferencesPanel({
 				}
 				aria-activedescendant={state.items[selected] ? `reference-${selected}` : undefined}
 				onKeyDown={(event) => {
+					const key = event.key.toLowerCase();
+					if (
+						event.ctrlKey &&
+						!event.shiftKey &&
+						!event.altKey &&
+						!event.metaKey &&
+						['d', 'u'].includes(key)
+					) {
+						// Ctrl+D/U move half the visible list.
+						event.preventDefault();
+						const rows = Math.max(
+							1,
+							Math.floor(event.currentTarget.clientHeight / 2 / rowHeight)
+						);
+						const last = Math.max(0, state.items.length - 1);
+						setSelected((index) =>
+							Math.max(0, Math.min(last, index + (key === 'd' ? rows : -rows)))
+						);
+						return;
+					}
 					if (
 						event.nativeEvent.isComposing ||
 						event.ctrlKey ||

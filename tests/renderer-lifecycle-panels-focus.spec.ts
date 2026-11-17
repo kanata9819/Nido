@@ -604,6 +604,39 @@ test('late reference results keep command palette focus and remain reachable aft
 	await expect(page.getByRole('listbox', { name: 'Reference results' })).toBeFocused();
 });
 
+test('Ctrl+D/U move half a palette list, from the list and while typing', async ({ page }) => {
+	await page.goto(`${origin}?view=app`);
+	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+	await page.keyboard.press('Control+Shift+P');
+	const list = page.getByRole('group', { name: 'Palette results' });
+	await expect(list).toBeFocused();
+	const rows = list.getByRole('button');
+	const selectedIndex = (): Promise<number> =>
+		rows.evaluateAll((buttons) =>
+			buttons.findIndex((button) => button.className.includes('selectedItem'))
+		);
+	const half = await list.evaluate((element) => {
+		const row = element.querySelector('button')!.getBoundingClientRect().height;
+		return Math.max(1, Math.floor(element.clientHeight / 2 / row));
+	});
+	expect(await rows.count()).toBeGreaterThan(half * 2);
+	expect(await selectedIndex()).toBe(0);
+	await page.keyboard.press('Control+d');
+	await expect.poll(selectedIndex).toBe(half);
+	await page.keyboard.press('Control+d');
+	await expect.poll(selectedIndex).toBe(half * 2);
+	await page.keyboard.press('Control+u');
+	await expect.poll(selectedIndex).toBe(half);
+	// The same keys work from the filter field.
+	await page.keyboard.press('i');
+	await expect(page.getByRole('textbox', { name: 'Filter items' })).toBeFocused();
+	await page.keyboard.press('Control+u');
+	await expect.poll(selectedIndex).toBe(0);
+	await page.keyboard.press('Control+d');
+	await expect.poll(selectedIndex).toBe(half);
+	await expect(page.getByRole('textbox', { name: 'Filter items' })).toHaveValue('');
+});
+
 test('the command palette lists the commands run last first and marks them', async ({ page }) => {
 	await page.goto(origin);
 	await page.evaluate(() => localStorage.clear());

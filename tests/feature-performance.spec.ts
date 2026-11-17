@@ -1060,6 +1060,14 @@ test('ten thousand references keep bounded DOM and keyboard jumps, and rapid sel
 	await expect(list.locator('#reference-9999')).toBeVisible();
 	await expect(list.locator('#reference-9999')).toHaveAttribute('aria-setsize', '10000');
 	expect(await list.getByRole('option').count()).toBeLessThan(40);
+	// Ctrl+U/D move half the visible list.
+	const half = await list.evaluate((element) =>
+		Math.max(1, Math.floor(element.clientHeight / 2 / 30))
+	);
+	await list.press('Control+u');
+	await expect(list).toHaveAttribute('aria-activedescendant', `reference-${9999 - half}`);
+	await list.press('Control+d');
+	await expect(list).toHaveAttribute('aria-activedescendant', 'reference-9999');
 	await list.press('Enter');
 	expect(
 		await page.evaluate(

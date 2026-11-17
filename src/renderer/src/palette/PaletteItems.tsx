@@ -184,6 +184,14 @@ export default function PaletteItems({
 					} else if (event.key === 'ArrowUp' || (event.ctrlKey && event.key === 'k')) {
 						event.preventDefault();
 						setSelection((n) => Math.max(0, n - 1));
+					} else if (
+						event.ctrlKey &&
+						!event.shiftKey &&
+						!event.altKey &&
+						['d', 'u'].includes(event.key.toLowerCase())
+					) {
+						// Ctrl+D/U move half a list while typing too.
+						navigateSearchList(event, filtered.length, setSelection, results.current);
 					} else {
 						shared(event);
 					}
