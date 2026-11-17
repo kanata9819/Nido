@@ -10,6 +10,9 @@ import type { SearchOptions } from '../../shared/search';
 import { SessionSearch } from '../search/sessionSearch';
 import { WorkspaceReplacement } from '../search/workspaceReplacement';
 
+// Keep relative symbolic links relative so they follow their targets in a copied folder.
+const copyOptions = { recursive: true, force: false, errorOnExist: true, verbatimSymlinks: true };
+
 /** A buffer as Neovim reports it, used to protect open files during file operations. */
 interface OpenBuffer {
 	id: number;
@@ -180,7 +183,7 @@ end`,
 			if (isWithin(source, result)) {
 				throw new Error('Cannot place a folder inside itself.');
 			}
-			await cp(source, result, { recursive: true, force: false, errorOnExist: true });
+			await cp(source, result, copyOptions);
 			copied.push(relative(this.root, result));
 		}
 		return copied;
@@ -237,7 +240,7 @@ end`,
 			throw new Error('Close the destination file tab first.');
 		}
 		if (action === 'copy') {
-			await cp(source, result, { recursive: true, force: false, errorOnExist: true });
+			await cp(source, result, copyOptions);
 		} else if (action === 'rename') {
 			await this.move(source, result, affected);
 		} else {

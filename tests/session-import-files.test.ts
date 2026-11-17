@@ -1,5 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+	mkdtemp,
+	mkdir,
+	readFile,
+	readdir,
+	readlink,
+	realpath,
+	rm,
+	symlink,
+	writeFile
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -50,6 +60,40 @@ test('dropped files and folders are copied, with everything in the folders, into
 		// '' is the workspace itself.
 		assert.deepEqual(await files.importFiles([join(outside, 'notes.txt')], ''), ['notes.txt']);
 		assert.equal(await readFile(join(root, 'notes.txt'), 'utf8'), 'dropped\n');
+	} finally {
+		await done();
+	}
+});
+
+test('copying a folder preserves a relative link to another file in the copy', async (context) => {
+	const { root, outside, done } = await folders();
+	try {
+		const source = join(outside, 'assets');
+		const link = join('icons', 'logo.svg');
+		const target = join('..', 'logo.svg');
+		try {
+			await symlink(target, join(source, link), 'file');
+		} catch (error) {
+			if (process.platform !== 'win32' || (error as NodeJS.ErrnoException).code !== 'EPERM') {
+				throw error;
+			}
+			context.skip('Windows does not allow this process to create symbolic links.');
+			return;
+		}
+		const files = new SessionFiles(root, client());
+		await files.importFiles([source], 'src');
+		await files.fileAction('copy', join('src', 'assets'), 'duplicate', async () => {});
+		await rm(source, { recursive: true });
+		await writeFile(join(root, 'src', 'assets', 'logo.svg'), 'imported');
+		await writeFile(join(root, 'duplicate', 'logo.svg'), 'duplicated');
+		for (const [folder, content] of [
+			[join('src', 'assets'), 'imported'],
+			['duplicate', 'duplicated']
+		]) {
+			const copiedLink = join(root, folder, link);
+			assert.equal(await readlink(copiedLink), target);
+			assert.equal(await readFile(copiedLink, 'utf8'), content);
+		}
 	} finally {
 		await done();
 	}
