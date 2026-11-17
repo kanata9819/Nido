@@ -242,8 +242,11 @@ export function splitPullRequestDiff(diff: string): Map<string, string> {
 		const oldPath = header.match(/^--- ("?a\/.*)$/m)?.[1];
 		const renamed = header.match(/^rename to (.*)$/m)?.[1];
 		// Without ---/+++ lines (a binary file or a pure rename), the first line names the file.
+		// An unquoted path can itself contain " b/". Match both sides against the same path
+		// before trying the fallback for a header with different paths.
+		const samePath = header.match(/^diff --git a\/(.+) (b\/\1)$/m)?.[2];
 		const named = header.match(/^diff --git (?:"a\/.*" ("b\/.*")|a\/.* (b\/.*))$/m);
-		const raw = newPath ?? oldPath ?? named?.[1] ?? named?.[2];
+		const raw = newPath ?? oldPath ?? samePath ?? named?.[1] ?? named?.[2];
 		const path =
 			newPath === undefined && renamed ? diffPath(renamed, false) : raw && diffPath(raw);
 		if (path) {
