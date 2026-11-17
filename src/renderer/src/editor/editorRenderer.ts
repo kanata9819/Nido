@@ -84,6 +84,8 @@ export class EditorRenderer {
 	private readonly observer: ResizeObserver;
 	private resolution?: MediaQueryList;
 	private readonly unsubscribe: () => void;
+	/** Fills the scroll caches once the editor has been idle for a moment after a jump. */
+	private warmTimer?: ReturnType<typeof setTimeout>;
 
 	constructor(
 		private readonly options: EditorRendererOptions,
@@ -135,6 +137,7 @@ export class EditorRenderer {
 		grid.scrollPreview = 0;
 		grid.horizontalOffset = 0;
 		grid.scrolling = false;
+		clearTimeout(this.warmTimer);
 		this.cursor.dispose();
 		this.scrolling.dispose();
 		surface.removeEventListener('pointerdown', this.pointerDown);
@@ -595,6 +598,52 @@ export class EditorRenderer {
 			this.scrolling.invalidatePrefetch();
 		}
 		this.descriptionDirty ||= redraw.descriptionChanged;
+		this.deferWarm(redraw);
 		this.schedule();
 	}
+
+	/**
+	 * A jump, a new buffer or a resized grid leaves the scroll caches empty, and wheel input
+	 * could then preview only one row before waiting for Neovim to draw more. Refill them once
+	 * redraws have been quiet for a moment. Edits do not start a refill (it would hold up the
+	 * next keystroke), and any other redraw postpones a pending one.
+	 */
+	private deferWarm(redraw: RedrawSummary): void {
+		if (redraw.edited) {
+			clearTimeout(this.warmTimer);
+			this.warmTimer = undefined;
+			return;
+		}
+		const moved =
+			!this.directScroll &&
+			!redraw.prefetched &&
+			(redraw.viewportMoved || redraw.bufferChanged || redraw.layoutReset);
+		if (moved || this.warmTimer !== undefined) {
+			clearTimeout(this.warmTimer);
+			this.warmTimer = setTimeout(this.warm, EditorRenderer.warmDelay);
+		}
+	}
+
+	private static readonly warmDelay = 100;
+
+	private warm = (): void => {
+		this.warmTimer = undefined;
+		const { grid, host, pixelScroll, attachedRef, scrollEnabledRef } = this.options;
+		if (
+			this.disposed ||
+			!pixelScroll ||
+			!attachedRef.current ||
+			!scrollEnabledRef.current ||
+			host.hidden ||
+			document.hidden ||
+			grid.rows < 1 ||
+			// Insert mode is for typing; a refill would hold up the next keystroke.
+			grid.mode !== 'normal'
+		) {
+			return;
+		}
+		if (this.motion || this.deferredScroll || !this.scrolling.warm()) {
+			this.warmTimer = setTimeout(this.warm, EditorRenderer.warmDelay);
+		}
+	};
 }

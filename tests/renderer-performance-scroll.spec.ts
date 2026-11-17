@@ -275,7 +275,8 @@ test('horizontal touchpad noise retains lookahead without vertical scrolling or 
 		localStorage.setItem('nido.lineHeight', '18');
 	});
 	await page.goto(`${origin}?view=app`);
-	await page.clock.runFor(32);
+	// The first layout refills both scroll caches once idle; let that finish before counting.
+	await page.clock.runFor(300);
 	await page.evaluate(() => {
 		const api = window.nido;
 		let fraction = 0;

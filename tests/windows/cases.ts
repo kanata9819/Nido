@@ -35,6 +35,7 @@ export const windowsBaselineCases = [
 	'fast wheel up moves when cached history is shorter than a wheel step',
 	'fast wheel up keeps moving while input exhausts cached history',
 	'touchpad down keeps moving while an upward refill is pending',
+	'after a jump the scroll caches fill while idle, so the next flick does not stall',
 	'touchpad up keeps moving while a refill is pending',
 	'cached editor text preserves its pixels at 100% scale',
 	'cached editor text preserves its pixels at 125% scale',
