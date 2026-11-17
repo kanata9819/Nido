@@ -282,15 +282,15 @@ export async function gitSyncState(
 	};
 }
 
-/** A remote action from the Git panel. Resolve the displayed destination again before using it. */
+/** Run a remote action, returning the number of commits added to the branch by a pull. */
 export async function gitRemoteAction(
 	cwd: string,
 	action: GitRemoteAction,
 	expected: GitRemoteInfo
-): Promise<void> {
+): Promise<number | undefined> {
 	if (action === 'fetch') {
 		await git(cwd, ['fetch', '--all']);
-		return;
+		return undefined;
 	}
 	const target = await gitRemoteInfo(cwd);
 	if (
@@ -306,17 +306,27 @@ export async function gitRemoteAction(
 	}
 	if (action === 'push') {
 		await pushBranch(cwd, target);
-	} else {
-		await git(cwd, [
-			'pull',
-			'--ff-only',
-			'--no-rebase',
-			'--no-autostash',
-			'--',
-			target.remote,
-			target.upstream
-		]);
+		return undefined;
 	}
+	const branch = `refs/heads/${target.branch}`;
+	const before = (await git(cwd, ['rev-parse', '--verify', '--quiet', branch], true)).trim();
+	await git(cwd, [
+		'pull',
+		'--ff-only',
+		'--no-rebase',
+		'--no-autostash',
+		'--',
+		target.remote,
+		target.upstream
+	]);
+	if (before) {
+		// The pull has already changed the branch. Refresh the editor even if counting fails.
+		const count = await git(cwd, ['rev-list', '--count', `${before}..${branch}`, '--']).catch(
+			() => undefined
+		);
+		return count === undefined ? undefined : Number(count.trim());
+	}
+	return undefined;
 }
 
 /**

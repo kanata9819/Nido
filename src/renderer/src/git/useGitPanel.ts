@@ -8,7 +8,7 @@ import {
 	type Dispatch,
 	type SetStateAction
 } from 'react';
-import type { GitChange, GitRemoteAction, GitStatus } from '../../../shared/types';
+import type { GitChange, GitRemoteAction, GitRemoteInfo, GitStatus } from '../../../shared/types';
 import { useGitDiff } from './useGitDiff';
 
 /** The outcome of the last remote action, shown as a banner: an English message and its values. */
@@ -93,9 +93,9 @@ export function useGitPanel({
 	}
 
 	/** Run one Git action at a time, then reload the status and pass it to `after`. */
-	async function run(
-		action: () => Promise<unknown>,
-		after?: (next: GitStatus) => void
+	async function run<T>(
+		action: () => Promise<T>,
+		after?: (next: GitStatus, result: T) => void
 	): Promise<void> {
 		if (locked.current) {
 			return;
@@ -106,9 +106,9 @@ export function useGitPanel({
 		setNotice('');
 		setRemoteNotice(undefined);
 		try {
-			await action();
+			const result = await action();
 			const next = await refresh();
-			after?.(next);
+			after?.(next, result);
 		} catch (failure) {
 			setError(String(failure));
 		} finally {
@@ -182,7 +182,8 @@ export function useGitPanel({
 		if (target) {
 			void run(
 				() => window.nido.gitRemoteAction(workspaceId, action, target),
-				(next) => setRemoteNotice(remoteResult(action, target.upstream, before, next))
+				(next, pulled) =>
+					setRemoteNotice(remoteResult(action, target, before, next, pulled))
 			);
 		}
 	}
@@ -211,14 +212,15 @@ export function useGitPanel({
 /** What a finished push, pull or fetch did, from the sync state before and after it. */
 function remoteResult(
 	action: GitRemoteAction,
-	upstream: string,
+	target: GitRemoteInfo,
 	before: GitStatus['sync'],
-	next: GitStatus
+	next: GitStatus,
+	pulled: number | undefined
 ): GitRemoteNotice {
 	const sync = next.sync;
 	const destination = sync?.upstream || '';
 	if (action === 'push') {
-		if (!upstream) {
+		if (!target.upstream) {
 			return {
 				message: destination ? 'Published {branch} to {upstream}.' : 'Published {branch}.',
 				values: { branch: next.branch, upstream: destination }
@@ -239,14 +241,22 @@ function remoteResult(
 				};
 	}
 	if (action === 'pull') {
-		const count = before?.behind ?? 0;
+		if (pulled === undefined) {
+			return { message: 'Pull complete.', values: {} };
+		}
+		const count = pulled;
 		return count
 			? {
 					message:
 						count === 1
 							? 'Pulled 1 commit from {upstream}.'
 							: 'Pulled {count} commits from {upstream}.',
-					values: { count, upstream: destination }
+					values: {
+						count,
+						upstream:
+							destination ||
+							`${target.remote}/${target.upstream.slice('refs/heads/'.length)}`
+					}
 				}
 			: { message: 'Pull complete. Already up to date.', values: {} };
 	}

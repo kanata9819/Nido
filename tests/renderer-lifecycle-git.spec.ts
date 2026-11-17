@@ -106,13 +106,21 @@ test('Git shows remote actions and refreshes the upstream after publishing', asy
 		await list.focus();
 		await page.keyboard.press(key);
 		await expect.poll(async () => (await remoteCalls()).at(-1)).toBe(action);
-		await page.evaluate(() => window.rendererTest.settle('gitRemoteAction', 0, undefined));
+		await page.evaluate(
+			(result) => window.rendererTest.settle('gitRemoteAction', 0, result),
+			action === 'pull' ? 2 : undefined
+		);
 		await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
 		await page.evaluate((next) => window.rendererTest.settle('gitStatus', 0, next), {
 			...status,
 			remote: tracked
 		});
 		await expect(fetch).toBeEnabled();
+		if (action === 'pull') {
+			await expect(panel.getByRole('status')).toHaveText(
+				'Pulled 2 commits from origin/main.'
+			);
+		}
 	}
 	expect(await remoteCalls()).toEqual(['push', 'push', 'fetch', 'pull', 'push']);
 });
