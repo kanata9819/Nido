@@ -113,18 +113,24 @@ export default function WorkspaceSearchResults({
 					role="option"
 					aria-selected={row.index === selection}
 					className={`${row.index === selection ? styles.selected : ''} ${replace && excluded.has(row.index) ? styles.excluded : ''}`}
-					onClick={() => {
+					onClick={(event) => {
 						if (locked.current) {
 							return;
 						}
 						if (!replace) {
-							open(row.index);
+							if (event.detail <= 1) {
+								open(row.index);
+							}
 							return;
 						}
 						setSelection(row.index);
 						results.current?.focus();
 					}}
-					onDoubleClick={() => open(row.index)}
+					onDoubleClick={() => {
+						if (replace && !locked.current) {
+							open(row.index);
+						}
+					}}
 				>
 					{replace && (
 						<span aria-label={t(excluded.has(row.index) ? 'Excluded' : 'Included')}>

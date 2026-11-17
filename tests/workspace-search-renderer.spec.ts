@@ -12,12 +12,14 @@ test.beforeAll(async ({ browser }) => {
 });
 test.afterAll(async () => server?.close());
 
-async function open(page: Page, language = 'en'): Promise<void> {
+async function open(page: Page, language = 'en', deferOpenFile = false): Promise<void> {
 	await page.addInitScript((language) => {
 		localStorage.setItem('nido.language', language);
 		localStorage.setItem('nido.animations', 'false');
 	}, language);
-	await page.goto(`${origin}?view=app&defer=searchText,previewReplacement,applyReplacement`);
+	await page.goto(
+		`${origin}?view=app&defer=searchText,previewReplacement,applyReplacement${deferOpenFile ? ',openFile' : ''}`
+	);
 	await expect(
 		page.getByRole('textbox', {
 			name: language === 'ja' ? 'Neovim入力' : 'Neovim input',
@@ -26,16 +28,20 @@ async function open(page: Page, language = 'en'): Promise<void> {
 	).toBeFocused();
 	await page.keyboard.press('Control+Shift+f');
 }
-async function matches(page: Page): Promise<void> {
+async function matches(page: Page, query?: string): Promise<void> {
 	await expect
 		.poll(() =>
 			page.evaluate(
-				() =>
-					window.rendererTest?.pending.filter((call) => call.method === 'searchText')
-						.length
+				(query) =>
+					window.rendererTest?.pending.some(
+						(call) =>
+							call.method === 'searchText' &&
+							(query === undefined || call.args[1] === query)
+					),
+				query
 			)
 		)
-		.toBeGreaterThan(0);
+		.toBe(true);
 	await page.evaluate(() => {
 		// Settle the latest request; older requests must not replace it.
 		const pending = window.rendererTest.pending.filter((call) => call.method === 'searchText');
@@ -50,6 +56,32 @@ async function matches(page: Page): Promise<void> {
 			});
 	});
 }
+
+test('double-clicking a result opens it once in both search modes', async ({ page }) => {
+	await open(page, 'en', true);
+	await page.keyboard.press('i');
+	await page.getByRole('textbox', { name: 'Search in files', exact: true }).fill('joke');
+	await matches(page, 'joke');
+	const row = page.getByRole('listbox', { name: 'Search results' }).getByRole('option').first();
+	const opens = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'openFile')
+				.map((call) => call.args)
+		);
+	await row.dblclick();
+	await expect.poll(opens).toEqual([['alpha', 'src/first.txt', 1, 1]]);
+
+	// Run the same gesture in replace mode, where a single click just selects the row.
+	await page.getByRole('button', { name: 'Replace', exact: true }).click();
+	await row.click();
+	expect(await opens()).toHaveLength(1);
+	await row.dblclick();
+	await expect.poll(opens).toEqual([
+		['alpha', 'src/first.txt', 1, 1],
+		['alpha', 'src/first.txt', 1, 1]
+	]);
+});
 
 test('search and replacement complete using Vim keys without arrows or mouse', async ({ page }) => {
 	await open(page);
