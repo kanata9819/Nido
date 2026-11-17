@@ -1869,7 +1869,7 @@ test('Markdown preview links open workspace files in the editor, jump to heading
 				path: '/alpha/docs/guide.md',
 				text
 			}),
-		`# Guide\n\n[Setup](setup.md) · [Main](../src/main.ts#L12) · [Usage](#usage) · [Site](https://example.com) · [Mail](mailto:me@example.com)\n\n${filler}\n\n## Usage\n\nEnd.`
+		`# Guide\n\n[Setup](setup.md) · [Main](../src/main.ts#L12) · [Usage](#usage) · [Second Usage](#usage-2) · [Second Usage-1](#usage-1-1) · [Site](https://example.com) · [Mail](mailto:me@example.com)\n\n## Usage\n\n## Usage-1\n\n## Usage\n\n${filler}\n\n## Usage-1\n\nEnd.`
 	);
 	await expect(content.getByRole('heading', { name: 'Guide' })).toBeVisible();
 	const opened = (): Promise<unknown[][]> =>
@@ -1898,8 +1898,19 @@ test('Markdown preview links open workspace files in the editor, jump to heading
 		.toEqual(['alpha', 'docs/../src/main.ts', 12]);
 	await expect(content.getByRole('alert')).toHaveCount(0);
 
-	await content.getByRole('link', { name: 'Usage' }).click();
-	await expect(content.getByRole('heading', { name: 'Usage' })).toBeInViewport();
+	await content.getByRole('link', { name: 'Usage', exact: true }).click();
+	await expect(
+		content.getByRole('heading', { name: 'Usage', exact: true }).first()
+	).toBeInViewport();
+
+	const headings = content.getByRole('heading');
+	await expect
+		.poll(() => headings.evaluateAll((items) => items.map(({ id }) => id)))
+		.toEqual(['guide', 'usage', 'usage-1', 'usage-2', 'usage-1-1']);
+	await content.getByRole('link', { name: 'Second Usage', exact: true }).click();
+	await expect(content.locator('#usage-2')).toBeInViewport();
+	await content.getByRole('link', { name: 'Second Usage-1', exact: true }).click();
+	await expect(content.locator('#usage-1-1')).toBeInViewport();
 
 	// A mailto: link is not followed; it is plain text.
 	await expect(content.getByRole('link', { name: 'Mail' })).toHaveCount(0);
