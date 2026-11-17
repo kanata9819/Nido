@@ -524,6 +524,61 @@ test('Explorer reveals the current editor file through collapsed parents without
 	).toEqual(['', 'src', 'src/nested']);
 });
 
+for (const { root, separator } of [
+	{ root: 'C:\\', separator: '\\' },
+	{ root: '/', separator: '/' }
+]) {
+	test('Explorer reveals the current file from workspace root ' + root, async ({ page }) => {
+		await page.goto(origin + '?view=app&defer=restoreWorkspaces,files');
+		const pendingFiles = (): Promise<unknown[]> =>
+			page.evaluate(() =>
+				window.rendererTest.pending
+					.filter(({ method }) => method === 'files')
+					.map(({ args }) => args[1])
+			);
+		await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+		await page.evaluate(
+			(root) =>
+				window.rendererTest.settle('restoreWorkspaces', 0, {
+					workspaces: [{ id: 'alpha', root, name: 'Root' }],
+					active: 'alpha',
+					errors: []
+				}),
+			root
+		);
+		await expect.poll(pendingFiles).toEqual(['']);
+		const file = ['src', 'Main.ts'].join(separator);
+		await page.evaluate((name) => {
+			window.rendererTest.emit({
+				type: 'statePatch',
+				id: 'alpha',
+				state: {
+					buffers: [{ id: 1, name, modified: false }],
+					current: 1
+				}
+			});
+			window.rendererTest.settle('files', 0, [{ name: 'src', path: 'src', directory: true }]);
+		}, root + file);
+		await expect.poll(pendingFiles).toEqual(['src']);
+		await page.evaluate(
+			(path) =>
+				window.rendererTest.settle('files', 0, [
+					{ name: 'Main.ts', path, directory: false }
+				]),
+			file
+		);
+		const tree = page.getByRole('tree', { name: 'Project files' });
+		await expect(tree.getByRole('treeitem', { name: 'src', exact: true })).toHaveAttribute(
+			'aria-expanded',
+			'true'
+		);
+		await expect(tree.getByRole('treeitem', { name: 'Main.ts', exact: true })).toHaveAttribute(
+			'aria-selected',
+			'true'
+		);
+	});
+}
+
 test('Explorer cancels stale file reveals and leaves manual selection alone for unchanged or external files', async ({
 	page
 }) => {

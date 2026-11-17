@@ -118,6 +118,8 @@ export function useRevealFile({
 		}
 		let cancelled = false;
 		const listings = { request, isCurrent, forget };
+		// A drive or filesystem root already ends in a separator.
+		const base = root.replace(/[\\/]+$/, '');
 		const revealFile = async (): Promise<void> => {
 			const parts = path.split(/[\\/]/);
 			const parents: string[] = [];
@@ -128,7 +130,7 @@ export function useRevealFile({
 					return;
 				}
 				const entry = files.find((entry) => {
-					const relative = explorerFilePath(root, `${root}/${entry.path}`);
+					const relative = explorerFilePath(root, `${base}/${entry.path}`);
 					return relative.split(/[\\/]/)[index] === part;
 				});
 				if (!entry) {
