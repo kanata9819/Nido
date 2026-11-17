@@ -70,13 +70,28 @@ test('after a jump the scroll caches fill while idle, so the next flick does not
 				}
 			)._invokeHandlers;
 			const prefetches: boolean[] = [];
-			Object.assign(globalThis, { prefetches });
+			const activity = { running: 0, last: Date.now() };
+			Object.assign(globalThis, { prefetches, prefetchActivity: activity });
 			const prefetch = handlers.get('nido:prefetchScroll')!;
-			handlers.set('nido:prefetchScroll', (...args) => {
+			handlers.set('nido:prefetchScroll', async (...args) => {
 				prefetches.push(args[2] as boolean);
-				return prefetch(...args);
+				activity.running++;
+				try {
+					return await prefetch(...args);
+				} finally {
+					activity.running--;
+					activity.last = Date.now();
+				}
 			});
 		});
+		// The first layout refills both caches once idle; wait until that has finished.
+		const refillsSettled = (): Promise<boolean> =>
+			running.evaluate(() => {
+				const { running, last } = (
+					globalThis as unknown as { prefetchActivity: { running: number; last: number } }
+				).prefetchActivity;
+				return running === 0 && Date.now() - last > 500;
+			});
 		const prefetches = (): Promise<boolean[]> =>
 			running.evaluate(() => (globalThis as unknown as { prefetches: boolean[] }).prefetches);
 		const resetPrefetches = (): Promise<void> =>
@@ -92,7 +107,7 @@ test('after a jump the scroll caches fill while idle, so the next flick does not
 			':lua do local m = require("nido_scroll"); local p = m.prefetch; m.prefetch = function(...) local t = vim.uv.hrtime(); while vim.uv.hrtime() - t < 3e8 do end; return p(...) end end'
 		);
 		await page.keyboard.press('Enter');
-		await page.waitForTimeout(300);
+		await expect.poll(refillsSettled, { timeout: 10000 }).toBe(true);
 		await resetPrefetches();
 
 		// Typing does not refill: the strips would hold up the next keystroke.
