@@ -37,6 +37,23 @@ function FileHeader({
 	const active = workspace.id;
 	const currentIndex = buffers.findIndex((buffer) => buffer.id === currentId);
 	const current = buffers[currentIndex];
+	// File names open more than once (index.ts in several folders) get their folder beside them.
+	const nameCounts = new Map<string, number>();
+	for (const buffer of buffers) {
+		if (buffer.name) {
+			const name = filename(buffer.name);
+			nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+		}
+	}
+	const folderHint = (name: string): string | undefined =>
+		(nameCounts.get(filename(name)) ?? 0) > 1
+			? name.split(/[\\/]/).slice(-2, -1)[0]
+			: undefined;
+	/** Close a file's tab; the button that was clicked goes away, so focus returns to the editor. */
+	const closeTab = (buffer: number): void => {
+		run(window.nido.closeBuffer(active, buffer));
+		focusEditor();
+	};
 	const selectedTab = useRef<HTMLDivElement>(null);
 	// The tab being dragged; a tab can only be dropped within its own workspace.
 	const draggedTab = useRef<{ workspace: string; buffer: number } | null>(null);
@@ -81,6 +98,18 @@ function FileHeader({
 									setDropTarget(null);
 								}
 							}}
+							// A middle click closes the tab, as in browsers and other editors.
+							onMouseDown={(event) => {
+								if (event.button === 1) {
+									event.preventDefault();
+								}
+							}}
+							onAuxClick={(event) => {
+								if (event.button === 1) {
+									event.preventDefault();
+									closeTab(buffer.id);
+								}
+							}}
 							onDrop={(event) => {
 								const dragged = draggedTab.current;
 								draggedTab.current = null;
@@ -123,6 +152,11 @@ function FileHeader({
 								>
 									{buffer.name ? filename(buffer.name) : t('[Untitled]')}
 								</span>
+								{buffer.name && folderHint(buffer.name) && (
+									<small className={styles.tabFolder}>
+										{folderHint(buffer.name)}
+									</small>
+								)}
 								<DiagnosticBadges decoration={decoration} />
 								{decoration?.code && (
 									<span
@@ -145,7 +179,7 @@ function FileHeader({
 								aria-label={t('Close file {name}', {
 									name: buffer.name ? filename(buffer.name) : t('[Untitled]')
 								})}
-								onClick={() => run(window.nido.closeBuffer(active, buffer.id))}
+								onClick={() => closeTab(buffer.id)}
 							>
 								<X size={12} />
 							</button>
