@@ -1,10 +1,24 @@
 import { onNidoEvent } from '../nidoEvents';
 import { useErrorMessage, useI18n } from '../i18n';
-import { memo, useEffect, useRef, useState } from 'react';
+import { Children, isValidElement, memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import prose from '../ui/Prose.module.css';
 import styles from './MarkdownPreview.module.css';
+import { headingSlug, resolveMarkdownLink } from './markdownLinks';
+
+/** The text of rendered Markdown, for a heading's id. */
+function textOf(node: ReactNode): string {
+	return Children.toArray(node)
+		.map((child) =>
+			typeof child === 'string' || typeof child === 'number'
+				? String(child)
+				: isValidElement<{ children?: ReactNode }>(child)
+					? textOf(child.props.children)
+					: ''
+		)
+		.join('');
+}
 
 export default memo(MarkdownPreview);
 
@@ -14,10 +28,13 @@ export default memo(MarkdownPreview);
  */
 function MarkdownPreview({
 	workspaceId,
+	root,
 	onClose,
 	focusEditor
 }: {
 	workspaceId: string;
+	/** The workspace's folder, which links to other files are resolved in. */
+	root: string;
 	onClose: () => void;
 	focusEditor: () => void;
 }): React.JSX.Element {
@@ -25,6 +42,9 @@ function MarkdownPreview({
 	const errorMessage = useErrorMessage();
 	const [source, setSource] = useState<string>();
 	const [error, setError] = useState('');
+	// The document's path, for relative links, and why the last link could not be followed.
+	const [path, setPath] = useState('');
+	const [linkError, setLinkError] = useState('');
 	const body = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		let cancelled = false;
@@ -49,6 +69,7 @@ function MarkdownPreview({
 				.then((value) => {
 					if (!cancelled && current === generation) {
 						token = value.token;
+						setPath(value.path);
 						if (value.text !== undefined) {
 							setSource(value.text);
 						}
@@ -111,6 +132,30 @@ function MarkdownPreview({
 			unsubscribe();
 		};
 	}, [workspaceId]);
+	// Heading ids, numbered from the top for each render as GitHub does for repeated headings.
+	const headingIds = new Map<string, number>();
+	const headingId = (children: ReactNode): string => {
+		const slug = headingSlug(textOf(children));
+		const seen = headingIds.get(slug) ?? 0;
+		headingIds.set(slug, seen + 1);
+		return seen ? `${slug}-${seen}` : slug;
+	};
+	/** Follow a link: a web page in the browser, a heading here, a workspace file in the editor. */
+	const follow = (href: string): void => {
+		const link = resolveMarkdownLink(href, path, root);
+		setLinkError('');
+		const fail = (reason: unknown): void => setLinkError(String(reason));
+		if (link.kind === 'web') {
+			void window.nido.openDocumentation(link.url).catch(fail);
+		} else if (link.kind === 'heading') {
+			const target = [...(body.current?.querySelectorAll('[id]') ?? [])].find(
+				(element) => element.id.toLowerCase() === link.id
+			);
+			target?.scrollIntoView({ block: 'start' });
+		} else if (link.kind === 'file') {
+			void window.nido.openFile(workspaceId, link.path, link.line).then(focusEditor, fail);
+		}
+	};
 	return (
 		<section className={styles.pane} aria-label={t('Markdown preview')}>
 			<header>
@@ -161,6 +206,11 @@ function MarkdownPreview({
 				}}
 			>
 				<article className={prose.prose}>
+					{linkError && (
+						<p role="alert" className={styles.linkError}>
+							{errorMessage(linkError)}
+						</p>
+					)}
 					{error ? (
 						<p role="alert">{errorMessage(error)}</p>
 					) : source === undefined ? (
@@ -171,15 +221,20 @@ function MarkdownPreview({
 							skipHtml
 							components={{
 								img: ({ alt }) => <span>{alt}</span>,
+								h1: ({ children }) => <h1 id={headingId(children)}>{children}</h1>,
+								h2: ({ children }) => <h2 id={headingId(children)}>{children}</h2>,
+								h3: ({ children }) => <h3 id={headingId(children)}>{children}</h3>,
+								h4: ({ children }) => <h4 id={headingId(children)}>{children}</h4>,
+								h5: ({ children }) => <h5 id={headingId(children)}>{children}</h5>,
+								h6: ({ children }) => <h6 id={headingId(children)}>{children}</h6>,
 								a: ({ href, children }) =>
-									href && /^https?:\/\//i.test(href) ? (
+									href &&
+									resolveMarkdownLink(href, path, root).kind !== 'none' ? (
 										<a
 											href={href}
 											onClick={(event) => {
 												event.preventDefault();
-												void window.nido
-													.openDocumentation(href)
-													.catch((error) => setError(String(error)));
+												follow(href);
 											}}
 										>
 											{children}

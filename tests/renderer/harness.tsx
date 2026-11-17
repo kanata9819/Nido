@@ -342,6 +342,7 @@ function render(updates: Partial<HarnessProps>): void {
 			root.render(
 				<MarkdownPreview
 					workspaceId={props.workspaceId}
+					root="/alpha"
 					onClose={noop}
 					focusEditor={noop}
 				/>

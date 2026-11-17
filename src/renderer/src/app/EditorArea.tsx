@@ -104,6 +104,7 @@ export default function EditorArea(props: Props): React.JSX.Element {
 						<MarkdownPreview
 							key={active}
 							workspaceId={active}
+							root={workspace?.root ?? ''}
 							onClose={props.closeMarkdown}
 							focusEditor={props.focusEditor}
 						/>
