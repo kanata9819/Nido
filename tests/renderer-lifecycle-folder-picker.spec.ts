@@ -38,6 +38,49 @@ test('workspace picker reaches connection and folder actions without a session t
 	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
 });
 
+test('confirming IME text in the folder address does not browse or open a workspace', async ({
+	page
+}) => {
+	await page.goto(origin + '?view=app&defer=browseFolders,createWorkspace');
+	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+	await page.keyboard.press('Control+Shift+n');
+	const list = page.getByRole('listbox', { name: 'Folders', exact: true });
+	const address = page.getByRole('textbox', { name: 'Folder path', exact: true });
+	const actions = (): Promise<string[]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter(({ method }) => ['browseFolders', 'createWorkspace'].includes(method))
+				.map(({ method }) => method)
+		);
+	await expect.poll(actions).toEqual(['browseFolders']);
+	await page.evaluate(() =>
+		window.rendererTest.settle('browseFolders', 0, { path: '/alpha', parent: '/', folders: [] })
+	);
+	await expect(list).toHaveAttribute('aria-busy', 'false');
+	await address.fill('/日本語');
+	for (const event of [
+		{ isComposing: true },
+		{ keyCode: 229 },
+		{ isComposing: true, ctrlKey: true }
+	]) {
+		await address.dispatchEvent('keydown', { key: 'Enter', ...event });
+		expect(await actions()).toEqual(['browseFolders']);
+		await expect(address).toBeFocused();
+	}
+	await address.press('Enter');
+	await expect.poll(actions).toEqual(['browseFolders', 'browseFolders']);
+	await page.evaluate(() =>
+		window.rendererTest.settle('browseFolders', 0, {
+			path: '/日本語',
+			parent: '/',
+			folders: []
+		})
+	);
+	await expect(list).toBeFocused();
+	await page.keyboard.press('Control+Enter');
+	await expect.poll(actions).toEqual(['browseFolders', 'browseFolders', 'createWorkspace']);
+});
+
 test('going up from a Windows drive root lists the drives and opens another one', async ({
 	page
 }) => {

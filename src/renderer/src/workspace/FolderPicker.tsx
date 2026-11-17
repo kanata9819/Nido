@@ -100,6 +100,9 @@ export default function FolderPicker({
 	}
 
 	function pickerKeyDown(event: React.KeyboardEvent): void {
+		if (event.nativeEvent.isComposing || event.keyCode === 229) {
+			return;
+		}
 		if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'f') {
 			event.preventDefault();
 			toggleFavorites();
@@ -122,6 +125,7 @@ export default function FolderPicker({
 			event.altKey ||
 			event.metaKey ||
 			event.nativeEvent.isComposing ||
+			event.keyCode === 229 ||
 			busy ||
 			(event.target as HTMLElement).closest('button') ||
 			!listKeys.includes(event.key)
@@ -178,6 +182,9 @@ export default function FolderPicker({
 				disabled={busy}
 				onChange={(event) => browser.setPath(event.target.value)}
 				onKeyDown={(event) => {
+					if (event.nativeEvent.isComposing || event.keyCode === 229) {
+						return;
+					}
 					if (event.key === 'Enter' && !event.ctrlKey) {
 						event.preventDefault();
 						void browser.browse(path);
