@@ -38,6 +38,8 @@ test('explorer commands create, rename, copy, move and recycle files from the ke
 		const select = async (name: string): Promise<void> => {
 			const item = tree.getByRole('treeitem', { name, exact: true });
 			await item.click();
+			// The click must land on this row, not on one that moved under the pointer.
+			await expect(item).toHaveAttribute('aria-selected', 'true');
 			if ((await item.getAttribute('aria-expanded')) === null) {
 				await expect(page.getByRole('tab', { name, exact: true })).toBeVisible();
 				await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
@@ -84,9 +86,11 @@ test('explorer commands create, rename, copy, move and recycle files from the ke
 		await expect
 			.poll(() => readSavedFile(join(workspace, 'nested/renamed.txt')))
 			.toBe('hello!\n');
-		await expect(
-			tree.getByRole('treeitem', { name: 'renamed.txt', exact: true })
-		).toBeVisible();
+		// Wait for the tree to show the move: the root row of renamed.txt satisfied a plain
+		// visibility check too, and its later removal could shift the next row being clicked.
+		const renamed = tree.getByRole('treeitem', { name: 'renamed.txt', exact: true });
+		await expect(renamed).toHaveCount(1);
+		await expect(renamed).toHaveAttribute('aria-level', '2');
 		await select('copy.txt');
 		await page.keyboard.press('Delete');
 		await expect(menu).toContainText('Move copy.txt to the recycle bin?');
