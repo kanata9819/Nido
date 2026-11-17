@@ -105,6 +105,9 @@ test('Time Machine ignores late previews and keeps restore disabled until the se
 	await expect(page.getByRole('alert')).toHaveText(
 		'The file changed. Refresh the preview before restoring.'
 	);
+	// The failure was about that version; selecting another one clears it.
+	await list.press('j');
+	await expect(page.getByRole('alert')).toHaveCount(0);
 	expect(errors).toEqual([]);
 });
 

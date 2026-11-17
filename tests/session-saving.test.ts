@@ -444,6 +444,32 @@ test('line endings normalize only in memory until saved, preserve content and su
 	}
 });
 
+test("the current file's encoding is published, with its byte order mark", async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-encoding-'));
+	let session: Session | undefined;
+	try {
+		await writeFile(join(root, 'plain.txt'), 'caf\u00e9\n');
+		await writeFile(join(root, 'bom.txt'), '\ufeffhello\n');
+		// é in Latin-1 is not valid UTF-8, so Neovim falls back to latin1.
+		await writeFile(join(root, 'latin.txt'), Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
+		session = await Session.create(root, () => {});
+		const settle = (): Promise<unknown> =>
+			session!.client.request('nvim_exec_lua', ['return 1', []]);
+		for (const [file, encoding] of [
+			['plain.txt', 'utf-8'],
+			['bom.txt', 'utf-8+bom'],
+			['latin.txt', 'latin1']
+		]) {
+			await session.openFile(file);
+			await settle();
+			assert.equal(session.state.fileEncoding, encoding, file);
+		}
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('save and save all wait for pending committed input', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-save-input-order-'));
 	try {

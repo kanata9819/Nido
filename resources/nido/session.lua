@@ -260,6 +260,10 @@ publish = function()
         / math.max(1, vim.api.nvim_buf_line_count(0) - (vim.fn.line('w$') - vim.fn.line('w0') + 1)) + 0.5)),
       current = vim.api.nvim_get_current_buf(),
       lineEnding = ending or vim.NIL,
+      -- The encoding the file is read and written in, as 'fileencoding' says (empty means
+      -- 'encoding'), and whether it starts with a byte order mark.
+      fileEncoding = (vim.bo.fileencoding ~= '' and vim.bo.fileencoding or vim.o.encoding)
+        .. (vim.bo.bomb and '+bom' or ''),
       indentation = vim.g.nido and require('nido_indentation').detect() or vim.NIL,
       lsp = clients,
       lspProgress = tasks,

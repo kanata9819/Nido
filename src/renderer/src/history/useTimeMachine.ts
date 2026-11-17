@@ -147,5 +147,11 @@ export function useTimeMachine({
 		}
 	};
 
-	return { data, selected, select: setSelected, busy, error, current, refresh, restore };
+	// A failed restore was about the version selected then; choosing another one clears it.
+	const select = useCallback((id: string): void => {
+		setError('');
+		setSelected(id);
+	}, []);
+
+	return { data, selected, select, busy, error, current, refresh, restore };
 }

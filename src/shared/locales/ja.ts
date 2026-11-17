@@ -738,6 +738,7 @@ export const japanese: Record<string, string> = {
 	'Plain text': 'プレーンテキスト',
 	'Rust language server connection': 'Rust言語サーバーの接続',
 	'Rust LSP: not connected': 'Rust LSP：未接続',
+	'File encoding': '文字コード',
 	'Line endings': '改行コード',
 	'Convert line endings (save to apply to disk)': '改行コードを変換（保存するとディスクに反映）',
 	Mixed: '混在',

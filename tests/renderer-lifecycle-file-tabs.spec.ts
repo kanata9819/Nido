@@ -340,3 +340,30 @@ test('file tab shortcuts leave a terminal session focused', async ({ page }) => 
 		)
 	).toEqual([]);
 });
+
+test("the status bar names the current file's real encoding, with a byte order mark", async ({
+	page
+}) => {
+	await showFileTabs(page);
+	const encoding = page.locator('footer').getByTitle('File encoding');
+	// Before Neovim reports one, and for UTF-8, the label is UTF-8.
+	await expect(encoding).toHaveText('UTF-8');
+	for (const [reported, label] of [
+		['latin1', 'Latin-1'],
+		['utf-8+bom', 'UTF-8 BOM'],
+		['cp932', 'Shift_JIS'],
+		['euc-kr', 'EUC-KR'],
+		['utf-8', 'UTF-8']
+	]) {
+		await page.evaluate(
+			(fileEncoding) =>
+				window.rendererTest.emit({
+					type: 'statePatch',
+					id: 'alpha',
+					state: { fileEncoding }
+				}),
+			reported
+		);
+		await expect(encoding).toHaveText(label);
+	}
+});
