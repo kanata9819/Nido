@@ -634,3 +634,62 @@ return {ordinaryEditWrites=2, unaffectedRows=2997}
 		await session.stop();
 	}
 });
+
+test('bracket guides are published only with the final text offset and never for prefetched views', async () => {
+	const session = await Session.create(process.cwd(), () => {});
+	try {
+		await session.attach(100, 30);
+		await session.client.request('nvim_exec_lua', [
+			`local api,brackets,scroll=vim.api,require('nido_brackets'),require('nido_scroll')
+local buffer=api.nvim_get_current_buf()
+local lines={}
+-- Four-digit line numbers widen the statuscolumn while a redraw is under way.
+for i=1,1000 do lines[#lines+1]='// pad '..i end
+vim.list_extend(lines,{'fn main() {','    if ready {','        run();','    }','}'})
+for i=1,200 do lines[#lines+1]='// tail '..i end
+api.nvim_buf_set_lines(buffer,0,-1,false,lines)
+vim.bo[buffer].shiftwidth=4
+api.nvim_win_set_cursor(0,{1003,8})
+vim.cmd('normal! zz')
+api.nvim_exec_autocmds('TextChanged',{buffer=buffer})
+assert(vim.wait(10000,function() return brackets.ready(buffer) end,5))
+vim.cmd.redraw({bang=true})
+local notify=vim.rpcnotify
+local published={}
+vim.rpcnotify=function(channel,name,value,...)
+  if name=='nido:bracket_guides' then published[#published+1]=vim.deepcopy(value) end
+  return notify(channel,name,value,...)
+end
+local function textoff() return vim.fn.getwininfo(api.nvim_get_current_win())[1].textoff end
+local ok,err=pcall(function()
+  -- Setting the option again makes Neovim estimate the column before it grows back.
+  vim.wo.statuscolumn=scroll.column
+  vim.cmd.redraw({bang=true})
+  assert(#published>0,'A full redraw publishes guides')
+  for _,guides in ipairs(published) do
+    for _,guide in ipairs(guides) do
+      local indent=guide.column-textoff()
+      assert(indent>=0 and indent%4==0,
+        ('A guide at column %d used another text offset than %d'):format(guide.column,textoff()))
+    end
+  end
+  -- A prefetch draws other views for the renderer's cache; only the real view's guides go out.
+  vim.cmd.redraw({bang=true})
+  local current=vim.deepcopy(published[#published])
+  published={}
+  local view=vim.fn.winsaveview()
+  scroll.prefetch(true)
+  scroll.prefetch(false)
+  assert(vim.deep_equal(vim.fn.winsaveview(),view),'Prefetch restores the view')
+  for _,guides in ipairs(published) do
+    assert(vim.deep_equal(guides,current),'A prefetch published guides for another view')
+  end
+end)
+vim.rpcnotify=notify
+assert(ok,err)`,
+			[]
+		]);
+	} finally {
+		await session.stop();
+	}
+});

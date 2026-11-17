@@ -299,6 +299,10 @@ local function scroll_horizontal(columns)
   return true
 end
 
+--- Whether a prefetch is drawing views other than the real one. Bracket guides are not
+--- published for those views (nido_brackets), or they would show at the rows of another view.
+M.prefetching = false
+
 --- Draw rows beyond the view (below with `down`) so the renderer can cache them, then put the
 --- view back. `previous` continues from where the last call stopped; returns the next one.
 function M.prefetch(down, previous)
@@ -332,6 +336,7 @@ function M.prefetch(down, previous)
   local remaining = math.min(32, 256 - cached)
   local depth = cached
   local at_edge = false
+  M.prefetching = true
   local ok, err = pcall(function()
     if cached > 0 then
       vim.cmd.normal({args={cached .. string.char(down and 5 or 25)}, bang=true})
@@ -362,12 +367,21 @@ function M.prefetch(down, previous)
   end)
   -- Restoring a mouse-scrolled wrapped view must not reapply the keyboard cursor margin.
   vim.wo.scrolloff = 0
-  for index = #views, 1, -1 do
-    vim.fn.winrestview(views[index])
-    vim.cmd.redraw()
-  end
+  local restored, restore_err = pcall(function()
+    for index = #views, 1, -1 do
+      vim.fn.winrestview(views[index])
+      vim.cmd.redraw()
+    end
+  end)
+  -- The last redraw shows the real view again, so its guides are published.
+  M.prefetching = false
   vim.fn.winrestview(view)
   vim.cmd.redraw()
+  if not restored then
+    vim.wo.scrolloff = scrolloff
+    mouse_scrolloff = saved_mouse_scrolloff
+    error(restore_err)
+  end
   vim.wo.scrolloff = scrolloff
   mouse_scrolloff = saved_mouse_scrolloff
   if not ok then
