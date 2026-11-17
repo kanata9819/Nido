@@ -59,6 +59,33 @@ test('Git shows remote actions and refreshes the upstream after publishing', asy
 	await expect(panel.getByRole('button', { name: 'Push' })).toBeEnabled();
 	await expect(pull).toBeEnabled();
 	await expect(panel.getByText('origin/main', { exact: true })).toBeVisible();
+
+	// From the list, f fetches, p pulls and P pushes, as in lazygit.
+	const tracked = { ...remote, upstream: 'refs/heads/main' };
+	const list = page.getByRole('listbox', { name: 'Changed files' });
+	const remoteCalls = (): Promise<unknown[]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter(({ method }) => method === 'gitRemoteAction')
+				.map(({ args }) => args[1])
+		);
+	for (const [key, action] of [
+		['f', 'fetch'],
+		['p', 'pull'],
+		['Shift+P', 'push']
+	] as const) {
+		await list.focus();
+		await page.keyboard.press(key);
+		await expect.poll(async () => (await remoteCalls()).at(-1)).toBe(action);
+		await page.evaluate(() => window.rendererTest.settle('gitRemoteAction', 0, undefined));
+		await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+		await page.evaluate((next) => window.rendererTest.settle('gitStatus', 0, next), {
+			...status,
+			remote: tracked
+		});
+		await expect(fetch).toBeEnabled();
+	}
+	expect(await remoteCalls()).toEqual(['push', 'fetch', 'pull', 'push']);
 });
 
 test('Git shortcuts use the enabled state as soon as loading finishes', async ({ page }) => {
@@ -322,7 +349,7 @@ test('Git commit failures preserve the draft and it survives switching views', a
 	await page.getByText('Keyboard shortcuts', { exact: true }).click();
 	await expect(
 		page.getByText(
-			'j/k Select · s Stage · S Stage all · u Unstage · r Refresh · c Message · Esc Close',
+			'j/k Select · s Stage · S Stage all · u Unstage · r Refresh · c Message · f Fetch · p Pull · P Push · Esc Close',
 			{ exact: true }
 		)
 	).toBeVisible();

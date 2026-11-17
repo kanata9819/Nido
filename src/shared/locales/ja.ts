@@ -855,8 +855,8 @@ export const japanese: Record<string, string> = {
 	'Choose a branch with a remote first.': '先にリモートのあるブランチを選んでください。',
 	'Save unsaved editor changes before pulling.':
 		'プルする前にエディターの未保存の変更を保存してください。',
-	'j/k Select · s Stage · S Stage all · u Unstage · r Refresh · c Message · Esc Close':
-		'j/k：選択 · s：ステージ · S：すべてステージ · u：ステージを解除 · r：更新 · c：メッセージ · Esc：閉じる',
+	'j/k Select · s Stage · S Stage all · u Unstage · r Refresh · c Message · f Fetch · p Pull · P Push · Esc Close':
+		'j/k：選択 · s：ステージ · S：すべてステージ · u：ステージを解除 · r：更新 · c：メッセージ · f：フェッチ · p：プル · P：プッシュ · Esc：閉じる',
 	'Ctrl+H/L List / Diff · j/k Scroll diff · Ctrl+D/U Half page · Ctrl+F/B Page · g/G Top / Bottom · n/N Next / Previous change':
 		'Ctrl+H/L：一覧／差分 · j/k：差分をスクロール · Ctrl+D/U：半ページ · Ctrl+F/B：ページ · g/G：先頭／末尾 · n/N：次／前の変更',
 	'Saved files only · Changes cover the entire repository.':
