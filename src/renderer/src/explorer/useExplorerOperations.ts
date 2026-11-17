@@ -79,6 +79,9 @@ export function useExplorerOperations({
 		if (sourcePath === destinationPath) {
 			if (clipboard.cut) {
 				// Moving a file into the folder it is already in changes nothing.
+				if (operation) {
+					closeOperation();
+				}
 				return;
 			}
 			// Pasting beside the original must suggest a new name instead of overwriting it.

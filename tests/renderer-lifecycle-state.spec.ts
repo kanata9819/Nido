@@ -289,6 +289,37 @@ test('a failed file operation shows its reason without the IPC channel', async (
 	);
 });
 
+test('pasting a cut file in its own folder dismisses the Explorer command menu', async ({
+	page
+}) => {
+	await page.goto(origin + '?view=app&defer=files');
+	const tree = page.getByRole('tree', { name: 'Project files' });
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some(({ method }) => method === 'files')
+			)
+		)
+		.toBe(true);
+	await page.evaluate(() =>
+		window.rendererTest.settle('files', 0, [
+			{ name: 'note.txt', path: 'note.txt', directory: false }
+		])
+	);
+	await tree.getByRole('treeitem', { name: 'note.txt' }).click();
+	await tree.press('Control+x');
+	await tree.press(':');
+	const menu = page.getByRole('dialog', { name: 'Explorer commands' });
+	await menu.getByRole('button', { name: 'Paste p', exact: true }).click();
+	await expect(menu).toHaveCount(0);
+	await expect(tree).toBeFocused();
+	expect(
+		await page.evaluate(() =>
+			window.rendererTest.calls.filter(({ method }) => method === 'fileAction')
+		)
+	).toHaveLength(0);
+});
+
 test('Explorer requests reset their field and clear the previous validation error', async ({
 	page
 }) => {
