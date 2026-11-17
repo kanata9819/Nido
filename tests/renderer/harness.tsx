@@ -241,6 +241,10 @@ window.nido = new Proxy({} as NidoAPI, {
 				};
 			};
 		}
+		if (method === 'pathForFile') {
+			// Synchronous, like Electron's webUtils.getPathForFile.
+			return (file: File): string => `C:\\Users\\me\\Desktop\\${file.name}`;
+		}
 		return (...args: unknown[]): Promise<unknown> => {
 			calls.push({ method, args });
 			if (deferred.has(method)) {

@@ -11,5 +11,8 @@ test('a copy pasted beside its original gets " copy" before the extension, or af
 	assert.equal(copyName('.env.local', false), '.env copy.local');
 	// A folder's dots are part of its name.
 	assert.equal(copyName('my.folder', true), 'my.folder copy');
+	// Later copies are numbered, as for files dropped onto a taken name.
+	assert.equal(copyName('notes.txt', false, 2), 'notes copy 2.txt');
+	assert.equal(copyName('assets', true, 3), 'assets copy 3');
 	assert.equal(copyName('src', true), 'src copy');
 });

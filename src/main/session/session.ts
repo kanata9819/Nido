@@ -708,6 +708,11 @@ end`,
 		);
 	}
 
+	/** Copy files dropped from the operating system into a workspace folder. */
+	importFiles(sources: string[], directory: string): Promise<string[]> {
+		return this.fileService.importFiles(sources, directory);
+	}
+
 	// Code navigation: references, symbols and problems (see SessionNavigation).
 	openReference(index: number, version: number): Promise<void> {
 		return this.navigation.openReference(index, version);

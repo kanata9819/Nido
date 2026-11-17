@@ -11,6 +11,7 @@ import { explorerRowHeight as rowHeight, useExplorerViewport } from './useExplor
 import { toggle } from './sidebarToggle';
 import type { getVisibleEntries } from './sidebarTree';
 import { createExplorerKeyHandler } from './sidebarKeyboard';
+import { insideDropDirectory, useExplorerDrop } from './explorerDrop';
 import styles from './Sidebar.module.css';
 import decorationStyles from '../ui/FileDecoration.module.css';
 import { gitFileKey, type Decoration } from '../git/useGitFileStatus';
@@ -84,6 +85,16 @@ function Sidebar({
 		closeOperation,
 		onDone
 	} = useExplorer({ workspace, active, currentFile, onError });
+	const rowIdPrefix = `file-${workspace.id}-`;
+	const { dropTarget, dropHandlers } = useExplorerDrop({
+		workspace,
+		entryAt: (id) =>
+			id.startsWith(rowIdPrefix)
+				? visible.find((entry) => entry.path === id.slice(rowIdPrefix.length))
+				: undefined,
+		onDone,
+		onError
+	});
 	const { indices, onScroll } = useExplorerViewport({
 		initialScrollTop,
 		selected,
@@ -206,6 +217,8 @@ function Sidebar({
 					selectedIndex >= 0 ? `file-${workspace.id}-${selected}` : undefined
 				}
 				aria-busy={!ready}
+				data-drop-target={dropTarget === '' || undefined}
+				{...dropHandlers}
 				onScroll={onScroll}
 				onBlur={() => {
 					centerPrefix.current = false;
@@ -222,6 +235,7 @@ function Sidebar({
 								top={index * rowHeight}
 								workspace={workspace}
 								selected={selected === entry.path}
+								dropTarget={insideDropDirectory(entry.path, dropTarget)}
 								expanded={expanded}
 								current={
 									gitFileKey(currentFile) ===
@@ -262,9 +276,11 @@ function Sidebar({
 			</div>
 			<div className={styles.sidebarFooter}>
 				<span className={styles.liveDot} />{' '}
-				{clipboard
-					? `${clipboard.cut ? t('Cut') : t('Copied')}: ${clipboard.name}`
-					: t('File commands')}{' '}
+				{dropTarget !== undefined
+					? `${t('Copy into')}: ${dropTarget.split(/[\\/]/).pop() || workspace.name}`
+					: clipboard
+						? `${clipboard.cut ? t('Cut') : t('Copied')}: ${clipboard.name}`
+						: t('File commands')}{' '}
 				<kbd>:</kbd>
 			</div>
 			<ExplorerCommands
@@ -358,6 +374,7 @@ function TreeRow({
 	top,
 	workspace,
 	selected,
+	dropTarget,
 	expanded,
 	current,
 	decoration,
@@ -368,6 +385,8 @@ function TreeRow({
 	top: number;
 	workspace: Workspace;
 	selected: boolean;
+	/** Whether files dragged from the computer would be copied into this row's folder. */
+	dropTarget: boolean;
 	expanded: Set<string>;
 	/** Whether this is the file open in the editor. */
 	current: boolean;
@@ -387,6 +406,7 @@ function TreeRow({
 			aria-expanded={entry.directory ? open : undefined}
 			aria-selected={selected}
 			data-ignored={entry.ignored || undefined}
+			data-drop-target={dropTarget || undefined}
 			className={`${styles.treeItem} ${selected ? styles.treeSelected : ''} ${current ? styles.currentFile : ''}`}
 			style={
 				{

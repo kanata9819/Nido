@@ -2,6 +2,7 @@ import { realpath, readdir, stat, lstat, mkdir, writeFile, rename, cp } from 'no
 import { basename, dirname, isAbsolute, resolve, sep } from 'node:path';
 import { workspaceRelative as relative } from '../workspace/workspacePaths';
 import { editorPath, hostPath } from '../../shared/wsl';
+import { copyName } from '../../shared/copyNames';
 import { type NeovimClient } from 'neovim';
 import { gitIgnored } from '../git/git';
 import type { FileAction, FileEntry, SearchResults } from '../../shared/types';
@@ -105,6 +106,84 @@ end`,
 		});
 		this.mutations = next.catch(() => {});
 		return next;
+	}
+
+	/**
+	 * Copy files and folders dropped from the operating system into a workspace folder (`''` is
+	 * the workspace itself). Folders are copied with everything in them. A name that is taken,
+	 * on disk or by an open tab, gets the explorer's copy name (notes copy.txt, then notes copy
+	 * 2.txt), so nothing is overwritten. Returns the workspace-relative paths of the copies.
+	 * In a WSL workspace both the sources and the workspace are host paths (\\wsl.localhost\...),
+	 * which Node copies like any other.
+	 */
+	importFiles(sources: string[], directory: string): Promise<string[]> {
+		const next = this.mutations.then(async () => {
+			this.cancelFindFiles();
+			this.search.clearDirectories();
+			try {
+				return await this.copyIn(sources, directory);
+			} finally {
+				this.cancelFindFiles();
+				this.search.clearDirectories();
+			}
+		});
+		this.mutations = next.then(
+			() => {},
+			() => {}
+		);
+		return next;
+	}
+
+	private async copyIn(sources: string[], directory: string): Promise<string[]> {
+		if (directory) {
+			this.validate(directory);
+		}
+		const folder = await this.path(directory);
+		if (directory) {
+			// The real folder may be reached through a link; it must still be outside .git.
+			this.validate(relative(this.root, folder));
+		}
+		if (!(await stat(folder)).isDirectory()) {
+			throw new Error('Choose a folder inside this workspace.');
+		}
+		const buffers = await this.buffers();
+		const copied: string[] = [];
+		for (const source of sources) {
+			if (!isAbsolute(source)) {
+				throw new Error('Expected an absolute path.');
+			}
+			const item = await lstat(source);
+			const name = basename(source);
+			const taken = async (candidate: string): Promise<boolean> => {
+				if (
+					buffers.some(
+						(buf) => (buf.listed || buf.modified) && isWithin(candidate, buf.name)
+					)
+				) {
+					return true;
+				}
+				try {
+					await lstat(candidate);
+					return true;
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+						return false;
+					}
+					throw error;
+				}
+			};
+			let result = resolve(folder, name);
+			for (let number = 1; await taken(result); number++) {
+				result = resolve(folder, copyName(name, item.isDirectory(), number));
+			}
+			this.validate(relative(this.root, result));
+			if (isWithin(source, result)) {
+				throw new Error('Cannot place a folder inside itself.');
+			}
+			await cp(source, result, { recursive: true, force: false, errorOnExist: true });
+			copied.push(relative(this.root, result));
+		}
+		return copied;
 	}
 
 	private async mutate(
