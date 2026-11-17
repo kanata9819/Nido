@@ -487,9 +487,29 @@ export class EditorScroll {
 		);
 	}
 
-	/** Ask Neovim to draw rows beyond the viewport in the last scroll direction. */
-	prefetch(): void {
-		const down = this.down;
+	/**
+	 * Fill the caches above and below while nothing else is in flight, so the first wheel
+	 * gesture after a jump has rows to preview instead of waiting for Neovim. Returns false
+	 * when scrolling or a refill is still busy, so the caller can try again later.
+	 */
+	warm(): boolean {
+		if (this.fetching || this.pending || this.queue.hasQueued || this.animating) {
+			return false;
+		}
+		const { grid } = this.options;
+		if (grid.needsLowerRows) {
+			this.prefetch(true, true);
+		} else if (grid.needsUpperRows) {
+			this.prefetch(false);
+		}
+		return true;
+	}
+
+	/**
+	 * Ask Neovim to draw rows beyond the viewport, by default in the last scroll direction.
+	 * With `both` the other direction is filled afterwards as well.
+	 */
+	prefetch(down = this.down, both = false): void {
 		const generation = this.generation;
 		this.prefetchNeeded = false;
 		this.fetching = true;
@@ -508,13 +528,11 @@ export class EditorScroll {
 					this.fetching = false;
 					// Warm the final direction even if input stopped during the previous refill.
 					if (
-						down !== this.down &&
+						(down !== this.down || both) &&
 						this.options.enabled() &&
-						(this.down
-							? this.options.grid.needsLowerRows
-							: this.options.grid.needsUpperRows)
+						(down ? this.options.grid.needsUpperRows : this.options.grid.needsLowerRows)
 					) {
-						this.prefetch();
+						this.prefetch(!down);
 					}
 					if (this.queue.hasQueued) {
 						this.options.schedule();

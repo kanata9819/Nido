@@ -38,6 +38,8 @@ export interface RedrawSummary {
 	cursorJumped: boolean;
 	/** Rows may have moved into view from above. */
 	viewportMoved: boolean;
+	/** The batch is a prefetch refilling the scroll caches. */
+	prefetched: boolean;
 	descriptionChanged: boolean;
 }
 
@@ -68,6 +70,7 @@ export function summarizeRedraw(events: Redraw): RedrawSummary {
 		cursorJumped:
 			viewportScrolls.length > 0 || gridShifted || layoutReset || names.has('mode_change'),
 		viewportMoved: names.has('nido_scroll') || gridShifted,
+		prefetched: names.has('nido_scroll_cache'),
 		descriptionChanged:
 			gridShifted || layoutReset || names.has('grid_line') || names.has('nido_buffer')
 	};

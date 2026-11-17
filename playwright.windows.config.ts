@@ -15,6 +15,7 @@ export default defineConfig({
 		'theme.spec.ts',
 		'scroll-boundary.spec.ts',
 		'fast-wheel.spec.ts',
+		'scroll-warm.spec.ts',
 		'canvas-sharpness.spec.ts',
 		'codelens-scroll.spec.ts'
 	],

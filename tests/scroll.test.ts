@@ -441,6 +441,65 @@ test('cold gestures send movement first and refill the final direction after rev
 	}
 });
 
+test('warming fills both empty caches, below first, and waits while scrolling is busy', async () => {
+	const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+	const calls: (string | boolean | undefined)[][] = [];
+	const completions: Promise<void>[] = [];
+	let replyScroll = (): void => {};
+	Object.defineProperty(globalThis, 'window', {
+		configurable: true,
+		value: {
+			nido: {
+				scroll: (): Promise<void> => {
+					calls.push(['scroll']);
+					return new Promise((resolve) => (replyScroll = resolve));
+				},
+				prefetchScroll: async (_id: string, down?: boolean): Promise<void> => {
+					calls.push(['prefetch', down]);
+				}
+			}
+		}
+	});
+	const grid = new Grid();
+	const scrolling = new EditorScroll({
+		id: 'alpha',
+		grid,
+		enabled: () => true,
+		schedule: () => {},
+		onError: (error) => {
+			throw error;
+		},
+		onCompletion: (promise) => {
+			completions.push(promise);
+		}
+	});
+	try {
+		// A jump left nothing cached on either side.
+		assert.equal(grid.needsLowerRows && grid.needsUpperRows, true);
+		assert.equal(scrolling.warm(), true);
+		await Promise.all(completions);
+		await Promise.all(completions);
+		assert.deepEqual(calls, [
+			['prefetch', true],
+			['prefetch', false]
+		]);
+		// A scroll in flight would race the refill; warming reports that it must wait.
+		calls.length = 0;
+		completions.length = 0;
+		scrolling.request(-0.25, true);
+		await Promise.all(completions.slice(1));
+		const prefetched = calls.filter(([name]) => name === 'prefetch').length;
+		assert.equal(scrolling.pending, true);
+		assert.equal(scrolling.warm(), false);
+		assert.equal(calls.filter(([name]) => name === 'prefetch').length, prefetched);
+		replyScroll();
+	} finally {
+		scrolling.dispose();
+		if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+		else Reflect.deleteProperty(globalThis, 'window');
+	}
+});
+
 test('horizontal gestures without lookahead defer prefetch until vertical input needs it', async () => {
 	const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 	const calls: unknown[][] = [];
