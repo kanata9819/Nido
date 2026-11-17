@@ -518,6 +518,7 @@ export const japanese: Record<string, string> = {
 	'for a folder.': 'でフォルダーを作成できます。',
 	Cut: '切り取り',
 	Copied: 'コピー済み',
+	'Copy into': 'コピー先',
 	'File commands': 'ファイルのコマンド',
 	'Explorer commands': 'エクスプローラーのコマンド',
 	'Close explorer commands': 'エクスプローラーのコマンドを閉じる',
@@ -943,6 +944,10 @@ export const japanese: Record<string, string> = {
 	'A file or folder already exists at that path.':
 		'そのパスには、すでにファイルまたはフォルダーがあります。',
 	'Close the destination file tab first.': '先に、移動先のファイルのタブを閉じてください。',
+	'Choose a folder inside this workspace.':
+		'このワークスペースの中のフォルダーを選んでください。',
+	'Expected an absolute path.': '絶対パスが必要です。',
+	'Invalid file selection.': 'ファイルの選択が正しくありません。',
 	'File changed during the move. The move was cancelled; save and try again.':
 		'移動中にファイルが変更されたため、移動を取り消しました。保存してから、もう一度お試しください。',
 	'Finish the current Neovim command before doing this.':

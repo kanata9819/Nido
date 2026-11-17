@@ -157,6 +157,14 @@ export interface FileAPI {
 	files(id: string, relative: string): Promise<FileEntry[]>;
 	watchDirectories(id: string, paths: string[]): Promise<void>;
 	fileAction(id: string, action: FileAction, path: string, target?: string): Promise<void>;
+	/**
+	 * Copy files and folders from anywhere on the computer into a workspace folder (`''` is the
+	 * workspace itself), naming any copy whose name is taken as the explorer does. Resolves to
+	 * the workspace-relative paths of the copies.
+	 */
+	importFiles(id: string, sources: string[], directory: string): Promise<string[]>;
+	/** The absolute path of a file or folder dropped from the operating system; '' if it has none. */
+	pathForFile(file: File): string;
 	findFiles(id: string, query?: string): Promise<FileEntry[]>;
 	searchText(id: string, query: string, options?: SearchOptions): Promise<SearchResults>;
 	previewReplacement(

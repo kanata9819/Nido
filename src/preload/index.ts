@@ -2,7 +2,7 @@
 // Electron directly, so it calls window.nido.<name>, which sends the 'nido:<name>' IPC that
 // handle('<name>') in src/main/ipc/handlers.ts and related files receives. Types: NidoAPI in
 // src/shared/nidoApi.ts.
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { NidoAPI, NidoEvent } from '../shared/types';
 
 /** Each method forwards its arguments to the matching IPC handler and returns its result. */
@@ -103,6 +103,10 @@ const api: NidoAPI = {
 	watchDirectories: (id, paths) => ipcRenderer.invoke('nido:watchDirectories', id, paths),
 	fileAction: (id, action, path, target) =>
 		ipcRenderer.invoke('nido:fileAction', id, action, path, target),
+	importFiles: (id, sources, directory) =>
+		ipcRenderer.invoke('nido:importFiles', id, sources, directory),
+	// A dropped File no longer carries its path, so Electron looks it up here.
+	pathForFile: (file) => webUtils.getPathForFile(file),
 	findFiles: (id, query) => ipcRenderer.invoke('nido:findFiles', id, query),
 	searchText: (id, query, options) => ipcRenderer.invoke('nido:searchText', id, query, options),
 	previewReplacement: (id, token, replacement, selected) =>

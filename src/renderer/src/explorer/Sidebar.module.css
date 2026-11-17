@@ -107,6 +107,15 @@
 .treeItem[data-ignored='true'] .fileIcon {
 	opacity: 0.55;
 }
+/* Where files dragged from the computer would be copied: a folder and its rows, or the whole
+   tree for the workspace. The outline matches the drop target of a dragged tab. */
+.tree[data-drop-target] {
+	outline: 1px solid var(--ui-accent, #a3cc94);
+	outline-offset: -2px;
+}
+.treeItem[data-drop-target] {
+	background: color-mix(in srgb, var(--ui-accent, #a3cc94) 14%, transparent);
+}
 .treeSelected {
 	background: var(--ui-selection, #2b333b) !important;
 	color: #edf0f3;

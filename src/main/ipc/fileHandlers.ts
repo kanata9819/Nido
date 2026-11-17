@@ -25,6 +25,14 @@ export function registerFileHandlers({
 	send: (event: NidoEvent) => void;
 	trash: (path: string) => Promise<void>;
 }): void {
+	/** Refresh the explorer and Git marks of every workspace showing the same folder. */
+	const filesChanged = (current: Session): void => {
+		for (const open of sessions.values()) {
+			if (open.workspace.root === current.workspace.root) {
+				send({ type: 'filesChanged', id: open.workspace.id });
+			}
+		}
+	};
 	// List one folder of the explorer.
 	handle('files', (id, path) => session(id).files(text(path)));
 	// Watch the folders expanded in the explorer, so it refreshes when their contents change.
@@ -101,11 +109,25 @@ export function registerFileHandlers({
 			protectOtherWorkspaces(resolve(parent, basename(destination)));
 		}
 		await current.fileAction(action as FileAction, text(path), destination, trash);
-		// Refresh the explorer of every workspace showing the same folder.
-		for (const open of sessions.values()) {
-			if (open.workspace.root === current.workspace.root) {
-				send({ type: 'filesChanged', id: open.workspace.id });
-			}
+		filesChanged(current);
+	});
+	// Copy files and folders dropped from the operating system into an explorer folder.
+	handle('importFiles', async (id, sources, directory) => {
+		if (
+			!Array.isArray(sources) ||
+			!sources.length ||
+			sources.length > 1000 ||
+			sources.some((source) => typeof source !== 'string' || !source || source.length > 4096)
+		) {
+			throw new Error('Invalid file selection.');
+		}
+		const current = session(id);
+		const folder = text(directory);
+		try {
+			return await current.importFiles(sources as string[], folder);
+		} finally {
+			// Some items may have been copied before an error, so refresh either way.
+			filesChanged(current);
 		}
 	});
 }

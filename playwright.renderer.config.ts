@@ -19,6 +19,7 @@ export default defineConfig({
 				'renderer-lifecycle-rendering.spec.ts',
 				'renderer-lifecycle-state.spec.ts',
 				'renderer-lifecycle-workspaces.spec.ts',
+				'renderer-lifecycle-explorer-drop.spec.ts',
 				'history-renderer.spec.ts',
 				'github-renderer.spec.ts',
 				'workspace-search-renderer.spec.ts',
