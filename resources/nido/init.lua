@@ -25,6 +25,10 @@ vim.keymap.set('n', '<Esc>', function()
   vim.api.nvim_exec_autocmds('User', {pattern='NidoSearch'})
 end, {silent=true})
 vim.o.termguicolors = true
+-- Read a file that is not valid UTF-8 as Shift_JIS (CP932) when it decodes as one, as Japanese
+-- Windows files often are, and only then fall back to Latin-1, which accepts any bytes.
+-- Neovim's default tries UTF-8 and then Latin-1, which showed such files as mojibake.
+vim.o.fileencodings = 'ucs-bom,utf-8,cp932,latin1'
 vim.o.number = true
 vim.o.relativenumber = false
 -- The renderer draws the code cursor line; Neovim colors only its current line number.
