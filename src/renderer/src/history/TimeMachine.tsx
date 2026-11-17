@@ -24,7 +24,7 @@ function scrollPane(event: React.KeyboardEvent): void {
 	const key = event.key.toLowerCase();
 	const offset =
 		event.ctrlKey && ['d', 'u'].includes(key)
-			? (pane.clientHeight / 2) * (key === 'd' ? 1 : -1)
+			? Math.round(pane.clientHeight / 2) * (key === 'd' ? 1 : -1)
 			: !event.ctrlKey && ['j', 'k'].includes(key)
 				? 66 * (key === 'j' ? 1 : -1)
 				: 0;

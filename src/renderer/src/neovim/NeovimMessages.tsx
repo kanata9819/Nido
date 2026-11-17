@@ -100,7 +100,9 @@ export default function NeovimMessages({
 								event.currentTarget.scrollBy({
 									top:
 										(down ? 1 : -1) *
-										(event.ctrlKey ? event.currentTarget.clientHeight / 2 : 32)
+										(event.ctrlKey
+											? Math.round(event.currentTarget.clientHeight / 2)
+											: 32)
 								});
 							}
 						}}
