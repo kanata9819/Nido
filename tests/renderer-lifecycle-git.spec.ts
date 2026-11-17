@@ -25,6 +25,12 @@ test('Git shows remote actions and refreshes the upstream after publishing', asy
 	const publish = panel.getByRole('button', { name: 'Publish branch' });
 	const status = { root: '/alpha', branch: 'main', changes: [] };
 	const remote = { branch: 'main', remote: 'origin', upstream: '' };
+	const remoteCalls = (): Promise<unknown[]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter(({ method }) => method === 'gitRemoteAction')
+				.map(({ args }) => args[1])
+		);
 	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
 	await page.evaluate((next) => window.rendererTest.settle('gitStatus', 0, next), status);
 	await expect(refresh).toBeEnabled();
@@ -59,16 +65,39 @@ test('Git shows remote actions and refreshes the upstream after publishing', asy
 	await expect(panel.getByRole('button', { name: 'Push' })).toBeEnabled();
 	await expect(pull).toBeEnabled();
 	await expect(panel.getByText('origin/main', { exact: true })).toBeVisible();
+	await expect(panel.getByRole('status')).toHaveText('Published main.');
+	await expect(panel.getByText('Up to date')).toHaveCount(0);
+
+	// With commits to push and pull, both buttons stand out and carry the counts.
+	await refresh.click();
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	const sync = { upstream: 'origin/main', head: 'a'.repeat(40), outgoing: ['b'.repeat(40)] };
+	await page.evaluate((next) => window.rendererTest.settle('gitStatus', 0, next), {
+		...status,
+		remote: { ...remote, upstream: 'refs/heads/main' },
+		sync: { ...sync, ahead: 2, behind: 1 }
+	});
+	const push = panel.getByRole('button', { name: 'Push' });
+	await expect(push).toHaveText(/Push\s*2/);
+	await expect(push).toHaveClass(/syncReady/);
+	await expect(pull).toHaveText(/Pull\s*1/);
+	await expect(pull).toHaveClass(/syncReady/);
+	await expect(panel.getByLabel('2 to push · 1 to pull')).toBeVisible();
+	await push.click();
+	await expect.poll(async () => (await remoteCalls()).at(-1)).toBe('push');
+	await page.evaluate(() => window.rendererTest.settle('gitRemoteAction', 0, undefined));
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate((next) => window.rendererTest.settle('gitStatus', 0, next), {
+		...status,
+		remote: { ...remote, upstream: 'refs/heads/main' },
+		sync: { ...sync, outgoing: [], ahead: 0, behind: 1 }
+	});
+	await expect(panel.getByRole('status')).toHaveText('Pushed 2 commits to origin/main.');
+	await expect(push).not.toHaveClass(/syncReady/);
 
 	// From the list, f fetches, p pulls and P pushes, as in lazygit.
 	const tracked = { ...remote, upstream: 'refs/heads/main' };
 	const list = page.getByRole('listbox', { name: 'Changed files' });
-	const remoteCalls = (): Promise<unknown[]> =>
-		page.evaluate(() =>
-			window.rendererTest.calls
-				.filter(({ method }) => method === 'gitRemoteAction')
-				.map(({ args }) => args[1])
-		);
 	for (const [key, action] of [
 		['f', 'fetch'],
 		['p', 'pull'],
@@ -85,7 +114,7 @@ test('Git shows remote actions and refreshes the upstream after publishing', asy
 		});
 		await expect(fetch).toBeEnabled();
 	}
-	expect(await remoteCalls()).toEqual(['push', 'fetch', 'pull', 'push']);
+	expect(await remoteCalls()).toEqual(['push', 'push', 'fetch', 'pull', 'push']);
 });
 
 test('Git shortcuts use the enabled state as soon as loading finishes', async ({ page }) => {
@@ -406,6 +435,49 @@ test('Git keyboard help stays in the modal focus cycle', async ({ page }) => {
 	await expect(first).toBeFocused();
 	await first.press('Shift+Tab');
 	await expect(help).toBeFocused();
+});
+
+test('Git history marks unpushed commits and the upstream, with the ahead and behind counts', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=git&defer=gitStatus,gitHistory`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
+	const status = { root: '/alpha', branch: 'main', changes: [] };
+	await page.evaluate((next) => window.rendererTest.settle('gitStatus', 0, next), status);
+	await page.getByRole('button', { name: 'History', exact: true }).click();
+	const hash = (index: number): string => String(index).repeat(40);
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	expect(
+		await page.evaluate(() => window.rendererTest.pending.map(({ args }) => args[1]))
+	).toEqual([true]);
+	await page.evaluate((next) => window.rendererTest.settle('gitStatus', 0, next), {
+		...status,
+		remote: { branch: 'main', remote: 'origin', upstream: 'refs/heads/main' },
+		sync: {
+			upstream: 'origin/main',
+			head: hash(3),
+			ahead: 2,
+			behind: 1,
+			outgoing: [hash(1), hash(2)]
+		}
+	});
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate(
+		(commits) => window.rendererTest.settle('gitHistory', 0, { total: 3, commits }),
+		[1, 2, 3].map((index) => ({
+			hash: hash(index),
+			subject: `Commit ${index}`,
+			author: 'Ada',
+			date: '2026-01-01'
+		}))
+	);
+	await expect(page.getByText('2 ahead of origin/main · 1 behind')).toBeVisible();
+	await expect(page.getByLabel('2 to push · 1 to pull')).toBeVisible();
+	const rows = page.getByRole('listbox', { name: 'Commit history' }).getByRole('option');
+	await expect(rows.nth(0)).toContainText('Not pushed');
+	await expect(rows.nth(1)).toContainText('Not pushed');
+	await expect(rows.nth(2)).not.toContainText('Not pushed');
+	await expect(rows.nth(2)).toContainText('origin/main');
 });
 
 test('Git history counts all commits and supports paging without reloading the first page', async ({

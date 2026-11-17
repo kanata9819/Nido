@@ -753,6 +753,109 @@
 .notice {
 	color: #a5ce91;
 }
+/* A push, pull or fetch that finished: a banner under the toolbar that names what it did. */
+.remoteNotice {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	padding: 8px 16px;
+	font-size: 12px;
+	font-weight: 500;
+	color: #a5ce91;
+	background: #a5ce9114;
+	border-bottom: 1px solid #a5ce9133;
+	animation: remoteNoticeIn 0.25s ease-out;
+}
+@keyframes remoteNoticeIn {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+}
+/* Push or Pull when there is something to send or receive (or a branch to publish). */
+.panel button.syncReady:not(:disabled) {
+	color: #182017;
+	background: #a5ce91;
+	border-color: #a5ce91;
+	font-weight: 600;
+}
+.panel button.syncReady:not(:disabled):hover {
+	background: #b5dca2;
+}
+.panel button.syncReady .count {
+	background: #18201722;
+	color: inherit;
+}
+.toolbar button .count,
+.syncChip span {
+	flex: none;
+	overflow: visible;
+	color: inherit;
+}
+/* The branch against its upstream: ✓ up to date, or ↑ to push and ↓ to pull. */
+.syncChip {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-size: 11px;
+	color: #93a2ad;
+	background: #ffffff08;
+	white-space: nowrap;
+}
+.syncChip span {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	font-size: 11px;
+	font-weight: 600;
+}
+.syncChip[data-state='synced'] {
+	gap: 4px;
+	color: #a5ce91;
+	background: #a5ce9114;
+}
+.syncChip [data-direction='ahead'] {
+	color: #e6c07b;
+}
+.syncChip [data-direction='behind'] {
+	color: #79b8e8;
+}
+.syncSummary {
+	flex-shrink: 0;
+	color: #93a2ad;
+	font-size: 11px;
+	white-space: nowrap;
+}
+/* History rows: commits not on the upstream yet, and the commit the upstream points to. */
+.commitMeta > span:first-of-type {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+.outgoingBadge,
+.upstreamBadge {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	flex-shrink: 0;
+	padding: 1px 6px;
+	border-radius: 4px;
+	font-size: 10px;
+	white-space: nowrap;
+}
+.outgoingBadge {
+	color: #e6c07b;
+	background: #e6c07b18;
+}
+.upstreamBadge {
+	color: #79b8e8;
+	background: #79b8e818;
+}
 .panel footer {
 	color: #93a2ad;
 	font-size: 11px;
@@ -899,4 +1002,20 @@
 	box-shadow: var(--neon-rim);
 	background: var(--surface-popover);
 	backdrop-filter: var(--glass-blur);
+}
+
+:global(:root[data-theme='neon']) .panel button.syncReady:not(:disabled) {
+	background: var(--neon-gradient);
+	border-color: transparent;
+	color: #04121a;
+}
+:global(:root[data-theme='neon']) .panel button.syncReady:not(:disabled):hover {
+	background: var(--neon-gradient);
+	filter: brightness(1.12);
+}
+:global(:root[data-theme='neon']) .remoteNotice,
+:global(:root[data-theme='neon']) .syncChip[data-state='synced'] {
+	color: var(--ui-accent);
+	background: var(--ui-accent-soft);
+	border-color: var(--ui-border);
 }

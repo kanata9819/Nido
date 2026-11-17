@@ -1,7 +1,8 @@
 import { useI18n } from '../i18n';
 import type { GitView } from '../types';
 import type { RefObject } from 'react';
-import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
+import type { GitBranchEntry, GitCommitEntry, GitSyncState } from '../../../shared/types';
+import { ArrowUp } from 'lucide-react';
 import { handleListKey } from './listKeys';
 import styles from './Git.module.css';
 
@@ -14,6 +15,7 @@ export default function GitBrowserList({
 	busy,
 	commit,
 	history,
+	sync,
 	branches,
 	labels,
 	listLabel,
@@ -27,6 +29,8 @@ export default function GitBrowserList({
 	busy: boolean;
 	commit?: GitCommitEntry;
 	history: GitCommitEntry[];
+	/** How the history compares with its upstream, to mark unpushed commits and the upstream. */
+	sync?: GitSyncState;
 	branches: GitBranchEntry[];
 	labels: string[];
 	listLabel: string;
@@ -39,6 +43,7 @@ export default function GitBrowserList({
 	const t = useI18n();
 	// Commits and branches use two-line rows; a commit's files are plain one-line rows.
 	const entryRows = view === 'branches' || (view === 'history' && !commit);
+	const outgoing = new Set(sync?.outgoing);
 	return (
 		<div
 			className={`${styles.list} ${entryRows ? styles.historyList : ''}`}
@@ -91,6 +96,15 @@ export default function GitBrowserList({
 									{history[position].hash.slice(0, 8)}
 								</code>
 								<span>{history[position].author}</span>
+								{outgoing.has(history[position].hash) && (
+									<span className={styles.outgoingBadge}>
+										<ArrowUp size={10} aria-hidden="true" />
+										{t('Not pushed')}
+									</span>
+								)}
+								{sync?.head === history[position].hash && (
+									<span className={styles.upstreamBadge}>{sync.upstream}</span>
+								)}
 							</div>
 						</>
 					) : view === 'branches' ? (

@@ -22,6 +22,7 @@ import {
 	gitPushBranch,
 	gitRemoteInfo,
 	gitRemoteAction,
+	gitSyncState,
 	gitIgnored
 } from '../src/main/git/git';
 
@@ -680,6 +681,14 @@ test('Git publishes, fetches without changing HEAD, and pulls only when safe', a
 		await gitRemoteAction(root, 'push', firstPush);
 		const tracked = { ...firstPush, upstream: 'refs/heads/main' };
 		assert.deepEqual(await gitRemoteInfo(root), tracked);
+		assert.equal(await gitSyncState(root, firstPush), undefined);
+		assert.deepEqual(await gitSyncState(root, tracked), {
+			upstream: 'review/main',
+			head: initial,
+			ahead: 0,
+			behind: 0,
+			outgoing: []
+		});
 		git(directory, 'clone', '-q', '-b', 'main', remote, writer);
 		await writeFile(join(writer, 'tracked.txt'), 'remote update');
 		commit(writer, 'Remote update');
@@ -723,6 +732,11 @@ test('Git publishes, fetches without changing HEAD, and pulls only when safe', a
 		git(writer, 'push', '-q', 'origin', 'main');
 		await assert.rejects(pull(), /fast-forward/i);
 		assert.equal(git(root, 'rev-parse', 'HEAD'), local);
+		// The failed pull fetched the remote: one commit to push, one to pull.
+		const divergent = await gitSyncState(root, tracked);
+		assert.equal(divergent?.ahead, 1);
+		assert.equal(divergent?.behind, 1);
+		assert.deepEqual(divergent?.outgoing, [local]);
 
 		// A branch made from review/main is published under its own name, not pushed to main.
 		const remoteMain = git(root, 'ls-remote', 'review', 'refs/heads/main').split('\t')[0];

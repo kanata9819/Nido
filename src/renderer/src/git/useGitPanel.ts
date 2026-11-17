@@ -11,6 +11,12 @@ import {
 import type { GitChange, GitRemoteAction, GitStatus } from '../../../shared/types';
 import { useGitDiff } from './useGitDiff';
 
+/** The outcome of the last remote action, shown as a banner: an English message and its values. */
+export interface GitRemoteNotice {
+	message: string;
+	values: Record<string, string | number>;
+}
+
 /** Identifies a change in the list; a file can be both staged and unstaged. */
 export const gitChangeKey = (change: GitChange): string => `${change.staged}:${change.path}`;
 const key = gitChangeKey;
@@ -32,6 +38,7 @@ export function useGitPanel({
 	setSelected: Dispatch<SetStateAction<string>>;
 	error: string;
 	notice: string;
+	remoteNotice: GitRemoteNotice | undefined;
 	busy: boolean;
 	changes: GitChange[];
 	current: GitChange | undefined;
@@ -48,6 +55,7 @@ export function useGitPanel({
 	const [selected, setSelected] = useState('');
 	const [error, setError] = useState('');
 	const [notice, setNotice] = useState('');
+	const [remoteNotice, setRemoteNotice] = useState<GitRemoteNotice>();
 	const [busy, setBusy] = useState(true);
 	// Set while an action runs, so a second one cannot start before React re-renders.
 	const locked = useRef(false);
@@ -78,12 +86,17 @@ export function useGitPanel({
 		});
 	}, []);
 
-	async function refresh(): Promise<void> {
-		applyStatus(await window.nido.gitStatus(workspaceId, true));
+	async function refresh(): Promise<GitStatus> {
+		const next = await window.nido.gitStatus(workspaceId, true);
+		applyStatus(next);
+		return next;
 	}
 
-	/** Run one Git action at a time, then reload the status. */
-	async function run(action: () => Promise<unknown>): Promise<void> {
+	/** Run one Git action at a time, then reload the status and pass it to `after`. */
+	async function run(
+		action: () => Promise<unknown>,
+		after?: (next: GitStatus) => void
+	): Promise<void> {
 		if (locked.current) {
 			return;
 		}
@@ -91,9 +104,11 @@ export function useGitPanel({
 		setBusy(true);
 		setError('');
 		setNotice('');
+		setRemoteNotice(undefined);
 		try {
 			await action();
-			await refresh();
+			const next = await refresh();
+			after?.(next);
 		} catch (failure) {
 			setError(String(failure));
 		} finally {
@@ -163,17 +178,12 @@ export function useGitPanel({
 
 	function remoteAction(action: GitRemoteAction): void {
 		const target = status?.remote;
+		const before = status?.sync;
 		if (target) {
-			void run(async () => {
-				await window.nido.gitRemoteAction(workspaceId, action, target);
-				setNotice(
-					action === 'push'
-						? 'Push complete.'
-						: action === 'pull'
-							? 'Pull complete.'
-							: 'Fetch complete.'
-				);
-			});
+			void run(
+				() => window.nido.gitRemoteAction(workspaceId, action, target),
+				(next) => setRemoteNotice(remoteResult(action, target.upstream, before, next))
+			);
 		}
 	}
 
@@ -183,6 +193,7 @@ export function useGitPanel({
 		setSelected,
 		error,
 		notice,
+		remoteNotice,
 		busy,
 		changes,
 		current,
@@ -195,4 +206,58 @@ export function useGitPanel({
 		commit,
 		remoteAction
 	};
+}
+
+/** What a finished push, pull or fetch did, from the sync state before and after it. */
+function remoteResult(
+	action: GitRemoteAction,
+	upstream: string,
+	before: GitStatus['sync'],
+	next: GitStatus
+): GitRemoteNotice {
+	const sync = next.sync;
+	const destination = sync?.upstream || '';
+	if (action === 'push') {
+		if (!upstream) {
+			return {
+				message: destination ? 'Published {branch} to {upstream}.' : 'Published {branch}.',
+				values: { branch: next.branch, upstream: destination }
+			};
+		}
+		const count = before?.ahead ?? 0;
+		return count
+			? {
+					message:
+						count === 1
+							? 'Pushed 1 commit to {upstream}.'
+							: 'Pushed {count} commits to {upstream}.',
+					values: { count, upstream: destination }
+				}
+			: {
+					message: 'Push complete. {upstream} is up to date.',
+					values: { upstream: destination }
+				};
+	}
+	if (action === 'pull') {
+		const count = before?.behind ?? 0;
+		return count
+			? {
+					message:
+						count === 1
+							? 'Pulled 1 commit from {upstream}.'
+							: 'Pulled {count} commits from {upstream}.',
+					values: { count, upstream: destination }
+				}
+			: { message: 'Pull complete. Already up to date.', values: {} };
+	}
+	const behind = sync?.behind ?? 0;
+	return behind
+		? {
+				message:
+					behind === 1
+						? 'Fetch complete. 1 commit to pull.'
+						: 'Fetch complete. {count} commits to pull.',
+				values: { count: behind }
+			}
+		: { message: 'Fetch complete.', values: {} };
 }
