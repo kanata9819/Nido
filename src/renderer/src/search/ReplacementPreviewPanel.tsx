@@ -91,7 +91,9 @@ export default function ReplacementPreviewPanel({
 						} else {
 							event.currentTarget.scrollTop +=
 								(['j', 'd'].includes(event.key) ? 1 : -1) *
-								(event.ctrlKey ? event.currentTarget.clientHeight / 2 : 40);
+								(event.ctrlKey
+									? Math.round(event.currentTarget.clientHeight / 2)
+									: 40);
 						}
 					}
 				}}

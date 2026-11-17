@@ -1905,3 +1905,38 @@ test('Markdown preview links open workspace files in the editor, jump to heading
 	await expect(content.getByRole('link', { name: 'Mail' })).toHaveCount(0);
 	await expect(content.getByText('Mail', { exact: true })).toBeVisible();
 });
+
+test('Markdown preview Ctrl+D then Ctrl+U returns to the top at an odd height', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=markdown&defer=markdownPreview`);
+	const content = page.getByLabel('Markdown preview content', { exact: true });
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest?.pending.some((call) => call.method === 'markdownPreview')
+			)
+		)
+		.toBe(true);
+	await page.evaluate(
+		(text) =>
+			window.rendererTest.settle('markdownPreview', 0, {
+				token: 'long:1',
+				path: '/alpha/long.md',
+				text
+			}),
+		Array.from({ length: 200 }, (_, i) => `Line ${i + 1}`).join('\n\n')
+	);
+	await expect(content.getByText('Line 200')).toBeAttached();
+	// Half of an odd height is a fraction of a pixel, which scrolling cannot hold.
+	await content.evaluate((node) => {
+		node.style.height = '301px';
+		node.style.flex = 'none';
+	});
+	expect(await content.evaluate((node) => node.clientHeight % 2)).toBe(1);
+	await content.focus();
+	await page.keyboard.press('Control+d');
+	await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+	await page.keyboard.press('Control+u');
+	await expect.poll(() => content.evaluate((node) => node.scrollTop)).toBe(0);
+});

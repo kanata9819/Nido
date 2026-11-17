@@ -189,10 +189,11 @@ function MarkdownPreview({
 					const content = event.currentTarget;
 					if (event.ctrlKey && ['d', 'u', 'f', 'b'].includes(key)) {
 						event.preventDefault();
+						// Whole pixels: half of an odd height left Ctrl+D then Ctrl+U a pixel short of
+						// where they started.
 						content.scrollTop +=
 							(['d', 'f'].includes(key) ? 1 : -1) *
-							content.clientHeight *
-							(['d', 'u'].includes(key) ? 0.5 : 1);
+							Math.round(content.clientHeight * (['d', 'u'].includes(key) ? 0.5 : 1));
 					} else if (!event.ctrlKey && ['j', 'k', 'g', 'G'].includes(event.key)) {
 						event.preventDefault();
 						if (event.key === 'g') {
