@@ -2,6 +2,7 @@ import { useState, type Dispatch, type RefObject, type SetStateAction } from 're
 import type { Workspace } from '../../../shared/types';
 import type { FileRequest } from './ExplorerCommands';
 import type { getVisibleEntries } from './sidebarTree';
+import { copyName } from './explorerPaths';
 
 type ExplorerEntry = ReturnType<typeof getVisibleEntries>[number];
 
@@ -23,13 +24,18 @@ export function useExplorerOperations({
 }): {
 	operation: { request?: FileRequest } | undefined;
 	setOperation: Dispatch<SetStateAction<{ request?: FileRequest } | undefined>>;
-	clipboard: { path: string; name: string; cut: boolean } | undefined;
+	clipboard: { path: string; name: string; cut: boolean; directory: boolean } | undefined;
 	commands: { title: string; key: string; disabled?: boolean; run: () => void }[];
 	closeOperation: () => void;
 	onDone: (path: string) => void;
 } {
 	const [operation, setOperation] = useState<{ request?: FileRequest }>();
-	const [clipboard, setClipboard] = useState<{ path: string; name: string; cut: boolean }>();
+	const [clipboard, setClipboard] = useState<{
+		path: string;
+		name: string;
+		cut: boolean;
+		directory: boolean;
+	}>();
 	let targetDirectory = '';
 	if (selectedEntry?.directory) {
 		targetDirectory = selectedEntry.path;
@@ -54,7 +60,12 @@ export function useExplorerOperations({
 		if (!selectedEntry) {
 			return;
 		}
-		setClipboard({ path: selectedEntry.path, name: selectedEntry.name, cut });
+		setClipboard({
+			path: selectedEntry.path,
+			name: selectedEntry.name,
+			cut,
+			directory: selectedEntry.directory
+		});
 		closeOperation();
 	};
 	const pasteClipboard = (): void => {
@@ -66,9 +77,12 @@ export function useExplorerOperations({
 		const destinationPath = destination.replace(/\\/g, '/');
 		let destinationName = destination;
 		if (sourcePath === destinationPath) {
+			if (clipboard.cut) {
+				// Moving a file into the folder it is already in changes nothing.
+				return;
+			}
 			// Pasting beside the original must suggest a new name instead of overwriting it.
-			const copyName = clipboard.name.replace(/(\.[^.]*)?$/, ' copy$1');
-			destinationName = pathInTargetDirectory(copyName);
+			destinationName = pathInTargetDirectory(copyName(clipboard.name, clipboard.directory));
 		}
 		requestFileOperation(
 			clipboard.cut ? 'rename' : 'copy',
