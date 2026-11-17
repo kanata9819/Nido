@@ -309,6 +309,64 @@ vim.api.nvim_win_set_cursor(0,{1,2})`);
 	}
 });
 
+test('Ctrl G opens the command line to jump to a line, without a range from its count', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-goto-line-'));
+	let session: Session | undefined;
+	try {
+		session = await Session.create(root, () => {});
+		const lua = (code: string): ReturnType<Session['client']['request']> =>
+			session!.client.request('nvim_exec_lua', [code, []]);
+		await lua("vim.api.nvim_buf_set_lines(0, 0, -1, false, {'a', 'b', 'c', 'd', 'e'})");
+		for (const count of ['', '2']) {
+			await session.input(`gg${count}<C-g>`);
+			assert.deepEqual(
+				await lua('return {vim.fn.mode(), vim.fn.getcmdtype(), vim.fn.getcmdline()}'),
+				['c', ':', '']
+			);
+			await session.input('4<CR>');
+			assert.deepEqual(await lua('return {vim.fn.mode(), vim.fn.line(".")}'), ['n', 4]);
+		}
+		// The command palette leaves Insert mode first, where Ctrl+G is a prefix key.
+		await session.input('ggi<C-\\><C-n><C-g>');
+		assert.deepEqual(
+			await lua('return {vim.fn.mode(), vim.fn.getcmdtype(), vim.fn.getcmdline()}'),
+			['c', ':', '']
+		);
+		await session.input('5<CR>');
+		assert.deepEqual(await lua('return {vim.fn.mode(), vim.fn.line(".")}'), ['n', 5]);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('pasting, deleting and undoing many lines does not report the line count', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-report-'));
+	let session: Session | undefined;
+	try {
+		// Messages reach the UI as Neovim UI state; keep everything that is shown.
+		const shown: string[] = [];
+		session = await Session.create(root, (event) => {
+			if (event.type === 'neovimUI' || event.type === 'neovimUIPatch') {
+				shown.push(JSON.stringify(event.state));
+			}
+		});
+		const lua = (code: string): ReturnType<Session['client']['request']> =>
+			session!.client.request('nvim_exec_lua', [code, []]);
+		await lua("vim.api.nvim_buf_set_lines(0, 0, -1, false, {'1', '2', '3', '4', '5', '6'})");
+		await session.input('ggyGGp');
+		await session.input('gg6dd');
+		await session.input('u');
+		await lua('return 1');
+		await new Promise((resolve) => setTimeout(resolve, 200));
+		assert.equal(await lua('return vim.api.nvim_buf_line_count(0)'), 12);
+		assert.doesNotMatch(shown.join('\n'), /more lines|fewer lines|lines yanked/);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('Ctrl Z and Ctrl Shift Z undo and redo in normal, insert and visual modes', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-undo-key-'));
 	let session: Session | undefined;

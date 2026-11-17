@@ -239,6 +239,8 @@ function editingCommands(context: CommandContext): Item[] {
 	const index = state.buffers.findIndex((buffer) => buffer.id === state.current);
 	return [
 		keysCommand(context, 'Toggle line comments', 'Ctrl+/', '<C-/>'),
+		// Leave Insert or Visual mode first, where Ctrl+G means something else.
+		keysCommand(context, 'Go to line', 'Ctrl+G', '<C-\\><C-n><C-g>'),
 		keysCommand(context, 'Undo', 'Ctrl+Z', '<C-z>'),
 		keysCommand(context, 'Redo', 'Ctrl+Shift+Z', '<C-S-z>'),
 		{
