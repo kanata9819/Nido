@@ -4,8 +4,8 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { GitBranch, GitCommitHorizontal } from 'lucide-react';
 import { PanelHeadingSlot } from '../ui/panelHeading';
-import type { GitBranchEntry, GitCommitEntry } from '../../../shared/types';
-import GitPanel from './GitPanel';
+import type { GitBranchEntry, GitCommitEntry, GitStatus } from '../../../shared/types';
+import GitPanel, { SyncChip } from './GitPanel';
 import GitBrowserList from './GitBrowserList';
 import { CommitDetails, BranchDetails } from './GitDetails';
 import { useGitBrowserKeyboard } from './useGitBrowserKeyboard';
@@ -167,6 +167,9 @@ export default function GitBrowser({
 						{view === 'history' && !busy && lists.commitCount !== undefined && (
 							<small>{t('Commits: {count}', { count: lists.commitCount })}</small>
 						)}
+						{view === 'history' && !busy && !commit && lists.remote.remote && (
+							<HistorySync remote={lists.remote} />
+						)}
 						<span>
 							{commit
 								? t('{hash} · {subject} · Compared with first parent', {
@@ -192,6 +195,7 @@ export default function GitBrowser({
 							busy={busy}
 							commit={commit}
 							history={history}
+							sync={lists.remote.sync}
 							branches={branches}
 							labels={labels}
 							listLabel={listLabel}
@@ -285,6 +289,47 @@ export default function GitBrowser({
 				</section>
 			)}
 		</div>
+	);
+}
+
+/**
+ * How the history compares with the upstream branch: the commits to push and to pull, with
+ * the upstream named, so the history rows' badges read against it.
+ */
+function HistorySync({
+	remote: { remote, sync }
+}: {
+	remote: Pick<GitStatus, 'remote' | 'sync'>;
+}): React.JSX.Element | null {
+	const t = useI18n();
+	if (!remote) {
+		return null;
+	}
+	const ahead = sync?.ahead ?? 0;
+	const behind = sync?.behind ?? 0;
+	const summary = !remote.upstream
+		? t('Not on {remote} yet', { remote: remote.remote })
+		: !sync
+			? t('Fetch to compare with {remote}', { remote: remote.remote })
+			: !ahead && !behind
+				? t('In sync with {upstream}', { upstream: sync.upstream })
+				: [
+						ahead &&
+							t('{count} ahead of {upstream}', {
+								count: ahead,
+								upstream: sync.upstream
+							}),
+						behind && t('{count} behind', { count: behind })
+					]
+						.filter(Boolean)
+						.join(' · ');
+	return (
+		<>
+			{remote.upstream && sync && (
+				<SyncChip upstream={remote.upstream} ahead={ahead} behind={behind} known />
+			)}
+			<small className={styles.syncSummary}>{summary}</small>
+		</>
 	);
 }
 

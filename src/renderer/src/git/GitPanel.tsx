@@ -1,7 +1,15 @@
 import { useErrorMessage, useI18n } from '../i18n';
 import { useEffect, useId, useLayoutEffect, useRef, type RefObject } from 'react';
 import type { GitChange } from '../../../shared/types';
-import { Check, GitBranch, RefreshCw } from 'lucide-react';
+import {
+	ArrowDown,
+	ArrowUp,
+	Check,
+	CircleCheck,
+	CloudUpload,
+	GitBranch,
+	RefreshCw
+} from 'lucide-react';
 import styles from './Git.module.css';
 import GitDiff from './GitDiff';
 import FileIcon from '../ui/FileIcon';
@@ -37,6 +45,7 @@ export default function GitPanel({
 		setSelected,
 		error,
 		notice,
+		remoteNotice,
 		busy,
 		changes,
 		current,
@@ -50,6 +59,9 @@ export default function GitPanel({
 		remoteAction
 	} = useGitPanel({ workspaceId, onBusyChange, message, setMessage });
 	const remote = status?.remote;
+	const sync = status?.sync;
+	const ahead = sync?.ahead ?? 0;
+	const behind = sync?.behind ?? 0;
 	const destination =
 		remote?.remote && remote.branch
 			? `${remote.remote}/${remote.upstream.replace(/^refs\/heads\//, '') || remote.branch}`
@@ -166,6 +178,12 @@ export default function GitPanel({
 				{remote && (
 					<>
 						{destination && <span title={destination}>{destination}</span>}
+						<SyncChip
+							upstream={remote.upstream}
+							ahead={ahead}
+							behind={behind}
+							known={!!sync}
+						/>
 						<button
 							disabled={busy}
 							aria-keyshortcuts="f"
@@ -174,20 +192,54 @@ export default function GitPanel({
 							{t('Fetch all')} <kbd>f</kbd>
 						</button>
 						<button
+							className={behind ? styles.syncReady : undefined}
 							disabled={busy || !destination || !remote.upstream}
-							title={destination}
+							title={
+								behind
+									? t('{count} commits to pull from {upstream}', {
+											count: behind,
+											upstream: destination
+										})
+									: destination
+							}
 							aria-keyshortcuts="p"
 							onClick={() => remoteAction('pull')}
 						>
-							{t('Pull')} <kbd>p</kbd>
+							<ArrowDown size={14} aria-hidden="true" />
+							{t('Pull')}
+							{behind > 0 && (
+								<span className={styles.count} aria-hidden="true">
+									{behind}
+								</span>
+							)}{' '}
+							<kbd>p</kbd>
 						</button>
 						<button
+							className={!remote.upstream || ahead ? styles.syncReady : undefined}
 							disabled={busy || !destination}
-							title={destination}
+							title={
+								ahead
+									? t('{count} commits to push to {upstream}', {
+											count: ahead,
+											upstream: destination
+										})
+									: destination
+							}
 							aria-keyshortcuts="Shift+P"
 							onClick={() => remoteAction('push')}
 						>
-							{remote.upstream ? t('Push') : t('Publish branch')} <kbd>P</kbd>
+							{remote.upstream ? (
+								<ArrowUp size={14} aria-hidden="true" />
+							) : (
+								<CloudUpload size={14} aria-hidden="true" />
+							)}
+							{remote.upstream ? t('Push') : t('Publish branch')}
+							{ahead > 0 && (
+								<span className={styles.count} aria-hidden="true">
+									{ahead}
+								</span>
+							)}{' '}
+							<kbd>P</kbd>
 						</button>
 					</>
 				)}
@@ -196,6 +248,12 @@ export default function GitPanel({
 					{t('Refresh')}
 				</button>
 			</div>
+			{remoteNotice && (
+				<p className={styles.remoteNotice} role="status">
+					<CircleCheck size={16} aria-hidden="true" />
+					{t(remoteNotice.message, remoteNotice.values)}
+				</p>
+			)}
 			<div className={styles.content}>
 				<aside className={styles.sidebar}>
 					<CommitComposer
@@ -285,6 +343,60 @@ export default function GitPanel({
 			)}
 			<ShortcutsFooter />
 		</section>
+	);
+}
+
+/**
+ * How the branch stands against its upstream: up to date, or how many commits there are to
+ * push (↑) and to pull (↓), as of the last fetch.
+ */
+export function SyncChip({
+	upstream,
+	ahead,
+	behind,
+	known
+}: {
+	/** The upstream branch; empty while the branch is unpublished. */
+	upstream: string;
+	ahead: number;
+	behind: number;
+	/** Whether the upstream has been fetched, so the counts are known. */
+	known: boolean;
+}): React.JSX.Element | null {
+	const t = useI18n();
+	if (!upstream) {
+		return <small className={styles.syncChip}>{t('Not published')}</small>;
+	}
+	if (!known) {
+		return null;
+	}
+	if (!ahead && !behind) {
+		return (
+			<small className={styles.syncChip} data-state="synced">
+				<Check size={12} aria-hidden="true" />
+				{t('Up to date')}
+			</small>
+		);
+	}
+	return (
+		<small
+			className={styles.syncChip}
+			data-state="pending"
+			aria-label={t('{ahead} to push · {behind} to pull', { ahead, behind })}
+		>
+			{ahead > 0 && (
+				<span data-direction="ahead">
+					<ArrowUp size={12} aria-hidden="true" />
+					{ahead}
+				</span>
+			)}
+			{behind > 0 && (
+				<span data-direction="behind">
+					<ArrowDown size={12} aria-hidden="true" />
+					{behind}
+				</span>
+			)}
+		</small>
 	);
 }
 

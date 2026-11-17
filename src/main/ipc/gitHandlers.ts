@@ -15,6 +15,7 @@ import {
 	gitSwitch,
 	gitRemoteInfo,
 	gitRemoteAction,
+	gitSyncState,
 	gitRoot
 } from '../git/git';
 
@@ -92,10 +93,13 @@ export function registerGitHandlers({
 			statusRequests.set(root, pending);
 		}
 		return includeRemote === true
-			? Promise.all([pending, gitRemoteInfo(root)]).then(([status, remote]) => ({
-					...status,
-					remote
-				}))
+			? Promise.all([
+					pending,
+					gitRemoteInfo(root).then(async (remote) => ({
+						remote,
+						sync: await gitSyncState(root, remote)
+					}))
+				]).then(([status, { remote, sync }]) => ({ ...status, remote, sync }))
 			: pending;
 	});
 	handle('gitHistory', (id, skip) => {

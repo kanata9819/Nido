@@ -6,7 +6,8 @@ import type {
 	GitCommitEntry,
 	GitBranchEntry,
 	GitRemoteAction,
-	GitRemoteInfo
+	GitRemoteInfo,
+	GitSyncState
 } from '../../shared/types';
 import { parseWslPath, wslHostPath } from '../../shared/wsl';
 import { wslArguments } from '../platform/wsl';
@@ -241,6 +242,44 @@ export async function gitRemoteInfo(cwd: string): Promise<GitRemoteInfo | undefi
 		(remotes.includes('origin') ? 'origin' : remotes.length === 1 ? remotes[0] : '');
 	const usable = !target.upstream || (target.remote && target.upstream.startsWith('refs/heads/'));
 	return { ...target, remote: usable && remotes.includes(remote) ? remote : '' };
+}
+
+/**
+ * How the branch of `info` compares with the remote branch it pushes to and pulls from, as of
+ * the last fetch. Undefined while the branch is unpublished or its remote branch is not fetched.
+ */
+export async function gitSyncState(
+	cwd: string,
+	info: GitRemoteInfo | undefined
+): Promise<GitSyncState | undefined> {
+	if (!info?.branch || !info.remote || !info.upstream) {
+		return undefined;
+	}
+	const local = `refs/heads/${info.branch}`;
+	const tracking = (await git(cwd, ['for-each-ref', '--format=%(upstream)', local])).trim();
+	if (!tracking.startsWith('refs/remotes/')) {
+		return undefined;
+	}
+	let head: string;
+	try {
+		head = (
+			await git(cwd, ['rev-parse', '--verify', '--quiet', `${tracking}^{commit}`])
+		).trim();
+	} catch {
+		return undefined;
+	}
+	const [counts, outgoing] = await Promise.all([
+		git(cwd, ['rev-list', '--left-right', '--count', `${local}...${head}`, '--']),
+		git(cwd, ['rev-list', '--max-count=1000', `${head}..${local}`, '--'])
+	]);
+	const [ahead = 0, behind = 0] = counts.trim().split(/\s+/).map(Number);
+	return {
+		upstream: tracking.replace(/^refs\/remotes\//, ''),
+		head,
+		ahead,
+		behind,
+		outgoing: outgoing.split(/\s+/).filter(Boolean)
+	};
 }
 
 /** A remote action from the Git panel. Resolve the displayed destination again before using it. */

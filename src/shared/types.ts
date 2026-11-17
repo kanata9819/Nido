@@ -311,6 +311,22 @@ export interface GitStatus {
 	branch: string;
 	changes: GitChange[];
 	remote?: GitRemoteInfo;
+	/** How the branch compares with its upstream; set with `remote` once that has been fetched. */
+	sync?: GitSyncState;
+}
+
+/** The current branch against the remote-tracking branch it pushes to and pulls from. */
+export interface GitSyncState {
+	/** The remote-tracking branch, such as origin/main. */
+	upstream: string;
+	/** The commit the remote-tracking branch points to. */
+	head: string;
+	/** Local commits not on the upstream yet (to push). */
+	ahead: number;
+	/** Upstream commits not in the branch yet (to pull). */
+	behind: number;
+	/** The hashes of the commits to push, newest first (at most 1000). */
+	outgoing: string[];
 }
 
 export interface GitRemoteInfo {
