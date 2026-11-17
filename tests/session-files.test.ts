@@ -134,3 +134,21 @@ test('selected-line replacement includes matches on both sides of an embedded CR
 		matcher.close();
 	}
 });
+
+test('whole-word search and replacement keep combining marks with their word', async () => {
+	const options = { ...defaultSearchOptions, wholeWord: true };
+	const matcher = new SearchMatcher('か', options);
+	try {
+		const text = 'か\u3099\nか か\u3099 か\n';
+		assert.deepEqual(
+			(await matcher.find(text)).map(({ line, column }) => ({ line, column })),
+			[{ line: 2, column: 1 }]
+		);
+		assert.deepEqual(await matcher.replace(text, [2], 'き'), {
+			text: 'か\u3099\nき か\u3099 き\n',
+			count: 2
+		});
+	} finally {
+		matcher.close();
+	}
+});
