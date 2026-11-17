@@ -1133,3 +1133,61 @@ test('sticky headers follow wrapped lines, virtual rows and folds, and ignore ou
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+test('sticky scroll is published only with the final gutter and never for prefetched views', async () => {
+	const session = await Session.create(process.cwd(), () => {});
+	try {
+		await session.attach(100, 30);
+		await session.client.request('nvim_exec_lua', [
+			`local api,scroll,sticky=vim.api,require('nido_scroll'),require('nido_sticky')
+local buffer=api.nvim_get_current_buf()
+local notify=vim.rpcnotify
+local published={}
+vim.rpcnotify=function(channel,name,value,...)
+  if name=='nido:sticky_scroll' then published[#published+1]=vim.deepcopy(value) end
+  return notify(channel,name,value,...)
+end
+local lines={}
+-- Four-digit line numbers widen the statuscolumn while a redraw is under way.
+for i=1,1000 do lines[#lines+1]='// pad '..i end
+lines[#lines+1]='fn main() {'
+for i=1,40 do lines[#lines+1]='    step_'..i..'();' end
+lines[#lines+1]='}'
+for i=1,200 do lines[#lines+1]='// tail '..i end
+api.nvim_buf_set_lines(buffer,0,-1,false,lines)
+vim.bo[buffer].filetype='rust'
+api.nvim_win_set_cursor(0,{1020,4})
+vim.cmd('normal! zt')
+api.nvim_exec_autocmds('TextChanged',{buffer=buffer})
+-- Wait for the scope outline (bracket analysis feeds it), watching every publication.
+assert(vim.wait(10000,function()
+  vim.cmd.redraw({bang=true})
+  local state=published[#published]
+  return state~=nil and #state.scopes>0
+end,50),'The sticky outline was not ready')
+local function textoff() return vim.fn.getwininfo(api.nvim_get_current_win())[1].textoff end
+local ok,err=pcall(function()
+  -- Setting the option again makes Neovim estimate the column before it grows back.
+  published={}
+  vim.wo.statuscolumn=scroll.column
+  vim.cmd.redraw({bang=true})
+  for _,state in ipairs(published) do
+    assert(state.gutter==textoff(),('Sticky scroll used gutter %d, not %d'):format(state.gutter,textoff()))
+  end
+  -- A prefetch draws other views for the renderer's cache; only the real view's state goes out.
+  vim.cmd.redraw({bang=true})
+  local view=vim.fn.winsaveview()
+  published={}
+  scroll.prefetch(true)
+  scroll.prefetch(false)
+  assert(vim.deep_equal(vim.fn.winsaveview(),view),'Prefetch restores the view')
+  assert(#published==0,('A prefetch published %d sticky states for other views'):format(#published))
+end)
+vim.rpcnotify=notify
+assert(ok,err)`,
+			[]
+		]);
+	} finally {
+		await session.stop();
+	}
+});
