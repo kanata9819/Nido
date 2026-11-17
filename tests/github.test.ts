@@ -384,6 +384,7 @@ test('gh errors come back with gh’s own message', async () => {
 test('diffs of files with spaces or non-ASCII names are found under their real paths', async () => {
 	const repo = join(folder, 'paths');
 	await mkdir(join(repo, 'docs'), { recursive: true });
+	await mkdir(join(repo, 'docs b'));
 	const git = (...args: string[]): string =>
 		execFileSync('git', args, { cwd: repo, encoding: 'utf8', windowsHide: true });
 	git('init', '-q');
@@ -395,20 +396,25 @@ test('diffs of files with spaces or non-ASCII names are found under their real p
 	for (const name of names) {
 		await writeFile(join(repo, name), 'before\n');
 	}
+	const binary = 'docs b/icon.bin';
+	await writeFile(join(repo, binary), Buffer.from([0, 1, 2]));
 	git('add', '.');
 	git('commit', '-qm', 'Initial');
 	for (const name of names.slice(0, 3)) {
 		await writeFile(join(repo, name), 'after\n');
 	}
+	await writeFile(join(repo, binary), Buffer.from([0, 3, 4]));
 	git('mv', 'old.txt', 'renamed é.txt');
 	// Git's own header format, with core.quotePath left at its default, as GitHub uses it.
 	const files = splitPullRequestDiff(git('diff', 'HEAD', '-M', '--no-color'));
 	assert.deepEqual([...files.keys()].sort(), [
+		'docs b/icon.bin',
 		'docs/two  spaces.md',
 		'my file.txt',
 		'renamed é.txt',
 		'日本語.ts'
 	]);
+	assert.match(files.get(binary)!, /Binary files .* differ/);
 	assert.match(files.get('日本語.ts')!, /\+after/);
 });
 
