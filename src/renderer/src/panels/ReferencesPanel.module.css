@@ -1,5 +1,16 @@
-.referencesPanel {
+.referencesAnchor {
+	position: relative;
+	z-index: 9;
 	flex-shrink: 0;
+	height: 0;
+}
+/* The panel covers the bottom of the window instead of taking room from the editor, so
+   opening it and jumping from it never resize Neovim: the text stays where it is. */
+.referencesPanel {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	left: 0;
 	border-top: 1px solid var(--ui-border-strong, #34383c);
 	background: var(--surface-panel, #17191b);
 	font-size: 12px;
@@ -8,12 +19,13 @@
 	backdrop-filter: var(--glass-blur, none);
 	position: absolute;
 	z-index: 5;
-	top: 50%;
+	/* Centered in the editor above the references panel, which covers the editor's bottom. */
+	top: calc((100% - var(--references-panel-height, 0px)) / 2);
 	left: 50%;
 	transform: translate(-50%, -50%);
 	width: min(820px, calc(100% - 48px));
 	height: 430px;
-	max-height: calc(100% - 100px);
+	max-height: calc(100% - var(--references-panel-height, 0px) - 100px);
 	overflow: hidden;
 	background: var(--surface-popover, #181d21);
 	border: 1px solid var(--ui-border-strong, #536359);

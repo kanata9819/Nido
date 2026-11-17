@@ -35,7 +35,8 @@ export default defineConfig({
 				'feature-performance.spec.ts',
 				'document-symbols.spec.ts',
 				'terminal-shells.spec.ts',
-				'overlay-motion.spec.ts'
+				'overlay-motion.spec.ts',
+				'references-panel-layout.spec.ts'
 			]
 		}
 	],
