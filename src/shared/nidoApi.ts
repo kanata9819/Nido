@@ -70,7 +70,11 @@ export interface GitAPI {
 	gitBranches(id: string): Promise<GitBranchEntry[]>;
 	gitSwitch(id: string, name: string, create: boolean): Promise<void>;
 	gitStatus(id: string, includeRemote?: boolean): Promise<GitStatus>;
-	gitRemoteAction(id: string, action: GitRemoteAction, expected: GitRemoteInfo): Promise<void>;
+	gitRemoteAction(
+		id: string,
+		action: GitRemoteAction,
+		expected: GitRemoteInfo
+	): Promise<number | undefined>;
 	gitDiff(id: string, path: string, staged: boolean): Promise<string>;
 	gitStage(id: string, path: string, staged: boolean): Promise<void>;
 	gitStageAll(id: string): Promise<void>;

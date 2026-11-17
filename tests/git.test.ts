@@ -717,12 +717,17 @@ test('Git publishes, fetches without changing HEAD, and pulls only when safe', a
 			sessions: new Map([['local', session]]),
 			send: () => {}
 		});
-		const pull = (): Promise<void> =>
-			handlers.get('gitRemoteAction')!('local', 'pull', tracked) as Promise<void>;
+		const pull = (): Promise<number> =>
+			handlers.get('gitRemoteAction')!('local', 'pull', tracked) as Promise<number>;
 		await assert.rejects(pull(), /Save unsaved editor changes before pulling/);
 		assert.equal(await readFile(file, 'utf8'), 'initial');
 		unsaved = false;
-		await pull();
+		// Pull fetches again, so it may receive more commits than the tracking ref shows.
+		commit(writer, 'Another update since the last fetch');
+		git(writer, 'push', '-q', 'origin', 'main');
+		assert.equal((await gitSyncState(root, tracked))?.behind, 1);
+		assert.equal(await pull(), 2);
+		assert.equal(await pull(), 0);
 		assert.equal(await readFile(file, 'utf8'), 'remote update');
 		assert.equal(refreshed, true);
 

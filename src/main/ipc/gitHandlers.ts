@@ -32,7 +32,7 @@ export function registerGitHandlers({
 	text: (value: unknown) => string;
 	sessions: Map<string, Session>;
 	send: (event: NidoEvent) => void;
-}): { changeBranch: (current: Session, change: () => Promise<void>) => Promise<void> } {
+}): { changeBranch: <T>(current: Session, change: () => Promise<T>) => Promise<T> } {
 	// Concurrent status requests for one folder share a single `git status` run.
 	const statusRequests = new Map<string, ReturnType<typeof gitStatus>>();
 	const previews = new WeakMap<Session, object>();
@@ -120,11 +120,11 @@ export function registerGitHandlers({
 	 * Run `change`, which can rewrite the files of the repository of `current`. Refuses while
 	 * any session with files from that repository has unsaved changes, then reloads the files.
 	 */
-	async function changeBranch(
+	async function changeBranch<T>(
 		current: Session,
-		change: () => Promise<void>,
+		change: () => Promise<T>,
 		unsavedMessage = 'Save unsaved editor changes before switching branches.'
-	): Promise<void> {
+	): Promise<T> {
 		const root = await gitRoot(current.workspace.root);
 		const affected: Session[] = [];
 		for (const open of sessions.values()) {
@@ -153,11 +153,12 @@ export function registerGitHandlers({
 				throw new Error(unsavedMessage);
 			}
 		}
-		await change();
+		const result = await change();
 		for (const open of affected) {
 			await open.refreshFiles();
 		}
 		await refreshGitState(affected);
+		return result;
 	}
 	// Switch (or create and switch to) a branch.
 	handle('gitSwitch', async (id, name, create) => {
@@ -182,7 +183,8 @@ export function registerGitHandlers({
 			remote: text(expected.remote),
 			upstream: text(expected.upstream)
 		};
-		const change = (): Promise<void> => gitRemoteAction(current.workspace.root, action, target);
+		const change = (): Promise<number | undefined> =>
+			gitRemoteAction(current.workspace.root, action, target);
 		return action === 'pull'
 			? changeBranch(current, change, 'Save unsaved editor changes before pulling.')
 			: change();
