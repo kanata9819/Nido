@@ -136,9 +136,14 @@ function MarkdownPreview({
 	const headingIds = new Map<string, number>();
 	const headingId = (children: ReactNode): string => {
 		const slug = headingSlug(textOf(children));
-		const seen = headingIds.get(slug) ?? 0;
-		headingIds.set(slug, seen + 1);
-		return seen ? `${slug}-${seen}` : slug;
+		let id = slug;
+		let suffix = headingIds.get(slug) ?? 0;
+		while (headingIds.has(id)) {
+			id = `${slug}-${++suffix}`;
+		}
+		headingIds.set(slug, suffix);
+		headingIds.set(id, 0);
+		return id;
 	};
 	/** Follow a link: a web page in the browser, a heading here, a workspace file in the editor. */
 	const follow = (href: string): void => {
