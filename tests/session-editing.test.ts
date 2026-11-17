@@ -309,6 +309,37 @@ vim.api.nvim_win_set_cursor(0,{1,2})`);
 	}
 });
 
+test('Ctrl G opens the command line to jump to a line, without a range from its count', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-goto-line-'));
+	let session: Session | undefined;
+	try {
+		session = await Session.create(root, () => {});
+		const lua = (code: string): ReturnType<Session['client']['request']> =>
+			session!.client.request('nvim_exec_lua', [code, []]);
+		await lua("vim.api.nvim_buf_set_lines(0, 0, -1, false, {'a', 'b', 'c', 'd', 'e'})");
+		for (const count of ['', '2']) {
+			await session.input(`gg${count}<C-g>`);
+			assert.deepEqual(
+				await lua('return {vim.fn.mode(), vim.fn.getcmdtype(), vim.fn.getcmdline()}'),
+				['c', ':', '']
+			);
+			await session.input('4<CR>');
+			assert.deepEqual(await lua('return {vim.fn.mode(), vim.fn.line(".")}'), ['n', 4]);
+		}
+		// The command palette leaves Insert mode first, where Ctrl+G is a prefix key.
+		await session.input('ggi<C-\\><C-n><C-g>');
+		assert.deepEqual(
+			await lua('return {vim.fn.mode(), vim.fn.getcmdtype(), vim.fn.getcmdline()}'),
+			['c', ':', '']
+		);
+		await session.input('5<CR>');
+		assert.deepEqual(await lua('return {vim.fn.mode(), vim.fn.line(".")}'), ['n', 5]);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('Ctrl Z and Ctrl Shift Z undo and redo in normal, insert and visual modes', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-undo-key-'));
 	let session: Session | undefined;

@@ -78,6 +78,10 @@ vim.keymap.set('n', 'gf', function()
   end
 end, {silent=true})
 vim.o.laststatus = 0
+-- Ctrl+G opens the command line, so a line number and Enter jump there as in other editors.
+-- Vim's file information (its Ctrl+G) repeats what the status bar shows. <C-u> drops the range
+-- a count would insert.
+vim.keymap.set('n', '<C-g>', ':<C-u>', {desc='Go to line'})
 vim.keymap.set('n', '<C-z>', 'u', {remap=true, silent=true})
 vim.keymap.set('x', '<C-z>', '<Esc>u', {remap=true, silent=true})
 vim.keymap.set('i', '<C-z>', '<C-o>u', {remap=true, silent=true})

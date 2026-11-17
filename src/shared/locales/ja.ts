@@ -7,6 +7,7 @@ export const japanese: Record<string, string> = {
 	Undo: '元に戻す',
 	Redo: 'やり直す',
 	'Reopen closed file': '閉じたファイルを開き直す',
+	'Go to line': '行へ移動',
 	'Restore the last closed file and cursor · Ctrl+Shift+T':
 		'直前に閉じたファイルとカーソル位置を復元 · Ctrl+Shift+T',
 	'Move file tab left': 'ファイルタブを左へ移動',
