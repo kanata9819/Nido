@@ -119,6 +119,8 @@ export interface SessionState {
 	symbols?: DocumentSymbolList;
 	debug?: DebugState;
 	lineEnding?: 'LF' | 'CRLF' | 'Mixed' | 'CR';
+	/** The current file's encoding as Neovim names it (utf-8, latin1, cp932…), "+bom" with a BOM. */
+	fileEncoding?: string;
 	/** Indentation of the current file: spaces or tabs, and the indent width. */
 	indentation?: Indentation;
 	/** Names of the language servers attached to the current buffer. */

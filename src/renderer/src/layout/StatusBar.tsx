@@ -3,6 +3,7 @@ import { useI18n } from '../i18n';
 import type { Translator } from '../../../shared/i18n';
 import { Code2, Search, ChevronUp, ChevronDown, X, SquareTerminal, GitBranch } from 'lucide-react';
 import type { Workspace, SessionState } from '../../../shared/types';
+import { encodingLabel } from './encodingLabel';
 import styles from './StatusBar.module.css';
 import { indentationLabel } from '../palette/commandItems';
 
@@ -184,7 +185,13 @@ export default function StatusBar({
 					{indentationLabel(state.indentation, t)}
 				</button>
 			)}
-			<span className={styles.encoding}>UTF-8</span>
+			<span
+				className={styles.encoding}
+				data-encoding={state.fileEncoding?.replace(/\+bom$/, '') || 'utf-8'}
+				title={t('File encoding')}
+			>
+				{encodingLabel(state.fileEncoding)}
+			</span>
 			{active && workspace?.kind !== 'terminal' && state.lineEnding && (
 				<select
 					className={styles.lineEnding}
