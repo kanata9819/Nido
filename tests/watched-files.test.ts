@@ -72,3 +72,63 @@ test(
 		}
 	}
 );
+
+// Where Neovim does not watch files itself (Linux, as in WSL), nido_watchfiles.lua watches
+// folders with fs_event: dependency and Git folders are left out, folders made later are
+// watched too, and starting returns at once.
+const linuxScript = `
+local root = _G.arg[1]
+dofile('${watchfiles}')
+local events = {}
+local function line(text) io.stdout:write(text .. '\\n') end
+local start = vim.uv.hrtime()
+local cancel = require('vim.lsp._watchfiles')._watchfunc(root, { debounce = 50 }, function(path, change)
+  table.insert(events, path:sub(#root + 2) .. '=' .. change)
+end)
+line('started=' .. ((vim.uv.hrtime() - start) / 1e6 < 50 and 'fast' or 'slow'))
+vim.wait(500)
+local function write(path)
+  local file = assert(io.open(root .. '/' .. path, 'w'))
+  file:write('x')
+  file:close()
+end
+write('node_modules/package/lib/index.js')
+write('.git/objects/blob')
+write('src/a/b/changed.ts')
+vim.fn.mkdir(root .. '/src/new')
+vim.wait(500)
+write('src/new/later.ts')
+vim.wait(500)
+table.sort(events)
+line('events=' .. table.concat(events, ','))
+cancel()
+vim.cmd('qa!')
+`;
+
+test(
+	'on Linux, files are watched without dependency folders, including folders made later',
+	{ skip: process.platform !== 'linux' || !existsSync(nvim), timeout: 30000 },
+	async () => {
+		const root = await mkdtemp(join(tmpdir(), 'nido-linux-watch-'));
+		try {
+			for (const folder of ['src/a/b', 'node_modules/package/lib', '.git/objects']) {
+				await mkdir(join(root, folder), { recursive: true });
+			}
+			await writeFile(join(root, 'src/a/b/changed.ts'), '');
+			await writeFile(join(root, 'check.lua'), linuxScript);
+			const { stdout } = await exec(
+				nvim,
+				['--clean', '--headless', '-l', join(root, 'check.lua'), root],
+				{ timeout: 20000 }
+			);
+			assert.match(stdout, /started=fast/);
+			// 1 is created, 2 changed (vim._watch.FileChangeType).
+			assert.match(
+				stdout,
+				/events=src\/a\/b\/changed\.ts=2,src\/new\/later\.ts=1,src\/new=1\n/
+			);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	}
+);
