@@ -176,11 +176,23 @@ export function useGitPanel({
 		}
 	}
 
+	/** A rejected Pull can still fetch, and Fetch all can update some remotes before failing. */
+	const runRemote: typeof run = (action, after) =>
+		run(
+			() =>
+				action().catch(async (failure) => {
+					// Keep the action's error if refreshing the comparison also fails.
+					await refresh().catch(() => {});
+					throw failure;
+				}),
+			after
+		);
+
 	function remoteAction(action: GitRemoteAction): void {
 		const target = status?.remote;
 		const before = status?.sync;
 		if (target) {
-			void run(
+			void runRemote(
 				() => window.nido.gitRemoteAction(workspaceId, action, target),
 				(next) => setRemoteNotice(remoteResult(action, target.upstream, before, next))
 			);

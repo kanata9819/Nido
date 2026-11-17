@@ -117,6 +117,38 @@ test('Git shows remote actions and refreshes the upstream after publishing', asy
 	expect(await remoteCalls()).toEqual(['push', 'push', 'fetch', 'pull', 'push']);
 });
 
+test('a failed Pull still refreshes the branch comparison and keeps the error', async ({
+	page
+}) => {
+	await page.goto(origin + '?view=git&defer=gitStatus,gitRemoteAction');
+	const panel = page.getByRole('region', { name: 'Git changes' });
+	const pending = (): Promise<string[]> =>
+		page.evaluate(() => window.rendererTest.pending.map(({ method }) => method));
+	const status = {
+		root: '/alpha',
+		branch: 'main',
+		changes: [],
+		remote: { branch: 'main', remote: 'origin', upstream: 'refs/heads/main' },
+		sync: { upstream: 'origin/main', head: 'a'.repeat(40), ahead: 1, behind: 0, outgoing: [] }
+	};
+	await expect.poll(pending).toEqual(['gitStatus']);
+	await page.evaluate((status) => window.rendererTest.settle('gitStatus', 0, status), status);
+	const pull = panel.getByRole('button', { name: 'Pull' });
+	await pull.click();
+	await expect.poll(pending).toEqual(['gitRemoteAction']);
+	await page.evaluate(() =>
+		window.rendererTest.settle('gitRemoteAction', 0, 'Not possible to fast-forward.', true)
+	);
+	// A failed fast-forward can still fetch and advance origin/main.
+	await expect.poll(pending).toEqual(['gitStatus']);
+	await page.evaluate((status) => window.rendererTest.settle('gitStatus', 0, status), {
+		...status,
+		sync: { ...status.sync, head: 'b'.repeat(40), behind: 2 }
+	});
+	await expect(pull).toHaveText(/Pull\s*2/);
+	await expect(panel.getByRole('alert')).toContainText('Not possible to fast-forward.');
+});
+
 test('Git shortcuts use the enabled state as soon as loading finishes', async ({ page }) => {
 	await page.goto(`${origin}?view=git&defer=gitStatus`);
 	const branches = page.getByRole('button', { name: 'Branches', exact: true });
