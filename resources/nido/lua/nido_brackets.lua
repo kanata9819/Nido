@@ -413,9 +413,29 @@ local function publish_guides(window, buffer, first, last, immediate)
     vim.rpcnotify(vim.g.nido_channel, 'nido:bracket_guides', guides, immediate == true)
     return false
 end
+-- Guides are published once a redraw has finished, not from on_win. A guide's column
+-- includes the window's text offset, and while a redraw is under way the statuscolumn can
+-- still be growing (a wider line number, such as the first four-digit one, widens it and
+-- redraws the window again). Read during on_win, that offset could be a column short, and the
+-- guides drew one column to the left until a later redraw corrected them.
+local pending_guides
 api.nvim_set_decoration_provider(api.nvim_create_namespace('nido_bracket_guides'), {
   on_win = function(_, window, buffer, first, last)
-    return publish_guides(window, buffer, first, last, false)
+    -- A scroll prefetch draws views other than the real one only for the renderer's cache.
+    if require('nido_scroll').prefetching then
+      return false
+    end
+    if window == api.nvim_get_current_win() then
+      pending_guides = {window, buffer, first, last}
+    end
+    return false
+  end,
+  on_end = function()
+    local pending = pending_guides
+    pending_guides = nil
+    if pending and api.nvim_win_is_valid(pending[1]) and api.nvim_buf_is_valid(pending[2]) then
+      publish_guides(pending[1], pending[2], pending[3], pending[4], false)
+    end
   end,
 })
 -- Cursor-only redraws do not call on_win; update the active scope without repainting Neovim's text.
