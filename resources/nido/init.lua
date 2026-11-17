@@ -11,6 +11,9 @@ end
 -- Candidate counts already appear in Nido's completion menu. Suppress native
 -- completion chatter so rapid refreshes cannot accumulate a hit-enter prompt.
 vim.opt.shortmess:append('IWFSsc')
+-- "6 more lines", "3 fewer lines" and the like after a paste, undo or delete only repeat what
+-- the editor already shows, and opened the messages card each time.
+vim.o.report = 9999
 vim.o.hlsearch = true
 vim.o.incsearch = true
 for _, key in ipairs({'*', '#', 'n', 'N', 'g*', 'g#'}) do
