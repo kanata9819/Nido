@@ -248,7 +248,8 @@ test('the GitHub extension is off until enabled, then opens from the activity ba
 	await search.fill('pull request');
 	const card = extensions.locator('[data-pack="github"]');
 	await expect(card).toBeVisible();
-	// The card sits in the same grid as the other extensions, below their buttons.
+	// The card sits in the same list as the other extensions, below their buttons: one card
+	// per row, each as wide as the list.
 	await search.fill('');
 	const deno = extensions.locator('[data-pack="deno"]');
 	const [cardBox, denoBox, actionsBox] = await Promise.all([
@@ -256,8 +257,11 @@ test('the GitHub extension is off until enabled, then opens from the activity ba
 		deno.boundingBox(),
 		extensions.getByRole('button', { name: 'Install extension' }).boundingBox()
 	]);
-	expect(cardBox!.y).toBe(denoBox!.y);
+	expect(cardBox!.x).toBe(denoBox!.x);
+	expect(cardBox!.width).toBe(denoBox!.width);
+	expect(denoBox!.y).toBeGreaterThan(cardBox!.y + cardBox!.height);
 	expect(cardBox!.y).toBeGreaterThan(actionsBox!.y + actionsBox!.height);
+	await page.screenshot({ path: test.info().outputPath('other-extensions.png') });
 	expect(Math.abs(cardBox!.width - denoBox!.width)).toBeLessThan(1);
 	expect(cardBox!.x).toBeGreaterThanOrEqual(actionsBox!.x);
 	await search.fill('pull request');
