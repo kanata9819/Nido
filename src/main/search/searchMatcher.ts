@@ -75,7 +75,7 @@ export class SearchMatcher {
 	) {
 		const source = options.regex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 		this.source = options.wholeWord
-			? `(?<![\\p{L}\\p{N}_])(?:${source})(?![\\p{L}\\p{N}_])`
+			? `(?<![\\p{L}\\p{M}\\p{N}_])(?:${source})(?![\\p{L}\\p{M}\\p{N}_])`
 			: source;
 		this.flags = options.caseSensitive ? 'gu' : 'giu';
 		try {
