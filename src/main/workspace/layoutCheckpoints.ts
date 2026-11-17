@@ -16,7 +16,7 @@ const checkpointInterval = 5000;
 export class LayoutCheckpoints {
 	private ready = false;
 	// The next write replaces the backup too, so closed drafts do not come back from it.
-	private replaceBackup = false;
+	private replaceBackup?: object;
 	private readonly checkpoints: WorkspaceCheckpoints;
 
 	constructor(
@@ -38,7 +38,8 @@ export class LayoutCheckpoints {
 						? untitledRecoveryLimitMessage
 						: String(error),
 					severity: 'error'
-				})
+				}),
+			() => this.replaceBackup !== undefined
 		);
 		const timer = setInterval(() => void this.checkpoints.save(), checkpointInterval);
 		timer.unref();
@@ -55,7 +56,7 @@ export class LayoutCheckpoints {
 
 	/** Save now, also replacing the backup (after a workspace was closed on purpose). */
 	saveReplacingBackup(): Promise<void> {
-		this.replaceBackup = true;
+		this.replaceBackup = {};
 		return this.checkpoints.save();
 	}
 
@@ -148,9 +149,10 @@ export class LayoutCheckpoints {
 
 	private async write(layout: SavedLayout): Promise<void> {
 		const replace = this.replaceBackup;
-		await writeLayout(this.layoutPath, layout, { replaceBackup: replace });
-		if (replace) {
-			this.replaceBackup = false;
+		await writeLayout(this.layoutPath, layout, { replaceBackup: replace !== undefined });
+		// A close during this write requested another backup replacement.
+		if (this.replaceBackup === replace) {
+			this.replaceBackup = undefined;
 		}
 	}
 }

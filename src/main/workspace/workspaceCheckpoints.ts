@@ -15,12 +15,13 @@ export class WorkspaceCheckpoints {
 	constructor(
 		private readonly snapshot: () => Promise<SavedLayout | undefined>,
 		private readonly write: (layout: SavedLayout) => Promise<void>,
-		private readonly onError: (error: unknown) => void
+		private readonly onError: (error: unknown) => void,
+		private readonly shouldWriteUnchanged: () => boolean = () => false
 	) {}
 
 	/**
 	 * Save a fresh snapshot. A save requested while another is running is queued, and all such
-	 * requests share one follow-up save. Unchanged layouts are not written again.
+	 * requests share one follow-up save. Unchanged layouts are skipped unless a write is requested for another reason.
 	 */
 	save(): Promise<void> {
 		if (this.disposed) {
@@ -36,7 +37,7 @@ export class WorkspaceCheckpoints {
 				return;
 			}
 			const serialized = JSON.stringify(layout);
-			if (serialized === this.saved) {
+			if (serialized === this.saved && !this.shouldWriteUnchanged()) {
 				return;
 			}
 			await this.write(layout);
