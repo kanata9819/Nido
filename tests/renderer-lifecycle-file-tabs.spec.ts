@@ -341,6 +341,48 @@ test('file tab shortcuts leave a terminal session focused', async ({ page }) => 
 	).toEqual([]);
 });
 
+test('closing a file tab returns focus to the editor, a middle click closes it, and same names show their folder', async ({
+	page
+}) => {
+	await showFileTabs(page);
+	const editor = page.getByRole('textbox', { name: 'Neovim input' });
+	const tabs = page.getByRole('tablist', { name: 'Files', exact: true });
+	const closed = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'closeBuffer')
+				.map((call) => call.args)
+		);
+	// The clicked button goes away with its tab; typing must still reach the editor.
+	await page.getByRole('button', { name: 'Close file second.ts', exact: true }).click();
+	await expect.poll(closed).toEqual([['alpha', 22]]);
+	await expect(editor).toBeFocused();
+
+	await tabs.getByRole('tab', { name: 'third.ts' }).click({ button: 'middle' });
+	await expect.poll(closed).toEqual([
+		['alpha', 22],
+		['alpha', 33]
+	]);
+	await expect(editor).toBeFocused();
+
+	// Two open index.ts files are told apart by their folders; a unique name shows none.
+	await page.evaluate(() => {
+		window.rendererTest.emit({
+			type: 'statePatch',
+			id: 'alpha',
+			state: {
+				buffers: [
+					{ id: 1, name: '/alpha/src/index.ts', modified: false },
+					{ id: 2, name: '/alpha/test/index.ts', modified: false },
+					{ id: 3, name: '/alpha/src/main.ts', modified: false }
+				],
+				current: 1
+			}
+		});
+	});
+	await expect(tabs.getByRole('tab')).toHaveText(['index.tssrc', 'index.tstest', 'main.ts']);
+});
+
 test("the status bar names the current file's real encoding, with a byte order mark", async ({
 	page
 }) => {

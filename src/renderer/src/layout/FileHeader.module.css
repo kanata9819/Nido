@@ -156,3 +156,11 @@
 	color: #86def0;
 	text-shadow: 0 0 10px #4ee6ff73;
 }
+
+/* The folder of a file whose name another open file shares. */
+.tabFolder {
+	margin-left: 4px;
+	color: var(--ui-text-dim, #7d8a96);
+	font-size: 11px;
+	white-space: nowrap;
+}
