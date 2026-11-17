@@ -1848,3 +1848,60 @@ test('rapid Time Machine selection starts only the final preview and keeps resto
 		)
 	).toEqual([['alpha', '/alpha/notes.txt', '21']]);
 });
+
+test('Markdown preview links open workspace files in the editor, jump to headings and keep the document on failure', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=markdown&defer=markdownPreview,openFile,openDocumentation`);
+	const content = page.getByLabel('Markdown preview content', { exact: true });
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest?.pending.some((call) => call.method === 'markdownPreview')
+			)
+		)
+		.toBe(true);
+	const filler = Array.from({ length: 80 }, (_, i) => `Line ${i + 1}`).join('\n\n');
+	await page.evaluate(
+		(text) =>
+			window.rendererTest.settle('markdownPreview', 0, {
+				token: 'guide:1',
+				path: '/alpha/docs/guide.md',
+				text
+			}),
+		`# Guide\n\n[Setup](setup.md) · [Main](../src/main.ts#L12) · [Usage](#usage) · [Site](https://example.com) · [Mail](mailto:me@example.com)\n\n${filler}\n\n## Usage\n\nEnd.`
+	);
+	await expect(content.getByRole('heading', { name: 'Guide' })).toBeVisible();
+	const opened = (): Promise<unknown[][]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter((call) => call.method === 'openFile')
+				.map((call) => call.args)
+		);
+	await content.getByRole('link', { name: 'Setup' }).click();
+	await expect.poll(opened).toEqual([['alpha', 'docs/setup.md', undefined]]);
+	// A file that cannot be opened explains why above the document, which stays.
+	await page.evaluate(() =>
+		window.rendererTest.settle(
+			'openFile',
+			0,
+			new Error('Path is outside this workspace.'),
+			true
+		)
+	);
+	await expect(content.getByRole('alert')).toContainText('Path is outside this workspace.');
+	await expect(content.getByRole('heading', { name: 'Guide' })).toBeVisible();
+
+	await content.getByRole('link', { name: 'Main' }).click();
+	await expect
+		.poll(async () => (await opened()).at(-1))
+		.toEqual(['alpha', 'docs/../src/main.ts', 12]);
+	await expect(content.getByRole('alert')).toHaveCount(0);
+
+	await content.getByRole('link', { name: 'Usage' }).click();
+	await expect(content.getByRole('heading', { name: 'Usage' })).toBeInViewport();
+
+	// A mailto: link is not followed; it is plain text.
+	await expect(content.getByRole('link', { name: 'Mail' })).toHaveCount(0);
+	await expect(content.getByText('Mail', { exact: true })).toBeVisible();
+});

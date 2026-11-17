@@ -57,3 +57,12 @@
 :global(:root[data-theme='neon']) .markdownPreview {
 	background: var(--surface-editor);
 }
+
+/* Why the last link could not be followed, above the document, which stays readable. */
+.linkError {
+	margin: 0 0 12px;
+	padding: 6px 10px;
+	border-radius: 6px;
+	background: #e06c7520;
+	color: #f0a3a8;
+}
