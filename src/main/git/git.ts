@@ -290,7 +290,7 @@ export async function gitRemoteAction(
 ): Promise<number | undefined> {
 	if (action === 'fetch') {
 		await git(cwd, ['fetch', '--all']);
-		return;
+		return undefined;
 	}
 	const target = await gitRemoteInfo(cwd);
 	if (
@@ -306,7 +306,7 @@ export async function gitRemoteAction(
 	}
 	if (action === 'push') {
 		await pushBranch(cwd, target);
-		return;
+		return undefined;
 	}
 	const branch = `refs/heads/${target.branch}`;
 	const before = (await git(cwd, ['rev-parse', '--verify', '--quiet', branch], true)).trim();
@@ -326,6 +326,7 @@ export async function gitRemoteAction(
 		);
 		return count === undefined ? undefined : Number(count.trim());
 	}
+	return undefined;
 }
 
 /**
