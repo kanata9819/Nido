@@ -452,14 +452,31 @@ function M.jump(window, buffer, line)
   return true
 end
 
-api.nvim_set_decoration_provider(api.nvim_create_namespace('nido_sticky'), {on_win=function(_, win, buffer)
-  -- An interrupted highlight keeps the last complete sticky frame until the next redraw.
-  local ok, result = pcall(M.publish, win, buffer)
-  if not ok and not tostring(result):find('Keyboard interrupt', 1, true) then
-    error(result)
-  end
-  return false
-end})
+-- The state is published once a redraw has finished, as bracket guides are (nido_brackets):
+-- during on_win the statuscolumn can still be growing, so the gutter width read then could be
+-- a column short, and a scroll prefetch draws other views whose scopes and rows are not the
+-- real view's. Either briefly drew the sticky headers and separators out of place.
+local pending_publish
+api.nvim_set_decoration_provider(api.nvim_create_namespace('nido_sticky'), {
+  on_win = function(_, win, buffer)
+    if not require('nido_scroll').prefetching and win == api.nvim_get_current_win() then
+      pending_publish = {win, buffer}
+    end
+    return false
+  end,
+  on_end = function()
+    local pending = pending_publish
+    pending_publish = nil
+    if not pending or not api.nvim_win_is_valid(pending[1]) or not api.nvim_buf_is_valid(pending[2]) then
+      return
+    end
+    -- An interrupted highlight keeps the last complete sticky frame until the next redraw.
+    local ok, result = pcall(M.publish, pending[1], pending[2])
+    if not ok and not tostring(result):find('Keyboard interrupt', 1, true) then
+      error(result)
+    end
+  end,
+})
 api.nvim_create_autocmd({'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'TextChangedI', 'TextChangedP', 'LspAttach', 'LspDetach'}, {
   callback=function(event)
     if entries[event.buf] and not event.event:match('^TextChanged') then entries[event.buf].highlights = {} end
