@@ -190,6 +190,45 @@ vim.api.nvim_win_set_cursor(0, {1, 1})`);
 	}
 });
 
+test('copying lines above keeps position marks attached to the original lines', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-copy-lines-marks-'));
+	const session = await Session.create(root, () => {});
+	const lua = (code: string): ReturnType<Session['client']['request']> =>
+		session.client.request('nvim_exec_lua', [code, []]);
+	try {
+		for (const [keys, row, expected, selection] of [
+			['<M-S-Up>', 2, 3, undefined],
+			['Vj<M-S-Up>', 3, 5, [2, 3]],
+			['Vj<M-S-Down>', 3, 3, [4, 5]]
+		] as const) {
+			await session.input('<Esc>');
+			await lua(`vim.api.nvim_buf_set_lines(0, 0, -1, false, {'first', 'second', 'third', 'last'})
+vim.api.nvim_win_set_cursor(0, {2, 1})
+vim.g.copy_test_namespace = vim.api.nvim_create_namespace('copy-lines')
+vim.g.copy_test_mark = vim.api.nvim_buf_set_extmark(0, vim.g.copy_test_namespace, ${row - 1}, 1, {})`);
+			await session.input(keys);
+			assert.deepEqual(
+				await lua(
+					'return vim.api.nvim_buf_get_extmark_by_id(0, vim.g.copy_test_namespace, vim.g.copy_test_mark, {})'
+				),
+				[expected - 1, 1],
+				keys
+			);
+			if (selection) {
+				assert.equal(await lua('return vim.fn.mode()'), 'V');
+				await session.input('<Esc>');
+				assert.deepEqual(
+					await lua('return {vim.fn.line("\'<"), vim.fn.line("\'>")}'),
+					selection
+				);
+			}
+		}
+	} finally {
+		await session.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('Ctrl Enter and Ctrl Shift Enter open a line without splitting the current one', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-insert-line-'));
 	const session = await Session.create(root, () => {});

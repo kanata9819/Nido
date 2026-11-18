@@ -141,14 +141,20 @@ end
 --- The cursor and selection stay on the copy in the given direction.
 local function copy_lines(delta, visual)
   local first, last = vim.fn.line('.'), vim.fn.line('.')
-  if visual then first, last = vim.fn.line("'<"), vim.fn.line("'>") end
+  local start, finish
+  if visual then
+    start, finish = vim.fn.getpos("'<"), vim.fn.getpos("'>")
+    first, last = start[2], finish[2]
+  end
   local row, column = unpack(vim.api.nvim_win_get_cursor(0))
   local lines = vim.api.nvim_buf_get_lines(0, first - 1, last, false)
-  vim.api.nvim_buf_set_lines(0, last, last, false, lines)
+  local after = delta < 0 and first - 1 or last
+  vim.api.nvim_buf_set_lines(0, after, after, false, lines)
   local shift = delta > 0 and #lines or 0
   if visual then
-    vim.fn.setpos("'<", {0, first + shift, vim.fn.col("'<"), 0})
-    vim.fn.setpos("'>", {0, last + shift, vim.fn.col("'>"), 0})
+    start[2], finish[2] = first + shift, last + shift
+    vim.fn.setpos("'<", start)
+    vim.fn.setpos("'>", finish)
     vim.cmd.normal({args={'gv'}, bang=true})
   else
     vim.api.nvim_win_set_cursor(0, {row + shift, column})
