@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rename, rm, writeFile, mkdir, symlink, utimes } from
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { splitDiff } from '../src/renderer/src/git/diff/splitDiff';
-import { diffViewRows } from '../src/renderer/src/git/diff/diffView';
+import { changedRange, diffViewRows } from '../src/renderer/src/git/diff/diffView';
 import { registerGitHandlers } from '../src/main/ipc/gitHandlers';
 import type { Session } from '../src/main/session/session';
 import type { NidoEvent } from '../src/shared/types';
@@ -873,4 +873,14 @@ test('large inline diff blocks render every deletion before the additions', () =
 		line: { number: 1, text: 'new', changed: true },
 		after: 1
 	});
+});
+
+test('diff emphasis keeps supplementary Unicode characters in one span', () => {
+	for (const pairs of [
+		['😀', '😁'], // same high surrogate
+		[String.fromCodePoint(0x1f600), String.fromCodePoint(0x1fa00)] // same low surrogate
+	]) {
+		const [before, after] = pairs.map((text) => 'prefix ' + text + ' suffix');
+		assert.deepEqual(changedRange(before, after), { before: [7, 9], after: [7, 9] });
+	}
 });
