@@ -64,10 +64,11 @@ export function useKeyboardShortcuts(
 	const context: ShortcutContext = { ...params, waking: !!workspace?.sleeping };
 
 	return (event: KeyboardEvent): void => {
-		if (isOwnedByFocusedElement(event, checkingMode.current)) {
+		const modePending = checkingMode();
+		if (isOwnedByFocusedElement(event, modePending)) {
 			return;
 		}
-		if (isAltGraph(event) && !checkingMode.current) {
+		if (isAltGraph(event) && !modePending) {
 			return;
 		}
 		const focusedInput = document.activeElement?.getAttribute('data-editor-input');
