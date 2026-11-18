@@ -353,7 +353,7 @@ test('a merge refreshes the list behind the pull request and reports a branch it
 	expect((await calls(page, 'githubPullRequests')).length).toBe(2);
 });
 
-test('a comment that fails to send keeps its text', async ({ page }) => {
+test('a pending or failed comment keeps its draft', async ({ page }) => {
 	await page.goto(`${origin}?view=github&defer=githubComment`);
 	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
 	await page.keyboard.press('Enter');
@@ -362,11 +362,23 @@ test('a comment that fails to send keeps its text', async ({ page }) => {
 	const box = page.getByRole('textbox', { name: 'Comment on the pull request' });
 	await page.keyboard.type('Important review notes');
 	await page.keyboard.press('Control+Enter');
+	await expect.poll(() => calls(page, 'githubComment')).toHaveLength(1);
+	await expect(page.getByRole('button', { name: 'Cancel (Esc)' })).toBeDisabled();
+	await box.press('Escape');
+	await expect(box).toBeFocused();
+	await box.press('End');
+	await page.keyboard.type(' unsent');
+	await expect(box).toHaveValue('Important review notes');
 	await page.evaluate(() =>
 		window.rendererTest.settle('githubComment', 0, new Error('HTTP 502: Bad gateway'), true)
 	);
 	await expect(page.getByRole('alert')).toContainText('HTTP 502');
 	await expect(box).toHaveValue('Important review notes');
+	await box.press('End');
+	await page.keyboard.type(' revised');
+	await expect(box).toHaveValue('Important review notes revised');
+	await box.press('Escape');
+	await expect(box).toHaveCount(0);
 });
 
 test('an issue that fails to load opens no comment form', async ({ page }) => {
