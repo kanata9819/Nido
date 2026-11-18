@@ -148,6 +148,13 @@ export class HorizontalScroll {
 		this.requested = Math.max(0, this.column + pendingColumns);
 	}
 
+	/** Ask Neovim for `column` after the gesture stopped; returns the columns to scroll. */
+	moveTo(column: number): number {
+		const movement = Math.max(0, column) - this.requested;
+		this.requested = Math.max(0, column);
+		return movement;
+	}
+
 	/** Start over at column 0. */
 	reset(): void {
 		this.column = 0;

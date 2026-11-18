@@ -15,6 +15,8 @@ local centered_view
 local mouse_scrolloff
 -- The horizontal position the user panned to, kept across vertical scrolling.
 local pan
+-- Where sideways scrolling last placed the cursor, and the column it had before being pushed.
+local pushed
 
 -- Buffer positions start below their virtual lines. topfill counts the extra
 -- screen rows still visible above that position, including CodeLens annotations.
@@ -298,7 +300,20 @@ local function scroll_horizontal(columns)
     if vim.fn.virtcol({view.lnum, '$'}) - 1 <= left then view.lnum = longest_line end
   end
   if left == view.leftcol then return false end
-  place(window, view, left, view.lnum, vim.fn.virtcol('.'))
+  -- The renderer scrolls ahead of a gesture and settles back. Keep the column a pushed cursor
+  -- started from, so settling back puts it where the gesture alone would have.
+  local buffer, now = api.nvim_get_current_buf(), vim.uv.now()
+  local cursor = api.nvim_win_get_cursor(window)
+  local origin = pushed
+  if not (origin and origin.window == window and origin.buffer == buffer
+      and origin.tick == api.nvim_buf_get_changedtick(buffer) and now - origin.time < 500
+      and origin.lnum == cursor[1] and origin.col == cursor[2]) then
+    origin = {virtcol=vim.fn.virtcol('.')}
+  end
+  place(window, view, left, view.lnum, origin.virtcol)
+  cursor = api.nvim_win_get_cursor(window)
+  pushed = {window=window, buffer=buffer, tick=api.nvim_buf_get_changedtick(buffer), time=now,
+    lnum=cursor[1], col=cursor[2], virtcol=origin.virtcol}
   remember_leftcol(left)
   return true
 end

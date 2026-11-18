@@ -883,6 +883,51 @@ test('horizontal panning preserves the vertical viewport and ignores text inside
 	}
 });
 
+test('settling sideways lookahead puts a pushed cursor where the gesture alone would', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-horizontal-lookahead-'));
+	let session: Session | undefined;
+	try {
+		await writeFile(
+			join(root, 'wide.txt'),
+			Array.from({ length: 30 }, (_, index) => `ROW_${index} ` + 'x'.repeat(400)).join('\n')
+		);
+		session = await Session.create(root, () => {});
+		await session.openFile('wide.txt');
+		await session.attach(70, 20);
+		await session.setWordWrap(false);
+		const state = (): Promise<unknown> =>
+			session!.client.request('nvim_exec_lua', [
+				"return {vim.fn.winsaveview().leftcol, vim.api.nvim_win_get_cursor(0), require('nido_scroll').cursor()}",
+				[]
+			]);
+		const reset = async (column: number): Promise<void> => {
+			await session!.input(`<Esc>gg0${column ? `${column}l` : ''}`);
+			await session!.client.request('nvim_eval', ['1']);
+		};
+		// A cursor at the left edge, and one the gesture never reaches.
+		for (const start of [0, 30]) {
+			await reset(start);
+			await session.scroll(0, true, true, 20);
+			const direct = await state();
+			await reset(start);
+			// The renderer asks for columns ahead of the gesture, then settles back.
+			await session.scroll(0, true, true, 12);
+			await session.scroll(0, true, true, 20);
+			await session.scroll(0, true, true, -12);
+			assert.deepEqual(await state(), direct, `cursor starting at column ${start}`);
+		}
+		// A later gesture starts from where the cursor was left, like Vim's zh.
+		await reset(0);
+		await session.scroll(0, true, true, 40);
+		await new Promise((resolve) => setTimeout(resolve, 600));
+		await session.scroll(0, true, true, -20);
+		assert.deepEqual(await state(), [20, [1, 40]]);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('vertical scrolling keeps the panned column when the cursor reaches short lines', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-vertical-leftcol-'));
 	let session: Session | undefined;

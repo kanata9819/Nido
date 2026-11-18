@@ -298,17 +298,37 @@ test('axis changes wait for lookahead acknowledgement and completion before real
 	}
 });
 
-test('cursor-following horizontal scrolling keeps one-column native requests ready for editing', async () => {
+test('cursor-following horizontal lookahead scrolls back to the shown column before editing', async () => {
 	await withEditorScroll(async ({ scroll, calls, completions }) => {
-		scroll.requestHorizontal(0.5, true);
+		// An eased touchpad gesture draws columns ahead even though the cursor follows.
+		scroll.requestHorizontal(2, true, true, 40, 0);
+		scroll.advance(40, true);
 		assert.equal(calls.length, 1);
-		assert.equal(calls[0].columns, 1);
+		assert.equal(calls[0].columns, 8);
 		assert.equal(calls[0].follow, true);
-		assert.equal(scroll.alignHorizontal(), false);
-		scroll.acknowledge(true, 1);
+		scroll.acknowledge(true, 8);
 		calls[0].resolve();
 		await completions[0];
-		assert.equal(scroll.alignHorizontal(), false);
+		assert.equal(scroll.horizontalColumn - scroll.horizontalOffset, 2);
+		let settled = false;
+		void scroll.stopForInput()!.then(() => (settled = true));
+		assert.equal(calls.length, 2);
+		assert.equal(calls[1].columns, -6);
+		assert.equal(calls[1].follow, true);
+		await Promise.resolve();
+		assert.equal(settled, false, 'editing waits for Neovim to scroll back');
+		scroll.acknowledge(true, 2);
+		calls[1].resolve();
+		await completions[1];
+		assert.equal(settled, true);
+		assert.equal(scroll.stopForInput(), undefined, 'an aligned view needs nothing');
+	});
+	await withEditorScroll(async ({ scroll, calls }) => {
+		// A cursor that does not follow the view is restored by Neovim itself.
+		scroll.requestHorizontal(2, false, true, 40, 0);
+		scroll.advance(40, true);
+		scroll.acknowledge(true, 8);
+		assert.equal(scroll.stopForInput(), undefined);
 		assert.equal(calls.length, 1);
 	});
 });

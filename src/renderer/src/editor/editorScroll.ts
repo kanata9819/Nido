@@ -37,6 +37,10 @@ export class EditorScroll {
 	// Shortly after scrolling stops, a fractional horizontal offset is settled to whole columns.
 	private settleTimer?: ReturnType<typeof setTimeout>;
 	private settleAt = 0;
+	// Settling keeps the sideways gesture's cursor behavior, so a following cursor is not detached.
+	private horizontalFollow = false;
+	// Input waiting for the scroll requests in flight to finish (stopForInput).
+	private idleWaiters: (() => void)[] = [];
 	// Eased vertical wheel movement, in lines, advanced on animation frames.
 	private wheelMotion?: {
 		distance: number;
@@ -114,7 +118,7 @@ export class EditorScroll {
 		if (!this.pending) {
 			const columns = this.horizontal.settle();
 			if (columns) {
-				this.move(0, false, columns);
+				this.move(0, this.horizontalFollow, columns);
 			}
 		}
 		return true;
@@ -162,6 +166,7 @@ export class EditorScroll {
 		this.fetching = false;
 		this.prefetchNeeded = true;
 		this.stop();
+		this.resolveIdle();
 	}
 
 	/** Drop queued scrolling while the editor is disabled, and settle again once enabled. */
@@ -173,11 +178,44 @@ export class EditorScroll {
 			this.queue.cancelQueued();
 			this.horizontal.stop(this.queue.pendingColumns, true);
 			this.options.grid.scrollPreview = 0;
+			this.resolveIdle();
 		} else if (this.paused) {
 			this.paused = false;
 			if (this.horizontal.active) {
 				this.deferSettle();
 			}
+		}
+	}
+
+	/**
+	 * Stop for editing input. A following cursor may sit on columns scrolled ahead of the shown
+	 * view, so Neovim is first scrolled back to it; the returned promise settles once it has.
+	 */
+	stopForInput(): Promise<void> | undefined {
+		const shown =
+			this.horizontalFollow && this.horizontal.active
+				? Math.round(this.horizontal.native - this.horizontal.offset)
+				: undefined;
+		this.stop();
+		const columns = shown === undefined ? 0 : this.horizontal.moveTo(shown);
+		if (!columns || !this.options.enabled()) {
+			return undefined;
+		}
+		// A lost reply must not hold typing back for long.
+		const idle = new Promise<void>((resolve) => {
+			this.idleWaiters.push(resolve);
+			setTimeout(resolve, 500);
+		});
+		this.move(0, true, columns);
+		return idle;
+	}
+
+	private resolveIdle(): void {
+		if (this.pending || this.queue.hasQueued) {
+			return;
+		}
+		for (const resolve of this.idleWaiters.splice(0)) {
+			resolve();
 		}
 	}
 
@@ -215,7 +253,7 @@ export class EditorScroll {
 		}
 		const columns = this.options.enabled() ? this.horizontal.settle() : 0;
 		if (columns) {
-			this.move(0, false, columns);
+			this.move(0, this.horizontalFollow, columns);
 			return;
 		}
 		this.options.grid.scrolling = false;
@@ -368,7 +406,8 @@ export class EditorScroll {
 		columns: number,
 		follow: boolean,
 		preview: boolean,
-		speed = Math.abs(columns)
+		/** The eased gesture's speed; undefined when the movement is not eased. */
+		easedSpeed?: number
 	): void {
 		this.deferSettle();
 		// Keep both cached edges overlapping when a fast gesture reverses.
@@ -376,18 +415,18 @@ export class EditorScroll {
 			1,
 			Math.floor((this.options.grid.columns - this.options.grid.horizontalGutter - 1) / 2)
 		);
-		let ahead = 1;
-		if (preview && !this.wheelMotion && !this.queue.verticalPending) {
-			if (!follow) {
-				ahead = Math.min(maxAhead, 32, Math.max(8, Math.ceil(speed * 4)));
-			} else {
-				// Prepare columns within the gesture so a following cursor never jumps past its target.
-				const remaining = this.horizontalMotion?.remaining ?? 0;
-				if (Math.sign(columns - this.horizontal.offset) === Math.sign(remaining)) {
-					ahead = Math.max(1, Math.min(maxAhead, Math.floor(Math.abs(remaining))));
-				}
-			}
-		}
+		// An eased gesture shows fractional columns between Neovim's replies, so it needs drawn
+		// columns ahead even when the cursor follows. Neovim keeps a cursor pushed by lookahead
+		// at its starting column, so settling back returns it to where the gesture alone would.
+		const speed = easedSpeed ?? Math.abs(columns);
+		const ahead =
+			preview &&
+			!this.wheelMotion &&
+			!this.queue.verticalPending &&
+			(!follow || easedSpeed !== undefined)
+				? Math.min(maxAhead, 32, Math.max(8, Math.ceil(speed * 4)))
+				: 1;
+		this.horizontalFollow = follow;
 		const movement = this.horizontal.request(columns, ahead);
 		if (movement) {
 			this.move(0, follow, movement);
@@ -455,6 +494,7 @@ export class EditorScroll {
 			}
 			this.options.schedule();
 		}
+		this.resolveIdle();
 	}
 
 	/** Send the queued movement to Neovim, unless a request is already in flight. */
@@ -552,6 +592,9 @@ export class EditorScroll {
 	/** Stop all motion when the editor goes away. */
 	dispose(): void {
 		this.disposed = true;
+		for (const resolve of this.idleWaiters.splice(0)) {
+			resolve();
+		}
 		this.wheelMotion = undefined;
 		this.horizontalMotion = undefined;
 		clearTimeout(this.settleTimer);
