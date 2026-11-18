@@ -3,6 +3,7 @@ import { test, expect } from './helpers/renderer-test';
 import type { ViteDevServer } from 'vite';
 import { harnessWarmupTimeout, startHarnessServer } from './helpers/harness-server';
 import type {} from './renderer/harness';
+import type { PullRequestDetails } from '../src/shared/github';
 
 let server: ViteDevServer;
 let origin: string;
@@ -123,6 +124,63 @@ test('a pull request file shows its diff and threads, which can be replied to an
 	expect(await calls(page, 'githubLineComment')).toEqual([
 		['alpha', 7, 'src/login.ts', 3, 'LEFT', 'Typo here']
 	]);
+});
+
+test('refresh keeps the reviewed file selected by path and returns to overview if it was removed', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=github&defer=githubPullRequest`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	const details = (paths: string[]): PullRequestDetails => ({
+		number: 7,
+		title: 'Add sign-in',
+		author: 'dev',
+		state: 'OPEN',
+		isDraft: false,
+		headRefName: 'feature/login',
+		baseRefName: 'main',
+		reviewDecision: '',
+		checks: 'none',
+		updatedAt: '',
+		url: 'https://github.com/octo/alpha/pull/7',
+		labels: [],
+		body: '',
+		headRefOid: 'abc123',
+		isCrossRepository: false,
+		mergeable: 'MERGEABLE',
+		additions: 1,
+		deletions: 0,
+		createdAt: '',
+		files: paths.map((path) => ({ path, additions: 1, deletions: 0 })),
+		checkRuns: [],
+		timeline: [],
+		threads: []
+	});
+	const refresh = async (paths: string[]): Promise<void> => {
+		await expect
+			.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.method))
+			.toBe('githubPullRequest');
+		await page.evaluate(
+			(value) => window.rendererTest.settle('githubPullRequest', 0, value),
+			details(paths)
+		);
+	};
+	await page.keyboard.press('Enter');
+	await refresh(['src/login.ts']);
+	const files = page.getByRole('listbox', { name: 'Pull request files' });
+	const reviewed = files.getByRole('option', { name: 'src/login.ts' });
+	await reviewed.click();
+	await expect(reviewed).toHaveAttribute('aria-selected', 'true');
+	await page.keyboard.press('r');
+	await refresh(['README.md', 'src/login.ts']);
+	await expect(files.getByRole('option', { name: 'README.md' })).toBeVisible();
+	await expect(reviewed).toHaveAttribute('aria-selected', 'true');
+	await page.keyboard.press('r');
+	await refresh(['README.md']);
+	await expect(files.getByRole('option', { name: 'Overview' })).toHaveAttribute(
+		'aria-selected',
+		'true'
+	);
 });
 
 test('reviews, merges and checkouts send their choices', async ({ page }) => {

@@ -265,20 +265,20 @@ function M.highlight(buffer, first, lines, syntax_only)
   return highlighted
 end
 
---- Jump to a quickfix-style item (filename, lnum, col) and center it, keeping the jump list.
-local function jump(item)
+--- Jump to a quickfix-style item (filename, lnum, col), keeping the jump list.
+local function jump(item, keep_view)
   vim.cmd("normal! m'")
-  require('nido_eol').open(item.filename)
+  if not keep_view then require('nido_eol').open(item.filename) end
   local line = math.min(item.lnum, vim.api.nvim_buf_line_count(0))
   local text = vim.api.nvim_buf_get_lines(0, line - 1, line, false)[1] or ''
   vim.api.nvim_win_set_cursor(0, { line, math.min(item.col - 1, #text) })
   vim.cmd('normal! zv')
-  require('nido_scroll').center()
+  if not keep_view then require('nido_scroll').center() end
 end
 
 --- Jump to a reference and center it.
 function M.open(index, expected_version)
-  jump(get_item(index, expected_version))
+  jump(get_item(index, expected_version), false)
 end
 
 local function show_locations(kind, options, win, tag)
@@ -293,7 +293,11 @@ local function show_locations(kind, options, win, tag)
   end
   if #found == 1 then
     vim.api.nvim_win_call(win, function()
-      jump(found[1])
+      local item = found[1]
+      -- A definition on the cursor's line only needs a column move.
+      local same_line = item.lnum == vim.fn.line('.')
+        and require('nido_buffers').find(item.filename) == vim.api.nvim_get_current_buf()
+      jump(item, same_line)
       vim.fn.settagstack(win, { items = { tag } }, 't')
     end)
     return
