@@ -42,6 +42,18 @@ export function changedRange(before: string, after: string): DiffEmphasis | unde
 	) {
 		end++;
 	}
+	// Text spans use UTF-16 offsets. Keep a surrogate pair in the same span on both sides.
+	const splitsPair = (text: string, index: number): boolean =>
+		index > 0 && (text.codePointAt(index - 1) ?? 0) > 0xffff;
+	if (splitsPair(before, start) || splitsPair(after, start)) {
+		start--;
+	}
+	if (
+		end > 0 &&
+		(splitsPair(before, before.length - end) || splitsPair(after, after.length - end))
+	) {
+		end--;
+	}
 	// Where the change cuts through a word, widen it to the whole word, so `false` → `true`
 	// marks both words rather than `fals` and `tru`.
 	const word = (text: string, index: number): boolean =>
