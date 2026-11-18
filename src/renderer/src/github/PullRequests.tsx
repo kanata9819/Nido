@@ -79,16 +79,24 @@ export default function PullRequests({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [workspaceId, filter, revision, listKey]);
 
-	/** Load (or reload) a pull request with its diff, keeping the selected entry. */
+	/** Keep the same file across reloads, even when it moves to another row. */
+	function showDetails(details: PullRequestDetails, keepEntry: boolean): void {
+		setOpened(details);
+		setEntry((value) => {
+			const path = keepEntry ? opened?.files[value - 1]?.path : undefined;
+			return path ? details.files.findIndex((file) => file.path === path) + 1 : 0;
+		});
+	}
+
+	/** Load (or reload) a pull request with its diff. */
 	function open(number: number, keepEntry = false): Promise<boolean> {
 		return run(async () => {
 			const [details, files] = await Promise.all([
 				window.nido.githubPullRequest(workspaceId, number),
 				window.nido.githubPullRequestDiff(workspaceId, number)
 			]);
-			setOpened(details);
+			showDetails(details, keepEntry);
 			setDiffs(new Map(files));
-			setEntry((value) => (keepEntry ? Math.min(value, details.files.length) : 0));
 			list.current?.focus();
 		});
 	}
@@ -132,7 +140,7 @@ export default function PullRequests({
 			setForm(undefined);
 			if (opened) {
 				const details = await window.nido.githubPullRequest(workspaceId, opened.number);
-				setOpened(details);
+				showDetails(details, true);
 			}
 			// A merge, review or checkout changes the PR's state, checks or review in the list.
 			setRevision((value) => value + 1);

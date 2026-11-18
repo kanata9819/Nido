@@ -44,7 +44,8 @@ function modeName(mode: string): string {
  * Holds keys whose meaning depends on Neovim's mode until the real mode is known. The mode
  * the renderer last heard of can trail fast typing: Space typed right after i must insert a
  * space, not open the leader menu. `defer` takes such a key, asks Neovim for its mode, and
- * dispatches the key (and every key typed meanwhile) again in order.
+ * dispatches the key (and every key typed meanwhile) again in order. A focus or workspace
+ * change outside that replay discards the waiting keys.
  */
 export function useKeyboardModeQueue({
 	active,
@@ -59,64 +60,97 @@ export function useKeyboardModeQueue({
 	mode: React.MutableRefObject<Record<string, string>>;
 	run: (promise: Promise<unknown>) => void;
 }): {
-	checkingMode: React.RefObject<boolean>;
+	checkingMode: () => boolean;
 	defer: (event: KeyboardEvent, focusedInput: string | null | undefined) => boolean;
 } {
 	// Keys waiting for the mode check, and the copies already dispatched again, which pass.
-	const queued = useRef<KeyboardEvent[]>([]);
-	const checkingMode = useRef(false);
+	const pending = useRef<KeyboardEvent[]>(undefined);
+	const replaying = useRef(false);
 	const replayed = useRef(new WeakSet<KeyboardEvent>());
 	const current = useRef({ active, panel, leader, mode });
 	useLayoutEffect(() => {
+		if (current.current.active !== active) {
+			pending.current = undefined;
+		}
 		current.current = { active, panel, leader, mode };
 	}, [active, panel, leader, mode]);
+	useLayoutEffect(() => {
+		const focusChanged = (): void => {
+			if (!replaying.current) {
+				pending.current = undefined;
+			}
+		};
+		document.addEventListener('focusout', focusChanged);
+		return () => {
+			pending.current = undefined;
+			document.removeEventListener('focusout', focusChanged);
+		};
+	}, []);
+
+	async function replayKeys(keys: KeyboardEvent[]): Promise<void> {
+		try {
+			for (const next of keys) {
+				if (pending.current !== keys) {
+					return;
+				}
+				const context = current.current;
+				const target = document.activeElement;
+				if (
+					target?.getAttribute('data-editor-input') === 'editor' &&
+					!context.panel &&
+					!context.leader &&
+					needsMode(next)
+				) {
+					const actual = await afterEditorClick(context.active, () =>
+						window.nido.inputMode(context.active)
+					);
+					if (pending.current !== keys || document.activeElement !== target) {
+						return;
+					}
+					context.mode.current[context.active] = modeName(actual);
+				}
+				replayed.current.add(next);
+				// A replayed shortcut may itself focus a menu for the remaining keys.
+				replaying.current = true;
+				try {
+					flushSync(() => target?.dispatchEvent(next));
+				} finally {
+					replaying.current = false;
+				}
+			}
+		} catch (error) {
+			if (pending.current === keys) {
+				throw error;
+			}
+		} finally {
+			if (pending.current === keys) {
+				pending.current = undefined;
+			}
+		}
+	}
 
 	const defer = (event: KeyboardEvent, focusedInput: string | null | undefined): boolean => {
 		// Redraw mode notifications can trail rapid input. Check the actual mode before
 		// consuming text as a Normal-mode UI shortcut, retaining following keys in order.
 		if (
-			!replayed.current.has(event) &&
-			(checkingMode.current ||
-				(focusedInput === 'editor' && !panel && !leader && needsMode(event)))
+			replayed.current.has(event) ||
+			(!pending.current &&
+				!(focusedInput === 'editor' && !panel && !leader && needsMode(event)))
 		) {
-			event.preventDefault();
-			event.stopPropagation();
-			queued.current.push(copyKeyDown(event));
-			if (!checkingMode.current) {
-				checkingMode.current = true;
-				run(
-					(async () => {
-						try {
-							while (queued.current.length) {
-								const next = queued.current.shift()!;
-								const context = current.current;
-								if (
-									document.activeElement?.getAttribute('data-editor-input') ===
-										'editor' &&
-									!context.panel &&
-									!context.leader &&
-									needsMode(next)
-								) {
-									const actual = await afterEditorClick(context.active, () =>
-										window.nido.inputMode(context.active)
-									);
-									context.mode.current[context.active] = modeName(actual);
-								}
-								replayed.current.add(next);
-								// Commit a menu transition before handling the next buffered key.
-								flushSync(() => document.activeElement?.dispatchEvent(next));
-							}
-						} finally {
-							checkingMode.current = false;
-							queued.current.length = 0;
-						}
-					})()
-				);
-			}
+			return false;
+		}
+		event.preventDefault();
+		event.stopPropagation();
+		const key = copyKeyDown(event);
+		if (pending.current) {
+			pending.current.push(key);
 			return true;
 		}
-		return false;
+		const keys = [key];
+		pending.current = keys;
+		run(replayKeys(keys));
+		return true;
 	};
 
-	return { checkingMode, defer };
+	return { checkingMode: () => pending.current !== undefined, defer };
 }

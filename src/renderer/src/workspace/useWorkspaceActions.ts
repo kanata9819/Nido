@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { FavoriteWorkspace, TerminalShell, Workspace } from '../../../shared/types';
 
 /** State and callbacks the workspace actions use. */
@@ -6,6 +6,7 @@ interface Options {
 	workspaces: Workspace[];
 	active: string;
 	restoring: boolean;
+	folderPickerOpen: boolean;
 	terminalShell: TerminalShell;
 	setWorkspaces: Dispatch<SetStateAction<Workspace[]>>;
 	setActive: Dispatch<SetStateAction<string>>;
@@ -40,6 +41,7 @@ export function useWorkspaceActions({
 	workspaces,
 	active,
 	restoring,
+	folderPickerOpen,
 	terminalShell,
 	setWorkspaces,
 	setActive,
@@ -53,6 +55,11 @@ export function useWorkspaceActions({
 	run
 }: Options): WorkspaceActions {
 	const [creating, setCreating] = useState(false);
+	// A workspace can finish opening after the user has left the picker.
+	const pickerRevision = useRef(0);
+	useLayoutEffect(() => {
+		pickerRevision.current++;
+	}, [active, folderPickerOpen]);
 	const activate = (id: string): void => {
 		setActive(id);
 		focusEditor();
@@ -74,18 +81,21 @@ export function useWorkspaceActions({
 		setCreating(true);
 		dismissLeader();
 		const canFocus = captureFocus();
+		const revision = pickerRevision.current;
 		try {
 			const added = await window.nido.createWorkspace(path, kind, terminalShell);
 			if (added) {
 				setWorkspaces((old) => [...old, added]);
-				setActive(added.id);
-				closeOverlay();
+				if (revision === pickerRevision.current) {
+					setActive(added.id);
+					closeOverlay();
+				}
 			}
 		} catch (error) {
 			report(String(error));
 		} finally {
 			setCreating(false);
-			if (canFocus()) {
+			if (revision === pickerRevision.current && canFocus()) {
 				requestEditorFocus();
 			}
 		}

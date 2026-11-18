@@ -141,6 +141,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 		workspaces,
 		active,
 		restoring,
+		folderPickerOpen: panel === 'folders',
 		terminalShell: settings.terminalShell,
 		setWorkspaces,
 		setActive,
