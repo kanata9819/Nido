@@ -39,11 +39,15 @@ function M.set(spaces, size, rewrite)
     'Invalid indent size')
   assert(vim.bo.buftype == '', 'Buffer has no indentation settings')
   local tabstop = vim.bo.tabstop
+  local view, textOffset, indentColumn
   if rewrite then
     assert(vim.bo.modifiable, 'Buffer cannot be modified')
-    local view = vim.fn.winsaveview()
+    view = vim.fn.winsaveview()
+    textOffset = view.col - #api.nvim_get_current_line():match('^[ \t]*')
+    if textOffset < 0 then
+      indentColumn = vim.fn.virtcol('.', true)[1]
+    end
     convert(spaces, size, tabstop)
-    vim.fn.winrestview(view)
   end
   vim.bo.expandtab = spaces
   vim.bo.shiftwidth = size
@@ -53,6 +57,12 @@ function M.set(spaces, size, rewrite)
   end
   if vim.bo.softtabstop ~= 0 then
     vim.bo.softtabstop = -1
+  end
+  if view then
+    -- Keep the cursor on the same text, or on the same screen column within indentation.
+    view.col = indentColumn and vim.fn.virtcol2col(0, view.lnum, indentColumn) - 1
+      or #api.nvim_get_current_line():match('^[ \t]*') + textOffset
+    vim.fn.winrestview(view)
   end
   api.nvim_exec_autocmds('User', {pattern = 'NidoIndentation'})
 end
