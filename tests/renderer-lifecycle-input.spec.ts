@@ -587,6 +587,71 @@ test('hidden editors discard late IME input while another workspace accepts typi
 	await expect(alpha).toHaveValue('');
 });
 
+test('switching workspaces drops keys waiting for the previous editor mode', async ({ page }) => {
+	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,inputMode`);
+	await page.evaluate(() =>
+		window.rendererTest.settle('restoreWorkspaces', 0, {
+			workspaces: [
+				{ id: 'alpha', root: '/alpha', name: 'Alpha' },
+				{ id: 'beta', root: '/beta', name: 'Beta' }
+			],
+			active: 'alpha',
+			errors: []
+		})
+	);
+	const pending = (): Promise<unknown[]> =>
+		page.evaluate(() =>
+			window.rendererTest.pending
+				.filter((call) => call.method === 'inputMode')
+				.map(({ args }) => args[0])
+		);
+	const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+	await expect(input).toBeFocused();
+	await page.keyboard.type(' x');
+	await expect.poll(pending).toEqual(['alpha']);
+	await page.getByRole('tab', { name: 'Workspace Beta' }).click();
+	await expect(input).toBeFocused();
+	await page.keyboard.type('b z');
+	await expect.poll(pending).toEqual(['alpha', 'beta']);
+	await page.evaluate(() => {
+		window.rendererTest.settle('inputMode', 0, 'i');
+		window.rendererTest.settle('inputMode', 0, 'i');
+	});
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.calls
+					.filter((call) => call.method === 'input')
+					.map(({ args }) => args)
+			)
+		)
+		.toEqual([
+			['beta', 'b'],
+			['beta', ' '],
+			['beta', 'z']
+		]);
+});
+
+test('moving focus leaves a pending editor mode check behind', async ({ page }) => {
+	await page.goto(`${origin}?view=app&defer=inputMode`);
+	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+	await page.keyboard.type(' x');
+	await expect
+		.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.method))
+		.toBe('inputMode');
+	const settings = page.getByRole('button', { name: 'Settings', exact: true });
+	await settings.press('Enter');
+	const option = page.getByRole('checkbox', { name: 'Cursor follows scrolling' });
+	await expect(option).toBeVisible();
+	await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'i'));
+	await expect(option).toBeVisible();
+	expect(
+		await page.evaluate(() =>
+			window.rendererTest.calls.filter(({ method }) => method === 'input')
+		)
+	).toEqual([]);
+});
+
 test('canvas clicks keep their place between earlier and later editor input', async ({ page }) => {
 	await page.clock.install();
 	await page.goto(`${origin}?view=app&defer=click`);
