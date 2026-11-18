@@ -1972,6 +1972,38 @@ test('Markdown preview links open workspace files in the editor, jump to heading
 	await expect(content.getByText('Mail', { exact: true })).toBeVisible();
 });
 
+test('Markdown file links preserve focus moved while the file is opening', async ({ page }) => {
+	await open(page, 'app', 'markdownPreview,openFile');
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'statePatch',
+			id: 'alpha',
+			state: { filetype: 'markdown', current: 1 }
+		})
+	);
+	await page.clock.runFor(50);
+	await page.keyboard.press('Control+Shift+v');
+	const content = page.getByLabel('Markdown preview content', { exact: true });
+	await expect(content).toBeFocused();
+	await page.evaluate(() =>
+		window.rendererTest.settle('markdownPreview', 0, {
+			token: '1:1',
+			path: '/alpha/notes.md',
+			text: '[Open setup](setup.md)'
+		})
+	);
+	const link = content.getByRole('link', { name: 'Open setup' });
+	await link.press('Enter');
+	await content.focus();
+	await page.evaluate(() => window.rendererTest.settle('openFile', 0, undefined));
+	await page.clock.runFor(32);
+	await expect(content).toBeFocused();
+
+	await link.press('Enter');
+	await page.evaluate(() => window.rendererTest.settle('openFile', 0, undefined));
+	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+});
+
 test('Markdown preview Ctrl+D then Ctrl+U returns to the top at an odd height', async ({
 	page
 }) => {
