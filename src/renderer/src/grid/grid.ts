@@ -578,7 +578,6 @@ export class Grid {
 				if (row && column < this.columns) {
 					if (row[column]?.text !== cell[0] || row[column]?.highlight !== highlight) {
 						if (!changed) {
-							this.layoutDirty = true;
 							if (this.isShared(row, batch)) {
 								row = this.detachRow(rowIndex, row, batch);
 							}
@@ -595,6 +594,11 @@ export class Grid {
 				}
 				column++;
 			}
+		}
+		if (changed && !this.layoutDirty && rowIndex < this.rows - 1) {
+			// A text edit only moves the following rows if this row changes height.
+			const height = this.rowTops[rowIndex + 1] - this.rowTops[rowIndex];
+			this.layoutDirty = this.rowHeight(row, this.cellHeight) !== height;
 		}
 	}
 
