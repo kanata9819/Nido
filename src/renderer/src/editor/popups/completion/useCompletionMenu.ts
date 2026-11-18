@@ -106,6 +106,13 @@ export function useCompletionMenu(
 			return;
 		}
 		const onKey = (event: KeyboardEvent): void => {
+			if (
+				event.isComposing ||
+				event.keyCode === 229 ||
+				anchor.hasAttribute('data-composing')
+			) {
+				return;
+			}
 			const navigation =
 				['ArrowUp', 'ArrowDown'].includes(event.key) ||
 				(event.ctrlKey && ['n', 'p'].includes(event.key));
