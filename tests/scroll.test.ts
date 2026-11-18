@@ -560,7 +560,7 @@ test('horizontal gestures without lookahead defer prefetch until vertical input 
 	}
 });
 
-test('animated horizontal input batches columns within the following cursor’s destination', async () => {
+test('animated cursor-following horizontal input looks ahead and settles on its destination', async () => {
 	const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
 	let native = 0;
 	const targets: number[] = [];
@@ -604,9 +604,18 @@ test('animated horizontal input batches columns within the following cursor’s 
 				scrolling.acknowledge(true, native);
 				await completion;
 			}
+			// Lookahead keeps the shown position within drawn columns during the gesture.
+			assert.ok(targets.length < 4);
+			assert.equal(
+				scrolling.horizontalColumn - scrolling.horizontalOffset,
+				delta > 0 ? 16 : 0
+			);
+			// Once it stops, Neovim settles on the destination, so a following cursor ends there.
+			scrolling.alignHorizontal();
+			scrolling.acknowledge(true, native);
+			await completion;
 			assert.equal(native, delta > 0 ? 16 : 0);
-			assert.ok(targets.every((target) => target >= 0 && target <= 16));
-			assert.ok(targets.length < 8);
+			assert.ok(targets.every((target) => target >= 0));
 		}
 	} finally {
 		scrolling.dispose();

@@ -3,6 +3,7 @@ import type { NidoEvent } from '../../../shared/types';
 import type { Grid } from '../grid/grid';
 import { scrollOffset } from './scroll';
 import { EditorScroll } from './editorScroll';
+import { queueEditorClick } from './editorClick';
 import { alignCanvasSurface } from './canvasSurface';
 import { positionEditorInput } from './editorInputPosition';
 import { createEditorResizer } from './editorResizer';
@@ -201,7 +202,7 @@ export class EditorRenderer {
 		this.deferredScroll = undefined;
 		this.motion = undefined;
 		this.lastScrollTime = undefined;
-		this.scrolling.stop();
+		this.stopScrollingForInput();
 	};
 
 	/** Like stopMotion, but a sideways scroll in progress keeps its frame. */
@@ -225,11 +226,19 @@ export class EditorRenderer {
 			['normal', 'visual', 'visual_line', 'visual_block'].includes(this.options.grid.mode)
 		) {
 			// Navigation retargets the visible scroll instead of snapping it first.
-			this.scrolling.stop();
+			this.stopScrollingForInput();
 		} else {
 			this.stopMotion();
 		}
 	};
+
+	/** Stop scrolling; editing input waits until a following cursor's lookahead is undone. */
+	private stopScrollingForInput(): void {
+		const settled = this.scrolling.stopForInput();
+		if (settled) {
+			void queueEditorClick(this.options.id, () => settled);
+		}
+	}
 
 	private pointerDown = (event: PointerEvent): void => {
 		if (event.button !== 0) {
