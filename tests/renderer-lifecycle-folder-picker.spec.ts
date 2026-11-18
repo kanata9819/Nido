@@ -352,6 +352,32 @@ test('Folder browsing keeps the current listing until the next one arrives', asy
 	expect(await list.evaluate((element) => element.scrollTop)).toBe(0);
 });
 
+test('Listing Windows drives keeps focus where the user moved it', async ({ page }) => {
+	await page.goto(`${origin}?view=folders&defer=browseFolders,windowsDrives`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('browseFolders', 0, {
+			path: 'C:\\',
+			parent: 'C:\\',
+			folders: [{ name: 'Users', path: 'C:\\Users', directory: true }]
+		})
+	);
+	const list = page.getByRole('listbox', { name: 'Folders' });
+	await expect(list.getByRole('option', { name: 'Users' })).toBeVisible();
+	await list.press('h');
+	await expect(list).toHaveAttribute('aria-busy', 'true');
+	const address = page.getByRole('textbox', { name: 'Folder path' });
+	await address.focus();
+	await page.evaluate(async () => {
+		window.rendererTest.settle('windowsDrives', 0, ['C:\\', 'D:\\']);
+		await new Promise<void>((resolve) =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		);
+	});
+	await expect(list.getByRole('option', { name: 'D:' })).toBeVisible();
+	await expect(address).toBeFocused();
+});
+
 test('Favorites open from the command palette and hide again with Ctrl+F', async ({ page }) => {
 	await page.goto(`${origin}?view=app&defer=favoriteWorkspaces`);
 	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();

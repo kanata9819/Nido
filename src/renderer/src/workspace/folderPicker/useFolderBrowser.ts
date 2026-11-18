@@ -11,6 +11,12 @@ import { parseWslPath } from '../../../../shared/wsl';
 
 type Listing = Awaited<ReturnType<typeof window.nido.browseFolders>>;
 
+/** Let a completed browse focus the list if the user stayed in the same control. */
+function captureBrowseFocus(): () => boolean {
+	const focused = document.activeElement;
+	return () => document.activeElement === focused || document.activeElement === document.body;
+}
+
 /** The folder browser's state and navigation, as FolderPicker shows it. */
 export interface FolderBrowser {
 	/** The connection: a WSL distribution, or '' for this computer. */
@@ -123,11 +129,9 @@ export function useFolderBrowser(
 			changeConnection(remote.distribution, next);
 			return;
 		}
-		const focused = document.activeElement;
 		await list(
 			() => window.nido.browseFolders(next, distribution || undefined),
-			// Take focus unless the user moved it elsewhere meanwhile.
-			() => document.activeElement === focused || document.activeElement === document.body
+			captureBrowseFocus()
 		);
 	}
 
@@ -143,7 +147,7 @@ export function useFolderBrowser(
 					directory: true
 				}))
 			}),
-			() => true
+			captureBrowseFocus()
 		);
 	}
 
