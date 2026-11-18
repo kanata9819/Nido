@@ -111,16 +111,12 @@ function M.convert(format)
   local view = vim.fn.winsaveview()
   if vim.bo.fileformat == 'unix' then
     -- Only strip CR belonging to a line ending; preserve embedded CR characters.
-    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-    local changed = false
+    local lines = api.nvim_buf_get_lines(0, 0, -1, false)
     for i, line in ipairs(lines) do
       if (i < #lines or vim.bo.endofline) and line:sub(-1) == '\r' then
-        lines[i] = line:sub(1, -2)
-        changed = true
+        -- Keep extmarks on their text by editing just the trailing CR.
+        api.nvim_buf_set_text(0, i - 1, #line - 1, i - 1, #line, {})
       end
-    end
-    if changed then
-      vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
     end
   end
   vim.bo.fileformat = format == 'LF' and 'unix' or 'dos'

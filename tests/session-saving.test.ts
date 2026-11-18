@@ -438,14 +438,22 @@ test('line endings normalize only in memory until saved, preserve content and su
 		assert.equal(session.state.lineEnding, 'Mixed');
 		assert.ok(notices.some((message) => message.includes('Mixed line endings')));
 		await session.client.request('nvim_win_set_cursor', [0, [2, 1]]);
+		await lua(`vim.g.eol_test_ns = vim.api.nvim_create_namespace('eol-test')
+vim.g.eol_test_mark = vim.api.nvim_buf_set_extmark(0, vim.g.eol_test_ns, 2, 2, {})`);
+		const mark = (): Promise<unknown> =>
+			lua(
+				'return vim.api.nvim_buf_get_extmark_by_id(0, vim.g.eol_test_ns, vim.g.eol_test_mark, {})'
+			);
 		await session.setLineEnding('LF');
 		await lua('return 1');
 		assert.equal(session.state.lineEnding, 'LF');
 		assert.equal(await session.bufferModified(session.state.current), true);
 		assert.deepEqual(await lua('return vim.api.nvim_win_get_cursor(0)'), [2, 1]);
+		assert.deepEqual(await mark(), [2, 2]);
 		assert.equal(await readFile(join(root, 'mixed.txt'), 'utf8'), original);
 		await lua('vim.cmd.undo()');
 		assert.equal(await lua("return require('nido_eol').detect()"), 'Mixed');
+		assert.deepEqual(await mark(), [2, 2]);
 		await session.setLineEnding('LF');
 		await session.save();
 		assert.equal(
