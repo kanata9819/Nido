@@ -370,7 +370,9 @@ test('Listing Windows drives keeps focus where the user moved it', async ({ page
 	await address.focus();
 	await page.evaluate(async () => {
 		window.rendererTest.settle('windowsDrives', 0, ['C:\\', 'D:\\']);
-		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+		await new Promise<void>((resolve) =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		);
 	});
 	await expect(list.getByRole('option', { name: 'D:' })).toBeVisible();
 	await expect(address).toBeFocused();

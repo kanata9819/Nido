@@ -11,6 +11,12 @@ import { parseWslPath } from '../../../../shared/wsl';
 
 type Listing = Awaited<ReturnType<typeof window.nido.browseFolders>>;
 
+/** Let a completed browse focus the list if the user stayed in the same control. */
+function captureBrowseFocus(): () => boolean {
+	const focused = document.activeElement;
+	return () => document.activeElement === focused || document.activeElement === document.body;
+}
+
 /** The folder browser's state and navigation, as FolderPicker shows it. */
 export interface FolderBrowser {
 	/** The connection: a WSL distribution, or '' for this computer. */
@@ -76,11 +82,10 @@ export function useFolderBrowser(
 	);
 
 	/**
-	 * Run a listing request. Show its result only if it is still the latest request and
-	 * focus the list unless the user has moved focus elsewhere.
+	 * Run a listing request. Its result is shown only while no later request started, and
+	 * `focus` decides then whether the list takes focus.
 	 */
-	async function list(load: () => Promise<Listing>): Promise<void> {
-		const focused = document.activeElement;
+	async function list(load: () => Promise<Listing>, focus: () => boolean): Promise<void> {
 		const id = ++request.current.id;
 		setLoading(true);
 		setError('');
@@ -91,10 +96,7 @@ export function useFolderBrowser(
 			}
 			applyFolders(result);
 			requestAnimationFrame(() => {
-				if (
-					id === request.current.id &&
-					(document.activeElement === focused || document.activeElement === document.body)
-				) {
+				if (id === request.current.id && focus()) {
 					focusList();
 				}
 			});
@@ -127,20 +129,26 @@ export function useFolderBrowser(
 			changeConnection(remote.distribution, next);
 			return;
 		}
-		await list(() => window.nido.browseFolders(next, distribution || undefined));
+		await list(
+			() => window.nido.browseFolders(next, distribution || undefined),
+			captureBrowseFocus()
+		);
 	}
 
 	/** List the drives of this computer, as the level above a drive root. */
 	function browseDrives(): Promise<void> {
-		return list(async () => ({
-			path: '',
-			parent: '',
-			folders: (await window.nido.windowsDrives()).map((root) => ({
-				name: root.replace(/[\\/]$/, ''),
-				path: root,
-				directory: true
-			}))
-		}));
+		return list(
+			async () => ({
+				path: '',
+				parent: '',
+				folders: (await window.nido.windowsDrives()).map((root) => ({
+					name: root.replace(/[\\/]$/, ''),
+					path: root,
+					directory: true
+				}))
+			}),
+			captureBrowseFocus()
+		);
 	}
 
 	const atDriveRoot = !distribution && /^[a-z]:[\\/]$/i.test(directory);
