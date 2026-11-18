@@ -3,6 +3,7 @@ import { useErrorMessage, useI18n } from '../i18n';
 import { Children, isValidElement, memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useFocusGuard } from '../app/useFocusGuard';
 import prose from '../ui/Prose.module.css';
 import styles from './MarkdownPreview.module.css';
 import { headingSlug, resolveMarkdownLink } from './markdownLinks';
@@ -40,6 +41,7 @@ function MarkdownPreview({
 }): React.JSX.Element {
 	const t = useI18n();
 	const errorMessage = useErrorMessage();
+	const captureFocus = useFocusGuard(workspaceId);
 	const [source, setSource] = useState<string>();
 	const [error, setError] = useState('');
 	// The document's path, for relative links, and why the last link could not be followed.
@@ -158,7 +160,12 @@ function MarkdownPreview({
 			);
 			target?.scrollIntoView({ block: 'start' });
 		} else if (link.kind === 'file') {
-			void window.nido.openFile(workspaceId, link.path, link.line).then(focusEditor, fail);
+			const canFocus = captureFocus();
+			void window.nido.openFile(workspaceId, link.path, link.line).then(() => {
+				if (canFocus()) {
+					focusEditor();
+				}
+			}, fail);
 		}
 	};
 	return (
