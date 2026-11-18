@@ -63,6 +63,12 @@ test('WSL command arguments preserve literal paths and decode Windows UTF-16 out
 	assert.throws(() => wslArguments('--exec', '/', ['sh']), /Invalid WSL/);
 });
 
+test('WSL command output preserves whitespace in folder names', () => {
+	const path = '/home/me/project\u3000 ';
+	assert.equal(decodeWslOutput(Buffer.from(`${path}\n`)), path);
+	assert.equal(decodeWslOutput(Buffer.from(`\uFEFF${path}\r\n`, 'utf16le')), path);
+});
+
 test('remote notifications publish host paths for buffers, diagnostics and references', () => {
 	const root = wslHostPath('Fedora', '/project');
 	const received: NidoEvent[] = [];
