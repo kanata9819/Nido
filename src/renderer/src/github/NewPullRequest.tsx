@@ -19,7 +19,8 @@ export default function NewPullRequest({
 }: GitHubViewProps & { created: () => void }): React.JSX.Element {
 	const t = useI18n();
 	const { run, working } = action;
-	const [title, setTitle] = useState('');
+	const [titleDraft, setTitleDraft] = useState<string>();
+	const title = titleDraft ?? '';
 	const [body, setBody] = useState('');
 	const [base, setBase] = useState(status.defaultBranch ?? 'main');
 	const [draft, setDraft] = useState(false);
@@ -29,13 +30,13 @@ export default function NewPullRequest({
 		keysRef.current = undefined;
 	});
 
-	// Start from the last commit's subject, unless the user has typed a title meanwhile.
+	// Start from the last commit's subject only if the title has never been edited.
 	useEffect(() => {
 		let alive = true;
 		window.nido.gitHistory(workspaceId, 0).then(
 			({ commits }) => {
 				if (alive && commits[0]) {
-					setTitle((value) => value || commits[0].subject);
+					setTitleDraft((value) => value ?? commits[0].subject);
 				}
 			},
 			() => {}
@@ -95,7 +96,7 @@ export default function NewPullRequest({
 					<input
 						ref={titleInput}
 						value={title}
-						onChange={(event) => setTitle(event.currentTarget.value)}
+						onChange={(event) => setTitleDraft(event.currentTarget.value)}
 					/>
 				</label>
 				<label className={styles.grow}>
