@@ -20,7 +20,11 @@ const diffConfig = ['-c', 'diff.suppressBlankEmpty=false'];
 
 /** The top folder of the repository containing `cwd`. */
 export async function gitRoot(cwd: string): Promise<string> {
-	return (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
+	const remote = parseWslPath(cwd);
+	const output = await git(cwd, ['rev-parse', '--show-toplevel']);
+	// Remove Git's line ending without dropping whitespace in the directory name.
+	const root = output.replace(!remote && process.platform === 'win32' ? /\r?\n$/ : /\n$/, '');
+	return remote ? wslHostPath(remote.distribution, root) : root;
 }
 
 /** One page (up to 100 commits) of HEAD's history, starting `skip` commits back, and the total. */
@@ -371,9 +375,7 @@ async function git(
 			task.child.stdin?.end(input);
 		}
 		const { stdout } = await task;
-		return remote && args[0] === 'rev-parse' && args[1] === '--show-toplevel'
-			? wslHostPath(remote.distribution, stdout.trim())
-			: stdout;
+		return stdout;
 	} catch (error) {
 		const failure = error as Error & {
 			code?: number | string;
