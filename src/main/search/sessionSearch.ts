@@ -145,7 +145,6 @@ export class SessionSearch {
 			throw new Error('Invalid search options.');
 		}
 		settings.folder = settings.folder
-			.trim()
 			.replaceAll('\\', '/')
 			.replace(/^\.\//, '')
 			.replace(/\/$/, '');

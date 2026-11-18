@@ -90,6 +90,25 @@ for (const action of ['rename', 'copy'] as const) {
 	});
 }
 
+test('a folder-scoped search preserves trailing spaces in the folder name', async () => {
+	const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-search-folder-')));
+	try {
+		const folder = 'project\u3000';
+		for (const name of ['project', folder]) {
+			await mkdir(join(root, name));
+			await writeFile(join(root, name, 'sample.txt'), 'needle\n');
+		}
+		const files = new SessionFiles(root, {} as NeovimClient);
+		const result = await files.searchText('needle', { ...defaultSearchOptions, folder });
+		assert.deepEqual(
+			result.matches.map((match) => match.path),
+			[join(folder, 'sample.txt')]
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('saved-text search keeps embedded CR characters inside LF and CRLF rows', async () => {
 	const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-search-cr-')));
 	try {
