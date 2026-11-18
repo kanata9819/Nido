@@ -587,6 +587,51 @@ test('hidden editors discard late IME input while another workspace accepts typi
 	await expect(alpha).toHaveValue('');
 });
 
+test('canvas clicks keep their place between earlier and later editor input', async ({ page }) => {
+	await page.clock.install();
+	await page.goto(`${origin}?view=app&defer=click`);
+	const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+	await expect(input).toBeFocused();
+	await expect(page.getByLabel('Neovim editor display')).toHaveAttribute(
+		'aria-description',
+		/./s
+	);
+	await page.clock.runFor(50);
+	const actions = (): Promise<string[]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls.flatMap(({ method, args }) => {
+				if (method === 'input') return [String(args[1])];
+				return ['click', 'paste', 'save', 'inputMode'].includes(method) ? [method] : [];
+			})
+		);
+	await page.evaluate(() => {
+		const input = document.querySelector('textarea[data-editor-input="editor"]')!;
+		const canvas = document.querySelector('canvas[aria-label="Neovim editor display"]')!;
+		const bounds = canvas.getBoundingClientRect();
+		input.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', bubbles: true }));
+		canvas.dispatchEvent(
+			new PointerEvent('pointerdown', {
+				bubbles: true,
+				button: 0,
+				clientX: bounds.left + 50,
+				clientY: bounds.top + 30
+			})
+		);
+		input.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true }));
+		const text = new DataTransfer();
+		text.setData('text/plain', 'pasted after click');
+		input.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, clipboardData: text }));
+		input.dispatchEvent(
+			new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true })
+		);
+		input.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+	});
+	await page.clock.runFor(50);
+	await expect.poll(actions).toEqual(['h', 'click']);
+	await page.evaluate(() => window.rendererTest.settle('click', 0, undefined));
+	await expect.poll(actions).toEqual(['h', 'click', 'x', 'paste', 'save', 'inputMode']);
+});
+
 test('Rapid insert text keeps spaces and following keys while a mode check is pending', async ({
 	page
 }) => {

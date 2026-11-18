@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import type { Panel } from '../types';
 import { isAltGraph } from './keyboard';
+import { afterEditorClick } from '../editor/editorClick';
 
 /**
  * Whether a key is a UI shortcut only in Normal mode (Space for the leader, Shift+H/L for
@@ -96,7 +97,9 @@ export function useKeyboardModeQueue({
 									!context.leader &&
 									needsMode(next)
 								) {
-									const actual = await window.nido.inputMode(context.active);
+									const actual = await afterEditorClick(context.active, () =>
+										window.nido.inputMode(context.active)
+									);
 									context.mode.current[context.active] = modeName(actual);
 								}
 								replayed.current.add(next);

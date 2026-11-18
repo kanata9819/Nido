@@ -24,6 +24,7 @@ import { initialSessionState, useWorkspaceSessions } from '../workspace/useWorks
 import type { SessionState, Workspace } from '../../../shared/types';
 import { useFocusGuard } from './useFocusGuard';
 import { useInitializedEditors } from '../editor/useInitializedEditors';
+import { afterEditorClick } from '../editor/editorClick';
 import { useWorkspaceSleep } from '../workspace/useWorkspaceSleep';
 import styles from './App.module.css';
 import { OverlayMotionContext, useReducedMotion } from '../ui/overlayMotion';
@@ -182,7 +183,8 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 	};
 
 	/** Save the current file, formatting it first when format on save is on. */
-	const save = (): void => run(window.nido.save(active, formatOnSave));
+	const save = (): void =>
+		run(afterEditorClick(active, () => window.nido.save(active, formatOnSave)));
 	const { commands, filtered } = useAppCommands({
 		active,
 		panel,

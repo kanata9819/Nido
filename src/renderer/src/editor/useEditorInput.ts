@@ -1,5 +1,6 @@
 import type { RefObject } from 'react';
 import { isAltGraph, vimKey } from '../keyboard/keyboard';
+import { afterEditorClick } from './editorClick';
 
 /**
  * Typed text as Neovim input. nvim_input reads key notation such as <CR>, so a literal < is
@@ -37,8 +38,8 @@ export function useEditorInput({
 	onPaste: (event: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 	onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
 } {
-	const send = (promise: Promise<unknown>): void => {
-		void promise.catch((e) => onError(String(e)));
+	const send = (action: () => Promise<unknown>): void => {
+		void afterEditorClick(id, action).catch((e) => onError(String(e)));
 	};
 	const resetInput = (event: React.FocusEvent<HTMLTextAreaElement>): void => {
 		composingRef.current = false;
@@ -60,7 +61,8 @@ export function useEditorInput({
 			const committed = composingRef.current && !blocked;
 			composingRef.current = false;
 			if (committed && event.data) {
-				send(window.nido.input(id, typedText(event.data)));
+				const text = typedText(event.data);
+				send(() => window.nido.input(id, text));
 			}
 			event.currentTarget.value = '';
 			event.currentTarget.removeAttribute('data-composing');
@@ -76,7 +78,7 @@ export function useEditorInput({
 			}
 			const value = event.currentTarget.value;
 			if (value) {
-				send(window.nido.input(id, typedText(value)));
+				send(() => window.nido.input(id, typedText(value)));
 			}
 			event.currentTarget.value = '';
 		},
@@ -85,7 +87,8 @@ export function useEditorInput({
 			if (blocked) {
 				return;
 			}
-			send(window.nido.paste(id, event.clipboardData.getData('text/plain')));
+			const text = event.clipboardData.getData('text/plain');
+			send(() => window.nido.paste(id, text));
 		},
 		onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
 			if (
@@ -105,14 +108,14 @@ export function useEditorInput({
 				event.key.toLowerCase() === 'v'
 			) {
 				event.preventDefault();
-				send(window.nido.pasteClipboard(id));
+				send(() => window.nido.pasteClipboard(id));
 				return;
 			}
 
 			const key = vimKey(event.nativeEvent);
 			if (key) {
 				event.preventDefault();
-				send(window.nido.input(id, key));
+				send(() => window.nido.input(id, key));
 			}
 		}
 	};

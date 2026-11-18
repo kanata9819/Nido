@@ -4,6 +4,27 @@ import type { Grid } from '../grid/grid';
 const nextFrame = (): Promise<void> =>
 	new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
+// The main process orders edits once they arrive. Hold later input while a renderer click is
+// still waiting for its grid position, and let unrelated sessions continue independently.
+const pendingClicks = new Map<string, Promise<void>>();
+
+export function afterEditorClick<T>(id: string, action: () => Promise<T>): Promise<T> {
+	const pending = pendingClicks.get(id);
+	return pending ? pending.then(action, action) : action();
+}
+
+export function queueEditorClick(id: string, action: () => Promise<void>): Promise<void> {
+	const click = afterEditorClick(id, action);
+	pendingClicks.set(id, click);
+	const clear = (): void => {
+		if (pendingClicks.get(id) === click) {
+			pendingClicks.delete(id);
+		}
+	};
+	void click.then(clear, clear);
+	return click;
+}
+
 /**
  * Where a click landed, read from the grid as it was drawn at the time of the click: the
  * column under the pointer, whether it was in the text rather than the gutter, and the
