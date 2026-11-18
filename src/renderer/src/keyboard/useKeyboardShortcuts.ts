@@ -1,4 +1,5 @@
 import { isAltGraph } from './keyboard';
+import { afterEditorClick } from '../editor/editorClick';
 import { isCtrl, isOwnedByFocusedElement, trapTabFocus } from './shortcutKeys';
 import { useKeyboardModeQueue } from './useKeyboardModeQueue';
 import type { Panel, Item } from '../types';
@@ -92,7 +93,7 @@ export function useKeyboardShortcuts(
 		// Ctrl+* and Ctrl+# reach Neovim as plain * and # in Normal mode.
 		if (focusedInput === 'editor' && shortcut.isNormalMode && isCtrl(event, '*', '#')) {
 			shortcut.consume();
-			run(window.nido.input(active, event.key));
+			run(afterEditorClick(active, () => window.nido.input(active, event.key)));
 			return;
 		}
 		if (handleEscape(context, shortcut) || handlePanelToggles(context, shortcut)) {

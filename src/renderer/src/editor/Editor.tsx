@@ -7,7 +7,7 @@ import { Grid } from '../grid/grid';
 import { useEditorRendering } from './useEditorRendering';
 import { useEditorInput } from './useEditorInput';
 import { useCompositionReset, useEditorWheel } from './useEditorWheel';
-import { clickCell, clickedCell, focusEditorPart } from './editorClick';
+import { clickCell, clickedCell, focusEditorPart, queueEditorClick } from './editorClick';
 import styles from './Editor.module.css';
 import TypeInformation from './popups/TypeInformation';
 import DiagnosticInformation from './popups/DiagnosticInformation';
@@ -154,7 +154,12 @@ function Editor({
 		}
 		const cell = clickedCell(grid.current, canvas.current, event.clientX, event.clientY);
 		if (cell) {
-			send(clickCell(id, grid.current, cell, scrollCompletion.current, () => !!host.current));
+			const scrolling = scrollCompletion.current;
+			send(
+				queueEditorClick(id, () =>
+					clickCell(id, grid.current, cell, scrolling, () => !!host.current)
+				)
+			);
 		}
 	};
 
