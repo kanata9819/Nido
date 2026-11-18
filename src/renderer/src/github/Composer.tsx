@@ -52,6 +52,7 @@ export function Composer({
 				aria-label={label}
 				placeholder={label}
 				value={body}
+				readOnly={busy}
 				onChange={(event) => setBody(event.target.value)}
 				onKeyDown={(event) => {
 					if (event.nativeEvent.isComposing) {
@@ -64,7 +65,9 @@ export function Composer({
 						// Esc cancels this form only, not the view behind it.
 						event.preventDefault();
 						event.stopPropagation();
-						onCancel();
+						if (!busy) {
+							onCancel();
+						}
 					}
 				}}
 			/>
