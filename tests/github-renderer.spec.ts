@@ -216,6 +216,29 @@ test('a new pull request starts from the last commit and pushes the branch', asy
 	await expect(page.getByText('Switch to a branch other than the base first.')).toBeVisible();
 });
 
+test('a delayed commit subject does not refill a pull request title the user cleared', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=github&defer=gitHistory`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('3');
+	const title = page.getByRole('textbox', { name: 'Title' });
+	await expect(title).toBeFocused();
+	await title.fill('My draft title');
+	await title.clear();
+	await page.evaluate(async () => {
+		window.rendererTest.settle('gitHistory', 0, {
+			commits: [{ hash: 'a'.repeat(40), author: 'dev', date: '', subject: 'Add sign-in' }],
+			total: 1
+		});
+		await new Promise<void>((resolve) =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		);
+	});
+	await expect(title).toHaveValue('');
+	await expect(page.getByRole('button', { name: /^Push and create/ })).toBeDisabled();
+});
+
 test('without a signed-in gh, the page explains how to sign in', async ({ page }) => {
 	await page.goto(`${origin}?view=github&defer=githubStatus`);
 	await expect(page.getByText('Connecting to GitHub…')).toBeVisible();
