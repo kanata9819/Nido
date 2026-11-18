@@ -611,6 +611,12 @@
 	padding: 0 16px 0 10px;
 	font: inherit;
 }
+.missingNewline {
+	margin-inline-start: 12px;
+	color: var(--diff-number);
+	font-style: italic;
+	user-select: none;
+}
 /* Line numbers and the +/- sign stay in view while scrolling sideways. */
 .gutter {
 	position: sticky;

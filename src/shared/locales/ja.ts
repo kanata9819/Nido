@@ -813,6 +813,7 @@ export const japanese: Record<string, string> = {
 	'Nothing to preview yet.': 'まだ表示する内容はありません。',
 	'{count} unchanged lines': '変更なし {count} 行',
 	'Diff layout (v)': '差分の表示方法 (v)',
+	'No newline at end of file': 'ファイル末尾に改行なし',
 	'Side by side': '左右に並べる',
 	Inline: 'インライン',
 	'{count} changes': '変更 {count} 箇所',

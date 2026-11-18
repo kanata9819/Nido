@@ -5,6 +5,7 @@ export interface DiffLine {
 	number: number;
 	text: string;
 	changed?: boolean;
+	missingNewline?: boolean;
 }
 
 /** Where a hunk starts on each side, and the context Git shows after its `@@` range. */
@@ -32,6 +33,8 @@ export function splitDiff(diff: string): DiffRow[] {
 	let before = 0;
 	let after = 0;
 	let inHunk = false;
+	let previousBefore: DiffLine | undefined;
+	let previousAfter: DiffLine | undefined;
 	let removed: DiffLine[] = [];
 	let added: DiffLine[] = [];
 	// The hunk that starts, waiting for its first row.
@@ -52,6 +55,18 @@ export function splitDiff(diff: string): DiffRow[] {
 	};
 
 	for (const line of diff.split('\n')) {
+		// Git prefixes its localized missing-newline message with a backslash.
+		if (inHunk && line.startsWith('\\ ')) {
+			if (previousBefore) {
+				previousBefore.missingNewline = true;
+			}
+			if (previousAfter) {
+				previousAfter.missingNewline = true;
+			}
+			continue;
+		}
+		previousBefore = undefined;
+		previousAfter = undefined;
 		const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@ ?(.*)$/.exec(line);
 		if (hunk) {
 			flush();
@@ -62,18 +77,16 @@ export function splitDiff(diff: string): DiffRow[] {
 			continue;
 		}
 		if (inHunk && line.startsWith('-')) {
-			removed.push({ number: before++, text: line.slice(1), changed: true });
+			previousBefore = { number: before++, text: line.slice(1), changed: true };
+			removed.push(previousBefore);
 		} else if (inHunk && line.startsWith('+')) {
-			added.push({ number: after++, text: line.slice(1), changed: true });
+			previousAfter = { number: after++, text: line.slice(1), changed: true };
+			added.push(previousAfter);
 		} else if (inHunk && line.startsWith(' ')) {
 			flush();
-			push({
-				before: { number: before++, text: line.slice(1) },
-				after: { number: after++, text: line.slice(1) }
-			});
-		} else if (line.startsWith('\\')) {
-			// Git's missing-newline marker is metadata, not a source line.
-			continue;
+			previousBefore = { number: before++, text: line.slice(1) };
+			previousAfter = { number: after++, text: line.slice(1) };
+			push({ before: previousBefore, after: previousAfter });
 		} else {
 			flush();
 			inHunk = false;

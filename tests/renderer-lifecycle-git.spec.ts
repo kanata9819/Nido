@@ -203,6 +203,34 @@ test('Git diff ignores an older response after selecting another file', async ({
 	await expect(page.locator('[data-git-scroll="after"]')).not.toContainText('STALE_CONTENT');
 });
 
+test('Git diff shows which version lacks a final newline in both layouts', async ({ page }) => {
+	await page.goto(origin + '?view=git&defer=gitDiff');
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some(({ method }) => method === 'gitDiff')
+			)
+		)
+		.toBe(true);
+	await page.evaluate(() =>
+		window.rendererTest.settle(
+			'gitDiff',
+			0,
+			'@@ -1 +1 @@\n-same text\n\\ No newline at end of file\n+same text\n'
+		)
+	);
+	const before = page.locator('[data-git-scroll="before"]');
+	const after = page.locator('[data-git-scroll="after"]');
+	const marker = 'No newline at end of file';
+	await expect(before.getByText(marker, { exact: true })).toBeVisible();
+	await expect(after.getByText(marker, { exact: true })).toHaveCount(0);
+	await page.getByRole('button', { name: 'Inline', exact: true }).click();
+	const rows = after.locator('[data-diff-row]');
+	await expect(rows).toHaveCount(2);
+	await expect(rows.nth(0).getByText(marker, { exact: true })).toBeVisible();
+	await expect(rows.nth(1).getByText(marker, { exact: true })).toHaveCount(0);
+});
+
 test('Git page scrolling returns to the same position with an odd viewport height', async ({
 	page
 }) => {

@@ -149,6 +149,7 @@ export function renderDiffRow(
 	const active =
 		context.selectedRow === entry.index && context.firstPositions.get(entry.index) === position;
 	const { className, numbers, content } = lineParts(context, entry, side);
+	const line = entry.kind === 'line' ? entry.line : entry.row[side];
 	return (
 		<div
 			key={position}
@@ -159,7 +160,14 @@ export function renderDiffRow(
 			<span className={styles.gutter} aria-hidden="true">
 				{numbers}
 			</span>
-			<code>{content}</code>
+			<code>
+				{content}
+				{line?.missingNewline && (
+					<span className={styles.missingNewline}>
+						{context.t('No newline at end of file')}
+					</span>
+				)}
+			</code>
 		</div>
 	);
 }
