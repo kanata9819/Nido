@@ -110,7 +110,13 @@ export function diffViewRows(rows: DiffRow[], layout: DiffLayout): DiffViewRow[]
 	let removed: DiffViewRow[] = [];
 	let added: DiffViewRow[] = [];
 	const flush = (): void => {
-		view.push(...removed, ...added);
+		// A large replacement block can exceed the argument limit of a single push.
+		for (const row of removed) {
+			view.push(row);
+		}
+		for (const row of added) {
+			view.push(row);
+		}
 		removed = [];
 		added = [];
 	};

@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rename, rm, writeFile, mkdir, symlink, utimes } from
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { splitDiff } from '../src/renderer/src/git/diff/splitDiff';
+import { diffViewRows } from '../src/renderer/src/git/diff/diffView';
 import { registerGitHandlers } from '../src/main/ipc/gitHandlers';
 import type { Session } from '../src/main/session/session';
 import type { NidoEvent } from '../src/shared/types';
@@ -852,3 +853,24 @@ for (const recreateSource of [false, true]) {
 		}
 	});
 }
+
+test('large inline diff blocks render every deletion before the additions', () => {
+	const count = 75_000;
+	const diff = '@@ -1,75000 +1,75000 @@\n' + '-old\n'.repeat(count) + '+new\n'.repeat(count);
+	const lines = diffViewRows(splitDiff(diff), 'unified');
+	assert.equal(lines.length, count * 2);
+	assert.deepEqual(lines[count - 1], {
+		kind: 'line',
+		index: count - 1,
+		side: 'before',
+		line: { number: count, text: 'old', changed: true },
+		before: count
+	});
+	assert.deepEqual(lines[count], {
+		kind: 'line',
+		index: 0,
+		side: 'after',
+		line: { number: 1, text: 'new', changed: true },
+		after: 1
+	});
+});
