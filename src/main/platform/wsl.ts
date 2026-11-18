@@ -17,21 +17,21 @@ interface WslRuntime {
 	resources: string;
 }
 
-/** Decode wsl.exe output. Some of its commands print UTF-16, which contains NUL bytes. */
+/** Decode wsl.exe output and remove its final line ending, preserving spaces in paths. */
 export function decodeWslOutput(value: Buffer): string {
 	return value
 		.toString(value.includes(0) ? 'utf16le' : 'utf8')
 		.replace(/^\uFEFF/, '')
-		.trim();
+		.replace(/\r?\n$/, '');
 }
 
 /** The most useful text from a failed wsl.exe run: its stderr, else its stdout, else the error. */
 function failureDetail(error: unknown): string {
 	const failure = error as Error & { stdout?: Buffer; stderr?: Buffer };
 	return failure.stderr?.length
-		? decodeWslOutput(failure.stderr)
+		? decodeWslOutput(failure.stderr).trim()
 		: failure.stdout?.length
-			? decodeWslOutput(failure.stdout)
+			? decodeWslOutput(failure.stdout).trim()
 			: failure.message;
 }
 
