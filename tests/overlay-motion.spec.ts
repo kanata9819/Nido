@@ -493,6 +493,23 @@ test('completion opens immediately and keeps its brightness, placement and pendi
 		const before = await page.evaluate(
 			() => window.rendererTest.calls.filter((call) => call.method === 'input').length
 		);
+		const prevented = await input.evaluate((node) =>
+			[
+				{ key: 'ArrowDown', isComposing: true },
+				{ key: 'ArrowUp', keyCode: 229 },
+				{ key: 'Tab', isComposing: true }
+			].map(
+				(init) =>
+					!node.dispatchEvent(
+						new KeyboardEvent('keydown', {
+							...init,
+							bubbles: true,
+							cancelable: true
+						})
+					)
+			)
+		);
+		expect(prevented).toEqual([false, false, false]);
 		await input.press('Tab');
 		await input.press('Control+n');
 		expect(
