@@ -23,10 +23,11 @@ export async function gitRoot(cwd: string): Promise<string> {
 	return (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
 }
 
-/** One page (up to 100 commits) of HEAD's history, starting `skip` commits back, and the total. */
+/** One page and the total for `anchor` (the first page's HEAD), or the current HEAD. */
 export async function gitHistory(
 	cwd: string,
-	skip: number
+	skip: number,
+	anchor?: string
 ): Promise<{ commits: GitCommitEntry[]; total: number }> {
 	if (!Number.isSafeInteger(skip) || skip < 0) {
 		throw new Error('Invalid history offset.');
@@ -37,10 +38,14 @@ export async function gitHistory(
 		throw new Error('Open a Git working tree.');
 	}
 	let head: string;
-	try {
-		head = (await git(cwd, ['rev-parse', '--verify', 'HEAD'])).trim();
-	} catch {
-		return { commits: [], total: 0 };
+	if (anchor !== undefined) {
+		head = commitHash(anchor);
+	} else {
+		try {
+			head = (await git(cwd, ['rev-parse', '--verify', 'HEAD'])).trim();
+		} catch {
+			return { commits: [], total: 0 };
+		}
 	}
 	const [output, count] = await Promise.all([
 		git(cwd, [

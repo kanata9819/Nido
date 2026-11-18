@@ -500,6 +500,28 @@ test('Git previews keep blank context lines even when Git is configured to suppr
 	}
 });
 
+test('older history pages stay anchored when HEAD moves', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-history-page-'));
+	const git = (...args: string[]): string =>
+		execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true });
+	try {
+		git('init', '-q', '-b', 'main');
+		git('config', 'user.name', 'Nido Test');
+		git('config', 'user.email', 'test@example.invalid');
+		git('config', 'commit.gpgsign', 'false');
+		git('commit', '-q', '--allow-empty', '-m', 'First commit');
+		git('commit', '-q', '--allow-empty', '-m', 'Second commit');
+		const firstPage = await gitHistory(root, 0);
+		git('commit', '-q', '--allow-empty', '-m', 'New commit from another terminal');
+
+		const older = await gitHistory(root, 1, firstPage.commits[0].hash);
+		assert.deepEqual(older, { total: 2, commits: firstPage.commits.slice(1) });
+		assert.equal((await gitHistory(root, 0)).total, 3);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('history, first-parent diffs and branch switches preserve conflicting edits', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-history-'));
 	const git = (...args: string[]): string =>

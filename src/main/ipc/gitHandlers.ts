@@ -102,11 +102,15 @@ export function registerGitHandlers({
 				]).then(([status, { remote, sync }]) => ({ ...status, remote, sync }))
 			: pending;
 	});
-	handle('gitHistory', (id, skip) => {
+	handle('gitHistory', (id, skip, anchor) => {
 		if (typeof skip !== 'number') {
 			throw new Error('Invalid history offset.');
 		}
-		return gitHistory(session(id).workspace.root, skip);
+		return gitHistory(
+			session(id).workspace.root,
+			skip,
+			anchor === undefined ? undefined : text(anchor)
+		);
 	});
 	handle('gitCommitFiles', (id, hash) => gitCommitFiles(session(id).workspace.root, text(hash)));
 	handle('gitCommitDiff', (id, hash, path) => {

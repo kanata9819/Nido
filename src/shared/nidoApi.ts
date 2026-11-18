@@ -64,7 +64,11 @@ export interface GitAPI {
 		before: string,
 		after: string
 	): Promise<ReferencePreview['lines'][]>;
-	gitHistory(id: string, skip: number): Promise<{ commits: GitCommitEntry[]; total: number }>;
+	gitHistory(
+		id: string,
+		skip: number,
+		anchor?: string
+	): Promise<{ commits: GitCommitEntry[]; total: number }>;
 	gitCommitFiles(id: string, hash: string): Promise<string[]>;
 	gitCommitDiff(id: string, hash: string, path: string): Promise<string>;
 	gitBranches(id: string): Promise<GitBranchEntry[]>;

@@ -97,7 +97,8 @@ export function useGitLists({
 	async function loadOlderHistory(): Promise<void> {
 		const { commits: entries, total } = await window.nido.gitHistory(
 			workspaceId,
-			history.length
+			history.length,
+			history[0]?.hash
 		);
 		setHistory([...history, ...entries]);
 		setCommitCount(total);

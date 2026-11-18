@@ -596,8 +596,8 @@ test('Git history counts all commits and supports paging without reloading the f
 	await page.screenshot({ path: 'test-results/git-history-keyboard.png' });
 	await page.getByRole('button', { name: 'Load older commits' }).click();
 	await expect
-		.poll(() => page.evaluate(() => window.rendererTest?.pending[0]?.args[1]))
-		.toBe(100);
+		.poll(() => page.evaluate(() => window.rendererTest?.pending[0]?.args.slice(1)))
+		.toEqual([100, '0'.repeat(40)]);
 	await list.press('Control+d');
 	await expect(list).toHaveAttribute('aria-activedescendant', 'git-entry-0');
 	await page.evaluate(() =>

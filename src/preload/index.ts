@@ -23,7 +23,7 @@ const api: NidoAPI = {
 		ipcRenderer.invoke('nido:historyRestore', id, path, version, token),
 	highlightSources: (id, path, before, after) =>
 		ipcRenderer.invoke('nido:highlightSources', id, path, before, after),
-	gitHistory: (id, skip) => ipcRenderer.invoke('nido:gitHistory', id, skip),
+	gitHistory: (id, skip, anchor) => ipcRenderer.invoke('nido:gitHistory', id, skip, anchor),
 	gitCommitFiles: (id, hash) => ipcRenderer.invoke('nido:gitCommitFiles', id, hash),
 	gitCommitDiff: (id, hash, path) => ipcRenderer.invoke('nido:gitCommitDiff', id, hash, path),
 	gitBranches: (id) => ipcRenderer.invoke('nido:gitBranches', id),
