@@ -335,6 +335,34 @@ test('indentation is published and converts only leading whitespace', async () =
 	}
 });
 
+test('converting indentation preserves the cursor on the same text and inside indentation', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-indent-cursor-'));
+	let session: Session | undefined;
+	try {
+		await writeFile(join(root, 'sample.txt'), '\t猫 value\n');
+		session = await Session.create(root, () => {});
+		await session.openFile('sample.txt');
+		const lua = (code: string): Promise<unknown> =>
+			session!.client.request('nvim_exec_lua', [code, []]);
+		const column = (): Promise<unknown> => lua('return vim.api.nvim_win_get_cursor(0)[2]');
+		await lua('vim.bo.tabstop=4; vim.api.nvim_win_set_cursor(0,{1,5})');
+		await session.setIndentation({ spaces: true, size: 4 }, true);
+		assert.equal(await column(), 8, 'The cursor should still be on the v in value.');
+		await session.setIndentation({ spaces: false, size: 4 }, true);
+		assert.equal(await column(), 5);
+
+		await lua('vim.api.nvim_win_set_cursor(0,{1,0})');
+		await session.setIndentation({ spaces: true, size: 4 }, true);
+		assert.equal(await column(), 0, 'The start of the indentation should stay in place.');
+		await lua('vim.api.nvim_win_set_cursor(0,{1,2})');
+		await session.setIndentation({ spaces: false, size: 4 }, true);
+		assert.equal(await column(), 0, 'The cursor should land on the tab covering its column.');
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('EditorConfig toggles existing buffers, indentation guides and save rules', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-editorconfig-'));
 	const grid = new Grid();
