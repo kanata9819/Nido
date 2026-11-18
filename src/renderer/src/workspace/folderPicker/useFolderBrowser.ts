@@ -76,10 +76,11 @@ export function useFolderBrowser(
 	);
 
 	/**
-	 * Run a listing request. Its result is shown only while no later request started, and
-	 * `focus` decides then whether the list takes focus.
+	 * Run a listing request. Show its result only if it is still the latest request and
+	 * focus the list unless the user has moved focus elsewhere.
 	 */
-	async function list(load: () => Promise<Listing>, focus: () => boolean): Promise<void> {
+	async function list(load: () => Promise<Listing>): Promise<void> {
+		const focused = document.activeElement;
 		const id = ++request.current.id;
 		setLoading(true);
 		setError('');
@@ -90,7 +91,10 @@ export function useFolderBrowser(
 			}
 			applyFolders(result);
 			requestAnimationFrame(() => {
-				if (id === request.current.id && focus()) {
+				if (
+					id === request.current.id &&
+					(document.activeElement === focused || document.activeElement === document.body)
+				) {
 					focusList();
 				}
 			});
@@ -123,28 +127,20 @@ export function useFolderBrowser(
 			changeConnection(remote.distribution, next);
 			return;
 		}
-		const focused = document.activeElement;
-		await list(
-			() => window.nido.browseFolders(next, distribution || undefined),
-			// Take focus unless the user moved it elsewhere meanwhile.
-			() => document.activeElement === focused || document.activeElement === document.body
-		);
+		await list(() => window.nido.browseFolders(next, distribution || undefined));
 	}
 
 	/** List the drives of this computer, as the level above a drive root. */
 	function browseDrives(): Promise<void> {
-		return list(
-			async () => ({
-				path: '',
-				parent: '',
-				folders: (await window.nido.windowsDrives()).map((root) => ({
-					name: root.replace(/[\\/]$/, ''),
-					path: root,
-					directory: true
-				}))
-			}),
-			() => true
-		);
+		return list(async () => ({
+			path: '',
+			parent: '',
+			folders: (await window.nido.windowsDrives()).map((root) => ({
+				name: root.replace(/[\\/]$/, ''),
+				path: root,
+				directory: true
+			}))
+		}));
 	}
 
 	const atDriveRoot = !distribution && /^[a-z]:[\\/]$/i.test(directory);
