@@ -527,8 +527,8 @@ export class Session {
 		await this.interaction.write('write', format);
 	}
 
-	prefetchScroll(down = false): Promise<void> {
-		return this.interaction.prefetchScroll(down);
+	prefetchScroll(down = false, scrolling = false): Promise<void> {
+		return this.interaction.prefetchScroll(down, scrolling);
 	}
 
 	scroll(lines: number, follow = true, pixel = false, columns = 0): Promise<void> {

@@ -509,6 +509,10 @@ test('lower preview cache is bounded, cleared on edits and stops at EOF', () => 
 		]);
 	}
 	assert.equal(grid.futureRows.length, 256);
+	grid.scrollPreview = 160;
+	assert.equal(grid.needsLowerRows, false, 'two cached viewports still cover the gesture');
+	grid.scrollPreview = 216;
+	assert.equal(grid.needsLowerRows, true, 'refill with one viewport left');
 	grid.apply([['nido_edit', []], ['flush']]);
 	assert.equal(grid.futureRows.length, 0);
 	grid.scrollPreview = 1.5;

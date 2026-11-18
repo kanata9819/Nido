@@ -151,7 +151,7 @@ export interface EditorAPI {
 		pixel?: boolean,
 		columns?: number
 	): Promise<void>;
-	prefetchScroll(id: string, down?: boolean): Promise<void>;
+	prefetchScroll(id: string, down?: boolean, scrolling?: boolean): Promise<void>;
 	jumpSticky(id: string, window: number, buffer: number, line: number): Promise<void>;
 	paste(id: string, text: string): Promise<void>;
 	/** Put a terminal in copy mode (Ctrl+Shift+C). */

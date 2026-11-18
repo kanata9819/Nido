@@ -286,14 +286,18 @@ local function scroll_horizontal(columns)
   local view = vim.fn.winsaveview()
   local window = api.nvim_get_current_win()
   local width = text_width(window)
-  local longest, longest_line = 0, view.lnum
-  for _, entry in ipairs((visible_lines())) do
-    if entry.width > longest then longest, longest_line = entry.width, entry.line end
-  end
-  local left = math.max(0, math.min(view.leftcol + columns, longest - width))
+  local left = math.max(0, view.leftcol + columns)
   if left == view.leftcol then return false end
-  -- A short cursor line must not prevent panning to longer visible lines.
-  if vim.fn.virtcol({view.lnum, '$'}) - 1 <= left then view.lnum = longest_line end
+  -- A cursor line wide enough to fill the requested view already proves it is reachable.
+  if vim.fn.foldclosed(view.lnum) >= 0 or vim.fn.strdisplaywidth(api.nvim_get_current_line()) < left + width then
+    local longest, longest_line = 0, view.lnum
+    for _, entry in ipairs((visible_lines())) do
+      if entry.width > longest then longest, longest_line = entry.width, entry.line end
+    end
+    left = math.max(0, math.min(left, longest - width))
+    if vim.fn.virtcol({view.lnum, '$'}) - 1 <= left then view.lnum = longest_line end
+  end
+  if left == view.leftcol then return false end
   place(window, view, left, view.lnum, vim.fn.virtcol('.'))
   remember_leftcol(left)
   return true
@@ -305,7 +309,7 @@ M.prefetching = false
 
 --- Draw rows beyond the view (below with `down`) so the renderer can cache them, then put the
 --- view back. `previous` continues from where the last call stopped; returns the next one.
-function M.prefetch(down, previous)
+function M.prefetch(down, previous, scrolling)
   if vim.bo.buftype ~= '' or api.nvim_win_get_config(0).relative ~= '' then
     return
   end
@@ -324,7 +328,9 @@ function M.prefetch(down, previous)
   end
   local cached = previous and math.max(0, previous.depth
     - M.view_distance(0, previous.view, view) * (down and 1 or -1)) or 0
-  if cached >= 256 then
+  -- While input is arriving, fill two viewports and leave the deeper cache for idle time.
+  local limit = scrolling and math.min(256, math.max(32, height * 2)) or 256
+  if cached >= limit then
     return
   end
   local scrolloff, saved_mouse_scrolloff = vim.wo.scrolloff, mouse_scrolloff
@@ -333,7 +339,7 @@ function M.prefetch(down, previous)
   local step = math.max(1, height - 1)
   -- Visit only the next strip, then restore the real view before yielding to input.
   local views = {}
-  local remaining = math.min(32, 256 - cached)
+  local remaining = math.min(32, limit - cached)
   local depth = cached
   local at_edge = false
   M.prefetching = true
@@ -387,7 +393,7 @@ function M.prefetch(down, previous)
   if not ok then
     error(err)
   end
-  local complete = at_edge or depth >= 256
+  local complete = at_edge or depth >= limit
   local upper_edge, lower_edge
   if down then lower_edge = at_edge else upper_edge = at_edge end
   publish_cache(upper_edge, lower_edge, complete)

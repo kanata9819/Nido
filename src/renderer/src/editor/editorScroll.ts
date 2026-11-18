@@ -376,10 +376,18 @@ export class EditorScroll {
 			1,
 			Math.floor((this.options.grid.columns - this.options.grid.horizontalGutter - 1) / 2)
 		);
-		const ahead =
-			!follow && preview && !this.wheelMotion && !this.queue.verticalPending
-				? Math.min(maxAhead, 32, Math.max(8, Math.ceil(speed * 4)))
-				: 1;
+		let ahead = 1;
+		if (preview && !this.wheelMotion && !this.queue.verticalPending) {
+			if (!follow) {
+				ahead = Math.min(maxAhead, 32, Math.max(8, Math.ceil(speed * 4)));
+			} else {
+				// Prepare columns within the gesture so a following cursor never jumps past its target.
+				const remaining = this.horizontalMotion?.remaining ?? 0;
+				if (Math.sign(columns - this.horizontal.offset) === Math.sign(remaining)) {
+					ahead = Math.max(1, Math.min(maxAhead, Math.floor(Math.abs(remaining))));
+				}
+			}
+		}
 		const movement = this.horizontal.request(columns, ahead);
 		if (movement) {
 			this.move(0, follow, movement);
@@ -515,7 +523,7 @@ export class EditorScroll {
 		this.fetching = true;
 		this.options.onCompletion(
 			window.nido
-				.prefetchScroll(this.options.id, down)
+				.prefetchScroll(this.options.id, down, this.options.grid.scrolling)
 				.catch((error) => {
 					if (!this.disposed && generation === this.generation) {
 						this.options.onError(error);

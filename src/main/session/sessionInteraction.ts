@@ -353,7 +353,7 @@ export class SessionInteraction {
 	}
 
 	/** Draw rows below (`down`) or above the viewport in strips, until Neovim has no more. */
-	async prefetchScroll(down = false): Promise<void> {
+	async prefetchScroll(down = false, scrolling = false): Promise<void> {
 		const generation = ++this.prefetchGeneration;
 		this.prefetchDown = down;
 		const side = down ? 1 : 0;
@@ -397,7 +397,7 @@ export class SessionInteraction {
 					try {
 						const next = await this.client.request('nvim_exec_lua', [
 							"return require('nido_scroll').prefetch(...)",
-							continuation ? [down, continuation] : [down]
+							[down, continuation ?? false, scrolling]
 						]);
 						await this.client.request('nvim_eval', ['1']);
 						if (next && generation === this.prefetchGeneration) {

@@ -42,7 +42,9 @@ function registerGridHandlers({ handle, session, syncFocus }: EditorHandlerDeps)
 	handle('resize', (id, columns, rows) =>
 		session(id).resize(integer(columns, 1000), integer(rows, 500))
 	);
-	handle('prefetchScroll', (id, down) => session(id).prefetchScroll(down === true));
+	handle('prefetchScroll', (id, down, scrolling) =>
+		session(id).prefetchScroll(down === true, scrolling === true)
+	);
 	handle('scroll', (id, lines, follow, pixel, columns = 0) => {
 		scrollDistance(lines, pixel === true, columns);
 		return session(id).scroll(

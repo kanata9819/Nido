@@ -93,7 +93,8 @@ const api: NidoAPI = {
 	click: (id, row, column) => ipcRenderer.invoke('nido:click', id, row, column),
 	scroll: (id, lines, follow, pixel, columns) =>
 		ipcRenderer.invoke('nido:scroll', id, lines, follow, pixel, columns),
-	prefetchScroll: (id, down) => ipcRenderer.invoke('nido:prefetchScroll', id, down),
+	prefetchScroll: (id, down, scrolling) =>
+		ipcRenderer.invoke('nido:prefetchScroll', id, down, scrolling),
 	jumpSticky: (id, window, buffer, line) =>
 		ipcRenderer.invoke('nido:jumpSticky', id, window, buffer, line),
 	paste: (id, text) => ipcRenderer.invoke('nido:paste', id, text),
