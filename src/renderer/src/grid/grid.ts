@@ -135,7 +135,7 @@ export class Grid {
 	get needsUpperRows(): boolean {
 		const remaining =
 			this.upperRows.length + Math.min(0, this.scrollFraction + this.scrollPreview);
-		return !this.upperRowsAtStart && remaining <= Grid.cacheRowLimit * 0.75;
+		return !this.upperRowsAtStart && remaining <= this.refillThreshold;
 	}
 
 	/** Whether the cached rows below cover the previewed position. */
@@ -150,7 +150,12 @@ export class Grid {
 	get needsLowerRows(): boolean {
 		const remaining =
 			this.lowerRows.length - Math.max(0, this.scrollFraction + this.scrollPreview);
-		return !this.lowerRowsAtEnd && remaining <= Grid.cacheRowLimit * 0.75;
+		return !this.lowerRowsAtEnd && remaining <= this.refillThreshold;
+	}
+
+	/** Keep a viewport in reserve while the next strip is fetched. */
+	private get refillThreshold(): number {
+		return Math.min(this.rows, Grid.cacheRowLimit * 0.75);
 	}
 
 	/** Clamp animation targets only when the cache includes the actual file boundary. */

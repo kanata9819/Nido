@@ -560,6 +560,61 @@ test('horizontal gestures without lookahead defer prefetch until vertical input 
 	}
 });
 
+test('animated horizontal input batches columns within the following cursor’s destination', async () => {
+	const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+	let native = 0;
+	const targets: number[] = [];
+	Object.defineProperty(globalThis, 'window', {
+		configurable: true,
+		value: {
+			nido: {
+				scroll: async (
+					_id: string,
+					_lines: number,
+					follow: boolean,
+					_pixel: boolean,
+					columns: number
+				) => {
+					assert.ok(follow);
+					native += columns;
+					targets.push(native);
+				}
+			}
+		}
+	});
+	const grid = new Grid();
+	grid.apply([['grid_resize', [1, 80, 20]], ['flush']]);
+	let completion: Promise<void> | undefined;
+	const scrolling = new EditorScroll({
+		id: 'alpha',
+		grid,
+		enabled: () => true,
+		schedule: () => {},
+		onError: (error) => assert.fail(String(error)),
+		onCompletion: (promise) => {
+			completion = promise;
+		}
+	});
+	try {
+		for (const delta of [16, -16]) {
+			targets.length = 0;
+			scrolling.requestHorizontal(delta, true, true, 120, 0);
+			for (let time = 4; time <= 120; time += 4) {
+				scrolling.advance(time, true);
+				scrolling.acknowledge(true, native);
+				await completion;
+			}
+			assert.equal(native, delta > 0 ? 16 : 0);
+			assert.ok(targets.every((target) => target >= 0 && target <= 16));
+			assert.ok(targets.length < 8);
+		}
+	} finally {
+		scrolling.dispose();
+		if (previous) Object.defineProperty(globalThis, 'window', previous);
+		else Reflect.deleteProperty(globalThis, 'window');
+	}
+});
+
 test('late replies from a previous buffer cannot complete a new scroll or refill', async () => {
 	const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 	const replies: (() => void)[] = [];

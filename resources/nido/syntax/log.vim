@@ -4,17 +4,18 @@ if exists('b:current_syntax')
 endif
 
 syntax case ignore
-syntax match nidoLogNumber display /\<\%(0x[0-9a-f]\+\|\d\+\%(\.\d\+\)\?\%([eE][+-]\?\d\+\)\?\)\>/
+" The backtracking engine is cheaper for these single-line tokens on dense logs.
+syntax match nidoLogNumber display /\%#=1\<\%(0x[0-9a-f]\+\|\d\+\%(\.\d\+\)\?\%([eE][+-]\?\d\+\)\?\)\>/
 syntax keyword nidoLogBoolean true false null nil none
 syntax keyword nidoLogTrace trace verbose
 syntax keyword nidoLogDebug debug
 syntax keyword nidoLogInfo info information notice
 syntax keyword nidoLogWarning warn warning
 syntax keyword nidoLogError error errors err fatal panic critical crit alert emergency emerg severe failed failure
-syntax match nidoLogTimestamp display /\<\d\{4}-\d\d-\d\d\%([Tt ]\d\d:\d\d:\d\d\%([.,]\d\+\)\?\%([Zz]\|[+-]\d\d:\?\d\d\)\?\)\?/
-syntax match nidoLogTimestamp display /\<\d\d:\d\d:\d\d\%([.,]\d\+\)\?\%([Zz]\|[+-]\d\d:\?\d\d\)\?/
-syntax match nidoLogString display /"\%([^"\\]\|\\.\)*"/
-syntax match nidoLogString display /'\%([^'\\]\|\\.\)*'/
+syntax match nidoLogTimestamp display /\%#=1\<\d\{4}-\d\d-\d\d\%([Tt ]\d\d:\d\d:\d\d\%([.,]\d\+\)\?\%([Zz]\|[+-]\d\d:\?\d\d\)\?\)\?/
+syntax match nidoLogTimestamp display /\%#=1\<\d\d:\d\d:\d\d\%([.,]\d\+\)\?\%([Zz]\|[+-]\d\d:\?\d\d\)\?/
+syntax match nidoLogString display /\%#=1"[^"\\]*\%(\\.[^"\\]*\)*"/
+syntax match nidoLogString display /\%#=1'[^'\\]*\%(\\.[^'\\]*\)*'/
 syntax sync minlines=1 maxlines=1
 
 highlight default link nidoLogNumber Number

@@ -328,7 +328,8 @@ test('application logs detect their format and highlight levels, timestamps and 
 		'2026-10-25T21:29:12+09:00 WARN message="ERROR 42"',
 		'21:29:13.000 error connection failed',
 		'TRACE message="unfinished',
-		'2026-10-25T12:29:14Z INFO recovered value=42'
+		'2026-10-25T12:29:14Z INFO recovered value=42',
+		String.raw`message="quoted \"ERROR\"" detail='it\'s WARN' INFO`
 	];
 	try {
 		await writeFile(join(root, 'chibi-20261025.log'), lines.join('\n'));
@@ -363,6 +364,8 @@ assert(tokens.warning.group == 'nidoLogWarning' and tokens.error.group == 'nidoL
 assert(tokens.number.group == 'nidoLogNumber' and tokens.float.group == 'nidoLogNumber' and tokens.hex.group == 'nidoLogNumber')
 assert(tokens.string.group == 'nidoLogString' and tokens.quoted_level.group == 'nidoLogString')
 assert(tokens.boolean.group == 'nidoLogBoolean')
+assert(token(7, 'ERROR').group == 'nidoLogString' and token(7, 'WARN').group == 'nidoLogString')
+assert(token(7, 'INFO').group == 'nidoLogInfo')
 for _, filename in ipairs({'sample.LOG', 'sample.Log', 'sample.log.1', 'sample.log.12'}) do
   assert(vim.filetype.match({filename=filename}) == 'log', filename)
 end

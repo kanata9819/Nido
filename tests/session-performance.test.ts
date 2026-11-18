@@ -1118,6 +1118,9 @@ return ready`,
 			[]
 		]);
 		const downRows = grid.cells.slice();
+		await session.prefetchScroll(true, true);
+		assert.ok(grid.futureRows.length > grid.rows && grid.futureRows.length <= grid.rows * 2);
+		assert.equal(grid.needsLowerRows, false);
 		frames.length = 0;
 		visibleFrames.length = 0;
 		await session.prefetchScroll(true);
