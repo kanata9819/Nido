@@ -39,6 +39,7 @@ end
 function M.find()
   local current = start_list()
   local buffer = vim.api.nvim_get_current_buf()
+  local changedtick = vim.api.nvim_buf_get_changedtick(buffer)
   local clients = vim.lsp.get_clients({ bufnr = buffer, method = 'textDocument/references' })
   local state = { version = version, search = current, items = {}, loading = true, error = '' }
   items = {}
@@ -66,8 +67,29 @@ function M.find()
     table.insert(pending, request)
     local params = vim.lsp.util.make_position_params(0, client.offset_encoding)
     params.context = { includeDeclaration = true }
+    local function send()
+      local accepted, id = client:request('textDocument/references', params, request.receive, buffer)
+      request.id = id
+      if not accepted then
+        request.receive({ message = 'The language server could not accept the references request.' })
+      end
+    end
     local function receive(err, locations)
       if current ~= search or request.done then
+        return
+      end
+      if err and err.code == vim.lsp.protocol.ErrorCodes.ContentModified and not request.retried then
+        request.retried = true
+        request.id = nil
+        -- A server can invalidate its analysis while indexing even if this buffer did not change.
+        vim.schedule(function()
+          if current ~= search or request.done then return end
+          if vim.api.nvim_buf_is_loaded(buffer) and vim.api.nvim_buf_get_changedtick(buffer) == changedtick then
+            send()
+          else
+            receive(err)
+          end
+        end)
         return
       end
       request.done = true
@@ -114,11 +136,7 @@ function M.find()
       end
     end
     request.receive = receive
-    local accepted, id = client:request('textDocument/references', params, receive, buffer)
-    request.id = id
-    if not accepted then
-      receive({ message = 'The language server could not accept the references request.' })
-    end
+    send()
   end
 end
 

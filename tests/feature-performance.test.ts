@@ -325,6 +325,54 @@ assert(ok, err)
 		]);
 	}));
 
+test('references retry ContentModified once when the source buffer is unchanged', () =>
+	withSession(async (session) => {
+		await session.client.request('nvim_exec_lua', [
+			`
+local module = require('nido_references')
+local clients, locations, notify = vim.lsp.get_clients, vim.lsp.util.locations_to_items, vim.rpcnotify
+local latest, requests = {}, {}
+local modified = {code=vim.lsp.protocol.ErrorCodes.ContentModified, message='content modified'}
+vim.rpcnotify = function(channel, method, state, ...)
+  if method == 'nido:references' then latest = vim.deepcopy(state); return end
+  return notify(channel, method, state, ...)
+end
+vim.lsp.util.locations_to_items = function(items) return items end
+vim.lsp.get_clients = function(options)
+  if not options or options.method ~= 'textDocument/references' then return clients(options) end
+  return {{offset_encoding='utf-16', request=function(_, _, params, callback)
+    requests[#requests+1] = {params=params, callback=callback}
+    return true, #requests
+  end}}
+end
+local ok, err = pcall(function()
+  module.find()
+  requests[1].callback(modified)
+  assert(vim.wait(1000, function() return #requests == 2 end, 5), 'reference request was not retried')
+  assert(latest.loading and latest.error == '', 'a retry must keep the list loading')
+  assert(vim.deep_equal(requests[1].params, requests[2].params))
+  requests[2].callback(nil, {{filename=vim.api.nvim_buf_get_name(0), lnum=1, col=1, text='one'}})
+  assert(not latest.loading and #latest.items == 1 and latest.error == '')
+
+  module.find()
+  vim.api.nvim_buf_set_lines(0, 0, 1, false, {'edited'})
+  requests[3].callback(modified)
+  assert(vim.wait(1000, function() return not latest.loading end, 5))
+  assert(#requests == 3 and latest.error == modified.message, 'changed content must not be retried')
+
+  module.find()
+  requests[4].callback(modified)
+  assert(vim.wait(1000, function() return #requests == 5 end, 5))
+  requests[5].callback(modified)
+  assert(not latest.loading and latest.error == modified.message, 'only one retry is allowed')
+end)
+vim.lsp.get_clients, vim.lsp.util.locations_to_items, vim.rpcnotify = clients, locations, notify
+assert(ok, err)
+`,
+			[]
+		]);
+	}));
+
 test('debugger batches output bursts while final state and last output are immediate', () =>
 	withSession(async (session) => {
 		await session.client.request('nvim_exec_lua', [
