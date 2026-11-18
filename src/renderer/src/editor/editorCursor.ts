@@ -9,6 +9,7 @@ interface Position {
 
 /** How long the cursor glides to a new position, in milliseconds. */
 const movementDuration = 100;
+const blinkInterval = 550;
 /** Input events that restart blinking, so the cursor stays visible while typing. */
 const inputEvents = ['focus', 'blur', 'keydown', 'input', 'compositionstart'];
 
@@ -32,6 +33,7 @@ export class EditorCursor {
 	private lastTargetTime?: number;
 	private fade?: { from: number; to: number; start: number };
 	private timer?: ReturnType<typeof setTimeout>;
+	private blinkAt = 0;
 
 	constructor(
 		private readonly grid: Grid,
@@ -130,31 +132,46 @@ export class EditorCursor {
 	}
 
 	private blink = (): void => {
+		this.timer = undefined;
 		if (!this.canBlink()) {
+			return;
+		}
+		const now = performance.now();
+		const remaining = this.blinkAt - now;
+		if (remaining > 0) {
+			this.timer = setTimeout(this.blink, remaining);
 			return;
 		}
 		if (this.smoothBlink) {
 			this.fade = {
 				from: this.grid.cursorOpacity,
 				to: this.grid.cursorOpacity > 0.5 ? 0 : 1,
-				start: performance.now()
+				start: now
 			};
 		} else {
 			this.grid.cursorVisible = !this.grid.cursorVisible;
 		}
 		this.schedule();
-		this.timer = setTimeout(this.blink, 550);
+		this.postponeBlink(now);
 	};
+
+	/** Reuse the pending timer while typing. It checks the updated deadline when it wakes. */
+	private postponeBlink(now: number): void {
+		this.blinkAt = now + blinkInterval;
+		this.timer ??= setTimeout(this.blink, blinkInterval);
+	}
 
 	/** Show the cursor and start the blink cycle over. */
 	resetBlink = (): void => {
-		clearTimeout(this.timer);
 		this.grid.cursorVisible = true;
 		this.grid.cursorOpacity = 1;
 		this.fade = undefined;
 		this.schedule();
 		if (this.canBlink()) {
-			this.timer = setTimeout(this.blink, 550);
+			this.postponeBlink(performance.now());
+		} else {
+			clearTimeout(this.timer);
+			this.timer = undefined;
 		}
 	};
 

@@ -1,6 +1,7 @@
 import { test, expect } from './helpers/renderer-test';
 import type { ViteDevServer } from 'vite';
 import { harnessWarmupTimeout, startHarnessServer } from './helpers/harness-server';
+import { viteFsUrl } from './helpers/vite-fs-url';
 import type {} from './renderer/harness';
 
 let server: ViteDevServer;
@@ -416,6 +417,71 @@ test('cursor-only state updates leave file tabs untouched while real tab changes
 			)
 		)
 		.toEqual([['alpha', 1]]);
+});
+
+test('typing reuses the cursor blink timer and gives the cursor a full idle interval', async ({
+	page
+}) => {
+	await page.route('**/cursor-timer-probe', (route) =>
+		route.fulfill({ contentType: 'text/html', body: '<main><textarea></textarea></main>' })
+	);
+	await page.goto(`${origin}cursor-timer-probe`);
+	await page.clock.install({ time: new Date(0) });
+	await page.clock.pauseAt(new Date(1000));
+	await page.evaluate(async (url) => {
+		const { EditorCursor } = await import(url);
+		const host = document.querySelector('main')!;
+		const input = host.querySelector('textarea')!;
+		input.focus();
+		const probe = { timerStarts: 0, cursorVisible: true, cursorOpacity: 1 };
+		const cursor = new EditorCursor(
+			probe,
+			host,
+			input,
+			matchMedia('(prefers-reduced-motion: reduce)'),
+			false,
+			() => {}
+		);
+		window.setTimeout = new Proxy(window.setTimeout, {
+			apply(target, receiver, args) {
+				probe.timerStarts++;
+				return Reflect.apply(target, receiver, args);
+			}
+		});
+		cursor.listen();
+		cursor.resetBlink();
+		let keys = 0;
+		const typing = window.setInterval(() => {
+			input.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+			if (++keys === 80) {
+				window.clearInterval(typing);
+			}
+		}, 10);
+		Object.assign(window, { cursorTimerProbe: probe });
+	}, viteFsUrl('src/renderer/src/editor/editorCursor.ts'));
+	const state = (): Promise<{ timerStarts: number; cursorVisible: boolean }> =>
+		page.evaluate(
+			() =>
+				(
+					window as unknown as {
+						cursorTimerProbe: { timerStarts: number; cursorVisible: boolean };
+					}
+				).cursorTimerProbe
+		);
+	await page.clock.runFor(800);
+	const duringTyping = await state();
+	console.log(JSON.stringify({ keys: 80, blinkTimers: duringTyping.timerStarts }));
+	expect(duringTyping.cursorVisible).toBe(true);
+	await page.clock.runFor(549);
+	expect((await state()).cursorVisible).toBe(true);
+	await page.clock.runFor(1);
+	expect((await state()).cursorVisible).toBe(false);
+	await page.locator('textarea').evaluate((input) => input.blur());
+	await page.clock.runFor(1100);
+	expect((await state()).cursorVisible).toBe(true);
+	if (!process.env.NIDO_PERFORMANCE_BASELINE) {
+		expect(duringTyping.timerStarts).toBeLessThanOrEqual(3);
+	}
 });
 
 test('hidden editors keep their state without scheduling paints, and cursor blinking does not rewrite input styles', async ({
