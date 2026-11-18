@@ -27,6 +27,25 @@ import {
 	gitIgnored
 } from '../src/main/git/git';
 
+test('Git status resolves repository roots that end in a full-width space', async () => {
+	const parent = await mkdtemp(join(tmpdir(), 'nido-git-root-'));
+	const root = join(parent, 'project\u3000');
+	const nested = join(root, 'nested');
+	try {
+		await mkdir(nested, { recursive: true });
+		execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root, windowsHide: true });
+		await writeFile(join(nested, 'notes.txt'), 'new file\n');
+		const status = await gitStatus(nested);
+		assert.equal(status.branch, 'main');
+		assert.deepEqual(
+			status.changes.map((change) => change.path),
+			['nested/notes.txt']
+		);
+	} finally {
+		await rm(parent, { recursive: true, force: true });
+	}
+});
+
 test('Git IPC shares pending status reads but refreshes after changes and failures', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-status-sharing-'));
 	const plain = await mkdtemp(join(tmpdir(), 'nido-status-plain-'));
