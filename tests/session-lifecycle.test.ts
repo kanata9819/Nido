@@ -79,6 +79,47 @@ end)`,
 	}
 });
 
+test('gd on a function definition keeps the viewport still', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-definition-view-'));
+	let session: Session | undefined;
+	let scrolled = false;
+	try {
+		await writeFile(join(root, 'lib.rs'), '\n'.repeat(66) + 'fn hoge() {}\n' + '\n'.repeat(30));
+		session = await Session.create(root, (event) => {
+			if (event.type !== 'redraw') return;
+			scrolled ||= event.events.some(
+				([name, ...calls]) => name === 'grid_scroll' && calls.some((args) => args[5] !== 0)
+			);
+		});
+		await session.attach(80, 30);
+		await session.openFile('lib.rs');
+		await session.client.request('nvim_exec_lua', [
+			`vim.fn.winrestview({ topline = 60, lnum = 67, col = 5 })
+vim.api.nvim_exec_autocmds('LspAttach', { buffer = 0, data = { client_id = 0 } })
+local get_clients = vim.lsp.get_clients
+vim.lsp.get_clients = function(opts)
+  if opts and opts.method == 'textDocument/definition' then
+    return {{ offset_encoding = 'utf-16', request = function(_, _, _, reply)
+      local position = { line = 66, character = 3 }
+      reply(nil, { uri = vim.uri_from_bufnr(0), range = { start = position, ['end'] = position } })
+    end }}
+  end
+  return get_clients(opts)
+end`,
+			[]
+		]);
+		assert.equal(await session.client.request('nvim_eval', ["line('w0')"]), 60);
+		scrolled = false;
+		await session.input('gd');
+		assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), [67, 3]);
+		assert.equal(await session.client.request('nvim_eval', ["line('w0')"]), 60);
+		assert.equal(scrolled, false);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
 test('reference previews reload external changes without switching files or changing readonly', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-reference-reload-'));
 	let session: Session | undefined;
