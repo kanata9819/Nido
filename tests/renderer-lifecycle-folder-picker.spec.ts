@@ -81,6 +81,41 @@ test('confirming IME text in the folder address does not browse or open a worksp
 	await expect.poll(actions).toEqual(['browseFolders', 'browseFolders', 'createWorkspace']);
 });
 
+test('a workspace opened in the background keeps the panel opened after leaving the picker', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=app&defer=createWorkspace`);
+	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+	const original = page.getByRole('tab', { name: 'Workspace Alpha', exact: true });
+	await page.keyboard.press('Control+Shift+n');
+	const list = page.getByRole('listbox', { name: 'Folders', exact: true });
+	await expect(list).toHaveAttribute('aria-busy', 'false');
+	await list.press('Control+Enter');
+	await expect
+		.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.method))
+		.toBe('createWorkspace');
+	await page.keyboard.press('Escape');
+	await expect(list).toHaveCount(0);
+	await page.keyboard.press('Control+Shift+p');
+	const filter = page.getByRole('textbox', { name: 'Filter items', exact: true });
+	await expect(filter).toBeVisible();
+	await filter.fill('Settings');
+	await page.evaluate(() =>
+		window.rendererTest.settle('createWorkspace', 0, {
+			id: 'new',
+			root: '/new',
+			name: 'New',
+			kind: 'editor'
+		})
+	);
+	const added = page.getByRole('tab', { name: 'Workspace New', exact: true });
+	await expect(added).toBeVisible();
+	await expect(original).toHaveAttribute('aria-selected', 'true');
+	await expect(added).toHaveAttribute('aria-selected', 'false');
+	await expect(filter).toBeFocused();
+	await expect(filter).toHaveValue('Settings');
+});
+
 test('going up from a Windows drive root lists the drives and opens another one', async ({
 	page
 }) => {
