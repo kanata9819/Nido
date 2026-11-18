@@ -262,6 +262,42 @@ test('creation entry chooses the session kind and cancelling resets the next edi
 		.toEqual(['/alpha', 'editor']);
 });
 
+test('Folder listings keep address edits made while loading', async ({ page }) => {
+	await page.goto(`${origin}?view=folders&defer=browseFolders`);
+	const address = page.getByRole('textbox', { name: 'Folder path' });
+	const list = page.getByRole('listbox', { name: 'Folders' });
+	await expect.poll(() => page.evaluate(() => window.rendererTest.pending.length)).toBe(1);
+	await address.fill('/beta');
+	await page.evaluate(() =>
+		window.rendererTest.settle('browseFolders', 0, {
+			path: '/home',
+			parent: '/',
+			folders: [{ name: 'Projects', path: '/home/Projects', directory: true }]
+		})
+	);
+	await expect(list.getByRole('option', { name: 'Projects' })).toBeVisible();
+	await expect(address).toHaveValue('/beta');
+	await address.press('Enter');
+	await expect(list).toHaveAttribute('aria-busy', 'true');
+	await expect
+		.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.args[0]))
+		.toBe('/beta');
+	await address.fill('/gamma');
+	await page.evaluate(async () => {
+		window.rendererTest.settle('browseFolders', 0, {
+			path: '/beta',
+			parent: '/',
+			folders: [{ name: 'Sources', path: '/beta/Sources', directory: true }]
+		});
+		await new Promise<void>((resolve) =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		);
+	});
+	await expect(list.getByRole('option', { name: 'Sources' })).toBeVisible();
+	await expect(address).toHaveValue('/gamma');
+	await expect(address).toBeFocused();
+});
+
 test('Folder browsing cancels old results and clamps selection after favorites change', async ({
 	page
 }) => {

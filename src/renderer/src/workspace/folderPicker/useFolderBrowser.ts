@@ -59,6 +59,7 @@ export function useFolderBrowser(
 	}));
 	const distribution = location.distribution;
 	const [path, setPath] = useState(parseWslPath(initialPath)?.path || initialPath);
+	const addressEdits = useRef(0);
 	const [directory, setDirectory] = useState('');
 	const [parent, setParent] = useState('');
 	const [folders, setFolders] = useState<FileEntry[]>([]);
@@ -70,8 +71,10 @@ export function useFolderBrowser(
 
 	/** Show a folder listing. */
 	const applyFolders = useCallback(
-		(result: Listing): void => {
-			setPath(parseWslPath(result.path)?.path || result.path);
+		(result: Listing, addressRevision: number): void => {
+			if (addressRevision === addressEdits.current) {
+				setPath(parseWslPath(result.path)?.path || result.path);
+			}
 			setDirectory(result.path);
 			setParent(result.parent);
 			setFolders(result.folders);
@@ -87,6 +90,7 @@ export function useFolderBrowser(
 	 */
 	async function list(load: () => Promise<Listing>, focus: () => boolean): Promise<void> {
 		const id = ++request.current.id;
+		const addressRevision = addressEdits.current;
 		setLoading(true);
 		setError('');
 		try {
@@ -94,8 +98,12 @@ export function useFolderBrowser(
 			if (id !== request.current.id) {
 				return;
 			}
-			applyFolders(result);
+			applyFolders(result, addressRevision);
 			requestAnimationFrame(() => {
+				// A user still editing the address should be able to finish typing.
+				if (addressRevision !== addressEdits.current) {
+					return;
+				}
 				if (id === request.current.id && focus()) {
 					focusList();
 				}
@@ -157,12 +165,13 @@ export function useFolderBrowser(
 	useEffect(() => {
 		const counter = request.current;
 		const id = ++counter.id;
+		const addressRevision = addressEdits.current;
 		void window.nido
 			.browseFolders(location.initialPath, location.distribution || undefined)
 			.then(
 				(result) => {
 					if (id === counter.id) {
-						applyFolders(result);
+						applyFolders(result, addressRevision);
 					}
 				},
 				(error) => {
@@ -184,7 +193,10 @@ export function useFolderBrowser(
 	return {
 		distribution,
 		path,
-		setPath,
+		setPath: (value) => {
+			addressEdits.current++;
+			setPath(value);
+		},
 		directory,
 		parent,
 		folders,
