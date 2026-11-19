@@ -2,6 +2,8 @@ import { test, expect } from './helpers/renderer-test';
 import type { ViteDevServer } from 'vite';
 import { harnessWarmupTimeout, startHarnessServer } from './helpers/harness-server';
 import { viteFsUrl } from './helpers/vite-fs-url';
+import { pauseRendererClock } from './helpers/renderer-lifecycle-shared';
+import type { Grid as EditorGrid } from '../src/renderer/src/grid/grid';
 import type {} from './renderer/harness';
 import { requireWebGLCorrection } from './helpers/row-image-probe';
 
@@ -97,6 +99,101 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 		}
 	});
 }
+
+test('Sticky Scroll skips unchanged cursor frames and follows the vertical offset', async ({
+	page
+}) => {
+	await pauseRendererClock(page);
+	await page.addInitScript(() => {
+		localStorage.setItem('nido.language', 'en');
+		localStorage.setItem('nido.animations', 'false');
+		localStorage.setItem('nido.smoothCursor', 'false');
+	});
+	await page.goto(`${origin}?view=app`);
+	await page.clock.runFor(200);
+	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+	await page.evaluate(async (url) => {
+		const { Grid } = (await import(url)) as { Grid: typeof EditorGrid };
+		const original = Grid.prototype.rowY;
+		const probe = { scopeReads: 0 };
+		Object.assign(window, { stickyProbe: probe });
+		Grid.prototype.rowY = function (row) {
+			if (row === 14) {
+				probe.scopeReads++;
+			}
+			return original.call(this, row);
+		};
+		window.rendererTest.emit({
+			type: 'redraw',
+			id: 'alpha',
+			events: [
+				[
+					'nido_sticky_scroll',
+					[
+						{
+							window: 1,
+							buffer: 1,
+							top: 0,
+							left: 0,
+							width: 60,
+							height: 24,
+							gutter: 4,
+							tabstop: 8,
+							leftcol: 0,
+							scopes: [
+								{
+									line: 27,
+									ending: 90,
+									top: 0,
+									bottom: 14,
+									text: [{ text: 'scope', color: '#ffffff', cells: 5 }],
+									endText: []
+								}
+							]
+						}
+					]
+				],
+				['nido_pixel_scroll', [0.5, false]],
+				['flush']
+			]
+		});
+	}, viteFsUrl('src/renderer/src/grid/grid.ts'));
+	await page.clock.runFor(32);
+	const header = page.getByRole('button', { name: 'Go to line 27' });
+	await expect(header).toBeVisible();
+	const scopeReads = (): Promise<number> =>
+		page.evaluate(
+			() =>
+				(window as unknown as { stickyProbe: { scopeReads: number } }).stickyProbe
+					.scopeReads
+		);
+	const initial = await scopeReads();
+	expect(initial).toBeGreaterThan(0);
+	for (let column = 1; column <= 20; column++) {
+		await page.evaluate(
+			(nextColumn) =>
+				window.rendererTest.emit({
+					type: 'redraw',
+					id: 'alpha',
+					events: [['grid_cursor_goto', [1, 0, nextColumn]], ['flush']]
+				}),
+			column
+		);
+		await page.clock.runFor(20);
+	}
+	expect(await scopeReads()).toBe(initial);
+	await expect(header).toBeVisible();
+
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'redraw',
+			id: 'alpha',
+			events: [['nido_pixel_scroll', [0, false]], ['flush']]
+		})
+	);
+	await page.clock.runFor(32);
+	await expect(header).toHaveCount(0);
+});
 
 for (const [scale, size, family] of [
 	[1, 15, '"Cascadia Code", monospace'],
