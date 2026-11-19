@@ -662,6 +662,65 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 	}
 }
 
+test('typing only paints for a cursor or grid change while Neovim is waiting to reply', async ({
+	page
+}) => {
+	await page.clock.install({ time: new Date(0) });
+	await page.clock.pauseAt(new Date(1000));
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	await page.addInitScript(() => {
+		localStorage.setItem('nido.language', 'en');
+		localStorage.setItem('nido.smoothBlink', 'false');
+		localStorage.setItem('nido.smoothCursor', 'false');
+	});
+	await page.goto(`${origin}?view=app&defer=input`);
+	const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+	await expect(input).toBeFocused();
+	await page.clock.runFor(200);
+	const display = page.locator('canvas[aria-label="Neovim editor display"]');
+	await expect(display).toHaveAttribute('aria-description', /hello/);
+	await page.evaluate(async (url) => {
+		const { Grid } = (await import(url)) as { Grid: typeof EditorGrid };
+		const original = Grid.prototype.draw;
+		const cursorStates: boolean[] = [];
+		Object.assign(window, { cursorStates });
+		Grid.prototype.draw = function (...args) {
+			if (args[0].getAttribute('aria-label') === 'Neovim editor display') {
+				cursorStates.push(this.cursorVisible);
+			}
+			return original.apply(this, args);
+		};
+	}, viteFsUrl('src/renderer/src/grid/grid.ts'));
+	const cursorStates = (): Promise<boolean[]> =>
+		page.evaluate(() => (window as unknown as { cursorStates: boolean[] }).cursorStates);
+	for (let key = 0; key < 20; key++) {
+		await page.keyboard.press('x');
+		await page.clock.runFor(20);
+	}
+	expect(await cursorStates()).toEqual([]);
+	const calls = await page.evaluate(
+		() => window.rendererTest.calls.filter((call) => call.method === 'input').length
+	);
+	expect(calls).toBe(20);
+
+	await page.clock.runFor(560);
+	expect(await cursorStates()).toEqual([false]);
+	await page.keyboard.press('x');
+	await page.clock.runFor(20);
+	expect(await cursorStates()).toEqual([false, true]);
+
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'redraw',
+			id: 'alpha',
+			events: [['grid_line', [1, 0, 0, [['X', 0]]]], ['flush']]
+		})
+	);
+	await page.clock.runFor(20);
+	await expect(display).toHaveAttribute('aria-description', /Xello/);
+	expect(await cursorStates()).toEqual([false, true, true]);
+});
+
 test('edits and decoration row shifts paint their final positions without a scroll transition', async ({
 	page
 }) => {

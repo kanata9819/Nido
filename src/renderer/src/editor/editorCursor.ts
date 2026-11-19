@@ -39,7 +39,7 @@ export class EditorCursor {
 		private readonly input: HTMLTextAreaElement,
 		private readonly reducedMotion: MediaQueryList,
 		private readonly smoothBlink: boolean,
-		private readonly schedule: () => void
+		private readonly schedule: (force?: boolean) => void
 	) {}
 
 	/** Whether the cursor is moving or fading, so the next frame must be painted. */
@@ -158,15 +158,21 @@ export class EditorCursor {
 		}
 	};
 
+	/** Focus and visibility can change what gets painted even if the blink state is the same. */
+	private refreshCursor = (): void => {
+		this.resetBlink();
+		this.schedule(true);
+	};
+
 	/** Restart blinking on input and focus changes. */
 	listen(): void {
 		for (const event of inputEvents) {
 			this.input.addEventListener(event, this.resetBlink);
 		}
-		window.addEventListener('focus', this.resetBlink);
-		window.addEventListener('blur', this.resetBlink);
-		document.addEventListener('visibilitychange', this.resetBlink);
-		this.reducedMotion.addEventListener('change', this.resetBlink);
+		window.addEventListener('focus', this.refreshCursor);
+		window.addEventListener('blur', this.refreshCursor);
+		document.addEventListener('visibilitychange', this.refreshCursor);
+		this.reducedMotion.addEventListener('change', this.refreshCursor);
 	}
 
 	/** Stop blinking and remove the listeners. */
@@ -175,9 +181,9 @@ export class EditorCursor {
 		for (const event of inputEvents) {
 			this.input.removeEventListener(event, this.resetBlink);
 		}
-		window.removeEventListener('focus', this.resetBlink);
-		window.removeEventListener('blur', this.resetBlink);
-		document.removeEventListener('visibilitychange', this.resetBlink);
-		this.reducedMotion.removeEventListener('change', this.resetBlink);
+		window.removeEventListener('focus', this.refreshCursor);
+		window.removeEventListener('blur', this.refreshCursor);
+		document.removeEventListener('visibilitychange', this.refreshCursor);
+		this.reducedMotion.removeEventListener('change', this.refreshCursor);
 	}
 }

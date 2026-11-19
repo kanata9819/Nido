@@ -192,11 +192,14 @@ export class EditorScroll {
 	 * view, so Neovim is first scrolled back to it; the returned promise settles once it has.
 	 */
 	stopForInput(): Promise<void> | undefined {
+		const { grid } = this.options;
 		const shown =
 			this.horizontalFollow && this.horizontal.active
 				? Math.round(this.horizontal.native - this.horizontal.offset)
 				: undefined;
-		this.stop();
+		const wasScrolling =
+			grid.scrolling || !!grid.scrollPreview || this.horizontal.active || this.animating;
+		this.stop(false, wasScrolling);
 		const columns = shown === undefined ? 0 : this.horizontal.moveTo(shown);
 		if (!columns || !this.options.enabled()) {
 			return undefined;
@@ -220,7 +223,7 @@ export class EditorScroll {
 	}
 
 	/** Stop all motion and the preview; `preserveHorizontal` keeps the sideways position. */
-	stop(preserveHorizontal = false): void {
+	stop(preserveHorizontal = false, repaint = true): void {
 		this.wheelMotion = undefined;
 		this.horizontalMotion = undefined;
 		this.queue.cancelQueued();
@@ -232,7 +235,9 @@ export class EditorScroll {
 		if (preserveHorizontal && this.horizontal.active) {
 			this.deferSettle();
 		}
-		this.options.schedule();
+		if (repaint) {
+			this.options.schedule();
+		}
 	}
 
 	private deferSettle(): void {
