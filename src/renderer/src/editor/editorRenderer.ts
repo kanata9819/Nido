@@ -271,7 +271,8 @@ export class EditorRenderer {
 		if (!this.options.scrollEnabledRef.current) {
 			this.deferredScroll = undefined;
 		}
-		if (!host.clientWidth || !host.clientHeight) {
+		const hostBounds = host.getBoundingClientRect();
+		if (!hostBounds.width || !hostBounds.height) {
 			return;
 		}
 		const now = performance.now();
@@ -284,7 +285,7 @@ export class EditorRenderer {
 			focused
 		);
 		const dpr = window.devicePixelRatio || 1;
-		const bounds = alignCanvasSurface(surface, host, dpr);
+		const bounds = alignCanvasSurface(surface, hostBounds, dpr);
 		grid.surfaceLeft = bounds.left;
 		grid.surfaceTop = bounds.top;
 		const reuseTarget = this.canReuseTarget(bounds, dpr, focused);

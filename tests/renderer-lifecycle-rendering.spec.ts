@@ -689,12 +689,16 @@ for (const scale of [1, 1.25, 1.5]) {
 				document.body.append(host);
 				return [31.3, 42.7].map((left) => {
 					host.style.left = `${left}px`;
-					const surface = alignCanvasSurface(canvas, host, devicePixelRatio);
+					const surface = alignCanvasSurface(
+						canvas,
+						host.getBoundingClientRect(),
+						devicePixelRatio
+					);
 					canvas.width = Math.round(surface.width * devicePixelRatio);
 					canvas.height = Math.round(surface.height * devicePixelRatio);
 					const observer = new MutationObserver(() => {});
 					observer.observe(canvas, { attributes: true, attributeFilter: ['style'] });
-					alignCanvasSurface(canvas, host, devicePixelRatio);
+					alignCanvasSurface(canvas, host.getBoundingClientRect(), devicePixelRatio);
 					const repeatedWrites = observer.takeRecords().length;
 					observer.disconnect();
 					const bounds = canvas.getBoundingClientRect();
