@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { maxDiffHighlightLength } from '../../../../shared/nidoApi';
 import type { ReferencePreview } from '../../../../shared/types';
 import type { DiffRow } from './splitDiff';
 import { hasLines, type SideSource } from './diffModel';
@@ -25,16 +26,17 @@ export function useDiffHighlight(
 		error?: string;
 	}>();
 	useEffect(() => {
-		let cancelled = false;
-		if (!path || !hasLines(rows)) {
+		const [{ text: before }, { text: after }] = sources;
+		if (!path || before.length + after.length > maxDiffHighlightLength || !hasLines(rows)) {
 			return;
 		}
+		let cancelled = false;
 		const result = (outcome: { lines?: HighlightedSides; error?: string }): void => {
 			if (!cancelled) {
 				setHighlighted({ workspaceId, path, diff, ...outcome });
 			}
 		};
-		void window.nido.highlightSources(workspaceId, path, sources[0].text, sources[1].text).then(
+		void window.nido.highlightSources(workspaceId, path, before, after).then(
 			(lines) => result({ lines }),
 			() => result({ error: 'Syntax highlighting unavailable' })
 		);

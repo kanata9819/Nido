@@ -648,6 +648,46 @@ test('A new diff clears the previous highlighting failure', async ({ page }) => 
 	await expect(page.locator('[data-git-scroll="after"]')).toContainText('after');
 });
 
+test('large Git diffs skip highlight transfer and the exact limit still requests colors', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=highlight`);
+	const highlightRequests = (): Promise<{ path: string; length: number }[]> =>
+		page.evaluate(() =>
+			window.rendererTest.calls
+				.filter(({ method }) => method === 'highlightSources')
+				.map(({ args }) => ({
+					path: String(args[1]),
+					length: String(args[2]).length + String(args[3]).length
+				}))
+		);
+	await expect.poll(highlightRequests).toHaveLength(1);
+	const renderDiff = (path: string, length: number): Promise<void> =>
+		page.evaluate(
+			({ path, length }) => {
+				const before = 'before '.padEnd(64_000, 'a');
+				const after = `${path} source `.padEnd(length - before.length, 'b');
+				window.rendererTest.render({ path, diff: `@@ -1 +1 @@\n-${before}\n+${after}\n` });
+			},
+			{ path, length }
+		);
+
+	await renderDiff('oversized.ts', 128_001);
+	await expect(page.locator('[data-git-scroll="after"]')).toContainText('oversized.ts source');
+	await page.evaluate(
+		() =>
+			new Promise<void>((resolve) => {
+				requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+			})
+	);
+	expect(await highlightRequests()).toHaveLength(1);
+
+	await renderDiff('at-limit.ts', 128_000);
+	await expect
+		.poll(async () => (await highlightRequests()).slice(1))
+		.toEqual([{ path: 'at-limit.ts', length: 128_000 }]);
+});
+
 test('unchanged Git polls avoid commits while changed and removed badges still update', async ({
 	page
 }) => {
