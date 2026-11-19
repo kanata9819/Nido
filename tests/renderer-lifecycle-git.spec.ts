@@ -634,6 +634,84 @@ test('Git history counts all commits and supports paging without reloading the f
 	await expect(list).not.toHaveAttribute('aria-activedescendant');
 });
 
+for (const [view, method, action, emptyText] of [
+	['History', 'gitHistory', 'Open commit (Enter)', 'No commits yet.'],
+	['Branches', 'gitBranches', 'Switch branch (Enter)', 'No branches yet. Press n to create one.']
+] as const) {
+	test(`Git ${view} stops offering old entries when refresh fails and can retry`, async ({
+		page
+	}) => {
+		await page.goto(`${origin}?view=git&defer=${method}`);
+		await page.getByRole('button', { name: view, exact: true }).click();
+		const list = page.getByRole('listbox', {
+			name: view === 'History' ? 'Commit history' : 'Branches'
+		});
+		const rows = list.getByRole('option');
+		const button = page.getByRole('button', { name: action, exact: true });
+		const refresh = page.getByRole('button', { name: 'Refresh', exact: true });
+		const pending = async (): Promise<void> => {
+			await expect
+				.poll(() =>
+					page.evaluate(
+						(name) => window.rendererTest.pending.some(({ method }) => method === name),
+						method
+					)
+				)
+				.toBe(true);
+		};
+		const finish = async (name: string): Promise<void> => {
+			await pending();
+			await page.evaluate(
+				({ method, name }) =>
+					window.rendererTest.settle(
+						method,
+						0,
+						method === 'gitHistory'
+							? {
+									total: 2,
+									commits: [
+										{
+											hash: 'a'.repeat(40),
+											subject: name,
+											author: 'Ada',
+											date: '2026-01-01'
+										}
+									]
+								}
+							: [{ name, current: false, remote: false }]
+					),
+				{ method, name }
+			);
+		};
+		await finish('old-entry');
+		await expect(rows.first()).toContainText('old-entry');
+		await expect(button).toBeEnabled();
+		await refresh.click();
+		await pending();
+		await rows.first().dblclick();
+		expect(
+			await page.evaluate(() =>
+				window.rendererTest.calls.filter(
+					({ method }) => method === 'gitCommitFiles' || method === 'gitSwitch'
+				)
+			)
+		).toHaveLength(0);
+		await page.evaluate(
+			(method) => window.rendererTest.settle(method, 0, 'Git refresh failed', true),
+			method
+		);
+		await expect(page.getByRole('alert')).toHaveText('Git refresh failed');
+		await expect(rows).toHaveCount(0);
+		await expect(button).toBeDisabled();
+		await expect(page.getByRole('button', { name: 'Load older commits' })).toHaveCount(0);
+		await expect(page.getByText(emptyText, { exact: true })).toHaveCount(0);
+		await refresh.click();
+		await finish('fresh-entry');
+		await expect(rows.first()).toContainText('fresh-entry');
+		await expect(button).toBeEnabled();
+	});
+}
+
 test('A new diff clears the previous highlighting failure', async ({ page }) => {
 	await page.goto(`${origin}?view=highlight&defer=highlightSources`);
 	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
