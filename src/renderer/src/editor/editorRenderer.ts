@@ -457,7 +457,7 @@ export class EditorRenderer {
 
 		const { row, column } = grid.cursor;
 		const mode = grid.mode;
-		if (grid.apply(event.events)) {
+		if (grid.apply(event.events, redraw)) {
 			this.afterFrame(redraw);
 		}
 		if (row !== grid.cursor.row || column !== grid.cursor.column || mode !== grid.mode) {

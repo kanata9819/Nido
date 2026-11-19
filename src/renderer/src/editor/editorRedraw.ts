@@ -1,5 +1,6 @@
 import type { Redraw } from '../../../shared/types';
 import type { Grid } from '../grid/grid';
+import { readGridRedraw, type GridRedraw } from '../grid/gridRedraw';
 import type { FrameMotion } from './editorMotion';
 
 /** A `nido_scroll` call: which region of which grid moved by how many rows/columns. */
@@ -20,59 +21,32 @@ function viewportScroll(call: number[]): ViewportScroll {
 }
 
 /** What one redraw batch means for scrolling, the cursor and the accessible description. */
-export interface RedrawSummary {
-	edited: boolean;
-	bufferChanged: boolean;
-	/** Horizontal scroll column of a newly entered buffer, if reported. */
-	bufferColumn?: number;
-	pixelOffsets: unknown[][];
-	viewportScrolls: unknown[][];
+export interface RedrawSummary extends GridRedraw {
 	/** The viewport scroll, when the batch holds exactly one. */
 	scroll?: ViewportScroll;
 	/** Horizontal scroll column reported by the last viewport scroll. */
 	lastScrollColumn?: number;
-	gridShifted: boolean;
-	/** The grid was cleared or resized. */
-	layoutReset: boolean;
 	/** Cursor animation must restart from its current cell rather than glide. */
 	cursorJumped: boolean;
 	/** Rows may have moved into view from above. */
 	viewportMoved: boolean;
-	/** The batch is a prefetch refilling the scroll caches. */
-	prefetched: boolean;
-	descriptionChanged: boolean;
 }
 
 /** Work out what a redraw batch changed, so the renderer can decide how to paint it. */
 export function summarizeRedraw(events: Redraw): RedrawSummary {
-	const names = new Set(events.map(([name]) => name));
-	const callsOf = (target: string): unknown[][] =>
-		events.flatMap(([name, ...calls]) => (name === target ? calls : []));
-	const buffer = events.find(([name]) => name === 'nido_buffer')?.[1];
-	const viewportScrolls = callsOf('nido_scroll');
+	const metadata = readGridRedraw(events);
+	const { viewportScrolls, gridShifted, layoutReset, modeChanged, viewportReported } = metadata;
 	const lastScroll = viewportScrolls.at(-1);
-	const gridShifted = names.has('grid_scroll');
-	const layoutReset = names.has('grid_clear') || names.has('grid_resize');
 	return {
-		edited: names.has('nido_edit'),
-		bufferChanged: names.has('nido_buffer'),
-		bufferColumn: typeof buffer?.[2] === 'number' ? buffer[2] : undefined,
-		pixelOffsets: callsOf('nido_pixel_scroll'),
-		viewportScrolls,
+		...metadata,
 		// Grid row shifts also describe edits and decorations, not viewport movement.
 		scroll:
 			viewportScrolls.length === 1
 				? viewportScroll(viewportScrolls[0] as number[])
 				: undefined,
 		lastScrollColumn: typeof lastScroll?.[8] === 'number' ? lastScroll[8] : undefined,
-		gridShifted,
-		layoutReset,
-		cursorJumped:
-			viewportScrolls.length > 0 || gridShifted || layoutReset || names.has('mode_change'),
-		viewportMoved: names.has('nido_scroll') || gridShifted,
-		prefetched: names.has('nido_scroll_cache'),
-		descriptionChanged:
-			gridShifted || layoutReset || names.has('grid_line') || names.has('nido_buffer')
+		cursorJumped: viewportScrolls.length > 0 || gridShifted || layoutReset || modeChanged,
+		viewportMoved: viewportReported || gridShifted
 	};
 }
 
