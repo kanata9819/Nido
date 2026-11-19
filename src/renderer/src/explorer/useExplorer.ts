@@ -41,7 +41,7 @@ interface ExplorerState {
 	clipboard: { path: string; name: string; cut: boolean } | undefined;
 	commands: { title: string; key: string; disabled?: boolean; run: () => void }[];
 	closeOperation: () => void;
-	onDone: (path: string) => void;
+	onDone: (path: string, request?: FileRequest) => void;
 }
 
 /**

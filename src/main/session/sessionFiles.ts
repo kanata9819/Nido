@@ -36,7 +36,7 @@ function isWithin(parent: string, path: string): boolean {
 export class SessionFiles {
 	readonly replacements: WorkspaceReplacement;
 	// File operations run one at a time.
-	private mutations: Promise<void> = Promise.resolve();
+	private mutations: Promise<unknown> = Promise.resolve();
 	private readonly search: SessionSearch;
 	constructor(
 		private readonly root: string,
@@ -96,12 +96,12 @@ end`,
 		path: string,
 		target: string,
 		trash: (path: string) => Promise<void>
-	): Promise<void> {
+	): Promise<string> {
 		const next = this.mutations.then(async () => {
 			this.cancelFindFiles();
 			this.search.clearDirectories();
 			try {
-				await this.mutate(action, path, target, trash);
+				return await this.mutate(action, path, target, trash);
 			} finally {
 				this.cancelFindFiles();
 				this.search.clearDirectories();
@@ -194,7 +194,7 @@ end`,
 		path: string,
 		target: string,
 		trash: (path: string) => Promise<void>
-	): Promise<void> {
+	): Promise<string> {
 		this.validate(path);
 		if (action === 'createFile' || action === 'createDirectory') {
 			// A new file or folder may name folders that do not exist yet, as in src/new/file.ts.
@@ -204,7 +204,7 @@ end`,
 			} else {
 				await mkdir(result);
 			}
-			return;
+			return relative(this.root, result);
 		}
 		const source = await this.path(path);
 		this.validate(relative(this.root, source));
@@ -220,7 +220,7 @@ end`,
 				// Edits can arrive while the OS is moving the file to the trash.
 				await this.client.request('nvim_buf_delete', [buf.id, { force: false }]);
 			}
-			return;
+			return relative(this.root, dirname(source));
 		}
 		const result = await this.destination(target);
 		if (isWithin(source, result)) {
@@ -246,6 +246,7 @@ end`,
 		} else {
 			throw new Error('Unknown file action.');
 		}
+		return relative(this.root, result);
 	}
 
 	/** Reject paths outside the workspace, the workspace itself, and anything in .git. */

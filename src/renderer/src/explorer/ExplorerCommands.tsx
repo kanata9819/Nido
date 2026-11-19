@@ -32,7 +32,7 @@ export default function ExplorerCommands({
 	request?: FileRequest;
 	commands: { title: string; key: string; disabled?: boolean; run: () => void }[];
 	onClose: () => void;
-	onDone: (path: string) => void;
+	onDone: (path: string, request: FileRequest) => void;
 }): React.JSX.Element {
 	const t = useI18n();
 	const errorMessage = useErrorMessage();
@@ -85,20 +85,13 @@ export default function ExplorerCommands({
 			}
 			// Renaming keeps the folder and replaces the name; moving and copying take a path.
 			const target = renaming ? request.path.replace(/[^\\/]+$/, '') + value : value;
-			await window.nido.fileAction(
+			const selected = await window.nido.fileAction(
 				workspaceId,
 				request.action,
 				path,
 				creating ? undefined : target
 			);
-			// Select the result in the explorer: the parent folder after a delete.
-			const selected =
-				request.action === 'delete'
-					? request.path.replace(/[\\/]?[^\\/]+$/, '')
-					: creating
-						? path
-						: target;
-			onDone(selected);
+			onDone(selected, request);
 			onClose();
 		} catch (e) {
 			setError(String(e));

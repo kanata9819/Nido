@@ -75,6 +75,100 @@ const imports = (page: Page): Promise<unknown[][]> =>
 			.map((call) => call.args)
 	);
 
+test('moving and deleting folders updates the expanded tree paths', async ({ page }) => {
+	await page.goto(`${origin}?view=app&defer=files,fileAction`);
+	await list(page, '', [
+		{ name: 'src', path: 'src', directory: true },
+		{ name: 'src-other', path: 'src-other', directory: true }
+	]);
+	const tree = page.getByRole('tree', { name: 'Project files' });
+	await tree.getByRole('treeitem', { name: 'src', exact: true }).click();
+	await list(page, 'src', [{ name: 'lib', path: 'src/lib', directory: true }]);
+	await tree.getByRole('treeitem', { name: 'lib', exact: true }).click();
+	await list(page, 'src/lib', [{ name: 'index.ts', path: 'src/lib/index.ts', directory: false }]);
+	await tree.getByRole('treeitem', { name: 'src-other', exact: true }).click();
+	await list(page, 'src-other', [
+		{ name: 'sibling.ts', path: 'src-other/sibling.ts', directory: false }
+	]);
+	await tree.press('Home');
+	await tree.press(':');
+	const dialog = page.getByRole('dialog', { name: 'Explorer commands' });
+	await dialog.getByRole('button', { name: 'Move to… m', exact: true }).click();
+	await dialog.getByRole('textbox', { name: 'Workspace-relative path' }).fill('./renamed');
+	await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending
+					.find(({ method }) => method === 'fileAction')
+					?.args.slice(0, 4)
+			)
+		)
+		.toEqual(['alpha', 'rename', 'src', './renamed']);
+	const startingCall = await page.evaluate(() => {
+		const count = window.rendererTest.calls.length;
+		window.rendererTest.settle('fileAction', 0, 'renamed');
+		return count;
+	});
+	await list(page, '', [
+		{ name: 'renamed', path: 'renamed', directory: true },
+		{ name: 'src-other', path: 'src-other', directory: true }
+	]);
+	const requests = (start: number): Promise<unknown[]> =>
+		page.evaluate(
+			(start) =>
+				window.rendererTest.calls
+					.slice(start)
+					.filter(({ method }) => method === 'files')
+					.map(({ args }) => args[1]),
+			start
+		);
+	expect(await requests(startingCall)).not.toContain('src');
+	expect(await requests(startingCall)).not.toContain('src/lib');
+	await list(page, 'renamed', [{ name: 'lib', path: 'renamed/lib', directory: true }]);
+	await list(page, 'renamed/lib', [
+		{ name: 'index.ts', path: 'renamed/lib/index.ts', directory: false }
+	]);
+	await list(page, 'src-other', [
+		{ name: 'sibling.ts', path: 'src-other/sibling.ts', directory: false }
+	]);
+	await expect(tree.getByRole('treeitem', { name: 'renamed', exact: true })).toHaveAttribute(
+		'aria-expanded',
+		'true'
+	);
+	await expect(tree.getByRole('treeitem', { name: 'lib', exact: true })).toHaveAttribute(
+		'aria-expanded',
+		'true'
+	);
+	await expect(tree.getByRole('treeitem', { name: 'index.ts', exact: true })).toBeVisible();
+	await expect(tree.getByRole('treeitem', { name: 'sibling.ts', exact: true })).toBeVisible();
+
+	await expect(tree).toHaveAttribute('aria-activedescendant', 'file-alpha-renamed');
+	await tree.press('Delete');
+	await dialog.getByRole('button', { name: 'Move to recycle bin', exact: true }).click();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending
+					.find(({ method }) => method === 'fileAction')
+					?.args.slice(0, 3)
+			)
+		)
+		.toEqual(['alpha', 'delete', 'renamed']);
+	const deletedAt = await page.evaluate(() => {
+		const count = window.rendererTest.calls.length;
+		window.rendererTest.settle('fileAction', 0, '');
+		return count;
+	});
+	await list(page, '', [{ name: 'src-other', path: 'src-other', directory: true }]);
+	await list(page, 'src-other', [
+		{ name: 'sibling.ts', path: 'src-other/sibling.ts', directory: false }
+	]);
+	await expect(tree.getByRole('treeitem', { name: 'renamed', exact: true })).toHaveCount(0);
+	await expect(tree.getByRole('treeitem', { name: 'sibling.ts', exact: true })).toBeVisible();
+	expect(await requests(deletedAt)).toEqual(['', 'src-other']);
+});
+
 test('Files dragged from the computer go into the folder under the pointer, which is highlighted', async ({
 	page
 }) => {
