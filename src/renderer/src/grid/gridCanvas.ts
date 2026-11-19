@@ -23,6 +23,7 @@ interface Frame {
 	cellHeight: number;
 	translucent: boolean;
 	cellStyle: ReturnType<typeof gridCellStyles>;
+	guides: GridGuides;
 	/** Ink bounds of digits per font, measured once per paint. */
 	digitBounds: Map<string, { left: number; right: number }>;
 }
@@ -374,22 +375,25 @@ export class GridCanvas implements GlyphMeasure {
 			dpr
 		);
 		this.previousCursorRows = cursorRows;
-		const frame: Frame = {
-			ctx,
-			canvas,
-			width,
-			height,
-			dpr,
-			fontSize,
-			cellWidth,
-			cellHeight,
-			translucent,
-			cellStyle,
-			digitBounds: new Map()
-		};
-		// Separate rectangular clips retain native GPU antialiasing at fractional positions.
-		for (const { top, bottom } of bands) {
-			this.paintBand(frame, top, bottom, focused, cursorPosition, cursorTops);
+		if (bands.length) {
+			const frame: Frame = {
+				ctx,
+				canvas,
+				width,
+				height,
+				dpr,
+				fontSize,
+				cellWidth,
+				cellHeight,
+				translucent,
+				cellStyle,
+				guides: createGridGuides(this.grid, cellWidth, dpr),
+				digitBounds: new Map()
+			};
+			// Separate rectangular clips retain native GPU antialiasing at fractional positions.
+			for (const { top, bottom } of bands) {
+				this.paintBand(frame, top, bottom, focused, cursorPosition, cursorTops);
+			}
 		}
 		this.paintDirty = false;
 		this.firstDirtyRow = Infinity;
@@ -466,7 +470,7 @@ export class GridCanvas implements GlyphMeasure {
 		cursorPosition: { row: number; column: number; width?: number } | undefined,
 		cursorTops: number[]
 	): void {
-		const { ctx, canvas, width, height, dpr, cellWidth, translucent } = frame;
+		const { ctx, canvas, width, height, dpr, translucent, guides } = frame;
 		ctx.save();
 		ctx.beginPath();
 		ctx.rect(0, paintTop, canvas.width / dpr, paintBottom - paintTop);
@@ -482,7 +486,6 @@ export class GridCanvas implements GlyphMeasure {
 			!!this.linearRows?.begin(canvas.width, canvas.height);
 		const [firstRow, lastRow] = this.rowRange(paintTop, paintBottom, dpr);
 		const commandRow = this.grid.rows - 1;
-		const guides = createGridGuides(this.grid, cellWidth, dpr);
 		for (
 			let row = Math.min(firstRow, Math.max(0, commandRow));
 			row < Math.max(lastRow, this.grid.rows);
