@@ -447,6 +447,46 @@ test('a terminal height saved in a taller window leaves the editor visible in a 
 	await expect.poll(async () => (await panel.boundingBox())!.height).toBe(before - 20);
 });
 
+test('a new terminal opens at the saved height after a maximized terminal exits', async ({
+	page
+}) => {
+	await page.addInitScript(() => localStorage.setItem('nido.terminalHeight', '240'));
+	await restoreWorkspaces(page, 'openTerminal');
+	const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+	await editor.press('Control+`');
+	const input = page.getByRole('textbox', { name: 'Terminal input', exact: true });
+	const panel = page.getByRole('region', { name: 'Terminal', exact: true });
+	await expect(input).toBeFocused();
+	await expect.poll(async () => (await panel.boundingBox())?.height).toBe(240);
+	await input.press('Control+Shift+Enter');
+	await expect(panel.getByRole('button', { name: 'Restore terminal size' })).toBeVisible();
+	await page.evaluate(() => window.rendererTest.emit({ type: 'exit', id: 'alpha-shell' }));
+	await expect(panel).toHaveCount(0);
+	await expect(editor).toBeFocused();
+
+	await editor.press('Control+`');
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					window.rendererTest.pending.find(({ method }) => method === 'openTerminal')
+						?.args
+			)
+		)
+		.toEqual(['alpha', 'auto']);
+	await page.evaluate(() =>
+		window.rendererTest.settle('openTerminal', 0, {
+			id: 'new-shell',
+			root: '/alpha',
+			name: 'Terminal Alpha',
+			kind: 'terminal'
+		})
+	);
+	await expect(input).toBeFocused();
+	await expect(panel.getByRole('button', { name: 'Maximize terminal' })).toBeVisible();
+	await expect.poll(async () => (await panel.boundingBox())?.height).toBe(240);
+});
+
 test('moving focus to the editor restores a maximized terminal so the editor can be seen', async ({
 	page
 }) => {
