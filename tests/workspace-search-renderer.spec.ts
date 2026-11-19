@@ -57,6 +57,36 @@ async function matches(page: Page, query?: string): Promise<void> {
 	});
 }
 
+test('selecting another replacement file starts its preview at the top left', async ({ page }) => {
+	await open(page);
+	await page.getByRole('textbox', { name: 'Search in files', exact: true }).fill('joke');
+	await matches(page, 'joke');
+	await page.getByRole('button', { name: 'Replace', exact: true }).click();
+	await page.getByRole('button', { name: 'Preview replacement' }).click();
+	await page.evaluate(() => {
+		const files = ['first', 'second'].map((name) => {
+			const lines = Array.from(
+				{ length: 120 },
+				(_, index) => `${name} line ${index + 1} ${'long text '.repeat(24)}`
+			).join('\n');
+			return { path: `src/${name}.txt`, count: 1, before: lines, after: lines };
+		});
+		window.rendererTest.settle('previewReplacement', 0, { token: 'preview', count: 2, files });
+	});
+	const diff = page.getByRole('region', { name: 'Replacement diff' });
+	const files = page.getByRole('listbox', { name: 'Replacement files' });
+	const scroll = (): Promise<number[]> =>
+		diff.evaluate((node) => [node.scrollTop, node.scrollLeft]);
+	await expect(diff.getByLabel('Before replacement')).toContainText('first line 1');
+	await diff.evaluate((node) => node.scrollTo({ top: 600, left: 300, behavior: 'instant' }));
+	await expect.poll(scroll).toEqual([600, 300]);
+
+	await files.press('j');
+	await expect(diff.getByLabel('Before replacement')).toContainText('second line 1');
+	await expect(files).toBeFocused();
+	await expect.poll(scroll).toEqual([0, 0]);
+});
+
 test('double-clicking a result opens it once in both search modes', async ({ page }) => {
 	await open(page, 'en', true);
 	await page.keyboard.press('i');

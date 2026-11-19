@@ -92,6 +92,7 @@ export function useBottomPanels({
 		previousTerminal.current = { active, terminalId };
 		if (previous.active === active && previous.terminalId && !terminalId) {
 			setTerminalVisible(false);
+			setTerminalMaximized(false);
 			if (
 				terminalVisible &&
 				bottomPanel === 'terminal' &&
