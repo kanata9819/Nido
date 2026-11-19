@@ -1026,6 +1026,44 @@ test('row rasterization preserves native dark and light text pixels', async ({ b
 	}
 });
 
+test('distant cursor damage shares bracket guide geometry across paint bands', async ({ page }) => {
+	await page.route('**/guide-geometry-probe', (route) =>
+		route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+	);
+	await page.goto(`${origin}guide-geometry-probe`);
+	const passes = await page.evaluate(async (url) => {
+		const { Grid } = (await import(url)) as { Grid: typeof EditorGrid };
+		const grid = new Grid();
+		grid.apply([['grid_resize', [1, 40, 40]], ['flush']]);
+		const guides = Array.from({ length: 12 }, (_, column) => ({
+			column,
+			top: 0,
+			bottom: 36,
+			opening: -1,
+			closing: -1,
+			color: '#20a0ff',
+			active: false
+		}));
+		const canvas = document.createElement('canvas');
+		const paint = (row: number): void => {
+			grid.apply([['grid_cursor_goto', [1, row, 2]], ['flush']]);
+			grid.draw(canvas, 360, 760, 15, 'monospace', true, undefined, 19);
+		};
+		grid.bracketGuides = guides;
+		paint(2);
+		let geometryPasses = 0;
+		guides[Symbol.iterator] = function () {
+			geometryPasses++;
+			return Array.prototype[Symbol.iterator].call(this);
+		};
+		for (let i = 0; i < 20; i++) {
+			paint(i % 2 ? 2 : 33);
+		}
+		return geometryPasses;
+	}, viteFsUrl('src/renderer/src/grid/grid.ts'));
+	expect(passes).toBe(20);
+});
+
 test('new highlight IDs preserve cached rows while existing highlight changes repaint them', async ({
 	page
 }) => {

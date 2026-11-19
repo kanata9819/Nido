@@ -12,7 +12,7 @@ interface GuideRect {
 	alpha: number;
 }
 
-/** Build bracket guide geometry and the indent pixels it covers for one paint band. */
+/** Build bracket guide geometry and share indent cuts across the bands of one paint. */
 export function createGridGuides(
 	grid: Grid,
 	cellWidth: number,
