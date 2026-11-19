@@ -380,6 +380,51 @@ test('Folder browsing cancels old results and clamps selection after favorites c
 	await expect(list).toHaveAttribute('aria-activedescendant', 'folder-choice-0');
 });
 
+test('a folder response leaves the selected favorite and its scroll position in place', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 900, height: 560 });
+	await page.goto(`${origin}?view=folders&defer=browseFolders`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.render({
+			favorites: Array.from({ length: 30 }, (_, index) => ({
+				root: `/favorite-${index}`,
+				name: `Favorite ${index}`,
+				kind: 'editor'
+			}))
+		})
+	);
+	const list = page.getByRole('listbox', { name: 'Folders' });
+	await list.press('Control+f');
+	await expect(list.getByRole('option')).toHaveCount(30);
+	// The standalone picker does not have the app dialog's height constraint.
+	await list.evaluate((node) => {
+		node.style.maxHeight = '160px';
+	});
+	for (let index = 0; index < 24; index++) {
+		await list.press('j');
+	}
+	const selected = list.getByRole('option', { selected: true });
+	await expect(selected).toContainText('Favorite 24');
+	const top = (): Promise<number> => list.evaluate((node) => node.scrollTop);
+	await expect.poll(top).toBeGreaterThan(0);
+	const position = await top();
+
+	await page.evaluate(() =>
+		window.rendererTest.settle('browseFolders', 0, {
+			path: '/alpha',
+			parent: '/',
+			folders: [{ name: 'Child', path: '/alpha/child', directory: true }]
+		})
+	);
+	await expect(list).toHaveAttribute('aria-busy', 'false');
+	await expect(selected).toContainText('Favorite 24');
+	expect(await top()).toBe(position);
+	await list.press('Control+f');
+	await expect(selected).toContainText('Child');
+});
+
 test('Folder browsing keeps the current listing until the next one arrives', async ({ page }) => {
 	await page.goto(`${origin}?view=folders&defer=browseFolders`);
 	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
