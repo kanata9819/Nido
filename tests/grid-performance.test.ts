@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Grid } from '../src/renderer/src/grid/grid';
+import type { GridRowLayout } from '../src/renderer/src/grid/gridRowLayout';
 import type { Redraw } from '../src/shared/types';
 
 type RedrawEvent = Redraw[number];
@@ -343,6 +344,41 @@ test('native scrolling reuses unchanged row identities without rereading their b
 		}
 		assert.equal(grid.cells[49], before[49], 'the command row stays fixed');
 	}
+});
+
+test('typing in rows of unchanged height reuses viewport geometry', (context) => {
+	const grid = new Grid();
+	grid.apply([
+		['grid_resize', [1, 160, 45]],
+		['hl_attr_define', [1, {}, {}, [{ hi_name: 'NidoCodeLens' }]]],
+		['grid_line', [1, 0, 0, [['Run', 1]]], [1, 17, 0, [['x', 0, 160]]]],
+		['flush']
+	]);
+	const prepare = (): void => grid.prepareLayout(900, 8, 20);
+	prepare();
+	const layout = Reflect.get(grid, 'rowLayout') as GridRowLayout;
+	const compact = layout.compact.bind(layout);
+	let checks = 0;
+	layout.compact = (row) => {
+		checks++;
+		return compact(row);
+	};
+	const before = Array.from({ length: grid.rows }, (_, row) => grid.rowTop(row));
+	for (let edit = 0; edit < 80; edit++) {
+		grid.apply([['grid_line', [1, 17, 10, [[String(edit % 10), 0]]]], ['flush']]);
+		prepare();
+		assert.deepEqual(
+			Array.from({ length: grid.rows }, (_, row) => grid.rowTop(row)),
+			before
+		);
+	}
+	context.diagnostic(JSON.stringify({ edits: 80, rowHeightChecks: checks }));
+	if (!process.env.NIDO_PERFORMANCE_BASELINE) {
+		assert.ok(checks <= 80, `ordinary edits checked ${checks} rows for height changes`);
+	}
+	grid.apply([['grid_line', [1, 0, 1, [['x', 0]]]], ['flush']]);
+	prepare();
+	assert.equal(grid.rowTop(1), 20, 'CodeLens becoming a normal row still changes the layout');
 });
 
 test('compact row counts follow edits, highlight changes and rectangular scrolling', () => {
