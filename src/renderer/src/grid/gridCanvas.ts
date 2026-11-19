@@ -506,7 +506,7 @@ export class GridCanvas implements GlyphMeasure {
 		if (correctLight) {
 			this.linearRows!.finish(ctx, dpr, this.grid.contentHeight);
 		}
-		this.paintOverlays(frame, guides.guideRects);
+		this.paintOverlays(frame, paintTop, paintBottom);
 		this.paintCursorLayer(frame, paintTop, paintBottom, focused, cursorPosition, cursorTops);
 		ctx.restore();
 	}
@@ -708,14 +708,24 @@ export class GridCanvas implements GlyphMeasure {
 		}
 	}
 
-	/** Method separators of sticky scroll and bracket guides, above the rows. */
-	private paintOverlays(frame: Frame, guideRects: GridGuides['guideRects']): void {
-		const { ctx, width, dpr, cellWidth } = frame;
+	/** Paint method separators and bracket guides that cross the damaged band. */
+	private paintOverlays(frame: Frame, paintTop: number, paintBottom: number): void {
+		const { ctx, width, dpr, cellWidth, guides } = frame;
+		const { contentHeight, stickyScroll: outline } = this.grid;
+		if (
+			paintTop >= contentHeight ||
+			(!outline?.separators?.length && !guides.guideRects.length)
+		) {
+			return;
+		}
+		// Keep a device-pixel fringe around the clip for fractional scroll positions.
+		const pixel = 1 / dpr;
+		const top = paintTop - pixel;
+		const bottom = Math.min(paintBottom, contentHeight) + pixel;
 		ctx.save();
 		ctx.beginPath();
-		ctx.rect(0, 0, width, this.grid.contentHeight);
+		ctx.rect(0, 0, width, contentHeight);
 		ctx.clip();
-		const outline = this.grid.stickyScroll;
 		if (outline?.separators?.length) {
 			const left = Math.round((outline.left + outline.gutter) * cellWidth * dpr) / dpr;
 			const right = Math.min(width, (outline.left + outline.width) * cellWidth);
@@ -723,10 +733,18 @@ export class GridCanvas implements GlyphMeasure {
 			ctx.globalAlpha = 0.22;
 			for (const separator of outline.separators) {
 				const y = Math.round(this.grid.rowY(separator.row) * dpr) / dpr;
-				ctx.fillRect(left, y, Math.max(0, right - left), 1 / dpr);
+				if (y < bottom && y + pixel > top) {
+					ctx.fillRect(left, y, Math.max(0, right - left), pixel);
+				}
 			}
 		}
-		for (const rect of guideRects) {
+		for (const rect of guides.guideRects) {
+			if (
+				Math.min(rect.top, rect.bottom) >= bottom ||
+				Math.max(rect.top, rect.bottom) <= top
+			) {
+				continue;
+			}
 			ctx.fillStyle = rect.color;
 			ctx.globalAlpha = rect.alpha;
 			ctx.fillRect(rect.x, rect.top, rect.width, rect.bottom - rect.top);

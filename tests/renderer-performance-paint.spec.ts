@@ -1123,6 +1123,104 @@ test('distant cursor damage shares bracket guide geometry across paint bands', a
 	expect(passes).toBe(20);
 });
 
+test('cursor-only bands skip unrelated editor overlays and match a full paint at 125% scale', async ({
+	browser
+}) => {
+	const context = await browser.newContext({ deviceScaleFactor: 1.25 });
+	try {
+		const page = await context.newPage();
+		await page.route('**/overlay-band-probe', (route) =>
+			route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+		);
+		await page.goto(`${origin}overlay-band-probe`);
+		const result = await page.evaluate(async (url) => {
+			const { Grid } = (await import(url)) as { Grid: typeof EditorGrid };
+			const setup = (): EditorGrid => {
+				const grid = new Grid();
+				grid.pixelScrollEnabled = true;
+				grid.backgroundOpacity = 0.5;
+				grid.scrollFraction = 0.25;
+				grid.apply([
+					['grid_resize', [1, 60, 40]],
+					[
+						'nido_sticky_scroll',
+						[
+							{
+								window: 1,
+								buffer: 1,
+								top: 0,
+								left: 0,
+								width: 60,
+								height: 40,
+								gutter: 4,
+								tabstop: 8,
+								leftcol: 0,
+								scopes: [],
+								separators: Array.from({ length: 37 }, (_, i) => ({
+									row: i + 1,
+									line: i + 20
+								}))
+							}
+						]
+					],
+					[
+						'nido_bracket_guides',
+						[
+							Array.from({ length: 12 }, (_, i) => ({
+								column: i + 4,
+								top: i * 3,
+								bottom: i * 3 + 2,
+								opening: i + 9,
+								closing: i + 8,
+								color: '#20a0ff',
+								active: i % 3 === 0
+							}))
+						]
+					],
+					['flush']
+				]);
+				return grid;
+			};
+			const paint = (grid: EditorGrid, canvas: HTMLCanvasElement, row: number): void => {
+				grid.apply([['grid_cursor_goto', [1, row, 14]], ['flush']]);
+				grid.draw(canvas, 600, 760, 15, 'monospace', true, undefined, 19);
+			};
+			const grid = setup();
+			const full = setup();
+			const canvas = document.createElement('canvas');
+			const reference = document.createElement('canvas');
+			paint(grid, canvas, 2);
+			const ctx = canvas.getContext('2d')!;
+			const fillRect = ctx.fillRect;
+			let separators = 0;
+			let guides = 0;
+			ctx.fillRect = function (...args) {
+				if (this.fillStyle === grid.foreground) separators++;
+				if (this.fillStyle === '#20a0ff') guides++;
+				fillRect.apply(this, args);
+			};
+			let mismatchedFrames = 0;
+			for (let frame = 0; frame < 20; frame++) {
+				const row = frame % 2 ? 2 : 33;
+				full.invalidatePaint();
+				paint(full, reference, row);
+				paint(grid, canvas, row);
+				const expected = reference
+					.getContext('2d')!
+					.getImageData(0, 0, reference.width, reference.height).data;
+				const actual = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+				if (actual.some((value, i) => value !== expected[i])) mismatchedFrames++;
+			}
+			return { separators, guides, mismatchedFrames };
+		}, viteFsUrl('src/renderer/src/grid/grid.ts'));
+		expect(result.mismatchedFrames).toBe(0);
+		expect(result.separators).toBeLessThan(120);
+		expect(result.guides).toBeLessThan(120);
+	} finally {
+		await context.close();
+	}
+});
+
 test('new highlight IDs preserve cached rows while existing highlight changes repaint them', async ({
 	page
 }) => {
