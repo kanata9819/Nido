@@ -1,6 +1,15 @@
 import { onNidoEvent } from '../nidoEvents';
 import { useErrorMessage, useI18n } from '../i18n';
-import { Children, isValidElement, memo, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+	Children,
+	isValidElement,
+	memo,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+	type ReactNode
+} from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useFocusGuard } from '../app/useFocusGuard';
@@ -47,12 +56,18 @@ function MarkdownPreview({
 	// The document's path, for relative links, and why the last link could not be followed.
 	const [path, setPath] = useState('');
 	const [linkError, setLinkError] = useState('');
+	const linkRequest = useRef(0);
 	const body = useRef<HTMLDivElement>(null);
+	useLayoutEffect(() => {
+		body.current?.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+	}, [workspaceId, path]);
 	useEffect(() => {
+		linkRequest.current++;
 		let cancelled = false;
 		// Grows with every change, so a read that started before the change is ignored.
 		let generation = 0;
 		let token = '';
+		let loadedPath: string | undefined;
 		let timer: number | undefined;
 		let pending = false;
 		// Whether the buffer may have changed since the last read.
@@ -71,7 +86,12 @@ function MarkdownPreview({
 				.then((value) => {
 					if (!cancelled && current === generation) {
 						token = value.token;
-						setPath(value.path);
+						if (loadedPath !== value.path) {
+							loadedPath = value.path;
+							linkRequest.current++;
+							setLinkError('');
+							setPath(loadedPath);
+						}
 						if (value.text !== undefined) {
 							setSource(value.text);
 						}
@@ -150,8 +170,13 @@ function MarkdownPreview({
 	/** Follow a link: a web page in the browser, a heading here, a workspace file in the editor. */
 	const follow = (href: string): void => {
 		const link = resolveMarkdownLink(href, path, root);
+		const request = ++linkRequest.current;
 		setLinkError('');
-		const fail = (reason: unknown): void => setLinkError(String(reason));
+		const fail = (reason: unknown): void => {
+			if (request === linkRequest.current) {
+				setLinkError(String(reason));
+			}
+		};
 		if (link.kind === 'web') {
 			void window.nido.openDocumentation(link.url).catch(fail);
 		} else if (link.kind === 'heading') {

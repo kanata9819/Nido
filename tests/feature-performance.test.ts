@@ -134,6 +134,7 @@ test('workspace search avoids clearing scratch buffers and inspects only bytes r
 	const allocate = Buffer.alloc;
 	const allocateUnsafe = Buffer.allocUnsafe;
 	let cleared = 0;
+	let buffers = 0;
 	try {
 		await writeFile(join(root, 'match.txt'), '日本語 needle\n');
 		await writeFile(join(root, 'binary.txt'), Buffer.from('needle\0'));
@@ -145,7 +146,10 @@ test('workspace search avoids clearing scratch buffers and inspects only bytes r
 		};
 		Buffer.allocUnsafe = (size) => {
 			const buffer = allocateUnsafe(size);
-			if (size === 1024 * 1024 + 1) buffer.fill(0xff);
+			if (size === 1024 * 1024 + 1) {
+				buffers++;
+				buffer.fill(0xff);
+			}
 			return buffer;
 		};
 		const files = new SessionFiles(root, {} as Session['client']);
@@ -154,7 +158,8 @@ test('workspace search avoids clearing scratch buffers and inspects only bytes r
 			matches: [{ path: 'match.txt', line: 1, column: 11, text: '日本語 needle' }],
 			truncated: false
 		});
-		assert.equal(cleared, 0, 'search must not zero-fill 8 MiB of scratch space per query');
+		assert.equal(cleared, 0, 'search must not zero-fill scratch space');
+		assert.equal(buffers, 4, 'a four-file search only needs four buffers');
 	} finally {
 		Buffer.alloc = allocate;
 		Buffer.allocUnsafe = allocateUnsafe;

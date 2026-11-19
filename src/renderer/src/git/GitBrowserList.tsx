@@ -13,6 +13,7 @@ import styles from './Git.module.css';
 export default function GitBrowserList({
 	view,
 	busy,
+	loadFailed,
 	commit,
 	history,
 	sync,
@@ -27,6 +28,7 @@ export default function GitBrowserList({
 }: {
 	view: GitView;
 	busy: boolean;
+	loadFailed: boolean;
 	commit?: GitCommitEntry;
 	history: GitCommitEntry[];
 	/** How the history compares with its upstream, to mark unpushed commits and the upstream. */
@@ -81,8 +83,10 @@ export default function GitBrowserList({
 						}
 					}}
 					onClick={() => {
-						setIndex(position);
-						listRef.current?.focus();
+						if (!busy) {
+							setIndex(position);
+							listRef.current?.focus();
+						}
 					}}
 					onDoubleClick={open}
 				>
@@ -128,7 +132,7 @@ export default function GitBrowserList({
 					)}
 				</div>
 			))}
-			{!labels.length && !busy && (
+			{!labels.length && !busy && !loadFailed && (
 				<p>
 					{commit
 						? t('No changed files.')

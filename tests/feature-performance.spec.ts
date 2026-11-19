@@ -1972,6 +1972,66 @@ test('Markdown preview links open workspace files in the editor, jump to heading
 	await expect(content.getByText('Mail', { exact: true })).toBeVisible();
 });
 
+test('switching Markdown files resets the scroll and discards late link errors', async ({
+	page
+}) => {
+	await open(page, 'app', 'markdownPreview,openFile');
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'statePatch',
+			id: 'alpha',
+			state: { filetype: 'markdown', current: 1 }
+		})
+	);
+	await page.clock.runFor(50);
+	await page.keyboard.press('Control+Shift+v');
+	const content = page.getByLabel('Markdown preview content', { exact: true });
+	await expect(content).toBeVisible();
+	const load = async (path: string, heading: string, token: string): Promise<void> => {
+		await expect
+			.poll(() =>
+				page.evaluate(() =>
+					window.rendererTest.pending.some(({ method }) => method === 'markdownPreview')
+				)
+			)
+			.toBe(true);
+		await page.evaluate(
+			({ path, heading, token }) =>
+				window.rendererTest.settle('markdownPreview', 0, {
+					path,
+					token,
+					text:
+						`# ${heading}\n\n[Missing file](missing.md)\n\n` +
+						'Paragraph\n\n'.repeat(100)
+				}),
+			{ path, heading, token }
+		);
+	};
+	await load('/alpha/first.md', 'First document', '1:1');
+	await content.getByRole('link', { name: 'Missing file' }).click();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some(({ method }) => method === 'openFile')
+			)
+		)
+		.toBe(true);
+	await content.evaluate((node) => node.scrollTo({ top: 600, behavior: 'instant' }));
+	const top = (): Promise<number> => content.evaluate((node) => node.scrollTop);
+	await expect.poll(top).toBe(600);
+
+	await page.evaluate(() =>
+		window.rendererTest.emit({ type: 'statePatch', id: 'alpha', state: { current: 2 } })
+	);
+	await page.clock.runFor(220);
+	await load('/alpha/second.md', 'Second document', '2:1');
+	await expect(content.getByRole('heading', { name: 'Second document' })).toBeVisible();
+	await expect.poll(top).toBe(0);
+	await page.evaluate(() => window.rendererTest.settle('openFile', 0, 'Old link failed', true));
+	await page.clock.runFor(32);
+	await expect(content.getByRole('alert')).toHaveCount(0);
+});
+
 test('Markdown file links preserve focus moved while the file is opening', async ({ page }) => {
 	await open(page, 'app', 'markdownPreview,openFile');
 	await page.evaluate(() =>

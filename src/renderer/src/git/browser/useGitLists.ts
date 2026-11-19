@@ -14,8 +14,9 @@ export interface GitLists {
 	/** The upstream of the branch and how the history compares with it (history view only). */
 	remote: Pick<GitStatus, 'remote' | 'sync'>;
 	setBranchName: (name: string) => void;
-	/** Whether the data of `view` at `revision` has loaded. */
+	/** Whether the current list request has finished. */
 	loaded: boolean;
+	loadFailed: boolean;
 	/** Load the next older page of history. */
 	loadOlderHistory: () => Promise<void>;
 }
@@ -43,8 +44,12 @@ export function useGitLists({
 	const [branches, setBranches] = useState<GitBranchEntry[]>([]);
 	const [branchName, setBranchName] = useState('');
 	const [remote, setRemote] = useState<Pick<GitStatus, 'remote' | 'sync'>>({});
-	// The view and revision whose data has loaded.
-	const [loadedView, setLoadedView] = useState<{ view: GitView; revision: number }>();
+	const [loadedView, setLoadedView] = useState<{
+		workspaceId: string;
+		view: GitView;
+		revision: number;
+		failed: boolean;
+	}>();
 
 	useEffect(() => {
 		if (view === 'changes') {
@@ -52,6 +57,7 @@ export function useGitLists({
 		}
 		let cancelled = false;
 		async function load(): Promise<void> {
+			let failed = false;
 			try {
 				const status = await window.nido.gitStatus(workspaceId, view === 'history');
 				if (view === 'history') {
@@ -76,12 +82,21 @@ export function useGitLists({
 				}
 			} catch (failure) {
 				if (!cancelled) {
-					setCommitCount(undefined);
+					failed = true;
+					if (view === 'history') {
+						setHistory([]);
+						setCommitCount(undefined);
+						setHasMoreHistory(false);
+					} else {
+						setBranches([]);
+					}
+					setBranchName('');
+					setRemote({});
 					setError(String(failure));
 				}
 			} finally {
 				if (!cancelled) {
-					setLoadedView({ view, revision });
+					setLoadedView({ workspaceId, view, revision, failed });
 				}
 			}
 		}
@@ -105,6 +120,10 @@ export function useGitLists({
 		setHasMoreHistory(history.length + entries.length < total);
 	}
 
+	const loaded =
+		loadedView?.workspaceId === workspaceId &&
+		loadedView.view === view &&
+		loadedView.revision === revision;
 	return {
 		history,
 		commitCount,
@@ -114,7 +133,8 @@ export function useGitLists({
 		branchName,
 		remote,
 		setBranchName,
-		loaded: loadedView?.view === view && loadedView.revision === revision,
+		loaded,
+		loadFailed: loaded && loadedView.failed,
 		loadOlderHistory
 	};
 }

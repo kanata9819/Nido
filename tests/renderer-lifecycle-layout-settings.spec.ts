@@ -743,6 +743,27 @@ test('editor font size accepts half sizes and keeps the last valid one', async (
 	await expect(page.getByRole('spinbutton', { name: 'Editor font size' })).toHaveValue('9.5');
 });
 
+test('settings shortcuts leave IME transition keys with the focused control', async ({ page }) => {
+	await page.goto(`${origin}?view=app`);
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+	const font = settings.getByRole('textbox', { name: 'Font family', exact: true });
+	const size = settings.getByRole('spinbutton', { name: 'Editor font size' });
+	await font.focus();
+	await font.dispatchEvent('keydown', { key: 'ArrowDown', keyCode: 229 });
+	await expect(font).toBeFocused();
+	await font.press('ArrowDown');
+	await expect(size).toBeFocused();
+
+	const wrap = settings.getByRole('checkbox', { name: 'Word wrap', exact: true });
+	await wrap.focus();
+	await expect(wrap).toBeChecked();
+	await wrap.dispatchEvent('keydown', { key: 'Enter', keyCode: 229 });
+	await expect(wrap).toBeChecked();
+	await wrap.press('Enter');
+	await expect(wrap).not.toBeChecked();
+});
+
 test('number settings can be cleared and retyped', async ({ page }) => {
 	await page.goto(`${origin}?view=app`);
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();

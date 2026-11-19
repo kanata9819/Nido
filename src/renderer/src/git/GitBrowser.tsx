@@ -125,6 +125,9 @@ export default function GitBrowser({
 
 	/** Enter: switch to the selected branch, or open the selected commit's files. */
 	function openSelection(): void {
+		if (busy) {
+			return;
+		}
 		if (view === 'branches' && branches[index]) {
 			const branch = branches[index];
 			switchBranch(`refs/${branch.remote ? 'remotes' : 'heads'}/${branch.name}`, false);
@@ -193,6 +196,7 @@ export default function GitBrowser({
 						<GitBrowserList
 							view={view}
 							busy={busy}
+							loadFailed={lists.loadFailed}
 							commit={commit}
 							history={history}
 							sync={lists.remote.sync}

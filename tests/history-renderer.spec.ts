@@ -111,6 +111,80 @@ test('Time Machine ignores late previews and keeps restore disabled until the se
 	expect(errors).toEqual([]);
 });
 
+test('a failed Time Machine refresh invalidates the old restore preview until a retry succeeds', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=history&defer=history,historyPreview,historyRestore`);
+	const loadHistory = async (): Promise<void> => {
+		await expect
+			.poll(() =>
+				page.evaluate(() =>
+					window.rendererTest.pending.some(({ method }) => method === 'history')
+				)
+			)
+			.toBe(true);
+		await page.evaluate(
+			(versions) =>
+				window.rendererTest.settle('history', 0, { path: '/alpha/notes.txt', versions }),
+			versions
+		);
+	};
+	const loadPreview = async (token: string, description: string): Promise<void> => {
+		await expect
+			.poll(() =>
+				page.evaluate(() =>
+					window.rendererTest.pending.some(({ method }) => method === 'historyPreview')
+				)
+			)
+			.toBe(true);
+		await page.evaluate(
+			({ token, description, version }) =>
+				window.rendererTest.settle('historyPreview', 0, {
+					path: '/alpha/notes.txt',
+					version,
+					token,
+					diff: `@@ -1 +1 @@\n-old\n+${description}`,
+					identical: false
+				}),
+			{ token, description, version: versions[1] }
+		);
+	};
+	const restore = page.getByRole('button', { name: /Restore to editor/ });
+	const refresh = page.getByRole('button', { name: 'Refresh Time Machine' });
+	const list = page.getByRole('listbox', { name: 'Edit history' });
+	await loadHistory();
+	await loadPreview('old-token', 'Old preview');
+	await expect(restore).toBeEnabled();
+	await refresh.click();
+	await page.evaluate(() =>
+		window.rendererTest.settle('history', 0, 'History refresh failed', true)
+	);
+	await expect(page.getByRole('alert')).toHaveText('History refresh failed');
+	await expect(restore).toBeDisabled();
+	await expect(page.getByText('Old preview', { exact: true })).toHaveCount(0);
+	await list.press('Control+Enter');
+	expect(
+		await page.evaluate(() =>
+			window.rendererTest.calls.filter(({ method }) => method === 'historyRestore')
+		)
+	).toHaveLength(0);
+
+	await refresh.click();
+	await loadHistory();
+	await loadPreview('fresh-token', 'Fresh preview');
+	await expect(restore).toBeEnabled();
+	await restore.click();
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					window.rendererTest.pending.find(({ method }) => method === 'historyRestore')
+						?.args
+			)
+		)
+		.toEqual(['alpha', '/alpha/notes.txt', 'saved', 'fresh-token']);
+});
+
 test('ten thousand diff rows stay bounded in the DOM while scrolling and jumping between distant changes', async ({
 	page
 }) => {

@@ -164,7 +164,7 @@ export default function TimeMachine({
 					role="listbox"
 					aria-label={t('Edit history')}
 					tabIndex={0}
-					aria-activedescendant={selected ? `history-${selected}` : undefined}
+					aria-activedescendant={data && selected ? `history-${selected}` : undefined}
 					ref={list}
 					onKeyDown={listKeyDown}
 				>

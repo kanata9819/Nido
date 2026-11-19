@@ -56,16 +56,19 @@ export default function FolderPicker({
 	const errorMessage = useErrorMessage();
 	const list = useRef<HTMLDivElement>(null);
 	const address = useRef<HTMLInputElement>(null);
-	const [selected, setSelected] = useState(0);
+	const [folderSelection, setFolderSelection] = useState(0);
+	const [favoriteSelection, setFavoriteSelection] = useState(0);
 	// Effects run in this order: focus the list, list the WSL distributions, list the folder.
 	useEffect(() => {
 		list.current?.focus();
 	}, []);
 	const wsl = useWslDistributions();
-	const browser = useFolderBrowser(initialPath, setSelected, () => list.current?.focus());
+	const browser = useFolderBrowser(initialPath, setFolderSelection, () => list.current?.focus());
 	const { distribution, path, directory, folders, loading } = browser;
 	// Favorites stay out of the way until requested (Ctrl+F or the Favorites button).
 	const [showFavorites, setShowFavorites] = useState(initialFavorites);
+	const selected = showFavorites ? favoriteSelection : folderSelection;
+	const setSelected = showFavorites ? setFavoriteSelection : setFolderSelection;
 	const choiceCount = showFavorites ? favorites.length : folders.length;
 	// Keep the selection in range when the list gets shorter.
 	const [previousChoiceCount, setPreviousChoiceCount] = useState(choiceCount);
@@ -73,19 +76,21 @@ export default function FolderPicker({
 		setPreviousChoiceCount(choiceCount);
 		setSelected((value) => Math.max(0, Math.min(value, choiceCount - 1)));
 	}
+	const visibleListing = showFavorites ? undefined : browser.listing;
 	useLayoutEffect(() => {
 		if (list.current) {
 			list.current.scrollTop = 0;
 		}
-	}, [browser.listing, showFavorites]);
+	}, [visibleListing]);
 	useEffect(() => {
 		list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
 	}, [selected, showFavorites]);
 
 	/** Switch between the folder list and the favorites. */
 	function toggleFavorites(): void {
-		setShowFavorites((value) => !value);
-		setSelected(0);
+		const next = !showFavorites;
+		setShowFavorites(next);
+		(next ? setFavoriteSelection : setFolderSelection)(0);
 		list.current?.focus();
 	}
 

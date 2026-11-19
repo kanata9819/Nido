@@ -6,7 +6,7 @@ import type { KeyboardEvent } from 'react';
  * arrows in a select or a number field and letters in a text field, are left alone.
  */
 export function settingsKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
-	if (event.nativeEvent.isComposing || event.altKey || event.metaKey) {
+	if (event.nativeEvent.isComposing || event.keyCode === 229 || event.altKey || event.metaKey) {
 		return;
 	}
 	const target = event.target as HTMLInputElement | HTMLSelectElement;
