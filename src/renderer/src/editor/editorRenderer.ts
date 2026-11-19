@@ -96,8 +96,13 @@ export class EditorRenderer {
 		grid.backgroundOpacity = options.backgroundOpacity;
 		grid.pixelScrollEnabled = options.pixelScroll;
 		this.hasFrame = grid.rows > 0 && grid.columns > 0;
-		this.cursor = new EditorCursor(grid, host, input, this.reducedMotion, smoothBlink, () =>
-			this.schedule()
+		this.cursor = new EditorCursor(
+			grid,
+			host,
+			input,
+			this.reducedMotion,
+			smoothBlink,
+			this.scheduleCursor
 		);
 		this.scrolling = new EditorScroll({
 			id,
@@ -116,8 +121,8 @@ export class EditorRenderer {
 		this.cursor.listen();
 		this.reducedMotion.addEventListener('change', this.stopMotion);
 		input.addEventListener('keydown', this.keyDown);
-		input.addEventListener('input', this.stopMotion);
-		input.addEventListener('compositionstart', this.stopMotion);
+		input.addEventListener('input', this.stopMotionForInput);
+		input.addEventListener('compositionstart', this.stopMotionForInput);
 		input.addEventListener('blur', this.pauseMotion);
 		this.unsubscribe = subscribe((event) => {
 			if (event.type === 'redraw' && event.id === id) {
@@ -144,8 +149,8 @@ export class EditorRenderer {
 		surface.removeEventListener('pointerdown', this.pointerDown);
 		this.reducedMotion.removeEventListener('change', this.stopMotion);
 		input.removeEventListener('keydown', this.keyDown);
-		input.removeEventListener('input', this.stopMotion);
-		input.removeEventListener('compositionstart', this.stopMotion);
+		input.removeEventListener('input', this.stopMotionForInput);
+		input.removeEventListener('compositionstart', this.stopMotionForInput);
 		input.removeEventListener('blur', this.pauseMotion);
 		this.observer.disconnect();
 		this.resolution?.removeEventListener('change', this.resolutionChanged);
@@ -159,6 +164,21 @@ export class EditorRenderer {
 		this.scrolling.pauseIfDisabled();
 		if (!this.disposed && !this.frame && !this.options.host.hidden && !document.hidden) {
 			this.frame = requestAnimationFrame(this.render);
+		}
+	};
+
+	/** A restarted blink only needs a frame if there's a visible change to paint. */
+	private scheduleCursor = (force = false): void => {
+		const { grid, input } = this.options;
+		if (
+			force ||
+			!this.ready ||
+			this.cursor.animating ||
+			this.paintedFocus !== (document.activeElement === input) ||
+			this.paintedCursorVisible !== grid.cursorVisible ||
+			this.paintedCursorOpacity !== grid.cursorOpacity
+		) {
+			this.schedule();
 		}
 	};
 
@@ -199,10 +219,19 @@ export class EditorRenderer {
 	}
 
 	private stopMotion = (): void => {
+		this.stopMotionForInput();
+		this.schedule();
+	};
+
+	private stopMotionForInput = (): void => {
+		const wasAnimating = this.motion !== undefined;
 		this.deferredScroll = undefined;
 		this.motion = undefined;
 		this.lastScrollTime = undefined;
 		this.stopScrollingForInput();
+		if (wasAnimating) {
+			this.schedule();
+		}
 	};
 
 	/** Like stopMotion, but a sideways scroll in progress keeps its frame. */
@@ -228,7 +257,7 @@ export class EditorRenderer {
 			// Navigation retargets the visible scroll instead of snapping it first.
 			this.stopScrollingForInput();
 		} else {
-			this.stopMotion();
+			this.stopMotionForInput();
 		}
 	};
 
@@ -462,6 +491,7 @@ export class EditorRenderer {
 		}
 		if (row !== grid.cursor.row || column !== grid.cursor.column || mode !== grid.mode) {
 			this.cursor.resetBlink();
+			this.schedule();
 		}
 		this.scrolling.finish();
 	}

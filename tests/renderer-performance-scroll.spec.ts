@@ -74,7 +74,6 @@ test('j/k viewport scrolling reuses frames until a redraw, while editing interru
 	await page.goto(`${origin}?view=app`);
 	const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
 	await expect(input).toBeFocused();
-	await page.clock.runFor(32);
 	await page.evaluate(async (url) => {
 		const { Grid } = await import(url);
 		const original = Grid.prototype.draw;
@@ -86,7 +85,6 @@ test('j/k viewport scrolling reuses frames until a redraw, while editing interru
 			return original.apply(this, args);
 		};
 	}, viteFsUrl('src/renderer/src/grid/grid.ts'));
-	await input.press('j');
 	await page.clock.runFor(32);
 	const scroll = async (): Promise<void> => {
 		await page.evaluate(() => {
