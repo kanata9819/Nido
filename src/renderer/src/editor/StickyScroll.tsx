@@ -6,7 +6,7 @@ import { stickyRows, type StickyRow } from './stickyHeaders';
 import styles from './StickyScroll.module.css';
 import { listIndex } from '../ui/listNavigation';
 
-/** What the sticky header draws, in pixels, computed from the grid on every paint. */
+/** What the sticky header draws, in pixels. */
 interface Model {
 	state: StickyScrollState;
 	rows: StickyRow[];
@@ -14,6 +14,17 @@ interface Model {
 	left: number;
 	width: number;
 	lineHeight: number;
+	cellWidth: number;
+	background: string;
+	horizontalOffset: number;
+}
+
+interface LayoutInputs {
+	state: StickyScrollState;
+	rowGeometryVersion: number;
+	motionOffset: number;
+	surfaceTop: number;
+	surfaceLeft: number;
 	cellWidth: number;
 	background: string;
 	horizontalOffset: number;
@@ -92,22 +103,56 @@ export default function StickyScroll({
 			window.removeEventListener('blur', blur);
 		};
 	}, []);
-	// Recompute the model on every editor paint (the editor calls paintRef), so the headers
-	// move with smooth scrolling.
+	// Follow scroll frames, reusing the model's inputs across unrelated cursor paints.
 	useLayoutEffect(() => {
+		let last: LayoutInputs | null | undefined;
 		const update = (motionOffset: number): void => {
 			const surface = grid.current;
-			const state = surface.stickyScroll;
-			if (!state || !surface.cellHeight) {
-				setModel(undefined);
+			const {
+				stickyScroll: state,
+				rowGeometryVersion,
+				cellHeight,
+				cellWidth,
+				surfaceTop,
+				surfaceLeft,
+				background,
+				horizontalOffset
+			} = surface;
+			if (!state || !cellHeight) {
+				if (last !== null) {
+					last = null;
+					setModel(undefined);
+				}
 				return;
 			}
+			if (
+				last?.state === state &&
+				last.rowGeometryVersion === rowGeometryVersion &&
+				last.motionOffset === motionOffset &&
+				last.surfaceTop === surfaceTop &&
+				last.surfaceLeft === surfaceLeft &&
+				last.cellWidth === cellWidth &&
+				last.background === background &&
+				last.horizontalOffset === horizontalOffset
+			) {
+				return;
+			}
+			last = {
+				state,
+				rowGeometryVersion,
+				motionOffset,
+				surfaceTop,
+				surfaceLeft,
+				cellWidth,
+				background,
+				horizontalOffset
+			};
 			const top = surface.rowTop(state.top);
 			const rows = stickyRows(
 				state,
 				(row) => surface.rowY(row),
 				top,
-				surface.cellHeight,
+				cellHeight,
 				maxLines,
 				motionOffset
 			);
@@ -115,13 +160,13 @@ export default function StickyScroll({
 				? {
 						state,
 						rows,
-						top: top + surface.surfaceTop,
-						left: state.left * surface.cellWidth + surface.surfaceLeft,
-						width: state.width * surface.cellWidth,
-						lineHeight: surface.cellHeight,
-						cellWidth: surface.cellWidth,
-						background: surface.background,
-						horizontalOffset: surface.horizontalOffset
+						top: top + surfaceTop,
+						left: state.left * cellWidth + surfaceLeft,
+						width: state.width * cellWidth,
+						lineHeight: cellHeight,
+						cellWidth,
+						background,
+						horizontalOffset
 					}
 				: undefined;
 			// Keep the previous model when nothing changed, so React skips the render.

@@ -79,6 +79,8 @@ export class Grid {
 	surfaceLeft = 0;
 	surfaceTop = 0;
 	contentHeight = 0;
+	/** Changes when prepared row positions or the visible vertical offset may differ. */
+	rowGeometryVersion = 0;
 	extraRows = 0;
 	bracketGuides: BracketGuide[] = [];
 	stickyScroll?: StickyScrollState;
@@ -760,7 +762,14 @@ export class Grid {
 	/** Compute shared row geometry before painting or hit-testing. */
 	prepareLayout(height: number, cellWidth: number, cellHeight: number): void {
 		this.cellWidth = cellWidth;
-		if (this.layoutDirty || this.cellHeight !== cellHeight) {
+		const layoutChanged = this.layoutDirty || this.cellHeight !== cellHeight;
+		const upperChanged =
+			this.upperRows !== this.upperLayout || this.upperFontHeight !== cellHeight;
+		const lowerChanged =
+			this.lowerRows !== this.lowerLayout || this.lowerFontHeight !== cellHeight;
+		const previousHeight = this.contentHeight;
+		const previousScroll = this.scrollPixels;
+		if (layoutChanged) {
 			const previousTops = this.rowTops;
 			this.rowTops = [0];
 			for (let row = 0; row < this.rows; row++) {
@@ -784,7 +793,7 @@ export class Grid {
 		const compactRows =
 			((this.rows - 1) * cellHeight - this.rowTop(this.rows - 1)) / cellHeight;
 		this.extraRows = this.pixelScrollEnabled ? Math.ceil(compactRows) : Math.floor(compactRows);
-		if (this.upperRows !== this.upperLayout || this.upperFontHeight !== cellHeight) {
+		if (upperChanged) {
 			this.upperTops = new Array(this.upperRows.length + 1);
 			this.upperTops[this.upperRows.length] = 0;
 			for (let index = this.upperRows.length - 1; index >= 0; index--) {
@@ -794,7 +803,7 @@ export class Grid {
 			this.upperLayout = this.upperRows;
 			this.upperFontHeight = cellHeight;
 		}
-		if (this.lowerRows !== this.lowerLayout || this.lowerFontHeight !== cellHeight) {
+		if (lowerChanged) {
 			this.lowerTops = [0];
 			for (const cells of this.lowerRows) {
 				this.lowerTops.push(
@@ -818,6 +827,15 @@ export class Grid {
 			: 0;
 		// Keep the accumulated fraction through pauses and native viewport rebases.
 		// The painter snaps each destination once, without changing scroll geometry.
+		if (
+			layoutChanged ||
+			upperChanged ||
+			lowerChanged ||
+			this.contentHeight !== previousHeight ||
+			this.scrollPixels !== previousScroll
+		) {
+			this.rowGeometryVersion++;
+		}
 	}
 
 	/** The rows cached above the viewport, nearest last. */
