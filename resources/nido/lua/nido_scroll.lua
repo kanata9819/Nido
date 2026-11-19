@@ -160,17 +160,43 @@ function M.restore(keep_view)
 end
 
 --- zz: center the cursor line, keeping the half-row offset that exact centering needs.
-function M.center(count)
-  M.restore()
-  vim.cmd.normal({args={(count and count > 0 and tostring(count) or '') .. 'zz'}, bang=true})
-  vim.cmd.redraw()
-  local view = vim.fn.winsaveview()
-  if vim.bo.buftype ~= 'terminal' and (view.topline > 1 or view.skipcol > 0) then
-    -- The renderer hides one overscan row below the visible code viewport.
-    fraction = math.max(0, math.min(0.5, vim.fn.winline() - api.nvim_win_get_height(0) / 2))
-    centered_view = view
+local frame_depth = 0
+
+local function notify_frame(hold)
+  for _, ui in ipairs(api.nvim_list_uis()) do
+    vim.rpcnotify(ui.chan, 'nido:frame', hold)
   end
-  publish_offset()
+end
+
+--- Run `fn` so the renderer gets everything it redraws as one frame: the grid, the cursor and
+--- the fractional offset. A jump then appears at once instead of in steps.
+function M.frame(fn, ...)
+  if frame_depth == 0 then notify_frame(true) end
+  frame_depth = frame_depth + 1
+  local result = {pcall(fn, ...)}
+  frame_depth = frame_depth - 1
+  if frame_depth == 0 then
+    -- Draw the cursor at its destination in the same frame.
+    pcall(api.nvim__redraw, {cursor=true, flush=true})
+    notify_frame(false)
+  end
+  if not result[1] then error(result[2], 0) end
+  return unpack(result, 2)
+end
+
+function M.center(count)
+  M.frame(function()
+    M.restore()
+    vim.cmd.normal({args={(count and count > 0 and tostring(count) or '') .. 'zz'}, bang=true})
+    vim.cmd.redraw()
+    local view = vim.fn.winsaveview()
+    if vim.bo.buftype ~= 'terminal' and (view.topline > 1 or view.skipcol > 0) then
+      -- The renderer hides one overscan row below the visible code viewport.
+      fraction = math.max(0, math.min(0.5, vim.fn.winline() - api.nvim_win_get_height(0) / 2))
+      centered_view = view
+    end
+    publish_offset()
+  end)
 end
 
 --- Scroll so screen row `row` is not hidden under the renderer's overscan rows.

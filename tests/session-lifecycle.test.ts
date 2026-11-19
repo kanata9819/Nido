@@ -120,6 +120,64 @@ end`,
 	}
 });
 
+test('gd to a far line of the same file appears as one centered frame without rereading the file', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-definition-frame-'));
+	let session: Session | undefined;
+	const frames: string[][] = [];
+	let recording = false;
+	try {
+		await writeFile(
+			join(root, 'lib.rs'),
+			Array.from({ length: 400 }, (_, i) => `fn f${i}() {}`).join('\n')
+		);
+		session = await Session.create(root, (event) => {
+			if (recording && event.type === 'redraw')
+				frames.push(event.events.map(([name]) => name));
+		});
+		await session.attach(80, 30);
+		await session.openFile('lib.rs');
+		await session.client.request('nvim_exec_lua', [
+			`vim.fn.winrestview({ topline = 1, lnum = 5, col = 3 })
+vim.api.nvim_exec_autocmds('LspAttach', { buffer = 0, data = { client_id = 0 } })
+local get_clients = vim.lsp.get_clients
+vim.lsp.get_clients = function(opts)
+  if opts and opts.method == 'textDocument/definition' then
+    return {{ offset_encoding = 'utf-16', request = function(_, _, _, reply)
+      local position = { line = 299, character = 3 }
+      reply(nil, { uri = vim.uri_from_bufnr(0), range = { start = position, ['end'] = position } })
+    end }}
+  end
+  return get_clients(opts)
+end`,
+			[]
+		]);
+		const changedtick = await session.client.request('nvim_eval', ['b:changedtick']);
+		recording = true;
+		await session.input('gd');
+		await session.client.request('nvim_eval', ['1']);
+		recording = false;
+		assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), [300, 3]);
+		assert.ok(Number(await session.client.request('nvim_eval', ["line('w0')"])) > 250);
+		// The buffer was not edited again, which would drop its highlights until they returned.
+		assert.equal(await session.client.request('nvim_eval', ['b:changedtick']), changedtick);
+		const moves = frames.filter((names) => names.includes('nido_scroll'));
+		assert.equal(moves.length, 1, JSON.stringify(frames));
+		// The new rows, their centering offset and the cursor become visible together.
+		for (const name of ['grid_line', 'nido_pixel_scroll', 'grid_cursor_goto']) {
+			assert.ok(moves[0].includes(name), `${name} in ${moves[0].join(',')}`);
+		}
+		assert.ok(
+			frames.every(
+				(names) => names.includes('nido_scroll') || !names.includes('nido_pixel_scroll')
+			),
+			'no offset arrives in a frame of its own'
+		);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
 test('reference previews reload external changes without switching files or changing readonly', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-reference-reload-'));
 	let session: Session | undefined;

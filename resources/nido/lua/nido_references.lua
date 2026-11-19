@@ -267,13 +267,19 @@ end
 
 --- Jump to a quickfix-style item (filename, lnum, col), keeping the jump list.
 local function jump(item, keep_view)
-  vim.cmd("normal! m'")
-  if not keep_view then require('nido_eol').open(item.filename) end
-  local line = math.min(item.lnum, vim.api.nvim_buf_line_count(0))
-  local text = vim.api.nvim_buf_get_lines(0, line - 1, line, false)[1] or ''
-  vim.api.nvim_win_set_cursor(0, { line, math.min(item.col - 1, #text) })
-  vim.cmd('normal! zv')
-  if not keep_view then require('nido_scroll').center() end
+  -- Opening, moving and centering redraw separately; show only where the jump lands.
+  require('nido_scroll').frame(function()
+    vim.cmd("normal! m'")
+    -- Editing the current file again would reread it, dropping its highlights until they return.
+    if not keep_view and require('nido_buffers').find(item.filename) ~= vim.api.nvim_get_current_buf() then
+      require('nido_eol').open(item.filename)
+    end
+    local line = math.min(item.lnum, vim.api.nvim_buf_line_count(0))
+    local text = vim.api.nvim_buf_get_lines(0, line - 1, line, false)[1] or ''
+    vim.api.nvim_win_set_cursor(0, { line, math.min(item.col - 1, #text) })
+    vim.cmd('normal! zv')
+    if not keep_view then require('nido_scroll').center() end
+  end)
 end
 
 --- Jump to a reference and center it.
