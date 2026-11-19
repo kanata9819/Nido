@@ -1,4 +1,4 @@
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import { useLayoutEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import type { ReplacementPreview } from '../../../shared/search';
 import { useI18n } from '../i18n';
 import styles from './WorkspaceSearch.module.css';
@@ -22,6 +22,10 @@ export default function ReplacementPreviewPanel({
 	diff: RefObject<HTMLDivElement | null>;
 }): React.JSX.Element {
 	const t = useI18n();
+	const selected = preview.files[file];
+	useLayoutEffect(() => {
+		diff.current?.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+	}, [diff, selected]);
 	return (
 		<>
 			<div
@@ -98,12 +102,12 @@ export default function ReplacementPreviewPanel({
 					}
 				}}
 			>
-				{preview.files[file] && (
+				{selected && (
 					<>
 						<h3>{t('Before')}</h3>
-						<pre aria-label={t('Before replacement')}>{preview.files[file].before}</pre>
+						<pre aria-label={t('Before replacement')}>{selected.before}</pre>
 						<h3>{t('After')}</h3>
-						<pre aria-label={t('After replacement')}>{preview.files[file].after}</pre>
+						<pre aria-label={t('After replacement')}>{selected.after}</pre>
 					</>
 				)}
 			</div>

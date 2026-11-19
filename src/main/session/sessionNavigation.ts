@@ -1,4 +1,5 @@
 import type { ReferencePreview, Workspace } from '../../shared/types';
+import { maxDiffHighlightLength } from '../../shared/nidoApi';
 import { editorPath } from '../../shared/wsl';
 import type { SessionClient } from './sessionClient';
 import type { SessionEvents } from './sessionEvents';
@@ -81,7 +82,7 @@ require('nido_scroll').center()`,
 		after: string
 	): Promise<ReferencePreview['lines'][]> {
 		// Large previews remain readable without monopolizing Neovim's input thread.
-		if (before.length + after.length > 128000) {
+		if (before.length + after.length > maxDiffHighlightLength) {
 			return [[], []];
 		}
 		return this.client.request('nvim_exec_lua', [

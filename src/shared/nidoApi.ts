@@ -56,6 +56,9 @@ export interface HistoryAPI {
 	historyRestore(id: string, path: string, version: string, token: string): Promise<void>;
 }
 
+/** Maximum combined source length for diff syntax colors, in UTF-16 code units. */
+export const maxDiffHighlightLength = 128_000;
+
 /** The Git panel and browser, and syntax colors for their diffs (ipc/gitHandlers.ts). */
 export interface GitAPI {
 	highlightSources(

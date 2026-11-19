@@ -64,6 +64,8 @@ export function useTimeMachine({
 				);
 			} catch (failure) {
 				if (latest()) {
+					setData(undefined);
+					setPreview(undefined);
 					setError(remoteErrorText(failure));
 				}
 			} finally {
