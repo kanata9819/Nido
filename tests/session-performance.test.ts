@@ -578,6 +578,54 @@ test('scroll batches publish the latest cursor with collection changes preserved
 	assert.deepEqual(events.state.diagnostics, { '/alpha/main.rs': 2 });
 });
 
+test('a frame Neovim brackets reaches the renderer as one redraw with its offset', (t) => {
+	t.mock.timers.enable({ apis: ['setTimeout'] });
+	const sent: NidoEvent[] = [];
+	const events = new SessionEvents('alpha', (event) => sent.push(event));
+	const redraws = (): Redraw[] =>
+		sent.flatMap((event) => (event.type === 'redraw' ? [event.events] : []));
+	const line: Redraw = [['grid_line', [1, 0, 0, [['x']]]], ['flush']];
+	events.receiveNotification('nido:frame', [true]);
+	events.receiveNotification('nido:pixel_scroll', [0, false, null, true, 0]);
+	events.receiveNotification('redraw', line);
+	events.receiveNotification('nido:pixel_scroll', [0.5, false, null, false, 0]);
+	events.receiveNotification('redraw', [['grid_cursor_goto', [1, 3, 0]], ['flush']]);
+	assert.equal(redraws().length, 0, 'nothing is shown before the frame ends');
+	events.receiveNotification('nido:frame', [false]);
+	assert.equal(redraws().length, 1);
+	assert.deepEqual(
+		redraws()[0].map(([name]) => name),
+		[
+			'nido_pixel_scroll',
+			'grid_line',
+			'flush',
+			'nido_pixel_scroll',
+			'grid_cursor_goto',
+			'flush',
+			'flush'
+		]
+	);
+
+	// A frame ending inside a scroll request waits for the request.
+	events.beginScrollBatch();
+	events.receiveNotification('nido:frame', [true]);
+	events.receiveNotification('redraw', line);
+	events.receiveNotification('nido:frame', [false]);
+	assert.equal(redraws().length, 1);
+	events.endScrollBatch();
+	assert.equal(redraws().length, 2);
+
+	// A frame that never ends must not freeze the editor.
+	events.receiveNotification('nido:frame', [true]);
+	events.receiveNotification('redraw', line);
+	t.mock.timers.tick(999);
+	assert.equal(redraws().length, 2);
+	t.mock.timers.tick(1);
+	assert.equal(redraws().length, 3);
+	events.receiveNotification('redraw', line);
+	assert.equal(redraws().length, 4, 'later redraws flow at once again');
+});
+
 test('diagnostic refreshes resolve each buffer once and keep paths and severity live', async (context) => {
 	const session = await Session.create(process.cwd(), () => {});
 	try {

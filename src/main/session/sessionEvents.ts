@@ -37,6 +37,9 @@ export class SessionEvents {
 	private pendingRedraw: Redraw = [];
 	// While true (during a scroll request) frames and state are held and sent together at the end.
 	private isBatchingScroll = false;
+	// While true, Neovim itself asked for its redraws to be sent as one frame (nido:frame).
+	private isHoldingFrame = false;
+	private holdTimer?: ReturnType<typeof setTimeout>;
 	private pendingState = false;
 	private publishedState?: SessionState;
 	// The command line, messages and completion menu, drawn by the renderer as Nido's own UI.
@@ -64,6 +67,30 @@ export class SessionEvents {
 	/** Send everything held since beginScrollBatch() as one frame. */
 	endScrollBatch(): void {
 		this.isBatchingScroll = false;
+		this.releaseHeld();
+	}
+
+	/** Whether redraws and state wait for a scroll request or a Neovim frame to end. */
+	private get holding(): boolean {
+		return this.isBatchingScroll || this.isHoldingFrame;
+	}
+
+	/** Neovim brackets work that redraws in several steps, such as a jump and its centering. */
+	private holdFrame(hold: boolean): void {
+		clearTimeout(this.holdTimer);
+		this.isHoldingFrame = hold;
+		if (hold) {
+			// A frame Neovim never ends must not freeze the editor.
+			this.holdTimer = setTimeout(() => this.holdFrame(false), 1000);
+		} else {
+			this.releaseHeld();
+		}
+	}
+
+	private releaseHeld(): void {
+		if (this.holding) {
+			return;
+		}
 		if (this.pendingRedraw.length) {
 			// Grid rows and their fractional offset must become visible together.
 			this.pendingRedraw.push(['flush', []]);
@@ -126,7 +153,7 @@ export class SessionEvents {
 
 	/** Send the state to the renderer: whole when a large collection changed, else as a patch. */
 	private publishState(): void {
-		if (this.isBatchingScroll) {
+		if (this.holding) {
 			this.pendingState = true;
 			return;
 		}
@@ -199,6 +226,10 @@ export class SessionEvents {
 				this.pendingRedraw.push(['nido_scroll', args[0] as unknown[]]);
 				break;
 			}
+			case 'nido:frame': {
+				this.holdFrame(args[0] === true);
+				break;
+			}
 			case 'nido:scroll_cache': {
 				this.pendingRedraw.push(['nido_scroll_cache', args]);
 				break;
@@ -223,7 +254,7 @@ export class SessionEvents {
 				break;
 			}
 			case 'nido:pixel_scroll': {
-				if (this.isBatchingScroll) {
+				if (this.holding) {
 					this.pendingRedraw.push(['nido_pixel_scroll', args]);
 					break;
 				}
@@ -330,7 +361,7 @@ export class SessionEvents {
 			}
 			this.pendingRedraw.push(event);
 			// A repaint can span several RPC notifications. Never expose a partial frame.
-			if (event[0] === 'flush' && !this.isBatchingScroll) {
+			if (event[0] === 'flush' && !this.holding) {
 				this.publishPendingRedraw();
 			}
 		}
