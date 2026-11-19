@@ -32,7 +32,7 @@ export default function ExplorerCommands({
 	request?: FileRequest;
 	commands: { title: string; key: string; disabled?: boolean; run: () => void }[];
 	onClose: () => void;
-	onDone: (path: string) => void;
+	onDone: (path: string, request: FileRequest) => void;
 }): React.JSX.Element {
 	const t = useI18n();
 	const errorMessage = useErrorMessage();
@@ -98,7 +98,7 @@ export default function ExplorerCommands({
 					: creating
 						? path
 						: target;
-			onDone(selected);
+			onDone(selected, request);
 			onClose();
 		} catch (e) {
 			setError(String(e));

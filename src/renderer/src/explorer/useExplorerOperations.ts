@@ -27,7 +27,7 @@ export function useExplorerOperations({
 	clipboard: { path: string; name: string; cut: boolean; directory: boolean } | undefined;
 	commands: { title: string; key: string; disabled?: boolean; run: () => void }[];
 	closeOperation: () => void;
-	onDone: (path: string) => void;
+	onDone: (path: string, request?: FileRequest) => void;
 } {
 	const [operation, setOperation] = useState<{ request?: FileRequest }>();
 	const [clipboard, setClipboard] = useState<{
@@ -44,8 +44,9 @@ export function useExplorerOperations({
 	}
 	const pathInTargetDirectory = (name: string): string =>
 		targetDirectory ? `${targetDirectory}/${name}` : name;
+	const separator = workspace.root.includes('\\') ? '\\' : '/';
 	const toTreePath = (path: string): string =>
-		path.replace(/[\\/]/g, workspace.root.includes('\\') ? '\\' : '/');
+		path.replace(/[\\/]+/g, separator).replace(/[\\/]+$/, '');
 	const closeOperation = (): void => {
 		setOperation(undefined);
 		requestAnimationFrame(() => tree.current?.focus());
@@ -129,24 +130,33 @@ export function useExplorerOperations({
 		}
 	];
 
-	const finishFileOperation = (path: string): void => {
+	const finishFileOperation = (path: string, request?: FileRequest): void => {
 		invalidate();
-		setSelected(toTreePath(path));
+		const selected = toTreePath(path);
+		setSelected(selected);
 		setExpanded((old) => {
 			const next = new Set(old);
-			const ancestorSegments = path.split(/[\\/]/);
+			if (request?.action === 'rename' || request?.action === 'delete') {
+				const source = toTreePath(request.path);
+				// Expanded descendants move with their folder, or disappear with a deletion.
+				for (const folder of old) {
+					if (folder === source || folder.startsWith(source + separator)) {
+						next.delete(folder);
+						if (request.action === 'rename') {
+							next.add(selected + folder.slice(source.length));
+						}
+					}
+				}
+			}
+			const ancestorSegments = selected.split(separator);
 			ancestorSegments.pop();
 			while (ancestorSegments.length) {
-				next.add(toTreePath(ancestorSegments.join('/')));
+				next.add(ancestorSegments.join(separator));
 				ancestorSegments.pop();
 			}
 			return next;
 		});
-		if (
-			clipboard?.cut &&
-			operation?.request?.action === 'rename' &&
-			operation?.request.path === clipboard.path
-		) {
+		if (clipboard?.cut && request?.action === 'rename' && request.path === clipboard.path) {
 			setClipboard(undefined);
 		}
 	};
