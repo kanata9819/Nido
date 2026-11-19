@@ -108,8 +108,14 @@ export function registerFileHandlers({
 			const parent = await current.path(dirname(destination));
 			protectOtherWorkspaces(resolve(parent, basename(destination)));
 		}
-		await current.fileAction(action as FileAction, text(path), destination, trash);
+		const selected = await current.fileAction(
+			action as FileAction,
+			text(path),
+			destination,
+			trash
+		);
 		filesChanged(current);
+		return selected;
 	});
 	// Copy files and folders dropped from the operating system into an explorer folder.
 	handle('importFiles', async (id, sources, directory) => {

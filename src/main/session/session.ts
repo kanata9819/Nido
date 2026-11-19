@@ -697,10 +697,10 @@ end`,
 		path: string,
 		target: string,
 		trash: (path: string) => Promise<void>
-	): Promise<void> {
+	): Promise<string> {
 		// Drain preceding input without blocking typing during the filesystem operation.
 		await this.inputMode();
-		await this.fileService.fileAction(
+		return this.fileService.fileAction(
 			action,
 			path,
 			target,

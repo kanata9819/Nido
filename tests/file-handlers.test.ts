@@ -23,7 +23,10 @@ test('file IPC validates requests and protects files open in other workspace ses
 		workspace: { id: 'current', root },
 		state: { buffers: [{ name: join(root, 'src/file.txt') }] },
 		path: async (path: string) => join(root, path),
-		fileAction: async (...args: unknown[]) => mutations.push(args),
+		fileAction: async (...args: unknown[]) => {
+			mutations.push(args);
+			return '';
+		},
 		searchText: async () => ({ matches: [], truncated: false }),
 		watchDirectories: async () => {}
 	} as unknown as Session;
@@ -55,8 +58,8 @@ test('file IPC validates requests and protects files open in other workspace ses
 		send: (event) => sent.push(event),
 		trash
 	});
-	const fileAction = (action: string, path = 'src'): Promise<void> =>
-		handlers.get('fileAction')!('current', action, path) as Promise<void>;
+	const fileAction = (action: string, path = 'src'): Promise<string> =>
+		handlers.get('fileAction')!('current', action, path) as Promise<string>;
 
 	for (const action of ['rename', 'delete', 'copy']) {
 		await assert.rejects(fileAction(action), /other workspace session/);
@@ -75,7 +78,7 @@ test('file IPC validates requests and protects files open in other workspace ses
 	}
 	assert.deepEqual(mutations, []);
 	sleeping[0] = join(root, 'src-sibling/file.txt');
-	await fileAction('delete');
+	assert.equal(await fileAction('delete'), '');
 	assert.deepEqual(mutations, [['delete', 'src', '', trash]]);
 	assert.deepEqual(sent, [
 		{ type: 'filesChanged', id: 'current' },

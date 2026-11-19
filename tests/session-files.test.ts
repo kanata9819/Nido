@@ -82,7 +82,10 @@ for (const action of ['rename', 'copy'] as const) {
 				}
 			} as unknown as NeovimClient;
 			const files = new SessionFiles(root, client);
-			await files.fileAction(action, 'source.txt', 'target.txt', async () => {});
+			assert.equal(
+				await files.fileAction(action, 'source.txt', './target.txt', async () => {}),
+				'target.txt'
+			);
 			assert.equal(await readFile(join(root, 'target.txt'), 'utf8'), 'source contents\n');
 		} finally {
 			await rm(root, { recursive: true, force: true });

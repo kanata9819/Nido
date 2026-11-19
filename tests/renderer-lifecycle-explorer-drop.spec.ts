@@ -75,7 +75,7 @@ const imports = (page: Page): Promise<unknown[][]> =>
 			.map((call) => call.args)
 	);
 
-test('renaming and deleting folders updates the expanded tree paths', async ({ page }) => {
+test('moving and deleting folders updates the expanded tree paths', async ({ page }) => {
 	await page.goto(`${origin}?view=app&defer=files,fileAction`);
 	await list(page, '', [
 		{ name: 'src', path: 'src', directory: true },
@@ -91,9 +91,10 @@ test('renaming and deleting folders updates the expanded tree paths', async ({ p
 		{ name: 'sibling.ts', path: 'src-other/sibling.ts', directory: false }
 	]);
 	await tree.press('Home');
-	await tree.press('F2');
+	await tree.press(':');
 	const dialog = page.getByRole('dialog', { name: 'Explorer commands' });
-	await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('renamed');
+	await dialog.getByRole('button', { name: 'Move to… m', exact: true }).click();
+	await dialog.getByRole('textbox', { name: 'Workspace-relative path' }).fill('./renamed');
 	await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
 	await expect
 		.poll(() =>
@@ -103,10 +104,10 @@ test('renaming and deleting folders updates the expanded tree paths', async ({ p
 					?.args.slice(0, 4)
 			)
 		)
-		.toEqual(['alpha', 'rename', 'src', 'renamed']);
+		.toEqual(['alpha', 'rename', 'src', './renamed']);
 	const startingCall = await page.evaluate(() => {
 		const count = window.rendererTest.calls.length;
-		window.rendererTest.settle('fileAction', 0, undefined);
+		window.rendererTest.settle('fileAction', 0, 'renamed');
 		return count;
 	});
 	await list(page, '', [
@@ -156,7 +157,7 @@ test('renaming and deleting folders updates the expanded tree paths', async ({ p
 		.toEqual(['alpha', 'delete', 'renamed']);
 	const deletedAt = await page.evaluate(() => {
 		const count = window.rendererTest.calls.length;
-		window.rendererTest.settle('fileAction', 0, undefined);
+		window.rendererTest.settle('fileAction', 0, '');
 		return count;
 	});
 	await list(page, '', [{ name: 'src-other', path: 'src-other', directory: true }]);

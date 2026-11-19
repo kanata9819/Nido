@@ -145,7 +145,7 @@ test('explorer file actions preserve buffers, reject overwrites and protect work
 			operation: import('../src/shared/types').FileAction,
 			path: string,
 			target = ''
-		): Promise<void> =>
+		): Promise<string> =>
 			session!.fileAction(operation, path, target, (source) =>
 				rename(source, join(root, 'trashed'))
 			);
@@ -274,7 +274,7 @@ test('an open file renames back to an earlier name, and only a real tab blocks a
 		await writeFile(join(root, 'a.txt'), 'a\n');
 		await writeFile(join(root, 'other.txt'), 'other\n');
 		session = await Session.create(root, () => {});
-		const rename = (from: string, to: string): Promise<void> =>
+		const rename = (from: string, to: string): Promise<string> =>
 			session!.fileAction('rename', from, to, async () => {});
 		const names = (): Promise<string[]> =>
 			session!.client.request('nvim_exec_lua', [

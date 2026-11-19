@@ -167,7 +167,8 @@ export interface EditorAPI {
 export interface FileAPI {
 	files(id: string, relative: string): Promise<FileEntry[]>;
 	watchDirectories(id: string, paths: string[]): Promise<void>;
-	fileAction(id: string, action: FileAction, path: string, target?: string): Promise<void>;
+	/** Returns the workspace-relative result, or the parent of a deleted entry. */
+	fileAction(id: string, action: FileAction, path: string, target?: string): Promise<string>;
 	/**
 	 * Copy files and folders from anywhere on the computer into a workspace folder (`''` is the
 	 * workspace itself), naming any copy whose name is taken as the explorer does. Resolves to

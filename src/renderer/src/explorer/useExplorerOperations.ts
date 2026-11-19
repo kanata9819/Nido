@@ -45,8 +45,6 @@ export function useExplorerOperations({
 	const pathInTargetDirectory = (name: string): string =>
 		targetDirectory ? `${targetDirectory}/${name}` : name;
 	const separator = workspace.root.includes('\\') ? '\\' : '/';
-	const toTreePath = (path: string): string =>
-		path.replace(/[\\/]+/g, separator).replace(/[\\/]+$/, '');
 	const closeOperation = (): void => {
 		setOperation(undefined);
 		requestAnimationFrame(() => tree.current?.focus());
@@ -130,14 +128,13 @@ export function useExplorerOperations({
 		}
 	];
 
-	const finishFileOperation = (path: string, request?: FileRequest): void => {
+	const finishFileOperation = (selected: string, request?: FileRequest): void => {
 		invalidate();
-		const selected = toTreePath(path);
 		setSelected(selected);
 		setExpanded((old) => {
 			const next = new Set(old);
 			if (request?.action === 'rename' || request?.action === 'delete') {
-				const source = toTreePath(request.path);
+				const source = request.path;
 				// Expanded descendants move with their folder, or disappear with a deletion.
 				for (const folder of old) {
 					if (folder === source || folder.startsWith(source + separator)) {
