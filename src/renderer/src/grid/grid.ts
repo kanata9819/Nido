@@ -9,6 +9,7 @@ import { GridCanvas } from './gridCanvas';
 import { GridRowLayout } from './gridRowLayout';
 import { gridHighlight } from './gridHighlight';
 import { scrollGridCells } from './gridCellScroll';
+import { readGridRedraw, type GridRedraw } from './gridRedraw';
 export type { Cell } from './gridTypes';
 
 /** State shared by the calls of one redraw batch. */
@@ -227,11 +228,12 @@ export class Grid {
 	}
 
 	/** Apply one redraw batch through applyCall(). Returns true when it ended with `flush`. */
-	apply(events: Redraw): boolean {
-		this.resetForBatch(events);
-		const batch = this.beginBatch(events);
+	apply(events: Redraw, redraw = readGridRedraw(events)): boolean {
+		this.resetForBatch(redraw);
+		const batch = this.beginBatch(redraw);
 		let flush = false;
-		for (const [name, ...calls] of events) {
+		for (const event of events) {
+			const name = event[0];
 			switch (name) {
 				case 'flush':
 					flush = true;
@@ -243,8 +245,8 @@ export class Grid {
 					this.busy = false;
 					break;
 			}
-			for (const args of calls) {
-				this.applyCall(name, args, batch);
+			for (let i = 1; i < event.length; i++) {
+				this.applyCall(name, event[i] as unknown[], batch);
 			}
 		}
 		this.finishBatch(batch);
@@ -252,16 +254,12 @@ export class Grid {
 	}
 
 	/** Drop scroll caches and preview state that cannot survive this batch. */
-	private resetForBatch(events: Redraw): void {
-		if (
-			events.some(([name]) =>
-				['nido_buffer', 'nido_edit', 'grid_clear', 'grid_resize'].includes(name)
-			)
-		) {
+	private resetForBatch({ bufferChanged, edited, layoutReset }: GridRedraw): void {
+		if (bufferChanged || edited || layoutReset) {
 			this.scrollOrigin = 0;
 			this.clearScrollCaches();
 		}
-		if (events.some(([name]) => name === 'nido_buffer')) {
+		if (bufferChanged) {
 			this.scrollFraction = 0;
 			this.scrollPreview = 0;
 			this.scrollCursor = undefined;
@@ -291,13 +289,14 @@ export class Grid {
 	}
 
 	/** Capture what the batch needs from the grid as it was before any call applies. */
-	private beginBatch(events: Redraw): RedrawBatch {
+	private beginBatch({
+		viewportScrolls: viewportMoves,
+		prefetched,
+		gridShifted,
+		pixelOffsets
+	}: GridRedraw): RedrawBatch {
 		// Neovim can repaint wrapped rows instead of emitting grid_scroll. Keep
 		// rasterized rows at their new positions when the returned cells still match.
-		const viewportMoves = events.flatMap(([name, ...calls]) =>
-			name === 'nido_scroll' ? calls : []
-		);
-		const prefetched = events.some(([name]) => name === 'nido_scroll_cache');
 		const verticalOnly = viewportMoves.every((args) => this.isFullWidthVerticalScroll(args));
 		const retainedRows =
 			prefetched || viewportMoves.length
@@ -315,17 +314,13 @@ export class Grid {
 			!prefetched && verticalOnly
 				? viewportMoves.reduce((total, args) => total + Number(args[5]), 0)
 				: 0;
-		const pixelScroll = events.some(
-			([name, ...calls]) =>
-				name === 'nido_pixel_scroll' && calls.some((args) => args[1] === true)
-		);
+		const pixelScroll = pixelOffsets.some((args) => args[1] === true);
 		if (viewportMoves.length && !prefetched && !pixelScroll) {
 			this.scrollOrigin = 0;
 		}
 		return {
 			prefetched,
-			repaintedScroll:
-				viewportMoves.length > 0 && !events.some(([name]) => name === 'grid_scroll'),
+			repaintedScroll: viewportMoves.length > 0 && !gridShifted,
 			// Sideways moves keep every row in place; their images can shift instead of rasterizing.
 			sideways: viewportMoves.length > 0 && viewportMoves.every((args) => args[5] === 0),
 			retainedRows,

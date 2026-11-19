@@ -41,6 +41,28 @@ test('multiple viewport scrolls in one batch are not animated as one', () => {
 	assert.equal(redraw.scroll, undefined);
 });
 
+test('redraw summaries keep separate viewport and pixel scroll groups in order', () => {
+	const first = [1, 0, 30, 0, 80, 1, 0, 0, 4];
+	const last = [1, 0, 30, 0, 80, 2, 0, 0, 7];
+	const firstOffset = [0.25, false];
+	const lastOffset = [0.75, true];
+	const redraw = summarizeRedraw([
+		['nido_buffer', [1, 'a.ts', 3], [1, 'b.ts', 10]],
+		['nido_scroll', first],
+		['nido_pixel_scroll', firstOffset],
+		['nido_scroll_cache'],
+		['nido_scroll', last],
+		['nido_pixel_scroll', lastOffset],
+		['flush']
+	]);
+	assert.deepEqual(redraw.viewportScrolls, [first, last]);
+	assert.deepEqual(redraw.pixelOffsets, [firstOffset, lastOffset]);
+	assert.equal(redraw.bufferColumn, 3);
+	assert.equal(redraw.lastScrollColumn, 7);
+	assert.equal(redraw.prefetched, true);
+	assert.equal(redraw.scroll, undefined);
+});
+
 test('edits alone neither move the viewport nor reset the cursor', () => {
 	const redraw = summarizeRedraw([['nido_edit']]);
 	assert.equal(redraw.edited, true);
