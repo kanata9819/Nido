@@ -7,15 +7,14 @@ export interface CanvasSurface {
 }
 
 /**
- * Size the canvas to the whole device pixels inside `host` and return its position and size.
+ * Size the canvas to the whole device pixels inside the host bounds.
  * This matches CSS bounds to the backing pixels, including fractional Windows display scaling.
  */
 export function alignCanvasSurface(
 	canvas: HTMLCanvasElement,
-	host: HTMLElement,
+	bounds: DOMRectReadOnly,
 	dpr: number
 ): CanvasSurface {
-	const bounds = host.getBoundingClientRect();
 	const left = Math.ceil(bounds.left * dpr - 0.001);
 	const top = Math.ceil(bounds.top * dpr - 0.001);
 	const right = Math.floor(bounds.right * dpr + 0.001);
