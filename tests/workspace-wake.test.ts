@@ -387,3 +387,128 @@ test('concurrent renderer restorations share startup and retain restoration erro
 	assert.deepEqual(results[0].errors, ['A saved file is unavailable.']);
 	assert.equal(check.created(), 1);
 });
+
+test('a workspace that cannot start at restore stays asleep with its drafts and wakes later', async (context) => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-restore-failure-'));
+	userData = root;
+	const working = join(root, 'working');
+	const unavailable = join(root, 'unavailable');
+	await mkdir(working);
+	await mkdir(unavailable);
+	const draft = {
+		id: '00000000-0000-4000-8000-000000000000:1',
+		lines: ['an unsaved idea'],
+		endOfLine: true,
+		fileformat: 'unix',
+		line: 1,
+		column: 0
+	};
+	// The unavailable workspace was selected and holds an unsaved draft.
+	await writeFile(
+		join(root, 'workspaces.json'),
+		JSON.stringify({
+			version: 1,
+			active: 1,
+			workspaces: [
+				{ root: working, files: [], current: '' },
+				{ root: unavailable, files: [], current: '', untitled: [draft] }
+			]
+		})
+	);
+	const { Session } = await import('../src/main/session/session');
+	const { registerWorkspaceHandlers } = await import('../src/main/ipc/workspaceHandlers');
+	const sessions = new Map<string, Session>();
+	const state: AppState = {
+		order: [],
+		active: '',
+		restoration: undefined,
+		prompting: false,
+		closing: false
+	};
+	const handlers = new Map<string, (...args: unknown[]) => unknown>();
+	const window = Object.assign(new EventEmitter(), {
+		isDestroyed: () => false,
+		isFocused: () => true,
+		isMaximized: () => false,
+		getNormalBounds: () => ({ width: 1000, height: 700 })
+	});
+	let reachable = false;
+	const restored: unknown[] = [];
+	const create = Session.create;
+	Session.create = async (
+		folder: string,
+		_emit: unknown,
+		_resources: unknown,
+		_packs: unknown,
+		id?: string
+	) => {
+		if (folder === unavailable && !reachable) {
+			throw new Error('WSL Neovim did not start. Reconnect to this workspace.');
+		}
+		const workspace = { id: id ?? `workspace-${folder}`, root: folder, name: folder };
+		return {
+			workspace,
+			running: true,
+			restore: async (saved: unknown) => {
+				restored.push(saved);
+				return [];
+			},
+			reloadLanguagePacks: async () => {},
+			setFocus: () => {},
+			modified: async () => false,
+			canSleep: async () => true,
+			sleepBlockers: async () => [],
+			snapshot: async () => ({ root: folder, files: [], current: '' }),
+			client: { request: async () => ({ blocking: false }) },
+			stop: async () => {}
+		} as unknown as Session;
+	};
+	registerWorkspaceHandlers({
+		window,
+		sessions,
+		state,
+		neovimResources: root,
+		languagePacks: { load: async () => ({}) },
+		send: () => {},
+		handle: (name: string, action: (...args: unknown[]) => unknown) =>
+			handlers.set(name, action),
+		session: (id: unknown) => {
+			const current = sessions.get(String(id));
+			assert.ok(current);
+			return current;
+		},
+		text: String,
+		shellChoice: () => 'auto',
+		captureHistory: async () => {}
+	} as never);
+	context.after(async () => {
+		Session.create = create;
+		window.emit('closed');
+		await rm(root, { recursive: true, force: true });
+	});
+	const result = (await handlers.get('restore')!()) as Awaited<
+		NonNullable<AppState['restoration']>
+	>;
+	assert.deepEqual(
+		result.workspaces.map(({ root, sleeping }) => [root, !!sleeping]),
+		[
+			// Unselected workspaces start asleep anyway.
+			[working, true],
+			[unavailable, true]
+		]
+	);
+	assert.match(result.errors.join('\n'), /WSL Neovim did not start/);
+	// The selection moves to the first tab rather than the one that failed.
+	assert.equal(result.active, result.workspaces[0].id);
+	// Selecting the tab once the folder is available again restores the draft.
+	reachable = true;
+	const asleep = result.workspaces[1].id;
+	await handlers.get('wake')!(asleep);
+	assert.ok(sessions.has(asleep));
+	assert.deepEqual(
+		(restored.at(-1) as { untitled?: { lines: string[] }[] }).untitled?.map(
+			({ lines }) => lines
+		),
+		[['an unsaved idea']]
+	);
+});
