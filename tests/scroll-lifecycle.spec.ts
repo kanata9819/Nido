@@ -5,6 +5,140 @@ import { join } from 'node:path';
 import { installRowImageProbe } from './helpers/row-image-probe';
 import { launchEnv } from './helpers/launch-env';
 
+test('wheel scrolling resumes after a pending Neovim command and across file tabs', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-scroll-pending-key-'));
+	const profile = join(root, 'profile');
+	const file = join(root, 'rows.txt');
+	await mkdir(profile);
+	await writeFile(file, Array.from({ length: 300 }, (_, i) => `ROW_${i + 1}`).join('\n'));
+	await writeFile(
+		join(root, 'other.txt'),
+		Array.from({ length: 300 }, (_, i) => `OTHER_${i + 1}`).join('\n')
+	);
+	await writeFile(
+		join(profile, 'workspaces.json'),
+		JSON.stringify({
+			version: 1,
+			active: 0,
+			workspaces: [{ root, current: file, files: [{ path: file, line: 100, column: 0 }] }]
+		})
+	);
+	const env = launchEnv();
+	delete env.ELECTRON_RUN_AS_NODE;
+	const executablePath = process.env.NIDO_PACKAGED_EXE;
+	const running = await electron.launch({
+		executablePath,
+		args: [...(executablePath ? [] : ['.']), `--user-data-dir=${profile}`],
+		env
+	});
+	try {
+		const page = await running.firstWindow();
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		const display = page.locator('canvas:visible');
+		await expect(display).toHaveAttribute('aria-description', /ROW_100\b/);
+		await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+		const id = await page.evaluate(
+			async () => (await window.nido.restoreWorkspaces()).workspaces[0].id
+		);
+		const mode = (): Promise<string> => page.evaluate((id) => window.nido.inputMode(id), id);
+		const wheel = (): Promise<void> =>
+			display.evaluate((node) => {
+				node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 2 }));
+			});
+		const top = async (): Promise<number> =>
+			Number(
+				(await display.getAttribute('aria-description'))?.match(/(?:ROW|OTHER)_(\d+)/)?.[1]
+			);
+		await running.evaluate(({ ipcMain }) => {
+			const handlers = (
+				ipcMain as unknown as {
+					_invokeHandlers: Map<string, (...args: unknown[]) => Promise<unknown>>;
+				}
+			)._invokeHandlers;
+			const scroll = handlers.get('nido:scroll')!;
+			const probe = {
+				replies: 0,
+				holdNext: false,
+				release: undefined as (() => void) | undefined
+			};
+			Object.assign(globalThis, { wheelProbe: probe });
+			handlers.set('nido:scroll', async (...args) => {
+				const hold = probe.holdNext;
+				probe.holdNext = false;
+				try {
+					const result = await scroll(...args);
+					if (hold) {
+						await new Promise<void>((resolve) => {
+							probe.release = resolve;
+						});
+						probe.release = undefined;
+					}
+					return result;
+				} finally {
+					probe.replies++;
+				}
+			});
+		});
+		const replies = (): Promise<number> =>
+			running.evaluate(() => Number(Reflect.get(globalThis, 'wheelProbe').replies));
+		for (const [key, next] of [
+			['f', 'Escape'],
+			['g', 'g']
+		]) {
+			await test.step(`the next gesture scrolls after ${key} then ${next}`, async () => {
+				const beforeRequest = await replies();
+				await page.keyboard.press(key);
+				await expect.poll(mode).toBe('pending');
+				await wheel();
+				await expect.poll(replies).toBeGreaterThan(beforeRequest);
+				await page.keyboard.press(next);
+				await expect.poll(mode).toBe('n');
+				if (key === 'g') {
+					await expect.poll(top).toBe(1);
+				}
+				const before = await top();
+				await display.hover();
+				await page.mouse.wheel(0, 240);
+				await expect.poll(top).toBeGreaterThan(before);
+			});
+		}
+		await test.step('a delayed reply from the old file does not block the first gesture in another tab', async () => {
+			await page.evaluate((id) => window.nido.openFile(id, 'other.txt'), id);
+			await expect(display).toHaveAttribute('aria-description', /OTHER_1\b/);
+			await page.mouse.wheel(0, 240);
+			await expect.poll(top).toBeGreaterThan(1);
+			await running.evaluate(() => {
+				Reflect.get(globalThis, 'wheelProbe').holdNext = true;
+			});
+			await page.mouse.wheel(0, 240);
+			await expect
+				.poll(() =>
+					running.evaluate(() => Boolean(Reflect.get(globalThis, 'wheelProbe').release))
+				)
+				.toBe(true);
+			await page.getByRole('tab', { name: 'rows.txt', exact: true }).click();
+			await expect(display).toHaveAttribute('aria-description', /ROW_\d+/);
+			const before = await top();
+			await display.hover();
+			await page.mouse.wheel(0, -240);
+			await expect.poll(top).toBeLessThan(before);
+			await running.evaluate(() => Reflect.get(globalThis, 'wheelProbe').release());
+			await page.getByRole('tab', { name: 'other.txt', exact: true }).click();
+			await expect(display).toHaveAttribute('aria-description', /OTHER_\d+/);
+			const restored = await top();
+			await display.hover();
+			await page.mouse.wheel(0, 240);
+			await expect.poll(top).toBeGreaterThan(restored);
+		});
+	} finally {
+		await running.evaluate(({ BrowserWindow }) => {
+			for (const window of BrowserWindow.getAllWindows()) window.destroy();
+		});
+		await running.close();
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
 test('an old scroll failure cannot reset the preview after changing editor settings', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-scroll-lifecycle-'));
 	const profile = join(root, 'profile');
@@ -31,6 +165,8 @@ test('an old scroll failure cannot reset the preview after changing editor setti
 	try {
 		const page = await running.firstWindow();
 		await page.addInitScript(installRowImageProbe);
+		// The IPC gates below hold individual requests, so use one request per gesture.
+		await page.emulateMedia({ reducedMotion: 'reduce' });
 		await page.reload();
 		const canvas = page.locator('canvas:visible');
 		await expect(canvas).toHaveAttribute('aria-description', /ROW_1/);

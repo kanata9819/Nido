@@ -30,6 +30,7 @@ export const windowsBaselineCases = [
 	'upward touchpad gestures stop at the first row while replies are delayed',
 	'touchpad horizontal scrolling reveals long lines and preserves ordinary editing',
 	'fast gestures reach both file edges without a slow final approach',
+	'wheel scrolling resumes after a pending Neovim command and across file tabs',
 	'fast wheel down moves during input with a cold viewport',
 	'fast wheel up moves during input with a cold viewport',
 	'fast wheel up moves when cached history is shorter than a wheel step',

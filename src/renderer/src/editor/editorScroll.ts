@@ -518,6 +518,17 @@ export class EditorScroll {
 			: window.nido.scroll(id, command.lines, command.follow, true);
 		onCompletion(
 			request
+				.then((result) => {
+					if (result !== false || this.disposed || generation !== this.generation) {
+						return;
+					}
+					// Neovim ignored this request while waiting for a key, so no redraw is coming.
+					this.acknowledge(true);
+					if (command.columns) {
+						this.stopHorizontal();
+					}
+					schedule();
+				})
 				.catch((error) => {
 					if (this.disposed || generation !== this.generation) {
 						return;
