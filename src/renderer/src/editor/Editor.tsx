@@ -15,6 +15,7 @@ import CompletionMenu from './popups/CompletionMenu';
 import StickyScroll from './StickyScroll';
 import NeovimUI from '../neovim/NeovimUI';
 import type { UITheme } from '../../../shared/types';
+import type { StickyScrollCoverage } from '../../../shared/nidoApi';
 import { defaultFontWeight } from '../settings/useEditorSettings';
 
 /** Settings and callbacks of one editor; `blocked` is true while a dialog covers it. */
@@ -74,6 +75,7 @@ function Editor({
 	// Functions the renderer installs: repaint, the sticky scroll repaint, and scroll.
 	const paint = useRef<() => void>(() => {});
 	const stickyPaint = useRef<(motionOffset: number) => void>(() => {});
+	const stickyCoverage = useRef<StickyScrollCoverage>(undefined);
 	const scroll = useRef<
 		(lines: number, follow: boolean, discrete: boolean, columns?: number) => void
 	>(() => {});
@@ -133,6 +135,7 @@ function Editor({
 		blocked: blocked || !active,
 		composingRef: composing,
 		paintRef: paint,
+		stickyCoverage,
 		onError
 	});
 
@@ -210,6 +213,7 @@ function Editor({
 					id={id}
 					grid={grid}
 					paintRef={stickyPaint}
+					coverageRef={stickyCoverage}
 					input={input}
 					scrollCompletion={scrollCompletion}
 					maxLines={stickyScrollMaxLines}

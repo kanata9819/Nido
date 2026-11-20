@@ -80,7 +80,20 @@ function registerGridHandlers({ handle, session, syncFocus }: EditorHandlerDeps)
 
 /** Keys, clicks, pastes and completion choices. */
 function registerInputHandlers({ handle, session }: EditorHandlerDeps): void {
-	handle('input', (id, keys) => session(id).input(text(keys)));
+	handle('input', (id, keys, sticky) => {
+		if (sticky === undefined) {
+			return session(id).input(text(keys));
+		}
+		if (sticky === null || typeof sticky !== 'object') {
+			throw new Error('Invalid Sticky Scroll coverage.');
+		}
+		const { window, buffer, rows } = sticky as Record<string, unknown>;
+		return session(id).input(text(keys), {
+			window: integer(window),
+			buffer: integer(buffer),
+			rows: integer(rows, 500)
+		});
+	});
 	handle('inputMode', (id) => session(id).inputMode());
 	handle('selectCompletion', (id, index) => {
 		if (typeof index !== 'number') {

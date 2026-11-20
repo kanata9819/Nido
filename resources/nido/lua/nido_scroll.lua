@@ -118,7 +118,7 @@ end
 
 --- Return to the anchored editing position. With `keep_view` (a mouse click) the view stays
 --- where it is and only the anchor is dropped.
-function M.restore(keep_view)
+function M.restore(keep_view, sticky)
   -- A mouse click changes the editing anchor, not the visible pixel offset.
   if keep_view then
     if not mouse_scrolloff then
@@ -163,6 +163,14 @@ function M.restore(keep_view)
         -- Reveal an off-screen edit position at the nearest edge with the normal scrolloff.
         if edge then
           vim.cmd.normal({args={edge}, bang=true})
+        end
+        if sticky and sticky.rows > vim.wo.scrolloff and sticky.window == saved.window and sticky.buffer == saved.buffer then
+          -- The header occupies part of the existing scrolloff, so reveal only any overlap.
+          local first_visible = math.min(sticky.rows + 1, math.max(1, api.nvim_win_get_height(0) - 3))
+          local hidden_rows = first_visible - vim.fn.winline()
+          if hidden_rows > 0 then
+            vim.cmd.normal({args={hidden_rows .. string.char(25)}, bang=true})
+          end
         end
       end)
     end

@@ -304,6 +304,7 @@ test('editor input sends AltGr characters without invoking clipboard shortcuts',
 			blocked: false,
 			composingRef: { current: false },
 			paintRef: { current: (): void => {} },
+			stickyCoverage: { current: undefined },
 			onError: (error): never => {
 				throw new Error(error);
 			}

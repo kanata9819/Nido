@@ -6,6 +6,7 @@
 //   - SessionPersistence / SessionHistory: saving and restoring state, and edit history
 //   - SessionUI / SessionOptions / SessionNavigation: UI attachment, options and code navigation
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import type { StickyScrollCoverage } from '../../shared/nidoApi';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -501,8 +502,8 @@ export class Session {
 	}
 
 	// Keyboard, mouse and scrolling (see SessionInteraction).
-	input(keys: string): Promise<void> {
-		return this.interaction.input(keys);
+	input(keys: string, sticky?: StickyScrollCoverage): Promise<void> {
+		return this.interaction.input(keys, sticky);
 	}
 
 	inputMode(): Promise<string> {

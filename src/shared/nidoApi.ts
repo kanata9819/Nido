@@ -133,11 +133,18 @@ export interface WorkspaceAPI {
 	wakeWorkspace(id: string): Promise<{ workspace: Workspace; errors: string[] }>;
 }
 
+/** Screen rows covered at the top of the current Neovim window by Sticky Scroll. */
+export interface StickyScrollCoverage {
+	window: number;
+	buffer: number;
+	rows: number;
+}
+
 /** A workspace's editor: its grid, input, settings and Run and Debug (ipc/editorHandlers.ts). */
 export interface EditorAPI {
 	attach(id: string, columns: number, rows: number): Promise<void>;
 	resize(id: string, columns: number, rows: number): Promise<void>;
-	input(id: string, keys: string): Promise<void>;
+	input(id: string, keys: string, sticky?: StickyScrollCoverage): Promise<void>;
 	inputMode(id: string): Promise<string>;
 	selectCompletion(id: string, index: number): Promise<void>;
 	markdownPreview(id: string, token?: string): Promise<MarkdownSnapshot>;

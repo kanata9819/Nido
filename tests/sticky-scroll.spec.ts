@@ -1,7 +1,8 @@
-import { test, expect, _electron as electron } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { electron } from './helpers/electron';
 import { launchEnv } from './helpers/launch-env';
 
 test('Sticky Scroll pins nested headers, jumps by mouse and keyboard, and saves its settings', async () => {
@@ -20,7 +21,18 @@ test('Sticky Scroll pins nested headers, jumps by mouse and keyboard, and saves 
 			...Array.from({ length: 30 }, (_, i) => `    after${i}();`),
 			'  }',
 			'}',
-			...Array.from({ length: 70 }, () => 'outside();')
+			...Array.from({ length: 70 }, () => 'outside();'),
+			'function outer() {',
+			'  if (ready) {',
+			'    for (const item of items) {',
+			'      while (item.ready) {',
+			'        if (item.active) {',
+			...Array.from({ length: 100 }, (_, i) => `alpha(beta, gamma); // ROW_${152 + i}`),
+			'        }',
+			'      }',
+			'    }',
+			'  }',
+			'}'
 		].join('\n')
 	);
 	await writeFile(
@@ -115,6 +127,27 @@ test('Sticky Scroll pins nested headers, jumps by mouse and keyboard, and saves 
 		await condition.click({ modifiers: ['Shift'] });
 		await page.keyboard.up('Shift');
 		await expect(page.locator('body')).toContainText('Ln 44, Col 1');
+
+		await page.keyboard.type(' ,');
+		await page.getByRole('checkbox', { name: 'Cursor follows scrolling' }).uncheck();
+		await page.keyboard.press('Escape');
+		await send('<Cmd>normal! 200Gzz0<CR>');
+		await expect(page.getByText('Ln 200, Col 1', { exact: true })).toBeVisible();
+		await expect(sticky.getByRole('button')).toHaveCount(5);
+		const topLine = async (): Promise<number> =>
+			Number((await display.getAttribute('aria-description'))?.match(/ROW_(\d+)/)?.[1]);
+		await page.evaluate(
+			async (lines) => {
+				const layout = await window.nido.restoreWorkspaces();
+				await window.nido.scroll(layout.workspaces[0].id, lines, false, true);
+			},
+			196 - (await topLine())
+		);
+		await expect.poll(topLine).toBe(196);
+		await page.keyboard.press('w');
+		await expect(page.getByText('Ln 200, Col 6', { exact: true })).toBeVisible();
+		await expect.poll(topLine).toBe(195);
+
 		await send('<Cmd>normal! 20Gzt<CR>');
 		await expect(sticky.getByRole('button')).toHaveCount(3);
 		await page.reload();
