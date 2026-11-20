@@ -907,6 +907,9 @@ export const japanese: Record<string, string> = {
 		'このワークスペースを閉じる前にすべてのファイルを保存します。無題のバッファーにはファイル名が必要です（:w path）。',
 	'Save all': 'すべて保存',
 	'Discard changes': '変更を破棄',
+	'Discard unsaved drafts in {name}?': '{name} の未保存の下書きを破棄しますか？',
+	'Open this workspace again to save its untitled buffers.':
+		'無題のバッファーを保存するには、このワークスペースをもう一度開いてください。',
 	'Discard this file’s unsaved changes?': 'このファイルの未保存の変更を破棄しますか？',
 	Discard: '破棄',
 	'Neovim command line': 'Neovimコマンドライン',

@@ -31,6 +31,33 @@ async function confirmClose({ window, state }: WorkspaceContext, s: Session): Pr
 }
 
 /**
+ * Ask before closing a sleeping workspace that still holds untitled drafts, such as one that
+ * could not start at launch: its drafts exist only in its saved state. Resolves false when the
+ * user keeps it.
+ */
+async function confirmDiscardDrafts(
+	{ window, state, registry }: WorkspaceContext,
+	id: string
+): Promise<boolean> {
+	const asleep = registry.sleeping.get(id);
+	if (!asleep?.saved.untitled?.length) {
+		return true;
+	}
+	const t = createTranslator(state.language ?? 'en');
+	const { response } = await dialog.showMessageBox(window, {
+		type: 'warning',
+		title: t('Unsaved changes'),
+		message: t('Discard unsaved drafts in {name}?', { name: asleep.workspace.name }),
+		detail: t('Open this workspace again to save its untitled buffers.'),
+		buttons: [t('Cancel'), t('Discard')],
+		defaultId: 0,
+		cancelId: 0,
+		noLink: true
+	});
+	return response === 1;
+}
+
+/**
  * Close a workspace's tab, asking first about unsaved files. Resolves false when the user
  * keeps it. Run it through registry.exclusive: whether the workspace is asleep is only known
  * once an earlier sleep or wake finishes.
@@ -41,6 +68,9 @@ export async function closeWorkspace(
 	running: () => Session
 ): Promise<boolean> {
 	const { registry, send, layout } = context;
+	if (registry.sleeping.has(id) && !(await confirmDiscardDrafts(context, id))) {
+		return false;
+	}
 	if (registry.forgetSleeping(id)) {
 		send({ type: 'exit', id });
 		await layout.saveReplacingBackup();
