@@ -1253,3 +1253,71 @@ test('grid updates preserve highlights, wide characters and scroll regions', () 
 		null
 	);
 });
+
+test('switching file tabs restores the scroll position, including a view scrolled away from the cursor', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-tab-view-'));
+	let session: Session | undefined;
+	try {
+		for (const name of ['long.txt', 'other.txt']) {
+			await writeFile(
+				join(root, name),
+				Array.from({ length: 1000 }, (_, i) => `line ${i + 1}`).join('\n')
+			);
+		}
+		session = await Session.create(root, () => {});
+		await session.openFile('other.txt');
+		const other = (await session.client.request('nvim_get_current_buf', [])) as number;
+		await session.openFile('long.txt');
+		const long = (await session.client.request('nvim_get_current_buf', [])) as number;
+		const view = async (): Promise<{ topline: number; lnum: number }> =>
+			(await session!.client.request('nvim_eval', ['winsaveview()'])) as {
+				topline: number;
+				lnum: number;
+			};
+		const away = async (): Promise<void> => {
+			await session!.selectBuffer(other);
+			await session!.selectBuffer(long);
+			await session!.client.request('nvim_eval', ['1']);
+		};
+		// A cursor near the bottom of the view stays there instead of being centered.
+		await session.client.request('nvim_exec_lua', [
+			'vim.fn.winrestview({topline=100, lnum=110, col=0})',
+			[]
+		]);
+		await session.client.request('nvim_command', ['redraw']);
+		const before = await view();
+		await away();
+		assert.deepEqual(await view(), before);
+
+		// A view scrolled away by the wheel comes back, and editing resumes at the cursor.
+		await session.scroll(200, false);
+		const scrolled = await view();
+		assert.ok(scrolled.topline > 250);
+		await away();
+		assert.equal((await view()).topline, scrolled.topline);
+		assert.deepEqual(
+			await session.client.request('nvim_exec_lua', [
+				"return require('nido_scroll').cursor()",
+				[]
+			]),
+			[before.lnum, 0]
+		);
+		await session.input('iX<Esc>');
+		await new Promise((done) => setTimeout(done, 50));
+		assert.equal(
+			await session.client.request('nvim_eval', [`getline(${before.lnum})`]),
+			`Xline ${before.lnum}`
+		);
+
+		// A jump made on returning wins over the remembered cursor.
+		await session.scroll(200, false);
+		await session.selectBuffer(other);
+		await session.openFile('long.txt', 900, 1);
+		await session.input('iY<Esc>');
+		await new Promise((done) => setTimeout(done, 50));
+		assert.equal(await session.client.request('nvim_eval', ['getline(900)']), 'Yline 900');
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
