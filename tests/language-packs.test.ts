@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+	mkdtemp,
+	mkdir,
+	readFile,
+	readdir,
+	realpath,
+	rm,
+	symlink,
+	writeFile
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
@@ -183,6 +192,40 @@ return response.result[1].label`),
 				(await session.languagePacks()).some((pack) => pack.id === manifest.id),
 				false
 			);
+		} finally {
+			await session?.stop();
+			await cleanup(root);
+		}
+	}
+);
+
+test(
+	'workspaces start without the bundled TypeScript server while the TypeScript pack is off',
+	{ timeout: 20000 },
+	async () => {
+		const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-pack-no-typescript-')));
+		// The bundled resources, except the TypeScript server the TypeScript pack starts.
+		const bundle = join(root, 'resources');
+		const workspace = join(root, 'workspace');
+		await mkdir(join(bundle, 'languages', 'node_modules'), { recursive: true });
+		await mkdir(workspace);
+		for (const name of await readdir(resources)) {
+			if (name !== 'languages') {
+				await symlink(join(resources, name), join(bundle, name));
+			}
+		}
+		let session: Session | undefined;
+		try {
+			const config = await discoverLanguagePacks(bundle);
+			await assert.rejects(
+				Session.create(workspace, () => {}, bundle, config),
+				/Bundled editor resource is missing: languages\/node_modules\/typescript-language-server/
+			);
+			session = await Session.create(workspace, () => {}, bundle, {
+				...config,
+				disabled: ['typescript']
+			});
+			assert.equal(await session.client.request('nvim_eval', ['1 + 1']), 2);
 		} finally {
 			await session?.stop();
 			await cleanup(root);

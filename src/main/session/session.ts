@@ -263,12 +263,22 @@ export class Session {
 		if (!(await stat(actual)).isDirectory()) {
 			throw new Error('Choose a project folder.');
 		}
+		const packs = languagePacks ?? (await discoverLanguagePacks(resources));
+		// The bundled TypeScript server belongs to the TypeScript pack; with the pack turned off,
+		// workspaces start without it.
+		const typescript = packs.packs.some(
+			(pack) => pack.adapter === 'typescript' && !packs.disabled.includes(pack.id)
+		);
 		for (const file of [
 			...(!remote ? [neovimBundle().executable] : ['nido/wsl-runtime.sh']),
 			'nido/init.lua',
 			'nido/session.lua',
-			'languages/node_modules/typescript-language-server/lib/cli.mjs',
-			'languages/node_modules/typescript/lib/tsserver.js'
+			...(typescript
+				? [
+						'languages/node_modules/typescript-language-server/lib/cli.mjs',
+						'languages/node_modules/typescript/lib/tsserver.js'
+					]
+				: [])
 		]) {
 			try {
 				await stat(resolve(resources, file));
@@ -297,9 +307,7 @@ export class Session {
 						'assert(vim.wait(10000, function() return vim.v.vim_did_enter == 1 end), "Neovim startup timed out")',
 						[]
 					]);
-					await session.reloadLanguagePacks(
-						languagePacks ?? (await discoverLanguagePacks(resources))
-					);
+					await session.reloadLanguagePacks(packs);
 				})(),
 				new Promise<never>((_, reject) => {
 					session.process.once('error', reject);
