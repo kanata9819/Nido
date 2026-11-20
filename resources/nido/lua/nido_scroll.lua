@@ -155,9 +155,15 @@ function M.restore(keep_view)
     api.nvim_buf_clear_namespace(saved.buffer, namespace, 0, -1)
     if not keep_view and pos and api.nvim_win_is_valid(saved.window) and api.nvim_win_get_buf(saved.window) == saved.buffer then
       api.nvim_win_call(saved.window, function()
-        saved.view.lnum = pos[1]
-        saved.view.col = pos[2]
-        vim.fn.winrestview(saved.view)
+        local view = vim.fn.winsaveview()
+        local edge = pos[1] < view.topline and 'zt' or pos[1] > vim.fn.line('w$') and 'zb'
+        view.lnum, view.col = pos[1], pos[2]
+        view.leftcol, view.curswant = saved.view.leftcol, saved.view.curswant
+        vim.fn.winrestview(view)
+        -- Reveal an off-screen edit position at the nearest edge with the normal scrolloff.
+        if edge then
+          vim.cmd.normal({args={edge}, bang=true})
+        end
       end)
     end
   end
