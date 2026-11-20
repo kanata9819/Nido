@@ -14,6 +14,7 @@ export default defineConfig({
 		'workspace-search.spec.ts',
 		'theme.spec.ts',
 		'scroll-boundary.spec.ts',
+		'scroll-lifecycle.spec.ts',
 		'fast-wheel.spec.ts',
 		'scroll-warm.spec.ts',
 		'canvas-sharpness.spec.ts',

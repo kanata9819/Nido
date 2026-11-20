@@ -547,7 +547,7 @@ export class Session {
 		return this.interaction.prefetchScroll(down, scrolling);
 	}
 
-	scroll(lines: number, follow = true, pixel = false, columns = 0): Promise<void> {
+	scroll(lines: number, follow = true, pixel = false, columns = 0): Promise<boolean> {
 		return this.interaction.scroll(lines, follow, pixel, columns);
 	}
 

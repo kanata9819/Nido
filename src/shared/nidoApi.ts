@@ -160,7 +160,7 @@ export interface EditorAPI {
 		follow?: boolean,
 		pixel?: boolean,
 		columns?: number
-	): Promise<void>;
+	): Promise<boolean>;
 	prefetchScroll(id: string, down?: boolean, scrolling?: boolean): Promise<void>;
 	jumpSticky(id: string, window: number, buffer: number, line: number): Promise<void>;
 	paste(id: string, text: string): Promise<void>;

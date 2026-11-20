@@ -703,7 +703,7 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
 			window.nido.scroll = async (...args) => {
 				node.dataset.pendingScrolls = String(++pendingScrolls);
 				try {
-					await scroll(...args);
+					return await scroll(...args);
 				} finally {
 					node.dataset.pendingScrolls = String(--pendingScrolls);
 				}

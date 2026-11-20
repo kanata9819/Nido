@@ -423,11 +423,11 @@ export class SessionInteraction {
 
 	/**
 	 * Scroll the viewport by `lines` (fractional with `pixel`) and `columns`. `follow` lets the
-	 * cursor follow the viewport.
+	 * cursor follow the viewport. Return false when no redraw will acknowledge the request.
 	 */
-	async scroll(lines: number, follow = true, pixel = false, columns = 0): Promise<void> {
+	async scroll(lines: number, follow = true, pixel = false, columns = 0): Promise<boolean> {
 		if (!lines && !columns) {
-			return;
+			return false;
 		}
 		if (columns) {
 			this.cancelPrefetch();
@@ -445,7 +445,7 @@ export class SessionInteraction {
 			try {
 				// Ignore the wheel while a command waits for its key.
 				if (await this.awaitingKey()) {
-					return;
+					return false;
 				}
 				this.scrollDetached = true;
 				if (this.workspace.kind === 'terminal') {
@@ -464,6 +464,7 @@ export class SessionInteraction {
 				// Publish the grid, fractional offset and anchored cursor as one frame, even for sub-line deltas.
 				this.events.endScrollBatch();
 			}
+			return true;
 		});
 	}
 
