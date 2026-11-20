@@ -31,12 +31,16 @@ vim.api.nvim_set_decoration_provider(vim.api.nvim_create_namespace('nido_viewpor
     local info = vim.fn.getwininfo(win)[1]
     local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
     local previous = views[win]
-    views[win] = {buffer=buffer, height=info.height, width=info.width,
+    -- :edit reuses an empty [No Name] buffer for the file, keeping its number; the renderer
+    -- must still drop rows cached for the empty buffer, or the wheel stays at its "end".
+    local name = vim.api.nvim_buf_get_name(buffer)
+    views[win] = {buffer=buffer, name=name, height=info.height, width=info.width,
       topline=view.topline, skipcol=view.skipcol, leftcol=view.leftcol, topfill=view.topfill}
-    if not previous or previous.buffer ~= buffer then
+    local switched = not previous or previous.buffer ~= buffer or previous.name ~= name
+    if switched then
       vim.rpcnotify(channel, 'nido:buffer', win, buffer, view.leftcol)
     end
-    if not previous or previous.buffer ~= buffer or previous.height ~= info.height
+    if switched or previous.height ~= info.height
         or previous.width ~= info.width
         -- Deleting lines can remove the old viewport; it has no valid scroll distance.
         or previous.topline > vim.api.nvim_buf_line_count(buffer) then
