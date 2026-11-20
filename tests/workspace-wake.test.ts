@@ -14,7 +14,18 @@ const testRequire = createRequire(__filename);
 const electronPath = testRequire.resolve('electron');
 const electron = new Module(electronPath);
 let userData: string;
-electron.exports = { app: { getPath: () => userData } };
+// Message boxes answer with `dialogResponse` and are counted.
+let dialogResponse = 0;
+let dialogs = 0;
+electron.exports = {
+	app: { getPath: () => userData },
+	dialog: {
+		showMessageBox: async () => {
+			dialogs++;
+			return { response: dialogResponse };
+		}
+	}
+};
 electron.loaded = true;
 testRequire.cache[electronPath] = electron;
 
@@ -388,7 +399,19 @@ test('concurrent renderer restorations share startup and retain restoration erro
 	assert.equal(check.created(), 1);
 });
 
-test('a workspace that cannot start at restore stays asleep with its drafts and wakes later', async (context) => {
+/**
+ * Restore two saved workspaces where the second holds an unsaved draft and cannot start until
+ * `reachable` is set. Returns the restoration and the handlers to act on it.
+ */
+async function failedRestoreFixture(context: TestContext): Promise<{
+	result: Awaited<NonNullable<AppState['restoration']>>;
+	handlers: Map<string, (...args: unknown[]) => unknown>;
+	sessions: Map<string, Session>;
+	restored: unknown[];
+	working: string;
+	unavailable: string;
+	setReachable: () => void;
+}> {
 	const root = await mkdtemp(join(tmpdir(), 'nido-restore-failure-'));
 	userData = root;
 	const working = join(root, 'working');
@@ -489,6 +512,22 @@ test('a workspace that cannot start at restore stays asleep with its drafts and 
 	const result = (await handlers.get('restore')!()) as Awaited<
 		NonNullable<AppState['restoration']>
 	>;
+	return {
+		result,
+		handlers,
+		sessions,
+		restored,
+		working,
+		unavailable,
+		setReachable: () => {
+			reachable = true;
+		}
+	};
+}
+
+test('a workspace that cannot start at restore stays asleep with its drafts and wakes later', async (context) => {
+	const { result, handlers, sessions, restored, working, unavailable, setReachable } =
+		await failedRestoreFixture(context);
 	assert.deepEqual(
 		result.workspaces.map(({ root, sleeping }) => [root, !!sleeping]),
 		[
@@ -501,7 +540,7 @@ test('a workspace that cannot start at restore stays asleep with its drafts and 
 	// The selection moves to the first tab rather than the one that failed.
 	assert.equal(result.active, result.workspaces[0].id);
 	// Selecting the tab once the folder is available again restores the draft.
-	reachable = true;
+	setReachable();
 	const asleep = result.workspaces[1].id;
 	await handlers.get('wake')!(asleep);
 	assert.ok(sessions.has(asleep));
@@ -511,4 +550,28 @@ test('a workspace that cannot start at restore stays asleep with its drafts and 
 		),
 		[['an unsaved idea']]
 	);
+});
+
+test('closing a sleeping workspace that kept drafts asks before discarding them', async (context) => {
+	const { result, handlers } = await failedRestoreFixture(context);
+	const [working, unavailable] = result.workspaces.map(({ id }) => id);
+	const close = (id: string): Promise<boolean> => handlers.get('close')!(id) as Promise<boolean>;
+	dialogs = 0;
+	// A sleeping workspace without drafts closes without asking.
+	assert.equal(await close(working), true);
+	assert.equal(dialogs, 0);
+	dialogResponse = 0;
+	assert.equal(await close(unavailable), false, 'Cancel keeps the tab and its drafts.');
+	assert.equal(dialogs, 1);
+	const kept = (await handlers.get('restore')!()) as Awaited<
+		NonNullable<AppState['restoration']>
+	>;
+	assert.deepEqual(
+		kept.workspaces.map(({ id }) => id),
+		[unavailable]
+	);
+	dialogResponse = 1;
+	assert.equal(await close(unavailable), true);
+	assert.equal(dialogs, 2);
+	dialogResponse = 0;
 });
