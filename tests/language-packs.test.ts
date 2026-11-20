@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { test } from 'node:test';
 import {
 	mkdtemp,
@@ -324,6 +325,37 @@ test(
 			await session.save();
 			assert.match(await readFile(join(root, 'main.py'), 'utf8'), /still editable/);
 		} finally {
+			await session?.stop();
+			await cleanup(root);
+		}
+	}
+);
+
+test(
+	'a workspace terminal starts its Neovim without language packs',
+	{ timeout: 20000 },
+	async () => {
+		const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-pack-terminal-')));
+		let session: Session | undefined;
+		const create = Session.create;
+		try {
+			session = await Session.create(root, () => {}, resources);
+			// The terminal's own Neovim needs a shell, so only its creation is observed.
+			let packs: unknown;
+			Session.create = (async (...args: Parameters<typeof Session.create>) => {
+				packs = args[3];
+				return {
+					workspace: { id: 'terminal' },
+					stopped: false,
+					startTerminal: async () => {},
+					process: new EventEmitter(),
+					stop: async () => {}
+				} as unknown as Session;
+			}) as typeof Session.create;
+			await session.openTerminal();
+			assert.deepEqual(packs, { packs: [], disabled: [], errors: [] });
+		} finally {
+			Session.create = create;
 			await session?.stop();
 			await cleanup(root);
 		}

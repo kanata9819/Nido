@@ -444,7 +444,14 @@ export class Session {
 			return this.terminal;
 		}
 		this.terminalStarting ??= (async () => {
-			const terminal = await Session.create(this.workspace.root, this.emit, this.resources);
+			// A terminal's Neovim shows only shells, so it starts no language servers. Loading
+			// the bundled packs there also ignored the user's choices and could run tool checks
+			// such as `tsc --version` each time the terminal opened.
+			const terminal = await Session.create(this.workspace.root, this.emit, this.resources, {
+				packs: [],
+				disabled: [],
+				errors: []
+			});
 			try {
 				await terminal.startTerminal(shell);
 				if (this.stopped) {
