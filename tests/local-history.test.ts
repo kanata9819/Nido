@@ -202,6 +202,25 @@ test('history retention bounds per-file revisions and total disk usage without t
 	assert.equal((await store.list(first)).length, 0);
 });
 
+test('history retention skips files another Nido process already pruned', async (context) => {
+	const root = await fixture(context);
+	const directory = join(root, 'history');
+	const limits = { versions: 3, historyBytes: 1800, totalBytes: 2400, files: 2 };
+	// Two Nido processes share one history folder, and each indexes it once.
+	const other = new LocalHistory(directory, limits);
+	await other.record(join(root, 'first.txt'), content('first\n'), 'saved');
+	await other.record(join(root, 'second.txt'), content('second\n'), 'saved');
+	const store = new LocalHistory(directory, limits);
+	assert.equal(await store.has(join(root, 'first.txt')), true);
+	// The other process prunes the oldest file, which this one still has in its index.
+	await other.record(join(root, 'third.txt'), content('third\n'), 'saved');
+	assert.equal(await other.has(join(root, 'first.txt')), false);
+	for (const name of ['fourth.txt', 'fifth.txt']) {
+		await store.record(join(root, name), content(`${name}\n`), 'saved');
+		assert.equal((await store.list(join(root, name))).length, 1);
+	}
+});
+
 test('history retention budgets escaped JSON and UTF-8 exactly and preserves history on overflow', async (context) => {
 	const root = await fixture(context);
 	const directory = join(root, 'history');
