@@ -1321,3 +1321,31 @@ test('switching file tabs restores the scroll position, including a view scrolle
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+test('opening a file into the empty start buffer drops the empty buffer scroll caches', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-scroll-reused-buffer-'));
+	const grid = new Grid();
+	let session: Session | undefined;
+	try {
+		await writeFile(
+			join(root, 'lines.txt'),
+			Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n')
+		);
+		session = await Session.create(root, (event) => {
+			if (event.type === 'redraw') grid.apply(event.events);
+		});
+		await session.attach(80, 24);
+		// A new workspace warms its caches on the empty buffer: both ends are reached at once.
+		await session.prefetchScroll(true);
+		assert.equal(grid.limitScroll(3), 0);
+		const empty = await session.client.request('nvim_eval', ['bufnr()']);
+		await session.openFile('lines.txt');
+		// :edit reuses that buffer, so its number alone does not show the switch.
+		assert.equal(await session.client.request('nvim_eval', ['bufnr()']), empty);
+		await new Promise((done) => setTimeout(done, 30));
+		assert.equal(grid.limitScroll(3), 3, 'the wheel must not stop at the empty buffer end');
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
