@@ -140,6 +140,14 @@ function M.restore(keep_view)
   local pos = M.cursor()
   local saved = anchor
   anchor = nil
+  if saved and saved.returned and api.nvim_win_is_valid(saved.window) then
+    -- A view brought back by a tab switch keeps its cursor only until something moves it:
+    -- a jump made on returning, such as opening a search result, must not be undone.
+    local cursor = api.nvim_win_get_cursor(saved.window)
+    if cursor[1] ~= saved.returned[1] or cursor[2] ~= saved.returned[2] then
+      pos = nil
+    end
+  end
   if saved then
     redraw_numbers(saved.window)
   end
@@ -453,6 +461,9 @@ function M.scroll(lines, follow, pixel, columns)
     return false
   end
   centered_view = nil
+  if anchor then
+    anchor.returned = nil
+  end
   local previous_anchor = anchor
   if follow then
     if anchor then
@@ -503,7 +514,68 @@ function M.scroll(lines, follow, pixel, columns)
   return changed
 end
 
-api.nvim_create_autocmd('BufLeave', {callback=function() M.restore() end})
+-- What each window last showed of each buffer: the view, and while scrolled away from the
+-- cursor, the anchored cursor and the view around it. Neovim itself keeps only the cursor and
+-- centers it when the buffer returns, which lost the scroll position on every tab switch.
+local views = {}
+
+local function editor_window(window, buffer)
+  return vim.bo[buffer].buftype == '' and api.nvim_win_get_config(window).relative == ''
+end
+
+local function remember_view()
+  local window, buffer = api.nvim_get_current_win(), api.nvim_get_current_buf()
+  if not editor_window(window, buffer) then
+    return
+  end
+  local entry = {view = vim.fn.winsaveview()}
+  local pos = M.cursor()
+  if pos and anchor.buffer == buffer and anchor.window == window then
+    entry.anchor = {pos = pos, view = anchor.view}
+  end
+  views[window] = views[window] or {}
+  views[window][buffer] = entry
+end
+
+local function restore_view(buffer)
+  local window = api.nvim_get_current_win()
+  local entry = views[window] and views[window][buffer]
+  if not entry or not editor_window(window, buffer) then
+    return
+  end
+  views[window][buffer] = nil
+  vim.fn.winrestview(entry.view)
+  local saved = entry.anchor
+  if not saved then
+    return
+  end
+  local last = api.nvim_buf_line_count(buffer)
+  local row = math.min(saved.pos[1], last)
+  local text = api.nvim_buf_get_lines(buffer, row - 1, row, false)[1] or ''
+  anchor = {
+    buffer = buffer, window = window, view = saved.view,
+    mark = api.nvim_buf_set_extmark(buffer, namespace, row - 1, math.min(saved.pos[2], #text), {right_gravity=false}),
+    returned = api.nvim_win_get_cursor(window),
+  }
+  redraw_numbers(window)
+  publish_offset()
+end
+
+api.nvim_create_autocmd('BufLeave', {callback=function()
+  remember_view()
+  M.restore()
+end})
+api.nvim_create_autocmd('BufWinEnter', {callback=function(args)
+  restore_view(args.buf)
+end})
+api.nvim_create_autocmd('BufWipeout', {callback=function(args)
+  for _, buffers in pairs(views) do
+    buffers[args.buf] = nil
+  end
+end})
+api.nvim_create_autocmd('WinClosed', {callback=function(args)
+  views[tonumber(args.match)] = nil
+end})
 api.nvim_create_autocmd({'CursorMoved', 'CursorMovedI', 'WinScrolled', 'WinResized'}, {callback=function()
   if anchor or mouse_scrolloff or vim.bo.buftype ~= '' or api.nvim_win_get_config(0).relative ~= '' then
     return
