@@ -70,33 +70,43 @@ for (const { delta, history, prefetchFirst, title } of scenarios) {
 		try {
 			const page = await running.firstWindow();
 			await page.addInitScript(installRowImageProbe);
+			// Hold the refill while wheel input is active, modeling a costly source/LSP redraw.
+			// With `upwardOnly`, downward refills pass and only an upward one is held and counted.
+			const holdPrefetches = (upwardOnly: boolean): Promise<void> =>
+				running.evaluate(({ ipcMain }, upwardOnly) => {
+					const handlers = (
+						ipcMain as unknown as {
+							_invokeHandlers: Map<string, (...args: unknown[]) => Promise<unknown>>;
+						}
+					)._invokeHandlers;
+					const prefetch = handlers.get('nido:prefetchScroll')!;
+					let release!: () => void;
+					const gate = new Promise<void>((resolve) => {
+						release = resolve;
+					});
+					const probe = { calls: 0, completed: 0, release };
+					Object.assign(globalThis, { wheelPrefetch: probe });
+					handlers.set('nido:prefetchScroll', async (...args) => {
+						// The arguments are the IPC event, the workspace id and the direction.
+						if (upwardOnly && args[2] === true) {
+							return prefetch(...args);
+						}
+						probe.calls++;
+						await gate;
+						try {
+							return await prefetch(...args);
+						} finally {
+							probe.completed++;
+						}
+					});
+				}, upwardOnly);
+			// The editor fills both caches while idle after loading, first below and then above.
+			// Hold before it starts, so a refill stays pending however quickly the machine loads;
+			// installed later, the refill can finish and fill the cache the test needs cold.
+			await holdPrefetches(prefetchFirst === true);
 			await page.reload();
 			const canvas = page.locator('canvas:visible');
 			await expect(canvas).toHaveAttribute('aria-description', /ROW_1000 /);
-			// Hold the refill while wheel input is active, modeling a costly source/LSP redraw.
-			await running.evaluate(({ ipcMain }) => {
-				const handlers = (
-					ipcMain as unknown as {
-						_invokeHandlers: Map<string, (...args: unknown[]) => Promise<unknown>>;
-					}
-				)._invokeHandlers;
-				const prefetch = handlers.get('nido:prefetchScroll')!;
-				let release!: () => void;
-				const gate = new Promise<void>((resolve) => {
-					release = resolve;
-				});
-				const probe = { calls: 0, completed: 0, release };
-				Object.assign(globalThis, { wheelPrefetch: probe });
-				handlers.set('nido:prefetchScroll', async (...args) => {
-					probe.calls++;
-					await gate;
-					try {
-						return await prefetch(...args);
-					} finally {
-						probe.completed++;
-					}
-				});
-			});
 			if (history) {
 				await page.evaluate(async (lines) => {
 					const restored = await window.nido.restoreWorkspaces();
@@ -168,7 +178,8 @@ for (const { delta, history, prefetchFirst, title } of scenarios) {
 				);
 			const start = await documentTop();
 			if (prefetchFirst) {
-				// A small upward gesture starts a refill before the sustained touchpad input.
+				// The upward refill is pending before the sustained touchpad input; a small upward
+				// gesture moves into the short cached history meanwhile.
 				await canvas.evaluate((node) =>
 					node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -1 }))
 				);
