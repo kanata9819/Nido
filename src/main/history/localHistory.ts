@@ -344,9 +344,7 @@ export class LocalHistory {
 				break;
 			}
 			// Only hash-named files discovered in this dedicated history directory are pruned.
-			// Another Nido process sharing the folder may have pruned it already; a missing file
-			// must not fail this write or every later one.
-			await rm(join(this.directory, file), { force: true });
+			await rm(join(this.directory, file));
 			this.entries.delete(file);
 			this.cache.delete(file);
 			total -= entry.bytes;
