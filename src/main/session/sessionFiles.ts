@@ -222,8 +222,15 @@ end`,
 			}
 			return relative(this.root, dirname(source));
 		}
-		const result = await this.destination(target);
-		if (isWithin(source, result)) {
+		// Renaming may change only the letter case, which Windows and macOS disks see as the same
+		// name: the existing entry is then the source itself.
+		const result = await this.destination(
+			target,
+			false,
+			action === 'rename' ? source : undefined
+		);
+		const caseOnly = result !== source && (await this.sameEntry(result, source));
+		if (!caseOnly && isWithin(source, result)) {
 			throw new Error('Cannot place a folder inside itself.');
 		}
 		if (
@@ -269,7 +276,11 @@ end`,
 	 * Resolve a new path which is not taken yet. Its parent must exist, unless `createParents`
 	 * is set: then the missing folders are created, inside the nearest existing one.
 	 */
-	private async destination(value: string, createParents = false): Promise<string> {
+	private async destination(
+		value: string,
+		createParents = false,
+		renaming?: string
+	): Promise<string> {
 		this.validate(value);
 		const parent = createParents
 			? await this.createParents(dirname(value))
@@ -284,7 +295,19 @@ end`,
 			}
 			throw error;
 		}
+		if (renaming && result !== renaming && (await this.sameEntry(result, renaming))) {
+			return result;
+		}
 		throw new Error('A file or folder already exists at that path.');
+	}
+
+	/** Whether `path` names the real path `entry`, for example in a different letter case. */
+	private async sameEntry(path: string, entry: string): Promise<boolean> {
+		try {
+			return (await realpath(path)) === entry;
+		} catch {
+			return false;
+		}
 	}
 
 	/** The folder at a project-relative path, after creating any of it that is missing. */
@@ -383,7 +406,7 @@ return false`,
 		]);
 		if (edited) {
 			// Undo the disk move before touching buffer names; never overwrite a new source.
-			await this.destination(relative(this.root, source));
+			await this.destination(relative(this.root, source), false, result);
 			await rename(result, source);
 			throw new Error(
 				'File changed during the move. The move was cancelled; save and try again.'

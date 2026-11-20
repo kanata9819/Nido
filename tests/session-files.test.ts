@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import fsp, {
+	mkdtemp,
+	mkdir,
+	readdir,
+	readFile,
+	realpath,
+	rm,
+	stat,
+	writeFile
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { test } from 'node:test';
 import type { NeovimClient } from 'neovim';
 import { SessionFiles } from '../src/main/session/sessionFiles';
@@ -172,5 +181,42 @@ test('whole-word search and replacement keep combining marks with their word', a
 		});
 	} finally {
 		matcher.close();
+	}
+});
+
+test('renaming may change only the letter case on disks that ignore it', async (t) => {
+	// Windows and macOS disks find readme.md when asked for README.md.
+	const onDisk = async (path: string): Promise<string> => {
+		const names = await readdir(dirname(path)).catch(() => []);
+		const name = names.find((entry) => entry.toLowerCase() === basename(path).toLowerCase());
+		return name ? join(dirname(path), name) : path;
+	};
+	const { lstat, realpath: resolveLinks } = fsp;
+	t.mock.method(fsp, 'lstat', async (path: string) => lstat(await onDisk(path)));
+	t.mock.method(fsp, 'realpath', async (path: string) => resolveLinks(await onDisk(path)));
+	const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-case-rename-')));
+	try {
+		await mkdir(join(root, 'docs'));
+		await writeFile(join(root, 'docs', 'readme.md'), 'contents\n');
+		await writeFile(join(root, 'notes.md'), 'notes\n');
+		const client = {
+			request: async (_method: string, args: unknown[]) =>
+				String(args[0]).includes('local result = {}') ? [] : false
+		} as unknown as NeovimClient;
+		const files = new SessionFiles(root, client);
+		assert.equal(
+			await files.fileAction('rename', 'docs/readme.md', 'docs/README.md', async () => {}),
+			join('docs', 'README.md')
+		);
+		assert.equal(await files.fileAction('rename', 'docs', 'Docs', async () => {}), 'Docs');
+		assert.deepEqual((await readdir(root)).sort(), ['Docs', 'notes.md']);
+		assert.deepEqual(await readdir(join(root, 'Docs')), ['README.md']);
+		// Another entry with the same name in a different case is still taken.
+		await assert.rejects(
+			files.fileAction('rename', 'notes.md', 'docs', async () => {}),
+			/already exists/
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
 	}
 });
