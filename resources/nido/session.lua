@@ -26,6 +26,33 @@ vim.api.nvim_create_autocmd('BufWipeout', {callback=function(event) edit_ticks[e
 -- Publish viewport movement during redraw, before its flush. WinScrolled runs
 -- after the flush and would leave a stale scroll notification in the next frame.
 local views = {}
+-- The renderer caches up to 256 rows on each side of the viewport (src/renderer/src/grid/grid.ts).
+local cached_rows = 256
+--- How many screen rows the lines around `topline` take: the viewport and the rows the renderer
+--- may cache above and below it. Folds and wrapping change it without editing the text.
+local function layout(win, topline, height, last)
+  local function rows(first, final)
+    return vim.api.nvim_win_text_height(win, {start_row=first, end_row=final}).all
+  end
+  local start = topline - 1
+  local below, finish, span = 0, start, height + cached_rows + 1
+  for _ = 1, 4 do
+    finish = math.min(last - 1, start + span - 1)
+    below = rows(start, finish)
+    if below > height + cached_rows or finish >= last - 1 then break end
+    span = span * 4
+  end
+  local above, first = 0, start
+  span = cached_rows + 1
+  for _ = 1, 4 do
+    if start == 0 then break end
+    first = math.max(0, start - span)
+    above = rows(first, start - 1)
+    if above > cached_rows or first == 0 then break end
+    span = span * 4
+  end
+  return {topline=topline, key=table.concat({first, above, finish, below}, ':')}
+end
 vim.api.nvim_set_decoration_provider(vim.api.nvim_create_namespace('nido_viewport'), {
   on_win = function(_, win, buffer)
     local info = vim.fn.getwininfo(win)[1]
@@ -34,11 +61,30 @@ vim.api.nvim_set_decoration_provider(vim.api.nvim_create_namespace('nido_viewpor
     -- :edit reuses an empty [No Name] buffer for the file, keeping its number; the renderer
     -- must still drop rows cached for the empty buffer, or the wheel stays at its "end".
     local name = vim.api.nvim_buf_get_name(buffer)
-    views[win] = {buffer=buffer, name=name, height=info.height, width=info.width,
+    local tick = vim.api.nvim_buf_get_changedtick(buffer)
+    local last = vim.api.nvim_buf_line_count(buffer)
+    views[win] = {buffer=buffer, name=name, height=info.height, width=info.width, tick=tick,
       topline=view.topline, skipcol=view.skipcol, leftcol=view.leftcol, topfill=view.topfill}
     local switched = not previous or previous.buffer ~= buffer or previous.name ~= name
     if switched then
       vim.rpcnotify(channel, 'nido:buffer', win, buffer, view.leftcol)
+    end
+    -- Opening or closing a fold, or toggling 'wrap', changes the rows around the viewport
+    -- without an edit; rows the renderer cached beyond the viewport no longer match.
+    -- An edit drops those caches itself, and a prefetch only visits other views.
+    local measured = previous and previous.layout
+    if require('nido_scroll').prefetching then
+      views[win].layout = measured
+    elseif switched or not measured or previous.tick ~= tick or previous.height ~= info.height
+        or previous.width ~= info.width or measured.topline > last then
+      views[win].layout = layout(win, view.topline, info.height, last)
+    else
+      local again = layout(win, measured.topline, info.height, last)
+      if again.key ~= measured.key then
+        vim.rpcnotify(channel, 'nido:layout')
+      end
+      views[win].layout = measured.topline == view.topline and again
+        or layout(win, view.topline, info.height, last)
     end
     if switched or previous.height ~= info.height
         or previous.width ~= info.width
