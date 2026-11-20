@@ -98,10 +98,18 @@ local function redraw_numbers(window)
   end
 end
 
+-- The cursor a prefetch started from: the window and its position. Prefetching scrolls the
+-- real view, which drags Neovim's cursor along; cached rows must still number from here.
+local prefetch_cursor
+
 function M.statuscolumn()
   local pos = M.cursor()
+  local owner = pos and anchor.window
+  if not pos and prefetch_cursor then
+    pos, owner = prefetch_cursor.pos, prefetch_cursor.window
+  end
   local window = vim.g.statusline_winid or api.nvim_get_current_win()
-  if not pos or window ~= anchor.window then
+  if not pos or window ~= owner then
     return M.number_column
   end
   -- Neovim moves its internal cursor to keep it visible; relative numbers use the edit anchor.
@@ -406,6 +414,7 @@ function M.prefetch(down, previous, scrolling)
   local depth = cached
   local at_edge = false
   M.prefetching = true
+  prefetch_cursor = {window=window, pos={view.lnum, view.col}}
   local ok, err = pcall(function()
     if cached > 0 then
       vim.cmd.normal({args={cached .. string.char(down and 5 or 25)}, bang=true})
@@ -444,6 +453,7 @@ function M.prefetch(down, previous, scrolling)
   end)
   -- The last redraw shows the real view again, so its guides are published.
   M.prefetching = false
+  prefetch_cursor = nil
   vim.fn.winrestview(view)
   vim.cmd.redraw()
   if not restored then

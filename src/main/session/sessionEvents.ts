@@ -242,6 +242,11 @@ export class SessionEvents {
 				this.pendingRedraw.push(['nido_buffer', args]);
 				break;
 			}
+			case 'nido:layout': {
+				// Folds or wrapping changed the rows around the viewport.
+				this.pendingRedraw.push(['nido_layout', []]);
+				break;
+			}
 			case 'nido:completion_refresh': {
 				this.sendToRenderer({
 					type: 'redraw',
