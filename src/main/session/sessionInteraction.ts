@@ -1,4 +1,5 @@
 import type { Workspace } from '../../shared/types';
+import type { StickyScrollCoverage } from '../../shared/nidoApi';
 import type { SessionClient } from './sessionClient';
 import type { SessionEvents } from './sessionEvents';
 
@@ -72,13 +73,13 @@ export class SessionInteraction {
 	}
 
 	/** Send keys in Neovim's key notation. */
-	input(keys: string): Promise<void> {
+	input(keys: string, sticky?: StickyScrollCoverage): Promise<void> {
 		// nvim_input can accept only part of a byte sequence when its input queue is full.
 		return this.enqueue(async () => {
 			if (this.stopped) {
 				throw new Error('Neovim session is closed.');
 			}
-			await this.restoreScroll();
+			await this.restoreScroll(sticky);
 			const terminal = this.workspace.kind === 'terminal';
 			if (terminal) {
 				// Neovim's own Ctrl+\ Ctrl+N also enters copy mode. Hold Ctrl+\ until the
@@ -319,11 +320,14 @@ export class SessionInteraction {
 	}
 
 	/** Return a scrolled-away viewport to the cursor, so the next action applies there. */
-	async restoreScroll(): Promise<void> {
+	async restoreScroll(sticky?: StickyScrollCoverage): Promise<void> {
 		if (!this.scrollDetached) {
 			return;
 		}
-		await this.client.request('nvim_exec_lua', ["require('nido_scroll').restore()", []]);
+		await this.client.request('nvim_exec_lua', [
+			"require('nido_scroll').restore(false, ...)",
+			sticky ? [sticky] : []
+		]);
 		this.scrollDetached = false;
 	}
 

@@ -149,6 +149,59 @@ test('wheel scrolling can retain the edit position and resumes input and paste a
 	}
 });
 
+test('word motions resume at the edit position without undoing vertical wheel scrolling', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-scroll-word-motion-'));
+	let session: Session | undefined;
+	try {
+		await writeFile(join(root, 'lines.txt'), Array(200).fill('alpha beta gamma').join('\n'));
+		session = await Session.create(root, () => {});
+		await session.attach(80, 24);
+		await session.openFile('lines.txt');
+		const view = (): Promise<{ topline: number; botline: number; lnum: number; col: number }> =>
+			session!.client.request('nvim_exec_lua', [
+				"vim.cmd.redraw(); local view = vim.fn.winsaveview(); view.botline = vim.fn.line('w$'); return view",
+				[]
+			]);
+		const line = 80;
+		const margin = 4;
+		const [window, buffer] = (await session.client.request('nvim_exec_lua', [
+			'return {vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()}',
+			[]
+		])) as [number, number];
+		for (const [key, column] of [
+			['w', 11],
+			['b', 0]
+		] as const) {
+			for (const [lines, rows] of [
+				[7, 3],
+				[7, 4],
+				[7, 5],
+				[60, 5],
+				[2, 5],
+				[-7, 5],
+				...[-60, -10, -2, 10, 60].map((lines) => [lines, 0])
+			]) {
+				await session.input(`${line}Gzz0w`);
+				await session.scroll(lines + 0.25, false, true);
+				const { topline, botline } = await view();
+				await session.input(key, rows ? { window, buffer, rows } : undefined);
+				const after = await view();
+				assert.equal(after.lnum, line);
+				assert.equal(after.col, column);
+				const expectedTop = topline + Math.max(0, line + margin - botline);
+				assert.equal(
+					after.topline,
+					Math.min(expectedTop, line - Math.max(margin, rows)),
+					`${key} after scrolling ${lines} lines with ${rows} rows covered`
+				);
+			}
+		}
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('keyboard movement and editing keep the cursor above pixel-scroll overscan', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-cursor-bottom-'));
 	const grid = new Grid();

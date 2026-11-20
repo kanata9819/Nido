@@ -1,6 +1,7 @@
 import { useI18n } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { StickyScrollState } from '../../../shared/types';
+import type { StickyScrollCoverage } from '../../../shared/nidoApi';
 import type { Grid } from '../grid/grid';
 import { stickyRows, type StickyRow } from './stickyHeaders';
 import styles from './StickyScroll.module.css';
@@ -13,6 +14,7 @@ interface Model {
 	top: number;
 	left: number;
 	width: number;
+	height: number;
 	lineHeight: number;
 	cellWidth: number;
 	background: string;
@@ -57,6 +59,7 @@ export default function StickyScroll({
 	id,
 	grid,
 	paintRef,
+	coverageRef,
 	input,
 	scrollCompletion,
 	maxLines,
@@ -68,6 +71,7 @@ export default function StickyScroll({
 	id: string;
 	grid: RefObject<Grid>;
 	paintRef: RefObject<(motionOffset: number) => void>;
+	coverageRef: RefObject<StickyScrollCoverage | undefined>;
 	input: RefObject<HTMLTextAreaElement | null>;
 	scrollCompletion: RefObject<Promise<void>>;
 	maxLines: number;
@@ -119,6 +123,7 @@ export default function StickyScroll({
 				horizontalOffset
 			} = surface;
 			if (!state || !cellHeight) {
+				coverageRef.current = undefined;
 				if (last !== null) {
 					last = null;
 					setModel(undefined);
@@ -156,6 +161,18 @@ export default function StickyScroll({
 				maxLines,
 				motionOffset
 			);
+			const coveredHeight = rows.length * cellHeight + (rows.at(-1)?.offset ?? 0);
+			let coveredRows = 0;
+			// The cursor resumes on grid rows with the fractional wheel offset cleared.
+			while (
+				coveredRows < state.height - 1 &&
+				surface.rowTop(state.top + coveredRows) - top < coveredHeight - 0.0001
+			) {
+				coveredRows++;
+			}
+			coverageRef.current = coveredRows
+				? { window: state.window, buffer: state.buffer, rows: coveredRows }
+				: undefined;
 			const next: Model | undefined = rows.length
 				? {
 						state,
@@ -163,6 +180,7 @@ export default function StickyScroll({
 						top: top + surfaceTop,
 						left: state.left * cellWidth + surfaceLeft,
 						width: state.width * cellWidth,
+						height: coveredHeight,
 						lineHeight: cellHeight,
 						cellWidth,
 						background,
@@ -179,8 +197,9 @@ export default function StickyScroll({
 		return () => {
 			cancelAnimationFrame(frame);
 			paintRef.current = () => {};
+			coverageRef.current = undefined;
 		};
-	}, [grid, paintRef, maxLines]);
+	}, [grid, paintRef, coverageRef, maxLines]);
 
 	if (!model) {
 		return null;
@@ -199,8 +218,6 @@ export default function StickyScroll({
 			input.current?.focus();
 		})().catch((error) => onError(String(error)));
 	};
-	// The last header can slide up as its scope scrolls out of view.
-	const lastOffset = model.rows.at(-1)?.offset ?? 0;
 	return (
 		<div
 			className={styles.sticky}
@@ -211,7 +228,7 @@ export default function StickyScroll({
 				top: model.top,
 				left: model.left,
 				width: model.width,
-				height: model.rows.length * model.lineHeight + lastOffset,
+				height: model.height,
 				background: model.background,
 				fontSize,
 				fontWeight,

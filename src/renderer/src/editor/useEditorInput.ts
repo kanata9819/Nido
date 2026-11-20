@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import type { StickyScrollCoverage } from '../../../shared/nidoApi';
 import { isAltGraph, vimKey } from '../keyboard/keyboard';
 import { afterEditorClick } from './editorClick';
 
@@ -15,6 +16,7 @@ interface UseEditorInputOptions {
 	blocked: boolean;
 	composingRef: RefObject<boolean>;
 	paintRef: RefObject<() => void>;
+	stickyCoverage: RefObject<StickyScrollCoverage | undefined>;
 	onError: (message: string) => void;
 }
 
@@ -28,6 +30,7 @@ export function useEditorInput({
 	blocked,
 	composingRef,
 	paintRef,
+	stickyCoverage,
 	onError
 }: UseEditorInputOptions): {
 	onFocus: (event: React.FocusEvent<HTMLTextAreaElement>) => void;
@@ -40,6 +43,9 @@ export function useEditorInput({
 } {
 	const send = (action: () => Promise<unknown>): void => {
 		void afterEditorClick(id, action).catch((e) => onError(String(e)));
+	};
+	const sendKeys = (keys: string): void => {
+		send(() => window.nido.input(id, keys, stickyCoverage.current));
 	};
 	const resetInput = (event: React.FocusEvent<HTMLTextAreaElement>): void => {
 		composingRef.current = false;
@@ -61,8 +67,7 @@ export function useEditorInput({
 			const committed = composingRef.current && !blocked;
 			composingRef.current = false;
 			if (committed && event.data) {
-				const text = typedText(event.data);
-				send(() => window.nido.input(id, text));
+				sendKeys(typedText(event.data));
 			}
 			event.currentTarget.value = '';
 			event.currentTarget.removeAttribute('data-composing');
@@ -78,7 +83,7 @@ export function useEditorInput({
 			}
 			const value = event.currentTarget.value;
 			if (value) {
-				send(() => window.nido.input(id, typedText(value)));
+				sendKeys(typedText(value));
 			}
 			event.currentTarget.value = '';
 		},
@@ -115,7 +120,7 @@ export function useEditorInput({
 			const key = vimKey(event.nativeEvent);
 			if (key) {
 				event.preventDefault();
-				send(() => window.nido.input(id, key));
+				sendKeys(key);
 			}
 		}
 	};

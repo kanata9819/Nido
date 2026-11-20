@@ -976,6 +976,7 @@ export const japanese: Record<string, string> = {
 		'このワークスペースの中のフォルダーを選んでください。',
 	'Expected an absolute path.': '絶対パスが必要です。',
 	'Invalid file selection.': 'ファイルの選択が正しくありません。',
+	'Invalid Sticky Scroll coverage.': 'スティッキースクロールの表示範囲が正しくありません。',
 	'File changed during the move. The move was cancelled; save and try again.':
 		'移動中にファイルが変更されたため、移動を取り消しました。保存してから、もう一度お試しください。',
 	'Finish the current Neovim command before doing this.':
