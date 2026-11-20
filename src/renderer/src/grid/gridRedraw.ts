@@ -55,6 +55,8 @@ export function readGridRedraw(events: Redraw): GridRedraw {
 				break;
 			case 'grid_clear':
 			case 'grid_resize':
+			case 'nido_layout':
+				// nido_layout: folds or wrapping changed the rows around the viewport (session.lua).
 				layoutReset = true;
 				break;
 			case 'mode_change':

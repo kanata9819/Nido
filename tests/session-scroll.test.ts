@@ -1402,3 +1402,150 @@ test('opening a file into the empty start buffer drops the empty buffer scroll c
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+test('opening folds drops scroll caches that ended at the folded end of the file', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-scroll-fold-'));
+	const grid = new Grid();
+	let session: Session | undefined;
+	try {
+		await writeFile(
+			join(root, 'lines.txt'),
+			Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n')
+		);
+		session = await Session.create(root, (event) => {
+			if (event.type === 'redraw') grid.apply(event.events);
+		});
+		await session.attach(80, 24);
+		await session.openFile('lines.txt');
+		await session.client.request('nvim_command', ['setlocal foldmethod=manual']);
+		await session.client.request('nvim_command', ['30,190fold']);
+		await session.input('gg');
+		await new Promise((done) => setTimeout(done, 30));
+		// The closed fold lets the refill reach the end of the file within a few rows.
+		await session.prefetchScroll(true);
+		await new Promise((done) => setTimeout(done, 30));
+		const folded = grid.limitScroll(1000);
+		assert.ok(folded < 100, `the folded file ends after ${folded} rows`);
+		// Opening the fold neither edits the text nor moves the viewport.
+		await session.input('zR');
+		await new Promise((done) => setTimeout(done, 30));
+		assert.ok(
+			grid.limitScroll(1000) > folded,
+			'the wheel must not stop where the closed fold used to end the file'
+		);
+		// The refill starts over from the viewport instead of the folded depth.
+		await session.prefetchScroll(true);
+		await new Promise((done) => setTimeout(done, 30));
+		assert.ok(grid.futureRows.length > 150, `${grid.futureRows.length} opened rows cached`);
+		// Closing it again must not leave the opened rows cached either.
+		await session.input('zE');
+		await session.client.request('nvim_command', ['30,190fold']);
+		await new Promise((done) => setTimeout(done, 30));
+		assert.ok(
+			grid.futureRows.every(
+				(row) => !/line (3\d|1[0-8]\d)\b/.test(row.map((cell) => cell.text).join(''))
+			),
+			'rows hidden by the new fold must not stay cached below the viewport'
+		);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('toggling word wrap drops scroll caches measured with the other wrapping', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-scroll-wrap-'));
+	const grid = new Grid();
+	let session: Session | undefined;
+	try {
+		await writeFile(
+			join(root, 'lines.txt'),
+			Array.from({ length: 60 }, (_, i) => `line ${i + 1} ${'x'.repeat(150)}`).join('\n')
+		);
+		session = await Session.create(root, (event) => {
+			if (event.type === 'redraw') grid.apply(event.events);
+		});
+		await session.attach(80, 24);
+		await session.openFile('lines.txt');
+		await session.setWordWrap(false);
+		await session.input('gg');
+		await new Promise((done) => setTimeout(done, 30));
+		await session.prefetchScroll(true);
+		await new Promise((done) => setTimeout(done, 30));
+		const unwrapped = grid.limitScroll(1000);
+		assert.ok(unwrapped < 60, `the unwrapped file ends after ${unwrapped} rows`);
+		await session.setWordWrap(true);
+		await new Promise((done) => setTimeout(done, 30));
+		assert.ok(
+			grid.limitScroll(1000) > unwrapped,
+			'the wheel must not stop where the unwrapped lines ended'
+		);
+		// The refill must start over too: continuing from the unwrapped depth would skip rows
+		// and leave the renderer with an end-of-file mark but no rows to reach it.
+		await session.prefetchScroll(true);
+		await new Promise((done) => setTimeout(done, 30));
+		assert.equal(grid.limitScroll(1000), grid.futureRows.length);
+		assert.ok(grid.futureRows.length > 100, `${grid.futureRows.length} wrapped rows cached`);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('prefetched rows number their lines from the real cursor', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-scroll-prefetch-numbers-'));
+	const grid = new Grid();
+	let session: Session | undefined;
+	try {
+		await writeFile(
+			join(root, 'lines.txt'),
+			Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n')
+		);
+		session = await Session.create(root, (event) => {
+			if (event.type === 'redraw') grid.apply(event.events);
+		});
+		await session.attach(80, 24);
+		await session.openFile('lines.txt');
+		const checkCache = (relative: boolean): void => {
+			let checked = 0;
+			for (const row of grid.futureRows) {
+				const text = row.map((cell) => cell.text).join('');
+				const match = text.match(/^\s*(\d+)\s+line (\d+)\s*$/);
+				if (!match) continue;
+				const line = Number(match[2]);
+				// The cursor stays on line 1, above every cached row.
+				assert.equal(
+					Number(match[1]),
+					relative ? line - 1 : line,
+					`number of line ${line}`
+				);
+				const first = text.indexOf(match[1]);
+				for (const cell of row.slice(first, first + match[1].length)) {
+					assert.equal(
+						grid.highlights.get(cell.highlight)?.foreground,
+						0x858585,
+						`line ${line} is not the cursor line`
+					);
+				}
+				checked++;
+			}
+			assert.ok(checked > 100, `checked ${checked} cached rows`);
+		};
+		for (const relative of [false, true]) {
+			await session.setRelativeLineNumbers(relative);
+			await session.input('gg');
+			await new Promise((done) => setTimeout(done, 30));
+			// An edit drops the caches, so the refill draws every row again.
+			await session.input('x');
+			await session.input('u');
+			await new Promise((done) => setTimeout(done, 30));
+			await session.prefetchScroll(true);
+			await new Promise((done) => setTimeout(done, 30));
+			checkCache(relative);
+			assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), [1, 0]);
+		}
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});

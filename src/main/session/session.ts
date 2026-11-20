@@ -193,6 +193,7 @@ export class Session {
 			if (
 				method === 'nido:buffer' ||
 				method === 'nido:edit' ||
+				method === 'nido:layout' ||
 				(method === 'redraw' &&
 					(args as [string, ...unknown[][]][]).some(
 						([name]) => name === 'grid_clear' || name === 'grid_resize'
