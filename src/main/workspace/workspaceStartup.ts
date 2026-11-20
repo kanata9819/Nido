@@ -149,7 +149,9 @@ export class WorkspaceStartup {
 			errors.push(`Workspace restore failed: ${String(error)}`);
 		}
 		state.order = registry.orderedIds();
-		state.active ||= state.order[0] || '';
+		// When the selected workspace could not start, select one that did.
+		state.active ||=
+			state.order.find((id) => registry.sessions.has(id)) || state.order[0] || '';
 		return {
 			workspaces: state.order.map((id) => registry.describe(id)),
 			active: state.active,
@@ -189,7 +191,15 @@ export class WorkspaceStartup {
 		} catch (error) {
 			await s?.stop();
 			errors.push(`${workspace.root}: ${String(error)}`);
-			return undefined;
+			if (workspace.kind === 'terminal') {
+				return undefined;
+			}
+			// Keep the tab asleep with its saved state, unsaved drafts included: a folder or WSL
+			// distribution that is unavailable now may start later, and selecting the tab tries
+			// again. Dropping it would remove it from the next saved layout and lose the drafts.
+			const asleep = sleepingWorkspace(workspace);
+			registry.sleeping.set(asleep.id, { workspace: asleep, saved: workspace });
+			return asleep.id;
 		}
 	}
 }
