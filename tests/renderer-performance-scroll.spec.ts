@@ -648,6 +648,8 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 				const text = prototype.fillText;
 				const gpu = WebGL2RenderingContext.prototype;
 				const upload = gpu.texImage2D;
+				const drawRow = gpu.drawArrays;
+				const drawBatch = gpu.drawArraysInstanced;
 				const work = {
 					reads: 0,
 					writes: 0,
@@ -656,7 +658,8 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 					editedGlyphs: 0,
 					uploads: 0,
 					cachedUploads: 0,
-					editedUploads: 0
+					editedUploads: 0,
+					drawCalls: 0
 				};
 				prototype.getImageData = function (...args) {
 					work.reads++;
@@ -673,6 +676,14 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 				gpu.texImage2D = function (...args) {
 					work.uploads++;
 					return Reflect.apply(upload, this, args);
+				};
+				gpu.drawArrays = function (...args) {
+					work.drawCalls++;
+					return drawRow.apply(this, args);
+				};
+				gpu.drawArraysInstanced = function (...args) {
+					work.drawCalls++;
+					return drawBatch.apply(this, args);
 				};
 				const durations: number[] = [];
 				let coldMs = 0;
@@ -721,6 +732,8 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 					prototype.putImageData = write;
 					prototype.fillText = text;
 					gpu.texImage2D = upload;
+					gpu.drawArrays = drawRow;
+					gpu.drawArraysInstanced = drawBatch;
 				}
 				durations.sort((a, b) => a - b);
 				return {
@@ -742,6 +755,13 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 			expect(work.writes, 'fractional motion must avoid per-frame CPU pixel uploads').toBe(0);
 			expect(work.cachedUploads, 'cached motion must reuse GPU textures').toBe(0);
 			expect(work.editedUploads, 'edits upload only changed rows').toBeLessThanOrEqual(4);
+			if (work.uploads > 0) {
+				expect(work.drawCalls).toBeGreaterThan(0);
+				expect(
+					work.drawCalls,
+					'49 rows need at most seven batches per frame'
+				).toBeLessThanOrEqual(33 * 7);
+			}
 			if (softwareGpu) {
 				// SwiftShader verifies GPU behavior on the CPU; its elapsed time
 				// cannot be compared with the normal rendering frame budget.

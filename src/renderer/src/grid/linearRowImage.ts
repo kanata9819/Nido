@@ -13,15 +13,20 @@ interface Texture {
 interface Program {
 	image: WebGLProgram;
 	viewport: WebGLUniformLocation | null;
-	row: WebGLUniformLocation | null;
-	phase: WebGLUniformLocation | null;
+	rows: WebGLUniformLocation | null;
 }
 
-// Places a row's quad on the canvas. `row` is (top, width, height) in device pixels.
+const batchSize = 8;
+
+// Places each row's quad. The packed attributes are top, width, height, and fractional phase.
 const vertex = `#version 300 es
 uniform vec2 viewport;
-uniform vec3 row;
+uniform vec4 rows[${batchSize}];
+flat out vec4 row;
+flat out int imageIndex;
 void main() {
+    imageIndex = gl_InstanceID;
+    row = rows[gl_InstanceID];
     vec2 corner = vec2(gl_VertexID & 1, gl_VertexID >> 1);
     // Leave fractional row boundaries to the native alpha compositor.
     vec2 pixel = vec2(corner.x * row.y, row.x + 1.0 + corner.y * (row.z - 1.0));
@@ -32,17 +37,23 @@ void main() {
 // in linear light, then encodes the result back to sRGB.
 const fragment = `#version 300 es
 precision highp float;
-uniform sampler2D source;
+uniform sampler2D sources[${batchSize}];
 uniform vec2 viewport;
-uniform vec3 row;
-uniform float phase;
+flat in vec4 row;
+flat in int imageIndex;
 out vec4 color;
+vec3 samplePixel(ivec2 pixel) {
+    switch (imageIndex) {
+${Array.from({ length: batchSize - 1 }, (_, i) => `        case ${i}: return texelFetch(sources[${i}], pixel, 0).rgb;`).join('\n')}
+        default: return texelFetch(sources[${batchSize - 1}], pixel, 0).rgb;
+    }
+}
 void main() {
     ivec2 pixel = ivec2(gl_FragCoord.x, viewport.y - gl_FragCoord.y - row.x);
     // sRGB textures decode before interpolation, preserving actual light.
-    vec3 current = texelFetch(source, pixel, 0).rgb;
-    vec3 previous = texelFetch(source, pixel - ivec2(0, 1), 0).rgb;
-    vec3 light = mix(current, previous, phase);
+    vec3 current = samplePixel(pixel);
+    vec3 previous = samplePixel(pixel - ivec2(0, 1));
+    vec3 light = mix(current, previous, row.w);
     vec3 encoded = mix(12.92 * light, 1.055 * pow(light, vec3(1.0 / 2.4)) - 0.055,
                        step(vec3(0.0031308), light));
     color = vec4(encoded, 1.0);
@@ -69,6 +80,8 @@ export class LinearRowImages {
 	private cachedPixels = 0;
 	private maxPixels = 0;
 	private painted = false;
+	private readonly batch = new Float32Array(batchSize * 4);
+	private batchCount = 0;
 	private unavailable = false;
 	private pending: { source: HTMLCanvasElement; top: number }[] = [];
 
@@ -107,6 +120,7 @@ export class LinearRowImages {
 		}
 		this.maxPixels = width * height * 2;
 		this.painted = false;
+		this.batchCount = 0;
 		this.pending = [];
 		return true;
 	}
@@ -175,11 +189,12 @@ export class LinearRowImages {
 		if (phase < 0.000001 || phase > 0.999999) {
 			return;
 		}
+		const gl = this.gl!;
+		gl.activeTexture(gl.TEXTURE0 + this.batchCount);
 		const texture = this.prepare(source);
 		if (!texture) {
 			return;
 		}
-		const gl = this.gl!;
 		if (!this.painted) {
 			// Native-position rows already use Canvas2D. Upload only rows that
 			// actually need fractional correction, including after gutter edits.
@@ -190,10 +205,25 @@ export class LinearRowImages {
 			gl.clear(gl.COLOR_BUFFER_BIT);
 		}
 		gl.bindTexture(gl.TEXTURE_2D, texture);
-		gl.uniform3f(this.program!.row, origin, source.width, source.height);
-		gl.uniform1f(this.program!.phase, phase);
-		gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+		const offset = this.batchCount * 4;
+		this.batch[offset] = origin;
+		this.batch[offset + 1] = source.width;
+		this.batch[offset + 2] = source.height;
+		this.batch[offset + 3] = phase;
 		this.painted = true;
+		this.batchCount++;
+		if (this.batchCount === batchSize) {
+			this.drawBatch();
+		}
+	}
+
+	private drawBatch(): void {
+		if (this.batchCount) {
+			const gl = this.gl!;
+			gl.uniform4fv(this.program!.rows, this.batch, 0, this.batchCount * 4);
+			gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.batchCount);
+			this.batchCount = 0;
+		}
 	}
 
 	/** Draw the queued rows and composite them onto the editor canvas, then trim the cache. */
@@ -202,6 +232,7 @@ export class LinearRowImages {
 		for (const { source, top } of this.pending) {
 			this.paintRow(source, top);
 		}
+		this.drawBatch();
 		if (this.painted) {
 			context.save();
 			context.beginPath();
@@ -248,11 +279,15 @@ export class LinearRowImages {
 			gl.deleteProgram(program);
 			return;
 		}
+		gl.useProgram(program);
+		gl.uniform1iv(
+			gl.getUniformLocation(program, 'sources[0]'),
+			Int32Array.from({ length: batchSize }, (_, i) => i)
+		);
 		return {
 			image: program,
 			viewport: gl.getUniformLocation(program, 'viewport'),
-			row: gl.getUniformLocation(program, 'row'),
-			phase: gl.getUniformLocation(program, 'phase')
+			rows: gl.getUniformLocation(program, 'rows[0]')
 		};
 	}
 }
