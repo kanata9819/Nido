@@ -201,10 +201,12 @@ local function refresh(buffer)
     redraw()
     return
   end
-  local lines = api.nvim_buf_get_lines(buffer, 0, -1, false)
+  local previous = entries[buffer]
+  -- Bracket analysis can finish after this edit's first scope refresh.
+  local lines = previous and previous.tick == tick and previous.lines
+    or api.nvim_buf_get_lines(buffer, 0, -1, false)
   -- Match the existing bracket scanner's bound; never scan a huge file during scrolling.
   local scopes = api.nvim_buf_call(buffer, function() return fallback(buffer, lines) end)
-  local previous = entries[buffer]
   local entry = {tick=tick, lines=lines, scopes=sort(scopes),
     methods=method_separators and api.nvim_buf_call(buffer, function() return fallback_methods(lines) end) or nil,
     highlights=previous and previous.highlights or {},

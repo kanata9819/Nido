@@ -29,6 +29,9 @@ local function before(a, b)
 end
 table.sort(pairs, function(a, b) return before(a.last, b.last) end)
 local index = factory.new(pairs)
+local collect, finish = factory.collect(index)
+for _, pair in ipairs(pairs) do collect(pair.first, pair.last) end
+assert(finish() == index, 'An identical scan should reuse the complete index')
 for row=-1,201 do
   for column=0,20 do
     local cursor, expected = {row=row, column=column}, nil
@@ -79,6 +82,9 @@ for row=0,205 do
 end
 for _,pair in ipairs(pairs) do index.invalidate(pair.first) end
 assert(index.innermost(10,6)==nil and #index.overlapping(0,300)==0,'Removing all leaves must empty the index')
+local restore, rebuild = factory.collect(index)
+restore(pairs[1].first, pairs[1].last)
+assert(rebuild() ~= index, 'An invalidated index must be rebuilt before publishing')
 `,
 			[]
 		]);

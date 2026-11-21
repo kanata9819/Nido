@@ -10,6 +10,7 @@ end
 -- The parser closes nested pairs in endpoint order. Store the earliest opening
 -- in each balanced range so cursor and viewport queries can skip unrelated pairs.
 function M.new(pairs, work)
+  local result = {pairs=pairs, reusable=true}
   local starts, ends, leaves = {}, {}, {}
   local function bounds(node)
     local left, right = starts[node * 2], starts[node * 2 + 1]
@@ -69,6 +70,7 @@ function M.new(pairs, work)
   local function invalidate(position)
     local node = leaves[position]
     if not node then return end
+    result.reusable = false
     starts[node], ends[node] = nil, nil
     while node > 1 do
       node = math.floor(node / 2)
@@ -76,7 +78,28 @@ function M.new(pairs, work)
     end
   end
 
-  return {innermost=innermost, overlapping=overlapping, invalidate=invalidate}
+  result.innermost, result.overlapping, result.invalidate = innermost, overlapping, invalidate
+  return result
+end
+
+function M.collect(previous)
+  local pairs = {}
+  local reused = previous and previous.reusable
+  local function add(first, last, color)
+    local offset = #pairs + 1
+    local old = previous and previous.pairs[offset]
+    if old and old.first == first and old.last == last and old.color == color then
+      pairs[offset] = old
+    else
+      reused = false
+      pairs[offset] = {first=first, last=last, color=color}
+    end
+  end
+  local function finish(work)
+    if reused and #pairs == #previous.pairs then return previous end
+    return M.new(pairs, work)
+  end
+  return add, finish
 end
 
 return M

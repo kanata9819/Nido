@@ -65,10 +65,15 @@ local function match_brackets()
 end
 
 --- Whether a position is inside a comment, string, or character literal.
-local function ignored(row, column, comments_only)
+local function ignored(row, column, comments_only, known)
   for _, id in ipairs(vim.fn.synstack(row, column)) do
-    local name = vim.fn.synIDattr(id, 'name'):lower()
-    if name:find('comment') or (not comments_only and (name:find('string') or name:find('character'))) then
+    local kind = known and known[id]
+    if kind == nil then
+      local name = vim.fn.synIDattr(id, 'name'):lower()
+      kind = name:find('comment') and 1 or (name:find('string') or name:find('character')) and 2 or 0
+      if known then known[id] = kind end
+    end
+    if kind == 1 or (kind == 2 and not comments_only) then
       return true
     end
   end
@@ -210,7 +215,8 @@ local function update(buffer, ticket)
           changed[row] = marks[row]
           marks[row] = nil
         end
-        if new_last ~= last then
+        local moved = new_last ~= last
+        if moved then
           local shifted = {}
           for row, items in pairs(marks) do
             local target = row >= last and row + new_last - last or row
@@ -228,6 +234,7 @@ local function update(buffer, ticket)
             local line = pos[1] and lines[pos[1] - first + 1]
             if line and pos[3].end_row == pos[1] and pos[3].end_col == pos[2] + 1
                 and line:sub(pos[2] + 1, pos[2] + 1) == mark.text then
+              moved = moved or mark.position.row ~= pos[1] or mark.position.column ~= pos[2]
               mark.position.row, mark.position.column = pos[1], pos[2]
               marks[pos[1]] = marks[pos[1]] or {}
               marks[pos[1]][pos[2]] = mark
@@ -239,6 +246,11 @@ local function update(buffer, ticket)
         end
         -- Recompute bounds only after all surviving endpoints have their native coordinates.
         for _, position in ipairs(invalid) do invalidate_position(buf, position) end
+        -- Tree bounds reference endpoints, so a move can change which endpoint owns a bound.
+        if moved then
+          if match_indices[buf] then match_indices[buf].reusable = false end
+          if scope_indices[buf] then scope_indices[buf].reusable = false end
+        end
         marks_by_buffer[buf] = marks
       end,
       on_detach = function(_, buf)
@@ -277,11 +289,13 @@ local function update(buffer, ticket)
         started = vim.uv.hrtime()
       end
     end
-    local matches, scopes = {}, {}
+    local match, finish_matches = index.collect(match_indices[buffer])
+    local scope, finish_scopes = index.collect(scope_indices[buffer])
     local stack = {}
+    local syntax_kinds = {}
     for row, line in ipairs(api.nvim_buf_get_lines(buffer, 0, -1, false)) do
       for column, bracket in line:gmatch('()([%(%)%[%]{}])') do
-        if not ignored(row, column) then
+        if not ignored(row, column, false, syntax_kinds) then
           if not closing[bracket] then
             stack[#stack + 1] = { row = row - 1, column = column - 1, bracket = bracket }
           elseif #stack > 0 and stack[#stack].bracket == closing[bracket] then
@@ -289,14 +303,9 @@ local function update(buffer, ticket)
             local opening = table.remove(stack)
             opening = highlight(opening, group, opening.bracket)
             local ending = highlight({row=row - 1, column=column - 1}, group, bracket)
-            table.insert(matches, {
-              first=opening, last=ending,
-            })
+            match(opening, ending)
             if opening.row < row - 1 then
-              table.insert(scopes, {
-                first=opening, last=ending,
-                color=colors[(#stack % #colors) + 1],
-              })
+              scope(opening, ending, colors[(#stack % #colors) + 1])
             end
           end
         end
@@ -316,10 +325,10 @@ local function update(buffer, ticket)
       if next(items) == nil then marks[row] = nil end
     end
     -- Build within the same yielding task; incomplete or obsolete indices stay private.
-    local matches_index = index.new(matches, yield_if_busy)
-    local scopes_index = index.new(scopes, yield_if_busy)
+    local matches_index = finish_matches(yield_if_busy)
+    local scopes_index = finish_scopes(yield_if_busy)
     match_indices[buffer], scope_indices[buffer] = matches_index, scopes_index
-    pairs_by_buffer[buffer], parsed_ticks[buffer] = scopes, tick
+    pairs_by_buffer[buffer], parsed_ticks[buffer] = scopes_index.pairs, tick
   end)
   local function resume()
     if pending[buffer] ~= ticket then return end
