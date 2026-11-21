@@ -726,7 +726,7 @@ test('A new diff clears the previous highlighting failure', async ({ page }) => 
 	await expect(page.locator('[data-git-scroll="after"]')).toContainText('after');
 });
 
-test('large Git diffs skip highlight transfer and the exact limit still requests colors', async ({
+test('large Git diffs skip highlight preparation and the exact limit still requests colors', async ({
 	page
 }) => {
 	await page.goto(`${origin}?view=highlight`);
@@ -740,12 +740,33 @@ test('large Git diffs skip highlight transfer and the exact limit still requests
 				}))
 		);
 	await expect.poll(highlightRequests).toHaveLength(1);
+	await page.evaluate(() => {
+		let joins = 0;
+		const join = Array.prototype.join;
+		Array.prototype.join = function (separator) {
+			const first = this[0];
+			if (
+				separator === '\n' &&
+				typeof first === 'string' &&
+				(first.startsWith('highlight probe before ') ||
+					first.startsWith('oversized.ts source '))
+			) {
+				joins++;
+			}
+			return join.call(this, separator);
+		};
+		Object.assign(window, { diffHighlightJoins: () => joins });
+	});
 	const renderDiff = (path: string, length: number): Promise<void> =>
 		page.evaluate(
 			({ path, length }) => {
-				const before = 'before '.padEnd(64_000, 'a');
-				const after = `${path} source `.padEnd(length - before.length, 'b');
-				window.rendererTest.render({ path, diff: `@@ -1 +1 @@\n-${before}\n+${after}\n` });
+				const before = 'highlight probe before '.padEnd(64_000, 'a');
+				// The newline and shared context line add two characters per side.
+				const after = `${path} source `.padEnd(length - before.length - 4, 'b');
+				window.rendererTest.render({
+					path,
+					diff: `@@ -1,2 +1,2 @@\n-${before}\n+${after}\n x\n`
+				});
 			},
 			{ path, length }
 		);
@@ -759,6 +780,11 @@ test('large Git diffs skip highlight transfer and the exact limit still requests
 			})
 	);
 	expect(await highlightRequests()).toHaveLength(1);
+	expect(
+		await page.evaluate(() =>
+			(window as unknown as { diffHighlightJoins(): number }).diffHighlightJoins()
+		)
+	).toBe(0);
 
 	await renderDiff('at-limit.ts', 128_000);
 	await expect

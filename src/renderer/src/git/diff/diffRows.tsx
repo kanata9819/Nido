@@ -13,7 +13,7 @@ type Spans = ReferencePreview['lines'][number];
 /** What drawing a row needs to know about the whole diff. */
 export interface DiffRowContext {
 	rows: DiffRow[];
-	sources: [SideSource, SideSource];
+	sources: [SideSource, SideSource] | undefined;
 	emphasis: (index: number) => DiffEmphasis | undefined;
 	highlighted: HighlightedSides | undefined;
 	/** The diff row of the change selected with n/N, if any. */
@@ -64,9 +64,8 @@ function lineContent(context: DiffRowContext, side: Side, index: number): React.
 		return ' ';
 	}
 	const sideIndex = side === 'before' ? 0 : 1;
-	const spans = context.highlighted?.[sideIndex]?.[
-		context.sources[sideIndex].positions[index]
-	] || [{ text: line.text, color: '' }];
+	const position = context.sources?.[sideIndex].positions[index] ?? -1;
+	const spans = context.highlighted?.[sideIndex]?.[position] || [{ text: line.text, color: '' }];
 	const range = context.emphasis(index)?.[side];
 	if (!line.text) {
 		return ' ';

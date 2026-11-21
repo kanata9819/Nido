@@ -1,5 +1,6 @@
 // What the diff view derives from the rows of a split diff. Pure functions, so GitDiff only
 // memoizes them.
+import { maxDiffHighlightLength } from '../../../../shared/nidoApi';
 import type { DiffRow } from './splitDiff';
 import type { DiffLayout, DiffViewRow } from './diffView';
 
@@ -40,20 +41,36 @@ export interface SideSource {
 	positions: number[];
 }
 
-/** The source of the before and after sides, in that order. */
-export function sideSources(rows: DiffRow[]): [SideSource, SideSource] {
-	const source = (side: 'before' | 'after'): SideSource => {
-		const lines: string[] = [];
-		const positions = rows.map((row) => {
-			if (!row[side]) {
-				return -1;
-			}
-			lines.push(row[side].text);
-			return lines.length - 1;
-		});
-		return { text: lines.join('\n'), positions };
+/** Prepare source text only for diffs within the highlighting limit. */
+export function sideSources(rows: DiffRow[]): [SideSource, SideSource] | undefined {
+	const sides = {
+		before: { lines: [] as string[], positions: [] as number[] },
+		after: { lines: [] as string[], positions: [] as number[] }
 	};
-	return [source('before'), source('after')];
+	const names = ['before', 'after'] as const;
+	let remaining = maxDiffHighlightLength;
+	for (const row of rows) {
+		for (const side of names) {
+			const line = row[side];
+			const { lines, positions } = sides[side];
+			positions.push(line ? lines.length : -1);
+			if (line) {
+				remaining -= line.text.length + (lines.length ? 1 : 0);
+				if (remaining < 0) {
+					return undefined;
+				}
+				lines.push(line.text);
+			}
+		}
+	}
+	const { before, after } = sides;
+	if (!before.lines.length && !after.lines.length) {
+		return undefined;
+	}
+	return [
+		{ text: before.lines.join('\n'), positions: before.positions },
+		{ text: after.lines.join('\n'), positions: after.positions }
+	];
 }
 
 const changed = (row: DiffRow | undefined): boolean =>

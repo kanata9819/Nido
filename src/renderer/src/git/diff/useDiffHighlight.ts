@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
-import { maxDiffHighlightLength } from '../../../../shared/nidoApi';
 import type { ReferencePreview } from '../../../../shared/types';
-import type { DiffRow } from './splitDiff';
-import { hasLines, type SideSource } from './diffModel';
+import type { SideSource } from './diffModel';
 
 /** Syntax-highlighted lines of the before and after sides. */
 export type HighlightedSides = ReferencePreview['lines'][];
@@ -15,8 +13,7 @@ export function useDiffHighlight(
 	workspaceId: string,
 	path: string,
 	diff: string,
-	rows: DiffRow[],
-	sources: [SideSource, SideSource]
+	sources: [SideSource, SideSource] | undefined
 ): { lines?: HighlightedSides; error: string } {
 	const [highlighted, setHighlighted] = useState<{
 		workspaceId: string;
@@ -26,10 +23,10 @@ export function useDiffHighlight(
 		error?: string;
 	}>();
 	useEffect(() => {
-		const [{ text: before }, { text: after }] = sources;
-		if (!path || before.length + after.length > maxDiffHighlightLength || !hasLines(rows)) {
+		if (!sources) {
 			return;
 		}
+		const [{ text: before }, { text: after }] = sources;
 		let cancelled = false;
 		const result = (outcome: { lines?: HighlightedSides; error?: string }): void => {
 			if (!cancelled) {
@@ -43,7 +40,7 @@ export function useDiffHighlight(
 		return () => {
 			cancelled = true;
 		};
-	}, [workspaceId, path, diff, rows, sources]);
+	}, [workspaceId, path, diff, sources]);
 	// A result for another file or diff is stale.
 	const current =
 		highlighted?.workspaceId === workspaceId &&
