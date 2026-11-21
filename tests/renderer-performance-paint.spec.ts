@@ -471,12 +471,36 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 							value.apply([['grid_line', [1, 35, 5, [['EDIT', 0]]]], ['flush']]);
 						}
 						compare('distant edit');
+						for (const value of [grid, full]) {
+							value.apply([
+								[
+									'grid_line',
+									[1, 6, 5, [['x', 0]]],
+									[1, 22, 5, [['y', 0]]],
+									[1, 35, 6, [['z', 0]]]
+								],
+								['flush']
+							]);
+						}
+						compare('sparse edits');
 						grid.cursor.row = 39;
 						compare('command row');
 						grid.scrollFraction = 0.25;
 						compare('fractional scroll');
 						grid.cursor.row = 2;
 						compare('fractional jump');
+						for (const value of [grid, full]) {
+							value.apply([
+								[
+									'grid_line',
+									[1, 6, 5, [['p', 0]]],
+									[1, 22, 5, [['q', 0]]],
+									[1, 35, 6, [['r', 0]]]
+								],
+								['flush']
+							]);
+						}
+						compare('fractional sparse edits');
 						return { work, mismatches };
 					},
 					{
@@ -489,8 +513,9 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 				if (!process.env.NIDO_PERFORMANCE_BASELINE) {
 					for (const sample of result.work) {
 						if (sample.label !== 'fractional scroll') {
-							// Three separated cursor bands include whole rows and their raster overscan.
-							expect(sample.copies, sample.label).toBeLessThanOrEqual(12);
+							// WebGL correction can add one composite per band at fractional offsets.
+							const limit = sample.label === 'fractional sparse edits' ? 16 : 12;
+							expect(sample.copies, sample.label).toBeLessThanOrEqual(limit);
 						}
 					}
 				}
