@@ -57,6 +57,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 				let mismatches = 0;
 				let comparisons = 0;
 				let rawPitch = 0;
+				let cellPitch = 0;
 				const failures: { shift: number; mismatches: number }[] = [];
 				for (const shift of [0, 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1, 0]) {
 					grid.apply([
@@ -86,6 +87,7 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 					);
 					const ctx = canvas.getContext('2d')!;
 					rawPitch = ctx.measureText('M').width * devicePixelRatio;
+					cellPitch = cellWidth * devicePixelRatio;
 					const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 					if (previous) {
 						const movement = Math.round(
@@ -119,9 +121,10 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 					previous = pixels;
 					previousShift = shift;
 				}
-				return { rawPitch, comparisons, mismatches, failures };
+				return { rawPitch, cellPitch, comparisons, mismatches, failures };
 			}, '/src/grid/grid.ts');
 			expect(Math.abs(result.rawPitch - Math.round(result.rawPitch))).toBeGreaterThan(0.001);
+			expect(result.cellPitch).toBeCloseTo(Math.round(result.rawPitch), 8);
 			expect(result.comparisons).toBe(16);
 			expect(result.mismatches, JSON.stringify(result)).toBe(0);
 		} finally {

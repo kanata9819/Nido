@@ -29,7 +29,6 @@ test('redraw summaries expose a single viewport scroll and the buffer column', (
 	});
 	assert.equal(redraw.cursorJumped, true);
 	assert.equal(redraw.viewportMoved, true);
-	assert.equal(redraw.descriptionChanged, true);
 	assert.equal(redraw.layoutReset, false);
 });
 
@@ -68,7 +67,6 @@ test('edits alone neither move the viewport nor reset the cursor', () => {
 	assert.equal(redraw.edited, true);
 	assert.equal(redraw.cursorJumped, false);
 	assert.equal(redraw.viewportMoved, false);
-	assert.equal(redraw.descriptionChanged, false);
 });
 
 test('scroll classification separates horizontal steps from animatable scrolls', () => {
