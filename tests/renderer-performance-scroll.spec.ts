@@ -65,66 +65,108 @@ test('Ctrl+@ terminal input places the cursor at its new cell on the first frame
 	expect(columns[0]).toBe(8);
 });
 
-test('j/k viewport scrolling reuses frames until a redraw, while editing interrupts it', async ({
+test('j/k holds show the new cursor and viewport without waiting for animation', async ({
 	page
 }) => {
 	await page.clock.install({ time: new Date(0) });
 	await page.clock.pauseAt(new Date(1000));
-	await page.addInitScript(() => localStorage.setItem('nido.animations', 'true'));
+	await page.addInitScript(() => {
+		localStorage.setItem('nido.animations', 'true');
+		localStorage.setItem('nido.smoothCursor', 'true');
+	});
 	await page.goto(`${origin}?view=app`);
 	const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });
 	await expect(input).toBeFocused();
 	await page.evaluate(async (url) => {
 		const { Grid } = await import(url);
 		const original = Grid.prototype.draw;
-		const probe = { draws: 0, grid: undefined as EditorGrid | undefined };
+		const probe = {
+			draws: 0,
+			composites: 0,
+			cursorRow: -1,
+			grid: undefined as EditorGrid | undefined
+		};
 		Object.assign(window, { viewportProbe: probe });
+		const context = document.querySelector('canvas')!.getContext('2d')!;
+		const drawImage = context.drawImage;
+		context.drawImage = ((...args: Parameters<typeof drawImage>) => {
+			if (args.length === 9) probe.composites++;
+			drawImage.apply(context, args);
+		}) as typeof drawImage;
 		Grid.prototype.draw = function (...args) {
 			probe.draws++;
+			probe.cursorRow = args[6]?.row ?? -1;
 			probe.grid = this;
 			return original.apply(this, args);
 		};
 	}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 	await page.clock.runFor(32);
-	const scroll = async (): Promise<void> => {
-		await page.evaluate(() => {
+	const scroll = async (rows = 1): Promise<void> => {
+		await page.evaluate((rows) => {
 			const { grid } = (window as unknown as { viewportProbe: { grid: EditorGrid } })
 				.viewportProbe;
-			const args = [1, 0, grid.rows - 1, 0, grid.columns, 1, 0];
+			const args = [1, 0, grid.rows - 1, 0, grid.columns, rows, 0];
 			window.rendererTest.emit({
 				type: 'redraw',
 				id: 'alpha',
 				events: [
 					['nido_scroll', args],
 					['grid_scroll', args],
-					['grid_line', [1, grid.rows - 2, 0, [['new row', 0]]]],
+					['grid_line', [1, rows > 0 ? grid.rows - 2 : 0, 0, [['new row', 0]]]],
 					['flush']
 				]
 			});
-		});
+		}, rows);
 	};
-	const count = (): Promise<number> =>
-		page.evaluate(
-			() => (window as unknown as { viewportProbe: { draws: number } }).viewportProbe.draws
-		);
+	const sample = (field: 'draws' | 'composites' | 'cursorRow' = 'draws'): Promise<number> =>
+		page.evaluate((key) => {
+			return (window as unknown as { viewportProbe: Record<typeof key, number> })
+				.viewportProbe[key];
+		}, field);
+	await page.keyboard.down('j');
+	await page.keyboard.down('j');
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'redraw',
+			id: 'alpha',
+			events: [['grid_cursor_goto', [1, 3, 0]], ['flush']]
+		})
+	);
+	await page.clock.runFor(16);
+	expect(await sample('cursorRow'), 'the cursor reaches its new row on the first paint').toBe(3);
+	await page.keyboard.up('j');
 	await scroll();
 	await page.clock.runFor(16);
-	const firstTarget = await count();
+	const firstTarget = await sample();
 	await page.clock.runFor(32);
-	expect(await count(), 'animation frames reuse the rendered target').toBe(firstTarget);
-	await input.dispatchEvent('keydown', { key: 'j', bubbles: true });
+	expect(await sample(), 'animation frames reuse the rendered target').toBe(firstTarget);
+	await page.keyboard.press('j');
 	await page.clock.runFor(16);
-	expect(await count(), 'tapping j preserves the current visible animation').toBe(firstTarget);
-	await input.dispatchEvent('keydown', { key: 'j', repeat: true, bubbles: true });
+	expect(await sample(), 'tapping j preserves the current visible animation').toBe(firstTarget);
+	await page.keyboard.down('j');
+	await page.keyboard.down('j');
 	await page.clock.runFor(16);
-	expect(await count(), 'repeating j preserves the current visible animation').toBe(firstTarget);
+	expect(await sample(), 'repeating j preserves the current visible animation').toBe(firstTarget);
+	for (const key of ['j', 'k']) {
+		if (key === 'k') {
+			await page.keyboard.down('k');
+			await page.keyboard.down('k');
+		}
+		const before = await sample('composites');
+		await scroll(key === 'j' ? 1 : -1);
+		await page.clock.runFor(16);
+		expect(await sample('composites'), `holding ${key} skips the slide`).toBe(before);
+		await page.keyboard.up(key);
+	}
+	expect(await sample(), 'native redraws still paint the new position').toBeGreaterThan(
+		firstTarget
+	);
+	const released = await sample('composites');
 	await scroll();
 	await page.clock.runFor(16);
-	const nextTarget = await count();
-	expect(nextTarget, 'native redraws refresh the target').toBeGreaterThan(firstTarget);
-	await input.dispatchEvent('keydown', { key: 'k', bubbles: true });
-	await page.clock.runFor(16);
-	expect(await count(), 'repeating k can reverse without snapping first').toBe(nextTarget);
+	expect(await sample('composites'), 'releasing the key restores animation').toBeGreaterThan(
+		released
+	);
 	await page.evaluate(() =>
 		window.rendererTest.emit({
 			type: 'redraw',
@@ -133,10 +175,10 @@ test('j/k viewport scrolling reuses frames until a redraw, while editing interru
 		})
 	);
 	await page.clock.runFor(16);
-	const beforeEdit = await count();
-	await input.dispatchEvent('keydown', { key: 'j', repeat: true, bubbles: true });
+	const beforeEdit = await sample();
+	await page.keyboard.press('j');
 	await page.clock.runFor(16);
-	expect(await count(), 'Insert-mode text interrupts the viewport animation').toBeGreaterThan(
+	expect(await sample(), 'Insert-mode text interrupts the viewport animation').toBeGreaterThan(
 		beforeEdit
 	);
 });

@@ -77,6 +77,7 @@ export class EditorRenderer {
 	/** A scroll requested while horizontal alignment finishes, applied by the next frame. */
 	private deferredScroll?: { lines: number; columns: number; follow: boolean; discrete: boolean };
 	private lastScrollTime?: number;
+	private repeatedLineKey?: 'j' | 'k';
 	private metrics = { cellWidth: 0, cellHeight: 0 };
 	private paintedFocus = false;
 	private paintedCursorVisible = true;
@@ -121,6 +122,7 @@ export class EditorRenderer {
 		this.cursor.listen();
 		this.reducedMotion.addEventListener('change', this.stopMotion);
 		input.addEventListener('keydown', this.keyDown);
+		input.addEventListener('keyup', this.keyUp);
 		input.addEventListener('input', this.stopMotionForInput);
 		input.addEventListener('compositionstart', this.stopMotionForInput);
 		input.addEventListener('blur', this.pauseMotion);
@@ -149,6 +151,7 @@ export class EditorRenderer {
 		surface.removeEventListener('pointerdown', this.pointerDown);
 		this.reducedMotion.removeEventListener('change', this.stopMotion);
 		input.removeEventListener('keydown', this.keyDown);
+		input.removeEventListener('keyup', this.keyUp);
 		input.removeEventListener('input', this.stopMotionForInput);
 		input.removeEventListener('compositionstart', this.stopMotionForInput);
 		input.removeEventListener('blur', this.pauseMotion);
@@ -225,6 +228,7 @@ export class EditorRenderer {
 
 	private stopMotionForInput = (): void => {
 		const wasAnimating = this.motion !== undefined;
+		this.repeatedLineKey = undefined;
 		this.deferredScroll = undefined;
 		this.motion = undefined;
 		this.lastScrollTime = undefined;
@@ -236,6 +240,7 @@ export class EditorRenderer {
 
 	/** Like stopMotion, but a sideways scroll in progress keeps its frame. */
 	private pauseMotion = (): void => {
+		this.repeatedLineKey = undefined;
 		this.deferredScroll = undefined;
 		this.lastScrollTime = undefined;
 		if (this.motion?.offsetX === undefined) {
@@ -251,13 +256,20 @@ export class EditorRenderer {
 			!event.metaKey &&
 			!event.shiftKey &&
 			!event.isComposing &&
-			['j', 'k'].includes(event.key) &&
+			(event.key === 'j' || event.key === 'k') &&
 			['normal', 'visual', 'visual_line', 'visual_block'].includes(this.options.grid.mode)
 		) {
-			// Navigation retargets the visible scroll instead of snapping it first.
+			this.repeatedLineKey = event.repeat ? event.key : undefined;
+			// Keep the current frame until Neovim replies with the new position.
 			this.stopScrollingForInput();
 		} else {
 			this.stopMotionForInput();
+		}
+	};
+
+	private keyUp = (event: KeyboardEvent): void => {
+		if (event.key === this.repeatedLineKey) {
+			this.repeatedLineKey = undefined;
 		}
 	};
 
@@ -310,7 +322,7 @@ export class EditorRenderer {
 		const cursorPosition = this.cursor.update(
 			now,
 			this.options.smoothCursorRef.current,
-			this.directScroll || !!this.motion,
+			this.directScroll || !!this.motion || !!this.repeatedLineKey,
 			focused
 		);
 		const dpr = window.devicePixelRatio || 1;
@@ -533,6 +545,8 @@ export class EditorRenderer {
 	 */
 	private prepareMotion(redraw: RedrawSummary, now: number): void {
 		const { scroll, bufferChanged, edited } = redraw;
+		// Held line moves already arrive at a steady cadence, so paint each new view directly.
+		const repeating = this.repeatedLineKey && scroll?.columns === 0;
 		if (
 			scroll &&
 			isHorizontalStep(scroll) &&
@@ -545,6 +559,7 @@ export class EditorRenderer {
 			!bufferChanged &&
 			!edited &&
 			!this.directScroll &&
+			!repeating &&
 			this.animate &&
 			!this.options.host.hidden &&
 			isAnimatableScroll(scroll)
