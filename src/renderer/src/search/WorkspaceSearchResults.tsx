@@ -52,7 +52,10 @@ export default function WorkspaceSearchResults({
 	query: string;
 }): React.JSX.Element {
 	const t = useI18n();
-	const { viewport, scrolled } = useListViewport(results, true, { top: 0, height: 300 });
+	const { viewport, scrolled } = useListViewport(results, true, rowHeight, {
+		top: 0,
+		height: 300
+	});
 	const indices = virtualRows(viewport, rows.length, rowHeight, overscan, {
 		selected: selection
 	});

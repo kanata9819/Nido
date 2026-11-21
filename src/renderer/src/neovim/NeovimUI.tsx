@@ -123,7 +123,7 @@ export default function NeovimUI({
 
 	// The layout effects run in this order: the completion viewport, the input at the command
 	// cursor, the newest messages scrolled into view, and the completion for assistive technology.
-	const completion = useListViewport(completionList, view.showCompletion, {
+	const completion = useListViewport(completionList, view.showCompletion, completionRowHeight, {
 		top: 0,
 		height: 280
 	});
