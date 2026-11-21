@@ -62,7 +62,7 @@ export class EditorRenderer {
 	private disposed = false;
 	/** The latest viewport move came from Nido's own scroll request rather than Neovim. */
 	private directScroll = false;
-	private descriptionDirty = true;
+	private describedVersion = -1;
 	private hasFrame: boolean;
 	private ready = false;
 	private preparingMotion = false;
@@ -77,6 +77,7 @@ export class EditorRenderer {
 	/** A scroll requested while horizontal alignment finishes, applied by the next frame. */
 	private deferredScroll?: { lines: number; columns: number; follow: boolean; discrete: boolean };
 	private lastScrollTime?: number;
+	private repeatedMotionKey?: string;
 	private metrics = { cellWidth: 0, cellHeight: 0 };
 	private paintedFocus = false;
 	private paintedCursorVisible = true;
@@ -121,6 +122,7 @@ export class EditorRenderer {
 		this.cursor.listen();
 		this.reducedMotion.addEventListener('change', this.stopMotion);
 		input.addEventListener('keydown', this.keyDown);
+		input.addEventListener('keyup', this.keyUp);
 		input.addEventListener('input', this.stopMotionForInput);
 		input.addEventListener('compositionstart', this.stopMotionForInput);
 		input.addEventListener('blur', this.pauseMotion);
@@ -149,6 +151,7 @@ export class EditorRenderer {
 		surface.removeEventListener('pointerdown', this.pointerDown);
 		this.reducedMotion.removeEventListener('change', this.stopMotion);
 		input.removeEventListener('keydown', this.keyDown);
+		input.removeEventListener('keyup', this.keyUp);
 		input.removeEventListener('input', this.stopMotionForInput);
 		input.removeEventListener('compositionstart', this.stopMotionForInput);
 		input.removeEventListener('blur', this.pauseMotion);
@@ -225,6 +228,7 @@ export class EditorRenderer {
 
 	private stopMotionForInput = (): void => {
 		const wasAnimating = this.motion !== undefined;
+		this.repeatedMotionKey = undefined;
 		this.deferredScroll = undefined;
 		this.motion = undefined;
 		this.lastScrollTime = undefined;
@@ -236,6 +240,7 @@ export class EditorRenderer {
 
 	/** Like stopMotion, but a sideways scroll in progress keeps its frame. */
 	private pauseMotion = (): void => {
+		this.repeatedMotionKey = undefined;
 		this.deferredScroll = undefined;
 		this.lastScrollTime = undefined;
 		if (this.motion?.offsetX === undefined) {
@@ -245,19 +250,30 @@ export class EditorRenderer {
 	};
 
 	private keyDown = (event: KeyboardEvent): void => {
+		const arrow = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key);
+		const { mode } = this.options.grid;
+		const vimMotion = ['normal', 'visual', 'visual_line', 'visual_block'].includes(mode);
 		if (
 			!event.ctrlKey &&
 			!event.altKey &&
 			!event.metaKey &&
 			!event.shiftKey &&
 			!event.isComposing &&
-			['j', 'k'].includes(event.key) &&
-			['normal', 'visual', 'visual_line', 'visual_block'].includes(this.options.grid.mode)
+			(arrow
+				? vimMotion || /^(insert|replace)/.test(mode)
+				: vimMotion && /^[hjkl]$/.test(event.key))
 		) {
-			// Navigation retargets the visible scroll instead of snapping it first.
+			this.repeatedMotionKey = event.repeat ? event.key : undefined;
+			// Keep the current frame until Neovim replies with the new position.
 			this.stopScrollingForInput();
 		} else {
 			this.stopMotionForInput();
+		}
+	};
+
+	private keyUp = (event: KeyboardEvent): void => {
+		if (event.key === this.repeatedMotionKey) {
+			this.repeatedMotionKey = undefined;
 		}
 	};
 
@@ -310,7 +326,7 @@ export class EditorRenderer {
 		const cursorPosition = this.cursor.update(
 			now,
 			this.options.smoothCursorRef.current,
-			this.directScroll || !!this.motion,
+			this.directScroll || !!this.motion || !!this.repeatedMotionKey,
 			focused
 		);
 		const dpr = window.devicePixelRatio || 1;
@@ -435,14 +451,15 @@ export class EditorRenderer {
 
 	/** Keep the canvas's accessible description in step with the grid. */
 	private updateDescription(): void {
-		if (!this.descriptionDirty) {
+		const { grid, surface } = this.options;
+		if (this.describedVersion === grid.descriptionVersion) {
 			return;
 		}
-		const description = this.options.grid.description;
-		if (this.options.surface.getAttribute('aria-description') !== description) {
-			this.options.surface.setAttribute('aria-description', description);
+		const description = grid.description;
+		if (surface.getAttribute('aria-description') !== description) {
+			surface.setAttribute('aria-description', description);
 		}
-		this.descriptionDirty = false;
+		this.describedVersion = grid.descriptionVersion;
 	}
 
 	/** Sizes the snapshot canvas to the surface and returns a context that overwrites it. */
@@ -545,6 +562,8 @@ export class EditorRenderer {
 			!bufferChanged &&
 			!edited &&
 			!this.directScroll &&
+			// Held motion keys already arrive at a steady cadence.
+			!this.repeatedMotionKey &&
 			this.animate &&
 			!this.options.host.hidden &&
 			isAnimatableScroll(scroll)
@@ -628,7 +647,6 @@ export class EditorRenderer {
 			this.motion.targetReady = false;
 		}
 		this.hasFrame = grid.rows > 0 && grid.columns > 0;
-		this.descriptionDirty ||= !this.ready;
 		if (
 			!this.scrolling.prefetchPending &&
 			(redraw.layoutReset ||
@@ -637,7 +655,6 @@ export class EditorRenderer {
 		) {
 			this.scrolling.invalidatePrefetch();
 		}
-		this.descriptionDirty ||= redraw.descriptionChanged;
 		this.deferWarm(redraw);
 		this.schedule();
 	}
