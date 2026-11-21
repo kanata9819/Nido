@@ -229,6 +229,39 @@ test('large explorer trees mount only the viewport and preserve keyboard navigat
 	const tree = page.getByRole('tree', { name: 'Project files' });
 	await expect(tree).toHaveAttribute('data-row-count', '10001');
 	expect(await tree.getByRole('treeitem').count()).toBeLessThan(70);
+	const fineScroll = await tree.evaluate(async (node) => {
+		let pathReads = 0;
+		let scrolls = 0;
+		const replaceAll = String.prototype.replaceAll;
+		const countScroll = (): void => {
+			scrolls++;
+		};
+		const nextFrame = (): Promise<void> =>
+			new Promise((resolve) => requestAnimationFrame(() => resolve()));
+		String.prototype.replaceAll = function (search, replacement) {
+			if (String(this).startsWith('/alpha/file-')) pathReads++;
+			return Reflect.apply(replaceAll, this, [search, replacement]);
+		};
+		node.addEventListener('scroll', countScroll);
+		try {
+			for (let top = 1; top <= 10; top++) {
+				node.scrollTop = top;
+				await nextFrame();
+				await nextFrame();
+			}
+			return { pathReads, scrolls, top: node.scrollTop };
+		} finally {
+			String.prototype.replaceAll = replaceAll;
+			node.removeEventListener('scroll', countScroll);
+		}
+	});
+	expect(fineScroll).toMatchObject({ scrolls: 10, top: 10 });
+	// Other state updates may still render the tree while it is scrolling.
+	expect(fineScroll.pathReads).toBeLessThan(200);
+	await tree.evaluate((node) => {
+		node.scrollTop = 2_600;
+	});
+	await expect(tree.getByText('file-00100.txt', { exact: true })).toBeInViewport();
 	await tree.focus();
 	const selected = tree.locator('[aria-selected="true"]');
 	await tree.press('End');
