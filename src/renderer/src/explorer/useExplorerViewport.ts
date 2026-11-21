@@ -1,10 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject, type UIEvent } from 'react';
+import { virtualRows } from '../ui/virtualRows';
 import type { getVisibleEntries } from './sidebarTree';
 
 // Explorer rows are drawn virtually: only the visible rows and `overscan` rows around them exist.
 export const explorerRowHeight = 26;
 const rowHeight = explorerRowHeight;
 const overscan = 8;
+const treePadding = 5;
+
+function rowStart(top: number): number {
+	return Math.floor(Math.max(0, top - treePadding) / rowHeight) * rowHeight;
+}
 
 /**
  * The explorer rows to draw for the current scroll position, restoring the saved scroll
@@ -31,23 +37,20 @@ export function useExplorerViewport({
 	tree: RefObject<HTMLDivElement | null>;
 	rememberScroll: (top: number) => void;
 }): { indices: number[]; onScroll: (event: UIEvent<HTMLDivElement>) => void } {
-	const [top, setTop] = useState(initialScrollTop);
+	const [top, setTop] = useState(() => rowStart(initialScrollTop));
 	const viewport = useRef(initialScrollTop);
 	const restored = useRef(false);
 	const previousSelection = useRef(selected);
 	const previousReveal = useRef(0);
 	const [height, setHeight] = useState(200);
-	const first = Math.max(
-		0,
-		Math.min(visible.length - 1, Math.floor(Math.max(0, top - 5) / rowHeight) - overscan)
+	// Cover the partial row at the far edge without rendering on each scroll pixel.
+	const indices = virtualRows(
+		{ top, height: height + rowHeight },
+		visible.length,
+		rowHeight,
+		overscan,
+		{ selected: selectedIndex, keepLast: true }
 	);
-	const last = Math.min(visible.length, Math.ceil((top + height) / rowHeight) + overscan);
-	const indices = Array.from({ length: Math.max(0, last - first) }, (_, index) => first + index);
-	if (selectedIndex >= 0 && selectedIndex < first) {
-		indices.unshift(selectedIndex);
-	} else if (selectedIndex >= last) {
-		indices.push(selectedIndex);
-	}
 	useLayoutEffect(() => {
 		const node = tree.current;
 		if (!active) {
@@ -69,7 +72,7 @@ export function useExplorerViewport({
 			(selected !== previousSelection.current || reveal !== previousReveal.current) &&
 			selectedIndex >= 0
 		) {
-			const rowTop = selectedIndex * rowHeight + 5;
+			const rowTop = selectedIndex * rowHeight + treePadding;
 			if (rowTop < node.scrollTop) {
 				node.scrollTo({ top: rowTop });
 			} else if (rowTop + rowHeight > node.scrollTop + node.clientHeight) {
@@ -81,7 +84,7 @@ export function useExplorerViewport({
 			previousReveal.current = reveal;
 		}
 		viewport.current = node.scrollTop;
-		setTop(node.scrollTop);
+		setTop(rowStart(viewport.current));
 	}, [selected, selectedIndex, reveal, visible, active, ready, tree, rememberScroll]);
 	useEffect(() => {
 		const node = tree.current;
@@ -90,14 +93,14 @@ export function useExplorerViewport({
 		}
 		const observer = new ResizeObserver(() => {
 			setHeight(node.clientHeight);
-			setTop(node.scrollTop);
+			setTop(rowStart(node.scrollTop));
 		});
 		observer.observe(node);
 		return () => observer.disconnect();
 	}, [tree]);
 	const onScroll = (event: UIEvent<HTMLDivElement>): void => {
 		const top = event.currentTarget.scrollTop;
-		setTop(top);
+		setTop(rowStart(top));
 		if (active && restored.current) {
 			viewport.current = top;
 			rememberScroll(top);
