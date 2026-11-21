@@ -50,8 +50,7 @@ export class GridCanvas implements GlyphMeasure {
 	private scrolling = false;
 	private previousCursorRows: number[] = [];
 	// The rows that changed since the last paint.
-	private firstDirtyRow = Infinity;
-	private lastDirtyRow = -Infinity;
+	private readonly dirtyRows = new Set<number>();
 
 	constructor(private readonly grid: Grid) {}
 
@@ -88,8 +87,9 @@ export class GridCanvas implements GlyphMeasure {
 				this.linearRows?.invalidate(image);
 				this.dirtyImages.add(image);
 			}
-			this.firstDirtyRow = Math.min(this.firstDirtyRow, row);
-			this.lastDirtyRow = Math.max(this.lastDirtyRow, row);
+			if (!this.paintDirty) {
+				this.dirtyRows.add(row);
+			}
 		} else {
 			this.invalidatePaint();
 			this.rowImages = new WeakMap();
@@ -367,8 +367,7 @@ export class GridCanvas implements GlyphMeasure {
 			this.grid,
 			cursorRows,
 			this.previousCursorRows,
-			this.firstDirtyRow,
-			this.lastDirtyRow,
+			this.dirtyRows,
 			cellHeight,
 			this.paintDirty,
 			canvas.height,
@@ -396,8 +395,7 @@ export class GridCanvas implements GlyphMeasure {
 			}
 		}
 		this.paintDirty = false;
-		this.firstDirtyRow = Infinity;
-		this.lastDirtyRow = -Infinity;
+		this.dirtyRows.clear();
 		return { cellWidth, cellHeight };
 	}
 
