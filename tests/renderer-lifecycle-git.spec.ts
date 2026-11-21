@@ -766,6 +766,43 @@ test('large Git diffs skip highlight transfer and the exact limit still requests
 		.toEqual([{ path: 'at-limit.ts', length: 128_000 }]);
 });
 
+test('large Git diffs compute inline emphasis only near the viewport', async ({ page }) => {
+	await page.goto(`${origin}?view=highlight`);
+	await page.evaluate(() => {
+		let reads = 0;
+		const codePointAt = String.prototype.codePointAt;
+		String.prototype.codePointAt = function (index) {
+			if (String(this).startsWith('diff emphasis probe ')) reads++;
+			return codePointAt.call(this, index);
+		};
+		Object.assign(window, { diffEmphasisReads: () => reads });
+		const lines = (prefix: string, change: string): string =>
+			Array.from(
+				{ length: 1_000 },
+				(_, index) =>
+					`${prefix}diff emphasis probe ${index} ${change} ${'context '.repeat(10)}\n`
+			).join('');
+		window.rendererTest.render({
+			diff: '@@ -1,1000 +1,1000 @@\n' + lines('-', 'removed') + lines('+', 'added')
+		});
+	});
+	const pane = page.locator('[data-git-scroll="after"]');
+	await expect(pane).toContainText('diff emphasis probe 0 added');
+	const reads = (): Promise<number> =>
+		page.evaluate(() =>
+			(window as unknown as { diffEmphasisReads(): number }).diffEmphasisReads()
+		);
+	const first = await reads();
+	expect(first).toBeGreaterThan(0);
+	expect(first).toBeLessThan(300);
+	await pane.evaluate((node) => node.scrollTo({ top: node.scrollHeight, behavior: 'instant' }));
+	await expect(pane).toContainText('diff emphasis probe 999 added');
+	await expect(
+		pane.locator('[data-diff-row="999"]').getByText('added', { exact: true })
+	).toBeVisible();
+	expect(await reads()).toBeGreaterThan(first);
+});
+
 test('unchanged Git polls avoid commits while changed and removed badges still update', async ({
 	page
 }) => {

@@ -14,7 +14,7 @@ type Spans = ReferencePreview['lines'][number];
 export interface DiffRowContext {
 	rows: DiffRow[];
 	sources: [SideSource, SideSource];
-	emphasis: (DiffEmphasis | undefined)[];
+	emphasis: (index: number) => DiffEmphasis | undefined;
 	highlighted: HighlightedSides | undefined;
 	/** The diff row of the change selected with n/N, if any. */
 	selectedRow: number | undefined;
@@ -67,7 +67,7 @@ function lineContent(context: DiffRowContext, side: Side, index: number): React.
 	const spans = context.highlighted?.[sideIndex]?.[
 		context.sources[sideIndex].positions[index]
 	] || [{ text: line.text, color: '' }];
-	const range = context.emphasis[index]?.[side];
+	const range = context.emphasis(index)?.[side];
 	if (!line.text) {
 		return ' ';
 	}

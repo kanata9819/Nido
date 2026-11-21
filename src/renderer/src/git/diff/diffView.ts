@@ -79,13 +79,19 @@ export function changedRange(before: string, after: string): DiffEmphasis | unde
 	};
 }
 
-/** The emphasis of each row that replaces a line with another. */
-export function rowEmphasis(rows: DiffRow[]): (DiffEmphasis | undefined)[] {
-	return rows.map((row) =>
-		row.before?.changed && row.after?.changed
-			? changedRange(row.before.text, row.after.text)
-			: undefined
-	);
+/** Compute emphasis only for replacement rows drawn by either pane. */
+export function rowEmphasis(rows: DiffRow[]): (index: number) => DiffEmphasis | undefined {
+	const ranges = new Map<number, DiffEmphasis | undefined>();
+	return (index) => {
+		const { before, after } = rows[index];
+		if (!before?.changed || !after?.changed) {
+			return undefined;
+		}
+		if (!ranges.has(index)) {
+			ranges.set(index, changedRange(before.text, after.text));
+		}
+		return ranges.get(index);
+	};
 }
 
 /**
