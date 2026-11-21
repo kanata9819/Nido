@@ -25,6 +25,65 @@ test.afterAll(async () => {
 	await server.close();
 });
 
+test('Rust SIMD matches the scalar repaint planner for shifted Unicode rows', async ({ page }) => {
+	await page.route('**/span-probe', (route) =>
+		route.fulfill({
+			contentType: 'text/html',
+			body: '<meta http-equiv="Content-Security-Policy" content="script-src \'self\' \'wasm-unsafe-eval\'">'
+		})
+	);
+	await page.goto(`${origin}/span-probe`);
+	const result = await page.evaluate(async (moduleUrl) => {
+		const { HorizontalSpans, horizontalSpans, loadHorizontalSpans } = await import(moduleUrl);
+		const packer = new HorizontalSpans();
+		const highlights = new Map([
+			[1, { italic: true }],
+			[2, { indentGuide: true }],
+			[3, { codeLens: true }],
+			[4, { diagnostic: true }]
+		]);
+		const cells = ['a', 'b', ' ', '日', '', '│', '👩‍💻', 'e\u0301'];
+		let state = 42;
+		const next = (max: number): number => {
+			state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+			return (state >>> 8) % max;
+		};
+		const cases = Array.from({ length: 500 }, (_, index) => {
+			const columns = 16 + next(354);
+			const left = next(7);
+			const right = columns - next(5);
+			const shift = (index % 2 ? 1 : -1) * (1 + next(Math.min(11, right - left - 1)));
+			const margin = 1 + next(3);
+			const before = Array.from({ length: columns }, () => ({
+				text: cells[next(cells.length)],
+				highlight: next(10) === 0 ? 1 : 0
+			}));
+			const after = before.map((cell, col) => {
+				const source = col >= left && col < right ? before[col + shift] : cell;
+				return source ?? { text: ' ', highlight: 0 };
+			});
+			after[left + next(right - left)] = {
+				text: cells[next(cells.length)],
+				highlight: [0, 1, 2, 3, 4, 5000][index % 6]
+			};
+			const previous = new Uint32Array(columns);
+			const current = new Uint32Array(columns);
+			packer.pack(before, highlights, previous);
+			packer.pack(after, highlights, current);
+			return [current, previous, left, right, shift, margin] as const;
+		});
+		const scalar = cases.map((args) => JSON.stringify(horizontalSpans(...args)));
+		const loaded = await loadHorizontalSpans();
+		const mismatch = cases.findIndex(
+			(args, i) => JSON.stringify(horizontalSpans(...args)) !== scalar[i]
+		);
+		return { loaded, mismatch, reused: scalar.filter((spans) => spans !== undefined).length };
+	}, '/src/grid/horizontalSpans.ts');
+	expect(result.loaded).toBe(true);
+	expect(result.reused).toBeGreaterThan(0);
+	expect(result.mismatch).toBe(-1);
+});
+
 for (const scale of [1, 1.25, 1.5, 2]) {
 	test(`horizontal native rebases preserve glyph shapes in both directions at ${scale * 100}% scale`, async ({
 		browser
@@ -295,8 +354,11 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 					);
 					await page.goto(`${origin}/horizontal-shift-probe`);
 					const result = await page.evaluate(
-						async ({ opacity, width, moduleUrl }) => {
+						async ({ opacity, width, moduleUrl, plannerUrl }) => {
 							const { Grid } = await import(moduleUrl);
+							const { loadHorizontalSpans } = await import(plannerUrl);
+							if (!(await loadHorizontalSpans()))
+								throw new Error('Rust span planner unavailable');
 							const native = CanvasRenderingContext2D.prototype.fillText;
 							const counts = [0, 0];
 							let drawing = 0;
@@ -431,7 +493,12 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 								CanvasRenderingContext2D.prototype.fillText = native;
 							}
 						},
-						{ opacity, width, moduleUrl: '/src/grid/grid.ts' }
+						{
+							opacity,
+							width,
+							moduleUrl: '/src/grid/grid.ts',
+							plannerUrl: '/src/grid/horizontalSpans.ts'
+						}
 					);
 					expect(result.mismatches, JSON.stringify(result.differences)).toBe(0);
 					if (width === 1200) {

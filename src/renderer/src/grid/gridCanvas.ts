@@ -5,6 +5,7 @@ import { createGridGuides } from './gridGuides';
 import { gridDamageBands } from './gridDamage';
 import { gridCellStyles } from './gridCellStyles';
 import { RowPainter, type GlyphMeasure } from './gridRowPainter';
+import { HorizontalSpans, horizontalSpans, loadHorizontalSpans } from './horizontalSpans';
 
 // Paints the grid onto the canvas: changed rows are rasterized into row images, which are
 // then copied to the canvas at their scrolled positions (see the comments in draw()).
@@ -34,7 +35,9 @@ export class GridCanvas implements GlyphMeasure {
 	private rowOverhangs = new WeakMap<HTMLCanvasElement, number>();
 	private rowIndents = new WeakMap<HTMLCanvasElement, { columns: number[]; cuts: number[] }>();
 	// Cell snapshots are only used to reuse rasters across horizontal moves.
-	private rowSources = new WeakMap<HTMLCanvasElement, { cells: Cell[]; leftcol: number }>();
+	private rowSources = new WeakMap<HTMLCanvasElement, { cells: Uint32Array; leftcol: number }>();
+	private readonly horizontalPlanner = new HorizontalSpans();
+	private packedScratch?: Uint32Array;
 	private shiftScratch?: HTMLCanvasElement;
 	private glyphMetrics = new Map<string, Map<string, TextMetrics>>();
 	private glyphMetricCount = 0;
@@ -120,7 +123,7 @@ export class GridCanvas implements GlyphMeasure {
 	 */
 	private horizontalSpans(
 		image: HTMLCanvasElement,
-		cells: Cell[],
+		cells: Uint32Array,
 		row: number,
 		cellWidth: number,
 		dpr: number,
@@ -142,74 +145,18 @@ export class GridCanvas implements GlyphMeasure {
 		const { left, right } = view;
 		const shift = view.leftcol - source.leftcol;
 		const columns = this.grid.columns;
-		if (!shift || Math.abs(shift) >= right - left || right > columns) {
-			return undefined;
-		}
-		// A grid wider than the row image (e.g. before a resize reaches Neovim) would copy
-		// from past the image edge, and the copy operator would clear what it cannot read.
-		if (Math.round(right * cellWidth * dpr) > image.width) {
+		if (
+			!Number.isInteger(shift) ||
+			!shift ||
+			Math.abs(shift) >= right - left ||
+			source.cells.length !== columns
+		) {
 			return undefined;
 		}
 		// Neighbouring cells are drawn again inside each clip so overhanging ink matches.
 		const margin = Math.ceil(overhang / cellWidth) + 1;
-		const stale: number[] = [];
-		for (let col = 0; col < columns; col++) {
-			const cell = cells[col];
-			const highlight = this.grid.highlights.get(cell?.highlight ?? 0);
-			if (highlight?.diagnostic || highlight?.codeLens) {
-				// Badges and CodeLens span several cells with rounded or measured edges.
-				return undefined;
-			}
-			const inside = col >= left && col < right;
-			const from = inside ? col + shift : col;
-			const previous = source.cells[from];
-			if (
-				(inside && (from < left || from >= right)) ||
-				previous?.text !== cell?.text ||
-				previous?.highlight !== cell?.highlight ||
-				// Guide cuts follow the current scope; box lines snap in CSS pixels.
-				highlight?.indentGuide ||
-				cell?.text === '│' ||
-				// Guides and backgrounds reach one pixel across the text area's edges.
-				(inside && (col < left + margin || col >= right - margin))
-			) {
-				stale.push(col);
-			}
-		}
-		const spans: [number, number][] = [];
-		let width = 0;
-		// Wide and slanted glyphs can cross a clip edge, where Chromium antialiases them
-		// differently from an unclipped raster. Keep span edges away from both kinds.
-		const crossing = (col: number): boolean => {
-			if (col < 0 || col >= columns) {
-				return false;
-			}
-			const cell = cells[col];
-			return (
-				cell?.text === '' ||
-				cells[col + 1]?.text === '' ||
-				!!this.grid.highlights.get(cell?.highlight ?? 0)?.italic
-			);
-		};
-		for (const col of stale) {
-			let from = Math.max(0, col - margin);
-			let to = Math.min(columns, col + 1 + margin);
-			while (from > 0 && (crossing(from - 1) || crossing(from))) {
-				from--;
-			}
-			while (to < columns && (crossing(to - 1) || crossing(to))) {
-				to++;
-			}
-			const last = spans.at(-1);
-			if (last && from <= last[1]) {
-				width += Math.max(0, to - last[1]);
-				last[1] = Math.max(last[1], to);
-			} else {
-				spans.push([from, to]);
-				width += to - from;
-			}
-		}
-		if (width * 2 > columns) {
+		const spans = horizontalSpans(cells, source.cells, left, right, shift, margin);
+		if (!spans) {
 			return undefined;
 		}
 		const x = (column: number): number => Math.round(column * cellWidth * dpr);
@@ -638,16 +585,35 @@ export class GridCanvas implements GlyphMeasure {
 		const ctx = image.getContext('2d', { alpha: translucent })!;
 		const prefix = this.dirtyPrefixes.get(image);
 		this.dirtyPrefixes.delete(image);
-		const shifted = prefix
-			? undefined
-			: this.horizontalSpans(image, cells, row, cellWidth, dpr, translucent);
+		const view = this.grid.horizontalView;
+		const columns = this.grid.columns;
+		let packed: Uint32Array | undefined;
+		let packedIndentColumns: number[] | undefined;
+		// A grid wider than its row image cannot safely copy from the off-canvas columns.
+		if (
+			view &&
+			row >= view.top &&
+			row < view.bottom &&
+			Number.isInteger(view.left) &&
+			Number.isInteger(view.right) &&
+			view.left >= 0 &&
+			view.right <= columns &&
+			Math.round(view.right * cellWidth * dpr) <= image.width
+		) {
+			void loadHorizontalSpans();
+			packed =
+				this.packedScratch?.length === columns
+					? this.packedScratch
+					: new Uint32Array(columns);
+			packedIndentColumns = this.horizontalPlanner.pack(cells, this.grid.highlights, packed);
+		}
+		const shifted =
+			!prefix && packed
+				? this.horizontalSpans(image, packed, row, cellWidth, dpr, translucent)
+				: undefined;
 		const indentColumns = prefix
 			? (indentState?.columns ?? [])
-			: shifted
-				? Array.from({ length: this.grid.columns }, (_, col) => col).filter(
-						(col) => this.grid.highlights.get(cells[col]?.highlight ?? 0)?.indentGuide
-					)
-				: [];
+			: (shifted && packedIndentColumns) || [];
 		const previousOverhang = prefix ? this.rowOverhangs.get(image) : undefined;
 		const painter = new RowPainter(
 			{
@@ -690,9 +656,9 @@ export class GridCanvas implements GlyphMeasure {
 		} else {
 			painter.paintAll(clip?.columns ?? this.grid.columns, width, translucent);
 		}
-		const view = this.grid.horizontalView;
-		if (view && row >= view.top && row < view.bottom) {
-			this.rowSources.set(image, { cells: cells.slice(), leftcol: view.leftcol });
+		if (view && packed) {
+			this.packedScratch = this.rowSources.get(image)?.cells;
+			this.rowSources.set(image, { cells: packed, leftcol: view.leftcol });
 		} else {
 			this.rowSources.delete(image);
 		}
