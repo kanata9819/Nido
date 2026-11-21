@@ -22,8 +22,8 @@ const { parentPort } = require('node:worker_threads');
 parentPort.on('message', ({ id, source, flags, text, ending, replacement, selected, regex }) => {
   try {
     const pattern = new RegExp(source, flags);
-    const parts = text.split(new RegExp('(' + ending + ')'));
     if (selected) {
+      const parts = text.split(new RegExp('(' + ending + ')'));
       let count = 0;
       for (const line of selected) {
         const index = (line - 1) * 2;
@@ -36,15 +36,17 @@ parentPort.on('message', ({ id, source, flags, text, ending, replacement, select
       parentPort.postMessage({ id, value: { text: parts.join(''), count } });
     } else {
       const matches = [];
-      for (let index = 0; index < parts.length; index += 2) {
-        // A final line ending does not introduce another editable Neovim row.
-        if (index > 0 && index === parts.length - 1 && parts[index] === '') break;
+      for (let start = 0, number = 1; ; number++) {
+        const end = text.indexOf(ending, start);
+        const line = text.slice(start, end === -1 ? text.length : end);
         pattern.lastIndex = 0;
-        const match = pattern.exec(parts[index]);
-        if (match) matches.push({ line: index / 2 + 1, index: match.index,
-          column: Buffer.byteLength(parts[index].slice(0, match.index)) + 1,
-          text: parts[index].slice(Math.max(0, match.index - 80), match.index + 220).trim() });
-        if (matches.length === 201) break;
+        const match = pattern.exec(line);
+        if (match) matches.push({ line: number, index: match.index,
+          column: Buffer.byteLength(line.slice(0, match.index)) + 1,
+          text: line.slice(Math.max(0, match.index - 80), match.index + 220).trim() });
+        start = end + ending.length;
+        // A final line ending does not introduce another editable Neovim row.
+        if (end === -1 || start === text.length || matches.length === 201) break;
       }
       parentPort.postMessage({ id, value: matches });
     }

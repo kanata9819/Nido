@@ -105,6 +105,22 @@ test('workspace grep skips line inspection in large nonmatching files', async ()
 	}
 });
 
+test('worker search caps dense results at the first 201 matching lines', async () => {
+	const matcher = new SearchMatcher('needle', { ...defaultSearchOptions, regex: true });
+	try {
+		const matches = await matcher.find('日本語 needle\r\nordinary line\r\n'.repeat(15_000));
+		assert.equal(matches.length, 201);
+		assert.deepEqual(matches.at(-1), {
+			line: 401,
+			index: 4,
+			column: 11,
+			text: '日本語 needle'
+		});
+	} finally {
+		matcher.close();
+	}
+});
+
 test('worker search returns byte columns without splitting matching files again on the main thread', async () => {
 	const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-search-columns-')));
 	const text = 'ordinary row\n'.repeat(10000) + '日本語 🦊 needle\n';
