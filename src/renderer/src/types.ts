@@ -1,4 +1,9 @@
 // Types used across the renderer.
+import type { SessionState } from '../../shared/types';
+
+/** Session updates shown only in the status bar. */
+export type WorkspacePosition = Pick<SessionState, 'line' | 'column' | 'scrollPercent'>;
+export type WorkspaceState = Omit<SessionState, keyof WorkspacePosition>;
 
 /** The views of the Git browser. */
 export type GitView = 'changes' | 'history' | 'branches';

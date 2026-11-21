@@ -147,36 +147,49 @@ test('state patches coalesce without dropping diagnostics, other sessions or opt
 		window.rendererTest.emit({
 			type: 'statePatch',
 			id: 'alpha',
-			state: { line: 9, column: 4, lspProgress: 'Indexing' }
+			state: { line: 9, column: 4, scrollPercent: 20, lspProgress: 'Indexing' }
 		});
 		window.rendererTest.emit({ type: 'statePatch', id: 'beta', state: { line: 3 } });
 	});
 	await page.clock.runFor(50);
 	const states = await page.getByRole('status').textContent();
-	expect(JSON.parse(states!)).toMatchObject({
+	const first = JSON.parse(states!);
+	expect(first.states).toMatchObject({
 		alpha: {
-			line: 9,
-			column: 4,
 			mode: 'i',
 			lineEnding: 'LF',
 			problems: [{ message: 'error' }],
 			buffers: [{ name: '/alpha/main.rs' }],
 			lspProgress: 'Indexing'
-		},
-		beta: { line: 3, buffers: [], mode: 'n' }
+		}
+	});
+	expect(first.states.beta).toBeUndefined();
+	expect(first.positions).toEqual({
+		alpha: { line: 9, column: 4, scrollPercent: 20 },
+		beta: { line: 3, column: 1 }
 	});
 	await page.evaluate(() =>
 		window.rendererTest.emit({
 			type: 'statePatch',
 			id: 'alpha',
-			state: { lineEnding: undefined, mode: 'n' }
+			state: { lineEnding: undefined, scrollPercent: undefined, mode: 'n' }
 		})
 	);
 	await page.clock.runFor(50);
 	const next = JSON.parse((await page.getByRole('status').textContent())!);
-	expect(next.alpha.lineEnding).toBeUndefined();
-	expect(next.alpha.mode).toBe('n');
-	expect(next.alpha.problems).toHaveLength(1);
+	expect(next.states.alpha.lineEnding).toBeUndefined();
+	expect(next.states.alpha.mode).toBe('n');
+	expect(next.states.alpha.problems).toHaveLength(1);
+	expect(next.positions.alpha).toEqual({ line: 9, column: 4 });
+	await page.evaluate(() => {
+		window.rendererTest.emit({ type: 'statePatch', id: 'beta', state: { column: 99 } });
+		window.rendererTest.emit({ type: 'exit', id: 'beta' });
+	});
+	await page.clock.runFor(50);
+	expect(JSON.parse((await page.getByRole('status').textContent())!).positions.beta).toEqual({
+		line: 1,
+		column: 1
+	});
 });
 
 test('Explorer discards obsolete manual refreshes and loads started before a file change', async ({

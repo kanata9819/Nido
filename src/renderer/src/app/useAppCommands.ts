@@ -2,8 +2,8 @@ import { useCallback, useMemo } from 'react';
 import { useI18n } from '../i18n';
 import { buildItems, buildProblemItems, filterItems } from '../palette/commands';
 import type { CommandsCallbacks } from '../palette/commandItems';
-import type { FileEntry, SessionState, Workspace } from '../../../shared/types';
-import type { Item, Panel } from '../types';
+import type { FileEntry, Workspace } from '../../../shared/types';
+import type { Item, Panel, WorkspaceState } from '../types';
 
 type Callbacks = CommandsCallbacks & { reorderWorkspace: (id: string, target: string) => void };
 
@@ -25,7 +25,7 @@ export function useAppCommands({
 	panel: Panel;
 	workspaces: Workspace[];
 	fileList: FileEntry[];
-	state: SessionState;
+	state: WorkspaceState;
 	query: string;
 	/** Runs a session request, then returns focus to the editor if nothing stole it. */
 	runThenFocus: (request: () => Promise<unknown>) => void;

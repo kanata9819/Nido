@@ -7,12 +7,13 @@ import {
 	type Dispatch,
 	type SetStateAction
 } from 'react';
-import type { DebugAction, SessionState, TerminalShell, Workspace } from '../../../shared/types';
+import type { DebugAction, TerminalShell, Workspace } from '../../../shared/types';
+import type { WorkspaceState } from '../types';
 
 interface Options {
 	active: string;
 	workspace?: Workspace;
-	state: SessionState;
+	state: WorkspaceState;
 	terminalShell: TerminalShell;
 	setWorkspaces: Dispatch<SetStateAction<Workspace[]>>;
 	focusEditor: () => void;

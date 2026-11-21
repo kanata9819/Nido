@@ -1,4 +1,4 @@
-import type { Panel, Item } from '../types';
+import type { Panel, Item, WorkspaceState } from '../types';
 import type { FileEntry, SessionState, Workspace } from '../../../shared/types';
 import { createTranslator, type Translator } from '../../../shared/i18n';
 import { buildCommands, type CommandsCallbacks } from './commandItems';
@@ -40,7 +40,7 @@ export function buildItems(
 	panel: Panel,
 	workspaces: Workspace[],
 	fileList: FileEntry[],
-	state: SessionState,
+	state: WorkspaceState,
 	query: string,
 	callbacks: CommandsCallbacks & { reorderWorkspace: (id: string, target: string) => void },
 	t: Translator = createTranslator('en'),

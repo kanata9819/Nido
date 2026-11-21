@@ -371,7 +371,7 @@ test('opening and closing Git does not duplicate badge status reads, and file ch
 	).toBeVisible();
 });
 
-test('cursor-only state updates leave file tabs untouched while real tab changes still render', async ({
+test('cursor-only state updates refresh the status bar without rendering the shell or file tabs', async ({
 	page
 }) => {
 	await page.goto(`${origin}?view=app&defer=gitStatus`);
@@ -417,18 +417,37 @@ test('cursor-only state updates leave file tabs untouched while real tab changes
 	).toBeVisible();
 	await page.evaluate(() => {
 		(window as unknown as { tabMaps: number }).tabMaps = 0;
+		const add = document.addEventListener;
+		const shell = { renders: 0 };
+		Object.assign(window, { shell });
+		document.addEventListener = new Proxy(add, {
+			apply(target, receiver, args) {
+				// AppContent binds the capture shortcut handler on each commit.
+				if (args[0] === 'keydown' && args[2] === true) shell.renders++;
+				return Reflect.apply(target, receiver, args);
+			}
+		});
 	});
 	for (let i = 0; i < 20; i++) {
 		await page.evaluate(async (column) => {
-			window.rendererTest.emit({ type: 'statePatch', id: 'alpha', state: { column } });
+			window.rendererTest.emit({
+				type: 'statePatch',
+				id: 'alpha',
+				state: { line: column + 10, column, scrollPercent: column }
+			});
 			await new Promise<void>((resolve) =>
 				requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
 			);
 		}, i + 2);
 	}
-	const maps = await page.evaluate(() => (window as unknown as { tabMaps: number }).tabMaps);
-	console.log(`100 file tabs, 20 cursor-only updates: ${maps} tab list maps`);
-	expect(maps).toBe(0);
+	await expect(page.getByText('Ln 31, Col 21', { exact: true })).toBeVisible();
+	await expect(page.getByLabel('File position 21%')).toBeVisible();
+	const work = await page.evaluate(() => {
+		const probe = window as unknown as { tabMaps: number; shell: { renders: number } };
+		return { tabMaps: probe.tabMaps, shellRenders: probe.shell.renders };
+	});
+	console.log('100 file tabs, 20 cursor updates', work);
+	expect(work).toEqual({ tabMaps: 0, shellRenders: 0 });
 	await page.evaluate(() => {
 		const buffers = (
 			window as unknown as {

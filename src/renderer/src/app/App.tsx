@@ -21,7 +21,8 @@ import { useGitFileStatus } from '../git/useGitFileStatus';
 import { useKeyboardShortcuts } from '../keyboard/useKeyboardShortcuts';
 import { usePointerVisibility } from './usePointerVisibility';
 import { initialSessionState, useWorkspaceSessions } from '../workspace/useWorkspaceSessions';
-import type { SessionState, Workspace } from '../../../shared/types';
+import type { Workspace } from '../../../shared/types';
+import type { WorkspaceState } from '../types';
 import { useFocusGuard } from './useFocusGuard';
 import { useInitializedEditors } from '../editor/useInitializedEditors';
 import { afterEditorClick } from '../editor/editorClick';
@@ -64,7 +65,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 	}, [dismissError, requestEditorFocus]);
 
 	// Open workspaces, the active workspace ID, and per-workspace state such as the cursor and buffers.
-	const { workspaces, setWorkspaces, active, setActive, states, mode, restoring } =
+	const { workspaces, setWorkspaces, active, setActive, states, positions, mode, restoring } =
 		useWorkspaceSessions(report);
 	const { initializedEditors, finishEditorLoading, forgetEditor } = useInitializedEditors();
 	const sleep = useWorkspaceSleep({
@@ -381,6 +382,7 @@ function AppContent({ settings }: { settings: EditorSettings }): React.JSX.Eleme
 				animations={settings.animations}
 			/>
 			<StatusBar
+				positions={positions}
 				onConnect={() => void actions.create()}
 				onSearch={(key) => {
 					run(window.nido.input(active, '<Esc>' + key));
@@ -453,7 +455,7 @@ function Explorers({
 }: {
 	settings: EditorSettings;
 	awakeWorkspaces: Workspace[];
-	states: Record<string, SessionState>;
+	states: Record<string, WorkspaceState>;
 	active: string;
 	decorations: Record<string, Decoration>;
 	openFile: (path: string) => void;
