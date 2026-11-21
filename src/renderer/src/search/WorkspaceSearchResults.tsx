@@ -1,11 +1,16 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { SearchResults } from '../../../shared/types';
 import { useI18n } from '../i18n';
+import { useListViewport } from '../ui/useListViewport';
+import { virtualRows } from '../ui/virtualRows';
 import styles from './WorkspaceSearch.module.css';
 import { navigateSearchList as navigate } from './workspaceSearchNavigation';
 
 /** A search match with its index in the results and the text shown for it. */
 type Row = SearchResults['matches'][number] & { index: number; title: string };
+
+const rowHeight = 52;
+const overscan = 8;
 
 /**
  * The matches of a workspace text search. Enter opens a match; i a / r f move to the search,
@@ -47,6 +52,10 @@ export default function WorkspaceSearchResults({
 	query: string;
 }): React.JSX.Element {
 	const t = useI18n();
+	const { viewport, scrolled } = useListViewport(results, true, { top: 0, height: 300 });
+	const indices = virtualRows(viewport, rows.length, rowHeight, overscan, {
+		selected: selection
+	});
 	// Include or exclude a match from the replacement.
 	const toggle = (index: number): void =>
 		setExcluded((old) => {
@@ -66,6 +75,7 @@ export default function WorkspaceSearchResults({
 			role="listbox"
 			aria-label={t('Search results')}
 			aria-activedescendant={rows[selection] ? `search-result-${selection}` : undefined}
+			onScroll={(event) => scrolled(event.currentTarget)}
 			onKeyDown={(event) => {
 				if (
 					event.nativeEvent.isComposing ||
@@ -106,44 +116,61 @@ export default function WorkspaceSearchResults({
 				}
 			}}
 		>
-			{rows.map((row) => (
+			{rows.length ? (
 				<div
-					key={`${row.path}:${row.line}`}
-					id={`search-result-${row.index}`}
-					role="option"
-					aria-selected={row.index === selection}
-					className={`${row.index === selection ? styles.selected : ''} ${replace && excluded.has(row.index) ? styles.excluded : ''}`}
-					onClick={(event) => {
-						if (locked.current) {
-							return;
-						}
-						if (!replace) {
-							if (event.detail <= 1) {
-								open(row.index);
-							}
-							return;
-						}
-						setSelection(row.index);
-						results.current?.focus();
-					}}
-					onDoubleClick={() => {
-						if (replace && !locked.current) {
-							open(row.index);
-						}
-					}}
+					role="presentation"
+					className={styles.resultRows}
+					style={{ height: rows.length * rowHeight }}
 				>
-					{replace && (
-						<span aria-label={t(excluded.has(row.index) ? 'Excluded' : 'Included')}>
-							{excluded.has(row.index) ? '☐' : '☑'}
-						</span>
-					)}
-					<span>
-						<strong>{row.title}</strong>
-						<small>{row.text}</small>
-					</span>
+					{indices.map((index) => {
+						const row = rows[index];
+						return (
+							<div
+								key={`${row.path}:${row.line}`}
+								id={`search-result-${row.index}`}
+								role="option"
+								aria-selected={row.index === selection}
+								aria-posinset={index + 1}
+								aria-setsize={rows.length}
+								style={{ top: index * rowHeight, height: rowHeight }}
+								className={`${row.index === selection ? styles.selected : ''} ${replace && excluded.has(row.index) ? styles.excluded : ''}`}
+								onClick={(event) => {
+									if (locked.current) {
+										return;
+									}
+									if (!replace) {
+										if (event.detail <= 1) {
+											open(row.index);
+										}
+										return;
+									}
+									setSelection(row.index);
+									results.current?.focus();
+								}}
+								onDoubleClick={() => {
+									if (replace && !locked.current) {
+										open(row.index);
+									}
+								}}
+							>
+								{replace && (
+									<span
+										aria-label={t(
+											excluded.has(row.index) ? 'Excluded' : 'Included'
+										)}
+									>
+										{excluded.has(row.index) ? '☐' : '☑'}
+									</span>
+								)}
+								<span>
+									<strong title={row.title}>{row.title}</strong>
+									<small>{row.text}</small>
+								</span>
+							</div>
+						);
+					})}
 				</div>
-			))}
-			{!rows.length && (
+			) : (
 				<p>
 					{loading
 						? t('Looking through your project…')

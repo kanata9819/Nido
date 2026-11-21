@@ -57,6 +57,55 @@ async function matches(page: Page, query?: string): Promise<void> {
 	});
 }
 
+test('large search results mount a viewport and keep distant matches reachable', async ({
+	page
+}) => {
+	await open(page, 'en', true);
+	await page.getByRole('textbox', { name: 'Search in files', exact: true }).fill('large');
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some(
+					(call) => call.method === 'searchText' && call.args[1] === 'large'
+				)
+			)
+		)
+		.toBe(true);
+	await page.evaluate(() =>
+		window.rendererTest.settle('searchText', 0, {
+			truncated: true,
+			matches: Array.from({ length: 200 }, (_, index) => ({
+				path: 'src/large.txt',
+				line: index + 1,
+				column: 1,
+				text: `large match ${index + 1}`
+			}))
+		})
+	);
+	const list = page.getByRole('listbox', { name: 'Search results', exact: true });
+	const first = list.locator('#search-result-0');
+	const last = list.locator('#search-result-199');
+	await expect(first).toBeInViewport();
+	expect(await list.getByRole('option').count()).toBeLessThan(40);
+	await list.evaluate((node) => node.scrollTo({ top: node.scrollHeight, behavior: 'instant' }));
+	await expect(last).toBeInViewport();
+	await expect(first).toHaveAttribute('aria-selected', 'true');
+	await list.press('Home');
+	await list.press('End');
+	await expect(list).toHaveAttribute('aria-activedescendant', 'search-result-199');
+	await expect(last).toHaveAttribute('aria-posinset', '200');
+	await expect(last).toHaveAttribute('aria-setsize', '200');
+	await expect(last).toBeInViewport();
+	await list.press('Enter');
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() => window.rendererTest.pending.find((call) => call.method === 'openFile')?.args
+			)
+		)
+		.toEqual(['alpha', 'src/large.txt', 200, 1]);
+});
+
 test('selecting another replacement file starts its preview at the top left', async ({ page }) => {
 	await open(page);
 	await page.getByRole('textbox', { name: 'Search in files', exact: true }).fill('joke');
