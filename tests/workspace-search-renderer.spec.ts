@@ -87,6 +87,43 @@ test('large search results mount a viewport and keep distant matches reachable',
 	const last = list.locator('#search-result-199');
 	await expect(first).toBeInViewport();
 	expect(await list.getByRole('option').count()).toBeLessThan(40);
+	const scroll = await list.evaluate(async (node) => {
+		const nextFrame = (): Promise<void> =>
+			new Promise((resolve) =>
+				requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+			);
+		const rowHeight = node.querySelector('[role="option"]')!.getBoundingClientRect().height;
+		node.scrollTop = rowHeight * 10 + 1;
+		// Find two pixel offsets with the same intersecting rows at either edge.
+		if ((node.scrollTop + node.clientHeight) % rowHeight === 0) node.scrollTop++;
+		await nextFrame();
+		const from = Array.from;
+		let listsBuilt = 0;
+		let scrollEvents = 0;
+		const onScroll = (): void => {
+			scrollEvents++;
+		};
+		node.addEventListener('scroll', onScroll);
+		Array.from = new Proxy(from, {
+			apply(target, receiver, args) {
+				if (new Error().stack?.includes('virtualRows')) listsBuilt++;
+				return Reflect.apply(target, receiver, args);
+			}
+		});
+		try {
+			node.scrollTop++;
+			await nextFrame();
+			const sameRows = listsBuilt;
+			const sameRowsScrolls = scrollEvents;
+			node.scrollTop += rowHeight;
+			await nextFrame();
+			return { sameRows, sameRowsScrolls, crossedRow: listsBuilt > sameRows };
+		} finally {
+			Array.from = from;
+			node.removeEventListener('scroll', onScroll);
+		}
+	});
+	expect(scroll).toEqual({ sameRows: 0, sameRowsScrolls: 1, crossedRow: true });
 	await list.evaluate((node) => node.scrollTo({ top: node.scrollHeight, behavior: 'instant' }));
 	await expect(last).toBeInViewport();
 	await expect(first).toHaveAttribute('aria-selected', 'true');
