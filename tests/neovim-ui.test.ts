@@ -130,7 +130,7 @@ test('UTF-8 positions split Japanese and emoji across highlight chunks without b
 	});
 });
 
-test('external UI is published only with complete grid frames and replayed on reattachment', () => {
+test('external UI waits for flush and skips empty grid frames', () => {
 	const sent: NidoEvent[] = [];
 	const events = new SessionEvents('alpha', (event) => sent.push(event));
 	events.receiveNotification('redraw', [['cmdline_show', [[[0, 'echo']], 4, ':', '', 0, 1]]]);
@@ -138,9 +138,9 @@ test('external UI is published only with complete grid frames and replayed on re
 	events.receiveNotification('redraw', [['flush', []]]);
 	assert.deepEqual(
 		sent.map((event) => event.type),
-		['redraw', 'neovimUI']
+		['neovimUI']
 	);
-	const ui = sent[1];
+	const ui = sent[0];
 	assert.equal(ui.type, 'neovimUI');
 	if (ui.type === 'neovimUI') assert.equal(ui.state.commands[1].position, 4);
 	events.beginScrollBatch();
@@ -148,14 +148,16 @@ test('external UI is published only with complete grid frames and replayed on re
 		['msg_show', ['echo', [[0, 'batched']], false]],
 		['flush', []]
 	]);
-	assert.equal(sent.length, 2);
+	assert.equal(sent.length, 1);
 	events.endScrollBatch();
 	assert.deepEqual(
-		sent.slice(2).map((event) => event.type),
-		['redraw', 'neovimUIPatch']
+		sent.slice(1).map((event) => event.type),
+		['neovimUIPatch']
 	);
 	const patch = sent.at(-1);
 	assert.equal(patch?.type, 'neovimUIPatch');
+	events.receiveNotification('redraw', [['flush', []]]);
+	assert.equal(sent.length, 2);
 	events.replayUI();
 	if (ui.type === 'neovimUI' && patch?.type === 'neovimUIPatch') {
 		assert.deepEqual(sent.at(-1), {
@@ -164,6 +166,15 @@ test('external UI is published only with complete grid frames and replayed on re
 			state: patchNeovimUI(ui.state, patch.state)
 		});
 	}
+	events.receiveNotification('redraw', [
+		['grid_cursor_goto', [1, 2, 3]],
+		['cmdline_pos', [3, 1]],
+		['flush', []]
+	]);
+	assert.deepEqual(
+		sent.slice(3).map((event) => event.type),
+		['redraw', 'neovimUIPatch']
+	);
 });
 
 test('external UI patches retain unchanged large collections and replay a full snapshot', () => {

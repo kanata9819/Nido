@@ -106,7 +106,9 @@ export class SessionEvents {
 	private publishPendingRedraw(): void {
 		const completedFrame = this.pendingRedraw;
 		this.pendingRedraw = [];
-		this.sendToRenderer({ type: 'redraw', id: this.workspaceId, events: completedFrame });
+		if (completedFrame.some(([name]) => name !== 'flush')) {
+			this.sendToRenderer({ type: 'redraw', id: this.workspaceId, events: completedFrame });
+		}
 		if (this.pendingUI) {
 			this.pendingUI = false;
 			this.publishUI();
