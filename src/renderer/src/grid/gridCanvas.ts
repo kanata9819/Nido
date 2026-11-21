@@ -342,7 +342,7 @@ export class GridCanvas implements GlyphMeasure {
 		);
 		ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
 		// A fixed physical-pixel pitch keeps glyph spacing unchanged across horizontal rebases.
-		const cellWidth = Math.ceil(ctx.measureText('M').width * dpr) / dpr;
+		const cellWidth = Math.round(ctx.measureText('M').width * dpr) / dpr;
 		const cellHeight = lineHeight;
 		this.updateImageStyle(
 			JSON.stringify([
