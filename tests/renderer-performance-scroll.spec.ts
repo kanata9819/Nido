@@ -65,7 +65,7 @@ test('Ctrl+@ terminal input places the cursor at its new cell on the first frame
 	expect(columns[0]).toBe(8);
 });
 
-test('j/k holds show the new cursor and viewport without waiting for animation', async ({
+test('held motion keys show the new cursor and viewport without waiting for animation', async ({
 	page
 }) => {
 	await page.clock.install({ time: new Date(0) });
@@ -101,22 +101,25 @@ test('j/k holds show the new cursor and viewport without waiting for animation',
 		};
 	}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 	await page.clock.runFor(32);
-	const scroll = async (rows = 1): Promise<void> => {
-		await page.evaluate((rows) => {
-			const { grid } = (window as unknown as { viewportProbe: { grid: EditorGrid } })
-				.viewportProbe;
-			const args = [1, 0, grid.rows - 1, 0, grid.columns, rows, 0];
-			window.rendererTest.emit({
-				type: 'redraw',
-				id: 'alpha',
-				events: [
-					['nido_scroll', args],
-					['grid_scroll', args],
-					['grid_line', [1, rows > 0 ? grid.rows - 2 : 0, 0, [['new row', 0]]]],
-					['flush']
-				]
-			});
-		}, rows);
+	const scroll = async (rows = 1, columns = 0): Promise<void> => {
+		await page.evaluate(
+			({ rows, columns }) => {
+				const { grid } = (window as unknown as { viewportProbe: { grid: EditorGrid } })
+					.viewportProbe;
+				const args = [1, 0, grid.rows - 1, 0, grid.columns, rows, columns];
+				window.rendererTest.emit({
+					type: 'redraw',
+					id: 'alpha',
+					events: [
+						['nido_scroll', args],
+						['grid_scroll', args],
+						['grid_line', [1, rows > 0 ? grid.rows - 2 : 0, 0, [['new row', 0]]]],
+						['flush']
+					]
+				});
+			},
+			{ rows, columns }
+		);
 	};
 	const sample = (field: 'draws' | 'composites' | 'cursorRow' = 'draws'): Promise<number> =>
 		page.evaluate((key) => {
@@ -181,6 +184,36 @@ test('j/k holds show the new cursor and viewport without waiting for animation',
 	expect(await sample(), 'Insert-mode text interrupts the viewport animation').toBeGreaterThan(
 		beforeEdit
 	);
+	await page.keyboard.down('ArrowDown');
+	await page.keyboard.down('ArrowDown');
+	const beforeArrow = await sample('composites');
+	await scroll();
+	await page.clock.runFor(16);
+	expect(await sample('composites'), 'holding an Insert-mode arrow skips the slide').toBe(
+		beforeArrow
+	);
+	await page.keyboard.up('ArrowDown');
+	await page.evaluate(() =>
+		window.rendererTest.emit({
+			type: 'redraw',
+			id: 'alpha',
+			events: [['mode_change', ['normal', 0]], ['flush']]
+		})
+	);
+	for (const [key, rows, columns] of [
+		['h', 0, -1],
+		['l', 0, 1],
+		['ArrowUp', -1, 0],
+		['ArrowRight', 0, 1]
+	] as const) {
+		await page.keyboard.down(key);
+		await page.keyboard.down(key);
+		const before = await sample('composites');
+		await scroll(rows, columns);
+		await page.clock.runFor(16);
+		expect(await sample('composites'), `holding ${key} skips the slide`).toBe(before);
+		await page.keyboard.up(key);
+	}
 });
 
 test('touchpad horizontal scrolling accumulates fine input, coalesces bursts and supports Shift and diagonal gestures', async ({
