@@ -195,6 +195,8 @@ function M.highlight(buffer, first, lines, syntax_only)
     end
     return colors[group]
   end
+  local normal = color('Normal') or '#d4d4d4'
+  local syntax_colors = {}
   local highlighted = {}
   for offset, text in ipairs(lines) do
     local spans = {}
@@ -203,32 +205,36 @@ function M.highlight(buffer, first, lines, syntax_only)
     local column = 0
     -- Inspect byte positions, but never split a UTF-8 character in the response.
     for character in text:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
-      -- Scratch previews have no LSP tokens; avoid the full inspector for every character.
-      local groups = syntax_only and {
-        syntax = {{hl_group = vim.fn.synIDattr(vim.fn.synID(first + offset - 1, column + 1, true), 'name')}},
-        treesitter = {}, semantic_tokens = {},
-      } or vim.inspect_pos(buffer, first + offset - 2, column)
-      local foreground = color('Normal') or '#d4d4d4'
-      local priority = -1
-      local function apply(group, rank)
-        local value = color(group)
-        if value and rank >= priority then
-          foreground = value
-          priority = rank
+      local foreground = normal
+      local row = first + offset - 2
+      if syntax_only then
+        local id = vim.fn.synID(row + 1, column + 1, true)
+        local cached = syntax_colors[id]
+        if not cached then
+          cached = color(vim.fn.synIDattr(id, 'name')) or normal
+          syntax_colors[id] = cached
         end
-      end
-      for _, group in ipairs(groups.syntax) do
-        apply(group.hl_group, vim.hl.priorities.syntax)
-      end
-      for _, group in ipairs(groups.treesitter) do
-        apply(group.hl_group, tonumber(group.metadata.priority) or vim.hl.priorities.treesitter)
-      end
-      for _, group in ipairs(groups.semantic_tokens) do
-        apply(group.opts.hl_group, group.opts.priority)
-      end
-      if not syntax_only then
+        foreground = cached
+      else
+        local groups = vim.inspect_pos(buffer, row, column)
+        local priority = -1
+        local function apply(group, rank)
+          local value = color(group)
+          if value and rank >= priority then
+            foreground = value
+            priority = rank
+          end
+        end
+        for _, group in ipairs(groups.syntax) do
+          apply(group.hl_group, vim.hl.priorities.syntax)
+        end
+        for _, group in ipairs(groups.treesitter) do
+          apply(group.hl_group, tonumber(group.metadata.priority) or vim.hl.priorities.treesitter)
+        end
+        for _, group in ipairs(groups.semantic_tokens) do
+          apply(group.opts.hl_group, group.opts.priority)
+        end
         -- Offscreen rows have token data even when Neovim has not painted their extmarks.
-        local row = first + offset - 2
         local filetype = vim.bo[buffer].filetype
         for _, token in ipairs(vim.lsp.semantic_tokens.get_at_pos(buffer, row, column) or {}) do
           apply('@lsp.type.' .. token.type .. '.' .. filetype, vim.hl.priorities.semantic_tokens)
@@ -258,7 +264,7 @@ function M.highlight(buffer, first, lines, syntax_only)
     end
     if #spans > 0 then spans[#spans].text = table.concat(pieces) end
     if #spans == 0 then
-      spans = { { text = '', color = color('Normal') or '#d4d4d4' } }
+      spans = { { text = '', color = normal } }
     end
     table.insert(highlighted, spans)
   end
