@@ -8,7 +8,10 @@ import {
 	useSessionSettings,
 	type SessionSettings
 } from '../../src/renderer/src/settings/useSessionSettings';
-import { useWorkspaceSessions } from '../../src/renderer/src/workspace/useWorkspaceSessions';
+import {
+	useWorkspacePosition,
+	useWorkspaceSessions
+} from '../../src/renderer/src/workspace/useWorkspaceSessions';
 
 const noop = (): void => {};
 export function Favorites({ workspace }: { workspace: Workspace }): React.JSX.Element {
@@ -57,8 +60,10 @@ export function Settings({
 }
 
 export function SessionUpdates(): React.JSX.Element {
-	const { states } = useWorkspaceSessions(noop);
-	return <p role="status">{JSON.stringify(states)}</p>;
+	const { states, positions } = useWorkspaceSessions(noop);
+	const alpha = useWorkspacePosition(positions, 'alpha');
+	const beta = useWorkspacePosition(positions, 'beta');
+	return <p role="status">{JSON.stringify({ states, positions: { alpha, beta } })}</p>;
 }
 
 export function Completion(): React.JSX.Element {

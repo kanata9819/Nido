@@ -6,11 +6,14 @@ import type { Workspace, SessionState } from '../../../shared/types';
 import { encodingLabel } from './encodingLabel';
 import styles from './StatusBar.module.css';
 import { indentationLabel } from '../palette/commandItems';
+import { useWorkspacePosition, type WorkspacePositions } from '../workspace/useWorkspaceSessions';
+import type { WorkspaceState } from '../types';
 
 interface StatusBarProps {
 	active: string;
 	workspace?: Workspace;
-	state: SessionState;
+	state: WorkspaceState;
+	positions: WorkspacePositions;
 	sessionCount: number;
 	/** The checked-out Git branch, absent outside a repository. */
 	branch?: string;
@@ -63,6 +66,7 @@ export default function StatusBar({
 	active,
 	workspace,
 	state,
+	positions,
 	sessionCount,
 	branch,
 	onBranch,
@@ -214,20 +218,43 @@ export default function StatusBar({
 					<option value="CRLF">CRLF</option>
 				</select>
 			)}
-			<span>{t('Ln {line}, Col {column}', { line: state.line, column: state.column })}</span>
-			{active && workspace?.kind !== 'terminal' && state.scrollPercent !== undefined && (
+			<Position
+				positions={positions}
+				id={active}
+				showScroll={!!active && workspace?.kind !== 'terminal'}
+			/>
+			<Code2 className={styles.statusIcon} size={15} />
+		</footer>
+	);
+}
+
+/** The cursor and viewport can change without updating the rest of the app. */
+function Position({
+	positions,
+	id,
+	showScroll
+}: {
+	positions: WorkspacePositions;
+	id: string;
+	showScroll: boolean;
+}): React.JSX.Element {
+	const t = useI18n();
+	const { line, column, scrollPercent } = useWorkspacePosition(positions, id);
+	return (
+		<>
+			<span>{t('Ln {line}, Col {column}', { line, column })}</span>
+			{showScroll && scrollPercent !== undefined && (
 				<span
 					className={styles.scrollPosition}
 					title={t('Position in file')}
-					aria-label={t('File position {percent}%', { percent: state.scrollPercent })}
+					aria-label={t('File position {percent}%', { percent: scrollPercent })}
 				>
 					<span className={styles.scrollTrack} aria-hidden="true">
-						<span style={{ width: `${state.scrollPercent}%` }} />
+						<span style={{ width: `${scrollPercent}%` }} />
 					</span>
-					{state.scrollPercent}%
+					{scrollPercent}%
 				</span>
 			)}
-			<Code2 className={styles.statusIcon} size={15} />
-		</footer>
+		</>
 	);
 }

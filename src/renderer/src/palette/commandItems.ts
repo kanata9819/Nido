@@ -1,5 +1,5 @@
-import type { Panel, Item } from '../types';
-import type { DebugAction, Indentation, SessionState, Workspace } from '../../../shared/types';
+import type { Panel, Item, WorkspaceState } from '../types';
+import type { DebugAction, Indentation, Workspace } from '../../../shared/types';
 import type { Translator } from '../../../shared/i18n';
 import { rememberCommand } from './recentCommands';
 
@@ -102,7 +102,7 @@ const unrepeatable = new Set([
 /** What the command groups below read and run. */
 interface CommandContext {
 	active: string;
-	state: SessionState;
+	state: WorkspaceState;
 	callbacks: CommandsCallbacks;
 	/** The active workspace edits files, rather than being a standalone terminal. */
 	editor: boolean;
@@ -486,7 +486,7 @@ function windowCommands({ callbacks }: CommandContext): Item[] {
 export function buildCommands(
 	active: string,
 	workspaces: Workspace[],
-	state: SessionState,
+	state: WorkspaceState,
 	callbacks: CommandsCallbacks,
 	t: Translator
 ): Item[] {

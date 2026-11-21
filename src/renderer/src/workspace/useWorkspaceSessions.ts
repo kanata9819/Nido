@@ -3,6 +3,7 @@ import {
 	useEffect,
 	useRef,
 	useState,
+	useSyncExternalStore,
 	type Dispatch,
 	type SetStateAction,
 	type RefObject
@@ -13,6 +14,7 @@ import {
 	type SessionState,
 	type Workspace
 } from '../../../shared/types';
+import type { WorkspacePosition, WorkspaceState } from '../types';
 
 /** The open workspaces, the selected one, and each workspace's session state. */
 interface WorkspaceSessions {
@@ -20,21 +22,64 @@ interface WorkspaceSessions {
 	setWorkspaces: Dispatch<SetStateAction<Workspace[]>>;
 	active: string;
 	setActive: Dispatch<SetStateAction<string>>;
-	states: Record<string, SessionState>;
+	states: Record<string, WorkspaceState>;
+	positions: WorkspacePositions;
 	/** Each workspace's Neovim mode as last reported, read by the keyboard shortcuts. */
 	mode: RefObject<Record<string, string>>;
 	restoring: boolean;
 }
 
 /** The state of a workspace before Neovim has reported any. */
-export const initialSessionState: SessionState = {
+export const initialSessionState: WorkspaceState = {
 	buffers: [],
 	current: 0,
 	mode: 'n',
-	line: 1,
-	column: 1,
 	filetype: ''
 };
+
+const initialPosition: WorkspacePosition = { line: 1, column: 1 };
+
+export interface WorkspacePositions {
+	get: (id: string) => WorkspacePosition;
+	subscribe: (listener: () => void) => () => void;
+}
+
+function createWorkspacePositions(): WorkspacePositions & {
+	set: (id: string, position: WorkspacePosition) => void;
+	remove: (id: string) => void;
+} {
+	const positions = new Map<string, WorkspacePosition>();
+	const listeners = new Set<() => void>();
+	const get = (id: string): WorkspacePosition => positions.get(id) ?? initialPosition;
+	const notify = (): void => listeners.forEach((listener) => listener());
+	return {
+		get,
+		subscribe(listener) {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		},
+		set(id, position) {
+			const previous = get(id);
+			if (
+				previous.line !== position.line ||
+				previous.column !== position.column ||
+				previous.scrollPercent !== position.scrollPercent
+			) {
+				positions.set(id, position);
+				notify();
+			}
+		},
+		remove(id) {
+			if (positions.delete(id)) {
+				notify();
+			}
+		}
+	};
+}
+
+export function useWorkspacePosition(positions: WorkspacePositions, id: string): WorkspacePosition {
+	return useSyncExternalStore(positions.subscribe, () => positions.get(id));
+}
 
 /**
  * The workspaces and their session state, restored at startup and kept up to date from the
@@ -43,7 +88,8 @@ export const initialSessionState: SessionState = {
 export function useWorkspaceSessions(report: (message: string) => void): WorkspaceSessions {
 	const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
 	const [selectedWorkspace, setActive] = useState('');
-	const [states, setStates] = useState<Record<string, SessionState>>({});
+	const [states, setStates] = useState<Record<string, WorkspaceState>>({});
+	const [positions] = useState(createWorkspacePositions);
 	const [restoring, setRestoring] = useState(true);
 	const mode = useRef<Record<string, string>>({});
 	// The selected workspace, or the first one when it closed.
@@ -69,9 +115,24 @@ export function useWorkspaceSessions(report: (message: string) => void): Workspa
 					if (!frame) {
 						frame = requestAnimationFrame(() => {
 							frame = 0;
-							if (pendingStates.size) {
-								const updates = [...pendingStates];
-								pendingStates.clear();
+							const updates: [string, Partial<WorkspaceState>][] = [];
+							for (const [id, update] of pendingStates) {
+								const { line, column, scrollPercent, ...state } = update;
+								const previous = positions.get(id);
+								positions.set(id, {
+									line: line ?? previous.line,
+									column: column ?? previous.column,
+									scrollPercent:
+										'scrollPercent' in update
+											? scrollPercent
+											: previous.scrollPercent
+								});
+								if (Object.keys(state).length) {
+									updates.push([id, state]);
+								}
+							}
+							pendingStates.clear();
+							if (updates.length) {
 								setStates((old) => {
 									const next = { ...old };
 									for (const [id, update] of updates) {
@@ -101,6 +162,7 @@ export function useWorkspaceSessions(report: (message: string) => void): Workspa
 				}
 				case 'exit': {
 					pendingStates.delete(event.id);
+					positions.remove(event.id);
 					const list = latestWorkspaces.current;
 					const index = list.findIndex((w) => w.id === event.id);
 					if (index >= 0) {
@@ -138,7 +200,7 @@ export function useWorkspaceSessions(report: (message: string) => void): Workspa
 			unsubscribe();
 			cancelAnimationFrame(frame);
 		};
-	}, [report]);
+	}, [report, positions]);
 
 	// Restore the workspaces of the last run, with the saved terminal shell.
 	useEffect(() => {
@@ -186,5 +248,5 @@ export function useWorkspaceSessions(report: (message: string) => void): Workspa
 		}
 	}, [workspaces, active, restoring, report]);
 
-	return { workspaces, setWorkspaces, active, setActive, states, mode, restoring };
+	return { workspaces, setWorkspaces, active, setActive, states, positions, mode, restoring };
 }

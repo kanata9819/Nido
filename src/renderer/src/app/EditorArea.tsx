@@ -12,8 +12,8 @@ import WorkspaceWakeError from '../workspace/WorkspaceWakeError';
 import { defaultFontFamily, type EditorSettings } from '../settings/useEditorSettings';
 import type { Decoration } from '../explorer/fileDecorations';
 import type { BottomPanels } from '../panels/useBottomPanels';
-import type { Item, Panel } from '../types';
-import type { SessionState, Workspace } from '../../../shared/types';
+import type { Item, Panel, WorkspaceState } from '../types';
+import type { Workspace } from '../../../shared/types';
 import styles from './EditorArea.module.css';
 
 /** The workspace editors' startup: which drew a frame, and which failed to wake. */
@@ -28,11 +28,11 @@ interface Props {
 	settings: EditorSettings;
 	/** The selected workspace, if any, and its session state. */
 	workspace: Workspace | undefined;
-	state: SessionState;
+	state: WorkspaceState;
 	active: string;
 	/** Workspaces with a running Neovim; each keeps its editor mounted. */
 	awakeWorkspaces: Workspace[];
-	states: Record<string, SessionState>;
+	states: Record<string, WorkspaceState>;
 	panel: Panel;
 	/** Whether a palette or the leader menu takes the keyboard from the editors. */
 	blocked: boolean;

@@ -1,4 +1,5 @@
-import type { SessionState, Workspace } from '../../../shared/types';
+import type { Workspace } from '../../../shared/types';
+import type { WorkspaceState } from '../types';
 import type { BottomPanels } from './useBottomPanels';
 import DebugPanel from './DebugPanel';
 import ReferencesPanel from './ReferencesPanel';
@@ -8,7 +9,7 @@ interface Props {
 	active: string;
 	blocked: boolean;
 	workspace?: Workspace;
-	state: SessionState;
+	state: WorkspaceState;
 	panels: BottomPanels;
 	animations: boolean;
 }
