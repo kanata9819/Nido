@@ -110,6 +110,23 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
+.resultRows {
+	position: relative;
+	overflow-anchor: none;
+}
+.resultRows > [role='option'] {
+	position: absolute;
+	inset-inline: 0;
+}
+.resultRows strong {
+	line-height: 16px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.resultRows small {
+	line-height: 14px;
+}
 .selected {
 	background: var(--ui-accent-soft, #a3cc9420);
 	box-shadow: inset 2px 0 var(--ui-accent, #a8cf9e);
