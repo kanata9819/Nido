@@ -46,13 +46,14 @@ export default function GitDiff({
 	const display = useMemo(() => diffViewRows(rows, layout), [rows, layout]);
 	const emphasis = useMemo(() => rowEmphasis(rows), [rows]);
 	const displayIndex = useMemo(() => firstPositions(display), [display]);
-	const sources = useMemo(() => sideSources(rows), [rows]);
+	const hasPath = !!path;
+	const sources = useMemo(() => (hasPath ? sideSources(rows) : undefined), [hasPath, rows]);
 	const changes = useMemo(() => changeStarts(rows), [rows]);
 	const width = useMemo(() => longestLine(rows), [rows]);
 	const hasLines = diffHasLines(rows);
 	const panes = usePaneSync(diff, hasLines);
 	const { before, after, height } = panes;
-	const highlight = useDiffHighlight(workspaceId, path, diff, rows, sources);
+	const highlight = useDiffHighlight(workspaceId, path, diff, sources);
 
 	// The first drawn row in view, and the drawn rows around it.
 	const [viewport, setViewport] = useState({ diff, row: 0 });
