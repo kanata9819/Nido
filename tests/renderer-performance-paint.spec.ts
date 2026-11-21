@@ -1635,7 +1635,8 @@ test('numeric row damage preserves overhanging text and decorations across repea
 						paint(grid, canvas);
 						for (const [column, text, fractional = true] of [
 							[3, '9'],
-							[17, '8'],
+							// Both edits must reach the cached texture when fractional motion resumes.
+							[17, '8', false],
 							[3, '2'],
 							// Follow a full repaint with another numeric edit before fractional motion.
 							[4, 'f\u0301\u0338', false],

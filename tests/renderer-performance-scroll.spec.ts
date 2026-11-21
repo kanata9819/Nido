@@ -785,6 +785,10 @@ for (const rows of [4, 8]) {
 							glyphs: number;
 							changedPixels: number;
 							uploads: number;
+							prefixUploads: number;
+							uploadedPixels: number;
+							fullUploadPixels: number;
+							displayClips: number;
 							canvases: number;
 							p50Ms: number;
 							p95Ms: number;
@@ -827,11 +831,16 @@ for (const rows of [4, 8]) {
 						grid.scrollFraction = 0.25 / (19 * devicePixelRatio);
 						const getContext = HTMLCanvasElement.prototype.getContext;
 						const text = CanvasRenderingContext2D.prototype.fillText;
+						const clip = CanvasRenderingContext2D.prototype.clip;
 						const upload = WebGL2RenderingContext.prototype.texImage2D;
+						const uploadPrefix = WebGL2RenderingContext.prototype.texSubImage2D;
 						const canvases = new WeakSet<HTMLCanvasElement>();
 						let canvasCount = 0;
 						let glyphs = 0;
 						let uploads = 0;
+						let prefixUploads = 0;
+						let uploadedPixels = 0;
+						let displayClips = 0;
 						HTMLCanvasElement.prototype.getContext = function (...args) {
 							if (args[0] === '2d' && this !== canvas && !canvases.has(this)) {
 								canvases.add(this);
@@ -843,9 +852,22 @@ for (const rows of [4, 8]) {
 							glyphs++;
 							return text.apply(this, args);
 						};
+						CanvasRenderingContext2D.prototype.clip = function (...args) {
+							if (this.canvas === canvas) displayClips++;
+							return Reflect.apply(clip, this, args);
+						};
 						WebGL2RenderingContext.prototype.texImage2D = function (...args) {
 							uploads++;
+							const source = args.at(-1);
+							if (source instanceof HTMLCanvasElement) {
+								uploadedPixels += source.width * source.height;
+							}
 							return Reflect.apply(upload, this, args);
+						};
+						WebGL2RenderingContext.prototype.texSubImage2D = function (...args) {
+							prefixUploads++;
+							uploadedPixels += args[4] * args[5];
+							return Reflect.apply(uploadPrefix, this, args);
 						};
 						const durations: number[] = [];
 						let initialImages = 0;
@@ -863,7 +885,7 @@ for (const rows of [4, 8]) {
 								canvas.width,
 								sampleHeight
 							).data;
-							glyphs = uploads = 0;
+							glyphs = uploads = prefixUploads = uploadedPixels = displayClips = 0;
 							for (let frame = 0; frame < 40; frame++) {
 								await new Promise(requestAnimationFrame);
 								const start = performance.now();
@@ -913,7 +935,9 @@ for (const rows of [4, 8]) {
 						} finally {
 							HTMLCanvasElement.prototype.getContext = getContext;
 							CanvasRenderingContext2D.prototype.fillText = text;
+							CanvasRenderingContext2D.prototype.clip = clip;
 							WebGL2RenderingContext.prototype.texImage2D = upload;
+							WebGL2RenderingContext.prototype.texSubImage2D = uploadPrefix;
 						}
 						const slowFrames = durations
 							.map((ms, frame) => ({ frame, ms }))
@@ -927,6 +951,14 @@ for (const rows of [4, 8]) {
 							glyphs,
 							changedPixels,
 							uploads,
+							prefixUploads,
+							uploadedPixels,
+							fullUploadPixels:
+								durations.length *
+								49 *
+								canvas.width *
+								Math.ceil(19 * devicePixelRatio),
+							displayClips,
 							canvases: canvasCount - initialImages,
 							p50Ms: durations[20],
 							p95Ms: durations[38],
@@ -956,14 +988,26 @@ for (const rows of [4, 8]) {
 						work.changedPixels,
 						'scrolling must change the visible row pixels'
 					).toBeGreaterThan(0);
-					expect(work.uploads, 'changed row rasters must reach WebGL').toBeGreaterThan(0);
+					expect(work.uploads, 'incoming row rasters must reach WebGL').toBeGreaterThan(
+						0
+					);
 					if (!process.env.NIDO_PERFORMANCE_BASELINE) {
 						expect(
 							work.glyphs,
 							'repaint incoming text and the changed gutter only'
 						).toBeLessThanOrEqual(work.frames * (work.rows * 160 + 49 * 8));
+						expect(
+							work.prefixUploads,
+							'changed line numbers upload their prefix'
+						).toBeGreaterThan(0);
+						expect(
+							work.uploads,
+							'only incoming rows upload whole textures'
+						).toBeLessThanOrEqual(work.frames * work.rows);
+						expect(work.uploadedPixels / work.fullUploadPixels).toBeLessThan(0.25);
+						expect(work.displayClips).toBeLessThanOrEqual(work.frames * 5);
 					}
-					expect(work.uploads).toBeLessThanOrEqual(work.frames * 49);
+					expect(work.uploads + work.prefixUploads).toBeLessThanOrEqual(work.frames * 49);
 					expect(work.canvases).toBeLessThanOrEqual(work.frames * work.rows);
 				}
 			} finally {

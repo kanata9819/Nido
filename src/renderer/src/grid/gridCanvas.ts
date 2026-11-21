@@ -33,8 +33,8 @@ export class GridCanvas implements GlyphMeasure {
 	private rowImages = new WeakMap<Cell[], HTMLCanvasElement>();
 	private rowOverhangs = new WeakMap<HTMLCanvasElement, number>();
 	private rowIndents = new WeakMap<HTMLCanvasElement, { columns: number[]; cuts: number[] }>();
-	// Cells and sideways view position each row image was last rasterized from.
-	private rowSources = new WeakMap<HTMLCanvasElement, { cells: Cell[]; leftcol?: number }>();
+	// Cell snapshots are only used to reuse rasters across horizontal moves.
+	private rowSources = new WeakMap<HTMLCanvasElement, { cells: Cell[]; leftcol: number }>();
 	private shiftScratch?: HTMLCanvasElement;
 	private glyphMetrics = new Map<string, Map<string, TextMetrics>>();
 	private glyphMetricCount = 0;
@@ -83,8 +83,8 @@ export class GridCanvas implements GlyphMeasure {
 					this.dirtyPrefixes.set(image, prefix);
 				} else {
 					this.dirtyPrefixes.delete(image);
+					this.linearRows?.invalidate(image);
 				}
-				this.linearRows?.invalidate(image);
 				this.dirtyImages.add(image);
 			}
 			if (!this.paintDirty) {
@@ -130,7 +130,7 @@ export class GridCanvas implements GlyphMeasure {
 		const view = this.grid.horizontalView;
 		const overhang = this.rowOverhangs.get(image);
 		if (
-			source?.leftcol === undefined ||
+			!source ||
 			!view ||
 			row < view.top ||
 			row >= view.bottom ||
@@ -550,12 +550,6 @@ export class GridCanvas implements GlyphMeasure {
 			? Math.round(rowY * dpr)
 			: Math.round((grid.rowTop(layoutRow) + origin) * dpr) -
 				(grid.scrollOffset + origin) * dpr;
-		ctx.save();
-		if (!commandLine) {
-			ctx.beginPath();
-			ctx.rect(0, 0, width, grid.contentHeight);
-			ctx.clip();
-		}
 		const image = this.rowImage(cells, canvas, Math.ceil(rowHeight * dpr));
 		const indentState = this.rowIndents.get(image);
 		const documentTop = Math.round((grid.rowTop(layoutRow) + origin) * dpr);
@@ -583,12 +577,24 @@ export class GridCanvas implements GlyphMeasure {
 				guides
 			);
 		}
+		// Rows inside the document already fit the band's clip.
+		const clipDocument =
+			!commandLine &&
+			(top + image.height > grid.contentHeight * dpr || image.width > width * dpr);
+		if (clipDocument) {
+			ctx.save();
+			ctx.beginPath();
+			ctx.rect(0, 0, width, grid.contentHeight);
+			ctx.clip();
+		}
 		// Reuse rasterized text; scroll and cursor animation only composite row images.
 		ctx.drawImage(image, 0, top / dpr, image.width / dpr, image.height / dpr);
+		if (clipDocument) {
+			ctx.restore();
+		}
 		if (correctLight && !commandLine) {
 			this.linearRows!.paint(image, top);
 		}
-		ctx.restore();
 	}
 
 	/** The row image for these cells, replaced by a new dirty image if missing or resized. */
@@ -672,9 +678,7 @@ export class GridCanvas implements GlyphMeasure {
 				collectIndents: !prefix && !shifted
 			}
 		);
-		const columns = prefix
-			? painter.clipToPrefix(prefix, frame.digitBounds, previousOverhang)
-			: this.grid.columns;
+		const clip = prefix && painter.clipToPrefix(prefix, frame.digitBounds, previousOverhang);
 		if (translucent && !shifted) {
 			ctx.setTransform(1, 0, 0, 1, 0, 0);
 			ctx.clearRect(0, 0, image.width, image.height);
@@ -684,25 +688,23 @@ export class GridCanvas implements GlyphMeasure {
 		if (shifted) {
 			painter.paintSpans(shifted.spans, shifted.margin, translucent, image.width);
 		} else {
-			painter.paintAll(columns, width, translucent);
+			painter.paintAll(clip?.columns ?? this.grid.columns, width, translucent);
 		}
-		this.rowSources.set(image, {
-			cells: cells.slice(),
-			leftcol:
-				this.grid.horizontalView &&
-				row >= this.grid.horizontalView.top &&
-				row < this.grid.horizontalView.bottom
-					? this.grid.horizontalView.leftcol
-					: undefined
-		});
+		const view = this.grid.horizontalView;
+		if (view && row >= view.top && row < view.bottom) {
+			this.rowSources.set(image, { cells: cells.slice(), leftcol: view.leftcol });
+		} else {
+			this.rowSources.delete(image);
+		}
 		// New digits may overhang farther; retain them for shorter prefixes.
 		this.rowOverhangs.set(image, painter.overhang);
 		this.rowIndents.set(image, {
 			columns: indentColumns,
 			cuts: guides.rowCuts(indentColumns, documentTop, image.height)
 		});
-		if (prefix) {
+		if (clip) {
 			ctx.restore();
+			this.linearRows?.invalidate(image, clip.width);
 		}
 	}
 

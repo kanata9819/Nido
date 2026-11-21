@@ -78,13 +78,13 @@ export class RowPainter {
 	/**
 	 * Clip to the damaged prefix of a row whose leading digits changed, such as line numbers,
 	 * keeping the unchanged suffix and glyphs crossing the damage edge. Saves the context; the
-	 * caller restores it. Returns how many columns to repaint.
+	 * caller restores it. Returns the repaint columns and the clip width in physical pixels.
 	 */
 	clipToPrefix(
 		prefix: { end: number; highlights: Set<number> },
 		digitBounds: Map<string, { left: number; right: number }>,
 		previousOverhang: number | undefined
-	): number {
+	): { columns: number; width: number } {
 		const { ctx, cellWidth, dpr } = this.row;
 		let columns = this.row.columns;
 		ctx.save();
@@ -124,7 +124,7 @@ export class RowPainter {
 				Math.max(prefix.end, Math.ceil((edge / dpr + this.overhang) / cellWidth))
 			);
 		}
-		return columns;
+		return { columns, width: edge };
 	}
 
 	/** Repaint the first `columns` cells over the default background. */
