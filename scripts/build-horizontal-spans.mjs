@@ -30,7 +30,7 @@ try {
 	if (result.status !== 0) throw new Error(`rustc failed with status ${result.status}`);
 	writeFileSync(
 		new URL('horizontalSpansWasm.ts', grid),
-		`// Generated from horizontalSpans.rs by node scripts/build-horizontal-spans.mjs.\nexport default '${readFileSync(wasm).toString('base64')}';\n`
+		`// Generated from horizontalSpans.rs and gridLine.rs by node scripts/build-horizontal-spans.mjs.\nexport default '${readFileSync(wasm).toString('base64')}';\n`
 	);
 } finally {
 	rmSync(wasm, { force: true });

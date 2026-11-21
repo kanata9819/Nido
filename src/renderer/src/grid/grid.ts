@@ -10,10 +10,19 @@ import { GridRowLayout } from './gridRowLayout';
 import { gridHighlight } from './gridHighlight';
 import { scrollGridCells } from './gridCellScroll';
 import { readGridRedraw, type GridRedraw } from './gridRedraw';
+import { DenseGridLines } from './gridLine';
+import {
+	packedGridLineEvent,
+	unpackGridLine,
+	type GridLine,
+	type PackedGridLine
+} from '../../../shared/gridLineTransport';
 export type { Cell } from './gridTypes';
 
 /** State shared by the calls of one redraw batch. */
 interface RedrawBatch {
+	/** The batch contains a native grid_scroll event that can expose fresh rows. */
+	nativeScroll: boolean;
 	/** The batch refills scroll caches through `nido_scroll_cache`. */
 	prefetched: boolean;
 	/** Neovim moved the viewport by repainting rows rather than with grid_scroll. */
@@ -93,6 +102,7 @@ export class Grid {
 	private readonly canvas = new GridCanvas(this);
 	private readonly rowLayout = new GridRowLayout(this.highlights);
 	private readonly rowText = new WeakMap<Cell[], string>();
+	private readonly denseLines = new DenseGridLines();
 	private upperRows: Cell[][] = [];
 	private upperRowsAtStart = false;
 	private upperTops: number[] = [0];
@@ -321,6 +331,7 @@ export class Grid {
 			this.scrollOrigin = 0;
 		}
 		return {
+			nativeScroll: gridShifted,
 			prefetched,
 			repaintedScroll: viewportMoves.length > 0 && !gridShifted,
 			// Sideways moves keep every row in place; their images can shift instead of rasterizing.
@@ -380,19 +391,22 @@ export class Grid {
 				break;
 			case 'grid_line':
 				if (args[0] === 1) {
-					this.writeLine(
-						Number(args[1]),
-						Number(args[2]),
-						args[3] as [string, number?, number?][],
-						batch
-					);
+					this.writeLine(Number(args[1]), Number(args[2]), args[3] as GridLine, batch);
 				}
+				break;
+			case packedGridLineEvent:
+				this.writePackedLines(args[0] as ArrayBuffer, args[1] as string[], batch);
 				break;
 			case 'grid_scroll':
 				if (args[0] === 1) {
 					this.descriptionVersion++;
 					this.layoutDirty = true;
 					this.canvas.invalidatePaint();
+					if (args[3] !== 0 || args[4] !== this.columns || args[6] !== 0) {
+						for (let row = Number(args[1]); row < Number(args[2]); row++) {
+							this.denseLines.forget(this.cells[row]);
+						}
+					}
 					scrollGridCells(
 						this.cells,
 						this.columns,
@@ -562,32 +576,97 @@ export class Grid {
 		);
 	}
 
+	private writePackedLines(buffer: ArrayBuffer, graphemes: string[], batch: RedrawBatch): void {
+		const words = new Uint32Array(buffer);
+		let offset = 0;
+		while (offset + 3 <= words.length) {
+			const row = words[offset++];
+			const column = words[offset++];
+			const runs = words[offset++];
+			const end = offset + 2 * runs;
+			if (end > words.length) {
+				break;
+			}
+			this.writeLine(row, column, { runs: words.subarray(offset, end), graphemes }, batch);
+			offset = end;
+		}
+	}
+
 	private writeLine(
 		rowIndex: number,
 		startColumn: number,
-		line: [string, number?, number?][],
+		line: GridLine | PackedGridLine,
 		batch: RedrawBatch
 	): void {
 		let row = this.cells[rowIndex];
+		if (!row) {
+			return;
+		}
+		const plan = this.denseLines.changes(
+			row,
+			startColumn,
+			line,
+			this.columns,
+			batch.nativeScroll
+		);
+		if (plan) {
+			if (plan.changed.length) {
+				const original = row;
+				if (this.isShared(row, batch)) {
+					row = this.detachRow(rowIndex, row, batch);
+				}
+				let textChanged = false;
+				let trackDamage = true;
+				const recountLayout = plan.changed.length >= 32;
+				if (recountLayout) {
+					this.rowLayout.invalidate(row);
+				}
+				for (const offset of plan.changed) {
+					const column = startColumn + offset;
+					const next = this.denseLines.cell(plan.words[offset]);
+					const before = row[column];
+					if (trackDamage) {
+						trackDamage = this.canvas.invalidate(rowIndex, column, before, next);
+					}
+					if (!recountLayout) {
+						this.rowLayout.replace(row, before, next);
+					}
+					textChanged ||= before?.text !== next.text;
+					row[column] = next;
+				}
+				this.denseLines.commit(row, original, plan.packed, startColumn, plan.words);
+				this.finishLine(rowIndex, row, textChanged);
+			}
+			return;
+		}
 		let changed = false;
 		let textChanged = false;
+		let trackDamage = true;
 		let column = startColumn;
 		let highlight = 0;
-		for (const cell of line) {
+		for (const cell of Array.isArray(line) ? line : unpackGridLine(line)) {
 			if (cell[1] !== undefined) {
 				highlight = cell[1];
 			}
 			for (let i = 0; i < (cell[2] ?? 1); i++) {
-				if (row && column < this.columns) {
+				if (column < this.columns) {
 					if (row[column]?.text !== cell[0] || row[column]?.highlight !== highlight) {
 						if (!changed) {
 							if (this.isShared(row, batch)) {
 								row = this.detachRow(rowIndex, row, batch);
 							}
+							this.denseLines.forget(row);
 							changed = true;
 						}
 						const next = { text: cell[0], highlight };
-						this.canvas.invalidate(rowIndex, column, row[column], next);
+						if (trackDamage) {
+							trackDamage = this.canvas.invalidate(
+								rowIndex,
+								column,
+								row[column],
+								next
+							);
+						}
 						textChanged ||= row[column]?.text !== next.text;
 						this.rowLayout.replace(row, row[column], next);
 						row[column] = next;
@@ -596,11 +675,17 @@ export class Grid {
 				column++;
 			}
 		}
+		if (changed) {
+			this.finishLine(rowIndex, row, textChanged);
+		}
+	}
+
+	private finishLine(rowIndex: number, row: Cell[], textChanged: boolean): void {
 		if (textChanged) {
 			this.rowText.delete(row);
 			this.descriptionVersion++;
 		}
-		if (changed && !this.layoutDirty && rowIndex < this.rows - 1) {
+		if (!this.layoutDirty && rowIndex < this.rows - 1) {
 			// A text edit only moves the following rows if this row changes height.
 			const height = this.rowTops[rowIndex + 1] - this.rowTops[rowIndex];
 			this.layoutDirty = this.rowHeight(row, this.cellHeight) !== height;

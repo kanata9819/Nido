@@ -3,6 +3,7 @@ import type { ViteDevServer } from 'vite';
 import { harnessWarmupTimeout, startHarnessServer } from './helpers/harness-server';
 import { viteFsUrl } from './helpers/vite-fs-url';
 import type { Grid as EditorGrid } from '../src/renderer/src/grid/grid';
+import type { DenseGridLines } from '../src/renderer/src/grid/gridLine';
 import type { Redraw } from '../src/shared/types';
 import type { FrameMotion } from '../src/renderer/src/editor/editorMotion';
 import type {} from './renderer/harness';
@@ -20,6 +21,144 @@ test.beforeAll(async ({ browser }) => {
 
 test.afterAll(async () => {
 	await server?.close();
+});
+
+test('packed redraws and Rust cell updates match scalar redraws through edits and scrolls', async ({
+	browser
+}) => {
+	const context = await browser.newContext({ deviceScaleFactor: 1.25 });
+	try {
+		const page = await context.newPage();
+		await page.route('**/grid-line-probe', (route) =>
+			route.fulfill({ contentType: 'text/html', body: '<body></body>' })
+		);
+		await page.goto(`${origin}grid-line-probe`);
+		const result = await page.evaluate(
+			async ({ gridUrl, wasmUrl, transportUrl }) => {
+				const { Grid } = await import(gridUrl);
+				const { loadGridWasm } = await import(wasmUrl);
+				const { packGridLineRedraw } = await import(transportUrl);
+				const columns = 137;
+				const prefix = (digit: string): [string, number?, number?][] => [
+					[digit, 1],
+					['日', 0],
+					[''],
+					['👩‍💻', 1],
+					[''],
+					['e\u0301'],
+					[' ', 0, 130]
+				];
+				const dense = (glyphs: string[]): RedrawEvent => [
+					'grid_line',
+					...Array.from({ length: 4 }, (_, row) => [
+						1,
+						row,
+						0,
+						Array.from({ length: columns }, (_, column) => [
+							glyphs[(column + row) % glyphs.length],
+							column % 3 ? undefined : row % 2
+						])
+					])
+				];
+				const frames: Redraw[] = [
+					[
+						['grid_resize', [1, columns, 4]],
+						['hl_attr_define', [1, { foreground: 0xffbf60 }, {}, []]],
+						['grid_line', [1, 0, 0, prefix('1')], [1, 1, 7, [['W', 1, 121]]]],
+						['grid_cursor_goto', [1, 0, 1]]
+					],
+					[['grid_line', [1, 0, 0, prefix('2')], [1, 1, 8, [['日', 0], ['']]]]],
+					[['grid_line', [1, 0, 0, prefix('2')], [1, 1, 7, [['W', 1, 121]]]]],
+					[dense(['A', '👩‍💻', '', 'e\u0301', '日', ''])],
+					[dense(['日', '', 'e\u0301', '👩‍💻', '', 'B'])],
+					[['grid_scroll', [1, 0, 2, 2, 130, 1, -1]]],
+					[['grid_line', [1, 0, 6, [['Q', 0, 123]]], [1, 1, 0, prefix('3')]]],
+					[
+						['nido_scroll', [1, 0, 3, 0, columns, 1, 0]],
+						['grid_line', [1, 0, 0, prefix('3')], [1, 1, 0, [['Z', 32768, 137]]]]
+					],
+					[
+						['grid_clear', [1]],
+						['grid_line', [1, 0, 0, prefix('4')]]
+					],
+					[
+						['grid_resize', [1, 120, 4]],
+						['grid_line', [1, 0, 0, prefix('5')]]
+					]
+				];
+				const replay = (
+					transport: boolean
+				): {
+					nativeCalls: number;
+					snapshots: { contents: string; pixels: Uint8ClampedArray }[];
+				} => {
+					const grid: EditorGrid = new Grid();
+					grid.busy = true;
+					const planner: DenseGridLines = Reflect.get(grid, 'denseLines');
+					const original = planner.changes.bind(planner);
+					let nativeCalls = 0;
+					planner.changes = (...args: Parameters<typeof planner.changes>) => {
+						const result = original(...args);
+						nativeCalls += Number(result !== undefined);
+						return result;
+					};
+					const surface = document.createElement('canvas');
+					const snapshots = frames.map((frame) => {
+						const events: Redraw = [...frame, ['flush']];
+						grid.apply(
+							transport ? structuredClone(packGridLineRedraw(events)) : events
+						);
+						grid.draw(surface, 1500, 80, 14, 'monospace', false, undefined, 20);
+						return {
+							contents: JSON.stringify([
+								grid.cells,
+								grid.description,
+								grid.cursorWidth
+							]),
+							pixels: surface
+								.getContext('2d')!
+								.getImageData(0, 0, surface.width, surface.height).data
+						};
+					});
+					return { nativeCalls, snapshots };
+				};
+				const scalar = replay(false);
+				const packedScalar = replay(true);
+				const loaded = await loadGridWasm();
+				const wasm = replay(true);
+				const mismatch = [packedScalar, wasm].map(({ snapshots }) =>
+					snapshots.findIndex((value, frame) => {
+						const reference = scalar.snapshots[frame];
+						return (
+							value.contents !== reference.contents ||
+							value.pixels.some((pixel, index) => pixel !== reference.pixels[index])
+						);
+					})
+				);
+				return {
+					loaded,
+					scalarCalls: scalar.nativeCalls,
+					wasmCalls: wasm.nativeCalls,
+					packed: packGridLineRedraw(frames[3]) !== frames[3],
+					sparse: packGridLineRedraw(frames[1]) === frames[1],
+					mismatch
+				};
+			},
+			{
+				gridUrl: viteFsUrl('src/renderer/src/grid/grid.ts'),
+				wasmUrl: viteFsUrl('src/renderer/src/grid/gridWasm.ts'),
+				transportUrl: viteFsUrl('src/shared/gridLineTransport.ts')
+			}
+		);
+		expect(result.loaded).toBe(true);
+		expect(result.scalarCalls).toBe(0);
+		expect(result.wasmCalls).toBeGreaterThan(5);
+		expect(result.packed).toBe(true);
+		expect(result.sparse).toBe(true);
+		expect(result.mismatch).toEqual([-1, -1]);
+	} finally {
+		await context.close();
+	}
 });
 
 test('wrapped row redraws retain the bitmaps of unchanged shifted text', async ({ browser }) => {

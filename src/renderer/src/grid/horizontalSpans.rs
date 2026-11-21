@@ -1,5 +1,8 @@
 #![no_std]
 
+#[path = "gridLine.rs"]
+mod grid_line;
+
 use core::{arch::wasm32::*, panic::PanicInfo, slice};
 
 const BLOCKED: u32 = 1 << 31;

@@ -61,7 +61,8 @@ export class GridCanvas implements GlyphMeasure {
 	 * Mark a row (or with no row, everything) for repainting. A change of digits in an otherwise
 	 * unchanged row, such as a line number, marks only that prefix of the row image.
 	 */
-	invalidate(row?: number, column?: number, before?: Cell, after?: Cell): void {
+	invalidate(row?: number, column?: number, before?: Cell, after?: Cell): boolean {
+		let prefixCanGrow = false;
 		if (row !== undefined) {
 			const cells = this.grid.cells[row];
 			const image = this.rowImages.get(cells);
@@ -84,6 +85,7 @@ export class GridCanvas implements GlyphMeasure {
 					prefix.end = Math.max(prefix.end, column + 1);
 					prefix.highlights.add(after.highlight);
 					this.dirtyPrefixes.set(image, prefix);
+					prefixCanGrow = true;
 				} else {
 					this.dirtyPrefixes.delete(image);
 					this.linearRows?.invalidate(image);
@@ -99,6 +101,7 @@ export class GridCanvas implements GlyphMeasure {
 			this.glyphMetrics.clear();
 			this.glyphMetricCount = 0;
 		}
+		return prefixCanGrow;
 	}
 
 	/** Reuse the visible bitmap when retained scroll cells need copy-on-write. */

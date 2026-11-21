@@ -10,6 +10,7 @@ import { registerHandlers, type AppState } from './ipc/handlers';
 import type { NidoEvent } from '../shared/types';
 import { readLayout } from './workspace/persistence';
 import { translate } from '../shared/i18n';
+import { packGridLineRedraw } from '../shared/gridLineTransport';
 
 // Running workspaces, keyed by workspace ID. Each Session owns one Neovim process.
 const sessions = new Map<string, Session>();
@@ -27,7 +28,15 @@ const state: AppState = {
 // Send an event to the renderer, where nidoEvents.ts receives it.
 const send = (event: NidoEvent): void => {
 	if (window && !window.isDestroyed()) {
-		window.webContents.send('nido:event', event);
+		if (event.type === 'redraw') {
+			const events = packGridLineRedraw(event.events);
+			window.webContents.send(
+				'nido:event',
+				events === event.events ? event : { ...event, events }
+			);
+		} else {
+			window.webContents.send('nido:event', event);
+		}
 	}
 	if (event.type === 'exit') {
 		sessions.delete(event.id);
