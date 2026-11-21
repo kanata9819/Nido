@@ -6,6 +6,7 @@
 interface Texture {
 	image: WebGLTexture;
 	pixels: number;
+	dirtyWidth: number;
 }
 
 /** The compiled shaders and their uniform locations. */
@@ -110,10 +111,14 @@ export class LinearRowImages {
 		return true;
 	}
 
-	/** Drop the texture of a row image whose content changed. */
-	invalidate(source: HTMLCanvasElement): void {
+	/** Drop a changed row texture or mark its repainted prefix for a later upload. */
+	invalidate(source: HTMLCanvasElement, width?: number): void {
 		const texture = this.textures.get(source);
 		if (texture) {
+			if (width !== undefined && width < source.width) {
+				texture.dirtyWidth = Math.max(texture.dirtyWidth, width);
+				return;
+			}
 			this.gl!.deleteTexture(texture.image);
 			this.textures.delete(source);
 			this.cachedPixels -= texture.pixels;
@@ -135,8 +140,22 @@ export class LinearRowImages {
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 			gl.texImage2D(gl.TEXTURE_2D, 0, gl.SRGB8_ALPHA8, gl.RGBA, gl.UNSIGNED_BYTE, source);
-			texture = { image, pixels: source.width * source.height };
+			texture = { image, pixels: source.width * source.height, dirtyWidth: 0 };
 			this.cachedPixels += texture.pixels;
+		} else if (texture.dirtyWidth) {
+			gl.bindTexture(gl.TEXTURE_2D, texture.image);
+			gl.texSubImage2D(
+				gl.TEXTURE_2D,
+				0,
+				0,
+				0,
+				texture.dirtyWidth,
+				source.height,
+				gl.RGBA,
+				gl.UNSIGNED_BYTE,
+				source
+			);
+			texture.dirtyWidth = 0;
 		}
 		// Refresh insertion order for a bounded LRU cache.
 		this.textures.delete(source);
