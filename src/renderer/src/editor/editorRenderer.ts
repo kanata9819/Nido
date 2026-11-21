@@ -62,7 +62,7 @@ export class EditorRenderer {
 	private disposed = false;
 	/** The latest viewport move came from Nido's own scroll request rather than Neovim. */
 	private directScroll = false;
-	private descriptionDirty = true;
+	private describedVersion = -1;
 	private hasFrame: boolean;
 	private ready = false;
 	private preparingMotion = false;
@@ -435,14 +435,15 @@ export class EditorRenderer {
 
 	/** Keep the canvas's accessible description in step with the grid. */
 	private updateDescription(): void {
-		if (!this.descriptionDirty) {
+		const { grid, surface } = this.options;
+		if (this.describedVersion === grid.descriptionVersion) {
 			return;
 		}
-		const description = this.options.grid.description;
-		if (this.options.surface.getAttribute('aria-description') !== description) {
-			this.options.surface.setAttribute('aria-description', description);
+		const description = grid.description;
+		if (surface.getAttribute('aria-description') !== description) {
+			surface.setAttribute('aria-description', description);
 		}
-		this.descriptionDirty = false;
+		this.describedVersion = grid.descriptionVersion;
 	}
 
 	/** Sizes the snapshot canvas to the surface and returns a context that overwrites it. */
@@ -628,7 +629,6 @@ export class EditorRenderer {
 			this.motion.targetReady = false;
 		}
 		this.hasFrame = grid.rows > 0 && grid.columns > 0;
-		this.descriptionDirty ||= !this.ready;
 		if (
 			!this.scrolling.prefetchPending &&
 			(redraw.layoutReset ||
@@ -637,7 +637,6 @@ export class EditorRenderer {
 		) {
 			this.scrolling.invalidatePrefetch();
 		}
-		this.descriptionDirty ||= redraw.descriptionChanged;
 		this.deferWarm(redraw);
 		this.schedule();
 	}

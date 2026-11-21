@@ -82,6 +82,8 @@ export class Grid {
 	contentHeight = 0;
 	/** Changes when prepared row positions or the visible vertical offset may differ. */
 	rowGeometryVersion = 0;
+	/** Changes when a redraw may change the accessible viewport text. */
+	descriptionVersion = 0;
 	extraRows = 0;
 	bracketGuides: BracketGuide[] = [];
 	stickyScroll?: StickyScrollState;
@@ -388,6 +390,7 @@ export class Grid {
 				break;
 			case 'grid_scroll':
 				if (args[0] === 1) {
+					this.descriptionVersion++;
 					this.layoutDirty = true;
 					this.canvas.invalidatePaint();
 					scrollGridCells(
@@ -533,6 +536,7 @@ export class Grid {
 
 	/** grid_resize: start over with blank cells of the new size. */
 	private resize(columns: number, rows: number): void {
+		this.descriptionVersion++;
 		this.layoutDirty = true;
 		this.canvas.invalidatePaint();
 		this.columns = columns;
@@ -547,6 +551,7 @@ export class Grid {
 
 	/** grid_clear: blank every cell. */
 	private clear(): void {
+		this.descriptionVersion++;
 		this.layoutDirty = true;
 		this.canvas.invalidatePaint();
 		this.cells = Array.from({ length: this.rows }, () =>
@@ -565,6 +570,7 @@ export class Grid {
 	): void {
 		let row = this.cells[rowIndex];
 		let changed = false;
+		let textChanged = false;
 		let column = startColumn;
 		let highlight = 0;
 		for (const cell of line) {
@@ -582,15 +588,17 @@ export class Grid {
 						}
 						const next = { text: cell[0], highlight };
 						this.canvas.invalidate(rowIndex, column, row[column], next);
-						if (row[column]?.text !== next.text) {
-							this.rowText.delete(row);
-						}
+						textChanged ||= row[column]?.text !== next.text;
 						this.rowLayout.replace(row, row[column], next);
 						row[column] = next;
 					}
 				}
 				column++;
 			}
+		}
+		if (textChanged) {
+			this.rowText.delete(row);
+			this.descriptionVersion++;
 		}
 		if (changed && !this.layoutDirty && rowIndex < this.rows - 1) {
 			// A text edit only moves the following rows if this row changes height.

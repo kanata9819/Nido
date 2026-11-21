@@ -111,7 +111,7 @@ test('large completion lists bound DOM work while preserving distant selection, 
 	await expect(page.locator('#completion-alpha-1')).toContainText('emoji_🙂');
 });
 
-test('editor descriptions stay current through Unicode edits and scrolling without rewriting unchanged text', async ({
+test('editor descriptions update for text and scrolling without rebuilding for highlights', async ({
 	page
 }) => {
 	await page.addInitScript(() => {
@@ -135,9 +135,17 @@ test('editor descriptions stay current through Unicode edits and scrolling witho
 		})
 	);
 	await page.clock.runFor(32);
-	await page.evaluate(() => {
-		const counter = { writes: 0 };
+	await page.evaluate(async (url) => {
+		const { Grid } = await import(url);
+		const description = Object.getOwnPropertyDescriptor(Grid.prototype, 'description')!.get!;
+		const counter = { reads: 0, writes: 0 };
 		Object.assign(window, { descriptionCounter: counter });
+		Object.defineProperty(Grid.prototype, 'description', {
+			get() {
+				counter.reads++;
+				return description.call(this);
+			}
+		});
 		const setAttribute = Element.prototype.setAttribute;
 		Element.prototype.setAttribute = function (name, value) {
 			if (this instanceof HTMLCanvasElement && name === 'aria-description') counter.writes++;
@@ -148,15 +156,15 @@ test('editor descriptions stay current through Unicode edits and scrolling witho
 			id: 'alpha',
 			events: [['grid_line', [1, 0, 0, Array.from('hello', (text) => [text, 1])]], ['flush']]
 		});
-	});
+	}, viteFsUrl('src/renderer/src/grid/grid.ts'));
 	await page.clock.runFor(32);
 	expect(
 		await page.evaluate(
 			() =>
-				(window as unknown as { descriptionCounter: { writes: number } }).descriptionCounter
-					.writes
+				(window as unknown as { descriptionCounter: { reads: number; writes: number } })
+					.descriptionCounter
 		)
-	).toBe(0);
+	).toEqual({ reads: 0, writes: 0 });
 	await page.evaluate(() =>
 		window.rendererTest.emit({
 			type: 'redraw',

@@ -12,7 +12,6 @@ export interface GridRedraw {
 	layoutReset: boolean;
 	modeChanged: boolean;
 	prefetched: boolean;
-	descriptionChanged: boolean;
 }
 
 /** Inspect event names once, preserving the order of all viewport and pixel scroll calls. */
@@ -25,7 +24,6 @@ export function readGridRedraw(events: Redraw): GridRedraw {
 	let layoutReset = false;
 	let modeChanged = false;
 	let prefetched = false;
-	let lineChanged = false;
 	const pixelOffsets: unknown[][] = [];
 	const viewportScrolls: unknown[][] = [];
 	for (const event of events) {
@@ -65,9 +63,6 @@ export function readGridRedraw(events: Redraw): GridRedraw {
 			case 'nido_scroll_cache':
 				prefetched = true;
 				break;
-			case 'grid_line':
-				lineChanged = true;
-				break;
 		}
 	}
 	return {
@@ -80,7 +75,6 @@ export function readGridRedraw(events: Redraw): GridRedraw {
 		gridShifted,
 		layoutReset,
 		modeChanged,
-		prefetched,
-		descriptionChanged: gridShifted || layoutReset || lineChanged || bufferChanged
+		prefetched
 	};
 }
