@@ -77,7 +77,7 @@ export class EditorRenderer {
 	/** A scroll requested while horizontal alignment finishes, applied by the next frame. */
 	private deferredScroll?: { lines: number; columns: number; follow: boolean; discrete: boolean };
 	private lastScrollTime?: number;
-	private repeatedLineKey?: 'j' | 'k';
+	private repeatedMotionKey?: string;
 	private metrics = { cellWidth: 0, cellHeight: 0 };
 	private paintedFocus = false;
 	private paintedCursorVisible = true;
@@ -228,7 +228,7 @@ export class EditorRenderer {
 
 	private stopMotionForInput = (): void => {
 		const wasAnimating = this.motion !== undefined;
-		this.repeatedLineKey = undefined;
+		this.repeatedMotionKey = undefined;
 		this.deferredScroll = undefined;
 		this.motion = undefined;
 		this.lastScrollTime = undefined;
@@ -240,7 +240,7 @@ export class EditorRenderer {
 
 	/** Like stopMotion, but a sideways scroll in progress keeps its frame. */
 	private pauseMotion = (): void => {
-		this.repeatedLineKey = undefined;
+		this.repeatedMotionKey = undefined;
 		this.deferredScroll = undefined;
 		this.lastScrollTime = undefined;
 		if (this.motion?.offsetX === undefined) {
@@ -250,16 +250,20 @@ export class EditorRenderer {
 	};
 
 	private keyDown = (event: KeyboardEvent): void => {
+		const arrow = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key);
+		const { mode } = this.options.grid;
+		const vimMotion = ['normal', 'visual', 'visual_line', 'visual_block'].includes(mode);
 		if (
 			!event.ctrlKey &&
 			!event.altKey &&
 			!event.metaKey &&
 			!event.shiftKey &&
 			!event.isComposing &&
-			(event.key === 'j' || event.key === 'k') &&
-			['normal', 'visual', 'visual_line', 'visual_block'].includes(this.options.grid.mode)
+			(arrow
+				? vimMotion || /^(insert|replace)/.test(mode)
+				: vimMotion && /^[hjkl]$/.test(event.key))
 		) {
-			this.repeatedLineKey = event.repeat ? event.key : undefined;
+			this.repeatedMotionKey = event.repeat ? event.key : undefined;
 			// Keep the current frame until Neovim replies with the new position.
 			this.stopScrollingForInput();
 		} else {
@@ -268,8 +272,8 @@ export class EditorRenderer {
 	};
 
 	private keyUp = (event: KeyboardEvent): void => {
-		if (event.key === this.repeatedLineKey) {
-			this.repeatedLineKey = undefined;
+		if (event.key === this.repeatedMotionKey) {
+			this.repeatedMotionKey = undefined;
 		}
 	};
 
@@ -322,7 +326,7 @@ export class EditorRenderer {
 		const cursorPosition = this.cursor.update(
 			now,
 			this.options.smoothCursorRef.current,
-			this.directScroll || !!this.motion || !!this.repeatedLineKey,
+			this.directScroll || !!this.motion || !!this.repeatedMotionKey,
 			focused
 		);
 		const dpr = window.devicePixelRatio || 1;
@@ -545,8 +549,6 @@ export class EditorRenderer {
 	 */
 	private prepareMotion(redraw: RedrawSummary, now: number): void {
 		const { scroll, bufferChanged, edited } = redraw;
-		// Held line moves already arrive at a steady cadence, so paint each new view directly.
-		const repeating = this.repeatedLineKey && scroll?.columns === 0;
 		if (
 			scroll &&
 			isHorizontalStep(scroll) &&
@@ -559,7 +561,8 @@ export class EditorRenderer {
 			!bufferChanged &&
 			!edited &&
 			!this.directScroll &&
-			!repeating &&
+			// Held motion keys already arrive at a steady cadence.
+			!this.repeatedMotionKey &&
 			this.animate &&
 			!this.options.host.hidden &&
 			isAnimatableScroll(scroll)
