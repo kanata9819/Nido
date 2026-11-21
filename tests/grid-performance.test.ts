@@ -407,6 +407,25 @@ test('compact row counts follow edits, highlight changes and rectangular scrolli
 	assert.equal(height(), 28);
 });
 
+test('rectangular scrolls clip both axes and blank an entirely exposed rectangle', () => {
+	const original = ['012345', 'abcdef', 'ABCDEF', 'uvwxyz'];
+	for (const { dy, dx, shifted } of [
+		{ dy: 1, dx: 1, shifted: ['aCDE f', 'A    F'] },
+		{ dy: -1, dx: -1, shifted: ['a    f', 'A bcdF'] },
+		{ dy: 0, dx: 5, shifted: ['a    f', 'A    F'] },
+		{ dy: 0, dx: -5, shifted: ['a    f', 'A    F'] }
+	]) {
+		const grid = new Grid();
+		grid.apply([
+			['grid_resize', [1, 6, 4]],
+			['grid_line', ...original.map((text, row) => [1, row, 0, [...text].map((c) => [c])])],
+			['flush']
+		]);
+		grid.apply([['grid_scroll', [1, 1, 3, 1, 5, dy, dx]], ['flush']]);
+		assert.equal(grid.description, [original[0], ...shifted, original[3]].join('\n'));
+	}
+});
+
 test('new highlight IDs retain compact geometry for visible and cached rows', (context) => {
 	const grid = new Grid();
 	grid.apply([
