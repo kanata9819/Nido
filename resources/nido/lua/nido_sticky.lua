@@ -7,6 +7,7 @@ local api = vim.api
 -- Per buffer: the scopes found (`entries`), the delayed refresh, what was last published,
 -- and the delayed recoloring.
 local entries, pending, published, color_pending = {}, {}, {}, {}
+local edits = {}
 --- Cancel a buffer's delayed refresh.
 local function cancel_pending(buffer)
   local ticket = pending[buffer]
@@ -35,10 +36,14 @@ local function redraw()
   vim.schedule(function() vim.cmd.redraw({bang=true}) end)
 end
 
+local function indent_content(text)
+  return text:find('%S') ~= nil and not text:find('^%s*[/#]')
+end
+
 --- Scopes from the buffer's {} pairs, with the header line found above a lone {.
-local function fallback(buffer, lines)
+local function fallback(lines, pairs)
   local scopes = {}
-  for _, pair in ipairs(require('nido_brackets').pairs(buffer)) do
+  for _, pair in ipairs(pairs) do
     if pair.first.bracket == '{' then
       local first = pair.first.row + 1
       if lines[first]:match('^%s*{%s*$') then
@@ -54,11 +59,12 @@ local function fallback(buffer, lines)
       scopes[#scopes + 1] = {line=first, ending=pair.last.row + 1}
     end
   end
-  if #scopes == 0 then
+  local indentation = #scopes == 0
+  if indentation then
     -- Indentation is the fallback for languages without brace scopes or an outline server.
     local stack, previous, previous_indent = {}, nil, 0
     for row, text in ipairs(lines) do
-      if text:match('%S') and not text:match('^%s*[/#]') then
+      if indent_content(text) then
         local indent = vim.fn.indent(row)
         while #stack > 0 and indent <= stack[#stack].indent do
           local scope = table.remove(stack)
@@ -74,7 +80,49 @@ local function fallback(buffer, lines)
       scopes[#scopes + 1] = {line=scope.line, ending=previous}
     end
   end
-  return scopes
+  return scopes, indentation
+end
+
+--- Accumulate changed rows without reading buffer text in the edit callback.
+local function watch_edits(buffer)
+  if not edits[buffer] and not api.nvim_buf_attach(buffer, false, {
+    on_lines = function(_, buf, tick, first, last, new_last)
+      local edit = edits[buf]
+      if not edit then return true end
+      edit.first = math.min(edit.first or first, first)
+      edit.last = math.max(edit.last or last, last)
+      edit.tick = tick
+      edit.full = edit.full or last ~= new_last
+    end,
+    on_reload = function(_, buf) if edits[buf] then edits[buf].full = true end end,
+    on_detach = function(_, buf) edits[buf] = nil end,
+  }) then return end
+  edits[buffer] = {}
+end
+
+--- Body edits with the same indentation leave the existing scope ranges and endpoints intact.
+local function reuse_indentation(buffer, entry, tick, pairs)
+  local edit = edits[buffer]
+  local indent = entry and entry.indent
+  if not indent or not edit or edit.full or vim.bo[buffer].tabstop ~= indent.tabstop
+      or vim.bo[buffer].vartabstop ~= indent.vartabstop then return false end
+  for _, pair in ipairs(pairs) do
+    if pair.first.bracket == '{' then return false end
+  end
+  if entry.tick == tick then return true end
+  -- shortcut: only compare a small changed span with no line-count change, rescan structural edits.
+  if edit.tick ~= tick or not edit.first or edit.last - edit.first > 128 then return false end
+  local lines = api.nvim_buf_get_lines(buffer, edit.first, edit.last, false)
+  for index, after in ipairs(lines) do
+    local row = edit.first + index
+    local before = entry.lines[row]
+    if not before or indent.endpoints[row] or indent_content(before) ~= indent_content(after)
+        or before:match('^%s*') ~= after:match('^%s*') then return false end
+  end
+  for index, text in ipairs(lines) do entry.lines[edit.first + index] = text end
+  entry.tick, entry.methods = tick, nil
+  edits[buffer] = {}
+  return true
 end
 
 --- Order scopes by their first line, outer scopes first.
@@ -165,12 +213,15 @@ end
 
 --- Store a buffer's scopes and redraw when they changed.
 local function set_scopes(buffer, entry, scopes)
-  entry.scopes, entry.scope_marks = sort(scopes), {}
+  entry.scope_marks = {}
   api.nvim_buf_clear_namespace(buffer, scope_namespace, 0, -1)
-  for _, scope in ipairs(scopes) do
+  for _, scope in ipairs(sort(scopes)) do
     local text, ending = entry.lines[scope.line] or '', entry.lines[scope.ending] or ''
     local first = text:find('%S')
     if first then
+      if entry.indent then
+        entry.indent.endpoints[scope.line], entry.indent.endpoints[scope.ending] = true, true
+      end
       local id = api.nvim_buf_set_extmark(buffer, scope_namespace, scope.line - 1, first - 1,
         {end_row=scope.ending - 1, end_col=#ending, invalidate=true})
       -- Separate endpoint ranges invalidate deleted headers instead of pinning their neighbors.
@@ -195,26 +246,37 @@ local function refresh(buffer)
   end
   local tick = api.nvim_buf_get_changedtick(buffer)
   if api.nvim_buf_get_offset(buffer, api.nvim_buf_line_count(buffer)) > 1024 * 1024 then
-    entries[buffer] = {tick=tick, lines={}, scopes={}, methods={}, highlights={}}
+    entries[buffer] = {tick=tick, lines={}, methods={}, highlights={}}
     set_methods(buffer, entries[buffer], {})
     set_scopes(buffer, entries[buffer], {})
     redraw()
     return
   end
   local previous = entries[buffer]
+  local clients = vim.lsp.get_clients({bufnr=buffer, method='textDocument/documentSymbol'})
+  local brace_pairs = require('nido_brackets').pairs(buffer)
+  local cache_indent = not method_separators and #clients == 0
+  if cache_indent and reuse_indentation(buffer, previous, tick, brace_pairs) then
+    return
+  end
   -- Bracket analysis can finish after this edit's first scope refresh.
   local lines = previous and previous.tick == tick and previous.lines
     or api.nvim_buf_get_lines(buffer, 0, -1, false)
   -- Match the existing bracket scanner's bound; never scan a huge file during scrolling.
-  local scopes = api.nvim_buf_call(buffer, function() return fallback(buffer, lines) end)
-  local entry = {tick=tick, lines=lines, scopes=sort(scopes),
+  local scopes, indentation
+  api.nvim_buf_call(buffer, function() scopes, indentation = fallback(lines, brace_pairs) end)
+  local entry = {tick=tick, lines=lines,
     methods=method_separators and api.nvim_buf_call(buffer, function() return fallback_methods(lines) end) or nil,
     highlights=previous and previous.highlights or {},
     scope_marks=previous and previous.scope_marks or {}}
+  if cache_indent and indentation then
+    entry.indent = {endpoints={}, tabstop=vim.bo[buffer].tabstop, vartabstop=vim.bo[buffer].vartabstop}
+    watch_edits(buffer)
+  end
   entries[buffer] = entry
   redraw()
   local requested = false
-  for _, client in ipairs(vim.lsp.get_clients({bufnr=buffer, method='textDocument/documentSymbol'})) do
+  for _, client in ipairs(clients) do
     if client.initialized then
       requested = true
       local request = {client=client}
@@ -481,7 +543,10 @@ api.nvim_set_decoration_provider(api.nvim_create_namespace('nido_sticky'), {
 })
 api.nvim_create_autocmd({'BufWinEnter', 'FileType', 'Syntax', 'TextChanged', 'TextChangedI', 'TextChangedP', 'LspAttach', 'LspDetach'}, {
   callback=function(event)
-    if entries[event.buf] and not event.event:match('^TextChanged') then entries[event.buf].highlights = {} end
+    if not event.event:match('^TextChanged') then
+      if entries[event.buf] then entries[event.buf].highlights = {} end
+      if edits[event.buf] then edits[event.buf].full = true end
+    end
     schedule(event.buf)
   end,
 })
@@ -498,7 +563,11 @@ api.nvim_create_autocmd('LspRequest', {callback=function(event)
   end
 end})
 api.nvim_create_autocmd('ColorScheme', {callback=function()
-  for buffer, entry in pairs(entries) do entry.highlights = {}; schedule(buffer) end
+  for buffer, entry in pairs(entries) do
+    entry.highlights = {}
+    if edits[buffer] then edits[buffer].full = true end
+    schedule(buffer)
+  end
 end})
 api.nvim_create_autocmd({'BufUnload', 'BufWipeout'}, {callback=function(event)
   cancel_outline(event.buf)
