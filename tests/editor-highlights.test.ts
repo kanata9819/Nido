@@ -304,7 +304,7 @@ local allocated = collectgarbage('count') - before
 collectgarbage('restart')
 assert(ok, result)
 assert(#result == 1 and #result[1] == 1 and result[1][1].text == text)
-assert(allocated < 32 * 1024,
+assert(allocated < 1024,
   string.format('A 16,000-byte preview row allocated %.1f MiB', allocated / 1024))
 return allocated
 `,
