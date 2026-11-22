@@ -14,30 +14,61 @@ export const packedGridLineEvent = 'nido_packed_grid_line';
 /** Pack large grid_line groups before they cross IPC and the isolated preload world. */
 export function packGridLineRedraw(events: Redraw): Redraw {
 	let result: Redraw | undefined;
-	for (const [index, event] of events.entries()) {
-		if (event[0] !== 'grid_line') {
-			continue;
-		}
+	let pending = 0;
+	for (let first = 0; first < events.length;) {
+		let end = first;
 		let runCount = 0;
-		for (let i = 1; i < event.length; i++) {
-			const line = event[i] as unknown[];
-			if (line[0] !== 1 || !Array.isArray(line[3])) {
-				runCount = 0;
+		// Neovim can split a single repaint across many RPC notifications before flush.
+		while (end < events.length) {
+			const count = countGridRuns(events[end]);
+			if (count < 0) {
 				break;
 			}
-			runCount += line[3].length;
+			runCount += count;
+			end++;
 		}
 		// Small updates and already compressed lines are cheap to transfer as tuples.
-		if (runCount < 512) {
-			continue;
+		if (runCount >= 512) {
+			const lines: unknown[][] = [];
+			for (let i = first; i < end; i++) {
+				const event = events[i];
+				for (let line = 1; line < event.length; line++) {
+					lines.push(event[line] as unknown[]);
+				}
+			}
+			const packed = packLines(lines, runCount);
+			if (packed) {
+				result ??= [];
+				for (; pending < first; pending++) {
+					result.push(events[pending]);
+				}
+				result.push(packed);
+				pending = end;
+			}
 		}
-		const packed = packLines(event.slice(1) as unknown[][], runCount);
-		if (packed) {
-			result ??= events.slice();
-			result[index] = packed;
+		first = Math.max(first + 1, end);
+	}
+	if (result) {
+		for (; pending < events.length; pending++) {
+			result.push(events[pending]);
 		}
 	}
 	return result ?? events;
+}
+
+function countGridRuns(event: Redraw[number]): number {
+	if (event[0] !== 'grid_line') {
+		return -1;
+	}
+	let count = 0;
+	for (let i = 1; i < event.length; i++) {
+		const line = event[i] as unknown[];
+		if (line[0] !== 1 || !Array.isArray(line[3])) {
+			return -1;
+		}
+		count += line[3].length;
+	}
+	return count;
 }
 
 function packLines(lines: unknown[][], runCount: number): Redraw[number] | undefined {

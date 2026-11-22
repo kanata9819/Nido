@@ -48,18 +48,19 @@ test('packed redraws and Rust cell updates match scalar redraws through edits an
 					['e\u0301'],
 					[' ', 0, 130]
 				];
-				const dense = (glyphs: string[]): RedrawEvent => [
-					'grid_line',
-					...Array.from({ length: 4 }, (_, row) => [
-						1,
-						row,
-						0,
-						Array.from({ length: columns }, (_, column) => [
-							glyphs[(column + row) % glyphs.length],
-							column % 3 ? undefined : row % 2
-						])
-					])
-				];
+				const dense = (glyphs: string[]): Redraw =>
+					Array.from({ length: 4 }, (_, row) => [
+						'grid_line',
+						[
+							1,
+							row,
+							0,
+							Array.from({ length: columns }, (_, column) => [
+								glyphs[(column + row) % glyphs.length],
+								column % 3 ? undefined : row % 2
+							])
+						]
+					]);
 				const frames: Redraw[] = [
 					[
 						['grid_resize', [1, columns, 4]],
@@ -69,8 +70,8 @@ test('packed redraws and Rust cell updates match scalar redraws through edits an
 					],
 					[['grid_line', [1, 0, 0, prefix('2')], [1, 1, 8, [['日', 0], ['']]]]],
 					[['grid_line', [1, 0, 0, prefix('2')], [1, 1, 7, [['W', 1, 121]]]]],
-					[dense(['A', '👩‍💻', '', 'e\u0301', '日', ''])],
-					[dense(['日', '', 'e\u0301', '👩‍💻', '', 'B'])],
+					dense(['A', '👩‍💻', '', 'e\u0301', '日', '']),
+					dense(['日', '', 'e\u0301', '👩‍💻', '', 'B']),
 					[['grid_scroll', [1, 0, 2, 2, 130, 1, -1]]],
 					[['grid_line', [1, 0, 6, [['Q', 0, 123]]], [1, 1, 0, prefix('3')]]],
 					[
@@ -135,11 +136,17 @@ test('packed redraws and Rust cell updates match scalar redraws through edits an
 						);
 					})
 				);
+				const interrupted: Redraw = [
+					...frames[3].slice(0, 2),
+					['flush'],
+					...frames[3].slice(2)
+				];
 				return {
 					loaded,
 					scalarCalls: scalar.nativeCalls,
 					wasmCalls: wasm.nativeCalls,
-					packed: packGridLineRedraw(frames[3]) !== frames[3],
+					packed: packGridLineRedraw(frames[3]).length === 1,
+					flushBoundary: packGridLineRedraw(interrupted) === interrupted,
 					sparse: packGridLineRedraw(frames[1]) === frames[1],
 					mismatch
 				};
@@ -154,6 +161,7 @@ test('packed redraws and Rust cell updates match scalar redraws through edits an
 		expect(result.scalarCalls).toBe(0);
 		expect(result.wasmCalls).toBeGreaterThan(5);
 		expect(result.packed).toBe(true);
+		expect(result.flushBoundary).toBe(true);
 		expect(result.sparse).toBe(true);
 		expect(result.mismatch).toEqual([-1, -1]);
 	} finally {
