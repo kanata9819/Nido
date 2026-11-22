@@ -10,6 +10,7 @@ interface GridKernel {
 		margin: number
 	): number;
 	grid_line_changes(buffer: number, stride: number, columns: number): number;
+	grid_line_expand(buffer: number, stride: number, runWords: number, graphemes: number): number;
 }
 
 interface GridWasm {
