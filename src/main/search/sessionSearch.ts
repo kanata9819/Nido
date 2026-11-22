@@ -11,6 +11,11 @@ import { WorkspaceReplacement } from './workspaceReplacement';
 
 /** Folders of dependencies and build output that text and file search never enter. */
 const skippedDirectories = ['node_modules', 'dist', 'out', 'build', 'target', '.next'];
+const quickOpenConcurrency = 8;
+const cachedDirectories = 512;
+const cachedEntries = 32_768;
+
+type DirectoryRead = { entries: FileEntry[] } | { error: unknown };
 
 /** Whether a file system error has one of `codes`, such as ENOENT. */
 function hasErrorCode(error: unknown, ...codes: string[]): boolean {
@@ -93,8 +98,9 @@ function literalMatches(path: string, text: string, query: string): SearchResult
 export class SessionSearch {
 	private searchMatcher?: SearchMatcher;
 	private searchGeneration = 0;
-	// Recently listed folders, reused for up to 2 seconds while their mtime is unchanged, so
-	// typing a file search query does not list the whole workspace again for every key.
+	private readonly quickOpenReads = new Set<Promise<DirectoryRead>>();
+	private searchEntryCount = 0;
+	// Keep recent directory listings while rechecking their mtime on every search.
 	private searchDirectories = new Map<
 		string,
 		{ mtime: number; checked: number; entries: FileEntry[] }
@@ -112,7 +118,8 @@ export class SessionSearch {
 
 	/** Forget cached folder listings, after files were created, moved or deleted. */
 	clearDirectories(): void {
-		this.searchDirectories.clear();
+		this.searchDirectories = new Map();
+		this.searchEntryCount = 0;
 	}
 
 	/** Cancel the running search and forget the results a replacement could refer to. */
@@ -367,17 +374,34 @@ export class SessionSearch {
 		const needle = comparable(query);
 		const result: FileEntry[] = [];
 		const directories = [''];
+		const pending = new Map<string, Promise<DirectoryRead>>();
 		while (directories.length && result.length < 100) {
 			if (generation !== this.searchGeneration) {
 				return [];
 			}
-			const entries = await this.searchableEntries(directories.pop()!);
+			// Read upcoming siblings together, but consume them in the original depth-first order.
+			if (needle) {
+				for (const path of directories.slice(-quickOpenConcurrency).reverse()) {
+					if (pending.size === quickOpenConcurrency) {
+						break;
+					}
+					if (!pending.has(path)) {
+						pending.set(path, this.quickOpenDirectory(path, generation));
+					}
+				}
+			}
+			const path = directories.pop()!;
+			const listing = await (pending.get(path) ?? this.quickOpenDirectory(path, generation));
+			pending.delete(path);
 			if (generation !== this.searchGeneration) {
 				return [];
 			}
+			if ('error' in listing) {
+				throw listing.error;
+			}
 			const children: string[] = [];
 			let inspected = 0;
-			for (const entry of entries) {
+			for (const entry of listing.entries) {
 				if (++inspected % 512 === 0) {
 					await new Promise<void>((resolve) => setImmediate(resolve));
 					if (generation !== this.searchGeneration) {
@@ -385,7 +409,7 @@ export class SessionSearch {
 					}
 				}
 				if (!entry.directory) {
-					if (comparable(`${entry.name} ${entry.path}`).includes(needle)) {
+					if (!needle || comparable(`${entry.name} ${entry.path}`).includes(needle)) {
 						result.push(entry);
 					}
 					if (result.length >= 100) {
@@ -402,25 +426,56 @@ export class SessionSearch {
 		return result;
 	}
 
+	/** Limit directory I/O even while reads from an obsolete query are finishing. */
+	private async quickOpenDirectory(path: string, generation: number): Promise<DirectoryRead> {
+		while (
+			generation === this.searchGeneration &&
+			this.quickOpenReads.size >= quickOpenConcurrency
+		) {
+			await Promise.race(this.quickOpenReads);
+		}
+		if (generation !== this.searchGeneration) {
+			return { entries: [] };
+		}
+		const read = this.searchableEntries(path).then(
+			(entries) => ({ entries }),
+			(error: unknown) => ({ error })
+		);
+		this.quickOpenReads.add(read);
+		const result = await read;
+		this.quickOpenReads.delete(read);
+		return result;
+	}
+
 	/** List a folder for searching, from the cache when it is still fresh. */
 	private async directoryEntries(directory: string): Promise<FileEntry[]> {
+		const cache = this.searchDirectories;
 		const info = await stat(await this.path(directory));
-		const cached = this.searchDirectories.get(directory);
+		const cached = cache.get(directory);
 		const entries =
 			cached && cached.mtime === info.mtimeMs && Date.now() - cached.checked < 2000
 				? cached.entries
 				: await this.files(directory, false);
-		this.searchDirectories.delete(directory);
-		// shortcut: retain at most 64 small directories; use an index for larger workspaces.
+		// A listing started before an in-app rename must not refill the invalidated cache.
+		if (cache !== this.searchDirectories) {
+			return entries;
+		}
+		this.searchEntryCount -= cache.get(directory)?.entries.length ?? 0;
+		cache.delete(directory);
 		if (entries.length <= 2000) {
-			if (this.searchDirectories.size >= 64) {
-				this.searchDirectories.delete(this.searchDirectories.keys().next().value!);
-			}
-			this.searchDirectories.set(directory, {
+			cache.set(directory, {
 				mtime: info.mtimeMs,
 				checked: cached?.entries === entries ? cached.checked : Date.now(),
 				entries
 			});
+			this.searchEntryCount += entries.length;
+			for (const [oldPath, old] of cache) {
+				if (cache.size <= cachedDirectories && this.searchEntryCount <= cachedEntries) {
+					break;
+				}
+				this.searchEntryCount -= old.entries.length;
+				cache.delete(oldPath);
+			}
 		}
 		return entries;
 	}

@@ -223,3 +223,58 @@ test('quick open matches folder separators typed either way', async () => {
 		await rm(folder, { recursive: true, force: true });
 	}
 });
+
+test(
+	'quick open overlaps directory reads without changing result order or leaking cancelled results',
+	{ timeout: 5000 },
+	async () => {
+		const root = await mkdtemp(join(tmpdir(), 'nido-quick-open-order-'));
+		const folders = Array.from({ length: 12 }, (_, index) => `dir-${index + 1}`);
+		const directory = (path: string): FileEntry => ({ name: path, path, directory: true });
+		const file = (path: string): FileEntry => ({
+			name: 'needle.txt',
+			path: `${path}/needle.txt`,
+			directory: false
+		});
+		const readsReady = Promise.withResolvers<void>();
+		const releaseReads = Promise.withResolvers<void>();
+		let activeReads = 0;
+		let peakReads = 0;
+		try {
+			const search = new SessionSearch(
+				root,
+				async () => root,
+				async (path) => {
+					if (!path) {
+						return folders.map(directory);
+					}
+					activeReads++;
+					peakReads = Math.max(peakReads, activeReads);
+					if (activeReads === 8) {
+						readsReady.resolve();
+					}
+					await releaseReads.promise;
+					activeReads--;
+					return path === folders[0]
+						? [directory(`${path}/nested`), file(path)]
+						: [file(path)];
+				},
+				{ clear: () => {} } as unknown as WorkspaceReplacement
+			);
+			const obsolete = search.findFiles('obsolete');
+			await readsReady.promise;
+			const current = search.findFiles('needle');
+			releaseReads.resolve();
+			assert.deepEqual(await obsolete, []);
+			assert.deepEqual(await current, [
+				file(folders[0]),
+				file(`${folders[0]}/nested`),
+				...folders.slice(1).map(file)
+			]);
+			assert.equal(peakReads, 8);
+		} finally {
+			releaseReads.resolve();
+			await rm(root, { recursive: true, force: true });
+		}
+	}
+);
