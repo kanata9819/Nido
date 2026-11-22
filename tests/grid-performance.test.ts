@@ -2,9 +2,56 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Grid } from '../src/renderer/src/grid/grid';
 import type { GridRowLayout } from '../src/renderer/src/grid/gridRowLayout';
+import { loadGridWasm } from '../src/renderer/src/grid/gridWasm';
+import {
+	packedGridLineEvent,
+	packGridLineRedraw,
+	type GridLine
+} from '../src/shared/gridLineTransport';
 import type { Redraw } from '../src/shared/types';
 
 type RedrawEvent = Redraw[number];
+
+test('packed redraws remap graphemes and preserve runs clipped at the right edge', async () => {
+	assert.ok(await loadGridWasm());
+	const grid = new Grid();
+	const control = new Grid();
+	const setup: Redraw = [['grid_resize', [1, 100, 24]], ['flush']];
+	grid.apply(setup);
+	control.apply(setup);
+
+	const redraw = (first: string, second: string, tailHighlight: number): void => {
+		const cells: GridLine = [
+			[first, 32767],
+			[''],
+			['z', 0, 0],
+			[second, 9],
+			...Array.from({ length: 22 }, (): GridLine[number] => ['字']),
+			[' ', tailHighlight, 0xffffffff],
+			['unseen', 4]
+		];
+		const lines: RedrawEvent = ['grid_line'];
+		for (let row = 0; row < 24; row++) {
+			lines.push([1, row, 5, cells]);
+		}
+		const tuples: Redraw = [lines, ['flush']];
+		const packed = packGridLineRedraw(tuples);
+		assert.equal(packed[0][0], packedGridLineEvent);
+		grid.apply(packed);
+		control.apply(tuples);
+		assert.deepEqual(grid.cells, control.cells);
+	};
+
+	redraw('🙂', 'e\u0301', 4);
+	assert.deepEqual(grid.cells[0][5], { text: '🙂', highlight: 32767 });
+	assert.deepEqual(grid.cells[0][6], { text: '', highlight: 32767 });
+	assert.deepEqual(grid.cells[0][7], { text: 'e\u0301', highlight: 9 });
+	assert.deepEqual(grid.cells[0][99], { text: ' ', highlight: 4 });
+	const kept = grid.cells[0][8];
+	redraw('e\u0301', '🙂', 2);
+	assert.equal(grid.cells[0][8], kept);
+	assert.deepEqual(grid.cells[0][99], { text: ' ', highlight: 2 });
+});
 
 test('pixel-scrolled code uses the full viewport and keeps bottom clicks in document rows', () => {
 	for (const height of [72, 77, 77.6, 90]) {

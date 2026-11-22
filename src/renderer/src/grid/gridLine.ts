@@ -16,6 +16,7 @@ const minimumColumns = 64;
 export class DenseGridLines {
 	private readonly rows = new WeakMap<Cell[], Uint32Array>();
 	private readonly textIds = new GridTextIds();
+	private readonly graphemeIds = new WeakMap<readonly string[], Uint32Array>();
 
 	forget(row: Cell[]): void {
 		this.rows.delete(row);
@@ -44,7 +45,18 @@ export class DenseGridLines {
 			return undefined;
 		}
 		const visible = columns - start;
-		const wasm = gridWasmBuffer(visible * 3);
+		// Avoid copying an oversized batch table for each row. Near ID exhaustion,
+		// keep interning only the graphemes that the visible runs actually use.
+		const remainingIds = gridTextMask - firstGridGrapheme + 1 - this.textIds.graphemes.length;
+		const packedLine =
+			!Array.isArray(line) &&
+			line.runs.length <= visible * 2 &&
+			line.graphemes.length <= Math.min(visible, remainingIds)
+				? line
+				: undefined;
+		const wasm = gridWasmBuffer(
+			visible * 3 + (packedLine ? packedLine.runs.length + packedLine.graphemes.length : 0)
+		);
 		if (!wasm) {
 			if (typeof window !== 'undefined') {
 				void loadGridWasm();
@@ -53,9 +65,20 @@ export class DenseGridLines {
 		}
 		const { kernel, base, scratch } = wasm;
 		const incoming = scratch.subarray(visible, 2 * visible);
-		const length = Array.isArray(line)
-			? this.writeTupleRuns(line, incoming)
-			: this.writePackedRuns(line, incoming);
+		let length: number;
+		if (packedLine) {
+			const { runs, graphemes } = packedLine;
+			const offset = visible * 3;
+			scratch.set(runs, offset);
+			if (graphemes.length) {
+				scratch.set(this.mapGraphemes(graphemes), offset + runs.length);
+			}
+			length = kernel.grid_line_expand(base, visible, runs.length, graphemes.length);
+		} else {
+			length = Array.isArray(line)
+				? this.writeTupleRuns(line, incoming)
+				: this.writePackedRuns(line, incoming);
+		}
 		if (length < minimumColumns) {
 			return undefined;
 		}
@@ -113,6 +136,18 @@ export class DenseGridLines {
 			}
 		}
 		return length;
+	}
+
+	private mapGraphemes(graphemes: readonly string[]): Uint32Array {
+		let ids = this.graphemeIds.get(graphemes);
+		if (!ids) {
+			ids = new Uint32Array(graphemes.length);
+			for (let i = 0; i < ids.length; i++) {
+				ids[i] = this.textIds.id(graphemes[i]) ?? 0;
+			}
+			this.graphemeIds.set(graphemes, ids);
+		}
+		return ids;
 	}
 
 	private writePackedRuns({ runs, graphemes }: PackedGridLine, target: Uint32Array): number {
