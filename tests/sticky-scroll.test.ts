@@ -676,6 +676,84 @@ assert(ok,err)
 	}
 });
 
+test('sticky indentation reuses scope marks for body edits and rebuilds changed boundaries', async () => {
+	const session = await Session.create(process.cwd(), () => {});
+	try {
+		await session.client.request('nvim_exec_lua', [
+			`
+local api, buffer = vim.api, vim.api.nvim_get_current_buf()
+local sticky = require('nido_sticky')
+local namespace = api.nvim_create_namespace('nido_sticky_scopes')
+local lines = {}
+for i = 1, 250 do
+  vim.list_extend(lines, {'def scope_' .. i .. ':', '  value', '  other', '  last'})
+end
+local defer, indent = vim.defer_fn, vim.fn.indent
+local refreshes, scans = 0, 0
+vim.defer_fn = function(fn, delay)
+  if delay ~= 120 or not debug.getinfo(fn, 'S').source:find('nido_sticky.lua', 1, true) then
+    return defer(fn, delay)
+  end
+  return defer(function() fn(); refreshes = refreshes + 1 end, delay)
+end
+vim.fn.indent = function(row)
+  if debug.getinfo(2, 'S').source:find('nido_sticky.lua', 1, true) then scans = scans + 1 end
+  return indent(row)
+end
+local function update(change)
+  local before = refreshes
+  scans = 0
+  change()
+  api.nvim_exec_autocmds('TextChangedI', {buffer=buffer})
+  assert(vim.wait(5000, function() return refreshes > before end, 2), 'Sticky refresh timed out')
+end
+local function first_scope()
+  for _, mark in ipairs(api.nvim_buf_get_extmarks(buffer, namespace, {0, 0}, {0, -1}, {details=true})) do
+    if mark[4].end_row and mark[4].end_row > mark[2] and not mark[4].invalid then
+      return mark[1], mark[4].end_row + 1
+    end
+  end
+end
+local ok, err = pcall(function()
+  update(function() api.nvim_buf_set_lines(buffer, 0, -1, false, lines) end)
+  local first, finish = first_scope()
+  assert(first and finish == 4 and scans == #lines, 'Expected the initial indentation scopes')
+  sticky.set_method_separators(true)
+  sticky.set_method_separators(false)
+  update(function()
+    api.nvim_buf_set_text(buffer, 1, 2, 1, 7, {'def nested:'})
+    api.nvim_buf_set_text(buffer, 2, 2, 2, 7, {'日本語'})
+  end)
+  assert(scans == 0 and first_scope() == first, 'Body edits must reuse the original scope')
+  local before = refreshes
+  api.nvim_exec_autocmds('User', {pattern='NidoBracketsUpdated', data={buffer=buffer}})
+  assert(vim.wait(5000, function() return refreshes > before end, 2))
+  assert(scans == 0 and first_scope() == first, 'Deferred analysis without brace scopes must still reuse them')
+  sticky.set_method_separators(true)
+  local methods = api.nvim_create_namespace('nido_method_separators')
+  assert(#api.nvim_buf_get_extmarks(buffer, methods, {1, 0}, {1, -1}, {}) == 1,
+    'Re-enabled method separators must see the edited text')
+  sticky.set_method_separators(false)
+  update(function() api.nvim_buf_set_lines(buffer, 2, 3, false, {'dedented'}) end)
+  local _, ending = first_scope()
+  assert(scans > 0 and ending == 2, 'Dedent must change the scope ending')
+  update(function() api.nvim_buf_set_lines(buffer, 0, 1, false, {'def renamed:'}) end)
+  local _, renamed_end = first_scope()
+  assert(scans > 0 and renamed_end == 2, 'Replacing a header must restore its range')
+  update(function() api.nvim_buf_set_lines(buffer, 1, 1, false, {'  inserted'}) end)
+  local _, inserted_end = first_scope()
+  assert(scans > 0 and inserted_end == 3, 'Inserting a row must update the scope range')
+end)
+vim.defer_fn, vim.fn.indent = defer, indent
+assert(ok, err)
+`,
+			[]
+		]);
+	} finally {
+		await session.stop();
+	}
+});
+
 function state(scopes: StickyScrollState['scopes']): StickyScrollState {
 	return {
 		window: 1,
