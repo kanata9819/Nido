@@ -4,8 +4,8 @@ import type { Panel } from '../types';
 import { onNidoEvent } from '../nidoEvents';
 
 /**
- * The files matching `query` while the file palette is open. The search runs 75 ms after the
- * query changes, and again when files change or the window gains focus.
+ * The files matching `query` while the file palette is open. Coalesce query changes for one frame,
+ * and refresh when files change or the window gains focus.
  */
 export function useFileSearch(
 	panel: Panel,
@@ -27,6 +27,7 @@ export function useFileSearch(
 		let cancelled = false;
 		let generation = 0;
 		const refresh = (): void => {
+			window.clearTimeout(timer);
 			const current = ++generation;
 			setLoading(true);
 			window.nido
@@ -47,7 +48,7 @@ export function useFileSearch(
 					}
 				});
 		};
-		const timer = window.setTimeout(refresh, 75);
+		const timer = window.setTimeout(refresh, 16);
 		const unsubscribe = onNidoEvent((event) => {
 			if (event.type === 'filesChanged' && event.id === active) {
 				refresh();
