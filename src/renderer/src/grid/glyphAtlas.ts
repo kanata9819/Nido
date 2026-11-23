@@ -283,8 +283,11 @@ export class GlyphAtlas {
 		this.count++;
 	}
 
-	/** Upload new tiles and draw the queued cells. Returns false when nothing was drawn. */
-	finish(page: Page, background: string): boolean {
+	/**
+	 * Upload new tiles and draw the queued cells between device-pixel lines `top` and `bottom`.
+	 * Returns false when nothing was drawn.
+	 */
+	finish(page: Page, background: string, top: number, bottom: number): boolean {
 		const gl = this.gl!;
 		const program = this.program!;
 		if (!this.count || gl.isContextLost()) {
@@ -305,6 +308,9 @@ export class GlyphAtlas {
 			((value >> 8) & 255) / 255,
 			(value & 255) / 255
 		);
+		// A cursor or a changed line repaints only its band, so leave the rest of the frame alone.
+		gl.enable(gl.SCISSOR_TEST);
+		gl.scissor(0, this.canvas.height - bottom, this.canvas.width, bottom - top);
 		gl.clearColor(0, 0, 0, 0);
 		gl.clear(gl.COLOR_BUFFER_BIT);
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer!);
@@ -314,6 +320,7 @@ export class GlyphAtlas {
 			gl.STREAM_DRAW
 		);
 		gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.count);
+		gl.disable(gl.SCISSOR_TEST);
 		return true;
 	}
 

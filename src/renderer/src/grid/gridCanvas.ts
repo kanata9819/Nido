@@ -485,7 +485,7 @@ export class GridCanvas implements GlyphMeasure {
 			this.paintRow(frame, row, paintTop, paintBottom, guides, correctLight, atlas);
 		}
 		if (atlas) {
-			this.atlasRows.finish(this.grid.contentHeight, width);
+			this.atlasRows.finish(this.grid.contentHeight, width, paintTop, paintBottom);
 		}
 		if (correctLight) {
 			this.linearRows!.finish(ctx, dpr, this.grid.contentHeight);

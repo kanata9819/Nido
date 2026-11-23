@@ -455,10 +455,73 @@ test('glyph atlas scroll replay timing', async ({ browser }) => {
 					canvases[index].getContext('2d')!.getImageData(0, 0, 1, 1);
 					totals[key] = Math.round(((performance.now() - begin) / 120) * 100) / 100;
 				};
+				// Smooth scrolling between Neovim redraws moves every row by a fraction of a line
+				// without changing any cell.
+				const smooth = (index: number): void => {
+					const key = `smooth (offset only):${modes[index]}`;
+					const grid = grids[index];
+					grid.pixelScrollEnabled = true;
+					const begin = performance.now();
+					for (let frame = 0; frame < 240; frame++) {
+						grid.scrollFraction = (frame % 16) / 16;
+						const start = performance.now();
+						grid.draw(
+							canvases[index],
+							1700,
+							49 * 22 + 22,
+							14,
+							'Consolas, "Yu Gothic UI", monospace',
+							false,
+							undefined,
+							22
+						);
+						(times[key] ??= []).push(performance.now() - start);
+					}
+					canvases[index].getContext('2d')!.getImageData(0, 0, 1, 1);
+					totals[key] = Math.round(((performance.now() - begin) / 240) * 100) / 100;
+					grid.scrollFraction = 0;
+					grid.pixelScrollEnabled = false;
+				};
+				// The cursor moves a line per frame, as held j does, or blinks; no cell changes.
+				const cursor = (index: number, phase: 'move' | 'blink'): void => {
+					const key = `cursor ${phase}:${modes[index]}`;
+					const grid = grids[index];
+					grid.busy = false;
+					grid.cursorVisible = true;
+					const begin = performance.now();
+					for (let frame = 0; frame < 240; frame++) {
+						const start = performance.now();
+						if (phase === 'move') {
+							grid.apply([
+								['grid_cursor_goto', [1, frame % (rows - 1), 12]],
+								['flush']
+							]);
+						} else {
+							grid.cursorVisible = frame % 2 === 0;
+						}
+						grid.draw(
+							canvases[index],
+							1700,
+							49 * 22 + 22,
+							14,
+							'Consolas, "Yu Gothic UI", monospace',
+							true,
+							undefined,
+							22
+						);
+						(times[key] ??= []).push(performance.now() - start);
+					}
+					canvases[index].getContext('2d')!.getImageData(0, 0, 1, 1);
+					totals[key] = Math.round(((performance.now() - begin) / 240) * 100) / 100;
+					grid.busy = true;
+				};
 				for (const index of [0, 1]) {
+					cursor(index, 'move');
+					cursor(index, 'blink');
 					run(index, 'down (new lines)', 1, 0);
 					run(index, 'up (revisited lines)', -1, frames * step);
 					jump(index);
+					smooth(index);
 				}
 				const stats = Object.fromEntries(
 					Object.entries(times).map(([key, values]) => {

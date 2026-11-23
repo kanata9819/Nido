@@ -160,14 +160,25 @@ export class GridAtlasRows {
 		}
 	}
 
-	/** Draw the queued rows onto the editor canvas, clipped to the document area. */
-	finish(contentHeight: number, width: number): void {
+	/**
+	 * Draw the queued rows onto the editor canvas, within the band from `paintTop` to
+	 * `paintBottom` CSS pixels and the document area.
+	 */
+	finish(contentHeight: number, width: number, paintTop: number, paintBottom: number): void {
 		const frame = this.frame;
 		this.frame = undefined;
-		if (!frame || !this.queued || !frame.atlas.finish(frame.page, frame.background)) {
+		if (!frame || !this.queued) {
 			return;
 		}
 		const { ctx, canvas, dpr } = frame;
+		const top = Math.max(0, Math.floor(paintTop * dpr));
+		const bottom = Math.min(
+			canvas.height,
+			Math.ceil(Math.min(paintBottom, contentHeight) * dpr)
+		);
+		if (bottom <= top || !frame.atlas.finish(frame.page, frame.background, top, bottom)) {
+			return;
+		}
 		ctx.save();
 		ctx.beginPath();
 		ctx.rect(0, 0, width, contentHeight);
@@ -186,7 +197,18 @@ export class GridAtlasRows {
 			}
 			ctx.clip();
 		}
-		ctx.drawImage(frame.atlas.canvas, 0, 0, canvas.width / dpr, canvas.height / dpr);
+		// Copy only the band, at whole device pixels.
+		ctx.drawImage(
+			frame.atlas.canvas,
+			0,
+			top,
+			canvas.width,
+			bottom - top,
+			0,
+			top / dpr,
+			canvas.width / dpr,
+			(bottom - top) / dpr
+		);
 		ctx.restore();
 	}
 
