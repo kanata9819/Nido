@@ -2,7 +2,7 @@ import { test, expect, _electron as electron } from '@playwright/test';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { installRowImageProbe } from './helpers/row-image-probe';
+import { installRowImageProbe, useRowImages } from './helpers/row-image-probe';
 import { launchEnv } from './helpers/launch-env';
 
 test('scroll rendering reuses text and reports GPU and frame timings', async () => {
@@ -210,6 +210,7 @@ test('non-animated touchpad deltas preview before RPC, coalesce and settle witho
 	const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
 	try {
 		const page = await running.firstWindow();
+		await useRowImages(page);
 		// Isolate IPC coalescing; animated gestures send their eased remainder in a later RPC.
 		await page.addInitScript(() => localStorage.setItem('nido.animations', 'false'));
 		await page.reload();

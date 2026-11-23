@@ -3,7 +3,7 @@ import { electron } from './helpers/electron';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { installRowImageProbe } from './helpers/row-image-probe';
+import { installRowImageProbe, useRowImages } from './helpers/row-image-probe';
 import { launchEnv } from './helpers/launch-env';
 
 test('fast gestures reach both file edges without a slow final approach', async () => {
@@ -26,6 +26,7 @@ test('fast gestures reach both file edges without a slow final approach', async 
 	const running = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
 	try {
 		const page = await running.firstWindow();
+		await useRowImages(page);
 		await page.addInitScript(installRowImageProbe);
 		await page.reload();
 		const canvas = page.locator('canvas:visible');
@@ -141,6 +142,7 @@ test('upward touchpad gestures stop at the first row while replies are delayed',
 	});
 	try {
 		const page = await running.firstWindow();
+		await useRowImages(page);
 		const canvas = page.locator('canvas:visible');
 		await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
 		await page.getByRole('button', { name: 'Settings', exact: true }).click();

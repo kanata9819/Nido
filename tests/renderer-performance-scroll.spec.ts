@@ -73,6 +73,8 @@ test('held motion keys show the new cursor and viewport without waiting for anim
 	await page.addInitScript(() => {
 		localStorage.setItem('nido.animations', 'true');
 		localStorage.setItem('nido.smoothCursor', 'true');
+		// The drawImage probe below follows row images, not the glyph atlas.
+		localStorage.setItem('nido.glyphAtlas', 'off');
 	});
 	await page.goto(`${origin}?view=app`);
 	const input = page.getByRole('textbox', { name: 'Neovim input', exact: true });

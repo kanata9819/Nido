@@ -52,15 +52,15 @@ export interface EditorRendererOptions {
 }
 
 /**
- * Whether editors draw opaque rows from the GPU glyph atlas. It is opt-in while it is being
- * evaluated: run `localStorage.setItem('nido.glyphAtlas', 'on')` in the developer tools and
- * reload.
+ * Whether editors draw opaque rows from the GPU glyph atlas. It is on unless turned off with
+ * `localStorage.setItem('nido.glyphAtlas', 'off')` in the developer tools and a reload, to
+ * compare with row images.
  */
-function glyphAtlasRequested(): boolean {
+function glyphAtlasEnabled(): boolean {
 	try {
-		return globalThis.localStorage?.getItem('nido.glyphAtlas') === 'on';
+		return globalThis.localStorage?.getItem('nido.glyphAtlas') !== 'off';
 	} catch {
-		return false;
+		return true;
 	}
 }
 
@@ -109,7 +109,7 @@ export class EditorRenderer {
 		const { id, grid, host, input, smoothBlink, errorRef, attachedRef } = options;
 		grid.backgroundOpacity = options.backgroundOpacity;
 		grid.pixelScrollEnabled = options.pixelScroll;
-		grid.glyphAtlasEnabled = options.pixelScroll && glyphAtlasRequested();
+		grid.glyphAtlasEnabled = options.pixelScroll && glyphAtlasEnabled();
 		this.hasFrame = grid.rows > 0 && grid.columns > 0;
 		this.cursor = new EditorCursor(
 			grid,

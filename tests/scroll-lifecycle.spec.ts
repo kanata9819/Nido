@@ -2,7 +2,7 @@ import { test, expect, _electron as electron } from '@playwright/test';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { installRowImageProbe } from './helpers/row-image-probe';
+import { installRowImageProbe, useRowImages } from './helpers/row-image-probe';
 import { launchEnv } from './helpers/launch-env';
 
 test('wheel scrolling resumes after a pending Neovim command and across file tabs', async () => {
@@ -164,6 +164,7 @@ test('an old scroll failure cannot reset the preview after changing editor setti
 	});
 	try {
 		const page = await running.firstWindow();
+		await useRowImages(page);
 		await page.addInitScript(installRowImageProbe);
 		// The IPC gates below hold individual requests, so use one request per gesture.
 		await page.emulateMedia({ reducedMotion: 'reduce' });
