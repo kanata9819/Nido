@@ -637,6 +637,73 @@ test('Ctrl+D/U move half a palette list, from the list and while typing', async 
 	await expect(page.getByRole('textbox', { name: 'Filter items' })).toHaveValue('');
 });
 
+test('file search pages through results from the list and the filter', async ({ page }) => {
+	await page.goto(`${origin}?view=app&defer=findFiles,openFile`);
+	await page.getByRole('button', { name: 'Find file', exact: true }).click();
+	const list = page.getByRole('group', { name: 'Palette results' });
+	const filter = page.getByRole('textbox', { name: 'Filter items' });
+	const rows = list.getByRole('button');
+	const selectedIndex = (): Promise<number> =>
+		rows.evaluateAll((buttons) =>
+			buttons.findIndex((button) => button.className.includes('selectedItem'))
+		);
+	const finishSearch = async (query: string): Promise<void> => {
+		await expect
+			.poll(() =>
+				page.evaluate(
+					(value) =>
+						window.rendererTest.pending.some(
+							(call) => call.method === 'findFiles' && call.args[1] === value
+						),
+					query
+				)
+			)
+			.toBe(true);
+		await page.evaluate(() =>
+			window.rendererTest.settle(
+				'findFiles',
+				0,
+				Array.from({ length: 60 }, (_, index) => ({
+					name: `file-${index}.rs`,
+					path: `file-${index}.rs`,
+					directory: false
+				}))
+			)
+		);
+	};
+	await finishSearch('');
+	await expect(rows).toHaveCount(60);
+	await expect(list).toBeFocused();
+	const { half, full } = await list.evaluate((element) => {
+		const height = element.querySelector('button')!.getBoundingClientRect().height;
+		const fit = element.clientHeight / height;
+		return { half: Math.max(1, Math.floor(fit / 2)), full: Math.max(1, Math.floor(fit)) };
+	});
+	expect(await rows.count()).toBeGreaterThan(full * 2);
+	await page.keyboard.press('Control+d');
+	await expect.poll(selectedIndex).toBe(half);
+	await page.keyboard.press('Control+u');
+	await expect.poll(selectedIndex).toBe(0);
+	await page.keyboard.press('Control+f');
+	await expect.poll(selectedIndex).toBe(full);
+	await page.keyboard.press('Control+u');
+	await expect.poll(selectedIndex).toBe(full - half);
+
+	await page.keyboard.press('/');
+	await expect(filter).toBeFocused();
+	await filter.fill('file');
+	await finishSearch('file');
+	await expect.poll(selectedIndex).toBe(0);
+	await page.keyboard.press('Control+f');
+	await expect.poll(selectedIndex).toBe(full);
+	await page.keyboard.press('Control+u');
+	await expect.poll(selectedIndex).toBe(full - half);
+	await page.keyboard.press('Control+b');
+	await expect.poll(selectedIndex).toBe(0);
+	await expect(filter).toHaveValue('file');
+	await expect(filter).toBeFocused();
+});
+
 test('the command palette lists the commands run last first and marks them', async ({ page }) => {
 	await page.goto(origin);
 	await page.evaluate(() => localStorage.clear());
