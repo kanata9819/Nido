@@ -16,3 +16,9 @@ syntax match typescriptCastKeyword /\<satisfies\>/ nextgroup=@typescriptType ski
 syntax match typescriptObjectLabel contained /\k\+\_s*/ nextgroup=typescriptObjectColon,@typescriptCallImpl skipwhite skipempty
 " A const assertion is a modifier, while named types after as retain type colors.
 syntax keyword typescriptConstAssertion const contained nextgroup=@typescriptTypeOperator skipwhite skipempty
+
+" Let contained parameter types finish before the outer arrow can end the signature.
+syntax region typescriptArrowFuncDef contained start=/(\%(\_[^()]\+\|(\_[^()]*)\)*):/
+  \ matchgroup=typescriptArrowFunc end=/=>/
+  \ contains=typescriptArrowFuncArg,typescriptTypeAnnotation,@typescriptCallSignature
+  \ nextgroup=@typescriptExpression,typescriptBlock skipwhite skipempty
