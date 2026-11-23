@@ -85,7 +85,7 @@ export default function GitDiff({
 
 	/** Scroll both panes to show a diff row at the top. */
 	function scrollToRow(row: number): void {
-		const position = displayIndex.get(row) ?? 0;
+		const position = displayIndex(row);
 		setViewport({ diff, row: position });
 		panes.scrollTo(position);
 	}
@@ -155,8 +155,7 @@ export default function GitDiff({
 		sources,
 		emphasis,
 		highlighted: highlight.lines,
-		selectedRow,
-		firstPositions: displayIndex,
+		selectedPosition: selectedRow === undefined ? undefined : displayIndex(selectedRow),
 		t
 	};
 	const sides: Side[] = layout === 'split' ? ['before', 'after'] : ['after'];

@@ -207,6 +207,13 @@
 	margin: 0;
 	padding: 10px 14px;
 }
+.virtualRows {
+	position: relative;
+}
+.virtualRows > [data-virtual-row] {
+	position: absolute;
+	inset-inline: 0;
+}
 .change.fileEntry {
 	align-items: center;
 	padding: 9px 14px;

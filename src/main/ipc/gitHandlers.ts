@@ -1,7 +1,7 @@
 import { dirname, isAbsolute } from 'node:path';
 import { workspaceRelative as relative } from '../workspace/workspacePaths';
 import type { Session } from '../session/session';
-import type { NidoEvent } from '../../shared/types';
+import type { GitStatus, NidoEvent } from '../../shared/types';
 import {
 	gitStatus,
 	gitDiff,
@@ -35,6 +35,7 @@ export function registerGitHandlers({
 }): { changeBranch: <T>(current: Session, change: () => Promise<T>) => Promise<T> } {
 	// Concurrent status requests for one folder share a single `git status` run.
 	const statusRequests = new Map<string, ReturnType<typeof gitStatus>>();
+	const previewStatuses = new WeakMap<Session, GitStatus>();
 	const previews = new WeakMap<Session, object>();
 	const pendingPreviews = new WeakMap<Session, Promise<string>>();
 	// Show one diff at a time per session: a new preview supersedes the previous request, and
@@ -82,7 +83,8 @@ export function registerGitHandlers({
 		}
 	}
 	handle('gitStatus', (id, includeRemote) => {
-		const root = session(id).workspace.root;
+		const current = session(id);
+		const root = current.workspace.root;
 		let pending = statusRequests.get(root);
 		if (!pending) {
 			pending = gitStatus(root).finally(() => {
@@ -92,6 +94,10 @@ export function registerGitHandlers({
 			});
 			statusRequests.set(root, pending);
 		}
+		void pending.then(
+			(snapshot) => previewStatuses.set(current, snapshot),
+			() => {}
+		);
 		return includeRemote === true
 			? Promise.all([
 					pending,
@@ -205,7 +211,9 @@ export function registerGitHandlers({
 		const isStaged = stagedFlag(staged);
 		const current = session(id);
 		const file = text(path);
-		return preview(current, () => gitDiff(current.workspace.root, file, isStaged));
+		return preview(current, () =>
+			gitDiff(current.workspace.root, file, isStaged, previewStatuses.get(current))
+		);
 	});
 	// Toggle one change: stage it when it is unstaged, unstage it when `staged` is true.
 	handle('gitStage', async (id, path, staged) => {

@@ -1,4 +1,7 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type {
 	GitChange,
@@ -10,13 +13,14 @@ import type {
 	GitSyncState
 } from '../../shared/types';
 import { parseWslPath, wslHostPath } from '../../shared/wsl';
-import { wslArguments } from '../platform/wsl';
+import { gitInvocation } from './gitProcess';
 
 // Git commands for the Git panel and Git browser. Every command runs the git executable, or
 // git inside WSL for a WSL workspace, and returns parsed results.
 const exec = promisify(execFile);
 // The preview parser needs the leading space on unchanged blank lines in a unified diff.
 const diffConfig = ['-c', 'diff.suppressBlankEmpty=false'];
+const knownWorkTrees = new Map<string, { config: string; root: string; checked: number }>();
 
 /** The top folder of the repository containing `cwd`. */
 export async function gitRoot(cwd: string): Promise<string> {
@@ -25,6 +29,40 @@ export async function gitRoot(cwd: string): Promise<string> {
 	// Remove Git's line ending without dropping whitespace in the directory name.
 	const root = output.replace(!remote && process.platform === 'win32' ? /\r?\n$/ : /\n$/, '');
 	return remote ? wslHostPath(remote.distribution, root) : root;
+}
+
+/** Reuse a verified native repository root while its Git configuration stays current. */
+export async function gitWorkTreeRoot(cwd: string): Promise<string> {
+	if (
+		parseWslPath(cwd) ||
+		process.env.GIT_DIR ||
+		process.env.GIT_WORK_TREE ||
+		process.env.GIT_COMMON_DIR
+	) {
+		return gitRoot(cwd);
+	}
+	// Linked worktrees, nested workspace folders and non-Git folders still use Git discovery.
+	const dotGit = join(cwd, '.git');
+	const info = await stat(join(dotGit, 'config')).catch(() => undefined);
+	if (!info?.isFile()) {
+		return gitRoot(cwd);
+	}
+	const overrides = Object.entries(process.env).filter(([name]) =>
+		name.startsWith('GIT_CONFIG_')
+	);
+	const environment = createHash('sha256').update(JSON.stringify(overrides)).digest('hex');
+	const config = `${info.ino}:${info.ctimeMs}:${info.mtimeMs}:${info.size}:${environment}`;
+	const cached = knownWorkTrees.get(cwd);
+	if (cached?.config === config && Date.now() - cached.checked < 60_000) {
+		return cached.root;
+	}
+	const root = await gitRoot(cwd);
+	knownWorkTrees.delete(cwd);
+	knownWorkTrees.set(cwd, { config, root, checked: Date.now() });
+	if (knownWorkTrees.size > 64) {
+		knownWorkTrees.delete(knownWorkTrees.keys().next().value!);
+	}
+	return root;
 }
 
 /** One page and the total for `anchor` (the first page's HEAD), or the current HEAD. */
@@ -352,27 +390,13 @@ async function git(
 	try {
 		// Background reads must not compete with staging for an optional index refresh.
 		// Git mutations still acquire their required locks.
-		const remote = parseWslPath(cwd);
-		const gitArgs = ['--no-pager', '--literal-pathspecs', '--no-optional-locks', ...args];
-		const task = exec(
-			remote ? 'wsl.exe' : 'git',
-			remote
-				? wslArguments(remote.distribution, remote.path, [
-						'env',
-						'GIT_TERMINAL_PROMPT=0',
-						'git',
-						...gitArgs
-					])
-				: gitArgs,
-			{
-				...(!remote ? { cwd } : {}),
-				encoding: 'utf8',
-				windowsHide: true,
-				maxBuffer: 4 * 1024 * 1024,
-				timeout: 60_000,
-				env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
-			}
-		);
+		const command = gitInvocation(cwd, args);
+		const task = exec(command.file, command.args, {
+			...command.options,
+			encoding: 'utf8',
+			maxBuffer: 4 * 1024 * 1024,
+			timeout: 60_000
+		});
 		if (input !== undefined) {
 			// Git can exit before it has read all of its input, such as outside a repository.
 			// Its exit status reports that; an unhandled pipe error would crash the app.
@@ -420,28 +444,50 @@ export async function gitIgnored(cwd: string, paths: string[]): Promise<Set<stri
  * twice: once staged and once unstaged.
  */
 export async function gitStatus(cwd: string): Promise<GitStatus> {
-	const root = await gitRoot(cwd);
-	// Branch identity and worktree status are independent reads; avoid a serial process round trip.
-	const [branch, output] = await Promise.all([
-		git(root, ['symbolic-ref', '--short', 'HEAD']).then(
-			(value) => value.trim(),
-			async () => `${(await git(root, ['rev-parse', '--short', 'HEAD'])).trim()} (detached)`
-		),
-		git(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all'])
+	return readStatus(await gitWorkTreeRoot(cwd));
+}
+
+async function readStatus(root: string, paths?: string[]): Promise<GitStatus> {
+	const output = await git(root, [
+		'status',
+		'--porcelain=v2',
+		...(!paths ? ['--branch', '--no-ahead-behind'] : []),
+		'-z',
+		'--untracked-files=all',
+		...(paths ? ['--', ...paths] : [])
 	]);
-	// Each record is "XY path", where X is the index status and Y the work tree status. A rename
-	// or copy is followed by a record with the original path.
 	const records = output.split('\0');
 	const changes: GitChange[] = [];
+	let branch = '';
 	for (let i = 0; i < records.length; i++) {
 		const record = records[i];
-		if (!record) {
+		if (record.startsWith('# branch.head ')) {
+			branch = record.slice('# branch.head '.length);
 			continue;
 		}
-		const status = record.slice(0, 2);
-		const path = record.slice(3);
-		const original = /[RC]/.test(status) ? records[++i] : undefined;
-		if (status[0] !== ' ' && status !== '??') {
+		if (record.startsWith('? ')) {
+			changes.push({ path: record.slice(2), status: '?', staged: false });
+			continue;
+		}
+		// Fixed fields precede the path, which can itself contain spaces, tabs or newlines.
+		const fields = /^1 /.test(record)
+			? 8
+			: /^2 /.test(record)
+				? 9
+				: /^u /.test(record)
+					? 10
+					: 0;
+		if (!fields) {
+			continue;
+		}
+		let start = 0;
+		for (let field = 0; field < fields; field++) {
+			start = record.indexOf(' ', start) + 1;
+		}
+		const status = record.slice(2, 4);
+		const path = record.slice(start);
+		const original = record[0] === '2' ? records[++i] : undefined;
+		if (status[0] !== '.') {
 			changes.push({
 				path,
 				original: /[RC]/.test(status[0]) ? original : undefined,
@@ -449,7 +495,7 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 				staged: true
 			});
 		}
-		if (status[1] !== ' ') {
+		if (status[1] !== '.') {
 			// The second path belongs to the side that renamed/copied the file. Later
 			// edits at its new name must not stage the old name as well.
 			changes.push({
@@ -460,6 +506,13 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 			});
 		}
 	}
+	if (branch === '(detached)') {
+		// Porcelain also prints this sentinel for a branch literally named "(detached)".
+		branch = await git(root, ['symbolic-ref', '--short', 'HEAD']).then(
+			(value) => value.trim(),
+			async () => `${(await git(root, ['rev-parse', '--short', 'HEAD'])).trim()} (detached)`
+		);
+	}
 	return { root, branch, changes };
 }
 
@@ -467,19 +520,36 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 async function selectedChange(
 	cwd: string,
 	path: string,
-	staged: boolean
+	staged: boolean,
+	recent?: GitStatus
 ): Promise<{ root: string; change: GitChange }> {
-	const status = await gitStatus(cwd);
-	const change = status.changes.find((item) => item.path === path && item.staged === staged);
+	const root = await (recent ? gitWorkTreeRoot(cwd) : gitRoot(cwd));
+	const find = ({ changes }: GitStatus): GitChange | undefined =>
+		changes.find((item) => item.path === path && item.staged === staged);
+	const previous = recent?.root === root ? find(recent) : undefined;
+	// A recent list supplies both sides of a rename. Refresh just those paths for previews;
+	// fall back to the full status if the selected entry has changed since the list was read.
+	const scoped = previous
+		? find(await readStatus(root, previous.original ? [path, previous.original] : [path]))
+		: undefined;
+	const change =
+		scoped && scoped.status === previous?.status && scoped.original === previous.original
+			? scoped
+			: find(await readStatus(root));
 	if (!change) {
 		throw new Error('This change no longer exists. Refresh the changes list.');
 	}
-	return { root: status.root, change };
+	return { root, change };
 }
 
 /** The diff of one change, with the whole file as context. Untracked files diff against nothing. */
-export async function gitDiff(cwd: string, path: string, staged: boolean): Promise<string> {
-	const { root, change } = await selectedChange(cwd, path, staged);
+export async function gitDiff(
+	cwd: string,
+	path: string,
+	staged: boolean,
+	recent?: GitStatus
+): Promise<string> {
+	const { root, change } = await selectedChange(cwd, path, staged, recent);
 	const options = ['--no-ext-diff', '--no-textconv', '--no-color', '--unified=2147483647'];
 	if (change.status === '?') {
 		return git(

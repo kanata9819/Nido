@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, mkdir, writeFile, rm, unlink, utimes, realpath } from 'node:fs/promises';
+import {
+	mkdtemp,
+	mkdir,
+	writeFile,
+	readFile,
+	rm,
+	unlink,
+	utimes,
+	realpath
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -185,9 +194,10 @@ test('workspace search avoids clearing scratch buffers and inspects only bytes r
 
 test('workspace grep batches directory ignores, bounds parallel reads and cancels in-flight searches', async () => {
 	const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-grep-batches-')));
+	const previousTrace = process.env.GIT_TRACE2_EVENT;
 	try {
 		execFileSync('git', ['init', '-q', root], { windowsHide: true });
-		await writeFile(join(root, '.gitignore'), '*.log\nignored/\n');
+		await writeFile(join(root, '.gitignore'), '*.log\nignored/\n!dir-31/ignored.log\n');
 		await mkdir(join(root, 'ignored'));
 		await writeFile(join(root, 'ignored', 'secret.txt'), 'batch-target');
 		await writeFile(join(root, 'tracked.log'), 'batch-target');
@@ -228,8 +238,21 @@ test('workspace grep batches directory ignores, bounds parallel reads and cancel
 				reading--;
 			}
 		};
+		const trace = join(root, '.git', 'nido-grep-trace.jsonl');
+		process.env.GIT_TRACE2_EVENT = trace;
 		const result = await service.searchText('batch-target');
-		assert.equal(result.matches.length, 65);
+		const commands = (await readFile(trace, 'utf8'))
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line) as { event: string; argv?: string[] });
+		assert.equal(
+			commands.filter(
+				({ event, argv }) => event === 'start' && argv?.includes('check-ignore')
+			).length,
+			1,
+			'one native ignore process should serve all directory batches'
+		);
+		assert.equal(result.matches.length, 66);
 		assert.equal(result.truncated, false);
 		assert(maximum > 1 && maximum <= 8, `unexpected concurrency: ${maximum}`);
 		assert(
@@ -250,6 +273,8 @@ test('workspace grep batches directory ignores, bounds parallel reads and cancel
 			truncated: false
 		});
 	} finally {
+		if (previousTrace === undefined) delete process.env.GIT_TRACE2_EVENT;
+		else process.env.GIT_TRACE2_EVENT = previousTrace;
 		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 	}
 });

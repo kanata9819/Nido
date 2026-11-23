@@ -125,8 +125,8 @@ function skippedLines(
 export function diffViewRows(rows: DiffRow[], layout: DiffLayout): DiffViewRow[] {
 	const view: DiffViewRow[] = [];
 	const last = { before: 0, after: 0 };
-	let removed: DiffViewRow[] = [];
-	let added: DiffViewRow[] = [];
+	const removed: DiffViewRow[] = [];
+	const added: DiffViewRow[] = [];
 	const flush = (): void => {
 		// A large replacement block can exceed the argument limit of a single push.
 		for (const row of removed) {
@@ -135,8 +135,8 @@ export function diffViewRows(rows: DiffRow[], layout: DiffLayout): DiffViewRow[]
 		for (const row of added) {
 			view.push(row);
 		}
-		removed = [];
-		added = [];
+		removed.length = 0;
+		added.length = 0;
 	};
 	rows.forEach((row, index) => {
 		if (row.hunk) {
@@ -153,7 +153,9 @@ export function diffViewRows(rows: DiffRow[], layout: DiffLayout): DiffViewRow[]
 			last.after = row.after.number;
 		}
 		if (layout === 'split' || row.heading) {
-			flush();
+			if (removed.length || added.length) {
+				flush();
+			}
 			view.push({ kind: 'row', index, row });
 			return;
 		}

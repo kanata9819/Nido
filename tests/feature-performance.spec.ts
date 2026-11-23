@@ -119,6 +119,9 @@ test('Git changes reuse status ordering while navigating and entering commit mes
 	page
 }) => {
 	await open(page, 'git', 'gitStatus,gitDiff');
+	const list = page.getByRole('listbox', { name: 'Changed files' });
+	// This harness view mounts Git directly, without the app's bounded modal.
+	await list.evaluate((node) => (node.style.maxHeight = '350px'));
 	await page.evaluate(() => {
 		const metrics = { sorts: 0 };
 		Object.assign(window, { gitOrderingMetrics: metrics });
@@ -137,8 +140,9 @@ test('Git changes reuse status ordering while navigating and entering commit mes
 			}))
 		});
 	});
-	const list = page.getByRole('listbox', { name: 'Changed files' });
-	await expect(list.getByRole('option')).toHaveCount(1000);
+	const options = list.getByRole('option');
+	await expect(options.first()).toHaveAttribute('aria-setsize', '1000');
+	await expect.poll(() => options.count()).toBeLessThan(40);
 	await page.evaluate(() => {
 		(window as unknown as { gitOrderingMetrics: { sorts: number } }).gitOrderingMetrics.sorts =
 			0;
@@ -155,6 +159,12 @@ test('Git changes reuse status ordering while navigating and entering commit mes
 	);
 	console.log(JSON.stringify({ changedFiles: 1000, selectionMoves: 20, sorts }));
 	expect(sorts, 'Unchanged Git data must keep its prepared ordering').toBe(0);
+	await list.press('End');
+	await expect(list.getByRole('option', { selected: true })).toHaveAttribute(
+		'aria-posinset',
+		'1000'
+	);
+	await expect.poll(() => options.count()).toBeLessThan(40);
 	await expect(page.getByRole('button', { name: /Commit staged/ })).toBeEnabled();
 });
 
@@ -1352,8 +1362,11 @@ test('Enter during file search opens the arriving result, while closing cancels 
 	).toBe(1);
 });
 
-test('Problems selection renders only the previous and next rows', async ({ page }) => {
+test('large Problems lists bound row renders while moving the selection', async ({ page }) => {
 	await page.goto(`${origin}?view=palette`);
+	const results = page.getByRole('listbox', { name: 'Problems', exact: true });
+	// Match the scroll viewport of the palette inside the app modal.
+	await results.evaluate((node) => (node.style.maxHeight = '400px'));
 	await page.evaluate(() => {
 		Object.assign(window, { paletteSeverityReads: 0 });
 		window.rendererTest.render({
@@ -1373,9 +1386,10 @@ test('Problems selection renders only the previous and next rows', async ({ page
 			}))
 		});
 	});
-	const results = page.getByRole('listbox', { name: 'Problems', exact: true });
-	await expect(results.getByRole('option')).toHaveCount(10000);
-	expect(await page.evaluate(() => Reflect.get(window, 'paletteSeverityReads'))).toBe(20000);
+	await expect(results.getByRole('option').first()).toHaveAttribute('aria-setsize', '10000');
+	expect(await page.evaluate(() => Reflect.get(window, 'paletteSeverityReads'))).toBeLessThan(
+		150
+	);
 	await page.evaluate(() => Reflect.set(window, 'paletteSeverityReads', 0));
 	const started = performance.now();
 	for (let index = 0; index < 20; index++) {
@@ -1389,7 +1403,7 @@ test('Problems selection renders only the previous and next rows', async ({ page
 		severityReads,
 		elapsedMs: Math.round(performance.now() - started)
 	});
-	expect(severityReads).toBe(80);
+	expect(severityReads).toBeLessThan(180);
 });
 
 test('Problems selection reuses sorting and filtering while preserving all multiline results', async ({
@@ -1418,7 +1432,8 @@ test('Problems selection reuses sorting and filtering while preserving all multi
 	await page.keyboard.press('Control+Shift+m');
 	const results = page.getByRole('listbox', { name: 'Problems', exact: true });
 	const rows = results.getByRole('option');
-	await expect(rows).toHaveCount(10000);
+	await expect(rows.first()).toHaveAttribute('aria-setsize', '10000');
+	await expect.poll(() => rows.count()).toBeLessThan(40);
 	const wrap = await rows.first().evaluate((node) => ({
 		height: node.getBoundingClientRect().height,
 		whiteSpace: getComputedStyle(node.querySelector('strong')!).whiteSpace

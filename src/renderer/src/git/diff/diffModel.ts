@@ -23,15 +23,20 @@ export function saveLayout(layout: DiffLayout): void {
 	}
 }
 
-/** The first drawn row of each diff row, to scroll to a change. */
-export function firstPositions(display: DiffViewRow[]): Map<number, number> {
-	const first = new Map<number, number>();
-	display.forEach((entry, position) => {
-		if (entry.kind !== 'separator' && !first.has(entry.index)) {
-			first.set(entry.index, position);
+/** Find the first drawn row for navigation. Build the index only on the first jump. */
+export function firstPositions(display: DiffViewRow[]): (row: number) => number {
+	let first: Map<number, number> | undefined;
+	return (row) => {
+		if (!first) {
+			first = new Map();
+			for (const [position, entry] of display.entries()) {
+				if (entry.kind !== 'separator' && !first.has(entry.index)) {
+					first.set(entry.index, position);
+				}
+			}
 		}
-	});
-	return first;
+		return first.get(row) ?? 0;
+	};
 }
 
 /** The text of one side, for syntax highlighting, and for each row its line in that text. */
@@ -78,7 +83,16 @@ const changed = (row: DiffRow | undefined): boolean =>
 
 /** The first row of every block of changed rows, for n/N. */
 export function changeStarts(rows: DiffRow[]): number[] {
-	return rows.flatMap((row, index) => (changed(row) && !changed(rows[index - 1]) ? [index] : []));
+	const starts: number[] = [];
+	let previous = false;
+	for (let index = 0; index < rows.length; index++) {
+		const current = changed(rows[index]);
+		if (current && !previous) {
+			starts.push(index);
+		}
+		previous = current;
+	}
+	return starts;
 }
 
 /** The longest line, so both panes scroll horizontally the same distance. */

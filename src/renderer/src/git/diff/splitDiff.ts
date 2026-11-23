@@ -35,8 +35,8 @@ export function splitDiff(diff: string): DiffRow[] {
 	let inHunk = false;
 	let previousBefore: DiffLine | undefined;
 	let previousAfter: DiffLine | undefined;
-	let removed: DiffLine[] = [];
-	let added: DiffLine[] = [];
+	const removed: DiffLine[] = [];
+	const added: DiffLine[] = [];
 	// The hunk that starts, waiting for its first row.
 	let hunkStart: DiffHunk | undefined;
 	const push = (row: DiffRow): void => {
@@ -50,8 +50,8 @@ export function splitDiff(diff: string): DiffRow[] {
 		for (let i = 0; i < Math.max(removed.length, added.length); i++) {
 			push({ before: removed[i], after: added[i] });
 		}
-		removed = [];
-		added = [];
+		removed.length = 0;
+		added.length = 0;
 	};
 
 	for (const line of diff.split('\n')) {
@@ -67,7 +67,9 @@ export function splitDiff(diff: string): DiffRow[] {
 		}
 		previousBefore = undefined;
 		previousAfter = undefined;
-		const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@ ?(.*)$/.exec(line);
+		const hunk = line.startsWith('@@ ')
+			? /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@ ?(.*)$/.exec(line)
+			: null;
 		if (hunk) {
 			flush();
 			before = Number(hunk[1]);
@@ -83,9 +85,13 @@ export function splitDiff(diff: string): DiffRow[] {
 			previousAfter = { number: after++, text: line.slice(1), changed: true };
 			added.push(previousAfter);
 		} else if (inHunk && line.startsWith(' ')) {
-			flush();
-			previousBefore = { number: before++, text: line.slice(1) };
-			previousAfter = { number: after++, text: line.slice(1) };
+			if (removed.length || added.length) {
+				flush();
+			}
+			const text = line.slice(1);
+			previousBefore = { number: before++, text };
+			const number = after++;
+			previousAfter = previousBefore.number === number ? previousBefore : { number, text };
 			push({ before: previousBefore, after: previousAfter });
 		} else {
 			flush();
