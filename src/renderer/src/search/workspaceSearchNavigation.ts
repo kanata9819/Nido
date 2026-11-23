@@ -30,18 +30,20 @@ export const isLeaveTypingKey = (event: KeyboardEvent<HTMLElement>): boolean => 
 export const isStartTypingKey = (event: KeyboardEvent): boolean =>
 	!event.ctrlKey && !event.altKey && !event.metaKey && ['i', 'a', '/'].includes(event.key);
 
-/** How many rows of `list` half its height holds, for Ctrl+D/U. */
-export const halfPageRows = (list: Element | null): number => {
+/** How many rows fit in the requested fraction of the list's viewport. */
+function pageRows(list: Element | null, fraction: number): number {
 	const row = list?.querySelector('[aria-selected], [role="option"], button');
 	const rowHeight = row?.getBoundingClientRect().height || 0;
 	const height = list?.clientHeight || 0;
-	return rowHeight > 0 && height > 0 ? Math.max(1, Math.floor(height / 2 / rowHeight)) : 10;
-};
+	return rowHeight > 0 && height > 0
+		? Math.max(1, Math.floor((height * fraction) / rowHeight))
+		: 20 * fraction;
+}
 
 /**
  * Move the selection of a search result list with Vim-style keys: j/k and the arrows by one,
- * Ctrl+D/U by half the list's height, g/Home and G/End to the ends. Ctrl+J/K also work, so
- * they can be used from a text field. `list` is the scrolling list, which sizes a half page
+ * Ctrl+D/U by half a page, Ctrl+F/B by a full page, g/Home and G/End to the ends. Ctrl+J/K also
+ * work, so they can be used from a text field. `list` is the scrolling list used to size a page
  * (the event's own element by default). Returns whether the key was handled.
  */
 export const navigateSearchList = (
@@ -51,17 +53,17 @@ export const navigateSearchList = (
 	list: Element | null = event.currentTarget as Element | null
 ): boolean => {
 	const key = event.key.length === 1 && event.ctrlKey ? event.key.toLowerCase() : event.key;
-	const halfPage = event.ctrlKey && !event.shiftKey && ['d', 'u'].includes(key);
+	const page = event.ctrlKey && !event.shiftKey && ['d', 'u', 'f', 'b'].includes(key);
 	if (
-		!(halfPage || ['j', 'k', 'g', 'G', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(key)) ||
+		!(page || ['j', 'k', 'g', 'G', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(key)) ||
 		event.altKey ||
 		event.metaKey ||
-		(event.ctrlKey && !['j', 'k', 'd', 'u'].includes(key))
+		(event.ctrlKey && !page && !['j', 'k'].includes(key))
 	) {
 		return false;
 	}
 	event.preventDefault();
-	const rows = halfPage ? halfPageRows(list) : 1;
+	const rows = page ? pageRows(list, ['d', 'u'].includes(key) ? 0.5 : 1) : 1;
 	move((index) => {
 		let next: number;
 		if (['g', 'Home'].includes(key)) {
@@ -69,7 +71,7 @@ export const navigateSearchList = (
 		} else if (['G', 'End'].includes(key)) {
 			next = count - 1;
 		} else {
-			const down = ['j', 'ArrowDown', 'd'].includes(key);
+			const down = ['j', 'ArrowDown', 'd', 'f'].includes(key);
 			next = Math.max(0, index) + (down ? rows : -rows);
 		}
 		return Math.max(0, Math.min(count - 1, next));
