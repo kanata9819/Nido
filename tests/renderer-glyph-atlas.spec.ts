@@ -304,6 +304,71 @@ for (const scale of [1, 1.25, 1.5, 2]) {
 	});
 }
 
+test('glyph atlas rows share tiles by appearance across grids', async ({ page }) => {
+	await page.route('**/atlas-shared-probe', (route) =>
+		route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' })
+	);
+	await page.goto(`${origin}/atlas-shared-probe`);
+	await requireWebGLCorrection(page);
+	const result = await page.evaluate(
+		async ({ gridUrl, atlasUrl }) => {
+			const { Grid } = (await import(
+				gridUrl
+			)) as typeof import('../src/renderer/src/grid/grid');
+			const { GlyphAtlas } = (await import(
+				atlasUrl
+			)) as typeof import('../src/renderer/src/grid/glyphAtlas');
+			const atlas = GlyphAtlas.forDocument(document);
+
+			function paint(
+				text: string,
+				background: number,
+				enabled: boolean,
+				highlight = 1
+			): Uint8ClampedArray {
+				const grid = new Grid();
+				grid.busy = true;
+				grid.pixelScrollEnabled = true;
+				grid.glyphAtlasEnabled = enabled;
+				grid.apply([
+					['grid_resize', [1, 16, 3]],
+					['hl_attr_define', [highlight, { background }, {}, []]],
+					['grid_line', [1, 0, 0, [[text, highlight]]]],
+					['flush']
+				]);
+				const canvas = document.createElement('canvas');
+				grid.draw(canvas, 144, 66, 14, 'Consolas, monospace', false, undefined, 22);
+				return canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height)
+					.data;
+			}
+
+			const red = paint('W', 0xff0000, true);
+			const redRasterizations = atlas.rasterizations;
+			const green = paint('I', 0x00ff00, true);
+			const greenRasterizations = atlas.rasterizations;
+			const sameGreen = paint('I', 0x00ff00, true, 2);
+			const sharedRasterizations = atlas.rasterizations;
+			const redReference = paint('W', 0xff0000, false);
+			const greenReference = paint('I', 0x00ff00, false);
+			return {
+				redMatches: red.every((byte, index) => byte === redReference[index]),
+				greenMatches: green.every((byte, index) => byte === greenReference[index]),
+				sharedMatches: sameGreen.every((byte, index) => byte === greenReference[index]),
+				redRasterizations,
+				greenRasterizations,
+				sharedRasterizations
+			};
+		},
+		{ gridUrl: '/src/grid/grid.ts', atlasUrl: '/src/grid/glyphAtlas.ts' }
+	);
+	expect(result.redRasterizations).toBeGreaterThan(0);
+	expect(result.redMatches).toBe(true);
+	expect(result.greenMatches).toBe(true);
+	expect(result.greenRasterizations).toBeGreaterThan(result.redRasterizations);
+	expect(result.sharedMatches).toBe(true);
+	expect(result.sharedRasterizations).toBe(result.greenRasterizations);
+});
+
 // Measurement only: NIDO_MEASURE_ATLAS=1 pnpm exec playwright test --config
 // playwright.renderer.config.ts tests/renderer-glyph-atlas.spec.ts -g "scroll replay"
 test('glyph atlas scroll replay timing', async ({ browser }) => {

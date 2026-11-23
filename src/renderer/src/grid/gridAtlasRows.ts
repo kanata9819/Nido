@@ -46,9 +46,6 @@ const fringe = 2;
  */
 export class GridAtlasRows {
 	private rows = new WeakMap<Cell[], RowTiles | typeof unsupported>();
-	private readonly signatures = new Map<string, number>();
-	/** Ids of a highlight signature and text together, for short tile keys. */
-	private readonly looks = new Map<string, number>();
 	private frame?: AtlasFrame & { page: Page; atlas: GlyphAtlas; ids: Map<number, number> };
 	private previous?: { slots: Uint32Array; top: number };
 	private queued = 0;
@@ -241,14 +238,14 @@ export class GridAtlasRows {
 
 	/** A small id for a highlight's appearance, shared by every grid with the same theme. */
 	private signature(id: number): number {
-		const ids = this.frame!.ids;
+		const { ids, page, cellStyle } = this.frame!;
 		let signature = ids.get(id);
 		if (signature === undefined) {
-			const key = JSON.stringify(this.frame!.cellStyle(id).highlight);
-			signature = this.signatures.get(key);
+			const key = JSON.stringify(cellStyle(id).highlight);
+			signature = page.highlightIds.get(key);
 			if (signature === undefined) {
-				signature = this.signatures.size;
-				this.signatures.set(key, signature);
+				signature = page.highlightIds.size;
+				page.highlightIds.set(key, signature);
 			}
 			ids.set(id, signature);
 		}
@@ -279,10 +276,10 @@ export class GridAtlasRows {
 			const style = cellStyle(cell.highlight);
 			const h = style.highlight;
 			const look = `${this.signature(cell.highlight)}:${cell.text === ' ' ? '' : cell.text}`;
-			let id = this.looks.get(look);
+			let id = page.cellIds.get(look);
 			if (id === undefined) {
-				id = this.looks.size;
-				this.looks.set(look, id);
+				id = page.cellIds.size;
+				page.cellIds.set(look, id);
 			}
 			looks[column] = id;
 			filled[column] = Number(style.background !== background);
