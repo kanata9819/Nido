@@ -94,6 +94,43 @@ test('TypeScript import bindings and type-only keywords use the reference theme 
 	}
 });
 
+test('TypeScript arrow return types retain their color after multiline callback parameters', async () => {
+	const session = await Session.create(process.cwd(), () => {});
+	try {
+		const source = [
+			'const check = (',
+			'  accept: (value: number) => void,',
+			'): boolean => true;',
+			'function outer() {',
+			'  const convert = (',
+			'    accept: (value: number) => void,',
+			'  ): string => "ok";',
+			'}',
+			'const simple = (value: number): boolean => false;',
+			'// boolean'
+		];
+		const expected: [number, string, string][] = [
+			[1, 'number', '#4ec9b0'],
+			[2, 'boolean', '#4ec9b0'],
+			[2, 'true', '#569cd6'],
+			[6, 'string', '#4ec9b0'],
+			[8, 'boolean', '#4ec9b0'],
+			[9, 'boolean', '#6a9955']
+		];
+		for (const path of ['sample.ts', 'sample.tsx']) {
+			const [lines] = await session.highlightSources(path, source.join('\n'), '');
+			for (const [row, word, color] of expected) {
+				const column = source[row].indexOf(word);
+				let end = 0;
+				const span = lines[row].find((span) => (end += span.text.length) > column);
+				assert.equal(span?.color, color, `${path}:${row + 1}: ${word}`);
+			}
+		}
+	} finally {
+		await session.stop();
+	}
+});
+
 test('TypeScript await uses the VS Code control-flow color without recoloring async or text', async () => {
 	const session = await Session.create(process.cwd(), () => {});
 	try {
