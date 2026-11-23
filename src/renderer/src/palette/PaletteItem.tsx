@@ -34,12 +34,14 @@ export default memo(function PaletteItem({
 	panel,
 	item,
 	index,
-	selected
+	selected,
+	total
 }: {
 	panel: Exclude<Panel, null>;
 	item: Item;
 	index: number;
 	selected: boolean;
+	total?: number;
 }): React.JSX.Element {
 	const t = useI18n();
 	// Problems and symbols are listboxes; their rows are options with ids that
@@ -55,6 +57,8 @@ export default memo(function PaletteItem({
 			id={option ? paletteOptionId(panel, index) : undefined}
 			role={option ? 'option' : undefined}
 			aria-selected={option ? selected : undefined}
+			aria-posinset={total === undefined ? undefined : index + 1}
+			aria-setsize={total}
 			tabIndex={-1}
 			data-severity={item.severity}
 			className={selected ? styles.selectedItem : ''}

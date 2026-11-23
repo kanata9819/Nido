@@ -15,11 +15,14 @@ import GitDiff from './GitDiff';
 import FileIcon from '../ui/FileIcon';
 import { gitChangeKey as key, useGitPanel } from './useGitPanel';
 import { listIndex } from '../ui/listNavigation';
+import { useMeasuredList } from '../ui/useMeasuredList';
 
 /** The file name of a repository path (Git uses / on every platform). */
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
 /** The folder of a repository path. */
 const folderName = (path: string): string => path.slice(0, path.lastIndexOf('/'));
+
+const changeHeight = (change: GitChange): number => (change.path.includes('/') ? 50 : 36);
 
 /**
  * The Git panel: commit message, changed files (staged first) and the diff of the selected
@@ -68,6 +71,14 @@ export default function GitPanel({
 			: '';
 	const list = useRef<HTMLDivElement>(null);
 	const input = useRef<HTMLTextAreaElement>(null);
+	const selectedIndex = current ? changes.indexOf(current) : -1;
+	const virtual = useMeasuredList(
+		list,
+		changes,
+		selectedIndex,
+		changes.length > 80,
+		changeHeight
+	);
 	useLayoutEffect(() => {
 		list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
 	}, [selected, status]);
@@ -83,7 +94,6 @@ export default function GitPanel({
 		if (event.ctrlKey || event.altKey || event.metaKey || event.nativeEvent.isComposing) {
 			return;
 		}
-		const index = changes.findIndex((change) => key(change) === selected);
 		const commandKey = event.shiftKey && event.key === 's' ? 'S' : event.key;
 		switch (commandKey) {
 			case 'S': {
@@ -98,7 +108,7 @@ export default function GitPanel({
 			case 'Home':
 			case 'End': {
 				event.preventDefault();
-				const next = listIndex(event.key, index, changes.length);
+				const next = listIndex(event.key, selectedIndex, changes.length);
 				if (changes[next]) {
 					setSelected(key(changes[next]));
 				}
@@ -139,6 +149,25 @@ export default function GitPanel({
 			}
 		}
 	};
+
+	function changeRow(index: number): React.JSX.Element {
+		const change = changes[index];
+		return (
+			<ChangeRow
+				key={key(change)}
+				change={change}
+				index={index}
+				total={changes.length}
+				heading={index === 0 || changes[index - 1].staged !== change.staged}
+				count={change.staged ? stagedCount : unstagedCount}
+				selected={index === selectedIndex}
+				onSelect={() => {
+					setSelected(key(change));
+					list.current?.focus();
+				}}
+			/>
+		);
+	}
 
 	// What the commit button does now, shown below it.
 	const commitHint = (): string => {
@@ -279,24 +308,35 @@ export default function GitPanel({
 						aria-label={t('Changed files')}
 						tabIndex={0}
 						aria-activedescendant={
-							current ? `git-change-${changes.indexOf(current)}` : undefined
+							selectedIndex >= 0 ? `git-change-${selectedIndex}` : undefined
 						}
 						onKeyDown={listKeyDown}
+						onScroll={
+							virtual.rows
+								? (event) => virtual.scrolled(event.currentTarget)
+								: undefined
+						}
 					>
-						{changes.map((change, index) => (
-							<ChangeRow
-								key={key(change)}
-								change={change}
-								index={index}
-								heading={index === 0 || changes[index - 1].staged !== change.staged}
-								count={change.staged ? stagedCount : unstagedCount}
-								selected={key(change) === selected}
-								onSelect={() => {
-									setSelected(key(change));
-									list.current?.focus();
-								}}
-							/>
-						))}
+						{virtual.rows ? (
+							<div
+								role="presentation"
+								className={styles.virtualRows}
+								style={{ height: virtual.height }}
+							>
+								{virtual.rows.map(({ index, top }) => (
+									<div
+										key={index}
+										role="presentation"
+										data-virtual-row={index}
+										style={{ top }}
+									>
+										{changeRow(index)}
+									</div>
+								))}
+							</div>
+						) : (
+							changes.map((_, index) => changeRow(index))
+						)}
 						{status && !changes.length && <p>{t('Working tree clean.')}</p>}
 					</div>
 				</aside>
@@ -461,6 +501,7 @@ function CommitComposer({
 function ChangeRow({
 	change,
 	index,
+	total,
 	heading,
 	count,
 	selected,
@@ -468,6 +509,7 @@ function ChangeRow({
 }: {
 	change: GitChange;
 	index: number;
+	total: number;
 	heading: boolean;
 	/** The number of changes in the group. */
 	count: number;
@@ -489,6 +531,8 @@ function ChangeRow({
 				id={`git-change-${index}`}
 				role="option"
 				aria-selected={selected}
+				aria-posinset={index + 1}
+				aria-setsize={total}
 				className={`${styles.change} ${styles.fileEntry}`}
 				aria-label={change.path}
 				title={change.original ? `${change.original} → ${change.path}` : change.path}

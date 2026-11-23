@@ -40,10 +40,11 @@ export class SessionPersistence {
 		const data = (await this.client.request('nvim_exec_lua', [
 			`local include_untitled, recovery_scope, known = ...
       local files, untitled, current_untitled, total = {}, {}, nil, 0
-      for _, b in ipairs(require('nido_buffers').list()) do
+      local buffers = require('nido_buffers')
+      for _, b in ipairs(buffers.list()) do
         local name = vim.api.nvim_buf_get_name(b)
         if vim.bo[b].buflisted and vim.bo[b].buftype == '' and name ~= '' then
-          local pos = vim.api.nvim_buf_get_mark(b, '"')
+          local pos = buffers.cursor(b)
           local wins = vim.fn.win_findbuf(b)
           if #wins > 0 then
             pos = vim.api.nvim_win_get_cursor(wins[1])
@@ -139,23 +140,39 @@ export class SessionPersistence {
 	async restore(saved: SavedWorkspace): Promise<string[]> {
 		const errors: string[] = [];
 		const failedFiles: number[] = [];
-		for (const [index, file] of saved.files.entries()) {
-			try {
-				if (!(await stat(file.path)).isFile()) {
-					throw new Error('File is unavailable.');
+		const files = await Promise.all(
+			saved.files.map(async (file) => {
+				try {
+					if (!(await stat(file.path)).isFile()) {
+						throw new Error('File is unavailable.');
+					}
+					return { path: editorPath(this.workspace.root, file.path) };
+				} catch (error) {
+					return { error: String(error) };
 				}
-				await this.client.request('nvim_exec_lua', [
-					`local path, line, column = ...
-          require('nido_eol').open(path)
-          line = math.min(line, vim.api.nvim_buf_line_count(0))
-          vim.api.nvim_win_set_cursor(0, {line, column})`,
-					[editorPath(this.workspace.root, file.path), file.line, file.column]
-				]);
-			} catch (error) {
+			})
+		);
+		const openErrors = files.some((file) => file.path !== undefined)
+			? ((await this.client.request('nvim_exec_lua', [
+					"return require('nido_buffers').restoreFiles(...)",
+					[
+						files.map((file, index) =>
+							file.path === undefined
+								? false
+								: [file.path, saved.files[index].line, saved.files[index].column]
+						),
+						editorPath(this.workspace.root, saved.current)
+					]
+				])) as [number, string][])
+			: [];
+		const failuresByIndex = new Map(openErrors);
+		files.forEach((file, index) => {
+			const error = file.error ?? failuresByIndex.get(index + 1);
+			if (error !== undefined) {
 				failedFiles.push(index + 1);
-				errors.push(`${file.path}: ${String(error)}`);
+				errors.push(`${saved.files[index].path}: ${error}`);
 			}
-		}
+		});
 		if (saved.untitled?.length) {
 			await this.client.request('nvim_exec_lua', [
 				`local drafts, active = ...

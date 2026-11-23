@@ -16,10 +16,8 @@ export interface DiffRowContext {
 	sources: [SideSource, SideSource] | undefined;
 	emphasis: (index: number) => DiffEmphasis | undefined;
 	highlighted: HighlightedSides | undefined;
-	/** The diff row of the change selected with n/N, if any. */
-	selectedRow: number | undefined;
-	/** The first drawn row of each diff row; only that one is marked as the selected change. */
-	firstPositions: Map<number, number>;
+	/** The first drawn row of the change selected with n/N, if any. */
+	selectedPosition: number | undefined;
 	t: Translator;
 }
 
@@ -145,8 +143,7 @@ export function renderDiffRow(
 	if (entry.kind === 'separator') {
 		return separator(entry, position, context.t);
 	}
-	const active =
-		context.selectedRow === entry.index && context.firstPositions.get(entry.index) === position;
+	const active = context.selectedPosition === position;
 	const { className, numbers, content } = lineParts(context, entry, side);
 	const line = entry.kind === 'line' ? entry.line : entry.row[side];
 	return (

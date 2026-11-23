@@ -5,6 +5,21 @@ local M = {}
 local order, closed = {}, {}
 local api = vim.api
 
+--- The saved cursor of a tab whose file has not been displayed since restoration.
+function M.cursor(buffer)
+  return vim.b[buffer].nido_restore_cursor or api.nvim_buf_get_mark(buffer, '"')
+end
+
+-- Background tabs load on first display; apply their saved position once the file is available.
+api.nvim_create_autocmd('BufWinEnter', {callback=function(event)
+  local position = vim.b[event.buf].nido_restore_cursor
+  if position and api.nvim_get_current_buf() == event.buf then
+    vim.b[event.buf].nido_restore_cursor = nil
+    local line = math.min(position[1], api.nvim_buf_line_count(event.buf))
+    api.nvim_win_set_cursor(0, {line, position[2]})
+  end
+end})
+
 --- The buffer of `path`, or -1 when there is none.
 function M.find(path)
   -- bufnr() treats names as patterns; check existence before exact lookup without creating a buffer.
@@ -29,6 +44,44 @@ function M.list()
   end
   order = result
   return result
+end
+
+--- Restore saved file tabs in order, deferring reads of background files until they are selected.
+--- The first successful open can reuse the initial empty buffer, just like an ordinary open.
+function M.restoreFiles(files, current)
+  local open = require('nido_eol').open
+  local failed, last, selected = {}, nil, nil
+  for index, file in ipairs(files) do
+    if file then
+      local path, line, column = unpack(file)
+      local visible = not last or path == current
+      local ok, result = pcall(function()
+        local buffer
+        if visible then
+          open(path)
+          buffer = api.nvim_get_current_buf()
+        else
+          buffer = vim.fn.bufadd(path)
+          vim.bo[buffer].binary = false
+          vim.bo[buffer].buflisted = true
+        end
+        if visible then
+          api.nvim_win_set_cursor(0, {math.min(line, api.nvim_buf_line_count(buffer)), column})
+        else
+          vim.b[buffer].nido_restore_cursor = {line, column}
+        end
+        return buffer
+      end)
+      if ok then
+        last = result
+        if path == current then selected = result end
+      else
+        failed[#failed + 1] = {index, tostring(result)}
+      end
+    end
+  end
+  if not selected and last then api.nvim_set_current_buf(last) end
+  return failed
 end
 
 --- Move a tab to position `index` (one-based).
@@ -56,7 +109,7 @@ function M.close(buffer, force)
   local info = name ~= '' and vim.bo[buffer].buftype == '' and vim.uv.fs_stat(name)
   local entry
   if info and info.type == 'file' then
-    local position = api.nvim_buf_get_mark(buffer, '"')
+    local position = M.cursor(buffer)
     local wins = vim.fn.win_findbuf(buffer)
     if #wins > 0 then
       position = api.nvim_win_get_cursor(wins[1])

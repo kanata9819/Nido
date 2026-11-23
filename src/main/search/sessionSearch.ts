@@ -2,7 +2,8 @@ import { open, stat } from 'node:fs/promises';
 import { isUtf8 } from 'node:buffer';
 import { isAbsolute } from 'node:path';
 import { workspaceRelative as relative } from '../workspace/workspacePaths';
-import { gitIgnored, gitRoot } from '../git/git';
+import { gitIgnored, gitWorkTreeRoot } from '../git/git';
+import { GitIgnoreReader } from '../git/gitProcess';
 import type { FileEntry, SearchResults } from '../../shared/types';
 import { defaultSearchOptions, type SearchOptions } from '../../shared/search';
 import { SearchMatcher } from './searchMatcher';
@@ -97,6 +98,7 @@ function literalMatches(path: string, text: string, query: string): SearchResult
  */
 export class SessionSearch {
 	private searchMatcher?: SearchMatcher;
+	private ignoreReader?: GitIgnoreReader;
 	private searchGeneration = 0;
 	private readonly quickOpenReads = new Set<Promise<DirectoryRead>>();
 	private searchEntryCount = 0;
@@ -124,9 +126,15 @@ export class SessionSearch {
 
 	/** Cancel the running search and forget the results a replacement could refer to. */
 	cancelFindFiles(): void {
-		this.searchGeneration++;
+		this.startSearch();
 		this.searchMatcher?.close();
 		this.replacements.clear();
+	}
+
+	private startSearch(): number {
+		this.ignoreReader?.close();
+		this.ignoreReader = undefined;
+		return ++this.searchGeneration;
 	}
 
 	/**
@@ -135,7 +143,7 @@ export class SessionSearch {
 	 * can refer to. With `options`, results get a token for WorkspaceReplacement.
 	 */
 	async searchText(query: string, options?: SearchOptions): Promise<SearchResults> {
-		const generation = ++this.searchGeneration;
+		const generation = this.startSearch();
 		this.searchMatcher?.close();
 		this.replacements.clear();
 		if (query.length > 1000 || /[\r\n]/.test(query)) {
@@ -180,9 +188,18 @@ export class SessionSearch {
 		}
 		const matcher = options ? new SearchMatcher(query, settings) : undefined;
 		this.searchMatcher = matcher;
+		const ignores = new GitIgnoreReader(this.root);
+		this.ignoreReader = ignores;
 		const hashes = new Map<string, string>();
 		try {
-			const result = await this.searchTextFiles(query, settings, matcher, hashes, generation);
+			const result = await this.searchTextFiles(
+				query,
+				settings,
+				matcher,
+				hashes,
+				generation,
+				ignores
+			);
 			if (generation !== this.searchGeneration) {
 				return { matches: [], truncated: false };
 			}
@@ -198,6 +215,10 @@ export class SessionSearch {
 			}
 			throw error;
 		} finally {
+			ignores.close();
+			if (this.ignoreReader === ignores) {
+				this.ignoreReader = undefined;
+			}
 			matcher?.close();
 			if (this.searchMatcher === matcher) {
 				this.searchMatcher = undefined;
@@ -211,7 +232,8 @@ export class SessionSearch {
 		options: SearchOptions,
 		matcher: SearchMatcher | undefined,
 		hashes: Map<string, string>,
-		generation: number
+		generation: number,
+		ignores: GitIgnoreReader
 	): Promise<SearchResults> {
 		const result: SearchResults = { matches: [], truncated: false };
 		const cancelled = (): boolean => generation !== this.searchGeneration;
@@ -225,14 +247,23 @@ export class SessionSearch {
 		const parallelReads = 8;
 		const buffers: Buffer[] = [];
 		const directories = [options.folder];
-		const checkIgnored = await gitRoot(this.root).then(
+		const checkIgnored = await gitWorkTreeRoot(this.root).then(
 			() => true,
 			() => false
 		);
+		if (cancelled()) {
+			return { matches: [], truncated: false };
+		}
 		if (
 			checkIgnored &&
 			options.folder &&
-			(await gitIgnored(this.root, [options.folder])).has(options.folder)
+			(
+				await ignores
+					.check([options.folder])
+					.catch(() =>
+						cancelled() ? new Set<string>() : gitIgnored(this.root, [options.folder])
+					)
+			).has(options.folder)
 		) {
 			return result;
 		}
@@ -247,7 +278,9 @@ export class SessionSearch {
 					.reverse()
 					.map((directory) => this.searchableEntries(directory))
 			);
-			const ignored = checkIgnored ? await this.ignoredEntries(listings) : new Set<string>();
+			const ignored = checkIgnored
+				? await this.ignoredEntries(listings, ignores, cancelled)
+				: new Set<string>();
 			if (cancelled()) {
 				return { matches: [], truncated: false };
 			}
@@ -309,12 +342,21 @@ export class SessionSearch {
 	}
 
 	/** Paths that Git ignores among the listed entries. */
-	private ignoredEntries(listings: FileEntry[][]): Promise<Set<string>> {
+	private async ignoredEntries(
+		listings: FileEntry[][],
+		ignores: GitIgnoreReader,
+		cancelled: () => boolean
+	): Promise<Set<string>> {
+		const paths = listings.flat().map((entry) => entry.path);
+		try {
+			return await ignores.check(paths);
+		} catch {
+			if (cancelled()) {
+				return new Set();
+			}
+		}
 		return (
-			gitIgnored(
-				this.root,
-				listings.flat().map((entry) => entry.path)
-			)
+			gitIgnored(this.root, paths)
 				// A submodule can reject one group; keep unrelated groups' ignore rules.
 				.catch(
 					async () =>
@@ -368,7 +410,7 @@ export class SessionSearch {
 
 	/** Up to 100 files whose name or path contains `query`, ignoring case. */
 	async findFiles(query = ''): Promise<FileEntry[]> {
-		const generation = ++this.searchGeneration;
+		const generation = this.startSearch();
 		// Windows paths use backslashes, but a query such as src/main is typed with slashes.
 		const comparable = (text: string): string => text.toLowerCase().replaceAll('\\', '/');
 		const needle = comparable(query);

@@ -383,19 +383,23 @@ test('workspace snapshot restores each cursor and tolerates missing files', asyn
 	const sessions: Session[] = [];
 	try {
 		await writeFile(join(root, 'first.txt'), 'first line\nsecond line\nthird line\n');
-		await writeFile(join(root, 'second.txt'), 'another file\n');
+		await writeFile(join(root, 'second.txt'), 'another file\nsecond line\n');
+		await writeFile(join(root, 'third.txt'), 'saved current file\n');
 		const first = await Session.create(root, () => {});
 		sessions.push(first);
 		await first.openFile('first.txt');
 		await first.client.request('nvim_win_set_cursor', [0, [3, 4]]);
 		await first.openFile('second.txt');
-		await first.client.request('nvim_win_set_cursor', [0, [1, 6]]);
+		await first.client.request('nvim_win_set_cursor', [0, [2, 6]]);
+		await first.openFile('third.txt');
+		await first.client.request('nvim_win_set_cursor', [0, [1, 5]]);
 		const snapshot = await first.snapshot();
 		assert.deepEqual(
 			snapshot.files.map((f) => [f.line, f.column]),
 			[
 				[3, 4],
-				[1, 6]
+				[2, 6],
+				[1, 5]
 			]
 		);
 		const path = join(root, 'workspaces.json');
@@ -404,9 +408,45 @@ test('workspace snapshot restores each cursor and tolerates missing files', asyn
 		await first.stop();
 		const restored = await Session.create(root, () => {});
 		sessions.push(restored);
+		await restored.client.request('nvim_exec_lua', [
+			`local window = vim.api.nvim_get_current_win()
+        vim.g.test_visible_restores = {}
+        vim.api.nvim_create_autocmd('BufEnter', {callback=function(event)
+          if event.file ~= '' and vim.api.nvim_win_get_buf(window) == event.buf then
+            vim.g.test_visible_restores = vim.list_extend(vim.g.test_visible_restores, {
+              vim.fn.fnamemodify(event.file, ':t')
+            })
+          end
+        end})`,
+			[]
+		]);
+		const request = restored.client.request.bind(restored.client);
+		let restoreRequests = 0;
+		restored.client.request = (...args) => {
+			restoreRequests++;
+			return request(...args);
+		};
 		assert.deepEqual(await restored.restore((await readLayout(path)).workspaces[0]), []);
+		assert.equal(restoreRequests, 2, 'one batch for all files, then select the active file');
+		assert.deepEqual(
+			await restored.client.request('nvim_exec_lua', [
+				'return vim.g.test_visible_restores',
+				[]
+			]),
+			['first.txt', 'third.txt']
+		);
 		await restored.attach(90, 30);
 		assert.deepEqual(await restored.snapshot(), snapshot);
+		assert.deepEqual(
+			await restored.client.request('nvim_exec_lua', [
+				`local buffer = vim.fn.bufadd(...)
+        assert(not vim.api.nvim_buf_is_loaded(buffer), 'background file must stay unloaded')
+        vim.cmd.buffer(buffer)
+        return vim.api.nvim_win_get_cursor(0)`,
+				[join(root, 'second.txt')]
+			]),
+			[2, 6]
+		);
 		await restored.stop();
 		await writeFile(join(root, 'first.txt'), 'short\n');
 		await rm(join(root, 'second.txt'));

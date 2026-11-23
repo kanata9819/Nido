@@ -6,6 +6,7 @@ import PaletteItem from './PaletteItem';
 import { hasOptions, paletteOptionId } from './paletteRows';
 import { emptyMessage, hint, placeholder } from './paletteText';
 import { useTabSelection } from './useTabSelection';
+import { useMeasuredList } from '../ui/useMeasuredList';
 import {
 	isLeaveTypingKey,
 	isStartTypingKey,
@@ -34,6 +35,8 @@ interface PaletteItemsProps {
 	/** Closes the palette; Ctrl+C on the list calls it, like Escape. */
 	onClose?: () => void;
 }
+
+const problemHeight = (): number => 46;
 
 /**
  * A palette's filter field and results. A palette opens on its list, as in Vim's Normal mode:
@@ -64,6 +67,13 @@ export default function PaletteItems({
 		fallbackSelection,
 		setFallbackSelection
 	});
+	const virtual = useMeasuredList(
+		results,
+		filtered,
+		selection,
+		panel === 'problems' && filtered.length > 80,
+		problemHeight
+	);
 	// Whether the filter field has focus: typing, rather than moving through the list.
 	const [typing, setTyping] = useState(false);
 	// Run the Enter pressed while loading, unless the query changed or focus left the palette.
@@ -223,6 +233,9 @@ export default function PaletteItems({
 				aria-activedescendant={
 					hasOptions(panel) && filtered[selection] ? optionId(selection) : undefined
 				}
+				onScroll={
+					virtual.rows ? (event) => virtual.scrolled(event.currentTarget) : undefined
+				}
 				onBlur={(event) => {
 					if (event.relatedTarget !== filter.current) {
 						pendingEnter.current = undefined;
@@ -270,15 +283,40 @@ export default function PaletteItems({
 						{t(message)}
 					</p>
 				)}
-				{filtered.map((item, i) => (
-					<PaletteItem
-						key={`${item.title}-${i}`}
-						panel={panel}
-						item={item}
-						index={i}
-						selected={i === selection}
-					/>
-				))}
+				{virtual.rows ? (
+					<div
+						role="presentation"
+						className={styles.virtualRows}
+						style={{ height: virtual.height }}
+					>
+						{virtual.rows.map(({ index, top }) => (
+							<div
+								key={index}
+								role="presentation"
+								data-virtual-row={index}
+								style={{ top }}
+							>
+								<PaletteItem
+									panel={panel}
+									item={filtered[index]}
+									index={index}
+									selected={index === selection}
+									total={filtered.length}
+								/>
+							</div>
+						))}
+					</div>
+				) : (
+					filtered.map((item, i) => (
+						<PaletteItem
+							key={`${item.title}-${i}`}
+							panel={panel}
+							item={item}
+							index={i}
+							selected={i === selection}
+						/>
+					))
+				)}
 				{!filtered.length && (
 					<p className={styles.noResults}>
 						{emptyMessage({ panel, loading, message, query }, t)}

@@ -126,6 +126,7 @@ test('Git previews skip superseded requests while keeping sessions and failures 
 		});
 		const working = (id = 'current', path = 'file.txt'): Promise<string> =>
 			handlers.get('gitDiff')!(id, path, false) as Promise<string>;
+		await handlers.get('gitStatus')!('current');
 		const trace = join(root, 'trace.jsonl');
 		process.env.GIT_TRACE2_EVENT = trace;
 		const results = await Promise.allSettled(
@@ -139,13 +140,18 @@ test('Git previews skip superseded requests while keeping sessions and failures 
 						) as Promise<string>)
 			)
 		);
-		const diffs = (await readFile(trace, 'utf8'))
+		const commands = (await readFile(trace, 'utf8'))
 			.trim()
 			.split('\n')
-			.map((line) => JSON.parse(line) as { event: string; argv?: string[] })
-			.filter(
-				({ event, argv }) => event === 'start' && argv?.includes('--unified=2147483647')
-			);
+			.map((line) => JSON.parse(line) as { event: string; argv?: string[] });
+		const diffs = commands.filter(
+			({ event, argv }) => event === 'start' && argv?.includes('--unified=2147483647')
+		);
+		const statuses = commands.filter(
+			({ event, argv }) => event === 'start' && argv?.includes('--porcelain=v2')
+		);
+		assert.equal(statuses.length, 1);
+		assert.deepEqual(statuses[0].argv?.slice(-2), ['--', 'file.txt']);
 		context.diagnostic(
 			JSON.stringify({ previewRequests: results.length, nativeDiffs: diffs.length })
 		);
