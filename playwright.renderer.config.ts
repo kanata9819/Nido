@@ -33,6 +33,7 @@ export default defineConfig({
 				'renderer-performance-scroll.spec.ts',
 				'renderer-performance-ui.spec.ts',
 				'renderer-horizontal.spec.ts',
+				'renderer-glyph-atlas.spec.ts',
 				'feature-performance.spec.ts',
 				'document-symbols.spec.ts',
 				'terminal-shells.spec.ts',

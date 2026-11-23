@@ -52,6 +52,19 @@ export interface EditorRendererOptions {
 }
 
 /**
+ * Whether editors draw opaque rows from the GPU glyph atlas. It is opt-in while it is being
+ * evaluated: run `localStorage.setItem('nido.glyphAtlas', 'on')` in the developer tools and
+ * reload.
+ */
+function glyphAtlasRequested(): boolean {
+	try {
+		return globalThis.localStorage?.getItem('nido.glyphAtlas') === 'on';
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Paints one editor's grid on its canvas, at most once per animation frame. It applies redraw
  * events from Neovim, animates scrolling and the cursor, and keeps Neovim's grid size in step
  * with the editor element. Settings fixed for its lifetime are in the options; changing them
@@ -96,6 +109,7 @@ export class EditorRenderer {
 		const { id, grid, host, input, smoothBlink, errorRef, attachedRef } = options;
 		grid.backgroundOpacity = options.backgroundOpacity;
 		grid.pixelScrollEnabled = options.pixelScroll;
+		grid.glyphAtlasEnabled = options.pixelScroll && glyphAtlasRequested();
 		this.hasFrame = grid.rows > 0 && grid.columns > 0;
 		this.cursor = new EditorCursor(
 			grid,
