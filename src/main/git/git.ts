@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { realpath, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type {
@@ -19,6 +19,7 @@ import { gitInvocation } from './gitProcess';
 const exec = promisify(execFile);
 // The preview parser needs the leading space on unchanged blank lines in a unified diff.
 const diffConfig = ['-c', 'diff.suppressBlankEmpty=false'];
+const knownWorkTrees = new Map<string, { config: string; root: string; checked: number }>();
 
 /** The top folder of the repository containing `cwd`. */
 export async function gitRoot(cwd: string): Promise<string> {
@@ -29,25 +30,36 @@ export async function gitRoot(cwd: string): Promise<string> {
 	return remote ? wslHostPath(remote.distribution, root) : root;
 }
 
-/** A repository opened at its root normally has a .git directory or worktree file. */
+/** Reuse a verified native repository root while its Git configuration stays current. */
 export async function gitWorkTreeRoot(cwd: string): Promise<string> {
 	if (
-		!parseWslPath(cwd) &&
-		!process.env.GIT_DIR &&
-		!process.env.GIT_WORK_TREE &&
-		!process.env.GIT_COMMON_DIR
+		parseWslPath(cwd) ||
+		process.env.GIT_DIR ||
+		process.env.GIT_WORK_TREE ||
+		process.env.GIT_COMMON_DIR ||
+		process.env.GIT_CONFIG_COUNT ||
+		process.env.GIT_CONFIG_PARAMETERS
 	) {
-		const dotGit = join(cwd, '.git');
-		const marker = await stat(dotGit).catch(() => undefined);
-		const head = marker?.isDirectory()
-			? await stat(join(dotGit, 'HEAD')).catch(() => undefined)
-			: undefined;
-		if (marker?.isFile() || head?.isFile()) {
-			const root = await realpath(cwd);
-			return process.platform === 'win32' ? root.replaceAll('\\', '/') : root;
-		}
+		return gitRoot(cwd);
 	}
-	return gitRoot(cwd);
+	// Linked worktrees, nested workspace folders and non-Git folders still use Git discovery.
+	const dotGit = join(cwd, '.git');
+	const info = await stat(join(dotGit, 'config')).catch(() => undefined);
+	if (!info?.isFile()) {
+		return gitRoot(cwd);
+	}
+	const config = `${info.ino}:${info.ctimeMs}:${info.mtimeMs}:${info.size}`;
+	const cached = knownWorkTrees.get(cwd);
+	if (cached?.config === config && Date.now() - cached.checked < 60_000) {
+		return cached.root;
+	}
+	const root = await gitRoot(cwd);
+	knownWorkTrees.delete(cwd);
+	knownWorkTrees.set(cwd, { config, root, checked: Date.now() });
+	if (knownWorkTrees.size > 64) {
+		knownWorkTrees.delete(knownWorkTrees.keys().next().value!);
+	}
+	return root;
 }
 
 /** One page and the total for `anchor` (the first page's HEAD), or the current HEAD. */
@@ -492,7 +504,11 @@ async function readStatus(root: string, paths?: string[]): Promise<GitStatus> {
 		}
 	}
 	if (branch === '(detached)') {
-		branch = `${(await git(root, ['rev-parse', '--short', 'HEAD'])).trim()} (detached)`;
+		// Porcelain also prints this sentinel for a branch literally named "(detached)".
+		branch = await git(root, ['symbolic-ref', '--short', 'HEAD']).then(
+			(value) => value.trim(),
+			async () => `${(await git(root, ['rev-parse', '--short', 'HEAD'])).trim()} (detached)`
+		);
 	}
 	return { root, branch, changes };
 }

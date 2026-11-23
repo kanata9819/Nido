@@ -24,7 +24,8 @@ import {
 	gitRemoteInfo,
 	gitRemoteAction,
 	gitSyncState,
-	gitIgnored
+	gitIgnored,
+	gitWorkTreeRoot
 } from '../src/main/git/git';
 
 test('Git status resolves repository roots that end in a full-width space', async () => {
@@ -41,6 +42,17 @@ test('Git status resolves repository roots that end in a full-width space', asyn
 			status.changes.map((change) => change.path),
 			['nested/notes.txt']
 		);
+		execFileSync('git', ['symbolic-ref', 'HEAD', 'refs/heads/(detached)'], {
+			cwd: root,
+			windowsHide: true
+		});
+		assert.equal((await gitStatus(root)).branch, '(detached)');
+		const originalRoot = await gitWorkTreeRoot(root);
+		execFileSync('git', ['config', 'core.worktree', nested], {
+			cwd: root,
+			windowsHide: true
+		});
+		assert.equal(await gitWorkTreeRoot(root), `${originalRoot}/nested`);
 	} finally {
 		await rm(parent, { recursive: true, force: true });
 	}
