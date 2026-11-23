@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -36,9 +37,7 @@ export async function gitWorkTreeRoot(cwd: string): Promise<string> {
 		parseWslPath(cwd) ||
 		process.env.GIT_DIR ||
 		process.env.GIT_WORK_TREE ||
-		process.env.GIT_COMMON_DIR ||
-		process.env.GIT_CONFIG_COUNT ||
-		process.env.GIT_CONFIG_PARAMETERS
+		process.env.GIT_COMMON_DIR
 	) {
 		return gitRoot(cwd);
 	}
@@ -48,7 +47,11 @@ export async function gitWorkTreeRoot(cwd: string): Promise<string> {
 	if (!info?.isFile()) {
 		return gitRoot(cwd);
 	}
-	const config = `${info.ino}:${info.ctimeMs}:${info.mtimeMs}:${info.size}`;
+	const overrides = Object.entries(process.env).filter(([name]) =>
+		name.startsWith('GIT_CONFIG_')
+	);
+	const environment = createHash('sha256').update(JSON.stringify(overrides)).digest('hex');
+	const config = `${info.ino}:${info.ctimeMs}:${info.mtimeMs}:${info.size}:${environment}`;
 	const cached = knownWorkTrees.get(cwd);
 	if (cached?.config === config && Date.now() - cached.checked < 60_000) {
 		return cached.root;
