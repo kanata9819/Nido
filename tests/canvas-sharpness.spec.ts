@@ -3,7 +3,7 @@ import { electron } from './helpers/electron';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { supportsHardwareWebGL } from './helpers/row-image-probe';
+import { supportsHardwareWebGL, useRowImages } from './helpers/row-image-probe';
 import { launchEnv } from './helpers/launch-env';
 
 for (const scale of [1, 1.25, 1.5]) {
@@ -25,6 +25,7 @@ for (const scale of [1, 1.25, 1.5]) {
 		});
 		try {
 			const page = await running.firstWindow();
+			await useRowImages(page);
 			const hasHardware = await page.evaluate(supportsHardwareWebGL);
 			await expect(
 				page.getByRole('heading', { name: 'Make yourself at home.' })

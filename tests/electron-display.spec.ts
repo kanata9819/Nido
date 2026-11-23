@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { electron } from './helpers/electron';
 import { readSavedFile } from './helpers/files';
-import { installRowImageProbe } from './helpers/row-image-probe';
+import { installRowImageProbe, useRowImages } from './helpers/row-image-probe';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -444,6 +444,7 @@ test('font family and line height update the canvas and survive restarting', asy
 	try {
 		running = await electron.launch(options);
 		let page = await running.firstWindow();
+		await useRowImages(page);
 		await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
 		await page.keyboard.press('Control+Shift+n');
 		await chooseWorkspace(page, workspace);
@@ -666,6 +667,7 @@ test('clicking editor glyphs moves the cursor, including wide text and detached 
 	let failed = false;
 	try {
 		const page = await running.firstWindow();
+		await useRowImages(page);
 		await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
 		await page.keyboard.press('Control+Shift+n');
 		await chooseWorkspace(page, root);
@@ -1260,6 +1262,7 @@ test('line deletion and undo stay still while viewport navigation animates', asy
 	});
 	try {
 		const page = await running.firstWindow();
+		await useRowImages(page);
 		await page.emulateMedia({ reducedMotion: 'no-preference' });
 		await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
 		await page.keyboard.press('Control+Shift+n');

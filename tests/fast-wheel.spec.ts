@@ -2,7 +2,7 @@ import { test, expect, _electron as electron } from '@playwright/test';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { installRowImageProbe } from './helpers/row-image-probe';
+import { installRowImageProbe, useRowImages } from './helpers/row-image-probe';
 
 interface WheelProbe {
 	positions: { top: number; at: number }[];
@@ -69,6 +69,7 @@ for (const { delta, history, prefetchFirst, title } of scenarios) {
 		});
 		try {
 			const page = await running.firstWindow();
+			await useRowImages(page);
 			await page.addInitScript(installRowImageProbe);
 			// Hold the refill while wheel input is active, modeling a costly source/LSP redraw.
 			// With `upwardOnly`, downward refills pass and only an upward one is held and counted.

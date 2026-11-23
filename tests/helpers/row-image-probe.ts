@@ -18,6 +18,15 @@ export async function requireWebGLCorrection(page: Page): Promise<void> {
 	test.skip(!available, 'WebGL correction unavailable');
 }
 
+/**
+ * Paint editors with row images instead of the glyph atlas. The probes in these tests follow
+ * rows through their row images; the atlas draws the same rows at the same positions, and
+ * tests/renderer-glyph-atlas.spec.ts compares its pixels with row images.
+ */
+export async function useRowImages(page: Page): Promise<void> {
+	await page.evaluate(() => localStorage.setItem('nido.glyphAtlas', 'off'));
+}
+
 // Follow glyphs through offscreen rasterization so scroll probes measure their
 // position, including coverage changes within a physical pixel.
 export function installRowImageProbe(): void {

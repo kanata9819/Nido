@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { electron } from './helpers/electron';
-import { installRowImageProbe } from './helpers/row-image-probe';
+import { installRowImageProbe, useRowImages } from './helpers/row-image-probe';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -36,6 +36,7 @@ for (const scale of [1, 1.25, 1.5]) {
 		});
 		try {
 			const page = await running.firstWindow();
+			await useRowImages(page);
 			await page.addInitScript(installRowImageProbe);
 			await page.reload();
 			const canvas = page.locator('canvas:visible');
