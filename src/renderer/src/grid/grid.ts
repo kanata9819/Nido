@@ -72,6 +72,8 @@ export class Grid {
 	cursorVisible = true;
 	cursorOpacity = 1;
 	pixelScrollEnabled = false;
+	/** Draw opaque rows from the GPU glyph atlas when WebGL 2 is available. */
+	glyphAtlasEnabled = false;
 	scrolling = false;
 	/** The viewport's fractional row offset from pixel scrolling. */
 	scrollFraction = 0;

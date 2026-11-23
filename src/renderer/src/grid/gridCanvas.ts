@@ -6,6 +6,7 @@ import { gridDamageBands } from './gridDamage';
 import { gridCellStyles } from './gridCellStyles';
 import { RowPainter, type GlyphMeasure } from './gridRowPainter';
 import { HorizontalSpans, horizontalSpans, loadHorizontalSpans } from './horizontalSpans';
+import { GridAtlasRows } from './gridAtlasRows';
 
 // Paints the grid onto the canvas: changed rows are rasterized into row images, which are
 // then copied to the canvas at their scrolled positions (see the comments in draw()).
@@ -27,6 +28,8 @@ interface Frame {
 	guides: GridGuides;
 	/** Ink bounds of digits per font, measured once per paint. */
 	digitBounds: Map<string, { left: number; right: number }>;
+	/** Font, size and theme of the glyph atlas page, without the canvas size. */
+	atlasStyle: string;
 }
 
 /** Paint grid snapshots, reusing rasterized row images until their content changes. */
@@ -54,6 +57,7 @@ export class GridCanvas implements GlyphMeasure {
 	private previousCursorRows: number[] = [];
 	// The rows that changed since the last paint.
 	private readonly dirtyRows = new Set<number>();
+	private readonly atlasRows = new GridAtlasRows(this);
 
 	constructor(private readonly grid: Grid) {}
 
@@ -65,6 +69,7 @@ export class GridCanvas implements GlyphMeasure {
 		let prefixCanGrow = false;
 		if (row !== undefined) {
 			const cells = this.grid.cells[row];
+			this.atlasRows.forget(cells);
 			const image = this.rowImages.get(cells);
 			if (image) {
 				let prefix = this.dirtyPrefixes.get(image);
@@ -98,6 +103,7 @@ export class GridCanvas implements GlyphMeasure {
 		} else {
 			this.invalidatePaint();
 			this.rowImages = new WeakMap();
+			this.atlasRows.forget();
 			this.glyphMetrics.clear();
 			this.glyphMetricCount = 0;
 		}
@@ -106,6 +112,7 @@ export class GridCanvas implements GlyphMeasure {
 
 	/** Reuse the visible bitmap when retained scroll cells need copy-on-write. */
 	moveRowImage(before: Cell[], after: Cell[]): void {
+		this.atlasRows.move(before, after);
 		const image = this.rowImages.get(before);
 		if (image) {
 			// Retained cells stay unchanged and can rasterize again if revisited.
@@ -337,7 +344,17 @@ export class GridCanvas implements GlyphMeasure {
 				translucent,
 				cellStyle,
 				guides: createGridGuides(this.grid, cellWidth, dpr),
-				digitBounds: new Map()
+				digitBounds: new Map(),
+				atlasStyle: JSON.stringify([
+					dpr,
+					fontSize,
+					fontFamily,
+					fontWeight,
+					cellWidth,
+					lineHeight,
+					this.grid.foreground,
+					this.grid.background
+				])
 			};
 			// Separate rectangular clips retain native GPU antialiasing at fractional positions.
 			for (const { top, bottom } of bands) {
@@ -432,6 +449,22 @@ export class GridCanvas implements GlyphMeasure {
 			!translucent &&
 			this.grid.pixelScrollEnabled &&
 			!!this.linearRows?.begin(canvas.width, canvas.height);
+		// Opaque rows can come from the glyph atlas; the rest keep their row images.
+		const atlas =
+			!translucent &&
+			this.grid.glyphAtlasEnabled &&
+			this.atlasRows.begin({
+				ctx,
+				canvas,
+				dpr,
+				fontSize: frame.fontSize,
+				cellWidth: frame.cellWidth,
+				cellHeight: frame.cellHeight,
+				background: this.grid.background,
+				cellStyle: frame.cellStyle,
+				guides,
+				style: frame.atlasStyle
+			});
 		const [firstRow, lastRow] = this.rowRange(paintTop, paintBottom, dpr);
 		const commandRow = this.grid.rows - 1;
 		for (
@@ -449,7 +482,10 @@ export class GridCanvas implements GlyphMeasure {
 				row = commandRow - 1;
 				continue;
 			}
-			this.paintRow(frame, row, paintTop, paintBottom, guides, correctLight);
+			this.paintRow(frame, row, paintTop, paintBottom, guides, correctLight, atlas);
+		}
+		if (atlas) {
+			this.atlasRows.finish(this.grid.contentHeight, width);
 		}
 		if (correctLight) {
 			this.linearRows!.finish(ctx, dpr, this.grid.contentHeight);
@@ -469,7 +505,8 @@ export class GridCanvas implements GlyphMeasure {
 		paintTop: number,
 		paintBottom: number,
 		guides: GridGuides,
-		correctLight: boolean
+		correctLight: boolean,
+		atlas: boolean
 	): void {
 		const { ctx, canvas, width, height, dpr, cellHeight } = frame;
 		const grid = this.grid;
@@ -500,9 +537,18 @@ export class GridCanvas implements GlyphMeasure {
 			? Math.round(rowY * dpr)
 			: Math.round((grid.rowTop(layoutRow) + origin) * dpr) -
 				(grid.scrollOffset + origin) * dpr;
+		const documentTop = Math.round((grid.rowTop(layoutRow) + origin) * dpr);
+		if (atlas) {
+			if (
+				!commandLine &&
+				this.atlasRows.paint(cells, top, Math.ceil(rowHeight * dpr), documentTop)
+			) {
+				return;
+			}
+			this.atlasRows.skip(top, Math.ceil(rowHeight * dpr));
+		}
 		const image = this.rowImage(cells, canvas, Math.ceil(rowHeight * dpr));
 		const indentState = this.rowIndents.get(image);
-		const documentTop = Math.round((grid.rowTop(layoutRow) + origin) * dpr);
 		if (indentState?.columns.length) {
 			const cuts = guides.rowCuts(indentState.columns, documentTop, image.height);
 			if (
