@@ -64,26 +64,27 @@ export class GitIgnoreReader {
 		this.wsl = !!parseWslPath(cwd);
 	}
 
-	/** Each path is echoed with its matching pattern, including negations and empty matches. */
-	async check(paths: string[]): Promise<Set<string>> {
+	/** Each path is echoed with its pattern. An unavailable stream leaves the batch to Git's fallback. */
+	async check(paths: string[]): Promise<Set<string> | undefined> {
 		if (!paths.length) {
 			return new Set();
 		}
 		if (this.closed) {
-			throw new Error('Git ignore reader is closed.');
+			return undefined;
 		}
-		const child = (this.child ??= startIgnoreProcess(this.cwd));
-		const output = (this.output ??= child.stdout[Symbol.asyncIterator]());
-		const normalized = this.wsl ? paths.map((path) => path.replaceAll('\\', '/')) : paths;
 		const timeout = setTimeout(() => this.close(), 60_000);
 		try {
+			const child = (this.child ??= startIgnoreProcess(this.cwd));
+			const output = (this.output ??= child.stdout[Symbol.asyncIterator]());
+			const normalized = this.wsl ? paths.map((path) => path.replaceAll('\\', '/')) : paths;
 			child.stdin.write(`${normalized.join('\0')}\0`);
 			const fields: string[] = [];
 			let tail = '';
 			while (fields.length < paths.length * 4) {
 				const chunk = await output.next();
 				if (chunk.done) {
-					throw new Error('Git ignore output ended early.');
+					this.close();
+					return undefined;
 				}
 				const parts = (tail + chunk.value).split('\0');
 				tail = parts.pop()!;
@@ -95,7 +96,8 @@ export class GitIgnoreReader {
 			for (const [index, path] of paths.entries()) {
 				const offset = index * 4;
 				if (fields[offset + 3] !== normalized[index]) {
-					throw new Error('Unexpected path in Git ignore output.');
+					this.close();
+					return undefined;
 				}
 				const pattern = fields[offset + 2];
 				if (pattern && !pattern.startsWith('!')) {
@@ -103,15 +105,18 @@ export class GitIgnoreReader {
 				}
 			}
 			return ignored;
-		} catch (error) {
+		} catch {
 			this.close();
-			throw error;
+			return undefined;
 		} finally {
 			clearTimeout(timeout);
 		}
 	}
 
 	close(): void {
+		if (this.closed) {
+			return;
+		}
 		this.closed = true;
 		this.child?.stdin.end();
 		this.child?.kill();

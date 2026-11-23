@@ -254,18 +254,15 @@ export class SessionSearch {
 		if (cancelled()) {
 			return { matches: [], truncated: false };
 		}
-		if (
-			checkIgnored &&
-			options.folder &&
-			(
-				await ignores
-					.check([options.folder])
-					.catch(() =>
-						cancelled() ? new Set<string>() : gitIgnored(this.root, [options.folder])
-					)
-			).has(options.folder)
-		) {
-			return result;
+		if (checkIgnored && options.folder) {
+			const paths = [options.folder];
+			const ignored = await ignores.check(paths);
+			if (
+				cancelled() ||
+				(ignored ?? (await gitIgnored(this.root, paths))).has(options.folder)
+			) {
+				return result;
+			}
 		}
 		// Walk the folder breadth-first, up to 16 directories at a time.
 		while (directories.length) {
@@ -348,12 +345,9 @@ export class SessionSearch {
 		cancelled: () => boolean
 	): Promise<Set<string>> {
 		const paths = listings.flat().map((entry) => entry.path);
-		try {
-			return await ignores.check(paths);
-		} catch {
-			if (cancelled()) {
-				return new Set();
-			}
+		const ignored = await ignores.check(paths);
+		if (ignored || cancelled()) {
+			return ignored ?? new Set();
 		}
 		return (
 			gitIgnored(this.root, paths)
