@@ -8,6 +8,9 @@
 export interface Page {
 	texture: WebGLTexture;
 	tiles: Map<string, number>;
+	/** Shared by all grids using these tiles and cleared with them. */
+	highlightIds: Map<string, number>;
+	cellIds: Map<string, number>;
 	pitch: number;
 	height: number;
 	across: number;
@@ -207,6 +210,8 @@ export class GlyphAtlas {
 				this.batched = [];
 			}
 			page.tiles.clear();
+			page.highlightIds.clear();
+			page.cellIds.clear();
 			page.generation++;
 			page.full = false;
 		}
@@ -378,6 +383,8 @@ export class GlyphAtlas {
 		return {
 			texture,
 			tiles: new Map(),
+			highlightIds: new Map(),
+			cellIds: new Map(),
 			pitch,
 			height,
 			across,
