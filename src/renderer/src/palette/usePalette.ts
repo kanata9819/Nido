@@ -1,5 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FileEntry } from '../../../shared/types';
+import { onNidoEvent } from '../nidoEvents';
 import type { Panel } from '../types';
 import { useFileSearch } from '../search/useFileSearch';
 
@@ -79,6 +80,16 @@ export function usePalette({
 			}
 		},
 		[panel, resetFileSearch]
+	);
+	// Neovim's gO opens the symbol palette of the active workspace.
+	useEffect(
+		() =>
+			onNidoEvent((event) => {
+				if (event.type === 'showSymbols' && event.id === active) {
+					showPanel('symbols');
+				}
+			}),
+		[active, showPanel]
 	);
 
 	return {

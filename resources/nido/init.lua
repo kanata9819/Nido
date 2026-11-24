@@ -406,6 +406,12 @@ vim.keymap.set('n', '<C-w>d', function() diagnostics.show() end)
 vim.keymap.set('n', '<C-w><C-d>', function() diagnostics.show() end)
 vim.keymap.set('n', ']d', function() diagnostics.jump(1) end)
 vim.keymap.set('n', '[d', function() diagnostics.jump(-1) end)
+vim.keymap.set('n', ']D', function() diagnostics.jump_to_end(1) end)
+vim.keymap.set('n', '[D', function() diagnostics.jump_to_end(-1) end)
+-- Neovim's gO lists the document symbols; Nido shows them in its symbol palette.
+vim.keymap.set('n', 'gO', function()
+  if vim.g.nido_channel then vim.rpcnotify(vim.g.nido_channel, 'nido:showSymbols') end
+end)
 local runnables = require('nido_runnables')
 vim.keymap.set('n', 'gR', function() runnables.execute(false) end)
 vim.keymap.set('n', 'gD', function() runnables.execute(true) end)
@@ -447,6 +453,9 @@ vim.api.nvim_create_autocmd('LspAttach', {
     end
     vim.keymap.set('n', '<F12>', go_to('definition', 'definitions'), opts)
     vim.keymap.set('n', 'gI', go_to('implementation', 'implementations'), opts)
+    -- Neovim's own grr and gri use the same panel instead of the quickfix window.
+    vim.keymap.set('n', 'grr', function() require('nido_references').find() end, opts)
+    vim.keymap.set('n', 'gri', go_to('implementation', 'implementations'), opts)
     vim.keymap.set('n', 'gy', go_to('type_definition', 'type definitions'), opts)
     vim.keymap.set('n', 'gra', vim.lsp.buf.code_action, opts)
     vim.keymap.set('n', 'g=', function() vim.lsp.buf.format({ async = true }) end, opts)

@@ -229,6 +229,7 @@ vim.cmd('messages clear')`,
 test('diagnostic navigation publishes native details without floating windows and clears stale cards', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-diagnostic-details-'));
 	const cards: Extract<NidoEvent, { type: 'diagnostics' }>[] = [];
+	let symbolRequests = 0;
 	let session: Session | undefined;
 	try {
 		await writeFile(
@@ -237,6 +238,7 @@ test('diagnostic navigation publishes native details without floating windows an
 		);
 		session = await Session.create(root, (event) => {
 			if (event.type === 'diagnostics') cards.push(event);
+			if (event.type === 'showSymbols') symbolRequests++;
 		});
 		await session.openFile('sample.txt');
 		await session.client.request('nvim_exec_lua', [
@@ -279,6 +281,16 @@ Remove these parentheses.]]},
 		assert.equal(cards.at(-1)?.items[0]?.line, 1);
 		await keys('[d');
 		assert.equal(cards.at(-1)?.items[0]?.line, 4);
+		// [D / ]D jump to the first and last diagnostic, and Ctrl+W d shows the same card as gl.
+		await keys('[D');
+		assert.equal(cards.at(-1)?.items[0]?.line, 1);
+		await keys(']D');
+		assert.equal(cards.at(-1)?.items[0]?.line, 4);
+		await keys('<C-w>d');
+		assert.equal(cards.at(-1)?.focus, true);
+		assert.equal(cards.at(-1)?.items[0]?.line, 4);
+		await keys('gO');
+		assert.equal(symbolRequests, 1);
 		assert.equal(((await session.client.request('nvim_list_wins', [])) as unknown[]).length, 1);
 		await keys('k');
 		assert.deepEqual(cards.at(-1)?.items, []);

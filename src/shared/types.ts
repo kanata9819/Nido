@@ -289,6 +289,8 @@ export type NidoEvent =
 			codeBlocks: ReferencePreview['lines'][];
 	  }
 	| { type: 'diagnostics'; id: string; items: DiagnosticDetails[]; focus: boolean }
+	/** Neovim asked for the symbol palette (gO). */
+	| { type: 'showSymbols'; id: string }
 	| { type: 'filesChanged'; id: string }
 	| { type: 'directoryChanged'; id: string; paths: string[] }
 	| { type: 'redraw'; id: string; events: Redraw }

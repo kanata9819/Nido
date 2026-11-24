@@ -33,6 +33,36 @@ vim.lsp.get_clients = original`,
 	assert.equal(session.state.references?.items.length, 1);
 }
 
+test("Neovim's grr and gri use Nido's panels in language server buffers", async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-lsp-keys-'));
+	let session: Session | undefined;
+	try {
+		await writeFile(join(root, 'sample.txt'), 'value\n');
+		session = await Session.create(root, () => {});
+		await session.openFile('sample.txt');
+		const mappings = await session.client.request('nvim_exec_lua', [
+			`local buf = vim.api.nvim_get_current_buf()
+vim.api.nvim_exec_autocmds('LspAttach', { buffer = buf, data = { client_id = 0 } })
+local result = {}
+for _, key in ipairs({ 'gr', 'grr', 'gI', 'gri' }) do
+  local mapping = vim.fn.maparg(key, 'n', false, true)
+  result[#result + 1] = { mapping.buffer, type(mapping.callback) }
+end
+return result`,
+			[]
+		]);
+		assert.deepEqual(mappings, [
+			[1, 'function'],
+			[1, 'function'],
+			[1, 'function'],
+			[1, 'function']
+		]);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
 test('a delayed definition jump uses its original window and Ctrl+T returns to the caller', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-definition-window-'));
 	let session: Session | undefined;

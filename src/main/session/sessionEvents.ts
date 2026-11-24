@@ -213,6 +213,10 @@ export class SessionEvents {
 				}
 				break;
 			}
+			case 'nido:showSymbols': {
+				this.sendToRenderer({ type: 'showSymbols', id: this.workspaceId });
+				break;
+			}
 			case 'nido:diagnostics': {
 				this.sendToRenderer({
 					type: 'diagnostics',
