@@ -229,6 +229,55 @@ function M.center(count)
   end)
 end
 
+-- The cursors and 'splitkeep' saved while the UI grid is resized.
+local resizing
+
+--- Before the UI grid resizes (the terminal panel opening or closing, a window resize): keep
+--- every window's first line where it is. Neovim otherwise scrolls each window to hold its
+--- cursor at the same height, which moves all of the code on screen.
+function M.before_resize()
+  -- A resize that failed before after_resize ran leaves its state behind.
+  if resizing then M.after_resize() end
+  local cursors = {}
+  for _, window in ipairs(api.nvim_list_wins()) do
+    if api.nvim_win_get_config(window).relative == '' then
+      cursors[window] = api.nvim_win_get_cursor(window)
+    end
+  end
+  resizing = {splitkeep=vim.o.splitkeep, cursors=cursors}
+  -- Show the resized grid and any scroll below as one frame.
+  if frame_depth == 0 then notify_frame(true) end
+  frame_depth = frame_depth + 1
+  vim.o.splitkeep = 'topline'
+end
+
+--- After the resize: 'topline' moves a cursor that no longer fits into the window. Put it
+--- back, scrolling only as far as it needs to be seen. Resizes also come while scrolling, as
+--- CodeLens rows change how many grid rows fill the editor.
+function M.after_resize()
+  local saved = resizing
+  if not saved then return end
+  resizing = nil
+  local ok, failure = pcall(function()
+    vim.o.splitkeep = saved.splitkeep
+    for window, cursor in pairs(saved.cursors) do
+      -- A wheel-scrolled view keeps its editing position in the anchor, and must not move.
+      if api.nvim_win_is_valid(window) and not (anchor and anchor.window == window) then
+        local now = api.nvim_win_get_cursor(window)
+        if now[1] ~= cursor[1] or now[2] ~= cursor[2] then
+          pcall(api.nvim_win_set_cursor, window, cursor)
+        end
+      end
+    end
+  end)
+  frame_depth = frame_depth - 1
+  if frame_depth == 0 then
+    pcall(api.nvim__redraw, {cursor=true, flush=true})
+    notify_frame(false)
+  end
+  if not ok then error(failure, 0) end
+end
+
 --- Scroll so screen row `row` is not hidden under the renderer's overscan rows.
 local function reveal_row(row)
   -- Overscan plus fractional-height and compact-row rounding can hide three native rows.

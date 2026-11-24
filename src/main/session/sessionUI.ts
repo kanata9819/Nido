@@ -93,10 +93,28 @@ export class SessionUI {
 		const generation = ++this.resizeGeneration;
 		const next = this.uiQueue.then(async () => {
 			if (this.attached && generation === this.resizeGeneration) {
-				await this.client.request('nvim_ui_try_resize', [columns, rows]);
+				// Keep each window's first line in place (see before_resize in
+				// resources/nido/lua/nido_scroll.lua). One atomic call, so no key runs between.
+				const [, failure] = (await this.client.request('nvim_call_atomic', [
+					[
+						['nvim_exec_lua', [resizeScript('before_resize'), []]],
+						['nvim_ui_try_resize', [columns, rows]],
+						['nvim_exec_lua', [resizeScript('after_resize'), []]]
+					]
+				])) as [unknown[], [number, number, string] | null];
+				if (failure) {
+					// The calls after a failed one did not run; release the held frame.
+					await this.client.request('nvim_exec_lua', [resizeScript('after_resize'), []]);
+					throw new Error(failure[2]);
+				}
 			}
 		});
 		this.uiQueue = next.catch(() => {});
 		return next;
 	}
+}
+
+/** Call a resize hook of nido_scroll, when Neovim has loaded Nido's init.lua. */
+function resizeScript(name: 'before_resize' | 'after_resize'): string {
+	return `local ok, scroll = pcall(require, 'nido_scroll') if ok then scroll.${name}() end`;
 }
