@@ -252,7 +252,8 @@ function M.before_resize()
 end
 
 --- After the resize: 'topline' moves a cursor that no longer fits into the window. Put it
---- back, scrolling only as far as it needs to be seen.
+--- back, scrolling only as far as it needs to be seen. Resizes also come while scrolling, as
+--- CodeLens rows change how many grid rows fill the editor.
 function M.after_resize()
   local saved = resizing
   if not saved then return end
@@ -260,7 +261,8 @@ function M.after_resize()
   local ok, failure = pcall(function()
     vim.o.splitkeep = saved.splitkeep
     for window, cursor in pairs(saved.cursors) do
-      if api.nvim_win_is_valid(window) then
+      -- A wheel-scrolled view keeps its editing position in the anchor, and must not move.
+      if api.nvim_win_is_valid(window) and not (anchor and anchor.window == window) then
         local now = api.nvim_win_get_cursor(window)
         if now[1] ~= cursor[1] or now[2] ~= cursor[2] then
           pcall(api.nvim_win_set_cursor, window, cursor)
