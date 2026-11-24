@@ -1,9 +1,11 @@
 import { onNidoEvent } from '../../nidoEvents';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import {
+	Check,
 	ChevronDown,
 	ChevronUp,
 	CircleAlert,
+	Copy,
 	Info,
 	Lightbulb,
 	TriangleAlert,
@@ -25,6 +27,24 @@ const severities = [
 	{ label: 'Hint', name: 'hint', icon: Lightbulb }
 ];
 
+type DiagnosticItemInfo = Extract<NidoEvent, { type: 'diagnostics' }>['items'][number];
+
+/**
+ * The diagnostics as plain text for the clipboard, one per block, such as
+ * `main.rs:42:18: error[E0277] rustc: The trait bound ...`.
+ */
+function diagnosticsText(items: DiagnosticItemInfo[]): string {
+	return items
+		.map((item) => {
+			const filename = item.path.replaceAll('\\', '/').split('/').pop() || 'Untitled';
+			const severity = (severities[item.severity - 1] || severities[0]).name;
+			const code = item.code ? `[${item.code}]` : '';
+			const source = item.source ? ` ${item.source}` : '';
+			return `${filename}:${item.line}:${item.column}: ${severity}${code}${source}: ${item.message}`;
+		})
+		.join('\n\n');
+}
+
 /** A diagnostic message, with `code` spans in the editor font. */
 function Message({ text, fontFamily }: { text: string; fontFamily: string }): React.JSX.Element {
 	return (
@@ -45,8 +65,9 @@ function Message({ text, fontFamily }: { text: string; fontFamily: string }): Re
 /**
  * The card's keys. Esc or Ctrl+C (without a selection) close it, Ctrl+K closes it and opens
  * Neovim's hover, and [d / ]d with an optional count jump on; the keys typed so far of such
- * a jump wait in `pendingRef`. Ctrl+D/U/F/B, h/l, j/k and the page keys scroll and Tab cycles
- * focus. Any other key closes the card and goes on to the editor, after a pending count.
+ * a jump wait in `pendingRef`. y copies every diagnostic. Ctrl+D/U/F/B, h/l, j/k and the
+ * page keys scroll and Tab cycles focus. Any other key closes the card and goes on to the
+ * editor, after a pending count.
  */
 function diagnosticKeyDown(
 	event: React.KeyboardEvent,
@@ -55,13 +76,15 @@ function diagnosticKeyDown(
 		card,
 		pendingRef,
 		close,
-		jump
+		jump,
+		copy
 	}: {
 		body: HTMLElement;
 		card: HTMLElement;
 		pendingRef: RefObject<string>;
 		close: () => void;
 		jump: (sequence: string) => void;
+		copy: () => void;
 	}
 ): void {
 	event.stopPropagation();
@@ -90,7 +113,10 @@ function diagnosticKeyDown(
 		jump(typed + 'd');
 	} else {
 		pendingRef.current = '';
-		if (ctrl && ['d', 'u', 'f', 'b'].includes(key)) {
+		if (plain && key === 'y' && !typed) {
+			event.preventDefault();
+			copy();
+		} else if (ctrl && ['d', 'u', 'f', 'b'].includes(key)) {
 			event.preventDefault();
 			scrollPage(body, key);
 		} else if (key === 'tab') {
@@ -127,7 +153,7 @@ function DiagnosticItem({
 	item,
 	fontFamily
 }: {
-	item: Extract<NidoEvent, { type: 'diagnostics' }>['items'][number];
+	item: DiagnosticItemInfo;
 	fontFamily: string;
 }): React.JSX.Element {
 	const t = useI18n();
@@ -196,6 +222,19 @@ export default function DiagnosticInformation({
 	const jump = (sequence: string): void => {
 		keys.current = '';
 		void window.nido.input(id, sequence).catch((error) => onError(String(error)));
+	};
+	// The items last copied, so the copy button shows a check until the card changes.
+	const [copied, setCopied] = useState<DiagnosticItemInfo[]>();
+	/** Copy every diagnostic on the card as plain text. */
+	const copy = (): void => {
+		const items = info?.items;
+		if (!items) {
+			return;
+		}
+		navigator.clipboard.writeText(diagnosticsText(items)).then(
+			() => setCopied(items),
+			(error) => onError(String(error))
+		);
 	};
 
 	useEffect(() => {
@@ -285,7 +324,8 @@ export default function DiagnosticInformation({
 						card: card.current!,
 						pendingRef: keys,
 						close,
-						jump
+						jump,
+						copy
 					})
 				}
 			>
@@ -296,6 +336,13 @@ export default function DiagnosticInformation({
 						{t('{count} on this line', { count: info.items.length })}
 					</span>
 					<div className={styles.actions}>
+						<button
+							aria-label={t('Copy diagnostics')}
+							title={`${copied === info.items ? t('Copied') : t('Copy diagnostics')} (y)`}
+							onClick={copy}
+						>
+							{copied === info.items ? <Check size={14} /> : <Copy size={14} />}
+						</button>
 						<button
 							aria-label={t('Previous diagnostic')}
 							title={`${t('Previous diagnostic')} ([d)`}
@@ -337,6 +384,7 @@ export default function DiagnosticInformation({
 				</div>
 				<footer className={styles.footer}>
 					<span>{t('[d / ]d · Previous / Next')}</span>
+					<span>{t('y · Copy')}</span>
 					<span>{t('h j k l · Scroll')}</span>
 					<span>{t('Other keys · Back to editor')}</span>
 				</footer>

@@ -105,6 +105,29 @@ test('native diagnostic cards show severity, source, codes and safe selectable t
 	await page.keyboard.press('Control+c');
 	await expect(popup).toBeVisible();
 	await page.evaluate(() => window.getSelection()?.removeAllRanges());
+	// y copies every diagnostic on the card as plain text and keeps the card open.
+	await page.evaluate(() => {
+		Object.defineProperty(navigator, 'clipboard', {
+			configurable: true,
+			value: {
+				writeText: async (text: string) => {
+					(window as unknown as { copiedText: string }).copiedText = text;
+				}
+			}
+		});
+	});
+	await page.keyboard.type('y');
+	await expect
+		.poll(() => page.evaluate(() => (window as unknown as { copiedText?: string }).copiedText))
+		.toBe(
+			'main.rs:42:18: error[E0277] rustc: The trait bound `String: From<u8>` is not satisfied\n`String` implements `From<&str>`.\n\nConsider converting the byte to a character first.\n\n' +
+				'main.rs:42:7: warning[unused_parens] rustc: Unnecessary parentheses around function argument\n`#[warn(unused_parens)]` is enabled by default.'
+		);
+	await expect(popup).toBeVisible();
+	await expect(content).toBeFocused();
+	await expect(
+		popup.getByRole('button', { name: 'Copy diagnostics', exact: true })
+	).toHaveAttribute('title', 'Copied (y)');
 	await page.keyboard.type(']d');
 	await page.keyboard.type('2[d');
 	await page.keyboard.type(']');
@@ -123,6 +146,10 @@ test('native diagnostic cards show severity, source, codes and safe selectable t
 			)
 		)
 		.toEqual([']d', '2[d', ']d']);
+	await page.keyboard.press('Tab');
+	await expect(
+		popup.getByRole('button', { name: 'Copy diagnostics', exact: true })
+	).toBeFocused();
 	await page.keyboard.press('Tab');
 	await expect(
 		popup.getByRole('button', { name: 'Previous diagnostic', exact: true })

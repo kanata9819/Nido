@@ -401,6 +401,9 @@ vim.api.nvim_set_hl(0, 'FloatTitle', {fg='#a8cf9e', bg='#1b1e21', bold=true})
 local show_type_information = require('nido_hover').show
 local diagnostics = require('nido_diagnostics')
 vim.keymap.set('n', 'gl', function() diagnostics.show() end)
+-- Neovim's own keys for the diagnostic float show the same card.
+vim.keymap.set('n', '<C-w>d', function() diagnostics.show() end)
+vim.keymap.set('n', '<C-w><C-d>', function() diagnostics.show() end)
 vim.keymap.set('n', ']d', function() diagnostics.jump(1) end)
 vim.keymap.set('n', '[d', function() diagnostics.jump(-1) end)
 local runnables = require('nido_runnables')

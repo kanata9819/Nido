@@ -729,8 +729,14 @@ test('diagnostic jumps show native cards with severity, keyboard navigation and 
 		).toBeVisible();
 		await page.keyboard.press('Escape');
 		await expect(editor).toBeFocused();
-		await page.keyboard.type('gl');
+		// Neovim's own Ctrl+W d opens the same card.
+		await page.keyboard.press('Control+w');
+		await page.keyboard.type('d');
 		await expect(popup).toBeVisible();
+		await page.keyboard.press('Tab');
+		await expect(
+			popup.getByRole('button', { name: 'Copy diagnostics', exact: true })
+		).toBeFocused();
 		await page.keyboard.press('Tab');
 		await expect(
 			popup.getByRole('button', { name: 'Previous diagnostic', exact: true })
