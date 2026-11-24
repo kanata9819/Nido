@@ -681,6 +681,8 @@ export const japanese: Record<string, string> = {
 	'{count} on this line': 'この行に {count} 件',
 	'[d / ]d · Previous / Next': '[d / ]d：前 / 次',
 	'h j k l · Scroll': 'h j k l：スクロール',
+	'y · Copy': 'y：コピー',
+	'Copy diagnostics': '診断をコピー',
 	'Other keys · Back to editor': 'その他のキー：エディターに戻る',
 	'Close type information': '型情報を閉じる',
 	'Close (Esc / Ctrl+C)': '閉じる（Esc / Ctrl+C）',
