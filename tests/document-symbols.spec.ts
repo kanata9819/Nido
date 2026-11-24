@@ -397,3 +397,13 @@ test('Japanese symbol search explains empty and unsupported files without openin
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('textbox', { name: 'Neovim入力', exact: true })).toBeFocused();
 });
+
+test("Neovim's gO opens the symbol palette of its own workspace only", async ({ page }) => {
+	await open(page);
+	const palette = page.getByRole('dialog', { name: 'symbols palette' });
+	await page.evaluate(() => window.rendererTest.emit({ type: 'showSymbols', id: 'beta' }));
+	await expect(palette).toHaveCount(0);
+	await page.evaluate(() => window.rendererTest.emit({ type: 'showSymbols', id: 'alpha' }));
+	await expect(palette.getByRole('listbox', { name: 'File symbols' })).toBeFocused();
+	await expect.poll(() => calls(page, 'findSymbols')).toEqual([['alpha']]);
+});

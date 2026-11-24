@@ -54,6 +54,12 @@ function M.jump(direction)
   M.show(false)
 end
 
+--- Jump to the last (1) or first (-1) diagnostic of the buffer and show it.
+function M.jump_to_end(direction)
+  vim.diagnostic.jump({count=direction * math.huge, wrap=false, float=false})
+  M.show(false)
+end
+
 -- Hide the card when the cursor leaves its position, the buffer is left, or diagnostics change.
 vim.api.nvim_create_autocmd('CursorMoved', {
   callback = function()
