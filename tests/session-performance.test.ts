@@ -491,8 +491,15 @@ test('resize bursts skip obsolete queued sizes and keep the latest viewport', as
 	});
 	try {
 		session.client.request = async (method, args = []) => {
-			if (method === 'nvim_ui_try_resize') {
-				sizes.push(args);
+			// Resizes go to Neovim inside an atomic call with the scroll hooks around them.
+			const resize =
+				method === 'nvim_call_atomic'
+					? (args[0] as [string, unknown[]][]).find(
+							([name]) => name === 'nvim_ui_try_resize'
+						)
+					: undefined;
+			if (resize) {
+				sizes.push(resize[1]);
 				if (sizes.length === 1) {
 					entered();
 					await gate;
