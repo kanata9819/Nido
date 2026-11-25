@@ -8,6 +8,24 @@ import { parseLanguage, type Language } from '../../../shared/i18n';
 const previousDefaultFontFamily = '"Cascadia Code", "Consolas", "Yu Gothic UI", monospace';
 export const defaultFontFamily = '"Cascadia Code", "Consolas", "Meiryo", "Yu Gothic UI", monospace';
 export const defaultFontWeight = 350;
+
+/** Terminal font metrics, scaling line height in proportion to the editor settings. */
+export function terminalFont({
+	fontSize,
+	lineHeight,
+	terminalFontSize
+}: Pick<EditorSettings, 'fontSize' | 'lineHeight' | 'terminalFontSize'>): Pick<
+	EditorSettings,
+	'fontSize' | 'lineHeight'
+> {
+	if (!terminalFontSize || terminalFontSize === fontSize) {
+		return { fontSize, lineHeight };
+	}
+	return {
+		fontSize: terminalFontSize,
+		lineHeight: Math.max(8, Math.round((lineHeight * terminalFontSize) / fontSize))
+	};
+}
 /** Where the activity bar sits: along the left edge or above the explorer. */
 export type ActivityBarPosition = 'left' | 'top';
 
