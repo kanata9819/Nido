@@ -64,9 +64,10 @@ function Message({ text, fontFamily }: { text: string; fontFamily: string }): Re
 
 /**
  * The card's keys. Esc or Ctrl+C (without a selection) close it, Ctrl+K closes it and opens
- * Neovim's hover, and [d / ]d with an optional count jump on; the keys typed so far of such
- * a jump wait in `pendingRef`. y copies every diagnostic. Ctrl+D/U/F/B, h/l, j/k and the
- * page keys scroll and Tab cycles focus. Any other key closes the card and goes on to the
+ * Neovim's hover. [d / ]d with an optional count jump on, and [D / ]D jump to the ends.
+ * The keys typed so far of a jump wait in `pendingRef`. y copies every diagnostic.
+ * Ctrl+D/U/F/B, h/l, j/k and the page keys scroll. Tab cycles focus.
+ * Any other key closes the card and goes on to the
  * editor, after a pending count.
  */
 function diagnosticKeyDown(
@@ -88,7 +89,8 @@ function diagnosticKeyDown(
 	}
 ): void {
 	event.stopPropagation();
-	if (event.nativeEvent.isComposing) {
+	const editorKey = vimKey(event.nativeEvent);
+	if (!editorKey || event.nativeEvent.keyCode === 229) {
 		return;
 	}
 	const key = event.key.toLowerCase();
@@ -110,7 +112,7 @@ function diagnosticKeyDown(
 		pendingRef.current = typed.replace(/(\[|\])$/, '') + key;
 	} else if (plain && key === 'd' && /(\[|\])$/.test(typed)) {
 		event.preventDefault();
-		jump(typed + 'd');
+		jump(typed + event.key);
 	} else {
 		pendingRef.current = '';
 		if (plain && key === 'y' && !typed) {
@@ -131,19 +133,15 @@ function diagnosticKeyDown(
 			scrollLines(body, key);
 		} else if (
 			!event.defaultPrevented &&
-			event.nativeEvent.keyCode !== 229 &&
 			// Ctrl+C with a selection copies the selected message text.
 			!(ctrl && key === 'c') &&
 			// Enter and Space still press a focused button.
 			!(['Enter', ' '].includes(event.key) && (event.target as HTMLElement).closest('button'))
 		) {
 			// Any other key goes back to the editor, with a pending count or bracket.
-			const keys = vimKey(event.nativeEvent);
-			if (keys) {
-				event.preventDefault();
-				close();
-				jump(typed + keys);
-			}
+			event.preventDefault();
+			close();
+			jump(typed + editorKey);
 		}
 	}
 }

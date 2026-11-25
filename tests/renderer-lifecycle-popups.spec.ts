@@ -47,6 +47,29 @@ async function showDiagnosticCard(page: Page): Promise<void> {
 	);
 }
 
+test('diagnostic cards preserve brackets through Shift for first and last jumps', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=app`);
+	await expect(page.getByRole('textbox', { name: 'Neovim input', exact: true })).toBeFocused();
+	await showDiagnosticCard(page);
+	await expect(page.getByLabel('Diagnostic content', { exact: true })).toBeFocused();
+
+	for (const bracket of ['[', ']']) {
+		await page.keyboard.press(bracket);
+		await page.keyboard.press('Shift+D');
+	}
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.calls
+					.filter((call) => call.method === 'input')
+					.map((call) => call.args[1])
+			)
+		)
+		.toEqual(['[D', ']D']);
+});
+
 test('native diagnostic cards show severity, source, codes and safe selectable text with keyboard navigation', async ({
 	page
 }) => {
