@@ -24,8 +24,8 @@ export function scrollLines(content: HTMLElement, key: string): void {
 	}
 }
 
-/** The keys scrollLines handles, in lower case. */
-export const lineKeys = ['j', 'k', 'arrowdown', 'arrowup', 'pagedown', 'pageup', 'home', 'end'];
+/** KeyboardEvent.key values that scroll the card by lines or pages. */
+export const lineKeys = ['j', 'k', 'ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'];
 
 /** Tab and Shift+Tab: move focus to the next or previous of `nodes`, wrapping around. */
 export function cycleFocus(nodes: HTMLElement[], backwards: boolean): void {

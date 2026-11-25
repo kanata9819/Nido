@@ -124,11 +124,11 @@ function diagnosticKeyDown(
 		} else if (key === 'tab') {
 			event.preventDefault();
 			cycleFocus([body, ...card.querySelectorAll<HTMLElement>('button')], event.shiftKey);
-		} else if (plain && ['h', 'l', 'arrowleft', 'arrowright'].includes(key)) {
+		} else if (plain && ['h', 'l', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
 			// Long messages wrap; a wide code span can still scroll sideways.
 			event.preventDefault();
 			body.scrollLeft += ['l', 'arrowright'].includes(key) ? 48 : -48;
-		} else if (plain && lineKeys.includes(key)) {
+		} else if (plain && lineKeys.includes(event.key)) {
 			event.preventDefault();
 			scrollLines(body, key);
 		} else if (
