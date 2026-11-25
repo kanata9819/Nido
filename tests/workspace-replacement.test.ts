@@ -104,6 +104,56 @@ test('selected-line replacement previews without writes, preserves BOM/CRLF and 
 		}
 	}));
 
+test('replacing selected lines keeps marks on other lines and undoes both edits together', () =>
+	fixture(async (session, root) => {
+		const original = ['needle first', 'keep this', 'keep that', 'needle last'];
+		await writeFile(join(root, 'lines.txt'), original.join('\n') + '\n');
+		await session.openFile('lines.txt', 2, 3);
+		await session.input('ma3Gmb');
+		await session.inputMode();
+		const marks = (): Promise<unknown> =>
+			session.client.request('nvim_exec_lua', [
+				"return {vim.api.nvim_buf_get_mark(0, 'a'), vim.api.nvim_buf_get_mark(0, 'b')}",
+				[]
+			]);
+		const before = await marks();
+		const found = await session.searchText('needle', defaultSearchOptions);
+		const preview = await session.previewReplacement(found.token!, 'changed', [0, 1]);
+		await session.applyReplacement(preview.token);
+		assert.deepEqual(await marks(), before);
+		assert.deepEqual(await session.client.request('nvim_buf_get_lines', [0, 0, -1, false]), [
+			'changed first',
+			'keep this',
+			'keep that',
+			'changed last'
+		]);
+		await session.input('u');
+		await session.inputMode();
+		assert.deepEqual(
+			await session.client.request('nvim_buf_get_lines', [0, 0, -1, false]),
+			original
+		);
+	}));
+
+test('replacement compares saved lines independently of the EditorConfig output format', () =>
+	fixture(async (session, root) => {
+		await writeFile(join(root, '.editorconfig'), 'root = true\n[*.txt]\nend_of_line = lf\n');
+		for (const name of ['open.txt', 'unopened.txt']) {
+			await writeFile(join(root, name), 'before\r\nneedle\r\n');
+		}
+		await session.setEditorConfig(true);
+		await session.openFile('open.txt');
+		assert.equal(await session.client.request('nvim_eval', ['&fileformat']), 'unix');
+		assert.equal(await session.modified(), false);
+		const found = await session.searchText('needle', defaultSearchOptions);
+		const preview = await session.previewReplacement(found.token!, 'changed', [0, 1]);
+		assert.deepEqual(await session.applyReplacement(preview.token), { files: 2, count: 2 });
+		await session.saveAll();
+		for (const name of ['open.txt', 'unopened.txt']) {
+			assert.equal(await readFile(join(root, name), 'utf8'), 'before\nchanged\n');
+		}
+	}));
+
 test('regex captures, Unicode word boundaries, case and folder options respect Git ignores', () =>
 	fixture(async (session, root) => {
 		execFileSync('git', ['init', '-q', root], { windowsHide: true });

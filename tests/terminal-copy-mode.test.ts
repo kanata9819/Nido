@@ -31,6 +31,48 @@ async function waitFor(check: () => boolean, message: string): Promise<void> {
 }
 
 test(
+	'closing a different shell keeps copy mode in the displayed shell',
+	{ timeout: 30000 },
+	async () => {
+		const root = await mkdtemp(join(tmpdir(), 'nido-copy-mode-close-shell-'));
+		let owner: Session | undefined;
+		try {
+			owner = await Session.create(root, () => {});
+			const terminal = await owner.openTerminal(shell);
+			await terminal.addTerminalShell(shell);
+			await terminal.enterCopyMode();
+			assert.equal(await terminal.inputMode(), 'nt');
+
+			await terminal.closeTerminalShell(1);
+			await waitFor(
+				() => terminal.state.terminalShells?.names.length === 1,
+				'background shell closed'
+			);
+			assert.equal(terminal.state.copyMode, true);
+			await terminal.input('j');
+			assert.equal(await terminal.inputMode(), 'nt', 'movement stays in copy mode');
+
+			await terminal.addTerminalShell(shell);
+			await terminal.enterCopyMode();
+			await terminal.closeTerminalShell(2);
+			await waitFor(
+				() => terminal.state.terminalShells?.names.length === 1,
+				'displayed shell closed'
+			);
+			assert.equal(terminal.state.copyMode, false);
+			assert.equal(
+				await terminal.inputMode(),
+				't',
+				'the newly displayed shell accepts input'
+			);
+		} finally {
+			await owner?.stop();
+			await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+		}
+	}
+);
+
+test(
 	'terminal copy mode selects output with Vim keys, copies it and returns to the shell',
 	{ timeout: 60000 },
 	async () => {
