@@ -1459,6 +1459,38 @@ test('switching file tabs restores the scroll position, including a view scrolle
 	}
 });
 
+test('resizing after returning to a scrolled file tab keeps its edit position', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-resize-tab-anchor-'));
+	let session: Session | undefined;
+	try {
+		await writeFile(
+			join(root, 'lines.txt'),
+			Array.from({ length: 250 }, (_, i) => `line ${i + 1}`).join('\n')
+		);
+		await writeFile(join(root, 'other.txt'), 'Other\n');
+		session = await Session.create(root, () => {});
+		await session.attach(80, 24);
+		await session.openFile('other.txt');
+		const other = (await session.client.request('nvim_get_current_buf', [])) as number;
+		await session.openFile('lines.txt');
+		const lines = (await session.client.request('nvim_get_current_buf', [])) as number;
+		await session.input('80Gzz');
+		await session.inputMode();
+		await session.scroll(-20, false, true);
+		await session.selectBuffer(other);
+		await session.selectBuffer(lines);
+
+		await session.resize(80, 10);
+		await session.input('iX<Esc>');
+		await session.inputMode();
+		assert.equal(await session.client.request('nvim_eval', ['getline(80)']), 'Xline 80');
+		assert.equal(await session.client.request('nvim_eval', ["line('.')"]), 80);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('opening a file into the empty start buffer drops the empty buffer scroll caches', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-scroll-reused-buffer-'));
 	const grid = new Grid();

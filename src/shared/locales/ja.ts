@@ -329,6 +329,10 @@ export const japanese: Record<string, string> = {
 	'Command Prompt (cmd)': 'コマンドプロンプト（cmd）',
 	'Applies to new terminals and Restart Shell. The selection is saved.':
 		'新しいターミナルとシェルの再起動に適用します。選択は保存されます。',
+	'Match editor font size': 'エディターと同じ文字サイズ',
+	'Terminal font size': 'ターミナルの文字サイズ',
+	"The line height keeps the editor's proportion to the font size.":
+		'行の高さは、文字サイズに対するエディターの比率を保ちます。',
 	Extensions: '拡張機能',
 	'Use EditorConfig': 'EditorConfigを使用',
 	"Apply the project's .editorconfig to indentation, line endings and save rules.":

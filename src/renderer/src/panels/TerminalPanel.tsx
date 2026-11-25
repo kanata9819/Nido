@@ -1,7 +1,11 @@
 import { useRef } from 'react';
 import { useI18n } from '../i18n';
 import Editor from '../editor/Editor';
-import { defaultFontFamily, type EditorSettings } from '../settings/useEditorSettings';
+import {
+	defaultFontFamily,
+	terminalFont,
+	type EditorSettings
+} from '../settings/useEditorSettings';
 import styles from './TerminalPanel.module.css';
 
 /**
@@ -54,7 +58,8 @@ export default function TerminalPanel({
 	onError: (message: string) => void;
 }): React.JSX.Element {
 	const t = useI18n();
-	const { fontSize, fontWeight, lineHeight, fontFamily, smoothCursor, smoothBlink } = settings;
+	const { fontWeight, fontFamily, smoothCursor, smoothBlink } = settings;
+	const { fontSize, lineHeight } = terminalFont(settings);
 	const names = shells?.names ?? [];
 	return (
 		<section

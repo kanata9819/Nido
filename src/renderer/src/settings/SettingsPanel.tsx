@@ -22,6 +22,9 @@ export default function SettingsPanel(settings: SettingsPanelProps): React.JSX.E
 			<TerminalSettings
 				terminalShell={settings.terminalShell}
 				setTerminalShell={settings.setTerminalShell}
+				fontSize={settings.fontSize}
+				terminalFontSize={settings.terminalFontSize}
+				setTerminalFontSize={settings.setTerminalFontSize}
 			/>
 			<p>
 				{t('Tab / ↑ ↓ / j k: Move · ← →: Adjust · Space / Enter: Toggle · Esc: Close')}

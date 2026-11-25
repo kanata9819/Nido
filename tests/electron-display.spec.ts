@@ -1038,6 +1038,25 @@ test('settings can be navigated and changed entirely with the keyboard', async (
 		await page.keyboard.press('Tab');
 		await expect(shell).toBeFocused();
 		await page.keyboard.press('Control+j');
+		const matchEditor = page.getByRole('checkbox', { name: 'Match editor font size' });
+		await expect(matchEditor).toBeFocused();
+		await expect(matchEditor).toBeChecked();
+		await page.keyboard.press('Space');
+		await expect(matchEditor).not.toBeChecked();
+		await page.keyboard.press('j');
+		const terminalSize = page.getByRole('spinbutton', { name: 'Terminal font size' });
+		await expect(terminalSize).toBeFocused();
+		// The terminal starts from the editor font size.
+		await expect(terminalSize).toHaveValue(String(initial + 0.5));
+		await page.keyboard.press('k');
+		await expect(matchEditor).toBeFocused();
+		await page.keyboard.press('Enter');
+		await expect(matchEditor).toBeChecked();
+		await expect(terminalSize).toHaveCount(0);
+		await expect
+			.poll(() => page.evaluate(() => localStorage.getItem('nido.terminalFontSize')))
+			.toBe('0');
+		await page.keyboard.press('Control+j');
 		await expect(language).toBeFocused();
 		await page.keyboard.press('ArrowDown');
 		await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
@@ -1055,7 +1074,7 @@ test('settings can be navigated and changed entirely with the keyboard', async (
 		await page.keyboard.press('Shift+Tab');
 		await expect(page.getByRole('button', { name: 'Close palette' })).toBeFocused();
 		await page.keyboard.press('Shift+Tab');
-		await expect(shell).toBeFocused();
+		await expect(matchEditor).toBeFocused();
 		await page.screenshot({ path: 'test-results/settings-keyboard.png' });
 		await page.keyboard.press('Escape');
 		await expect(page.getByRole('dialog', { name: 'Settings' })).not.toBeVisible();
