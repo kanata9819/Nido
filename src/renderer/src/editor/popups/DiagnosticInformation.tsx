@@ -115,7 +115,7 @@ function diagnosticKeyDown(
 		jump(typed + event.key);
 	} else {
 		pendingRef.current = '';
-		if (plain && key === 'y' && !typed) {
+		if (plain && event.key === 'y' && !typed) {
 			event.preventDefault();
 			copy();
 		} else if (ctrl && ['d', 'u', 'f', 'b'].includes(key)) {
