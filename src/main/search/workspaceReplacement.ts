@@ -294,13 +294,19 @@ for _, item in ipairs(files) do
     local originalLines = api.nvim_buf_get_lines(buf, 0, -1, false)
     local empty = #originalLines == 1 and originalLines[1] == '' and item.original == ''
     local hasEnding = bo.endofline and not empty
-    local current = table.concat(originalLines, ending) .. (hasEnding and ending or '')
-    assert(current == item.original, 'Search results changed. Search again.')
+    local function matches_original(separator)
+      return table.concat(originalLines, separator) .. (hasEnding and separator or '') == item.original
+    end
+    -- EditorConfig may select a different format for saving the same rows.
+    if not matches_original(ending) then
+      ending = item.ending
+      assert(matches_original(ending), 'Search results changed. Search again.')
+    end
     if apply then
       local lines = vim.split(item.changed, ending, {plain=true})
       if hasEnding then table.remove(lines) end
-      if #lines == 0 then lines = {''} end
-      table.insert(edits, {buf=buf, lines=lines, hasEnding=hasEnding})
+      assert(#lines == #originalLines, 'Search results changed. Search again.')
+      table.insert(edits, {buf=buf, before=originalLines, after=lines, hasEnding=hasEnding})
     end
   end
 end
@@ -308,11 +314,18 @@ for _, edit in ipairs(edits) do
   vim.bo[edit.buf].buflisted = true
   vim.bo[edit.buf].endofline = edit.hasEnding
   vim.bo[edit.buf].fixendofline = false
-  api.nvim_buf_set_lines(edit.buf, 0, -1, false, edit.lines)
+  -- Editing just the changed rows keeps marks and extmarks on untouched lines.
+  for row, line in ipairs(edit.after) do
+    local before = edit.before[row]
+    if line ~= before then
+      api.nvim_buf_set_text(edit.buf, row - 1, 0, row - 1, #before, {line})
+    end
+  end
 end`,
 				[
 					files.map((file) => ({
 						path: editorPath(this.root, this.root + '/' + file.path),
+						ending: searchLineEnding(file.original),
 						original: file.original,
 						changed: file.changed
 					})),

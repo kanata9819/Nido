@@ -167,10 +167,14 @@ export class Session {
 			}
 			// The shells of a terminal workspace and the shown one (nido_terminal.lua).
 			if (method === 'nido:terminal_shells') {
-				const { names, current } = (args[0] ?? {}) as {
+				const { names, current, resumed } = (args[0] ?? {}) as {
 					names?: unknown;
 					current?: unknown;
+					resumed?: unknown;
 				};
+				if (resumed === true) {
+					this.interaction.forgetCopyMode();
+				}
 				this.events.updateState({
 					terminalShells: {
 						names: Array.isArray(names) ? names.map(String) : [],
@@ -393,7 +397,9 @@ export class Session {
 			throw new Error('Not a terminal session.');
 		}
 		return this.interaction.enqueue(async () => {
-			this.interaction.forgetCopyMode();
+			if (action === 'select') {
+				this.interaction.forgetCopyMode();
+			}
 			await this.client.request('nvim_exec_lua', [
 				`require('nido_terminal').${action}(...)`,
 				[position]

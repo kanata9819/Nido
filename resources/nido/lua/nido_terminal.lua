@@ -15,12 +15,14 @@ local choices = {
 }
 
 --- Tell Nido which shells run and which one is shown.
-local function publish()
+local function publish(resumed)
   local names = {}
   for index, shell in ipairs(shells) do
     names[index] = shell.name
   end
-  vim.rpcnotify(vim.g.nido_channel, 'nido:terminal_shells', { names = names, current = current })
+  vim.rpcnotify(vim.g.nido_channel, 'nido:terminal_shells', {
+    names = names, current = current, resumed = resumed,
+  })
 end
 
 --- A terminal window shows no line numbers, signs or status line. 'statuscolumn' must be
@@ -83,7 +85,7 @@ local function exited(shell)
   if vim.api.nvim_buf_is_valid(shell.buffer) then
     vim.api.nvim_buf_delete(shell.buffer, { force = true })
   end
-  publish()
+  publish(was_shown)
 end
 
 --- Run `command` in a new terminal buffer for `shell`, shown in the current window.
