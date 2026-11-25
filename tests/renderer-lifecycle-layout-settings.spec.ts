@@ -743,6 +743,27 @@ test('editor font size accepts half sizes and keeps the last valid one', async (
 	await expect(page.getByRole('spinbutton', { name: 'Editor font size' })).toHaveValue('9.5');
 });
 
+test('terminal font size follows the editor until set on its own', async ({ page }) => {
+	await page.goto(`${origin}?view=app`);
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	const match = page.getByRole('checkbox', { name: 'Match editor font size', exact: true });
+	const size = page.getByRole('spinbutton', { name: 'Terminal font size' });
+	await expect(match).toBeChecked();
+	await expect(size).toHaveCount(0);
+	// Turning matching off starts from the editor size.
+	await match.uncheck();
+	await expect(size).toHaveValue('15');
+	await size.fill('17.5');
+	await expect
+		.poll(() => page.evaluate(() => localStorage.getItem('nido.terminalFontSize')))
+		.toBe('17.5');
+	await match.check();
+	await expect(size).toHaveCount(0);
+	await expect
+		.poll(() => page.evaluate(() => localStorage.getItem('nido.terminalFontSize')))
+		.toBe('0');
+});
+
 test('settings shortcuts leave IME transition keys with the focused control', async ({ page }) => {
 	await page.goto(`${origin}?view=app`);
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();

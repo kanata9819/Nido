@@ -135,6 +135,12 @@ export function useEditorSettings(): EditorSettings {
 		18,
 		(value) => Number.isInteger(value) && value >= 8 && value <= 80
 	);
+	// 0 follows the editor font size; otherwise the terminal's own size, in the same steps.
+	const [terminalFontSize, setTerminalFontSize] = useStoredNumber(
+		'nido.terminalFontSize',
+		0,
+		(value) => value === 0 || (value >= 8 && value <= 24 && Number.isInteger(value * 2))
+	);
 
 	return {
 		githubEnabled,
@@ -185,6 +191,8 @@ export function useEditorSettings(): EditorSettings {
 		setFontSize,
 		lineHeight,
 		setLineHeight,
+		terminalFontSize,
+		setTerminalFontSize,
 		sidebarWidth,
 		resizeSidebar
 	};
@@ -241,6 +249,9 @@ export interface EditorSettings {
 	setFontSize: Dispatch<SetStateAction<number>>;
 	lineHeight: number;
 	setLineHeight: Dispatch<SetStateAction<number>>;
+	/** The terminal's font size in px, or 0 to use the editor font size. */
+	terminalFontSize: number;
+	setTerminalFontSize: Dispatch<SetStateAction<number>>;
 	sidebarWidth: number;
 	resizeSidebar: (width: number) => void;
 }
