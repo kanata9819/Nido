@@ -1046,6 +1046,12 @@ test('references stay accessible after jumping and can be closed with the keyboa
 		await page.getByRole('textbox', { name: 'Filter items' }).fill('main.rs');
 		await expect(page.getByRole('button', { name: /main.rs/ })).toBeVisible();
 		await page.keyboard.press('Enter');
+		// Neovim's built-in gr replaces a character until LspAttach installs the
+		// references mapping. Wait before sending it, then wait for indexing below.
+		await expect(page.getByTitle('Rust language server connection')).toContainText(
+			'rust_analyzer',
+			{ timeout: 30000 }
+		);
 		// A cold rust-analyzer can still be scanning the standard library after 30 seconds.
 		await expect(async () => {
 			const before = await page.evaluate(
@@ -1053,7 +1059,7 @@ test('references stay accessible after jumping and can be closed with the keyboa
 					(window as unknown as Window & { referenceState: { version: number } })
 						.referenceState.version
 			);
-			// Ctrl+K requests hover when the editor is already focused.
+			// Return to the editor before requesting another reference search.
 			await page.keyboard.press('Control+l');
 			await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
 			await page.keyboard.type('gg0wgr', { delay: 20 });

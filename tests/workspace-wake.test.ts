@@ -7,6 +7,8 @@ import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
 import type { Session } from '../src/main/session/session';
 import type { AppState } from '../src/main/ipc/handlers';
+import type { WorkspaceContext } from '../src/main/workspace/workspaceContext';
+import { WorkspaceStartup } from '../src/main/workspace/workspaceStartup';
 import type { LanguagePackConfiguration } from '../src/shared/languagePacks';
 import type { NidoEvent, Workspace } from '../src/shared/types';
 
@@ -36,6 +38,29 @@ function gate(): { promise: Promise<void>; release: () => void } {
 	});
 	return { promise, release };
 }
+
+test('an empty startup does not wait for language packs', async (context) => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-empty-startup-'));
+	context.after(() => rm(root, { recursive: true, force: true }));
+	const startLayout = context.mock.fn();
+	const loadLanguagePacks = context.mock.fn(async () => {
+		throw new Error('No restored workspace needs language packs.');
+	});
+	const startup = new WorkspaceStartup(
+		{
+			window: new EventEmitter(),
+			state: { active: '', order: [] },
+			registry: { sessions: new Map(), sleeping: new Map(), orderedIds: () => [] },
+			layout: { start: startLayout },
+			loadLanguagePacks
+		} as unknown as WorkspaceContext,
+		join(root, 'workspaces.json')
+	);
+
+	assert.deepEqual(await startup.restore('auto'), { workspaces: [], active: '', errors: [] });
+	assert.equal(loadLanguagePacks.mock.callCount(), 0);
+	assert.equal(startLayout.mock.callCount(), 1);
+});
 
 interface WakeFixture {
 	wake: () => Promise<unknown>;

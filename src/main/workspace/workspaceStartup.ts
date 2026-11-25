@@ -135,14 +135,14 @@ export class WorkspaceStartup {
 			);
 			// A preference may change while independent sessions are starting.
 			// Register first so subsequent updates also include these sessions.
-			const packs = await this.context.loadLanguagePacks();
-			await Promise.all(
-				restored.map((id) =>
-					id && registry.sessions.has(id)
-						? registry.sessions.get(id)!.reloadLanguagePacks(packs)
-						: undefined
-				)
-			);
+			if (restored.some((id) => id && registry.sessions.has(id))) {
+				const packs = await this.context.loadLanguagePacks();
+				await Promise.all(
+					restored.map((id) =>
+						id ? registry.sessions.get(id)?.reloadLanguagePacks(packs) : undefined
+					)
+				);
+			}
 			state.order = restored.filter((id): id is string => !!id);
 			layout.start();
 		} catch (error) {
