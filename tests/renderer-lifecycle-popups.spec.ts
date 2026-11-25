@@ -570,6 +570,14 @@ test('diagnostic cards scroll with their own keys and hand any other key to the 
 		await expect(editor).toBeFocused();
 	}
 	await expect.poll(inputs).toEqual(['w', '3w', ']x', 'i']);
+	for (const key of ['H', 'J', 'K', 'L']) {
+		await jump();
+		await expect(content).toBeFocused();
+		await page.keyboard.press(`Shift+${key}`);
+		await expect(popup).toHaveCount(0);
+		await expect(editor).toBeFocused();
+	}
+	await expect.poll(inputs).toEqual(['w', '3w', ']x', 'i', 'H', 'J', 'K', 'L']);
 	// Focus outside the editor stays where it is.
 	const settings = page.getByRole('button', { name: 'Settings', exact: true });
 	await settings.focus();
