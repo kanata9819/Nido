@@ -249,6 +249,15 @@ function M.before_resize()
   if frame_depth == 0 then notify_frame(true) end
   frame_depth = frame_depth + 1
   vim.o.splitkeep = 'topline'
+  -- Insert mode can move the viewport to satisfy 'scrolloff', even if the cursor
+  -- already fits. This makes a CodeLens grid resize jump against the wheel.
+  local window = api.nvim_get_current_win()
+  if cursors[window] and vim.bo.buftype == '' and api.nvim_get_mode().mode:match('^[iR]') then
+    local options = {win=window, scope='local'}
+    resizing.scrolloff_options = options
+    resizing.scrolloff = api.nvim_get_option_value('scrolloff', options)
+    api.nvim_set_option_value('scrolloff', 0, options)
+  end
 end
 
 --- After the resize: 'topline' moves a cursor that no longer fits into the window. Put it
@@ -260,6 +269,9 @@ function M.after_resize()
   resizing = nil
   local ok, failure = pcall(function()
     vim.o.splitkeep = saved.splitkeep
+    if saved.scrolloff_options and api.nvim_win_is_valid(saved.scrolloff_options.win) then
+      api.nvim_set_option_value('scrolloff', saved.scrolloff, saved.scrolloff_options)
+    end
     for window, cursor in pairs(saved.cursors) do
       -- A wheel-scrolled view keeps its editing position in the anchor, and must not move.
       if api.nvim_win_is_valid(window) and not (anchor and anchor.window == window) then

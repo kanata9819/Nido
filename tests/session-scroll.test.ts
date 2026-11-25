@@ -469,6 +469,52 @@ test('resizing reports whether the wheel-scrolled cursor is visible in the new g
 	}
 });
 
+test('resizing during insert-mode wheel scrolling keeps the CodeLens viewport in place', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-resize-insert-scroll-'));
+	let session: Session | undefined;
+	try {
+		session = await Session.create(root, () => {});
+		await session.attach(100, 36);
+		const lua = (script: string): Promise<unknown> =>
+			session!.client.request('nvim_exec_lua', [script, []]);
+		await lua(`
+			local api = vim.api
+			vim.o.scrolloff = 4
+			api.nvim_buf_set_lines(0, 0, -1, false, vim.tbl_map(tostring, vim.fn.range(1, 500)))
+			local ns = api.nvim_create_namespace('resize-insert-scroll')
+			for row = 0, 499, 4 do
+				api.nvim_buf_set_extmark(0, ns, row, 0, {
+					virt_lines = {{{'Run', 'NidoCodeLens'}}},
+					virt_lines_above = true,
+				})
+			end
+			vim.cmd.redraw()
+		`);
+		await session.input('100Gzti');
+		assert.equal(await session.inputMode(), 'i');
+		await session.scroll(1.2, true, true);
+		const view = (): Promise<unknown> =>
+			lua(`
+			local v = vim.fn.winsaveview()
+			return {v.topline, v.topfill, v.lnum, v.col}
+		`);
+		const before = await view();
+		for (const rows of [35, 37]) {
+			await session.resize(100, rows);
+			assert.deepEqual(await view(), before);
+		}
+		assert.deepEqual(
+			await lua(
+				"return {vim.go.scrolloff, vim.api.nvim_get_option_value('scrolloff', {win=0, scope='local'})}"
+			),
+			[4, -1]
+		);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('pixel scroll previews agree with native movement through CodeLens rows', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-codelens-scroll-'));
 	let session: Session | undefined;
