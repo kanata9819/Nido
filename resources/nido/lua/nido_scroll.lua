@@ -244,7 +244,7 @@ function M.before_resize()
       cursors[window] = api.nvim_win_get_cursor(window)
     end
   end
-  resizing = {splitkeep=vim.o.splitkeep, cursors=cursors}
+  resizing = {splitkeep=vim.o.splitkeep, cursors=cursors, anchor=anchor}
   -- Show the resized grid and any scroll below as one frame.
   if frame_depth == 0 then notify_frame(true) end
   frame_depth = frame_depth + 1
@@ -280,6 +280,14 @@ function M.after_resize()
           pcall(api.nvim_win_set_cursor, window, cursor)
         end
       end
+    end
+    -- A resize may move the native cursor behind a restored wheel view. Keep recognizing
+    -- that cursor so the next edit still returns to the anchor. A jump before the resize
+    -- already invalidated it and must still win.
+    if anchor and anchor == saved.anchor and anchor.returned
+      and vim.deep_equal(saved.cursors[anchor.window], anchor.returned)
+      and api.nvim_win_is_valid(anchor.window) then
+      anchor.returned = api.nvim_win_get_cursor(anchor.window)
     end
   end)
   frame_depth = frame_depth - 1
