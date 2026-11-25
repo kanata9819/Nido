@@ -1668,16 +1668,26 @@ test('settings navigation crosses the shell selector with Ctrl D and Ctrl U', as
 		const page = await running.firstWindow();
 		await page.getByRole('button', { name: 'Settings', exact: true }).click();
 		const shell = page.getByRole('combobox', { name: 'Shell', exact: true });
-		const extension = page.getByRole('checkbox', { name: 'Use EditorConfig' });
+		// The setting just above the shell selector. What follows it can change as terminal
+		// settings are added, so moving down is checked by leaving and coming back.
+		const history = page.getByRole('checkbox', { name: 'Automatic edit history' });
 		await expect(shell).toBeEnabled();
 		const firstInstalled = await shell.locator('option').nth(1).getAttribute('value');
 		await shell.focus();
+		await page.keyboard.press('Control+u');
+		await expect(history).toBeFocused();
 		await page.keyboard.press('Control+d');
-		await expect(extension).toBeFocused();
+		await expect(shell).toBeFocused();
+		await page.keyboard.press('Control+d');
+		await expect(shell).not.toBeFocused();
 		await page.keyboard.press('Control+u');
 		await expect(shell).toBeFocused();
+		await page.keyboard.press('Control+k');
+		await expect(history).toBeFocused();
 		await page.keyboard.press('Control+j');
-		await expect(extension).toBeFocused();
+		await expect(shell).toBeFocused();
+		await page.keyboard.press('Control+j');
+		await expect(shell).not.toBeFocused();
 		await page.keyboard.press('Control+k');
 		await expect(shell).toBeFocused();
 		await page.keyboard.press('ArrowDown');
