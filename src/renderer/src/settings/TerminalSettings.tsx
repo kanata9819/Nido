@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import type { TerminalShell } from '../../../shared/types';
 import type { EditorSettings } from './useEditorSettings';
 import { useI18n } from '../i18n';
+import { Hint, NumberField, Toggle } from './fields/SettingFields';
+import styles from './SettingsPanel.module.css';
 
 /** Names of the terminal shells, shown in the shell setting. */
 const shellLabels: Record<TerminalShell, string> = {
@@ -12,11 +14,17 @@ const shellLabels: Record<TerminalShell, string> = {
 	'wsl.exe': 'WSL'
 };
 
-/** The terminal section of the settings: which shell new terminals start. */
+/** The terminal section of the settings: which shell new terminals start, and its font size. */
 export default function TerminalSettings({
 	terminalShell,
-	setTerminalShell
-}: Pick<EditorSettings, 'terminalShell' | 'setTerminalShell'>): React.JSX.Element {
+	setTerminalShell,
+	fontSize,
+	terminalFontSize,
+	setTerminalFontSize
+}: Pick<
+	EditorSettings,
+	'terminalShell' | 'setTerminalShell' | 'fontSize' | 'terminalFontSize' | 'setTerminalFontSize'
+>): React.JSX.Element {
 	const t = useI18n();
 	const [installedShells, setInstalledShells] = useState<TerminalShell[]>();
 	const [shellError, setShellError] = useState(false);
@@ -71,6 +79,24 @@ export default function TerminalSettings({
 			<small>
 				{t('Applies to new terminals and Restart Shell. The selection is saved.')}
 			</small>
+			<Toggle
+				label="Match editor font size"
+				checked={terminalFontSize === 0}
+				onChange={(match) => setTerminalFontSize(match ? 0 : fontSize)}
+			/>
+			{terminalFontSize !== 0 && (
+				<NumberField
+					label="Terminal font size"
+					className={styles.subsetting}
+					value={terminalFontSize}
+					min={8}
+					max={24}
+					step={0.5}
+					unit="px"
+					onChange={setTerminalFontSize}
+				/>
+			)}
+			<Hint text="The line height keeps the editor's proportion to the font size." />
 		</section>
 	);
 }
