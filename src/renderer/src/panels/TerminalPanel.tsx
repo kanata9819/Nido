@@ -1,7 +1,11 @@
 import { useRef } from 'react';
 import { useI18n } from '../i18n';
 import Editor from '../editor/Editor';
-import { defaultFontFamily, type EditorSettings } from '../settings/useEditorSettings';
+import {
+	defaultFontFamily,
+	terminalFont,
+	type EditorSettings
+} from '../settings/useEditorSettings';
 import styles from './TerminalPanel.module.css';
 
 /**
@@ -174,27 +178,6 @@ export default function TerminalPanel({
 			/>
 		</section>
 	);
-}
-
-/**
- * The terminal's font size and line height. Its own font size keeps the editor's ratio of
- * line height to font size, so a larger terminal font does not crowd its lines.
- */
-function terminalFont({
-	fontSize,
-	lineHeight,
-	terminalFontSize
-}: Pick<EditorSettings, 'fontSize' | 'lineHeight' | 'terminalFontSize'>): {
-	fontSize: number;
-	lineHeight: number;
-} {
-	if (!terminalFontSize || terminalFontSize === fontSize) {
-		return { fontSize, lineHeight };
-	}
-	return {
-		fontSize: terminalFontSize,
-		lineHeight: Math.max(8, Math.round((lineHeight * terminalFontSize) / fontSize))
-	};
 }
 
 /** The panel's top edge: drag it, or press ↑/↓ on it, to change the height. */

@@ -9,7 +9,11 @@ import FileHeader from '../layout/FileHeader';
 import { Welcome } from '../workspace/Welcome';
 import WorkspaceLoading from '../workspace/WorkspaceLoading';
 import WorkspaceWakeError from '../workspace/WorkspaceWakeError';
-import { defaultFontFamily, type EditorSettings } from '../settings/useEditorSettings';
+import {
+	defaultFontFamily,
+	terminalFont,
+	type EditorSettings
+} from '../settings/useEditorSettings';
 import type { Decoration } from '../explorer/fileDecorations';
 import type { BottomPanels } from '../panels/useBottomPanels';
 import type { Item, Panel, WorkspaceState } from '../types';
@@ -134,6 +138,7 @@ function WorkspaceEditors({
 	openFiles,
 	report
 }: Props): React.JSX.Element[] {
+	const terminalMetrics = terminalFont(settings);
 	return awakeWorkspaces.map((w) => (
 		<WorkspaceEditor
 			key={w.id}
@@ -141,9 +146,9 @@ function WorkspaceEditors({
 			id={w.id}
 			terminal={w.kind === 'terminal'}
 			active={w.id === active}
-			fontSize={settings.fontSize}
+			fontSize={w.kind === 'terminal' ? terminalMetrics.fontSize : settings.fontSize}
 			fontWeight={settings.fontWeight}
-			lineHeight={settings.lineHeight}
+			lineHeight={w.kind === 'terminal' ? terminalMetrics.lineHeight : settings.lineHeight}
 			animations={settings.animations}
 			smoothCursor={settings.smoothCursor}
 			smoothBlink={settings.smoothBlink}
