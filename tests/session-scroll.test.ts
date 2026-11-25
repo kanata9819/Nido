@@ -149,6 +149,44 @@ test('wheel scrolling can retain the edit position and resumes input and paste a
 	}
 });
 
+test('resizing reports whether the wheel-scrolled cursor is visible in the new grid', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-resize-scroll-cursor-'));
+	const frames: Redraw[] = [];
+	let session: Session | undefined;
+	try {
+		session = await Session.create(root, (event) => {
+			if (event.type === 'redraw') frames.push(event.events);
+		});
+		await session.attach(80, 24);
+		await session.client.request('nvim_exec_lua', [
+			'vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.tbl_map(tostring, vim.fn.range(1, 250)))',
+			[]
+		]);
+		await session.input('80Gzz');
+		await session.inputMode();
+		await session.scroll(-20, false, true);
+
+		const screenCursor = (): Promise<{ row: number; column: number }> =>
+			session!.client.request('nvim_exec_lua', [
+				"return require('nido_scroll').screen_cursor()",
+				[]
+			]);
+		assert.equal((await screenCursor()).row, -1);
+		for (const rows of [54, 24]) {
+			frames.length = 0;
+			await session.resize(80, rows);
+			const cursor = await screenCursor();
+			assert.equal(cursor.row >= 0, rows === 54);
+			const frame = frames.find((events) => events.some(([name]) => name === 'grid_resize'));
+			const reported = frame?.findLast(([name]) => name === 'nido_pixel_scroll')?.[1]?.[2];
+			assert.deepEqual(reported, cursor, `cursor position in the ${rows}-row resize frame`);
+		}
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('word motions resume at the edit position without undoing vertical wheel scrolling', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-scroll-word-motion-'));
 	let session: Session | undefined;
@@ -425,44 +463,6 @@ test('pixel scrolling publishes the grid, offset and anchored cursor in a single
 				(frame) => frame.filter(([name]) => name === 'nido_pixel_scroll').length === 1
 			)
 		);
-	} finally {
-		await session?.stop();
-		await rm(root, { recursive: true, force: true });
-	}
-});
-
-test('resizing reports whether the wheel-scrolled cursor is visible in the new grid', async () => {
-	const root = await mkdtemp(join(tmpdir(), 'nido-resize-scroll-cursor-'));
-	const frames: Redraw[] = [];
-	let session: Session | undefined;
-	try {
-		session = await Session.create(root, (event) => {
-			if (event.type === 'redraw') frames.push(event.events);
-		});
-		await session.attach(80, 24);
-		await session.client.request('nvim_exec_lua', [
-			'vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.tbl_map(tostring, vim.fn.range(1, 250)))',
-			[]
-		]);
-		await session.input('80Gzz');
-		await session.inputMode();
-		await session.scroll(-20, false, true);
-
-		const screenCursor = (): Promise<{ row: number; column: number }> =>
-			session!.client.request('nvim_exec_lua', [
-				"return require('nido_scroll').screen_cursor()",
-				[]
-			]);
-		assert.equal((await screenCursor()).row, -1);
-		for (const rows of [54, 24]) {
-			frames.length = 0;
-			await session.resize(80, rows);
-			const cursor = await screenCursor();
-			assert.equal(cursor.row >= 0, rows === 54);
-			const frame = frames.find((events) => events.some(([name]) => name === 'grid_resize'));
-			const reported = frame?.findLast(([name]) => name === 'nido_pixel_scroll')?.[1]?.[2];
-			assert.deepEqual(reported, cursor, `cursor position in the ${rows}-row resize frame`);
-		}
 	} finally {
 		await session?.stop();
 		await rm(root, { recursive: true, force: true });
