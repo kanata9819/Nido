@@ -273,6 +273,8 @@ function M.after_resize()
   frame_depth = frame_depth - 1
   if frame_depth == 0 then
     pcall(api.nvim__redraw, {cursor=true, flush=true})
+    -- The anchored cursor can enter or leave the grid even if the view did not scroll.
+    if anchor then publish_offset() end
     notify_frame(false)
   end
   if not ok then error(failure, 0) end
