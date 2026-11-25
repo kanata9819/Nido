@@ -554,3 +554,34 @@ test('diagnostic cards scroll with their own keys and hand any other key to the 
 	await expect(popup).toBeVisible();
 	await expect(settings).toBeFocused();
 });
+
+test('diagnostic cards forward uppercase Y without copying diagnostics', async ({ page }) => {
+	await page.goto(`${origin}?view=app`);
+	const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+	await expect(editor).toBeFocused();
+	await page.evaluate(() => {
+		Object.defineProperty(navigator, 'clipboard', {
+			configurable: true,
+			value: {
+				writeText: async () => {
+					document.body.dataset.copiedDiagnostics = 'true';
+				}
+			}
+		});
+	});
+	await showDiagnosticCard(page);
+	await expect(page.getByLabel('Diagnostic content', { exact: true })).toBeFocused();
+
+	await page.keyboard.press('Shift+Y');
+	await expect(editor).toBeFocused();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.calls
+					.filter((call) => call.method === 'input')
+					.map((call) => call.args[1])
+			)
+		)
+		.toEqual(['Y']);
+	expect(await page.evaluate(() => document.body.dataset.copiedDiagnostics)).toBeUndefined();
+});
