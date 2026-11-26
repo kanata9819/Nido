@@ -53,9 +53,9 @@ export default function Issues({
 			(next) => {
 				if (alive) {
 					setIssues(next);
-					setListError('');
 					setIndex((value) => Math.min(value, Math.max(0, next.length - 1)));
 					setLoadedKey(listKey);
+					setListError('');
 					list.current?.focus();
 				}
 			},
