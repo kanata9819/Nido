@@ -313,6 +313,9 @@ test('review and merge shortcuts respect pull request state', async ({ page }) =
 	await expect(merge).toBeDisabled();
 	await expect(files).toBeFocused();
 	await expect(page.getByRole('button', { name: /^Review/ })).toBeDisabled();
+	await expect(page.getByRole('button', { name: /^Check out/ })).toBeDisabled();
+	await page.keyboard.press('o');
+	expect(await calls(page, 'githubCheckout')).toEqual([]);
 	await page.keyboard.press('v');
 	await expect(page.getByRole('textbox', { name: 'Review summary' })).toHaveCount(0);
 	expect(await calls(page, 'githubReview')).toEqual([]);

@@ -171,7 +171,7 @@ export default function PullRequests({
 			list.current?.focus();
 		});
 	const checkout = (): void => {
-		if (opened) {
+		if (opened && opened.state === 'OPEN') {
 			void act(async () => {
 				await window.nido.githubCheckout(workspaceId, opened.number);
 				await refreshStatus();
