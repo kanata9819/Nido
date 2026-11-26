@@ -75,6 +75,30 @@ test('pull requests list, open with their overview, and take comments from the k
 	expect(await calls(page, 'onClose')).toEqual([[]]);
 });
 
+test('an unavailable diff leaves the pull request overview usable and can be retried', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=github&defer=githubPullRequestDiff`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect.poll(() => calls(page, 'githubPullRequestDiff')).toHaveLength(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubPullRequestDiff', 0, new Error('HTTP 503'), true)
+	);
+	const overview = page.getByRole('region', { name: 'Pull request overview' });
+	await expect(overview).toContainText('Adds sign-in.');
+	await expect(overview).toContainText('Looks close.');
+	await expect(page.getByRole('alert')).toContainText('HTTP 503');
+	const files = page.getByRole('listbox', { name: 'Pull request files' });
+	await files.getByRole('option', { name: 'src/login.ts' }).click();
+	await expect(page.getByText('The diff is unavailable. Refresh to try again.')).toBeVisible();
+	await page.keyboard.press('r');
+	await expect.poll(() => calls(page, 'githubPullRequestDiff')).toHaveLength(2);
+	await page.evaluate(() => window.rendererTest.settle('githubPullRequestDiff', 0, []));
+	await expect(page.getByRole('region', { name: 'Review threads' })).toBeVisible();
+	await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
 test('a pull request file shows its diff and threads, which can be replied to and resolved', async ({
 	page
 }) => {
