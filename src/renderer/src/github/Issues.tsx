@@ -43,6 +43,7 @@ export default function Issues({
 	const [opened, setOpened] = useState<IssueDetails>();
 	const [commenting, setCommenting] = useState(false);
 	const list = useRef<HTMLDivElement>(null);
+	const previousIssues = useRef<IssueSummary[]>([]);
 	const busy = working || !loaded;
 
 	useEffect(() => {
@@ -50,9 +51,11 @@ export default function Issues({
 		window.nido.githubIssues(workspaceId, filter).then(
 			(next) => {
 				if (alive) {
+					const previous = previousIssues.current;
+					previousIssues.current = next;
 					setIssues(next);
 					setIndex((value) => {
-						const number = issues[value]?.number;
+						const number = previous[value]?.number;
 						const position = next.findIndex((issue) => issue.number === number);
 						return position < 0
 							? Math.min(value, Math.max(0, next.length - 1))
@@ -64,6 +67,7 @@ export default function Issues({
 			},
 			(error) => {
 				if (alive) {
+					previousIssues.current = [];
 					setIssues([]);
 					setLoadedKey(listKey);
 					action.setError(String(error));
