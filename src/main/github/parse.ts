@@ -120,10 +120,7 @@ function timeline(comments: unknown, reviews: unknown): GitHubComment[] {
 
 /** The review threads of a pull request, from the GraphQL query in github.ts. */
 export function parseReviewThreads(value: unknown): ReviewThread[] {
-	const threads = object(
-		object(object(object(value).repository).pullRequest).reviewThreads
-	).nodes;
-	return list(threads).map((node) => {
+	return list(value).map((node) => {
 		const thread = object(node);
 		const line = thread.line ?? thread.originalLine;
 		return {
