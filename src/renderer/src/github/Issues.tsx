@@ -125,14 +125,27 @@ export default function Issues({
 		};
 	});
 
-	/** Change the issue and reload its conversation. */
-	const act = (change: () => Promise<unknown>, message: string): Promise<boolean> =>
+	const postComment = (number: number, body: string): Promise<boolean> =>
 		run(async () => {
-			await change();
+			await window.nido.githubComment(workspaceId, 'issue', number, body);
 			setCommenting(false);
-			if (selected) {
-				setOpened(await window.nido.githubIssue(workspaceId, selected.number));
+			let details: IssueDetails | undefined;
+			let message = t('Comment posted.');
+			try {
+				details = await window.nido.githubIssue(workspaceId, number);
+				setOpened(details);
+			} catch (error) {
+				message = t('Comment posted, but the issue could not be refreshed: {reason}', {
+					reason: errorMessage(error)
+				});
 			}
+			setIssues((current) =>
+				current.map((issue) =>
+					issue.number === number
+						? { ...issue, comments: details?.comments ?? issue.comments + 1 }
+						: issue
+				)
+			);
 			notify(message);
 			list.current?.focus();
 		});
@@ -280,18 +293,7 @@ export default function Issues({
 									label={t('Comment on the issue')}
 									submitLabel={t('Comment')}
 									busy={busy}
-									onSubmit={(body) =>
-										act(
-											() =>
-												window.nido.githubComment(
-													workspaceId,
-													'issue',
-													selected.number,
-													body
-												),
-											'Comment posted.'
-										)
-									}
+									onSubmit={(body) => postComment(selected.number, body)}
 									onCancel={() => setCommenting(false)}
 								/>
 							) : (

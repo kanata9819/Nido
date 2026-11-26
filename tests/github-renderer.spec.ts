@@ -300,6 +300,54 @@ test('issues open with their comments, and can be commented on and closed', asyn
 	expect(await calls(page, 'githubSetIssueOpen')).toEqual([['alpha', 3, false]]);
 });
 
+test('posting an issue comment updates its list count even if detail refresh fails', async ({
+	page
+}) => {
+	const issue: IssueDetails = {
+		number: 3,
+		title: 'Crash on start',
+		author: 'user',
+		state: 'OPEN',
+		updatedAt: '',
+		url: '',
+		labels: [],
+		comments: 1,
+		body: 'Report',
+		createdAt: '',
+		assignees: [],
+		timeline: []
+	};
+	await page.goto(`${origin}?view=github&defer=githubIssue`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('2');
+	const list = page.getByRole('listbox', { name: 'Issues' });
+	await expect(list).toBeFocused();
+	await page.keyboard.press('c');
+	await expect.poll(() => calls(page, 'githubIssue')).toHaveLength(1);
+	await page.evaluate((value) => window.rendererTest.settle('githubIssue', 0, value), issue);
+	const draft = page.getByRole('textbox', { name: 'Comment on the issue' });
+	await draft.fill('First new comment');
+	await draft.press('Control+Enter');
+	await expect.poll(() => calls(page, 'githubIssue')).toHaveLength(2);
+	await page.evaluate((value) => window.rendererTest.settle('githubIssue', 0, value), {
+		...issue,
+		comments: 3
+	});
+	await expect(list.getByText('Comments: 3')).toBeVisible();
+	await expect(page.getByRole('status')).toHaveText('Comment posted.');
+
+	await list.press('c');
+	await draft.fill('Second new comment');
+	await draft.press('Control+Enter');
+	await expect.poll(() => calls(page, 'githubIssue')).toHaveLength(3);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubIssue', 0, new Error('HTTP 503'), true)
+	);
+	await expect(list.getByText('Comments: 4')).toBeVisible();
+	await expect(page.getByRole('status')).toContainText('Comment posted, but');
+	await expect(page.getByRole('status')).toContainText('HTTP 503');
+});
+
 test('switching issues cannot carry a comment draft to the new issue', async ({ page }) => {
 	await page.goto(`${origin}?view=github&defer=githubIssues`);
 	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();

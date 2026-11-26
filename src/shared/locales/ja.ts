@@ -1224,6 +1224,8 @@ export const japanese: Record<string, string> = {
 	'Pull request created: {url}': 'プルリクエストを作成しました：{url}',
 	'Pull request created.': 'プルリクエストを作成しました。',
 	'Comment posted.': 'コメントを投稿しました。',
+	'Comment posted, but the issue could not be refreshed: {reason}':
+		'コメントを投稿しました。Issueを更新できませんでした（{reason}）。',
 	'Review submitted.': 'レビューを送信しました。',
 	'Reply posted.': '返信を投稿しました。',
 	'{message} Could not refresh the pull request: {reason}':
