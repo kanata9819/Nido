@@ -306,7 +306,14 @@ test('reviews, merges and checkouts send their choices', async ({ page }) => {
 	await submit.click();
 	await expect(page.getByRole('status')).toHaveText('Review submitted.');
 	expect(await calls(page, 'githubReview')).toEqual([
-		['alpha', 7, 'request-changes', 'Add a test', 'a'.repeat(40)]
+		[
+			'alpha',
+			7,
+			'request-changes',
+			'Add a test',
+			'a'.repeat(40),
+			'https://github.com/octo/alpha/pull/7'
+		]
 	]);
 
 	await files.focus();
@@ -318,13 +325,23 @@ test('reviews, merges and checkouts send their choices', async ({ page }) => {
 	await merge.getByRole('button', { name: 'Merge', exact: true }).click();
 	await expect(page.getByRole('status')).toHaveText('Pull request merged.');
 	expect(await calls(page, 'githubMerge')).toEqual([
-		['alpha', 7, 'rebase', false, 'a'.repeat(40), 'main']
+		[
+			'alpha',
+			7,
+			'rebase',
+			false,
+			'a'.repeat(40),
+			'main',
+			'https://github.com/octo/alpha/pull/7'
+		]
 	]);
 
 	await files.focus();
 	await page.keyboard.press('o');
 	await expect(page.getByRole('status')).toHaveText('Checked out the pull request’s branch.');
-	expect(await calls(page, 'githubCheckout')).toEqual([['alpha', 7]]);
+	expect(await calls(page, 'githubCheckout')).toEqual([
+		['alpha', 7, 'https://github.com/octo/alpha/pull/7']
+	]);
 	// The branch changed, so gh's status is read again.
 	expect((await calls(page, 'githubStatus')).length).toBe(2);
 });

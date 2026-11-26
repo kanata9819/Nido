@@ -6,6 +6,7 @@ import { after, before, test } from 'node:test';
 import { useGhExecutable } from '../src/main/github/gh';
 import {
 	addComment,
+	checkoutPullRequest,
 	commentOnLine,
 	createPullRequest,
 	githubStatus,
@@ -547,6 +548,55 @@ test('reviews refuse stale heads and pin even a bodyless approval to the viewed 
 		event: 'APPROVE',
 		body: ''
 	});
+});
+
+test('reviews, merges and checkouts act on the displayed pull request’s repository', async () => {
+	const url = 'https://git.example.com/upstream/app/pull/3';
+	let calls = await withReplies({ [`pr view ${url}`]: { headRefOid: diffHead } }, () =>
+		reviewPullRequest(folder, 3, 'approve', '', diffHead, url)
+	);
+	assert.deepEqual(calls[0].args.slice(0, 3), ['pr', 'view', url]);
+	assert.deepEqual(calls[1].args, [
+		'api',
+		'--method',
+		'POST',
+		'repos/upstream/app/pulls/3/reviews',
+		'--hostname=git.example.com',
+		'--input',
+		'-'
+	]);
+
+	calls = await withReplies(
+		{
+			[`pr view ${url} --json headRefName`]: {
+				headRefName: 'topic',
+				isCrossRepository: true,
+				baseRefName: 'main',
+				url
+			},
+			[`pr view ${url} --json state`]: { state: 'MERGED' }
+		},
+		() => mergePullRequest(folder, 3, 'squash', false, diffHead, 'main', url)
+	);
+	assert.deepEqual(
+		calls.map(({ args }) => args.slice(0, 3)),
+		[
+			['pr', 'view', url],
+			['pr', 'merge', url],
+			['pr', 'view', url]
+		]
+	);
+
+	calls = await withReplies({}, () => checkoutPullRequest(folder, 3, url));
+	assert.deepEqual(calls[0].args, ['pr', 'checkout', url]);
+	await assert.rejects(
+		reviewPullRequest(folder, 3, 'approve', '', diffHead, 'https://github.com/o/r/pull/4'),
+		/Invalid GitHub request/
+	);
+	await assert.rejects(
+		checkoutPullRequest(folder, 3, 'https://github.com/o/r/issues/3'),
+		/Invalid GitHub request/
+	);
 });
 
 test('gh errors come back with gh’s own message', async () => {

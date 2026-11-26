@@ -204,7 +204,7 @@ export default function PullRequests({
 	const checkout = (): void => {
 		if (opened && opened.state === 'OPEN') {
 			void act(async () => {
-				await window.nido.githubCheckout(workspaceId, opened.number);
+				await window.nido.githubCheckout(workspaceId, opened.number, opened.url);
 				await refreshStatus();
 			}, 'Checked out the pull request’s branch.');
 		}
