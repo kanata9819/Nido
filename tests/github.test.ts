@@ -388,10 +388,10 @@ test('merging deletes the head branch on GitHub only, and never for a fork', asy
 	]);
 	assert.deepEqual(calls.at(-1)?.args, ['pr', 'view', mergeUrl, '--json', 'state']);
 	calls = await withReplies(
-		{ 'pr view 5': { headRefName: 'feature/x', isCrossRepository: true } },
+		{ 'pr view 5': { headRefName: 'feature/x', isCrossRepository: true, state: 'MERGED' } },
 		() => mergePullRequest(folder, 5, 'rebase', true, mergeHead)
 	);
-	assert.equal(calls.length, 2);
+	assert.equal(calls.length, 3);
 	await assert.rejects(
 		mergePullRequest(folder, 5, '--admin' as never, false, mergeHead),
 		/Invalid merge/
@@ -409,6 +409,43 @@ test('merging deletes the head branch on GitHub only, and never for a fork', asy
 			assert.rejects(mergePullRequest(folder, 5, 'squash', true, mergeHead), /does not match/)
 	);
 	assert.equal(rejected.length, 2);
+});
+
+test('merging refuses a changed base before sending a merge request', async () => {
+	const calls = await withReplies({ 'pr view 7': { baseRefName: 'release' } }, () =>
+		assert.rejects(
+			mergePullRequest(folder, 7, 'squash', false, mergeHead, 'main'),
+			/base branch changed/
+		)
+	);
+	assert.equal(calls.length, 1);
+	assert.ok(calls[0].args.at(-1)?.includes('baseRefName'));
+});
+
+test('only confirmed merges may delete their branch', async () => {
+	for (const reply of [{ state: 'OPEN' }, { error: 'HTTP 503' }]) {
+		const calls = await withReplies(
+			{
+				'pr view 7': { headRefName: 'topic', isCrossRepository: false },
+				'pr view 7 --json state': reply
+			},
+			async () =>
+				assert.deepEqual(
+					await mergePullRequest(folder, 7, 'squash', true, mergeHead),
+					'error' in reply
+						? { merged: false, confirmationError: reply.error }
+						: { merged: false }
+				)
+		);
+		assert.deepEqual(
+			calls.map(({ args }) => args.slice(0, 2)),
+			[
+				['pr', 'view'],
+				['pr', 'merge'],
+				['pr', 'view']
+			]
+		);
+	}
 });
 
 test('a pull request diff is returned per file and checked against its head', async () => {
@@ -525,7 +562,7 @@ test('diffs of files with spaces or non-ASCII names are found under their real p
 test('a failed branch deletion keeps the merge and reports its error', async () => {
 	const calls = await withReplies(
 		{
-			'pr view 6': { headRefName: 'protected', isCrossRepository: false }
+			'pr view 6': { headRefName: 'protected', isCrossRepository: false, state: 'MERGED' }
 		},
 		async () =>
 			assert.equal(

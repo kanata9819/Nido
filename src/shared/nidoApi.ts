@@ -8,6 +8,7 @@ import type {
 	IssueSummary,
 	MergeMethod,
 	PullRequestDetails,
+	PullRequestMergeResult,
 	PullRequestFilter,
 	PullRequestSummary,
 	ReviewEvent
@@ -260,8 +261,9 @@ export interface GitHubAPI {
 		number: number,
 		method: MergeMethod,
 		deleteBranch: boolean,
-		expectedHead: string
-	): Promise<{ branchError?: string }>;
+		expectedHead: string,
+		expectedBase: string
+	): Promise<PullRequestMergeResult>;
 	githubIssues(id: string, filter: IssueFilter): Promise<IssueSummary[]>;
 	githubIssue(id: string, number: number): Promise<IssueDetails>;
 	githubSetIssueOpen(id: string, number: number, open: boolean): Promise<void>;

@@ -1243,6 +1243,10 @@ export const japanese: Record<string, string> = {
 	'Thread resolved.': 'スレッドを解決済みにしました。',
 	'Thread reopened.': 'スレッドを未解決に戻しました。',
 	'Pull request merged.': 'プルリクエストをマージしました。',
+	'GitHub did not confirm the merge: {reason}':
+		'GitHubでマージを確認できませんでした（{reason}）。',
+	'Merge requested. The pull request has not merged yet.':
+		'マージをリクエストしました。プルリクエストのマージはまだ完了していません。',
 	'Checked out the pull request’s branch.': 'プルリクエストのブランチをチェックアウトしました。',
 	'Issue closed.': 'Issueをクローズしました。',
 	'Issue reopened.': 'Issueを再オープンしました。',
@@ -1262,6 +1266,8 @@ export const japanese: Record<string, string> = {
 	'Invalid file.': 'ファイルが正しくありません。',
 	'Invalid merge method.': 'マージ方法が正しくありません。',
 	'Refresh the pull request before merging.': 'マージする前にプルリクエストを更新してください。',
+	'The pull request base branch changed. Refresh it before merging.':
+		'マージ先のブランチが変わりました。プルリクエストを更新してからマージしてください。',
 	'Invalid pull request or issue number.': 'プルリクエストまたはIssueの番号が正しくありません。',
 	'Refresh the pull request to get its current diff.':
 		'プルリクエストを更新して最新の差分を取得してください。',

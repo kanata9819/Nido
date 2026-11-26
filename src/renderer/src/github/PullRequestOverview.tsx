@@ -241,13 +241,23 @@ function MergeForm({
 			onSubmit={(event) => {
 				event.preventDefault();
 				void act(async () => {
-					const { branchError } = await window.nido.githubMerge(
-						workspaceId,
-						pr.number,
-						method,
-						deleteBranch,
-						pr.headRefOid
-					);
+					const { merged, confirmationError, branchError } =
+						await window.nido.githubMerge(
+							workspaceId,
+							pr.number,
+							method,
+							deleteBranch,
+							pr.headRefOid,
+							pr.baseRefName
+						);
+					if (confirmationError) {
+						return t('GitHub did not confirm the merge: {reason}', {
+							reason: errorMessage(confirmationError)
+						});
+					}
+					if (!merged) {
+						return t('Merge requested. The pull request has not merged yet.');
+					}
 					// The merge happened even when the branch on GitHub could not be deleted.
 					return branchError
 						? t('Pull request merged, but its branch could not be deleted: {reason}', {

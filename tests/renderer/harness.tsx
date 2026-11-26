@@ -186,7 +186,7 @@ const defaults: Record<string, unknown> = {
 			'diff --git a/src/login.ts b/src/login.ts\n--- a/src/login.ts\n+++ b/src/login.ts\n@@ -1,2 +1,4 @@\n export {};\n-old\n+next\n+more\n+last\n'
 		]
 	],
-	githubMerge: {},
+	githubMerge: { merged: true },
 	githubIssues: [
 		{
 			number: 3,

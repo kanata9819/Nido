@@ -8,6 +8,7 @@ import type {
 	PullRequestDetails,
 	PullRequestDraft,
 	PullRequestFilter,
+	PullRequestMergeResult,
 	PullRequestSummary,
 	ReviewEvent
 } from '../../shared/github';
@@ -376,8 +377,9 @@ export async function mergePullRequest(
 	number: number,
 	method: MergeMethod,
 	deleteBranch: boolean,
-	expectedHead: string
-): Promise<{ branchError?: string }> {
+	expectedHead: string,
+	expectedBase?: string
+): Promise<PullRequestMergeResult> {
 	if (method !== 'squash' && method !== 'merge' && method !== 'rebase') {
 		throw new Error('Invalid merge method.');
 	}
@@ -387,20 +389,42 @@ export async function mergePullRequest(
 	const {
 		headRefName,
 		isCrossRepository,
+		baseRefName,
 		url: pullRequestUrl
 	} = await ghJson<{
 		headRefName?: string;
 		isCrossRepository?: boolean;
+		baseRefName?: string;
 		url?: string;
-	}>(cwd, ['pr', 'view', String(number), '--json', 'headRefName,isCrossRepository,url']);
-	await gh(cwd, [
+	}>(cwd, [
 		'pr',
-		'merge',
-		pullRequestUrl ?? String(number),
-		`--${method}`,
-		'--match-head-commit',
-		expectedHead
+		'view',
+		String(number),
+		'--json',
+		'headRefName,isCrossRepository,baseRefName,url'
 	]);
+	if (expectedBase !== undefined && (!expectedBase || expectedBase !== baseRefName)) {
+		throw new Error('The pull request base branch changed. Refresh it before merging.');
+	}
+	const selector = pullRequestUrl ?? String(number);
+	await gh(cwd, ['pr', 'merge', selector, `--${method}`, '--match-head-commit', expectedHead]);
+	try {
+		const { state } = await ghJson<{ state?: string }>(cwd, [
+			'pr',
+			'view',
+			selector,
+			'--json',
+			'state'
+		]);
+		if (state !== 'MERGED') {
+			return { merged: false };
+		}
+	} catch (error) {
+		return {
+			merged: false,
+			confirmationError: error instanceof Error ? error.message : String(error)
+		};
+	}
 	if (deleteBranch && headRefName && !isCrossRepository) {
 		try {
 			const url = URL.parse(pullRequestUrl ?? '');
@@ -413,23 +437,16 @@ export async function mergePullRequest(
 			) {
 				throw new Error('Could not identify the GitHub repository for branch deletion.');
 			}
-			const { state } = await ghJson<{ state?: string }>(cwd, [
-				'pr',
-				'view',
-				url.href,
-				'--json',
-				'state'
-			]);
-			if (state !== 'MERGED') {
-				return {};
-			}
 			const remote = url.origin + url.pathname.split('/').slice(0, 3).join('/') + '.git';
 			await gitDeleteBranchAtHead(cwd, remote, headRefName, expectedHead);
 		} catch (error) {
-			return { branchError: error instanceof Error ? error.message : String(error) };
+			return {
+				merged: true,
+				branchError: error instanceof Error ? error.message : String(error)
+			};
 		}
 	}
-	return {};
+	return { merged: true };
 }
 
 /** Up to 100 issues: open ones, those assigned to the user, the user's, or closed. */
