@@ -41,7 +41,7 @@ export default function Issues({
 	const loaded = loadedKey === listKey;
 	const [index, setIndex] = useState(0);
 	const [opened, setOpened] = useState<IssueDetails>();
-	const [commenting, setCommenting] = useState(false);
+	const [commentIssue, setCommentIssue] = useState<number>();
 	const list = useRef<HTMLDivElement>(null);
 	const busy = working || !loaded;
 
@@ -74,6 +74,7 @@ export default function Issues({
 	// A different selection closes the opened issue.
 	const selected = issues[index];
 	const shown = opened && opened.number === selected?.number ? opened : undefined;
+	const commenting = commentIssue !== undefined && commentIssue === selected?.number;
 
 	/** Load the selected issue's description and comments; resolves to whether it loaded. */
 	const open = (): Promise<boolean> =>
@@ -86,7 +87,7 @@ export default function Issues({
 	useLayoutEffect(() => {
 		backRef.current = () => {
 			if (commenting) {
-				setCommenting(false);
+				setCommentIssue(undefined);
 				list.current?.focus();
 				return true;
 			}
@@ -103,7 +104,7 @@ export default function Issues({
 	const act = (change: () => Promise<unknown>, message: string): Promise<boolean> =>
 		run(async () => {
 			await change();
-			setCommenting(false);
+			setCommentIssue(undefined);
 			if (selected) {
 				setOpened(await window.nido.githubIssue(workspaceId, selected.number));
 			}
@@ -126,7 +127,7 @@ export default function Issues({
 	const comment = (): void => {
 		if (selected) {
 			void (shown ? Promise.resolve(true) : open()).then(
-				(loaded) => loaded && setCommenting(true)
+				(loaded) => loaded && setCommentIssue(selected.number)
 			);
 		}
 	};
@@ -187,7 +188,12 @@ export default function Issues({
 					label={t('Issues')}
 					busy={busy}
 					index={index}
-					setIndex={setIndex}
+					setIndex={(next) => {
+						if (!busy && next !== index) {
+							setCommentIssue(undefined);
+							setIndex(next);
+						}
+					}}
 					listRef={list}
 					open={() => void open()}
 					empty={t(loaded ? 'No issues.' : 'Loading…')}
@@ -239,6 +245,7 @@ export default function Issues({
 							</section>
 							{commenting ? (
 								<Composer
+									key={selected.number}
 									label={t('Comment on the issue')}
 									submitLabel={t('Comment')}
 									busy={busy}
@@ -254,7 +261,7 @@ export default function Issues({
 											'Comment posted.'
 										)
 									}
-									onCancel={() => setCommenting(false)}
+									onCancel={() => setCommentIssue(undefined)}
 								/>
 							) : (
 								<div className={`${gitStyles.toolbar} ${styles.actions}`}>
