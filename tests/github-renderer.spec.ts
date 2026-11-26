@@ -600,6 +600,48 @@ test('a merge refreshes the list behind the pull request and reports a branch it
 	expect((await calls(page, 'githubPullRequests')).length).toBe(2);
 });
 
+test('returning to a reordered PR list keeps the same pull request selected', async ({ page }) => {
+	const first = {
+		number: 7,
+		title: 'Add sign-in',
+		author: 'dev',
+		state: 'OPEN',
+		isDraft: false,
+		headRefName: 'feature',
+		baseRefName: 'main',
+		reviewDecision: '',
+		checks: 'none',
+		updatedAt: '',
+		url: '',
+		labels: []
+	};
+	const next = { ...first, number: 8, title: 'Fix typo' };
+	await page.goto(`${origin}?view=github&defer=githubPullRequests`);
+	await expect.poll(() => calls(page, 'githubPullRequests')).toHaveLength(1);
+	await page.evaluate(
+		(items) => window.rendererTest.settle('githubPullRequests', 0, items),
+		[first, next]
+	);
+	const list = page.getByRole('listbox', { name: 'Pull requests' });
+	await expect(list).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(page.getByRole('listbox', { name: 'Pull request files' })).toBeFocused();
+	await page.keyboard.press('c');
+	const draft = page.getByRole('textbox', { name: 'Comment on the pull request' });
+	await draft.fill('Looks good');
+	await draft.press('Control+Enter');
+	await expect.poll(() => calls(page, 'githubPullRequests')).toHaveLength(2);
+	await page.evaluate(
+		(items) => window.rendererTest.settle('githubPullRequests', 0, items),
+		[next, first]
+	);
+	await expect(page.getByRole('status')).toHaveText('Comment posted.');
+	await page.getByRole('button', { name: 'Back (Esc)' }).click();
+	await expect(
+		list.getByRole('option', { name: '#7 Add sign-in', selected: true })
+	).toBeVisible();
+});
+
 test('a pending or failed comment keeps its draft', async ({ page }) => {
 	await page.goto(`${origin}?view=github&defer=githubComment`);
 	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
