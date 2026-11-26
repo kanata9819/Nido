@@ -736,6 +736,38 @@ test('a successful issue list retry clears the prior list error', async ({ page 
 	await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
+test('a successful pull request list retry clears the prior list error', async ({ page }) => {
+	await page.goto(`${origin}?view=github&defer=githubPullRequests`);
+	await expect.poll(() => calls(page, 'githubPullRequests')).toHaveLength(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubPullRequests', 0, new Error('HTTP 503'), true)
+	);
+	await expect(page.getByRole('alert')).toContainText('HTTP 503');
+
+	await page.getByRole('button', { name: 'Refresh (r)' }).click();
+	await expect.poll(() => calls(page, 'githubPullRequests')).toHaveLength(2);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubPullRequests', 0, [
+			{
+				number: 7,
+				title: 'Add sign-in',
+				author: 'dev',
+				state: 'OPEN',
+				isDraft: false,
+				headRefName: 'feature',
+				baseRefName: 'main',
+				reviewDecision: '',
+				checks: 'none',
+				updatedAt: '',
+				url: '',
+				labels: []
+			}
+		])
+	);
+	await expect(page.getByRole('heading', { name: 'Add sign-in' })).toBeVisible();
+	await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
 test('a GitHub that cannot be reached is not reported as signed out', async ({ page }) => {
 	await page.goto(`${origin}?view=github&defer=githubStatus`);
 	await page.evaluate(() =>
