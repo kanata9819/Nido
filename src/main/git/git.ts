@@ -227,19 +227,37 @@ export async function gitSwitch(cwd: string, name: string, create: boolean): Pro
  * Push only the checked-out branch, to its upstream when it has one, or else to `origin`, setting
  * that as its upstream. An upstream that is `base`, the branch a pull request will merge into
  * (as for a branch made from origin/main), is not pushed to: the branch is published under its
- * own name instead. Returns the branch's name.
+ * own name instead. Returns the published branch and remote.
  */
-export async function gitPushBranch(cwd: string, base?: string): Promise<string> {
+export async function gitPushBranch(
+	cwd: string,
+	base?: string,
+	expectedBranch?: string
+): Promise<{ branch: string; remote: string }> {
 	const { branch, remote, upstream } = await branchDestination(cwd);
+	if (expectedBranch !== undefined && branch !== expectedBranch) {
+		throw new Error('The checked-out branch changed. Reopen the GitHub panel and try again.');
+	}
+	if (base && branch === base) {
+		throw new Error('Switch to a branch other than the base first.');
+	}
 	if (upstream && (!remote || !upstream.startsWith('refs/heads/'))) {
 		throw new Error('Invalid branch name.');
 	}
-	await pushBranch(cwd, {
+	const target = {
 		branch,
 		remote: remote || 'origin',
 		upstream: upstream === `refs/heads/${base}` ? '' : upstream
-	});
-	return branch;
+	};
+	await pushBranch(cwd, target);
+	return {
+		branch: target.upstream ? target.upstream.slice('refs/heads/'.length) : branch,
+		remote: target.remote
+	};
+}
+
+export async function gitPushRemoteUrl(cwd: string, remote: string): Promise<string> {
+	return (await git(cwd, ['remote', 'get-url', '--push', '--', remote])).trim();
 }
 
 async function branchDestination(cwd: string): Promise<GitRemoteInfo> {

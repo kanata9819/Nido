@@ -130,6 +130,8 @@ export interface PullRequestDraft {
 	body: string;
 	base: string;
 	draft: boolean;
+	/** The checked-out branch shown in the form. */
+	head: string;
 }
 
 /** A new comment on a line of a pull request's diff. */

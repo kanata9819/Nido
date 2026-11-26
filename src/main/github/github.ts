@@ -11,7 +11,7 @@ import type {
 	PullRequestSummary,
 	ReviewEvent
 } from '../../shared/github';
-import { gitStatus } from '../git/git';
+import { gitPushBranch, gitPushRemoteUrl, gitStatus } from '../git/git';
 import { gh, GhError, ghGraphql, ghJson } from './gh';
 import {
 	parseIssueDetails,
@@ -313,13 +313,16 @@ export async function commentOnLine(
 export async function createPullRequest(
 	cwd: string,
 	draft: PullRequestDraft,
-	publish: () => Promise<unknown> = async () => {}
+	publish: () => Promise<string> = () => publishPullRequestBranch(cwd, draft)
 ): Promise<string> {
 	if (!/^[\w./#+-]+$/.test(draft.base) || draft.base.startsWith('-')) {
 		throw new Error('Choose a base branch.');
 	}
 	requiredText(draft.title, 'title');
-	await publish();
+	if (!draft.head || draft.head === draft.base) {
+		throw new Error('Switch to a branch other than the base first.');
+	}
+	const head = await publish();
 	const args = [
 		'pr',
 		'create',
@@ -327,6 +330,8 @@ export async function createPullRequest(
 		requiredText(draft.title, 'title'),
 		'--base',
 		draft.base,
+		'--head',
+		head,
 		'--body-file',
 		'-'
 	];
@@ -335,6 +340,19 @@ export async function createPullRequest(
 	}
 	// gh prints the new pull request's address.
 	return (await gh(cwd, args, draft.body)).trim().split('\n').pop() ?? '';
+}
+
+async function publishPullRequestBranch(cwd: string, draft: PullRequestDraft): Promise<string> {
+	const { branch, remote } = await gitPushBranch(cwd, draft.base, draft.head);
+	const [url, base] = await Promise.all([gitPushRemoteUrl(cwd, remote), repositoryName(cwd)]);
+	const path = url.includes('://') ? new URL(url).pathname : (url.split(':').at(-1) ?? '');
+	const match = /^\/?([^/]+)\/([^/]+?)\/?$/.exec(path);
+	if (!match) {
+		throw new Error('Could not identify the GitHub push repository.');
+	}
+	const [, owner, name] = match;
+	const repo = `${owner}/${name.replace(/\.git$/i, '')}`.toLowerCase();
+	return repo === `${base.owner}/${base.name}`.toLowerCase() ? branch : `${owner}:${branch}`;
 }
 
 /**

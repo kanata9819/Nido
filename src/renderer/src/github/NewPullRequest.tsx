@@ -51,7 +51,7 @@ export default function NewPullRequest({
 	const sameBranch = !!branch && branch === base.trim();
 	const canCreate = !working && !!branch && !sameBranch && !!title.trim() && !!base.trim();
 	const create = (): void => {
-		if (!canCreate) {
+		if (!canCreate || !branch) {
 			return;
 		}
 		void run(async () => {
@@ -60,7 +60,8 @@ export default function NewPullRequest({
 				title,
 				body,
 				base.trim(),
-				draft
+				draft,
+				branch
 			);
 			notify(url ? t('Pull request created: {url}', { url }) : 'Pull request created.');
 			created();

@@ -687,11 +687,16 @@ test('a PR branch made from its base branch is published under its own name, not
 		const initial = git('rev-parse', 'HEAD');
 		git('push', '-q', 'origin', 'main');
 		git('fetch', '-q', 'origin');
+		await assert.rejects(gitPushBranch(root, 'main', 'feature'), /checked-out branch changed/);
+		await assert.rejects(gitPushBranch(root, 'main', 'main'), /other than the base/);
 		// `git switch -c feature origin/main` makes origin/main the branch's upstream.
 		git('switch', '-q', '-c', 'feature', 'origin/main');
 		git('commit', '-qm', 'Feature work', '--allow-empty');
 		const work = git('rev-parse', 'HEAD');
-		await gitPushBranch(root, 'main');
+		assert.deepEqual(await gitPushBranch(root, 'main', 'feature'), {
+			branch: 'feature',
+			remote: 'origin'
+		});
 		assert.equal(git('--git-dir', remote, 'rev-parse', 'refs/heads/main'), initial);
 		assert.equal(git('--git-dir', remote, 'rev-parse', 'refs/heads/feature'), work);
 		assert.equal(git('rev-parse', '--abbrev-ref', '@{upstream}'), 'origin/feature');
