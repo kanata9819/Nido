@@ -481,8 +481,11 @@ test('closing an issue updates its state before the list reloads', async ({ page
 			}
 		])
 	);
-	await expect(page.getByRole('listbox', { name: 'Issues' })).toBeFocused();
-	await page.keyboard.press('x');
+	const list = page.getByRole('listbox', { name: 'Issues' });
+	await expect(
+		list.getByRole('option', { name: '#3 Crash on start', selected: true })
+	).toBeVisible();
+	await list.press('x');
 	await expect
 		.poll(() => calls(page, 'githubSetIssueOpen'))
 		.toEqual([['alpha', 3, false, 'https://github.com/octo/alpha/issues/3']]);
