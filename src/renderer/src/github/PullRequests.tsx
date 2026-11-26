@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useI18n } from '../i18n';
+import { useErrorMessage, useI18n } from '../i18n';
 import type {
 	PullRequestDetails,
 	PullRequestFilter,
@@ -36,6 +36,7 @@ export default function PullRequests({
 	refreshStatus
 }: GitHubViewProps): React.JSX.Element {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	const { run, working } = action;
 	const [filter, setFilter] = useState<PullRequestFilter>('open');
 	const [revision, setRevision] = useState(0);
@@ -140,13 +141,21 @@ export default function PullRequests({
 		run(async () => {
 			const note = await change();
 			setForm(undefined);
+			let result = typeof note === 'string' ? note : t(message);
 			if (opened) {
-				const details = await window.nido.githubPullRequest(workspaceId, opened.number);
-				showDetails(details, true);
+				try {
+					const details = await window.nido.githubPullRequest(workspaceId, opened.number);
+					showDetails(details, true);
+				} catch (error) {
+					result = t('{message} Could not refresh the pull request: {reason}', {
+						message: result,
+						reason: errorMessage(error)
+					});
+				}
 			}
 			// A merge, review or checkout changes the PR's state, checks or review in the list.
 			setRevision((value) => value + 1);
-			notify(typeof note === 'string' ? note : message);
+			notify(result);
 			list.current?.focus();
 		});
 	const checkout = (): void => {
