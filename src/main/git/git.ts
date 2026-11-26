@@ -225,9 +225,10 @@ export async function gitSwitch(cwd: string, name: string, create: boolean): Pro
 
 /**
  * Push only the checked-out branch, to its upstream when it has one, or else to `origin`, setting
- * that as its upstream. An upstream that is `base`, the branch a pull request will merge into
- * (as for a branch made from origin/main), is not pushed to: the branch is published under its
- * own name instead. Returns the published branch and remote.
+ * that as its upstream. An upstream of another name (as for a branch made from origin/main or
+ * origin/develop) is not pushed to: like Git's default push, the branch is published under its
+ * own name instead, so a pull request never updates the branch it was started from. Returns the
+ * published branch and remote.
  */
 export async function gitPushBranch(
 	cwd: string,
@@ -247,13 +248,10 @@ export async function gitPushBranch(
 	const target = {
 		branch,
 		remote: remote || 'origin',
-		upstream: upstream === `refs/heads/${base}` ? '' : upstream
+		upstream: upstream === `refs/heads/${branch}` ? upstream : ''
 	};
 	await pushBranch(cwd, target);
-	return {
-		branch: target.upstream ? target.upstream.slice('refs/heads/'.length) : branch,
-		remote: target.remote
-	};
+	return { branch, remote: target.remote };
 }
 
 export async function gitPushRemoteUrl(cwd: string, remote: string): Promise<string> {
