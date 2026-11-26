@@ -93,14 +93,17 @@ export default function PullRequests({
 	function open(number: number, keepEntry = false): Promise<boolean> {
 		return run(async () => {
 			const details = await window.nido.githubPullRequest(workspaceId, number);
-			const files = await window.nido.githubPullRequestDiff(
-				workspaceId,
-				number,
-				details.headRefOid
-			);
-			showDetails(details, keepEntry);
-			setDiff({ head: details.headRefOid, files: new Map(files) });
-			list.current?.focus();
+			try {
+				const files = await window.nido.githubPullRequestDiff(
+					workspaceId,
+					number,
+					details.headRefOid
+				);
+				setDiff({ head: details.headRefOid, files: new Map(files) });
+			} finally {
+				showDetails(details, keepEntry);
+				list.current?.focus();
+			}
 		});
 	}
 
@@ -303,6 +306,10 @@ export default function PullRequests({
 							setCommenting={(value) => setForm(value ? 'comment' : undefined)}
 							act={act}
 						/>
+					) : opened && file ? (
+						<div className={gitStyles.emptyPreview} data-git-summary tabIndex={0}>
+							<p>{t('The diff is unavailable. Refresh to try again.')}</p>
+						</div>
 					) : opened ? (
 						<PullRequestOverview
 							workspaceId={workspaceId}
