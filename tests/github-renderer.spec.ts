@@ -245,6 +245,40 @@ test('issues open with their comments, and can be commented on and closed', asyn
 	expect(await calls(page, 'githubSetIssueOpen')).toEqual([['alpha', 3, false]]);
 });
 
+test('switching issues cannot carry a comment draft to the new issue', async ({ page }) => {
+	await page.goto(`${origin}?view=github&defer=githubIssues`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('2');
+	await expect.poll(() => calls(page, 'githubIssues')).toHaveLength(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle(
+			'githubIssues',
+			0,
+			['First issue', 'Second issue'].map((title, index) => ({
+				number: index + 3,
+				title,
+				author: 'user',
+				state: 'OPEN',
+				labels: [],
+				comments: 0
+			}))
+		)
+	);
+	await expect(page.getByRole('listbox', { name: 'Issues' })).toBeFocused();
+	await page.keyboard.press('c');
+	const box = page.getByRole('textbox', { name: 'Comment on the issue' });
+	await box.fill('Only for issue 3');
+	await page.getByRole('option', { name: '#4 Second issue' }).click();
+	await expect(page.getByRole('heading', { name: 'Second issue' })).toBeVisible();
+	await expect(box).toHaveCount(0);
+	await page.keyboard.press('Control+Enter');
+	expect(await calls(page, 'githubComment')).toEqual([]);
+
+	await page.getByRole('option', { name: '#3 First issue' }).click();
+	await page.keyboard.press('c');
+	await expect(box).toHaveValue('');
+});
+
 test('a new pull request starts from the last commit and pushes the branch', async ({ page }) => {
 	await page.goto(`${origin}?view=github&defer=gitHistory`);
 	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();

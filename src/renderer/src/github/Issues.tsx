@@ -41,7 +41,7 @@ export default function Issues({
 	const loaded = loadedKey === listKey;
 	const [index, setIndex] = useState(0);
 	const [opened, setOpened] = useState<IssueDetails>();
-	const [commenting, setCommenting] = useState(false);
+	const [commentTarget, setCommentTarget] = useState<number>();
 	const list = useRef<HTMLDivElement>(null);
 	const busy = working || !loaded;
 
@@ -74,6 +74,11 @@ export default function Issues({
 	// A different selection closes the opened issue.
 	const selected = issues[index];
 	const shown = opened && opened.number === selected?.number ? opened : undefined;
+	const commenting = commentTarget !== undefined && commentTarget === selected?.number;
+
+	function setCommenting(value: boolean): void {
+		setCommentTarget(value ? selected?.number : undefined);
+	}
 
 	/** Load the selected issue's description and comments; resolves to whether it loaded. */
 	const open = (): Promise<boolean> =>
@@ -187,7 +192,12 @@ export default function Issues({
 					label={t('Issues')}
 					busy={busy}
 					index={index}
-					setIndex={setIndex}
+					setIndex={(next) => {
+						if (!busy && next !== index) {
+							setCommenting(false);
+							setIndex(next);
+						}
+					}}
 					listRef={list}
 					open={() => void open()}
 					empty={t(loaded ? 'No issues.' : 'Loading…')}
@@ -239,6 +249,7 @@ export default function Issues({
 							</section>
 							{commenting ? (
 								<Composer
+									key={selected.number}
 									label={t('Comment on the issue')}
 									submitLabel={t('Comment')}
 									busy={busy}
