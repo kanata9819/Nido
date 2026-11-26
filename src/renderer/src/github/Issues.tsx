@@ -43,7 +43,7 @@ export default function Issues({
 	const loaded = loadedKey === listKey;
 	const [index, setIndex] = useState(0);
 	const [opened, setOpened] = useState<IssueDetails>();
-	const [commentTarget, setCommentTarget] = useState<number>();
+	const [commentTarget, setCommentTarget] = useState<string>();
 	const list = useRef<HTMLDivElement>(null);
 	const previousIssues = useRef<IssueSummary[]>([]);
 	const busy = working || !loaded;
@@ -84,18 +84,20 @@ export default function Issues({
 
 	// A different selection closes the opened issue.
 	const selected = issues[index];
-	const shown = opened && opened.number === selected?.number ? opened : undefined;
-	const commenting = commentTarget !== undefined && commentTarget === selected?.number;
+	const shown = opened && opened.url === selected?.url ? opened : undefined;
+	const commenting = commentTarget !== undefined && commentTarget === selected?.url;
 
 	function setCommenting(value: boolean): void {
-		setCommentTarget(value ? selected?.number : undefined);
+		setCommentTarget(value ? selected?.url : undefined);
 	}
 
 	/** Load the selected issue's description and comments; resolves to whether it loaded. */
 	const open = (): Promise<boolean> =>
 		selected
 			? run(async () => {
-					setOpened(await window.nido.githubIssue(workspaceId, selected.number));
+					setOpened(
+						await window.nido.githubIssue(workspaceId, selected.number, selected.url)
+					);
 				})
 			: Promise.resolve(false);
 
@@ -125,14 +127,14 @@ export default function Issues({
 		};
 	});
 
-	const postComment = (number: number, body: string): Promise<boolean> =>
+	const postComment = ({ number, url }: IssueSummary, body: string): Promise<boolean> =>
 		run(async () => {
-			await window.nido.githubComment(workspaceId, 'issue', number, body);
+			await window.nido.githubComment(workspaceId, 'issue', number, body, url);
 			setCommenting(false);
 			let details: IssueDetails | undefined;
 			let message = t('Comment posted.');
 			try {
-				details = await window.nido.githubIssue(workspaceId, number);
+				details = await window.nido.githubIssue(workspaceId, number, url);
 				setOpened(details);
 			} catch (error) {
 				message = t('Comment posted, but the issue could not be refreshed: {reason}', {
@@ -141,7 +143,7 @@ export default function Issues({
 			}
 			setIssues((current) =>
 				current.map((issue) =>
-					issue.number === number
+					issue.url === url
 						? { ...issue, comments: details?.comments ?? issue.comments + 1 }
 						: issue
 				)
@@ -153,16 +155,16 @@ export default function Issues({
 		if (!selected || busy) {
 			return;
 		}
-		const { number } = selected;
+		const { number, url } = selected;
 		const open = selected.state === 'CLOSED';
 		const state = open ? 'OPEN' : 'CLOSED';
 		void run(async () => {
-			await window.nido.githubSetIssueOpen(workspaceId, number, open);
+			await window.nido.githubSetIssueOpen(workspaceId, number, open, url);
 			setCommenting(false);
 			setIssues((current) =>
-				current.map((issue) => (issue.number === number ? { ...issue, state } : issue))
+				current.map((issue) => (issue.url === url ? { ...issue, state } : issue))
 			);
-			setOpened((current) => (current?.number === number ? { ...current, state } : current));
+			setOpened((current) => (current?.url === url ? { ...current, state } : current));
 			notify(open ? 'Issue reopened.' : 'Issue closed.');
 			setRevision((value) => value + 1);
 			list.current?.focus();
@@ -293,7 +295,7 @@ export default function Issues({
 									label={t('Comment on the issue')}
 									submitLabel={t('Comment')}
 									busy={busy}
-									onSubmit={(body) => postComment(selected.number, body)}
+									onSubmit={(body) => postComment(selected, body)}
 									onCancel={() => setCommenting(false)}
 								/>
 							) : (

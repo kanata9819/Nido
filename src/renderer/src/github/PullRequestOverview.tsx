@@ -115,7 +115,14 @@ export default function PullRequestOverview({
 					busy={busy}
 					onSubmit={(body) =>
 						act(
-							() => window.nido.githubComment(workspaceId, 'pr', pr.number, body),
+							() =>
+								window.nido.githubComment(
+									workspaceId,
+									'pr',
+									pr.number,
+									body,
+									pr.url
+								),
 							'Comment posted.'
 						)
 					}
