@@ -55,6 +55,9 @@ test('pull requests list, open with their overview, and take comments from the k
 	await expect(overview).toContainText('Looks close.');
 	await expect(overview.getByText('e2e')).toBeVisible();
 	await expect(page.getByRole('listbox', { name: 'Pull request files' })).toBeFocused();
+	expect(await calls(page, 'githubPullRequest')).toEqual([
+		['alpha', 7, 'https://github.com/octo/alpha/pull/7']
+	]);
 	expect(await calls(page, 'githubPullRequestDiff')).toEqual([['alpha', 7, 'a'.repeat(40)]]);
 
 	await page.keyboard.press('c');
@@ -127,12 +130,16 @@ test('a pull request file shows its diff and threads, which can be replied to an
 	await reply.fill('Done');
 	await page.keyboard.press('Control+Enter');
 	await expect(page.getByRole('status')).toHaveText('Reply posted.');
-	expect(await calls(page, 'githubReply')).toEqual([['alpha', 'PRRT_1', 'Done']]);
+	expect(await calls(page, 'githubReply')).toEqual([
+		['alpha', 'PRRT_1', 'Done', 'https://github.com/octo/alpha/pull/7']
+	]);
 	await expect(reply).toHaveCount(0);
 
 	await threads.getByRole('button', { name: 'Resolve', exact: true }).click();
 	await expect(page.getByRole('status')).toHaveText('Thread resolved.');
-	expect(await calls(page, 'githubResolve')).toEqual([['alpha', 'PRRT_1', true]]);
+	expect(await calls(page, 'githubResolve')).toEqual([
+		['alpha', 'PRRT_1', true, 'https://github.com/octo/alpha/pull/7']
+	]);
 
 	// c starts a thread on a line, of the new or the old side.
 	await files.focus();
@@ -836,7 +843,7 @@ test('a posted thread reply closes its draft even if reloading the PR fails', as
 	await expect(page.getByRole('status')).toContainText('Reply posted. Could not refresh');
 	await expect(page.getByRole('status')).toContainText('HTTP 503');
 	await expect(reply).toHaveCount(0);
-	expect(await calls(page, 'githubReply')).toEqual([['alpha', 'PRRT_1', 'Done']]);
+	expect(await calls(page, 'githubReply')).toEqual([['alpha', 'PRRT_1', 'Done', pr.url]]);
 });
 
 test('refresh reloads an open issue and keeps it selected after list reordering', async ({

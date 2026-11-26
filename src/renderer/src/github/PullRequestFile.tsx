@@ -77,6 +77,7 @@ export default function PullRequestFile({
 						key={thread.id}
 						workspaceId={workspaceId}
 						thread={thread}
+						pullRequestUrl={pr.url}
 						busy={busy}
 						act={act}
 					/>
@@ -171,11 +172,13 @@ function LineCommentForm({
 function Thread({
 	workspaceId,
 	thread,
+	pullRequestUrl,
 	busy,
 	act
 }: {
 	workspaceId: string;
 	thread: ReviewThread;
+	pullRequestUrl: string;
 	busy: boolean;
 	act: (change: () => Promise<unknown>, message: string) => Promise<boolean>;
 }): React.JSX.Element {
@@ -207,7 +210,8 @@ function Thread({
 								window.nido.githubResolve(
 									workspaceId,
 									thread.id,
-									!thread.isResolved
+									!thread.isResolved,
+									pullRequestUrl
 								),
 							thread.isResolved ? 'Thread reopened.' : 'Thread resolved.'
 						)
@@ -224,7 +228,13 @@ function Thread({
 					busy={busy}
 					onSubmit={(body) =>
 						act(
-							() => window.nido.githubReply(workspaceId, thread.id, body),
+							() =>
+								window.nido.githubReply(
+									workspaceId,
+									thread.id,
+									body,
+									pullRequestUrl
+								),
 							'Reply posted.'
 						).then((sent) => {
 							if (sent) {

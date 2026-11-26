@@ -219,7 +219,7 @@ export interface BufferAPI {
 export interface GitHubAPI {
 	githubStatus(id: string): Promise<GitHubStatus>;
 	githubPullRequests(id: string, filter: PullRequestFilter): Promise<PullRequestSummary[]>;
-	githubPullRequest(id: string, number: number): Promise<PullRequestDetails>;
+	githubPullRequest(id: string, number: number, url: string): Promise<PullRequestDetails>;
 	/** The pull request's diff as [path, diff of that file] pairs. */
 	githubPullRequestDiff(
 		id: string,
@@ -241,8 +241,8 @@ export interface GitHubAPI {
 		body: string,
 		head: string
 	): Promise<void>;
-	githubReply(id: string, thread: string, body: string): Promise<void>;
-	githubResolve(id: string, thread: string, resolved: boolean): Promise<void>;
+	githubReply(id: string, thread: string, body: string, url: string): Promise<void>;
+	githubResolve(id: string, thread: string, resolved: boolean, url: string): Promise<void>;
 	githubLineComment(
 		id: string,
 		number: number,

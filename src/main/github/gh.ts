@@ -97,9 +97,13 @@ export async function ghJson<T>(cwd: string, args: string[], input?: string): Pr
 export async function ghGraphql<T>(
 	cwd: string,
 	query: string,
-	variables: Record<string, string | number | boolean>
+	variables: Record<string, string | number | boolean>,
+	hostname?: string
 ): Promise<T> {
 	const args = ['api', 'graphql', '-f', `query=${query}`];
+	if (hostname) {
+		args.push(`--hostname=${hostname}`);
+	}
 	for (const [name, value] of Object.entries(variables)) {
 		// -F turns numbers and booleans into their JSON types; strings stay strings with -f.
 		args.push(typeof value === 'string' ? '-f' : '-F', `${name}=${value}`);

@@ -143,16 +143,30 @@ const threadQuery = `query($owner: String!, $name: String!, $number: Int!) {
 }`;
 
 /** A pull request with its files, checks, conversation and review threads. */
-export async function pullRequest(cwd: string, number: number): Promise<PullRequestDetails> {
-	const [details, repository] = await Promise.all([
-		ghJson<{ url?: string }>(cwd, ['pr', 'view', String(number), '--json', detailFields]),
-		repositoryName(cwd)
+export async function pullRequest(
+	cwd: string,
+	number: number,
+	url?: string
+): Promise<PullRequestDetails> {
+	const details = await ghJson<{ url?: string }>(cwd, [
+		'pr',
+		'view',
+		conversationTarget('pr', number, url),
+		'--json',
+		detailFields
 	]);
-	const threads = await ghGraphql<unknown>(cwd, threadQuery, { ...repository, number });
+	const canonical = new URL(conversationTarget('pr', number, details.url ?? url ?? ''));
+	const [, owner, name] = canonical.pathname.split('/');
+	const threads = await ghGraphql<unknown>(
+		cwd,
+		threadQuery,
+		{ owner, name, number },
+		canonical.host
+	);
 	return parsePullRequestDetails(details, threads);
 }
 
-/** Each folder's repository, read once; githubStatus reads it again. */
+/** The repository used as the base when creating a pull request. */
 const repositories = new Map<string, Promise<{ owner: string; name: string }>>();
 
 /** The owner and name of the workspace's repository. */
@@ -284,7 +298,12 @@ export async function reviewPullRequest(
 }
 
 /** Reply to a review thread. */
-export async function replyToThread(cwd: string, thread: string, body: string): Promise<void> {
+export async function replyToThread(
+	cwd: string,
+	thread: string,
+	body: string,
+	pullRequestUrl?: string
+): Promise<void> {
 	await ghGraphql(
 		cwd,
 		`mutation($thread: ID!, $body: String!) {
@@ -292,17 +311,24 @@ export async function replyToThread(cwd: string, thread: string, body: string): 
     comment { id }
   }
 }`,
-		{ thread: nodeId(thread), body: requiredText(body, 'reply') }
+		{ thread: nodeId(thread), body: requiredText(body, 'reply') },
+		pullRequestUrl ? new URL(pullRequestUrl).host : undefined
 	);
 }
 
 /** Resolve a review thread, or with `resolved` false, reopen it. */
-export async function resolveThread(cwd: string, thread: string, resolved: boolean): Promise<void> {
+export async function resolveThread(
+	cwd: string,
+	thread: string,
+	resolved: boolean,
+	pullRequestUrl?: string
+): Promise<void> {
 	const mutation = resolved ? 'resolveReviewThread' : 'unresolveReviewThread';
 	await ghGraphql(
 		cwd,
 		`mutation($thread: ID!) { ${mutation}(input: { threadId: $thread }) { thread { id } } }`,
-		{ thread: nodeId(thread) }
+		{ thread: nodeId(thread) },
+		pullRequestUrl ? new URL(pullRequestUrl).host : undefined
 	);
 }
 
