@@ -186,7 +186,7 @@ test('a pull request file shows its diff and threads, which can be replied to an
 test('refresh keeps the reviewed file selected by path and returns to overview if it was removed', async ({
 	page
 }) => {
-	await page.goto(`${origin}?view=github&defer=githubPullRequest`);
+	await page.goto(`${origin}?view=github&defer=githubPullRequest,githubPullRequestDiff`);
 	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
 	const details = (paths: string[], head: string, base: string): PullRequestDetails => ({
 		number: 7,
@@ -226,6 +226,18 @@ test('refresh keeps the reviewed file selected by path and returns to overview i
 			(value) => window.rendererTest.settle('githubPullRequest', 0, value),
 			details(paths, head, base)
 		);
+		await expect
+			.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.method))
+			.toBe('githubPullRequestDiff');
+		await page.evaluate(
+			(paths) =>
+				window.rendererTest.settle(
+					'githubPullRequestDiff',
+					0,
+					paths.map((path) => [path, '@@ -1 +1 @@\n-old\n+new\n'])
+				),
+			paths
+		);
 	};
 	await page.keyboard.press('Enter');
 	await refresh(['src/login.ts']);
@@ -260,6 +272,24 @@ test('refresh keeps the reviewed file selected by path and returns to overview i
 		'aria-selected',
 		'true'
 	);
+});
+
+test('files present only in the diff are listed and can be opened', async ({ page }) => {
+	await page.goto(`${origin}?view=github&defer=githubPullRequestDiff`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect.poll(() => calls(page, 'githubPullRequestDiff')).toHaveLength(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubPullRequestDiff', 0, [
+			['src/login.ts', '@@ -1 +1 @@\n-old\n+new\n'],
+			['src/file-101.ts', '@@ -1 +1,2 @@\n-old\n+added first\n+added second\n']
+		])
+	);
+	const file = page.getByRole('option', { name: 'src/file-101.ts' });
+	await expect(file).toContainText('+2');
+	await expect(file).toContainText('−1');
+	await file.click();
+	await expect(page.getByText('added second', { exact: true })).toBeVisible();
 });
 
 test('reviews, merges and checkouts send their choices', async ({ page }) => {

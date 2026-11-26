@@ -12,6 +12,7 @@ import PullRequestOverview, { type PullRequestForm } from './PullRequestOverview
 import PullRequestFile from './PullRequestFile';
 import { PullRequestCard } from './PullRequestCard';
 import { canMergePullRequest, canReviewPullRequest, type GitHubViewProps } from './githubModel';
+import { splitDiff } from '../git/diff/splitDiff';
 import gitStyles from '../git/Git.module.css';
 import styles from './GitHub.module.css';
 
@@ -22,6 +23,12 @@ const filterTitles = {
 	review: 'Review requested',
 	closed: 'Closed'
 } as const;
+
+interface PullRequestDiffSnapshot {
+	head: string;
+	target: PullRequestDiffTarget;
+	files: Map<string, string>;
+}
 
 /**
  * The pull requests of the repository. Enter opens one: the list then holds its overview and
@@ -50,11 +57,7 @@ export default function PullRequests({
 	const [index, setIndex] = useState(0);
 	// The opened pull request, its diff per file, and the entry selected in it (0: overview).
 	const [opened, setOpened] = useState<PullRequestDetails>();
-	const [diff, setDiff] = useState<{
-		head: string;
-		target: PullRequestDiffTarget;
-		files: Map<string, string>;
-	}>();
+	const [diff, setDiff] = useState<PullRequestDiffSnapshot>();
 	const [entry, setEntry] = useState(0);
 	const [form, setForm] = useState<PullRequestForm>();
 	const list = useRef<HTMLDivElement>(null);
@@ -95,11 +98,37 @@ export default function PullRequests({
 	}, [workspaceId, filter, listKey]);
 
 	/** Keep the same file across reloads, even when it moves to another row. */
-	function showDetails(details: PullRequestDetails, keepEntry: boolean): void {
-		setOpened(details);
+	function showDetails(details: PullRequestDetails, keepEntry: boolean, snapshot = diff): void {
+		const files = [...details.files];
+		if (
+			snapshot &&
+			snapshot.head === details.headRefOid &&
+			snapshot.target.url === details.url &&
+			snapshot.target.baseRefName === details.baseRefName &&
+			snapshot.target.baseRefOid === details.baseRefOid
+		) {
+			const listed = new Set(files.map((file) => file.path));
+			for (const [path, patch] of snapshot.files) {
+				if (listed.has(path)) {
+					continue;
+				}
+				let additions = 0;
+				let deletions = 0;
+				for (const row of splitDiff(patch)) {
+					if (row.after?.changed) {
+						additions += 1;
+					}
+					if (row.before?.changed) {
+						deletions += 1;
+					}
+				}
+				files.push({ path, additions, deletions });
+			}
+		}
+		setOpened({ ...details, files });
 		setEntry((value) => {
 			const path = keepEntry ? opened?.files[value - 1]?.path : undefined;
-			return path ? details.files.findIndex((file) => file.path === path) + 1 : 0;
+			return path ? files.findIndex((file) => file.path === path) + 1 : 0;
 		});
 	}
 
@@ -112,6 +141,7 @@ export default function PullRequests({
 				baseRefName: details.baseRefName,
 				baseRefOid: details.baseRefOid
 			};
+			let snapshot = diff;
 			try {
 				const files = await window.nido.githubPullRequestDiff(
 					workspaceId,
@@ -119,9 +149,10 @@ export default function PullRequests({
 					details.headRefOid,
 					target
 				);
-				setDiff({ head: details.headRefOid, target, files: new Map(files) });
+				snapshot = { head: details.headRefOid, target, files: new Map(files) };
+				setDiff(snapshot);
 			} finally {
-				showDetails(details, keepEntry);
+				showDetails(details, keepEntry, snapshot);
 				list.current?.focus();
 			}
 		});
