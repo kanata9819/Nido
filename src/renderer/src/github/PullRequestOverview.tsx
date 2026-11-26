@@ -246,7 +246,8 @@ function MergeForm({
 						pr.number,
 						method,
 						deleteBranch,
-						pr.headRefOid
+						pr.headRefOid,
+						pr.baseRefName
 					);
 					// The merge happened even when the branch on GitHub could not be deleted.
 					return branchError

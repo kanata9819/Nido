@@ -376,7 +376,8 @@ export async function mergePullRequest(
 	number: number,
 	method: MergeMethod,
 	deleteBranch: boolean,
-	expectedHead: string
+	expectedHead: string,
+	expectedBase?: string
 ): Promise<{ branchError?: string }> {
 	if (method !== 'squash' && method !== 'merge' && method !== 'rebase') {
 		throw new Error('Invalid merge method.');
@@ -384,10 +385,14 @@ export async function mergePullRequest(
 	if (!/^[a-f\d]{40}$/i.test(expectedHead)) {
 		throw new Error('Refresh the pull request before merging.');
 	}
-	const { headRefName, isCrossRepository } = await ghJson<{
+	const { headRefName, isCrossRepository, baseRefName } = await ghJson<{
 		headRefName?: string;
 		isCrossRepository?: boolean;
-	}>(cwd, ['pr', 'view', String(number), '--json', 'headRefName,isCrossRepository']);
+		baseRefName?: string;
+	}>(cwd, ['pr', 'view', String(number), '--json', 'headRefName,isCrossRepository,baseRefName']);
+	if (expectedBase !== undefined && (!expectedBase || expectedBase !== baseRefName)) {
+		throw new Error('The pull request base branch changed. Refresh it before merging.');
+	}
 	await gh(cwd, [
 		'pr',
 		'merge',
