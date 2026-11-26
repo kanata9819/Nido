@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useErrorMessage, useI18n } from '../i18n';
 import type {
 	PullRequestDetails,
+	PullRequestDiffTarget,
 	PullRequestFilter,
 	PullRequestSummary
 } from '../../../shared/github';
@@ -49,7 +50,11 @@ export default function PullRequests({
 	const [index, setIndex] = useState(0);
 	// The opened pull request, its diff per file, and the entry selected in it (0: overview).
 	const [opened, setOpened] = useState<PullRequestDetails>();
-	const [diff, setDiff] = useState<{ head: string; files: Map<string, string> }>();
+	const [diff, setDiff] = useState<{
+		head: string;
+		target: PullRequestDiffTarget;
+		files: Map<string, string>;
+	}>();
 	const [entry, setEntry] = useState(0);
 	const [form, setForm] = useState<PullRequestForm>();
 	const list = useRef<HTMLDivElement>(null);
@@ -102,13 +107,19 @@ export default function PullRequests({
 	function open({ number, url }: PullRequestSummary, keepEntry = false): Promise<boolean> {
 		return run(async () => {
 			const details = await window.nido.githubPullRequest(workspaceId, number, url);
+			const target = {
+				url: details.url,
+				baseRefName: details.baseRefName,
+				baseRefOid: details.baseRefOid
+			};
 			try {
 				const files = await window.nido.githubPullRequestDiff(
 					workspaceId,
 					number,
-					details.headRefOid
+					details.headRefOid,
+					target
 				);
-				setDiff({ head: details.headRefOid, files: new Map(files) });
+				setDiff({ head: details.headRefOid, target, files: new Map(files) });
 			} finally {
 				showDetails(details, keepEntry);
 				list.current?.focus();
@@ -318,6 +329,7 @@ export default function PullRequests({
 							path={file.path}
 							diff={diff.files.get(file.path) ?? ''}
 							diffHead={diff.head}
+							diffTarget={diff.target}
 							busy={working}
 							commenting={form === 'comment'}
 							setCommenting={(value) => setForm(value ? 'comment' : undefined)}

@@ -498,6 +498,39 @@ test('a stale head prevents loading its diff or posting a line comment', async (
 	);
 });
 
+test('line comments reject a changed base and are sent to the displayed PR', async () => {
+	const url = 'https://git.example.com/old/app/pull/4';
+	const target = { url, baseRefName: 'main', baseRefOid: 'b'.repeat(40) };
+	const comment = {
+		path: 'x',
+		line: 1,
+		side: 'LEFT' as const,
+		body: 'Review',
+		head: diffHead,
+		target
+	};
+	for (const changed of [{ baseRefName: 'release' }, { baseRefOid: 'c'.repeat(40) }]) {
+		const calls = await withReplies(
+			{
+				[`pr view ${url}`]: { headRefOid: diffHead, ...target, ...changed }
+			},
+			async () => {
+				await assert.rejects(pullRequestDiff(folder, 4, diffHead, target), /base changed/);
+				await assert.rejects(commentOnLine(folder, 4, comment), /base changed/);
+			}
+		);
+		assert.ok(calls.every(({ args }) => args[1] === 'view'));
+	}
+	const calls = await withReplies(
+		{
+			[`pr view ${url}`]: { headRefOid: diffHead, ...target }
+		},
+		() => commentOnLine(folder, 4, comment)
+	);
+	assert.ok(calls[1].args.includes('repos/old/app/pulls/4/comments'));
+	assert.ok(calls[1].args.includes('--hostname=git.example.com'));
+});
+
 test('reviews refuse stale heads and pin even a bodyless approval to the viewed commit', async () => {
 	const stale = await withReplies({ 'pr view 3': { headRefOid: 'b'.repeat(40) } }, () =>
 		assert.rejects(reviewPullRequest(folder, 3, 'approve', '', diffHead), /head changed/)

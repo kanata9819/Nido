@@ -145,6 +145,7 @@ export function parsePullRequestDetails(value: unknown, threads: unknown): PullR
 		...parsePullRequestSummary(pr),
 		body: text(pr.body),
 		headRefOid: text(pr.headRefOid),
+		baseRefOid: text(pr.baseRefOid),
 		isCrossRepository: pr.isCrossRepository === true,
 		mergeable: text(pr.mergeable) || 'UNKNOWN',
 		additions: count(pr.additions),

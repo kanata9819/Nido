@@ -88,6 +88,7 @@ export interface ReviewThread {
 export interface PullRequestDetails extends PullRequestSummary {
 	body: string;
 	headRefOid: string;
+	baseRefOid: string;
 	isCrossRepository: boolean;
 	/** MERGEABLE, CONFLICTING or UNKNOWN. */
 	mergeable: string;
@@ -148,4 +149,12 @@ export interface LineComment {
 	body: string;
 	/** Head commit of the diff the user reviewed. */
 	head: string;
+	target?: PullRequestDiffTarget;
+}
+
+/** Repository and base of the displayed pull request diff. */
+export interface PullRequestDiffTarget {
+	url: string;
+	baseRefName: string;
+	baseRefOid: string;
 }

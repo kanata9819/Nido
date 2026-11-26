@@ -143,6 +143,7 @@ const defaults: Record<string, unknown> = {
 		labels: ['feature'],
 		body: 'Adds **sign-in**.',
 		headRefOid: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+		baseRefOid: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
 		isCrossRepository: false,
 		mergeable: 'MERGEABLE',
 		additions: 3,
