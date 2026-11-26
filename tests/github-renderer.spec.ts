@@ -308,6 +308,35 @@ test('a new pull request starts from the last commit and pushes the branch', asy
 	await expect(page.getByText('Switch to a branch other than the base first.')).toBeVisible();
 });
 
+test('closing an issue updates its state before the list reloads', async ({ page }) => {
+	await page.goto(`${origin}?view=github&defer=githubIssues,githubIssue,githubSetIssueOpen`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('2');
+	await expect.poll(() => calls(page, 'githubIssues')).toHaveLength(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubIssues', 0, [
+			{
+				number: 3,
+				title: 'Crash on start',
+				author: 'user',
+				state: 'OPEN',
+				labels: [],
+				comments: 0
+			}
+		])
+	);
+	await expect(page.getByRole('listbox', { name: 'Issues' })).toBeFocused();
+	await page.keyboard.press('x');
+	await expect.poll(() => calls(page, 'githubSetIssueOpen')).toEqual([['alpha', 3, false]]);
+	await page.evaluate(() => window.rendererTest.settle('githubSetIssueOpen', 0, undefined));
+	await expect(page.getByRole('status')).toHaveText('Issue closed.');
+	await expect(page.getByRole('button', { name: 'Reopen issue' })).toBeVisible();
+	expect(await calls(page, 'githubIssue')).toEqual([]);
+	await expect.poll(() => calls(page, 'githubIssues')).toHaveLength(2);
+	await page.evaluate(() => window.rendererTest.settle('githubIssues', 0, []));
+	await expect(page.getByText('No issues.')).toBeVisible();
+});
+
 test('a delayed commit subject does not refill a pull request title the user cleared', async ({
 	page
 }) => {
