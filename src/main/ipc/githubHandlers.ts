@@ -68,8 +68,8 @@ export function registerGithubHandlers({
 		}
 		return addComment(root(id), kind, issueNumber(number), text(body));
 	});
-	handle('githubReview', (id, number, event, body) =>
-		reviewPullRequest(root(id), issueNumber(number), event as never, text(body))
+	handle('githubReview', (id, number, event, body, head) =>
+		reviewPullRequest(root(id), issueNumber(number), event as never, text(body), text(head))
 	);
 	handle('githubReply', (id, thread, body) => replyToThread(root(id), text(thread), text(body)));
 	handle('githubResolve', (id, thread, resolved) =>

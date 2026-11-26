@@ -279,10 +279,26 @@ test('writing actions pass text on stdin or as raw fields, never as gh flags', a
 	assert.deepEqual(calls[0].args, ['issue', 'comment', '3', '--body-file', '-']);
 	assert.equal(calls[0].input, body);
 
-	calls = await withReplies({}, () => reviewPullRequest(folder, 3, 'request-changes', body));
-	assert.deepEqual(calls[0].args, ['pr', 'review', '3', '--request-changes', '--body-file', '-']);
-	assert.equal(calls[0].input, body);
-	await assert.rejects(reviewPullRequest(folder, 3, 'comment', '  '), /Write a review first/);
+	calls = await withReplies({ 'pr view 3': { headRefOid: diffHead } }, () =>
+		reviewPullRequest(folder, 3, 'request-changes', body, diffHead)
+	);
+	assert.deepEqual(calls[1].args, [
+		'api',
+		'--method',
+		'POST',
+		'repos/{owner}/{repo}/pulls/3/reviews',
+		'--input',
+		'-'
+	]);
+	assert.deepEqual(JSON.parse(calls[1].input), {
+		commit_id: diffHead,
+		event: 'REQUEST_CHANGES',
+		body
+	});
+	await assert.rejects(
+		reviewPullRequest(folder, 3, 'comment', '  ', diffHead),
+		/Write a review first/
+	);
 
 	calls = await withReplies({ 'api graphql': { data: {} } }, () =>
 		replyToThread(folder, 'PRRT_kw1', body)
@@ -441,6 +457,24 @@ test('a stale head prevents loading its diff or posting a line comment', async (
 			['pr', 'view', '4']
 		]
 	);
+});
+
+test('reviews refuse stale heads and pin even a bodyless approval to the viewed commit', async () => {
+	const stale = await withReplies({ 'pr view 3': { headRefOid: 'b'.repeat(40) } }, () =>
+		assert.rejects(reviewPullRequest(folder, 3, 'approve', '', diffHead), /head changed/)
+	);
+	assert.deepEqual(
+		stale.map(({ args }) => args.slice(0, 3)),
+		[['pr', 'view', '3']]
+	);
+	const calls = await withReplies({ 'pr view 3': { headRefOid: diffHead } }, () =>
+		reviewPullRequest(folder, 3, 'approve', '', diffHead)
+	);
+	assert.deepEqual(JSON.parse(calls[1].input), {
+		commit_id: diffHead,
+		event: 'APPROVE',
+		body: ''
+	});
 });
 
 test('gh errors come back with gh’s own message', async () => {

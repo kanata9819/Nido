@@ -227,7 +227,13 @@ export interface GitHubAPI {
 	): Promise<[string, string][]>;
 	githubCheckout(id: string, number: number): Promise<void>;
 	githubComment(id: string, kind: 'pr' | 'issue', number: number, body: string): Promise<void>;
-	githubReview(id: string, number: number, event: ReviewEvent, body: string): Promise<void>;
+	githubReview(
+		id: string,
+		number: number,
+		event: ReviewEvent,
+		body: string,
+		head: string
+	): Promise<void>;
 	githubReply(id: string, thread: string, body: string): Promise<void>;
 	githubResolve(id: string, thread: string, resolved: boolean): Promise<void>;
 	githubLineComment(

@@ -237,7 +237,8 @@ export async function reviewPullRequest(
 	cwd: string,
 	number: number,
 	event: ReviewEvent,
-	body: string
+	body: string,
+	head: string
 ): Promise<void> {
 	if (event !== 'approve' && event !== 'request-changes' && event !== 'comment') {
 		throw new Error('Invalid review.');
@@ -245,7 +246,17 @@ export async function reviewPullRequest(
 	if (event !== 'approve') {
 		requiredText(body, 'review');
 	}
-	await gh(cwd, ['pr', 'review', String(number), `--${event}`, '--body-file', '-'], body);
+	await requirePullRequestHead(cwd, number, head);
+	const reviewEvents = {
+		approve: 'APPROVE',
+		'request-changes': 'REQUEST_CHANGES',
+		comment: 'COMMENT'
+	} as const;
+	await gh(
+		cwd,
+		['api', '--method', 'POST', `repos/{owner}/{repo}/pulls/${number}/reviews`, '--input', '-'],
+		JSON.stringify({ commit_id: head, event: reviewEvents[event], body })
+	);
 }
 
 /** Reply to a review thread. */
