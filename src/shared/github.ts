@@ -124,6 +124,12 @@ export interface IssueDetails extends IssueSummary {
 export type ReviewEvent = 'approve' | 'request-changes' | 'comment';
 export type MergeMethod = 'squash' | 'merge' | 'rebase';
 
+export interface PullRequestMergeResult {
+	merged: boolean;
+	confirmationError?: string;
+	branchError?: string;
+}
+
 /** A new pull request from the checked-out branch. */
 export interface PullRequestDraft {
 	title: string;

@@ -371,7 +371,7 @@ const mergeHead = 'a'.repeat(40);
 
 test('merging deletes the head branch on GitHub only, and never for a fork', async () => {
 	let calls = await withReplies(
-		{ 'pr view 5': { headRefName: 'feature/x', isCrossRepository: false } },
+		{ 'pr view 5': { headRefName: 'feature/x', isCrossRepository: false, state: 'MERGED' } },
 		() => mergePullRequest(folder, 5, 'squash', true, mergeHead)
 	);
 	assert.deepEqual(calls[1].args, [
@@ -382,17 +382,17 @@ test('merging deletes the head branch on GitHub only, and never for a fork', asy
 		'--match-head-commit',
 		mergeHead
 	]);
-	assert.deepEqual(calls[2].args, [
+	assert.deepEqual(calls[3].args, [
 		'api',
 		'--method',
 		'DELETE',
 		'repos/{owner}/{repo}/git/refs/heads/feature/x'
 	]);
 	calls = await withReplies(
-		{ 'pr view 5': { headRefName: 'feature/x', isCrossRepository: true } },
+		{ 'pr view 5': { headRefName: 'feature/x', isCrossRepository: true, state: 'MERGED' } },
 		() => mergePullRequest(folder, 5, 'rebase', true, mergeHead)
 	);
-	assert.equal(calls.length, 2);
+	assert.equal(calls.length, 3);
 	await assert.rejects(
 		mergePullRequest(folder, 5, '--admin' as never, false, mergeHead),
 		/Invalid merge/
@@ -410,6 +410,32 @@ test('merging deletes the head branch on GitHub only, and never for a fork', asy
 			assert.rejects(mergePullRequest(folder, 5, 'squash', true, mergeHead), /does not match/)
 	);
 	assert.equal(rejected.length, 2);
+});
+
+test('only confirmed merges may delete their branch', async () => {
+	for (const reply of [{ state: 'OPEN' }, { error: 'HTTP 503' }]) {
+		const calls = await withReplies(
+			{
+				'pr view 7': { headRefName: 'topic', isCrossRepository: false },
+				'pr view 7 --json state': reply
+			},
+			async () =>
+				assert.deepEqual(
+					await mergePullRequest(folder, 7, 'squash', true, mergeHead),
+					'error' in reply
+						? { merged: false, confirmationError: reply.error }
+						: { merged: false }
+				)
+		);
+		assert.deepEqual(
+			calls.map(({ args }) => args.slice(0, 2)),
+			[
+				['pr', 'view'],
+				['pr', 'merge'],
+				['pr', 'view']
+			]
+		);
+	}
 });
 
 test('a pull request diff is returned per file and checked against its head', async () => {
@@ -525,18 +551,21 @@ test('diffs of files with spaces or non-ASCII names are found under their real p
 
 test('deleting a merged branch escapes its name, and a failed deletion keeps the merge', async () => {
 	let calls = await withReplies(
-		{ 'pr view 6': { headRefName: 'fix#12/a?b', isCrossRepository: false } },
+		{ 'pr view 6': { headRefName: 'fix#12/a?b', isCrossRepository: false, state: 'MERGED' } },
 		async () =>
-			assert.deepEqual(await mergePullRequest(folder, 6, 'squash', true, mergeHead), {})
+			assert.deepEqual(await mergePullRequest(folder, 6, 'squash', true, mergeHead), {
+				merged: true
+			})
 	);
-	assert.deepEqual(calls[2].args.at(-1), 'repos/{owner}/{repo}/git/refs/heads/fix%2312/a%3Fb');
+	assert.deepEqual(calls[3].args.at(-1), 'repos/{owner}/{repo}/git/refs/heads/fix%2312/a%3Fb');
 	calls = await withReplies(
 		{
-			'pr view 6': { headRefName: 'protected', isCrossRepository: false },
+			'pr view 6': { headRefName: 'protected', isCrossRepository: false, state: 'MERGED' },
 			'api --method DELETE': { error: 'HTTP 422: Reference does not exist' }
 		},
 		async () =>
 			assert.deepEqual(await mergePullRequest(folder, 6, 'merge', true, mergeHead), {
+				merged: true,
 				branchError: 'HTTP 422: Reference does not exist'
 			})
 	);

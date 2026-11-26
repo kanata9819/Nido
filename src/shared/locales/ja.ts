@@ -1241,6 +1241,10 @@ export const japanese: Record<string, string> = {
 	'Thread resolved.': 'スレッドを解決済みにしました。',
 	'Thread reopened.': 'スレッドを未解決に戻しました。',
 	'Pull request merged.': 'プルリクエストをマージしました。',
+	'GitHub did not confirm the merge: {reason}':
+		'GitHubでマージを確認できませんでした（{reason}）。',
+	'Merge requested. The pull request has not merged yet.':
+		'マージをリクエストしました。プルリクエストのマージはまだ完了していません。',
 	'Checked out the pull request’s branch.': 'プルリクエストのブランチをチェックアウトしました。',
 	'Issue closed.': 'Issueをクローズしました。',
 	'Issue reopened.': 'Issueを再オープンしました。',
