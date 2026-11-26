@@ -221,6 +221,59 @@ test('reviews, merges and checkouts send their choices', async ({ page }) => {
 	expect((await calls(page, 'githubStatus')).length).toBe(2);
 });
 
+test('the merge shortcut respects draft and closed pull requests', async ({ page }) => {
+	const pr: PullRequestDetails = {
+		number: 7,
+		title: 'Add sign-in',
+		author: 'dev',
+		state: 'OPEN',
+		isDraft: true,
+		headRefName: 'feature',
+		baseRefName: 'main',
+		reviewDecision: '',
+		checks: 'none',
+		updatedAt: '',
+		url: '',
+		labels: [],
+		body: '',
+		headRefOid: 'a'.repeat(40),
+		isCrossRepository: false,
+		mergeable: 'MERGEABLE',
+		additions: 1,
+		deletions: 0,
+		createdAt: '',
+		files: [],
+		checkRuns: [],
+		timeline: [],
+		threads: []
+	};
+	await page.goto(`${origin}?view=github&defer=githubPullRequest`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect.poll(() => calls(page, 'githubPullRequest')).toHaveLength(1);
+	await page.evaluate((value) => window.rendererTest.settle('githubPullRequest', 0, value), pr);
+	const files = page.getByRole('listbox', { name: 'Pull request files' });
+	const merge = page.getByRole('button', { name: /^Merge/ });
+	const form = page.getByRole('form', { name: 'Merge pull request' });
+	await expect(files).toBeFocused();
+	await expect(merge).toBeDisabled();
+	await page.keyboard.press('m');
+	await expect(form).toHaveCount(0);
+
+	await page.keyboard.press('r');
+	await expect.poll(() => calls(page, 'githubPullRequest')).toHaveLength(2);
+	await page.evaluate((value) => window.rendererTest.settle('githubPullRequest', 0, value), {
+		...pr,
+		isDraft: false,
+		state: 'CLOSED'
+	});
+	await expect(merge).toBeDisabled();
+	await expect(files).toBeFocused();
+	await page.keyboard.press('m');
+	await expect(form).toHaveCount(0);
+	expect(await calls(page, 'githubMerge')).toEqual([]);
+});
+
 test('issues open with their comments, and can be commented on and closed', async ({ page }) => {
 	await page.goto(`${origin}?view=github`);
 	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
