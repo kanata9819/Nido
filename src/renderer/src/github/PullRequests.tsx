@@ -53,6 +53,7 @@ export default function PullRequests({
 	const [entry, setEntry] = useState(0);
 	const [form, setForm] = useState<PullRequestForm>();
 	const list = useRef<HTMLDivElement>(null);
+	const previousPrs = useRef<PullRequestSummary[]>([]);
 	const busy = working || !loaded;
 
 	useEffect(() => {
@@ -60,8 +61,16 @@ export default function PullRequests({
 		window.nido.githubPullRequests(workspaceId, filter).then(
 			(next) => {
 				if (alive) {
+					const previous = previousPrs.current;
+					previousPrs.current = next;
 					setPrs(next);
-					setIndex((value) => Math.min(value, Math.max(0, next.length - 1)));
+					setIndex((value) => {
+						const selectedNumber = previous[value]?.number;
+						const position = next.findIndex((pr) => pr.number === selectedNumber);
+						return position < 0
+							? Math.min(value, Math.max(0, next.length - 1))
+							: position;
+					});
 					setLoadedKey(listKey);
 					setListError('');
 					list.current?.focus();
