@@ -5,7 +5,7 @@ import { Composer } from './Composer';
 import { GitHubMarkdown } from './GitHubMarkdown';
 import { Timeline } from './Timeline';
 import { ChecksIcon, FormattedDate, PullRequestState } from './format';
-import { canMergePullRequest, reviewDecisionTitle } from './githubModel';
+import { canMergePullRequest, canReviewPullRequest, reviewDecisionTitle } from './githubModel';
 import gitStyles from '../git/Git.module.css';
 import styles from './GitHub.module.css';
 
@@ -39,6 +39,7 @@ export default function PullRequestOverview({
 	const decision = reviewDecisionTitle(pr.reviewDecision);
 	const open = pr.state === 'OPEN';
 	const canMerge = canMergePullRequest(pr);
+	const canReview = canReviewPullRequest(pr);
 	return (
 		<div className={styles.overview}>
 			<section
@@ -120,7 +121,7 @@ export default function PullRequestOverview({
 					}
 					onCancel={() => setForm(undefined)}
 				/>
-			) : form === 'review' ? (
+			) : form === 'review' && canReview ? (
 				<ReviewForm
 					workspaceId={workspaceId}
 					pr={pr}
@@ -144,7 +145,7 @@ export default function PullRequestOverview({
 					<button disabled={busy} onClick={() => setForm('comment')}>
 						{t('Comment')} <kbd>c</kbd>
 					</button>
-					<button disabled={busy || !open} onClick={() => setForm('review')}>
+					<button disabled={busy || !canReview} onClick={() => setForm('review')}>
 						{t('Review')} <kbd>v</kbd>
 					</button>
 					<button disabled={busy || !canMerge} onClick={() => setForm('merge')}>

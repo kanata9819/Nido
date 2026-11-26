@@ -223,7 +223,7 @@ test('reviews, merges and checkouts send their choices', async ({ page }) => {
 	expect((await calls(page, 'githubStatus')).length).toBe(2);
 });
 
-test('the merge shortcut respects draft and closed pull requests', async ({ page }) => {
+test('review and merge shortcuts respect pull request state', async ({ page }) => {
 	const pr: PullRequestDetails = {
 		number: 7,
 		title: 'Add sign-in',
@@ -271,6 +271,10 @@ test('the merge shortcut respects draft and closed pull requests', async ({ page
 	});
 	await expect(merge).toBeDisabled();
 	await expect(files).toBeFocused();
+	await expect(page.getByRole('button', { name: /^Review/ })).toBeDisabled();
+	await page.keyboard.press('v');
+	await expect(page.getByRole('textbox', { name: 'Review summary' })).toHaveCount(0);
+	expect(await calls(page, 'githubReview')).toEqual([]);
 	await page.keyboard.press('m');
 	await expect(form).toHaveCount(0);
 	expect(await calls(page, 'githubMerge')).toEqual([]);

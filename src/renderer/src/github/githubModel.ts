@@ -7,6 +7,10 @@ import type { GitHubStatus, PullRequestSummary } from '../../../shared/github';
 export const githubViews = ['pulls', 'issues', 'create'] as const;
 export type GitHubView = (typeof githubViews)[number];
 
+export function canReviewPullRequest(pr: PullRequestSummary): boolean {
+	return pr.state === 'OPEN';
+}
+
 export function canMergePullRequest(pr: PullRequestSummary): boolean {
 	return pr.state === 'OPEN' && !pr.isDraft;
 }
