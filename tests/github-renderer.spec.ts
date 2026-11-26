@@ -636,13 +636,31 @@ test('a merge refreshes the list behind the pull request and reports a branch it
 	await page.keyboard.press('m');
 	await page.getByRole('button', { name: 'Merge', exact: true }).click();
 	await page.evaluate(() =>
-		window.rendererTest.settle('githubMerge', 0, { branchError: 'HTTP 422: protected' })
+		window.rendererTest.settle('githubMerge', 0, {
+			merged: true,
+			branchError: 'HTTP 422: protected'
+		})
 	);
 	await expect(page.getByRole('status')).toHaveText(
 		'Pull request merged, but its branch could not be deleted: HTTP 422: protected'
 	);
 	// The list behind the pull request is read again, so its state is current after Esc.
 	expect((await calls(page, 'githubPullRequests')).length).toBe(2);
+});
+
+test('a requested merge is not displayed as completed', async ({ page }) => {
+	await page.goto(`${origin}?view=github&defer=githubMerge`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	const files = page.getByRole('listbox', { name: 'Pull request files' });
+	await expect(files).toBeFocused();
+	await files.press('m');
+	await page.getByRole('button', { name: 'Merge', exact: true }).click();
+	await expect.poll(() => calls(page, 'githubMerge')).toHaveLength(1);
+	await page.evaluate(() => window.rendererTest.settle('githubMerge', 0, { merged: false }));
+	await expect(page.getByRole('status')).toHaveText(
+		'Merge requested. The pull request has not merged yet.'
+	);
 });
 
 test('returning to a reordered PR list keeps the same pull request selected', async ({ page }) => {

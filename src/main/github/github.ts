@@ -8,6 +8,7 @@ import type {
 	PullRequestDetails,
 	PullRequestDraft,
 	PullRequestFilter,
+	PullRequestMergeResult,
 	PullRequestSummary,
 	ReviewEvent
 } from '../../shared/github';
@@ -378,7 +379,7 @@ export async function mergePullRequest(
 	deleteBranch: boolean,
 	expectedHead: string,
 	expectedBase?: string
-): Promise<{ branchError?: string }> {
+): Promise<PullRequestMergeResult> {
 	if (method !== 'squash' && method !== 'merge' && method !== 'rebase') {
 		throw new Error('Invalid merge method.');
 	}
@@ -401,6 +402,23 @@ export async function mergePullRequest(
 		'--match-head-commit',
 		expectedHead
 	]);
+	try {
+		const { state } = await ghJson<{ state?: string }>(cwd, [
+			'pr',
+			'view',
+			String(number),
+			'--json',
+			'state'
+		]);
+		if (state !== 'MERGED') {
+			return { merged: false };
+		}
+	} catch (error) {
+		return {
+			merged: false,
+			confirmationError: error instanceof Error ? error.message : String(error)
+		};
+	}
 	if (deleteBranch && headRefName && !isCrossRepository) {
 		// Each part is escaped: a '#' or '?' in a branch name must not end the path early and
 		// delete another branch.
@@ -413,10 +431,13 @@ export async function mergePullRequest(
 				`repos/{owner}/{repo}/git/refs/heads/${ref}`
 			]);
 		} catch (error) {
-			return { branchError: error instanceof Error ? error.message : String(error) };
+			return {
+				merged: true,
+				branchError: error instanceof Error ? error.message : String(error)
+			};
 		}
 	}
-	return {};
+	return { merged: true };
 }
 
 /** Up to 100 issues: open ones, those assigned to the user, the user's, or closed. */
