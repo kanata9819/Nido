@@ -43,6 +43,7 @@ export default function PullRequestFile({
 }: PullRequestFileProps): React.JSX.Element {
 	const t = useI18n();
 	const threads = pr.threads.filter((thread) => thread.path === path);
+	const showLineForm = !historical && commenting && pr.state === 'OPEN';
 	return (
 		<div className={styles.fileView}>
 			{historical ? (
@@ -69,7 +70,7 @@ export default function PullRequestFile({
 					<strong>
 						{t('Review threads')} <span>{threads.length}</span>
 					</strong>
-					{!historical && !commenting && (
+					{!historical && !showLineForm && (
 						<button
 							disabled={busy || pr.state !== 'OPEN'}
 							onClick={() => setCommenting(true)}
@@ -78,7 +79,7 @@ export default function PullRequestFile({
 						</button>
 					)}
 				</header>
-				{!historical && commenting && (
+				{showLineForm && (
 					<LineCommentForm
 						workspaceId={workspaceId}
 						pr={pr}

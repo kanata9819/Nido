@@ -382,7 +382,9 @@ test('reviews, merges and checkouts send their choices', async ({ page }) => {
 	expect((await calls(page, 'githubStatus')).length).toBe(2);
 });
 
-test('review and merge shortcuts respect pull request state', async ({ page }) => {
+test('PR shortcuts respect closed state, while general comments remain available', async ({
+	page
+}) => {
 	const pr: PullRequestDetails = {
 		number: 7,
 		title: 'Add sign-in',
@@ -427,7 +429,8 @@ test('review and merge shortcuts respect pull request state', async ({ page }) =
 	await page.evaluate((value) => window.rendererTest.settle('githubPullRequest', 0, value), {
 		...pr,
 		isDraft: false,
-		state: 'CLOSED'
+		state: 'CLOSED',
+		files: [{ path: 'src/login.ts', additions: 1, deletions: 0 }]
 	});
 	await expect(merge).toBeDisabled();
 	await expect(files).toBeFocused();
@@ -441,6 +444,14 @@ test('review and merge shortcuts respect pull request state', async ({ page }) =
 	await page.keyboard.press('m');
 	await expect(form).toHaveCount(0);
 	expect(await calls(page, 'githubMerge')).toEqual([]);
+	await files.getByRole('option', { name: 'src/login.ts' }).click();
+	await expect(page.getByRole('button', { name: /^Comment on a line/ })).toBeDisabled();
+	await files.press('c');
+	await expect(page.getByRole('textbox', { name: /^Comment on line/ })).toHaveCount(0);
+	expect(await calls(page, 'githubLineComment')).toEqual([]);
+	await files.getByRole('option', { name: 'Overview' }).click();
+	await files.press('c');
+	await expect(page.getByRole('textbox', { name: 'Comment on the pull request' })).toBeVisible();
 });
 
 test('issues open with their comments, and can be commented on and closed', async ({ page }) => {
