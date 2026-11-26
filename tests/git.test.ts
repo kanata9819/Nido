@@ -628,7 +628,7 @@ test('history, first-parent diffs and branch switches preserve conflicting edits
 	}
 });
 
-test('pushing a PR branch updates only its upstream even with matching pushes configured', async () => {
+test('pushing a PR branch updates only its own branch even with matching pushes configured', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-push-branch-'));
 	const remote = join(root, 'remote.git');
 	const git = (...args: string[]): string =>
@@ -656,17 +656,19 @@ test('pushing a PR branch updates only its upstream even with matching pushes co
 		git('branch', '-f', 'other', update);
 		git('-c', 'tag.gpgsign=false', 'tag', '-am', 'Local tag', 'local-tag');
 
-		await gitPushBranch(root);
+		// An upstream of another name is left alone; the branch is published under its own name.
+		assert.deepEqual(await gitPushBranch(root), { branch: 'feature', remote: 'fork' });
 		assert.deepEqual(
 			git('--git-dir', remote, 'for-each-ref', '--format=%(refname) %(objectname)').split(
 				/\r?\n/
 			),
 			[
-				`refs/heads/feature ${initial}`,
+				`refs/heads/feature ${update}`,
 				`refs/heads/other ${initial}`,
-				`refs/heads/published ${update}`
+				`refs/heads/published ${initial}`
 			]
 		);
+		assert.equal(git('rev-parse', '--abbrev-ref', '@{upstream}'), 'fork/feature');
 	} finally {
 		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 	}
@@ -727,6 +729,42 @@ test('a PR branch made from its base branch is published under its own name, not
 			remote: 'origin'
 		});
 		assert.equal(git('--git-dir', remote, 'rev-parse', 'refs/heads/main'), initial);
+		assert.equal(git('--git-dir', remote, 'rev-parse', 'refs/heads/feature'), work);
+		assert.equal(git('rev-parse', '--abbrev-ref', '@{upstream}'), 'origin/feature');
+	} finally {
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
+test('a PR branch made from another shared branch is published under its own name', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-push-shared-'));
+	const remote = join(root, 'remote.git');
+	const git = (...args: string[]): string =>
+		execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
+	try {
+		git('init', '-q', '-b', 'main');
+		git('init', '-q', '--bare', remote);
+		git('config', 'user.name', 'Nido Test');
+		git('config', 'user.email', 'test@example.invalid');
+		git('config', 'commit.gpgsign', 'false');
+		git('remote', 'add', 'origin', remote);
+		git('commit', '-qm', 'Initial', '--allow-empty');
+		git('push', '-q', 'origin', 'main');
+		git('switch', '-q', '-c', 'develop');
+		git('commit', '-qm', 'Develop work', '--allow-empty');
+		const develop = git('rev-parse', 'HEAD');
+		git('push', '-q', 'origin', 'develop');
+		git('fetch', '-q', 'origin');
+		// `git switch -c feature origin/develop` makes origin/develop the branch's upstream,
+		// but the pull request merges into main: develop must not receive the feature's work.
+		git('switch', '-q', '-c', 'feature', 'origin/develop');
+		git('commit', '-qm', 'Feature work', '--allow-empty');
+		const work = git('rev-parse', 'HEAD');
+		assert.deepEqual(await gitPushBranch(root, 'main', 'feature'), {
+			branch: 'feature',
+			remote: 'origin'
+		});
+		assert.equal(git('--git-dir', remote, 'rev-parse', 'refs/heads/develop'), develop);
 		assert.equal(git('--git-dir', remote, 'rev-parse', 'refs/heads/feature'), work);
 		assert.equal(git('rev-parse', '--abbrev-ref', '@{upstream}'), 'origin/feature');
 	} finally {

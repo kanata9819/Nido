@@ -94,9 +94,21 @@ export default function PullRequests({
 		};
 	}, [workspaceId, filter, listKey]);
 
-	/** Keep the same file across reloads, even when it moves to another row. */
+	/**
+	 * Keep the same file across reloads, even when it moves to another row. A diff loaded for
+	 * another head, base or repository is dropped, so the preview never shows outdated changes.
+	 */
 	function showDetails(details: PullRequestDetails, keepEntry: boolean): void {
 		setOpened(details);
+		setDiff((current) =>
+			current &&
+			current.head === details.headRefOid &&
+			current.target.url === details.url &&
+			current.target.baseRefName === details.baseRefName &&
+			current.target.baseRefOid === details.baseRefOid
+				? current
+				: undefined
+		);
 		setEntry((value) => {
 			const path = keepEntry ? opened?.files[value - 1]?.path : undefined;
 			return path ? details.files.findIndex((file) => file.path === path) + 1 : 0;
@@ -120,6 +132,10 @@ export default function PullRequests({
 					target
 				);
 				setDiff({ head: details.headRefOid, target, files: new Map(files) });
+			} catch (error) {
+				// The previous diff belongs to an earlier load; show it as unavailable instead.
+				setDiff(undefined);
+				throw error;
 			} finally {
 				showDetails(details, keepEntry);
 				list.current?.focus();
@@ -188,7 +204,7 @@ export default function PullRequests({
 	const checkout = (): void => {
 		if (opened && opened.state === 'OPEN') {
 			void act(async () => {
-				await window.nido.githubCheckout(workspaceId, opened.number);
+				await window.nido.githubCheckout(workspaceId, opened.number, opened.url);
 				await refreshStatus();
 			}, 'Checked out the pull request’s branch.');
 		}

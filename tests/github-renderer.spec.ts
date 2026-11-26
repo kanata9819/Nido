@@ -115,6 +115,33 @@ test('an unavailable diff leaves the pull request overview usable and can be ret
 	await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
+test('a refresh whose diff fails does not keep showing the earlier diff', async ({ page }) => {
+	await page.goto(`${origin}?view=github&defer=githubPullRequestDiff`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect.poll(() => calls(page, 'githubPullRequestDiff')).toHaveLength(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubPullRequestDiff', 0, [
+			[
+				'src/login.ts',
+				'diff --git a/src/login.ts b/src/login.ts\n--- a/src/login.ts\n+++ b/src/login.ts\n@@ -1 +1 @@\n-before refresh\n+earlier diff line\n'
+			]
+		])
+	);
+	const files = page.getByRole('listbox', { name: 'Pull request files' });
+	await files.getByRole('option', { name: 'src/login.ts' }).click();
+	const preview = page.locator('[data-panel="github"] [data-git-preview]');
+	await expect(preview).toContainText('earlier diff line');
+	await page.keyboard.press('r');
+	await expect.poll(() => calls(page, 'githubPullRequestDiff')).toHaveLength(2);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubPullRequestDiff', 0, new Error('HTTP 503'), true)
+	);
+	await expect(page.getByRole('alert')).toContainText('HTTP 503');
+	await expect(page.getByText('The diff is unavailable. Refresh to try again.')).toBeVisible();
+	await expect(preview).not.toContainText('earlier diff line');
+});
+
 test('a pull request file shows its diff and threads, which can be replied to and resolved', async ({
 	page
 }) => {
@@ -279,7 +306,14 @@ test('reviews, merges and checkouts send their choices', async ({ page }) => {
 	await submit.click();
 	await expect(page.getByRole('status')).toHaveText('Review submitted.');
 	expect(await calls(page, 'githubReview')).toEqual([
-		['alpha', 7, 'request-changes', 'Add a test', 'a'.repeat(40)]
+		[
+			'alpha',
+			7,
+			'request-changes',
+			'Add a test',
+			'a'.repeat(40),
+			'https://github.com/octo/alpha/pull/7'
+		]
 	]);
 
 	await files.focus();
@@ -291,13 +325,23 @@ test('reviews, merges and checkouts send their choices', async ({ page }) => {
 	await merge.getByRole('button', { name: 'Merge', exact: true }).click();
 	await expect(page.getByRole('status')).toHaveText('Pull request merged.');
 	expect(await calls(page, 'githubMerge')).toEqual([
-		['alpha', 7, 'rebase', false, 'a'.repeat(40), 'main']
+		[
+			'alpha',
+			7,
+			'rebase',
+			false,
+			'a'.repeat(40),
+			'main',
+			'https://github.com/octo/alpha/pull/7'
+		]
 	]);
 
 	await files.focus();
 	await page.keyboard.press('o');
 	await expect(page.getByRole('status')).toHaveText('Checked out the pull request’s branch.');
-	expect(await calls(page, 'githubCheckout')).toEqual([['alpha', 7]]);
+	expect(await calls(page, 'githubCheckout')).toEqual([
+		['alpha', 7, 'https://github.com/octo/alpha/pull/7']
+	]);
 	// The branch changed, so gh's status is read again.
 	expect((await calls(page, 'githubStatus')).length).toBe(2);
 });

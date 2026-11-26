@@ -228,7 +228,7 @@ export interface GitHubAPI {
 		expectedHead: string,
 		target: PullRequestDiffTarget
 	): Promise<[string, string][]>;
-	githubCheckout(id: string, number: number): Promise<void>;
+	githubCheckout(id: string, number: number, url: string): Promise<void>;
 	githubComment(
 		id: string,
 		kind: 'pr' | 'issue',
@@ -241,7 +241,8 @@ export interface GitHubAPI {
 		number: number,
 		event: ReviewEvent,
 		body: string,
-		head: string
+		head: string,
+		url: string
 	): Promise<void>;
 	githubReply(id: string, thread: string, body: string, url: string): Promise<void>;
 	githubResolve(id: string, thread: string, resolved: boolean, url: string): Promise<void>;
@@ -271,7 +272,8 @@ export interface GitHubAPI {
 		method: MergeMethod,
 		deleteBranch: boolean,
 		expectedHead: string,
-		expectedBase: string
+		expectedBase: string,
+		url: string
 	): Promise<PullRequestMergeResult>;
 	githubIssues(id: string, filter: IssueFilter): Promise<IssueSummary[]>;
 	githubIssue(id: string, number: number, url: string): Promise<IssueDetails>;

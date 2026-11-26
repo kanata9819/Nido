@@ -201,7 +201,8 @@ async function requirePullRequestHead(
 	cwd: string,
 	number: number,
 	expectedHead: string,
-	target?: PullRequestDiffTarget
+	target?: PullRequestDiffTarget,
+	url = target?.url
 ): Promise<void> {
 	if (
 		!/^[a-f\d]{40}$/i.test(expectedHead) ||
@@ -212,7 +213,7 @@ async function requirePullRequestHead(
 	const { headRefOid, baseRefName, baseRefOid } = await ghJson<Partial<PullRequestDetails>>(cwd, [
 		'pr',
 		'view',
-		conversationTarget('pr', number, target?.url),
+		conversationTarget('pr', number, url),
 		'--json',
 		target ? 'headRefOid,baseRefName,baseRefOid' : 'headRefOid'
 	]);
@@ -244,8 +245,23 @@ export async function pullRequestDiff(
 }
 
 /** Check out the pull request's branch into the working tree. */
-export async function checkoutPullRequest(cwd: string, number: number): Promise<void> {
-	await gh(cwd, ['pr', 'checkout', String(number)]);
+export async function checkoutPullRequest(
+	cwd: string,
+	number: number,
+	url?: string
+): Promise<void> {
+	await gh(cwd, ['pr', 'checkout', conversationTarget('pr', number, url)]);
+}
+
+/** The `gh api` repository path and host flags for the pull request at `url`. */
+function pullRequestApi(number: number, url?: string): { repository: string; host: string[] } {
+	const target = url === undefined ? undefined : new URL(conversationTarget('pr', number, url));
+	return target
+		? {
+				repository: target.pathname.split('/').slice(1, 3).join('/'),
+				host: [`--hostname=${target.host}`]
+			}
+		: { repository: '{owner}/{repo}', host: [] };
 }
 
 /** Add a comment to the pull request's or issue's conversation. */
@@ -291,7 +307,8 @@ export async function reviewPullRequest(
 	number: number,
 	event: ReviewEvent,
 	body: string,
-	head: string
+	head: string,
+	url?: string
 ): Promise<void> {
 	if (event !== 'approve' && event !== 'request-changes' && event !== 'comment') {
 		throw new Error('Invalid review.');
@@ -299,7 +316,8 @@ export async function reviewPullRequest(
 	if (event !== 'approve') {
 		requiredText(body, 'review');
 	}
-	await requirePullRequestHead(cwd, number, head);
+	await requirePullRequestHead(cwd, number, head, undefined, url);
+	const { repository, host } = pullRequestApi(number, url);
 	const reviewEvents = {
 		approve: 'APPROVE',
 		'request-changes': 'REQUEST_CHANGES',
@@ -307,7 +325,15 @@ export async function reviewPullRequest(
 	} as const;
 	await gh(
 		cwd,
-		['api', '--method', 'POST', `repos/{owner}/{repo}/pulls/${number}/reviews`, '--input', '-'],
+		[
+			'api',
+			'--method',
+			'POST',
+			`repos/${repository}/pulls/${number}/reviews`,
+			...host,
+			'--input',
+			'-'
+		],
 		JSON.stringify({ commit_id: head, event: reviewEvents[event], body })
 	);
 }
@@ -364,16 +390,13 @@ export async function commentOnLine(
 	}
 	const body = requiredText(comment.body, 'comment');
 	await requirePullRequestHead(cwd, number, comment.head, comment.target);
-	const url = comment.target
-		? new URL(conversationTarget('pr', number, comment.target.url))
-		: undefined;
-	const repository = url ? url.pathname.split('/').slice(1, 3).join('/') : '{owner}/{repo}';
+	const { repository, host } = pullRequestApi(number, comment.target?.url);
 	await gh(cwd, [
 		'api',
 		'--method',
 		'POST',
 		`repos/${repository}/pulls/${number}/comments`,
-		...(url ? [`--hostname=${url.host}`] : []),
+		...host,
 		'-f',
 		`body=${body}`,
 		'-f',
@@ -447,7 +470,8 @@ export async function mergePullRequest(
 	method: MergeMethod,
 	deleteBranch: boolean,
 	expectedHead: string,
-	expectedBase?: string
+	expectedBase?: string,
+	displayedUrl?: string
 ): Promise<PullRequestMergeResult> {
 	if (method !== 'squash' && method !== 'merge' && method !== 'rebase') {
 		throw new Error('Invalid merge method.');
@@ -468,7 +492,7 @@ export async function mergePullRequest(
 	}>(cwd, [
 		'pr',
 		'view',
-		String(number),
+		conversationTarget('pr', number, displayedUrl),
 		'--json',
 		'headRefName,isCrossRepository,baseRefName,url'
 	]);
