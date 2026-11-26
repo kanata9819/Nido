@@ -41,7 +41,7 @@ export default function Issues({
 	const loaded = loadedKey === listKey;
 	const [index, setIndex] = useState(0);
 	const [opened, setOpened] = useState<IssueDetails>();
-	const [commentIssue, setCommentIssue] = useState<number>();
+	const [commentTarget, setCommentTarget] = useState<number>();
 	const list = useRef<HTMLDivElement>(null);
 	const busy = working || !loaded;
 
@@ -74,7 +74,11 @@ export default function Issues({
 	// A different selection closes the opened issue.
 	const selected = issues[index];
 	const shown = opened && opened.number === selected?.number ? opened : undefined;
-	const commenting = commentIssue !== undefined && commentIssue === selected?.number;
+	const commenting = commentTarget !== undefined && commentTarget === selected?.number;
+
+	function setCommenting(value: boolean): void {
+		setCommentTarget(value ? selected?.number : undefined);
+	}
 
 	/** Load the selected issue's description and comments; resolves to whether it loaded. */
 	const open = (): Promise<boolean> =>
@@ -87,7 +91,7 @@ export default function Issues({
 	useLayoutEffect(() => {
 		backRef.current = () => {
 			if (commenting) {
-				setCommentIssue(undefined);
+				setCommenting(false);
 				list.current?.focus();
 				return true;
 			}
@@ -104,7 +108,7 @@ export default function Issues({
 	const act = (change: () => Promise<unknown>, message: string): Promise<boolean> =>
 		run(async () => {
 			await change();
-			setCommentIssue(undefined);
+			setCommenting(false);
 			if (selected) {
 				setOpened(await window.nido.githubIssue(workspaceId, selected.number));
 			}
@@ -127,7 +131,7 @@ export default function Issues({
 	const comment = (): void => {
 		if (selected) {
 			void (shown ? Promise.resolve(true) : open()).then(
-				(loaded) => loaded && setCommentIssue(selected.number)
+				(loaded) => loaded && setCommenting(true)
 			);
 		}
 	};
@@ -190,7 +194,7 @@ export default function Issues({
 					index={index}
 					setIndex={(next) => {
 						if (!busy && next !== index) {
-							setCommentIssue(undefined);
+							setCommenting(false);
 							setIndex(next);
 						}
 					}}
@@ -261,7 +265,7 @@ export default function Issues({
 											'Comment posted.'
 										)
 									}
-									onCancel={() => setCommentIssue(undefined)}
+									onCancel={() => setCommenting(false)}
 								/>
 							) : (
 								<div className={`${gitStyles.toolbar} ${styles.actions}`}>
