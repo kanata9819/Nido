@@ -184,6 +184,7 @@ function ReviewForm({
 }): React.JSX.Element {
 	const t = useI18n();
 	const [event, setEvent] = useState<ReviewEvent>('approve');
+	const [head] = useState(pr.headRefOid);
 	return (
 		<Composer
 			label={t('Review summary')}
@@ -205,7 +206,7 @@ function ReviewForm({
 			}
 			onSubmit={(body) =>
 				act(
-					() => window.nido.githubReview(workspaceId, pr.number, event, body),
+					() => window.nido.githubReview(workspaceId, pr.number, event, body, head),
 					'Review submitted.'
 				)
 			}

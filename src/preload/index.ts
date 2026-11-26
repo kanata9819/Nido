@@ -43,8 +43,8 @@ const api: NidoAPI = {
 	githubCheckout: (id, number) => ipcRenderer.invoke('nido:githubCheckout', id, number),
 	githubComment: (id, kind, number, body) =>
 		ipcRenderer.invoke('nido:githubComment', id, kind, number, body),
-	githubReview: (id, number, event, body) =>
-		ipcRenderer.invoke('nido:githubReview', id, number, event, body),
+	githubReview: (id, number, event, body, head) =>
+		ipcRenderer.invoke('nido:githubReview', id, number, event, body, head),
 	githubReply: (id, thread, body) => ipcRenderer.invoke('nido:githubReply', id, thread, body),
 	githubResolve: (id, thread, resolved) =>
 		ipcRenderer.invoke('nido:githubResolve', id, thread, resolved),

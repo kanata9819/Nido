@@ -200,7 +200,7 @@ test('reviews, merges and checkouts send their choices', async ({ page }) => {
 	await submit.click();
 	await expect(page.getByRole('status')).toHaveText('Review submitted.');
 	expect(await calls(page, 'githubReview')).toEqual([
-		['alpha', 7, 'request-changes', 'Add a test']
+		['alpha', 7, 'request-changes', 'Add a test', 'a'.repeat(40)]
 	]);
 
 	await files.focus();
