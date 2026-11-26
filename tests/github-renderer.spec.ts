@@ -728,8 +728,11 @@ test('refresh reloads an open issue and keeps it selected after list reordering'
 		(items) => window.rendererTest.settle('githubIssues', 0, items),
 		[issue, other]
 	);
-	await expect(page.getByRole('listbox', { name: 'Issues' })).toBeFocused();
-	await page.keyboard.press('Enter');
+	const issueList = page.getByRole('listbox', { name: 'Issues' });
+	await expect(
+		issueList.getByRole('option', { name: '#3 Crash on start', selected: true })
+	).toBeVisible();
+	await issueList.press('Enter');
 	await expect.poll(() => calls(page, 'githubIssue')).toEqual([['alpha', 3]]);
 	await page.evaluate((value) => window.rendererTest.settle('githubIssue', 0, value), issue);
 	await expect(page.getByText('Original issue')).toBeVisible();
