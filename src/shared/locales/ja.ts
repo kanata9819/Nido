@@ -1039,6 +1039,8 @@ export const japanese: Record<string, string> = {
 		'チェックアウト中のブランチが変わりました。GitHubパネルを開き直してください。',
 	'Could not identify the GitHub push repository.':
 		'プッシュ先のGitHubリポジトリを特定できませんでした。',
+	'Could not identify the GitHub repository for branch deletion.':
+		'ブランチを削除するGitHubリポジトリを特定できませんでした。',
 	'Enter a commit message (up to 10,000 characters).':
 		'コミットメッセージを入力してください（10,000文字まで）。',
 	'Stage changes before committing.': 'コミットする前に、変更をステージしてください。',

@@ -12,7 +12,7 @@ import type {
 	PullRequestSummary,
 	ReviewEvent
 } from '../../shared/github';
-import { gitPushBranch, gitPushRemoteUrl, gitStatus } from '../git/git';
+import { gitDeleteBranchAtHead, gitPushBranch, gitPushRemoteUrl, gitStatus } from '../git/git';
 import { gh, GhError, ghGraphql, ghJson } from './gh';
 import {
 	parseIssueDetails,
@@ -409,27 +409,33 @@ export async function mergePullRequest(
 	if (!/^[a-f\d]{40}$/i.test(expectedHead)) {
 		throw new Error('Refresh the pull request before merging.');
 	}
-	const { headRefName, isCrossRepository, baseRefName } = await ghJson<{
+	const {
+		headRefName,
+		isCrossRepository,
+		baseRefName,
+		url: pullRequestUrl
+	} = await ghJson<{
 		headRefName?: string;
 		isCrossRepository?: boolean;
 		baseRefName?: string;
-	}>(cwd, ['pr', 'view', String(number), '--json', 'headRefName,isCrossRepository,baseRefName']);
+		url?: string;
+	}>(cwd, [
+		'pr',
+		'view',
+		String(number),
+		'--json',
+		'headRefName,isCrossRepository,baseRefName,url'
+	]);
 	if (expectedBase !== undefined && (!expectedBase || expectedBase !== baseRefName)) {
 		throw new Error('The pull request base branch changed. Refresh it before merging.');
 	}
-	await gh(cwd, [
-		'pr',
-		'merge',
-		String(number),
-		`--${method}`,
-		'--match-head-commit',
-		expectedHead
-	]);
+	const selector = pullRequestUrl ?? String(number);
+	await gh(cwd, ['pr', 'merge', selector, `--${method}`, '--match-head-commit', expectedHead]);
 	try {
 		const { state } = await ghJson<{ state?: string }>(cwd, [
 			'pr',
 			'view',
-			String(number),
+			selector,
 			'--json',
 			'state'
 		]);
@@ -443,16 +449,19 @@ export async function mergePullRequest(
 		};
 	}
 	if (deleteBranch && headRefName && !isCrossRepository) {
-		// Each part is escaped: a '#' or '?' in a branch name must not end the path early and
-		// delete another branch.
-		const ref = headRefName.split('/').map(encodeURIComponent).join('/');
 		try {
-			await gh(cwd, [
-				'api',
-				'--method',
-				'DELETE',
-				`repos/{owner}/{repo}/git/refs/heads/${ref}`
-			]);
+			const url = URL.parse(pullRequestUrl ?? '');
+			if (
+				!url ||
+				url.protocol !== 'https:' ||
+				url.username ||
+				url.password ||
+				!/^\/[^/]+\/[^/]+\/pull\/\d+\/?$/.test(url.pathname)
+			) {
+				throw new Error('Could not identify the GitHub repository for branch deletion.');
+			}
+			const remote = url.origin + url.pathname.split('/').slice(0, 3).join('/') + '.git';
+			await gitDeleteBranchAtHead(cwd, remote, headRefName, expectedHead);
 		} catch (error) {
 			return {
 				merged: true,
