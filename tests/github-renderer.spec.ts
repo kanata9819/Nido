@@ -596,6 +596,34 @@ test('an issue that fails to load opens no comment form', async ({ page }) => {
 	await expect(page.getByRole('textbox', { name: 'Comment on the issue' })).toHaveCount(0);
 });
 
+test('a successful issue list retry clears the prior list error', async ({ page }) => {
+	await page.goto(`${origin}?view=github&defer=githubIssues`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('2');
+	await expect.poll(() => calls(page, 'githubIssues')).toHaveLength(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubIssues', 0, new Error('HTTP 503'), true)
+	);
+	await expect(page.getByRole('alert')).toContainText('HTTP 503');
+
+	await page.getByRole('button', { name: 'Refresh (r)' }).click();
+	await expect.poll(() => calls(page, 'githubIssues')).toHaveLength(2);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubIssues', 0, [
+			{
+				number: 3,
+				title: 'Crash on start',
+				author: 'user',
+				state: 'OPEN',
+				labels: [],
+				comments: 0
+			}
+		])
+	);
+	await expect(page.getByRole('heading', { name: 'Crash on start' })).toBeVisible();
+	await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
 test('a GitHub that cannot be reached is not reported as signed out', async ({ page }) => {
 	await page.goto(`${origin}?view=github&defer=githubStatus`);
 	await page.evaluate(() =>

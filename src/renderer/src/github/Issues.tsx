@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useI18n } from '../i18n';
+import { useErrorMessage, useI18n } from '../i18n';
 import type { IssueDetails, IssueFilter, IssueSummary } from '../../../shared/github';
 import GitHubList, { type GitHubRow } from './GitHubList';
 import { Composer } from './Composer';
@@ -31,10 +31,12 @@ export default function Issues({
 	keysRef
 }: GitHubViewProps): React.JSX.Element {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	const { run, working } = action;
 	const [filter, setFilter] = useState<IssueFilter>('open');
 	const [revision, setRevision] = useState(0);
 	const [issues, setIssues] = useState<IssueSummary[]>([]);
+	const [listError, setListError] = useState('');
 	// The filter and refresh count the shown list was loaded for.
 	const [loadedKey, setLoadedKey] = useState<string>();
 	const listKey = `${filter}:${revision}`;
@@ -62,6 +64,7 @@ export default function Issues({
 							: position;
 					});
 					setLoadedKey(listKey);
+					setListError('');
 					list.current?.focus();
 				}
 			},
@@ -70,16 +73,14 @@ export default function Issues({
 					previousIssues.current = [];
 					setIssues([]);
 					setLoadedKey(listKey);
-					action.setError(String(error));
+					setListError(String(error));
 				}
 			}
 		);
 		return () => {
 			alive = false;
 		};
-		// The error setter is stable; listing again only follows the filter and refreshes.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [workspaceId, filter, revision, listKey]);
+	}, [workspaceId, filter, listKey]);
 
 	// A different selection closes the opened issue.
 	const selected = issues[index];
@@ -330,6 +331,11 @@ export default function Issues({
 					'1/2/3 Views · j/k Select · Enter Open · f Filter · c Comment · x Close / Reopen · b Browser · r Refresh · Esc Back / Close'
 				)}
 			</footer>
+			{listError && (
+				<p role="alert" className={gitStyles.error}>
+					{errorMessage(listError)}
+				</p>
+			)}
 		</>
 	);
 }
