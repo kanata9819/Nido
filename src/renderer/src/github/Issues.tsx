@@ -43,6 +43,7 @@ export default function Issues({
 	const [opened, setOpened] = useState<IssueDetails>();
 	const [commentTarget, setCommentTarget] = useState<number>();
 	const list = useRef<HTMLDivElement>(null);
+	const previousIssues = useRef<IssueSummary[]>([]);
 	const busy = working || !loaded;
 
 	useEffect(() => {
@@ -50,14 +51,23 @@ export default function Issues({
 		window.nido.githubIssues(workspaceId, filter).then(
 			(next) => {
 				if (alive) {
+					const previous = previousIssues.current;
+					previousIssues.current = next;
 					setIssues(next);
-					setIndex((value) => Math.min(value, Math.max(0, next.length - 1)));
+					setIndex((value) => {
+						const number = previous[value]?.number;
+						const position = next.findIndex((issue) => issue.number === number);
+						return position < 0
+							? Math.min(value, Math.max(0, next.length - 1))
+							: position;
+					});
 					setLoadedKey(listKey);
 					list.current?.focus();
 				}
 			},
 			(error) => {
 				if (alive) {
+					previousIssues.current = [];
 					setIssues([]);
 					setLoadedKey(listKey);
 					action.setError(String(error));
@@ -87,6 +97,16 @@ export default function Issues({
 					setOpened(await window.nido.githubIssue(workspaceId, selected.number));
 				})
 			: Promise.resolve(false);
+
+	const refresh = (): void => {
+		if (busy) {
+			return;
+		}
+		setRevision((value) => value + 1);
+		if (shown) {
+			void open();
+		}
+	};
 
 	useLayoutEffect(() => {
 		backRef.current = () => {
@@ -142,7 +162,7 @@ export default function Issues({
 			c: comment,
 			x: toggleOpen,
 			b: () => selected && void window.nido.openDocumentation(selected.url),
-			r: () => setRevision((value) => value + 1)
+			r: refresh
 		};
 	});
 
@@ -182,7 +202,7 @@ export default function Issues({
 						))}
 					</select>
 				</label>
-				<button disabled={busy} onClick={() => setRevision((value) => value + 1)}>
+				<button disabled={busy} onClick={refresh}>
 					{t('Refresh (r)')}
 				</button>
 			</div>

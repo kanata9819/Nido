@@ -3,7 +3,7 @@ import { test, expect } from './helpers/renderer-test';
 import type { ViteDevServer } from 'vite';
 import { harnessWarmupTimeout, startHarnessServer } from './helpers/harness-server';
 import type {} from './renderer/harness';
-import type { PullRequestDetails } from '../src/shared/github';
+import type { IssueDetails, PullRequestDetails } from '../src/shared/github';
 
 let server: ViteDevServer;
 let origin: string;
@@ -494,6 +494,64 @@ test('a pending or failed comment keeps its draft', async ({ page }) => {
 	await expect(box).toHaveValue('Important review notes revised');
 	await box.press('Escape');
 	await expect(box).toHaveCount(0);
+});
+
+test('refresh reloads an open issue and keeps it selected after list reordering', async ({
+	page
+}) => {
+	const issue: IssueDetails = {
+		number: 3,
+		title: 'Crash on start',
+		author: 'user',
+		state: 'OPEN',
+		updatedAt: '2026-11-14T10:00:00Z',
+		url: 'https://github.com/octo/alpha/issues/3',
+		labels: [],
+		comments: 0,
+		body: 'Original issue',
+		createdAt: '2026-11-13T10:00:00Z',
+		assignees: [],
+		timeline: []
+	};
+	const other = { ...issue, number: 4, title: 'Another issue' };
+	await page.goto(`${origin}?view=github&defer=githubIssues,githubIssue`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('2');
+	await expect.poll(() => calls(page, 'githubIssues')).toHaveLength(1);
+	await page.evaluate(
+		(items) => window.rendererTest.settle('githubIssues', 0, items),
+		[issue, other]
+	);
+	await expect(page.getByRole('listbox', { name: 'Issues' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect.poll(() => calls(page, 'githubIssue')).toEqual([['alpha', 3]]);
+	await page.evaluate((value) => window.rendererTest.settle('githubIssue', 0, value), issue);
+	await expect(page.getByText('Original issue')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Refresh (r)' }).click();
+	await expect.poll(() => calls(page, 'githubIssues')).toHaveLength(2);
+	await expect
+		.poll(() => calls(page, 'githubIssue'))
+		.toEqual([
+			['alpha', 3],
+			['alpha', 3]
+		]);
+	const updated: IssueDetails = {
+		...issue,
+		body: 'Updated issue',
+		comments: 1,
+		timeline: [{ id: 'new', author: 'user', body: 'A new comment', createdAt: issue.updatedAt }]
+	};
+	await page.evaluate(
+		(items) => window.rendererTest.settle('githubIssues', 0, items),
+		[other, updated]
+	);
+	await page.evaluate((value) => window.rendererTest.settle('githubIssue', 0, value), updated);
+	await expect(
+		page.getByRole('option', { name: '#3 Crash on start', selected: true })
+	).toBeVisible();
+	await expect(page.getByText('Updated issue')).toBeVisible();
+	await expect(page.getByText('A new comment')).toBeVisible();
 });
 
 test('an issue that fails to load opens no comment form', async ({ page }) => {
