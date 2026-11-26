@@ -58,7 +58,18 @@ test('pull requests list, open with their overview, and take comments from the k
 	expect(await calls(page, 'githubPullRequest')).toEqual([
 		['alpha', 7, 'https://github.com/octo/alpha/pull/7']
 	]);
-	expect(await calls(page, 'githubPullRequestDiff')).toEqual([['alpha', 7, 'a'.repeat(40)]]);
+	expect(await calls(page, 'githubPullRequestDiff')).toEqual([
+		[
+			'alpha',
+			7,
+			'a'.repeat(40),
+			{
+				url: 'https://github.com/octo/alpha/pull/7',
+				baseRefName: 'main',
+				baseRefOid: 'b'.repeat(40)
+			}
+		]
+	]);
 
 	await page.keyboard.press('c');
 	const comment = page.getByRole('textbox', { name: 'Comment on the pull request' });
@@ -155,7 +166,20 @@ test('a pull request file shows its diff and threads, which can be replied to an
 	await send.click();
 	await expect(page.getByRole('status')).toHaveText('Comment posted.');
 	expect(await calls(page, 'githubLineComment')).toEqual([
-		['alpha', 7, 'src/login.ts', 3, 'LEFT', 'Typo here', 'a'.repeat(40)]
+		[
+			'alpha',
+			7,
+			'src/login.ts',
+			3,
+			'LEFT',
+			'Typo here',
+			'a'.repeat(40),
+			{
+				url: 'https://github.com/octo/alpha/pull/7',
+				baseRefName: 'main',
+				baseRefOid: 'b'.repeat(40)
+			}
+		]
 	]);
 });
 
@@ -164,14 +188,14 @@ test('refresh keeps the reviewed file selected by path and returns to overview i
 }) => {
 	await page.goto(`${origin}?view=github&defer=githubPullRequest`);
 	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
-	const details = (paths: string[], head: string): PullRequestDetails => ({
+	const details = (paths: string[], head: string, base: string): PullRequestDetails => ({
 		number: 7,
 		title: 'Add sign-in',
 		author: 'dev',
 		state: 'OPEN',
 		isDraft: false,
 		headRefName: 'feature/login',
-		baseRefName: 'main',
+		baseRefName: base,
 		reviewDecision: '',
 		checks: 'none',
 		updatedAt: '',
@@ -179,6 +203,7 @@ test('refresh keeps the reviewed file selected by path and returns to overview i
 		labels: [],
 		body: '',
 		headRefOid: head,
+		baseRefOid: 'b'.repeat(40),
 		isCrossRepository: false,
 		mergeable: 'MERGEABLE',
 		additions: 1,
@@ -189,13 +214,17 @@ test('refresh keeps the reviewed file selected by path and returns to overview i
 		timeline: [],
 		threads: []
 	});
-	const refresh = async (paths: string[], head = 'a'.repeat(40)): Promise<void> => {
+	const refresh = async (
+		paths: string[],
+		head = 'a'.repeat(40),
+		base = 'main'
+	): Promise<void> => {
 		await expect
 			.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.method))
 			.toBe('githubPullRequest');
 		await page.evaluate(
 			(value) => window.rendererTest.settle('githubPullRequest', 0, value),
-			details(paths, head)
+			details(paths, head, base)
 		);
 	};
 	await page.keyboard.press('Enter');
@@ -217,7 +246,7 @@ test('refresh keeps the reviewed file selected by path and returns to overview i
 	await expect(reviewed).toHaveAttribute('aria-selected', 'true');
 	await expect(send).toBeEnabled();
 	await page.keyboard.press('r');
-	await refresh(['README.md', 'src/login.ts'], 'b'.repeat(40));
+	await refresh(['README.md', 'src/login.ts'], 'a'.repeat(40), 'release');
 	await expect(page.getByRole('alert')).toContainText('The diff changed.');
 	await expect(draft).toHaveValue('About the original diff');
 	await expect(send).toBeDisabled();
@@ -289,6 +318,7 @@ test('review and merge shortcuts respect pull request state', async ({ page }) =
 		labels: [],
 		body: '',
 		headRefOid: 'a'.repeat(40),
+		baseRefOid: 'b'.repeat(40),
 		isCrossRepository: false,
 		mergeable: 'MERGEABLE',
 		additions: 1,
@@ -805,6 +835,7 @@ test('a posted thread reply closes its draft even if reloading the PR fails', as
 		labels: [],
 		body: '',
 		headRefOid: 'a'.repeat(40),
+		baseRefOid: 'b'.repeat(40),
 		isCrossRepository: false,
 		mergeable: 'MERGEABLE',
 		additions: 1,

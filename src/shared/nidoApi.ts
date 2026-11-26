@@ -8,6 +8,7 @@ import type {
 	IssueSummary,
 	MergeMethod,
 	PullRequestDetails,
+	PullRequestDiffTarget,
 	PullRequestMergeResult,
 	PullRequestFilter,
 	PullRequestSummary,
@@ -224,7 +225,8 @@ export interface GitHubAPI {
 	githubPullRequestDiff(
 		id: string,
 		number: number,
-		expectedHead: string
+		expectedHead: string,
+		target: PullRequestDiffTarget
 	): Promise<[string, string][]>;
 	githubCheckout(id: string, number: number): Promise<void>;
 	githubComment(
@@ -250,7 +252,8 @@ export interface GitHubAPI {
 		line: number,
 		side: 'LEFT' | 'RIGHT',
 		body: string,
-		head: string
+		head: string,
+		target: PullRequestDiffTarget
 	): Promise<void>;
 	/** Push the checked-out branch and open a pull request from it; returns its address. */
 	githubCreatePullRequest(

@@ -6,6 +6,7 @@ import type {
 	LineComment,
 	MergeMethod,
 	PullRequestDetails,
+	PullRequestDiffTarget,
 	PullRequestDraft,
 	PullRequestFilter,
 	PullRequestMergeResult,
@@ -27,7 +28,7 @@ import {
 
 const summaryFields =
 	'number,title,author,state,isDraft,headRefName,baseRefName,reviewDecision,statusCheckRollup,updatedAt,url,labels';
-const detailFields = `${summaryFields},body,headRefOid,isCrossRepository,mergeable,additions,deletions,createdAt,files,comments,reviews`;
+const detailFields = `${summaryFields},body,headRefOid,baseRefOid,isCrossRepository,mergeable,additions,deletions,createdAt,files,comments,reviews`;
 const issueFields = 'number,title,author,state,updatedAt,url,labels,comments';
 
 /** A positive pull request or issue number; throws otherwise. */
@@ -199,20 +200,27 @@ function repositoryName(cwd: string): Promise<{ owner: string; name: string }> {
 async function requirePullRequestHead(
 	cwd: string,
 	number: number,
-	expectedHead: string
+	expectedHead: string,
+	target?: PullRequestDiffTarget
 ): Promise<void> {
-	if (!/^[a-f\d]{40}$/i.test(expectedHead)) {
+	if (
+		!/^[a-f\d]{40}$/i.test(expectedHead) ||
+		(target && (!target.baseRefName || !/^[a-f\d]{40}$/i.test(target.baseRefOid)))
+	) {
 		throw new Error('Refresh the pull request to get its current diff.');
 	}
-	const { headRefOid } = await ghJson<{ headRefOid?: string }>(cwd, [
+	const { headRefOid, baseRefName, baseRefOid } = await ghJson<Partial<PullRequestDetails>>(cwd, [
 		'pr',
 		'view',
-		String(number),
+		conversationTarget('pr', number, target?.url),
 		'--json',
-		'headRefOid'
+		target ? 'headRefOid,baseRefName,baseRefOid' : 'headRefOid'
 	]);
 	if (headRefOid !== expectedHead) {
 		throw new Error('The pull request head changed. Refresh it to get the current diff.');
+	}
+	if (target && (baseRefName !== target.baseRefName || baseRefOid !== target.baseRefOid)) {
+		throw new Error('The pull request base changed. Refresh it to get the current diff.');
 	}
 }
 
@@ -220,11 +228,18 @@ async function requirePullRequestHead(
 export async function pullRequestDiff(
 	cwd: string,
 	number: number,
-	expectedHead: string
+	expectedHead: string,
+	target?: PullRequestDiffTarget
 ): Promise<[string, string][]> {
-	await requirePullRequestHead(cwd, number, expectedHead);
-	const diff = await gh(cwd, ['pr', 'diff', String(number), '--color', 'never']);
-	await requirePullRequestHead(cwd, number, expectedHead);
+	await requirePullRequestHead(cwd, number, expectedHead, target);
+	const diff = await gh(cwd, [
+		'pr',
+		'diff',
+		conversationTarget('pr', number, target?.url),
+		'--color',
+		'never'
+	]);
+	await requirePullRequestHead(cwd, number, expectedHead, target);
 	return [...splitPullRequestDiff(diff)];
 }
 
@@ -348,12 +363,17 @@ export async function commentOnLine(
 		throw new Error('Invalid file.');
 	}
 	const body = requiredText(comment.body, 'comment');
-	await requirePullRequestHead(cwd, number, comment.head);
+	await requirePullRequestHead(cwd, number, comment.head, comment.target);
+	const url = comment.target
+		? new URL(conversationTarget('pr', number, comment.target.url))
+		: undefined;
+	const repository = url ? url.pathname.split('/').slice(1, 3).join('/') : '{owner}/{repo}';
 	await gh(cwd, [
 		'api',
 		'--method',
 		'POST',
-		`repos/{owner}/{repo}/pulls/${number}/comments`,
+		`repos/${repository}/pulls/${number}/comments`,
+		...(url ? [`--hostname=${url.host}`] : []),
 		'-f',
 		`body=${body}`,
 		'-f',

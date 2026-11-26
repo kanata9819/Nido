@@ -1273,6 +1273,8 @@ export const japanese: Record<string, string> = {
 		'プルリクエストを更新して最新の差分を取得してください。',
 	'The pull request head changed. Refresh it to get the current diff.':
 		'プルリクエストの先頭コミットが変わりました。更新して最新の差分を取得してください。',
+	'The pull request base changed. Refresh it to get the current diff.':
+		'プルリクエストの比較先が変わりました。更新して最新の差分を取得してください。',
 	'Invalid review thread.': 'レビューのスレッドが正しくありません。',
 	'Invalid review.': 'レビューが正しくありません。',
 	'Invalid GitHub request.': 'GitHubへのリクエストが正しくありません。',

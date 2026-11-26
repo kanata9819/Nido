@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { useI18n } from '../i18n';
-import type { PullRequestDetails, ReviewThread } from '../../../shared/github';
+import type {
+	PullRequestDetails,
+	PullRequestDiffTarget,
+	ReviewThread
+} from '../../../shared/github';
 import GitDiff from '../git/GitDiff';
 import { Composer } from './Composer';
 import { Timeline } from './Timeline';
@@ -12,6 +16,7 @@ interface PullRequestFileProps {
 	path: string;
 	diff: string;
 	diffHead: string;
+	diffTarget: PullRequestDiffTarget;
 	busy: boolean;
 	commenting: boolean;
 	setCommenting: (commenting: boolean) => void;
@@ -28,6 +33,7 @@ export default function PullRequestFile({
 	path,
 	diff,
 	diffHead,
+	diffTarget,
 	busy,
 	commenting,
 	setCommenting,
@@ -66,7 +72,9 @@ export default function PullRequestFile({
 						workspaceId={workspaceId}
 						pr={pr}
 						path={path}
+						diff={diff}
 						diffHead={diffHead}
+						diffTarget={diffTarget}
 						busy={busy}
 						act={act}
 						setCommenting={setCommenting}
@@ -91,16 +99,27 @@ function LineCommentForm({
 	workspaceId,
 	pr,
 	path,
+	diff,
 	diffHead,
+	diffTarget,
 	busy,
 	act,
 	setCommenting
-}: Omit<PullRequestFileProps, 'diff' | 'commenting'>): React.JSX.Element {
+}: Omit<PullRequestFileProps, 'commenting'>): React.JSX.Element {
 	const t = useI18n();
-	const [head] = useState(diffHead);
+	const [anchor] = useState({ head: diffHead, target: diffTarget, diff });
 	const [line, setLine] = useState('');
 	const [side, setSide] = useState<'LEFT' | 'RIGHT'>('RIGHT');
-	const stale = head !== diffHead || head !== pr.headRefOid;
+	const stale =
+		anchor.head !== diffHead ||
+		anchor.head !== pr.headRefOid ||
+		anchor.diff !== diff ||
+		anchor.target.baseRefName !== diffTarget.baseRefName ||
+		anchor.target.baseRefName !== pr.baseRefName ||
+		anchor.target.baseRefOid !== diffTarget.baseRefOid ||
+		anchor.target.baseRefOid !== pr.baseRefOid ||
+		anchor.target.url !== diffTarget.url ||
+		anchor.target.url !== pr.url;
 	return (
 		<>
 			{stale && (
@@ -157,7 +176,8 @@ function LineCommentForm({
 								Number(line),
 								side,
 								body,
-								head
+								anchor.head,
+								anchor.target
 							),
 						'Comment posted.'
 					)

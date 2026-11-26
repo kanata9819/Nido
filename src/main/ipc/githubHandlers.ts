@@ -17,7 +17,7 @@ import {
 	reviewPullRequest,
 	setIssueOpen
 } from '../github/github';
-import type { IssueFilter, PullRequestFilter } from '../../shared/github';
+import type { IssueFilter, PullRequestDiffTarget, PullRequestFilter } from '../../shared/github';
 
 const pullRequestFilters: readonly PullRequestFilter[] = ['open', 'mine', 'review', 'closed'];
 const issueFilters: readonly IssueFilter[] = ['open', 'assigned', 'mine', 'closed'];
@@ -45,6 +45,14 @@ export function registerGithubHandlers({
 	changeBranch: (current: Session, change: () => Promise<void>) => Promise<void>;
 }): void {
 	const root = (id: unknown): string => session(id).workspace.root;
+	const diffTarget = (value: unknown): PullRequestDiffTarget => {
+		const target = value as Record<string, unknown> | null | undefined;
+		return {
+			url: text(target?.url),
+			baseRefName: text(target?.baseRefName),
+			baseRefOid: text(target?.baseRefOid)
+		};
+	};
 
 	handle('githubStatus', (id) => githubStatus(root(id)));
 	handle('githubPullRequests', (id, filter) => {
@@ -56,8 +64,8 @@ export function registerGithubHandlers({
 	handle('githubPullRequest', (id, number, url) =>
 		pullRequest(root(id), issueNumber(number), text(url))
 	);
-	handle('githubPullRequestDiff', (id, number, expectedHead) =>
-		pullRequestDiff(root(id), issueNumber(number), text(expectedHead))
+	handle('githubPullRequestDiff', (id, number, expectedHead, target) =>
+		pullRequestDiff(root(id), issueNumber(number), text(expectedHead), diffTarget(target))
 	);
 	handle('githubCheckout', async (id, number) => {
 		const current = session(id);
@@ -79,13 +87,14 @@ export function registerGithubHandlers({
 	handle('githubResolve', (id, thread, resolved, url) =>
 		resolveThread(root(id), text(thread), flag(resolved), text(url))
 	);
-	handle('githubLineComment', (id, number, path, line, side, body, head) =>
+	handle('githubLineComment', (id, number, path, line, side, body, head, target) =>
 		commentOnLine(root(id), issueNumber(number), {
 			path: text(path),
 			line: typeof line === 'number' ? line : NaN,
 			side: side as never,
 			body: text(body),
-			head: text(head)
+			head: text(head),
+			target: diffTarget(target)
 		})
 	);
 	handle('githubCreatePullRequest', (id, title, body, base, draft, head) =>
