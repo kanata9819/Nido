@@ -1247,6 +1247,7 @@ export const japanese: Record<string, string> = {
 	'Invalid diff side.': '差分の側が正しくありません。',
 	'Invalid file.': 'ファイルが正しくありません。',
 	'Invalid merge method.': 'マージ方法が正しくありません。',
+	'Refresh the pull request before merging.': 'マージする前にプルリクエストを更新してください。',
 	'Invalid pull request or issue number.': 'プルリクエストまたはIssueの番号が正しくありません。',
 	'Invalid review thread.': 'レビューのスレッドが正しくありません。',
 	'Invalid review.': 'レビューが正しくありません。',

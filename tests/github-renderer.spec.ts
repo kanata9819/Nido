@@ -211,7 +211,9 @@ test('reviews, merges and checkouts send their choices', async ({ page }) => {
 	await merge.getByRole('checkbox', { name: 'Delete the branch on GitHub' }).uncheck();
 	await merge.getByRole('button', { name: 'Merge', exact: true }).click();
 	await expect(page.getByRole('status')).toHaveText('Pull request merged.');
-	expect(await calls(page, 'githubMerge')).toEqual([['alpha', 7, 'rebase', false]]);
+	expect(await calls(page, 'githubMerge')).toEqual([
+		['alpha', 7, 'rebase', false, 'a'.repeat(40)]
+	]);
 
 	await files.focus();
 	await page.keyboard.press('o');

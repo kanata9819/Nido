@@ -52,8 +52,8 @@ const api: NidoAPI = {
 		ipcRenderer.invoke('nido:githubLineComment', id, number, path, line, side, body),
 	githubCreatePullRequest: (id, title, body, base, draft) =>
 		ipcRenderer.invoke('nido:githubCreatePullRequest', id, title, body, base, draft),
-	githubMerge: (id, number, method, deleteBranch) =>
-		ipcRenderer.invoke('nido:githubMerge', id, number, method, deleteBranch),
+	githubMerge: (id, number, method, deleteBranch, expectedHead) =>
+		ipcRenderer.invoke('nido:githubMerge', id, number, method, deleteBranch, expectedHead),
 	githubIssues: (id, filter) => ipcRenderer.invoke('nido:githubIssues', id, filter),
 	githubIssue: (id, number) => ipcRenderer.invoke('nido:githubIssue', id, number),
 	githubSetIssueOpen: (id, number, open) =>

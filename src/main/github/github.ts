@@ -325,16 +325,27 @@ export async function mergePullRequest(
 	cwd: string,
 	number: number,
 	method: MergeMethod,
-	deleteBranch: boolean
+	deleteBranch: boolean,
+	expectedHead: string
 ): Promise<{ branchError?: string }> {
 	if (method !== 'squash' && method !== 'merge' && method !== 'rebase') {
 		throw new Error('Invalid merge method.');
+	}
+	if (!/^[a-f\d]{40}$/i.test(expectedHead)) {
+		throw new Error('Refresh the pull request before merging.');
 	}
 	const { headRefName, isCrossRepository } = await ghJson<{
 		headRefName?: string;
 		isCrossRepository?: boolean;
 	}>(cwd, ['pr', 'view', String(number), '--json', 'headRefName,isCrossRepository']);
-	await gh(cwd, ['pr', 'merge', String(number), `--${method}`]);
+	await gh(cwd, [
+		'pr',
+		'merge',
+		String(number),
+		`--${method}`,
+		'--match-head-commit',
+		expectedHead
+	]);
 	if (deleteBranch && headRefName && !isCrossRepository) {
 		// Each part is escaped: a '#' or '?' in a branch name must not end the path early and
 		// delete another branch.
