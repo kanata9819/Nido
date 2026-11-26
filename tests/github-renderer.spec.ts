@@ -525,6 +525,63 @@ test('a pending or failed comment keeps its draft', async ({ page }) => {
 	await expect(box).toHaveCount(0);
 });
 
+test('a posted thread reply closes its draft even if reloading the PR fails', async ({ page }) => {
+	const pr: PullRequestDetails = {
+		number: 7,
+		title: 'Add sign-in',
+		author: 'dev',
+		state: 'OPEN',
+		isDraft: false,
+		headRefName: 'feature',
+		baseRefName: 'main',
+		reviewDecision: '',
+		checks: 'none',
+		updatedAt: '',
+		url: '',
+		labels: [],
+		body: '',
+		headRefOid: 'a'.repeat(40),
+		isCrossRepository: false,
+		mergeable: 'MERGEABLE',
+		additions: 1,
+		deletions: 0,
+		createdAt: '',
+		files: [{ path: 'src/login.ts', additions: 1, deletions: 0 }],
+		checkRuns: [],
+		timeline: [],
+		threads: [
+			{
+				id: 'PRRT_1',
+				path: 'src/login.ts',
+				line: 2,
+				side: 'RIGHT',
+				isResolved: false,
+				isOutdated: false,
+				comments: []
+			}
+		]
+	};
+	await page.goto(`${origin}?view=github&defer=githubPullRequest`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect.poll(() => calls(page, 'githubPullRequest')).toHaveLength(1);
+	await page.evaluate((value) => window.rendererTest.settle('githubPullRequest', 0, value), pr);
+	await expect(page.getByRole('listbox', { name: 'Pull request files' })).toBeFocused();
+	await page.keyboard.press('j');
+	await page.getByRole('button', { name: 'Reply', exact: true }).click();
+	const reply = page.getByRole('textbox', { name: 'Reply to the thread' });
+	await reply.fill('Done');
+	await reply.press('Control+Enter');
+	await expect.poll(() => calls(page, 'githubPullRequest')).toHaveLength(2);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubPullRequest', 0, new Error('HTTP 503'), true)
+	);
+	await expect(page.getByRole('status')).toContainText('Reply posted. Could not refresh');
+	await expect(page.getByRole('status')).toContainText('HTTP 503');
+	await expect(reply).toHaveCount(0);
+	expect(await calls(page, 'githubReply')).toEqual([['alpha', 'PRRT_1', 'Done']]);
+});
+
 test('refresh reloads an open issue and keeps it selected after list reordering', async ({
 	page
 }) => {
