@@ -1035,6 +1035,10 @@ export const japanese: Record<string, string> = {
 	'Branch no longer exists. Refresh the list.':
 		'このブランチはもうありません。一覧を更新してください。',
 	'Invalid branch name.': 'ブランチ名が正しくありません。',
+	'The checked-out branch changed. Reopen the GitHub panel and try again.':
+		'チェックアウト中のブランチが変わりました。GitHubパネルを開き直してください。',
+	'Could not identify the GitHub push repository.':
+		'プッシュ先のGitHubリポジトリを特定できませんでした。',
 	'Enter a commit message (up to 10,000 characters).':
 		'コミットメッセージを入力してください（10,000文字まで）。',
 	'Stage changes before committing.': 'コミットする前に、変更をステージしてください。',

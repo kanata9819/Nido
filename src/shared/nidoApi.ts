@@ -245,7 +245,8 @@ export interface GitHubAPI {
 		title: string,
 		body: string,
 		base: string,
-		draft: boolean
+		draft: boolean,
+		head: string
 	): Promise<string>;
 	/** Merge; `branchError` says why the branch on GitHub could not be deleted, if it was not. */
 	githubMerge(

@@ -317,7 +317,11 @@ test('writing actions pass text on stdin or as raw fields, never as gh flags', a
 		{ 'pr create': 'Warning\nhttps://github.com/octo/app/pull/9\n' },
 		async () =>
 			assert.equal(
-				await createPullRequest(folder, { title: 'T', body, base: 'main', draft: true }),
+				await createPullRequest(
+					folder,
+					{ title: 'T', body, base: 'main', draft: true, head: 'feature' },
+					async () => 'octo:published'
+				),
 				'https://github.com/octo/app/pull/9'
 			)
 	);
@@ -328,13 +332,21 @@ test('writing actions pass text on stdin or as raw fields, never as gh flags', a
 		'T',
 		'--base',
 		'main',
+		'--head',
+		'octo:published',
 		'--body-file',
 		'-',
 		'--draft'
 	]);
 	assert.equal(calls[0].input, body);
 	await assert.rejects(
-		createPullRequest(folder, { title: 'T', body: '', base: '--web', draft: false }),
+		createPullRequest(folder, {
+			title: 'T',
+			body: '',
+			base: '--web',
+			draft: false,
+			head: 'feature'
+		}),
 		/Choose a base branch/
 	);
 });
@@ -506,22 +518,39 @@ test('deleting a merged branch escapes its name, and a failed deletion keeps the
 
 test('creating a pull request checks the draft before the branch is pushed', async () => {
 	const pushes: string[] = [];
-	const publish = async (): Promise<void> => {
+	const publish = async (): Promise<string> => {
 		pushes.push('push');
+		return 'feature';
 	};
 	await assert.rejects(
-		createPullRequest(folder, { title: ' ', body: '', base: 'main', draft: false }, publish),
+		createPullRequest(
+			folder,
+			{ title: ' ', body: '', base: 'main', draft: false, head: 'feature' },
+			publish
+		),
 		/Write a title first/
 	);
 	await assert.rejects(
-		createPullRequest(folder, { title: 'T', body: '', base: '-x', draft: false }, publish),
+		createPullRequest(
+			folder,
+			{ title: 'T', body: '', base: '-x', draft: false, head: 'feature' },
+			publish
+		),
 		/Choose a base branch/
+	);
+	await assert.rejects(
+		createPullRequest(
+			folder,
+			{ title: 'T', body: '', base: 'main', draft: false, head: 'main' },
+			publish
+		),
+		/Switch to a branch other than the base/
 	);
 	assert.equal(pushes.length, 0);
 	const calls = await withReplies({ 'pr create': 'https://github.com/octo/app/pull/1' }, () =>
 		createPullRequest(
 			folder,
-			{ title: 'T', body: '', base: 'release/1.0', draft: false },
+			{ title: 'T', body: '', base: 'release/1.0', draft: false, head: 'feature' },
 			async () => {
 				pushes.push('push');
 				assert.equal(
@@ -529,6 +558,7 @@ test('creating a pull request checks the draft before the branch is pushed', asy
 					'',
 					'pushed before gh pr create'
 				);
+				return 'feature';
 			}
 		)
 	);

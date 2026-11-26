@@ -401,7 +401,7 @@ test('a new pull request starts from the last commit and pushes the branch', asy
 	await page.keyboard.press('Control+Enter');
 	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeVisible();
 	expect(await calls(page, 'githubCreatePullRequest')).toEqual([
-		['alpha', 'Add sign-in', 'Closes #3', 'main', true]
+		['alpha', 'Add sign-in', 'Closes #3', 'main', true, 'feature/login']
 	]);
 
 	// The base cannot be the checked-out branch.

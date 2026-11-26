@@ -1,5 +1,4 @@
 import type { Session } from '../session/session';
-import { gitPushBranch } from '../git/git';
 import {
 	addComment,
 	checkoutPullRequest,
@@ -85,17 +84,15 @@ export function registerGithubHandlers({
 			head: text(head)
 		})
 	);
-	handle('githubCreatePullRequest', async (id, title, body, base, draft) => {
-		const cwd = root(id);
-		const draftPr = {
+	handle('githubCreatePullRequest', (id, title, body, base, draft, head) =>
+		createPullRequest(root(id), {
 			title: text(title),
 			body: text(body),
 			base: text(base),
-			draft: flag(draft)
-		};
-		// The branch is pushed only once the draft is valid, and never into its base branch.
-		return createPullRequest(cwd, draftPr, () => gitPushBranch(cwd, draftPr.base));
-	});
+			draft: flag(draft),
+			head: text(head)
+		})
+	);
 	handle('githubMerge', (id, number, method, deleteBranch, expectedHead) =>
 		mergePullRequest(
 			root(id),
