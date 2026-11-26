@@ -260,6 +260,28 @@ export async function gitPushRemoteUrl(cwd: string, remote: string): Promise<str
 	return (await git(cwd, ['remote', 'get-url', '--push', '--', remote])).trim();
 }
 
+/** Delete just this remote branch, if its tip still matches the merged commit. */
+export async function gitDeleteBranchAtHead(
+	cwd: string,
+	remote: string,
+	branch: string,
+	expectedHead: string
+): Promise<void> {
+	const ref = `refs/heads/${branch}`;
+	await git(cwd, [
+		'-c',
+		'credential.helper=',
+		'-c',
+		'credential.helper=!gh auth git-credential',
+		'push',
+		'--no-follow-tags',
+		`--force-with-lease=${ref}:${expectedHead}`,
+		'--',
+		remote,
+		`:${ref}`
+	]);
+}
+
 async function branchDestination(cwd: string): Promise<GitRemoteInfo> {
 	const branch = (await git(cwd, ['branch', '--show-current'])).trim();
 	if (!branch) {

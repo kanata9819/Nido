@@ -368,26 +368,25 @@ test('writing actions pass text on stdin or as raw fields, never as gh flags', a
 });
 
 const mergeHead = 'a'.repeat(40);
+const mergeUrl = 'https://github.com/octo/app/pull/5';
 
 test('merging deletes the head branch on GitHub only, and never for a fork', async () => {
 	let calls = await withReplies(
-		{ 'pr view 5': { headRefName: 'feature/x', isCrossRepository: false } },
+		{
+			'pr view 5': { headRefName: 'feature/x', isCrossRepository: false, url: mergeUrl },
+			[`pr view ${mergeUrl}`]: { state: 'OPEN' }
+		},
 		() => mergePullRequest(folder, 5, 'squash', true, mergeHead)
 	);
 	assert.deepEqual(calls[1].args, [
 		'pr',
 		'merge',
-		'5',
+		mergeUrl,
 		'--squash',
 		'--match-head-commit',
 		mergeHead
 	]);
-	assert.deepEqual(calls[2].args, [
-		'api',
-		'--method',
-		'DELETE',
-		'repos/{owner}/{repo}/git/refs/heads/feature/x'
-	]);
+	assert.deepEqual(calls.at(-1)?.args, ['pr', 'view', mergeUrl, '--json', 'state']);
 	calls = await withReplies(
 		{ 'pr view 5': { headRefName: 'feature/x', isCrossRepository: true } },
 		() => mergePullRequest(folder, 5, 'rebase', true, mergeHead)
@@ -523,22 +522,16 @@ test('diffs of files with spaces or non-ASCII names are found under their real p
 	assert.match(files.get('日本語.ts')!, /\+after/);
 });
 
-test('deleting a merged branch escapes its name, and a failed deletion keeps the merge', async () => {
-	let calls = await withReplies(
-		{ 'pr view 6': { headRefName: 'fix#12/a?b', isCrossRepository: false } },
-		async () =>
-			assert.deepEqual(await mergePullRequest(folder, 6, 'squash', true, mergeHead), {})
-	);
-	assert.deepEqual(calls[2].args.at(-1), 'repos/{owner}/{repo}/git/refs/heads/fix%2312/a%3Fb');
-	calls = await withReplies(
+test('a failed branch deletion keeps the merge and reports its error', async () => {
+	const calls = await withReplies(
 		{
-			'pr view 6': { headRefName: 'protected', isCrossRepository: false },
-			'api --method DELETE': { error: 'HTTP 422: Reference does not exist' }
+			'pr view 6': { headRefName: 'protected', isCrossRepository: false }
 		},
 		async () =>
-			assert.deepEqual(await mergePullRequest(folder, 6, 'merge', true, mergeHead), {
-				branchError: 'HTTP 422: Reference does not exist'
-			})
+			assert.equal(
+				(await mergePullRequest(folder, 6, 'merge', true, mergeHead)).branchError,
+				'Could not identify the GitHub repository for branch deletion.'
+			)
 	);
 	assert.deepEqual(calls[1].args, [
 		'pr',

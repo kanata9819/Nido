@@ -21,6 +21,7 @@ import {
 	gitBranches,
 	gitSwitch,
 	gitPushBranch,
+	gitDeleteBranchAtHead,
 	gitRemoteInfo,
 	gitRemoteAction,
 	gitSyncState,
@@ -666,6 +667,34 @@ test('pushing a PR branch updates only its upstream even with matching pushes co
 				`refs/heads/published ${update}`
 			]
 		);
+	} finally {
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
+test('a branch deletion preserves a newer remote commit and leaves the local branch intact', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-delete-branch-'));
+	const remote = join(root, 'remote.git');
+	const git = (...args: string[]): string =>
+		execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
+	try {
+		git('init', '-q', '-b', 'topic/v1#test');
+		git('init', '-q', '--bare', remote);
+		git('config', 'user.name', 'Nido Test');
+		git('config', 'user.email', 'test@example.invalid');
+		git('config', 'commit.gpgsign', 'false');
+		git('commit', '-qm', 'Merged commit', '--allow-empty');
+		const merged = git('rev-parse', 'HEAD');
+		git('commit', '-qm', 'New work', '--allow-empty');
+		const current = git('rev-parse', 'HEAD');
+		const branch = 'topic/v1#test';
+		const ref = `refs/heads/${branch}`;
+		git('push', '-q', remote, ref);
+		await assert.rejects(gitDeleteBranchAtHead(root, remote, branch, merged), /stale info/);
+		assert.equal(git('--git-dir', remote, 'rev-parse', ref), current);
+		await gitDeleteBranchAtHead(root, remote, branch, current);
+		assert.equal(git('--git-dir', remote, 'for-each-ref', '--format=%(refname)', ref), '');
+		assert.equal(git('rev-parse', ref), current);
 	} finally {
 		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 	}

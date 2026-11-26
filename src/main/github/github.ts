@@ -11,7 +11,7 @@ import type {
 	PullRequestSummary,
 	ReviewEvent
 } from '../../shared/github';
-import { gitPushBranch, gitPushRemoteUrl, gitStatus } from '../git/git';
+import { gitDeleteBranchAtHead, gitPushBranch, gitPushRemoteUrl, gitStatus } from '../git/git';
 import { gh, GhError, ghGraphql, ghJson } from './gh';
 import {
 	parseIssueDetails,
@@ -384,29 +384,47 @@ export async function mergePullRequest(
 	if (!/^[a-f\d]{40}$/i.test(expectedHead)) {
 		throw new Error('Refresh the pull request before merging.');
 	}
-	const { headRefName, isCrossRepository } = await ghJson<{
+	const {
+		headRefName,
+		isCrossRepository,
+		url: pullRequestUrl
+	} = await ghJson<{
 		headRefName?: string;
 		isCrossRepository?: boolean;
-	}>(cwd, ['pr', 'view', String(number), '--json', 'headRefName,isCrossRepository']);
+		url?: string;
+	}>(cwd, ['pr', 'view', String(number), '--json', 'headRefName,isCrossRepository,url']);
 	await gh(cwd, [
 		'pr',
 		'merge',
-		String(number),
+		pullRequestUrl ?? String(number),
 		`--${method}`,
 		'--match-head-commit',
 		expectedHead
 	]);
 	if (deleteBranch && headRefName && !isCrossRepository) {
-		// Each part is escaped: a '#' or '?' in a branch name must not end the path early and
-		// delete another branch.
-		const ref = headRefName.split('/').map(encodeURIComponent).join('/');
 		try {
-			await gh(cwd, [
-				'api',
-				'--method',
-				'DELETE',
-				`repos/{owner}/{repo}/git/refs/heads/${ref}`
+			const url = URL.parse(pullRequestUrl ?? '');
+			if (
+				!url ||
+				url.protocol !== 'https:' ||
+				url.username ||
+				url.password ||
+				!/^\/[^/]+\/[^/]+\/pull\/\d+\/?$/.test(url.pathname)
+			) {
+				throw new Error('Could not identify the GitHub repository for branch deletion.');
+			}
+			const { state } = await ghJson<{ state?: string }>(cwd, [
+				'pr',
+				'view',
+				url.href,
+				'--json',
+				'state'
 			]);
+			if (state !== 'MERGED') {
+				return {};
+			}
+			const remote = url.origin + url.pathname.split('/').slice(0, 3).join('/') + '.git';
+			await gitDeleteBranchAtHead(cwd, remote, headRefName, expectedHead);
 		} catch (error) {
 			return { branchError: error instanceof Error ? error.message : String(error) };
 		}
