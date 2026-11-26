@@ -1,11 +1,15 @@
 import type { useGitAction } from '../git/browser/useGitAction';
-import type { GitHubStatus } from '../../../shared/github';
+import type { GitHubStatus, PullRequestSummary } from '../../../shared/github';
 
 // Values and types shared by the GitHub page's components.
 
 /** The views of the GitHub page, switched with 1, 2 and 3. */
 export const githubViews = ['pulls', 'issues', 'create'] as const;
 export type GitHubView = (typeof githubViews)[number];
+
+export function canMergePullRequest(pr: PullRequestSummary): boolean {
+	return pr.state === 'OPEN' && !pr.isDraft;
+}
 
 /** What a view of the GitHub page shares with it. */
 export interface GitHubViewProps {

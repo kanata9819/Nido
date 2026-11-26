@@ -10,7 +10,7 @@ import { ChecksIcon, PullRequestState } from './format';
 import PullRequestOverview, { type PullRequestForm } from './PullRequestOverview';
 import PullRequestFile from './PullRequestFile';
 import { PullRequestCard } from './PullRequestCard';
-import type { GitHubViewProps } from './githubModel';
+import { canMergePullRequest, type GitHubViewProps } from './githubModel';
 import gitStyles from '../git/Git.module.css';
 import styles from './GitHub.module.css';
 
@@ -206,7 +206,11 @@ export default function PullRequests({
 				o: checkout,
 				c: () => setForm('comment'),
 				v: () => setForm('review'),
-				m: () => setForm('merge'),
+				m: () => {
+					if (canMergePullRequest(opened)) {
+						setForm('merge');
+					}
+				},
 				b: openInBrowser,
 				r: () => void open(opened.number, true)
 			}

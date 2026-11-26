@@ -5,7 +5,7 @@ import { Composer } from './Composer';
 import { GitHubMarkdown } from './GitHubMarkdown';
 import { Timeline } from './Timeline';
 import { ChecksIcon, FormattedDate, PullRequestState } from './format';
-import { reviewDecisionTitle } from './githubModel';
+import { canMergePullRequest, reviewDecisionTitle } from './githubModel';
 import gitStyles from '../git/Git.module.css';
 import styles from './GitHub.module.css';
 
@@ -38,6 +38,7 @@ export default function PullRequestOverview({
 	const t = useI18n();
 	const decision = reviewDecisionTitle(pr.reviewDecision);
 	const open = pr.state === 'OPEN';
+	const canMerge = canMergePullRequest(pr);
 	return (
 		<div className={styles.overview}>
 			<section
@@ -127,7 +128,7 @@ export default function PullRequestOverview({
 					act={act}
 					cancel={() => setForm(undefined)}
 				/>
-			) : form === 'merge' ? (
+			) : form === 'merge' && canMerge ? (
 				<MergeForm
 					workspaceId={workspaceId}
 					pr={pr}
@@ -146,7 +147,7 @@ export default function PullRequestOverview({
 					<button disabled={busy || !open} onClick={() => setForm('review')}>
 						{t('Review')} <kbd>v</kbd>
 					</button>
-					<button disabled={busy || !open || pr.isDraft} onClick={() => setForm('merge')}>
+					<button disabled={busy || !canMerge} onClick={() => setForm('merge')}>
 						{t('Merge')} <kbd>m</kbd>
 					</button>
 					<span />
