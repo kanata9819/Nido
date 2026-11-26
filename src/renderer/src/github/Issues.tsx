@@ -277,9 +277,9 @@ export default function Issues({
 								</p>
 								{shown ? (
 									<>
-										<GitHubMarkdown source={shown.body} />
+										<GitHubMarkdown source={shown.body} baseUrl={shown.url} />
 										<h3 className={styles.sectionTitle}>{t('Comments')}</h3>
-										<Timeline comments={shown.timeline} />
+										<Timeline comments={shown.timeline} baseUrl={shown.url} />
 									</>
 								) : (
 									<button disabled={busy} onClick={() => void open()}>
