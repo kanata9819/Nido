@@ -93,13 +93,14 @@ export function registerGithubHandlers({
 			head: text(head)
 		})
 	);
-	handle('githubMerge', (id, number, method, deleteBranch, expectedHead) =>
+	handle('githubMerge', (id, number, method, deleteBranch, expectedHead, expectedBase) =>
 		mergePullRequest(
 			root(id),
 			issueNumber(number),
 			method as never,
 			flag(deleteBranch),
-			text(expectedHead)
+			text(expectedHead),
+			text(expectedBase)
 		)
 	);
 	handle('githubIssues', (id, filter) => {

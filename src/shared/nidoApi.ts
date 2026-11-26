@@ -261,7 +261,8 @@ export interface GitHubAPI {
 		number: number,
 		method: MergeMethod,
 		deleteBranch: boolean,
-		expectedHead: string
+		expectedHead: string,
+		expectedBase: string
 	): Promise<PullRequestMergeResult>;
 	githubIssues(id: string, filter: IssueFilter): Promise<IssueSummary[]>;
 	githubIssue(id: string, number: number): Promise<IssueDetails>;

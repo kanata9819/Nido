@@ -253,7 +253,7 @@ test('reviews, merges and checkouts send their choices', async ({ page }) => {
 	await merge.getByRole('button', { name: 'Merge', exact: true }).click();
 	await expect(page.getByRole('status')).toHaveText('Pull request merged.');
 	expect(await calls(page, 'githubMerge')).toEqual([
-		['alpha', 7, 'rebase', false, 'a'.repeat(40)]
+		['alpha', 7, 'rebase', false, 'a'.repeat(40), 'main']
 	]);
 
 	await files.focus();

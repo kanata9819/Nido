@@ -247,7 +247,8 @@ function MergeForm({
 							pr.number,
 							method,
 							deleteBranch,
-							pr.headRefOid
+							pr.headRefOid,
+							pr.baseRefName
 						);
 					if (confirmationError) {
 						return t('GitHub did not confirm the merge: {reason}', {

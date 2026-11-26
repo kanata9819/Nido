@@ -412,6 +412,17 @@ test('merging deletes the head branch on GitHub only, and never for a fork', asy
 	assert.equal(rejected.length, 2);
 });
 
+test('merging refuses a changed base before sending a merge request', async () => {
+	const calls = await withReplies({ 'pr view 7': { baseRefName: 'release' } }, () =>
+		assert.rejects(
+			mergePullRequest(folder, 7, 'squash', false, mergeHead, 'main'),
+			/base branch changed/
+		)
+	);
+	assert.equal(calls.length, 1);
+	assert.ok(calls[0].args.at(-1)?.includes('baseRefName'));
+});
+
 test('only confirmed merges may delete their branch', async () => {
 	for (const reply of [{ state: 'OPEN' }, { error: 'HTTP 503' }]) {
 		const calls = await withReplies(
