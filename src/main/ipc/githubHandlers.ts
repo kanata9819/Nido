@@ -93,8 +93,14 @@ export function registerGithubHandlers({
 		// The branch is pushed only once the draft is valid, and never into its base branch.
 		return createPullRequest(cwd, draftPr, () => gitPushBranch(cwd, draftPr.base));
 	});
-	handle('githubMerge', (id, number, method, deleteBranch) =>
-		mergePullRequest(root(id), issueNumber(number), method as never, flag(deleteBranch))
+	handle('githubMerge', (id, number, method, deleteBranch, expectedHead) =>
+		mergePullRequest(
+			root(id),
+			issueNumber(number),
+			method as never,
+			flag(deleteBranch),
+			text(expectedHead)
+		)
 	);
 	handle('githubIssues', (id, filter) => {
 		if (!issueFilters.includes(filter as IssueFilter)) {

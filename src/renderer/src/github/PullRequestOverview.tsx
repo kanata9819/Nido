@@ -242,7 +242,8 @@ function MergeForm({
 						workspaceId,
 						pr.number,
 						method,
-						deleteBranch
+						deleteBranch,
+						pr.headRefOid
 					);
 					// The merge happened even when the branch on GitHub could not be deleted.
 					return branchError

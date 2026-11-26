@@ -247,7 +247,8 @@ export interface GitHubAPI {
 		id: string,
 		number: number,
 		method: MergeMethod,
-		deleteBranch: boolean
+		deleteBranch: boolean,
+		expectedHead: string
 	): Promise<{ branchError?: string }>;
 	githubIssues(id: string, filter: IssueFilter): Promise<IssueSummary[]>;
 	githubIssue(id: string, number: number): Promise<IssueDetails>;
