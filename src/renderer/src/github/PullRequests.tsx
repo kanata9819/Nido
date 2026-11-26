@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useI18n } from '../i18n';
+import { useErrorMessage, useI18n } from '../i18n';
 import type {
 	PullRequestDetails,
 	PullRequestFilter,
@@ -36,10 +36,12 @@ export default function PullRequests({
 	refreshStatus
 }: GitHubViewProps): React.JSX.Element {
 	const t = useI18n();
+	const errorMessage = useErrorMessage();
 	const { run, working } = action;
 	const [filter, setFilter] = useState<PullRequestFilter>('open');
 	const [revision, setRevision] = useState(0);
 	const [prs, setPrs] = useState<PullRequestSummary[]>([]);
+	const [listError, setListError] = useState('');
 	// The filter and refresh count the shown list was loaded for.
 	const [loadedKey, setLoadedKey] = useState<string>();
 	const listKey = `${filter}:${revision}`;
@@ -61,6 +63,7 @@ export default function PullRequests({
 					setPrs(next);
 					setIndex((value) => Math.min(value, Math.max(0, next.length - 1)));
 					setLoadedKey(listKey);
+					setListError('');
 					list.current?.focus();
 				}
 			},
@@ -68,16 +71,14 @@ export default function PullRequests({
 				if (alive) {
 					setPrs([]);
 					setLoadedKey(listKey);
-					action.setError(String(error));
+					setListError(String(error));
 				}
 			}
 		);
 		return () => {
 			alive = false;
 		};
-		// The error setter is stable; listing again only follows the filter and refreshes.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [workspaceId, filter, revision, listKey]);
+	}, [workspaceId, filter, listKey]);
 
 	/** Keep the same file across reloads, even when it moves to another row. */
 	function showDetails(details: PullRequestDetails, keepEntry: boolean): void {
@@ -318,6 +319,11 @@ export default function PullRequests({
 						: '1/2/3 Views · j/k Select · Enter Open · f Filter · b Browser · r Refresh · Ctrl+H/L List / Preview · Esc Close'
 				)}
 			</footer>
+			{listError && (
+				<p role="alert" className={gitStyles.error}>
+					{errorMessage(listError)}
+				</p>
+			)}
 		</>
 	);
 }
