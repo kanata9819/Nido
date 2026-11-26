@@ -99,9 +99,9 @@ export default function PullRequests({
 	}
 
 	/** Load (or reload) a pull request with its diff. */
-	function open(number: number, keepEntry = false): Promise<boolean> {
+	function open({ number, url }: PullRequestSummary, keepEntry = false): Promise<boolean> {
 		return run(async () => {
-			const details = await window.nido.githubPullRequest(workspaceId, number);
+			const details = await window.nido.githubPullRequest(workspaceId, number, url);
 			try {
 				const files = await window.nido.githubPullRequestDiff(
 					workspaceId,
@@ -156,7 +156,11 @@ export default function PullRequests({
 			let result = typeof note === 'string' ? note : t(message);
 			if (opened) {
 				try {
-					const details = await window.nido.githubPullRequest(workspaceId, opened.number);
+					const details = await window.nido.githubPullRequest(
+						workspaceId,
+						opened.number,
+						opened.url
+					);
 					showDetails(details, true);
 				} catch (error) {
 					result = t('{message} Could not refresh the pull request: {reason}', {
@@ -228,7 +232,7 @@ export default function PullRequests({
 					}
 				},
 				b: openInBrowser,
-				r: () => void open(opened.number, true)
+				r: () => void open(opened, true)
 			}
 		: {
 				f: () => setFilter(filters[(filters.indexOf(filter) + 1) % filters.length]),
@@ -275,7 +279,7 @@ export default function PullRequests({
 				<button
 					disabled={busy}
 					onClick={() =>
-						opened ? void open(opened.number, true) : setRevision((value) => value + 1)
+						opened ? void open(opened, true) : setRevision((value) => value + 1)
 					}
 				>
 					{t('Refresh (r)')}
@@ -291,7 +295,7 @@ export default function PullRequests({
 					listRef={list}
 					open={() => {
 						if (!opened && prs[index]) {
-							void open(prs[index].number);
+							void open(prs[index]);
 						} else if (opened) {
 							// Enter moves into the overview or the file's diff.
 							document
@@ -338,7 +342,7 @@ export default function PullRequests({
 						<PullRequestCard
 							pr={prs[index]}
 							busy={busy}
-							open={() => void open(prs[index].number)}
+							open={() => void open(prs[index])}
 						/>
 					) : (
 						<div className={gitStyles.emptyPreview} tabIndex={0} aria-busy={busy}>

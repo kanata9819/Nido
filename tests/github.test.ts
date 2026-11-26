@@ -204,6 +204,7 @@ test('a pull request joins its details with its review threads', async () => {
 				state: 'OPEN',
 				body: 'Body',
 				headRefOid: 'abc',
+				url: 'https://github.com/octo/app/pull/12',
 				files: [{ path: 'a.ts', additions: 2, deletions: 1 }],
 				comments: [
 					{ id: 'c1', author: { login: 'x' }, body: 'Nice', createdAt: '2026-01-02' }
@@ -673,20 +674,24 @@ test('status tells a signed-out gh from a GitHub it cannot reach', async () => {
 	});
 });
 
-test('a pull request reads its repository once per folder until status is read again', async () => {
-	const replies = {
-		'pr view 12': { number: 12, title: 'A', author: { login: 'a' }, state: 'OPEN' },
-		'repo view': { nameWithOwner: 'octo/app' },
-		'api graphql': { data: {} },
-		'api user': 'octocat'
-	};
-	const calls = await withReplies(replies, async () => {
-		await githubStatus(folder);
-		await pullRequest(folder, 12);
-		await pullRequest(folder, 12);
-	});
-	// One repo view for the status and one shared by both pull requests.
-	assert.equal(calls.filter((call) => call.args[0] === 'repo').length, 2);
+test('pull requests and their threads use the displayed repository and host', async () => {
+	const selected = 'https://git.example.com/old/app/pull/12';
+	const calls = await withReplies(
+		{
+			'pr view 12': { url: 'https://github.com/new/app/pull/12' },
+			[`pr view ${selected}`]: { number: 12, title: 'Selected', url: selected },
+			'api graphql': { data: {} }
+		},
+		async () => {
+			assert.equal((await pullRequest(folder, 12, selected)).title, 'Selected');
+			await replyToThread(folder, 'THREAD', 'Test reply', selected);
+		}
+	);
+	assert.equal(calls[0].args[2], selected);
+	assert.ok(calls[1].args.includes('owner=old'));
+	assert.ok(calls[1].args.includes('name=app'));
+	assert.ok(calls[1].args.includes('--hostname=git.example.com'));
+	assert.ok(calls[2].args.includes('--hostname=git.example.com'));
 });
 
 test("diff paths undo git's quoting and keep folders named a or b", () => {

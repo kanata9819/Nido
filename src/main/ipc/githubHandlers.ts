@@ -53,7 +53,9 @@ export function registerGithubHandlers({
 		}
 		return listPullRequests(root(id), filter as PullRequestFilter);
 	});
-	handle('githubPullRequest', (id, number) => pullRequest(root(id), issueNumber(number)));
+	handle('githubPullRequest', (id, number, url) =>
+		pullRequest(root(id), issueNumber(number), text(url))
+	);
 	handle('githubPullRequestDiff', (id, number, expectedHead) =>
 		pullRequestDiff(root(id), issueNumber(number), text(expectedHead))
 	);
@@ -71,9 +73,11 @@ export function registerGithubHandlers({
 	handle('githubReview', (id, number, event, body, head) =>
 		reviewPullRequest(root(id), issueNumber(number), event as never, text(body), text(head))
 	);
-	handle('githubReply', (id, thread, body) => replyToThread(root(id), text(thread), text(body)));
-	handle('githubResolve', (id, thread, resolved) =>
-		resolveThread(root(id), text(thread), flag(resolved))
+	handle('githubReply', (id, thread, body, url) =>
+		replyToThread(root(id), text(thread), text(body), text(url))
+	);
+	handle('githubResolve', (id, thread, resolved, url) =>
+		resolveThread(root(id), text(thread), flag(resolved), text(url))
 	);
 	handle('githubLineComment', (id, number, path, line, side, body, head) =>
 		commentOnLine(root(id), issueNumber(number), {
