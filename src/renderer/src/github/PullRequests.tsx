@@ -47,7 +47,7 @@ export default function PullRequests({
 	const [index, setIndex] = useState(0);
 	// The opened pull request, its diff per file, and the entry selected in it (0: overview).
 	const [opened, setOpened] = useState<PullRequestDetails>();
-	const [diffs, setDiffs] = useState<Map<string, string>>();
+	const [diff, setDiff] = useState<{ head: string; files: Map<string, string> }>();
 	const [entry, setEntry] = useState(0);
 	const [form, setForm] = useState<PullRequestForm>();
 	const list = useRef<HTMLDivElement>(null);
@@ -91,19 +91,21 @@ export default function PullRequests({
 	/** Load (or reload) a pull request with its diff. */
 	function open(number: number, keepEntry = false): Promise<boolean> {
 		return run(async () => {
-			const [details, files] = await Promise.all([
-				window.nido.githubPullRequest(workspaceId, number),
-				window.nido.githubPullRequestDiff(workspaceId, number)
-			]);
+			const details = await window.nido.githubPullRequest(workspaceId, number);
+			const files = await window.nido.githubPullRequestDiff(
+				workspaceId,
+				number,
+				details.headRefOid
+			);
 			showDetails(details, keepEntry);
-			setDiffs(new Map(files));
+			setDiff({ head: details.headRefOid, files: new Map(files) });
 			list.current?.focus();
 		});
 	}
 
 	function close(): void {
 		setOpened(undefined);
-		setDiffs(undefined);
+		setDiff(undefined);
 		setForm(undefined);
 		setEntry(0);
 		list.current?.focus();
@@ -275,13 +277,14 @@ export default function PullRequests({
 					empty={t(loaded ? 'No pull requests.' : 'Loading…')}
 				/>
 				<div className={`${gitStyles.preview} ${styles.preview}`} data-git-preview>
-					{opened && file ? (
+					{opened && file && diff ? (
 						<PullRequestFile
 							key={`${opened.number}:${file.path}`}
 							workspaceId={workspaceId}
 							pr={opened}
 							path={file.path}
-							diff={diffs?.get(file.path) ?? ''}
+							diff={diff.files.get(file.path) ?? ''}
+							diffHead={diff.head}
 							busy={working}
 							commenting={form === 'comment'}
 							setCommenting={(value) => setForm(value ? 'comment' : undefined)}

@@ -1249,6 +1249,10 @@ export const japanese: Record<string, string> = {
 	'Invalid merge method.': 'マージ方法が正しくありません。',
 	'Refresh the pull request before merging.': 'マージする前にプルリクエストを更新してください。',
 	'Invalid pull request or issue number.': 'プルリクエストまたはIssueの番号が正しくありません。',
+	'Refresh the pull request to get its current diff.':
+		'プルリクエストを更新して最新の差分を取得してください。',
+	'The pull request head changed. Refresh it to get the current diff.':
+		'プルリクエストの先頭コミットが変わりました。更新して最新の差分を取得してください。',
 	'Invalid review thread.': 'レビューのスレッドが正しくありません。',
 	'Invalid review.': 'レビューが正しくありません。',
 	'Invalid GitHub request.': 'GitHubへのリクエストが正しくありません。',

@@ -55,7 +55,7 @@ test('pull requests list, open with their overview, and take comments from the k
 	await expect(overview).toContainText('Looks close.');
 	await expect(overview.getByText('e2e')).toBeVisible();
 	await expect(page.getByRole('listbox', { name: 'Pull request files' })).toBeFocused();
-	expect(await calls(page, 'githubPullRequestDiff')).toEqual([['alpha', 7]]);
+	expect(await calls(page, 'githubPullRequestDiff')).toEqual([['alpha', 7, 'a'.repeat(40)]]);
 
 	await page.keyboard.press('c');
 	const comment = page.getByRole('textbox', { name: 'Comment on the pull request' });
@@ -122,7 +122,7 @@ test('a pull request file shows its diff and threads, which can be replied to an
 	await send.click();
 	await expect(page.getByRole('status')).toHaveText('Comment posted.');
 	expect(await calls(page, 'githubLineComment')).toEqual([
-		['alpha', 7, 'src/login.ts', 3, 'LEFT', 'Typo here']
+		['alpha', 7, 'src/login.ts', 3, 'LEFT', 'Typo here', 'a'.repeat(40)]
 	]);
 });
 

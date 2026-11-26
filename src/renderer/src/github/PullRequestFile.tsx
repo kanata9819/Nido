@@ -15,6 +15,7 @@ export default function PullRequestFile({
 	pr,
 	path,
 	diff,
+	diffHead,
 	busy,
 	commenting,
 	setCommenting,
@@ -24,6 +25,7 @@ export default function PullRequestFile({
 	pr: PullRequestDetails;
 	path: string;
 	diff: string;
+	diffHead: string;
 	busy: boolean;
 	commenting: boolean;
 	setCommenting: (commenting: boolean) => void;
@@ -106,7 +108,8 @@ export default function PullRequestFile({
 										path,
 										Number(line),
 										side,
-										body
+										body,
+										diffHead
 									),
 								'Comment posted.'
 							)
