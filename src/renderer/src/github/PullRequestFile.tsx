@@ -6,6 +6,18 @@ import { Composer } from './Composer';
 import { Timeline } from './Timeline';
 import styles from './GitHub.module.css';
 
+interface PullRequestFileProps {
+	workspaceId: string;
+	pr: PullRequestDetails;
+	path: string;
+	diff: string;
+	diffHead: string;
+	busy: boolean;
+	commenting: boolean;
+	setCommenting: (commenting: boolean) => void;
+	act: (change: () => Promise<unknown>, message: string) => Promise<boolean>;
+}
+
 /**
  * A file of an opened pull request: its diff, and below it the file's review threads, which
  * can be replied to and resolved, and a form to start a thread on a line (c).
@@ -20,21 +32,9 @@ export default function PullRequestFile({
 	commenting,
 	setCommenting,
 	act
-}: {
-	workspaceId: string;
-	pr: PullRequestDetails;
-	path: string;
-	diff: string;
-	diffHead: string;
-	busy: boolean;
-	commenting: boolean;
-	setCommenting: (commenting: boolean) => void;
-	act: (change: () => Promise<unknown>, message: string) => Promise<boolean>;
-}): React.JSX.Element {
+}: PullRequestFileProps): React.JSX.Element {
 	const t = useI18n();
 	const threads = pr.threads.filter((thread) => thread.path === path);
-	const [line, setLine] = useState('');
-	const [side, setSide] = useState<'LEFT' | 'RIGHT'>('RIGHT');
 	return (
 		<div className={styles.fileView}>
 			<div className={styles.diff}>
@@ -62,59 +62,14 @@ export default function PullRequestFile({
 					)}
 				</header>
 				{commenting && (
-					<Composer
-						label={t('Comment on line {line}', { line: line || '…' })}
-						submitLabel={t('Comment')}
+					<LineCommentForm
+						workspaceId={workspaceId}
+						pr={pr}
+						path={path}
+						diffHead={diffHead}
 						busy={busy}
-						ready={Number(line) > 0}
-						controls={
-							<>
-								<label className={styles.filter}>
-									{t('Line')}
-									<input
-										className={styles.lineInput}
-										inputMode="numeric"
-										value={line}
-										aria-label={t('Line number')}
-										onChange={(event) =>
-											setLine(event.currentTarget.value.replace(/\D/g, ''))
-										}
-									/>
-								</label>
-								<label className={styles.filter}>
-									{t('Side')}
-									<select
-										value={side}
-										onChange={(event) =>
-											setSide(event.currentTarget.value as 'LEFT' | 'RIGHT')
-										}
-									>
-										<option value="RIGHT">
-											{t('New ({branch})', { branch: pr.headRefName })}
-										</option>
-										<option value="LEFT">
-											{t('Old ({branch})', { branch: pr.baseRefName })}
-										</option>
-									</select>
-								</label>
-							</>
-						}
-						onSubmit={(body) =>
-							act(
-								() =>
-									window.nido.githubLineComment(
-										workspaceId,
-										pr.number,
-										path,
-										Number(line),
-										side,
-										body,
-										diffHead
-									),
-								'Comment posted.'
-							)
-						}
-						onCancel={() => setCommenting(false)}
+						act={act}
+						setCommenting={setCommenting}
 					/>
 				)}
 				{threads.map((thread) => (
@@ -128,6 +83,87 @@ export default function PullRequestFile({
 				))}
 			</section>
 		</div>
+	);
+}
+
+function LineCommentForm({
+	workspaceId,
+	pr,
+	path,
+	diffHead,
+	busy,
+	act,
+	setCommenting
+}: Omit<PullRequestFileProps, 'diff' | 'commenting'>): React.JSX.Element {
+	const t = useI18n();
+	const [head] = useState(diffHead);
+	const [line, setLine] = useState('');
+	const [side, setSide] = useState<'LEFT' | 'RIGHT'>('RIGHT');
+	const stale = head !== diffHead || head !== pr.headRefOid;
+	return (
+		<>
+			{stale && (
+				<p role="alert">
+					{t(
+						'The diff changed. Copy your draft and reopen the form to choose a line in the new diff.'
+					)}
+				</p>
+			)}
+			<Composer
+				label={t('Comment on line {line}', { line: line || '…' })}
+				submitLabel={t('Comment')}
+				busy={busy}
+				ready={!stale && Number(line) > 0}
+				controls={
+					<>
+						<label className={styles.filter}>
+							{t('Line')}
+							<input
+								className={styles.lineInput}
+								inputMode="numeric"
+								value={line}
+								aria-label={t('Line number')}
+								onChange={(event) =>
+									setLine(event.currentTarget.value.replace(/\D/g, ''))
+								}
+							/>
+						</label>
+						<label className={styles.filter}>
+							{t('Side')}
+							<select
+								value={side}
+								onChange={(event) =>
+									setSide(event.currentTarget.value as 'LEFT' | 'RIGHT')
+								}
+							>
+								<option value="RIGHT">
+									{t('New ({branch})', { branch: pr.headRefName })}
+								</option>
+								<option value="LEFT">
+									{t('Old ({branch})', { branch: pr.baseRefName })}
+								</option>
+							</select>
+						</label>
+					</>
+				}
+				onSubmit={(body) =>
+					act(
+						() =>
+							window.nido.githubLineComment(
+								workspaceId,
+								pr.number,
+								path,
+								Number(line),
+								side,
+								body,
+								head
+							),
+						'Comment posted.'
+					)
+				}
+				onCancel={() => setCommenting(false)}
+			/>
+		</>
 	);
 }
 

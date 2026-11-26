@@ -1185,6 +1185,8 @@ export const japanese: Record<string, string> = {
 	'Review threads': 'レビューのスレッド',
 	'Comment on a line': '行にコメント',
 	'Comment on line {line}': '{line}行目にコメント',
+	'The diff changed. Copy your draft and reopen the form to choose a line in the new diff.':
+		'差分が変わりました。下書きをコピーし、フォームを開き直して新しい差分の行を選んでください。',
 	Line: '行',
 	'Line number': '行番号',
 	Side: '側',

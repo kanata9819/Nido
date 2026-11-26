@@ -131,7 +131,7 @@ test('refresh keeps the reviewed file selected by path and returns to overview i
 }) => {
 	await page.goto(`${origin}?view=github&defer=githubPullRequest`);
 	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
-	const details = (paths: string[]): PullRequestDetails => ({
+	const details = (paths: string[], head: string): PullRequestDetails => ({
 		number: 7,
 		title: 'Add sign-in',
 		author: 'dev',
@@ -145,7 +145,7 @@ test('refresh keeps the reviewed file selected by path and returns to overview i
 		url: 'https://github.com/octo/alpha/pull/7',
 		labels: [],
 		body: '',
-		headRefOid: 'abc123',
+		headRefOid: head,
 		isCrossRepository: false,
 		mergeable: 'MERGEABLE',
 		additions: 1,
@@ -156,13 +156,13 @@ test('refresh keeps the reviewed file selected by path and returns to overview i
 		timeline: [],
 		threads: []
 	});
-	const refresh = async (paths: string[]): Promise<void> => {
+	const refresh = async (paths: string[], head = 'a'.repeat(40)): Promise<void> => {
 		await expect
 			.poll(() => page.evaluate(() => window.rendererTest.pending[0]?.method))
 			.toBe('githubPullRequest');
 		await page.evaluate(
 			(value) => window.rendererTest.settle('githubPullRequest', 0, value),
-			details(paths)
+			details(paths, head)
 		);
 	};
 	await page.keyboard.press('Enter');
@@ -171,10 +171,27 @@ test('refresh keeps the reviewed file selected by path and returns to overview i
 	const reviewed = files.getByRole('option', { name: 'src/login.ts' });
 	await reviewed.click();
 	await expect(reviewed).toHaveAttribute('aria-selected', 'true');
+	await page.keyboard.press('c');
+	const draft = page.getByRole('textbox', { name: /^Comment on line/ });
+	await draft.fill('About the original diff');
+	await page.getByRole('textbox', { name: 'Line number' }).fill('2');
+	const send = page.getByRole('button', { name: /^Comment/ });
+	await expect(send).toBeEnabled();
+	await files.focus();
 	await page.keyboard.press('r');
 	await refresh(['README.md', 'src/login.ts']);
 	await expect(files.getByRole('option', { name: 'README.md' })).toBeVisible();
 	await expect(reviewed).toHaveAttribute('aria-selected', 'true');
+	await expect(send).toBeEnabled();
+	await page.keyboard.press('r');
+	await refresh(['README.md', 'src/login.ts'], 'b'.repeat(40));
+	await expect(page.getByRole('alert')).toContainText('The diff changed.');
+	await expect(draft).toHaveValue('About the original diff');
+	await expect(send).toBeDisabled();
+	await draft.press('Control+Enter');
+	expect(await calls(page, 'githubLineComment')).toEqual([]);
+	await draft.press('Escape');
+	await files.focus();
 	await page.keyboard.press('r');
 	await refresh(['README.md']);
 	await expect(files.getByRole('option', { name: 'Overview' })).toHaveAttribute(
