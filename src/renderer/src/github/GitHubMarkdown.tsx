@@ -9,9 +9,11 @@ import prose from '../ui/Prose.module.css';
  * browser. An empty text shows a dimmed note instead.
  */
 export const GitHubMarkdown = memo(function GitHubMarkdown({
-	source
+	source,
+	baseUrl
 }: {
 	source: string;
+	baseUrl?: string;
 }): React.JSX.Element {
 	const t = useI18n();
 	if (!source.trim()) {
@@ -24,20 +26,22 @@ export const GitHubMarkdown = memo(function GitHubMarkdown({
 				skipHtml
 				components={{
 					img: ({ alt }) => <span>{alt}</span>,
-					a: ({ href, children }) =>
-						href && /^https?:\/\//i.test(href) ? (
+					a: ({ href, children }) => {
+						const link = href ? URL.parse(href, baseUrl) : null;
+						return link && (link.protocol === 'https:' || link.protocol === 'http:') ? (
 							<a
-								href={href}
+								href={link.href}
 								onClick={(event) => {
 									event.preventDefault();
-									void window.nido.openDocumentation(href);
+									void window.nido.openDocumentation(link.href);
 								}}
 							>
 								{children}
 							</a>
 						) : (
 							<span>{children}</span>
-						)
+						);
+					}
 				}}
 			>
 				{source}

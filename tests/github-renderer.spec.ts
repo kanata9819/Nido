@@ -348,6 +348,39 @@ test('issues open with their comments, and can be commented on and closed', asyn
 	expect(await calls(page, 'githubSetIssueOpen')).toEqual([['alpha', 3, false]]);
 });
 
+test('relative links in an issue use the issue host and open in the browser', async ({ page }) => {
+	await page.goto(`${origin}?view=github&defer=githubIssue`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('2');
+	const list = page.getByRole('listbox', { name: 'Issues' });
+	await expect(list.getByRole('option', { name: '#3 Crash on start' })).toBeVisible();
+	await list.press('Enter');
+	await expect.poll(() => calls(page, 'githubIssue')).toHaveLength(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubIssue', 0, {
+			number: 3,
+			title: 'Crash on start',
+			state: 'OPEN',
+			author: 'user',
+			updatedAt: '',
+			createdAt: '',
+			url: 'https://github.com/octo/alpha/issues/3',
+			labels: [],
+			assignees: [],
+			comments: 0,
+			timeline: [],
+			body: '[Another issue](/octo/alpha/issues/5) [Unsafe](javascript:alert%281%29)'
+		})
+	);
+	const link = page.getByRole('link', { name: 'Another issue' });
+	await expect(link).toHaveAttribute('href', 'https://github.com/octo/alpha/issues/5');
+	await link.click();
+	expect(await calls(page, 'openDocumentation')).toEqual([
+		['https://github.com/octo/alpha/issues/5']
+	]);
+	await expect(page.getByRole('link', { name: 'Unsafe' })).toHaveCount(0);
+});
+
 test('posting an issue comment updates its list count even if detail refresh fails', async ({
 	page
 }) => {

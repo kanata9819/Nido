@@ -14,10 +14,12 @@ const reviewTitles: Record<string, string> = {
 /** Comments (and reviews) of a conversation, oldest first. */
 export function Timeline({
 	comments,
-	empty
+	empty,
+	baseUrl
 }: {
 	comments: GitHubComment[];
 	empty?: string;
+	baseUrl?: string;
 }): React.JSX.Element {
 	const t = useI18n();
 	if (!comments.length) {
@@ -37,7 +39,7 @@ export function Timeline({
 						<FormattedDate value={comment.createdAt} />
 					</header>
 					{(comment.body || !comment.reviewState) && (
-						<GitHubMarkdown source={comment.body} />
+						<GitHubMarkdown source={comment.body} baseUrl={baseUrl} />
 					)}
 				</li>
 			))}
