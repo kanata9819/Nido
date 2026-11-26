@@ -271,6 +271,8 @@ test('a pull request joins its details with its review threads', async () => {
 	assert.deepEqual(graphql.args.slice(-2), ['-F', 'number=12']);
 });
 
+const diffHead = 'a'.repeat(40);
+
 test('writing actions pass text on stdin or as raw fields, never as gh flags', async () => {
 	const body = '--approve\n@file and `code`';
 	let calls = await withReplies({}, () => addComment(folder, 'issue', 3, body));
@@ -288,8 +290,8 @@ test('writing actions pass text on stdin or as raw fields, never as gh flags', a
 	assert.ok(calls[0].args.includes(`body=${body}`));
 	await assert.rejects(replyToThread(folder, 'bad id; drop', 'x'), /Invalid review thread/);
 
-	calls = await withReplies({ 'pr view 3': { headRefOid: 'f00d' } }, () =>
-		commentOnLine(folder, 3, { path: 'src/a.ts', line: 9, side: 'LEFT', body })
+	calls = await withReplies({ 'pr view 3': { headRefOid: diffHead } }, () =>
+		commentOnLine(folder, 3, { path: 'src/a.ts', line: 9, side: 'LEFT', body, head: diffHead })
 	);
 	assert.deepEqual(calls[1].args.slice(0, 4), [
 		'api',
@@ -299,7 +301,7 @@ test('writing actions pass text on stdin or as raw fields, never as gh flags', a
 	]);
 	for (const field of [
 		`body=${body}`,
-		'commit_id=f00d',
+		`commit_id=${diffHead}`,
 		'path=src/a.ts',
 		'line=9',
 		'side=LEFT'
@@ -307,7 +309,7 @@ test('writing actions pass text on stdin or as raw fields, never as gh flags', a
 		assert.ok(calls[1].args.includes(field), field);
 	}
 	await assert.rejects(
-		commentOnLine(folder, 3, { path: 'a', line: 0, side: 'LEFT', body: 'x' }),
+		commentOnLine(folder, 3, { path: 'a', line: 0, side: 'LEFT', body: 'x', head: diffHead }),
 		/Choose a line/
 	);
 
@@ -357,18 +359,50 @@ test('merging deletes the head branch on GitHub only, and never for a fork', asy
 	await assert.rejects(mergePullRequest(folder, 5, '--admin' as never, false), /Invalid merge/);
 });
 
-test('a pull request diff is returned per file', async () => {
-	await withReplies(
+test('a pull request diff is returned per file and checked against its head', async () => {
+	const calls = await withReplies(
 		{
+			'pr view 4': { headRefOid: diffHead },
 			'pr diff 4': 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n'
 		},
 		async () => {
-			const files = await pullRequestDiff(folder, 4);
+			const files = await pullRequestDiff(folder, 4, diffHead);
 			assert.deepEqual(
 				files.map(([path]) => path),
 				['x']
 			);
 		}
+	);
+	assert.deepEqual(
+		calls.map(({ args }) => args.slice(0, 3)),
+		[
+			['pr', 'view', '4'],
+			['pr', 'diff', '4'],
+			['pr', 'view', '4']
+		]
+	);
+});
+
+test('a stale head prevents loading its diff or posting a line comment', async () => {
+	const calls = await withReplies({ 'pr view 4': { headRefOid: 'b'.repeat(40) } }, async () => {
+		await assert.rejects(pullRequestDiff(folder, 4, diffHead), /head changed/);
+		await assert.rejects(
+			commentOnLine(folder, 4, {
+				path: 'x',
+				line: 1,
+				side: 'RIGHT',
+				body: 'Review',
+				head: diffHead
+			}),
+			/head changed/
+		);
+	});
+	assert.deepEqual(
+		calls.map(({ args }) => args.slice(0, 3)),
+		[
+			['pr', 'view', '4'],
+			['pr', 'view', '4']
+		]
 	);
 });
 

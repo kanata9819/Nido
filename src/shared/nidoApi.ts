@@ -220,7 +220,11 @@ export interface GitHubAPI {
 	githubPullRequests(id: string, filter: PullRequestFilter): Promise<PullRequestSummary[]>;
 	githubPullRequest(id: string, number: number): Promise<PullRequestDetails>;
 	/** The pull request's diff as [path, diff of that file] pairs. */
-	githubPullRequestDiff(id: string, number: number): Promise<[string, string][]>;
+	githubPullRequestDiff(
+		id: string,
+		number: number,
+		expectedHead: string
+	): Promise<[string, string][]>;
 	githubCheckout(id: string, number: number): Promise<void>;
 	githubComment(id: string, kind: 'pr' | 'issue', number: number, body: string): Promise<void>;
 	githubReview(id: string, number: number, event: ReviewEvent, body: string): Promise<void>;
@@ -232,7 +236,8 @@ export interface GitHubAPI {
 		path: string,
 		line: number,
 		side: 'LEFT' | 'RIGHT',
-		body: string
+		body: string,
+		head: string
 	): Promise<void>;
 	/** Push the checked-out branch and open a pull request from it; returns its address. */
 	githubCreatePullRequest(

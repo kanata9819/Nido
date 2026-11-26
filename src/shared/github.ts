@@ -138,4 +138,6 @@ export interface LineComment {
 	line: number;
 	side: 'LEFT' | 'RIGHT';
 	body: string;
+	/** Head commit of the diff the user reviewed. */
+	head: string;
 }

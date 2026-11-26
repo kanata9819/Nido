@@ -142,7 +142,7 @@ const defaults: Record<string, unknown> = {
 		url: 'https://github.com/octo/alpha/pull/7',
 		labels: ['feature'],
 		body: 'Adds **sign-in**.',
-		headRefOid: 'abc123',
+		headRefOid: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
 		isCrossRepository: false,
 		mergeable: 'MERGEABLE',
 		additions: 3,

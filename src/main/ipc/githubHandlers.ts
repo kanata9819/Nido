@@ -55,7 +55,9 @@ export function registerGithubHandlers({
 		return listPullRequests(root(id), filter as PullRequestFilter);
 	});
 	handle('githubPullRequest', (id, number) => pullRequest(root(id), issueNumber(number)));
-	handle('githubPullRequestDiff', (id, number) => pullRequestDiff(root(id), issueNumber(number)));
+	handle('githubPullRequestDiff', (id, number, expectedHead) =>
+		pullRequestDiff(root(id), issueNumber(number), text(expectedHead))
+	);
 	handle('githubCheckout', async (id, number) => {
 		const current = session(id);
 		const pr = issueNumber(number);
@@ -74,12 +76,13 @@ export function registerGithubHandlers({
 	handle('githubResolve', (id, thread, resolved) =>
 		resolveThread(root(id), text(thread), flag(resolved))
 	);
-	handle('githubLineComment', (id, number, path, line, side, body) =>
+	handle('githubLineComment', (id, number, path, line, side, body, head) =>
 		commentOnLine(root(id), issueNumber(number), {
 			path: text(path),
 			line: typeof line === 'number' ? line : NaN,
 			side: side as never,
-			body: text(body)
+			body: text(body),
+			head: text(head)
 		})
 	);
 	handle('githubCreatePullRequest', async (id, title, body, base, draft) => {

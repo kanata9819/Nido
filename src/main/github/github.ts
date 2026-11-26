@@ -181,9 +181,35 @@ function repositoryName(cwd: string): Promise<{ owner: string; name: string }> {
 	return pending;
 }
 
+async function requirePullRequestHead(
+	cwd: string,
+	number: number,
+	expectedHead: string
+): Promise<void> {
+	if (!/^[a-f\d]{40}$/i.test(expectedHead)) {
+		throw new Error('Refresh the pull request to get its current diff.');
+	}
+	const { headRefOid } = await ghJson<{ headRefOid?: string }>(cwd, [
+		'pr',
+		'view',
+		String(number),
+		'--json',
+		'headRefOid'
+	]);
+	if (headRefOid !== expectedHead) {
+		throw new Error('The pull request head changed. Refresh it to get the current diff.');
+	}
+}
+
 /** The pull request's diff, one entry per changed file, as [path, diff] pairs. */
-export async function pullRequestDiff(cwd: string, number: number): Promise<[string, string][]> {
+export async function pullRequestDiff(
+	cwd: string,
+	number: number,
+	expectedHead: string
+): Promise<[string, string][]> {
+	await requirePullRequestHead(cwd, number, expectedHead);
 	const diff = await gh(cwd, ['pr', 'diff', String(number), '--color', 'never']);
+	await requirePullRequestHead(cwd, number, expectedHead);
 	return [...splitPullRequestDiff(diff)];
 }
 
@@ -245,7 +271,7 @@ export async function resolveThread(cwd: string, thread: string, resolved: boole
 	);
 }
 
-/** Start a review thread on a line of the pull request's latest commit. */
+/** Start a review thread on a line of the displayed diff. */
 export async function commentOnLine(
 	cwd: string,
 	number: number,
@@ -260,22 +286,17 @@ export async function commentOnLine(
 	if (!comment.path || comment.path.startsWith('-')) {
 		throw new Error('Invalid file.');
 	}
-	const { headRefOid } = await ghJson<{ headRefOid?: string }>(cwd, [
-		'pr',
-		'view',
-		String(number),
-		'--json',
-		'headRefOid'
-	]);
+	const body = requiredText(comment.body, 'comment');
+	await requirePullRequestHead(cwd, number, comment.head);
 	await gh(cwd, [
 		'api',
 		'--method',
 		'POST',
 		`repos/{owner}/{repo}/pulls/${number}/comments`,
 		'-f',
-		`body=${requiredText(comment.body, 'comment')}`,
+		`body=${body}`,
 		'-f',
-		`commit_id=${headRefOid ?? ''}`,
+		`commit_id=${comment.head}`,
 		'-f',
 		`path=${comment.path}`,
 		'-F',

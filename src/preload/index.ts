@@ -38,8 +38,8 @@ const api: NidoAPI = {
 	githubStatus: (id) => ipcRenderer.invoke('nido:githubStatus', id),
 	githubPullRequests: (id, filter) => ipcRenderer.invoke('nido:githubPullRequests', id, filter),
 	githubPullRequest: (id, number) => ipcRenderer.invoke('nido:githubPullRequest', id, number),
-	githubPullRequestDiff: (id, number) =>
-		ipcRenderer.invoke('nido:githubPullRequestDiff', id, number),
+	githubPullRequestDiff: (id, number, expectedHead) =>
+		ipcRenderer.invoke('nido:githubPullRequestDiff', id, number, expectedHead),
 	githubCheckout: (id, number) => ipcRenderer.invoke('nido:githubCheckout', id, number),
 	githubComment: (id, kind, number, body) =>
 		ipcRenderer.invoke('nido:githubComment', id, kind, number, body),
@@ -48,8 +48,8 @@ const api: NidoAPI = {
 	githubReply: (id, thread, body) => ipcRenderer.invoke('nido:githubReply', id, thread, body),
 	githubResolve: (id, thread, resolved) =>
 		ipcRenderer.invoke('nido:githubResolve', id, thread, resolved),
-	githubLineComment: (id, number, path, line, side, body) =>
-		ipcRenderer.invoke('nido:githubLineComment', id, number, path, line, side, body),
+	githubLineComment: (id, number, path, line, side, body, head) =>
+		ipcRenderer.invoke('nido:githubLineComment', id, number, path, line, side, body, head),
 	githubCreatePullRequest: (id, title, body, base, draft) =>
 		ipcRenderer.invoke('nido:githubCreatePullRequest', id, title, body, base, draft),
 	githubMerge: (id, number, method, deleteBranch) =>
