@@ -99,7 +99,7 @@ export default function Issues({
 		};
 	});
 
-	/** Change the issue, reload it and the list, and confirm with `message`. */
+	/** Change the issue and reload its conversation. */
 	const act = (change: () => Promise<unknown>, message: string): Promise<boolean> =>
 		run(async () => {
 			await change();
@@ -111,17 +111,23 @@ export default function Issues({
 			list.current?.focus();
 		});
 	const toggleOpen = (): void => {
-		if (selected) {
-			void act(
-				() =>
-					window.nido.githubSetIssueOpen(
-						workspaceId,
-						selected.number,
-						selected.state !== 'OPEN'
-					),
-				selected.state === 'OPEN' ? 'Issue closed.' : 'Issue reopened.'
-			).then((done) => done && setRevision((value) => value + 1));
+		if (!selected || busy) {
+			return;
 		}
+		const { number } = selected;
+		const open = selected.state === 'CLOSED';
+		const state = open ? 'OPEN' : 'CLOSED';
+		void run(async () => {
+			await window.nido.githubSetIssueOpen(workspaceId, number, open);
+			setCommenting(false);
+			setIssues((current) =>
+				current.map((issue) => (issue.number === number ? { ...issue, state } : issue))
+			);
+			setOpened((current) => (current?.number === number ? { ...current, state } : current));
+			notify(open ? 'Issue reopened.' : 'Issue closed.');
+			setRevision((value) => value + 1);
+			list.current?.focus();
+		});
 	};
 	const comment = (): void => {
 		if (selected) {
