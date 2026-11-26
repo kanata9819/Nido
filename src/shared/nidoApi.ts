@@ -227,7 +227,13 @@ export interface GitHubAPI {
 		expectedHead: string
 	): Promise<[string, string][]>;
 	githubCheckout(id: string, number: number): Promise<void>;
-	githubComment(id: string, kind: 'pr' | 'issue', number: number, body: string): Promise<void>;
+	githubComment(
+		id: string,
+		kind: 'pr' | 'issue',
+		number: number,
+		body: string,
+		url: string
+	): Promise<void>;
 	githubReview(
 		id: string,
 		number: number,
@@ -265,8 +271,8 @@ export interface GitHubAPI {
 		expectedBase: string
 	): Promise<PullRequestMergeResult>;
 	githubIssues(id: string, filter: IssueFilter): Promise<IssueSummary[]>;
-	githubIssue(id: string, number: number): Promise<IssueDetails>;
-	githubSetIssueOpen(id: string, number: number, open: boolean): Promise<void>;
+	githubIssue(id: string, number: number, url: string): Promise<IssueDetails>;
+	githubSetIssueOpen(id: string, number: number, open: boolean, url: string): Promise<void>;
 }
 
 /** The app itself: theme, language, window, updates, links and events (ipc/appHandlers.ts). */

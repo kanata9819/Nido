@@ -224,13 +224,36 @@ export async function addComment(
 	cwd: string,
 	kind: 'pr' | 'issue',
 	number: number,
-	body: string
+	body: string,
+	url?: string
 ): Promise<void> {
 	await gh(
 		cwd,
-		[kind, 'comment', String(number), '--body-file', '-'],
+		[kind, 'comment', conversationTarget(kind, number, url), '--body-file', '-'],
 		requiredText(body, 'comment')
 	);
+}
+
+function conversationTarget(kind: 'pr' | 'issue', number: number, value?: string): string {
+	if (value === undefined) {
+		return String(number);
+	}
+	const url = URL.parse(value);
+	const segments = url?.pathname.replace(/\/$/, '').split('/');
+	if (
+		!url ||
+		(url.protocol !== 'https:' && url.protocol !== 'http:') ||
+		url.username ||
+		url.password ||
+		segments?.length !== 5 ||
+		!segments[1] ||
+		!segments[2] ||
+		segments[3] !== (kind === 'issue' ? 'issues' : 'pull') ||
+		segments[4] !== String(number)
+	) {
+		throw new Error('Invalid GitHub request.');
+	}
+	return url.origin + url.pathname;
 }
 
 /** Approve, request changes on, or comment on a pull request as a review. */
@@ -453,12 +476,12 @@ export async function listIssues(cwd: string, filter: IssueFilter): Promise<Issu
 	return (await ghJson<unknown[]>(cwd, args)).map(parseIssueSummary);
 }
 
-export async function issue(cwd: string, number: number): Promise<IssueDetails> {
+export async function issue(cwd: string, number: number, url?: string): Promise<IssueDetails> {
 	return parseIssueDetails(
 		await ghJson(cwd, [
 			'issue',
 			'view',
-			String(number),
+			conversationTarget('issue', number, url),
 			'--json',
 			`${issueFields},body,createdAt,assignees`
 		])
@@ -466,6 +489,11 @@ export async function issue(cwd: string, number: number): Promise<IssueDetails> 
 }
 
 /** Close an open issue, or reopen a closed one. */
-export async function setIssueOpen(cwd: string, number: number, open: boolean): Promise<void> {
-	await gh(cwd, ['issue', open ? 'reopen' : 'close', String(number)]);
+export async function setIssueOpen(
+	cwd: string,
+	number: number,
+	open: boolean,
+	url?: string
+): Promise<void> {
+	await gh(cwd, ['issue', open ? 'reopen' : 'close', conversationTarget('issue', number, url)]);
 }

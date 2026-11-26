@@ -62,11 +62,11 @@ export function registerGithubHandlers({
 		const pr = issueNumber(number);
 		await changeBranch(current, () => checkoutPullRequest(current.workspace.root, pr));
 	});
-	handle('githubComment', (id, kind, number, body) => {
+	handle('githubComment', (id, kind, number, body, url) => {
 		if (kind !== 'pr' && kind !== 'issue') {
 			throw new Error('Invalid GitHub request.');
 		}
-		return addComment(root(id), kind, issueNumber(number), text(body));
+		return addComment(root(id), kind, issueNumber(number), text(body), text(url));
 	});
 	handle('githubReview', (id, number, event, body, head) =>
 		reviewPullRequest(root(id), issueNumber(number), event as never, text(body), text(head))
@@ -109,8 +109,8 @@ export function registerGithubHandlers({
 		}
 		return listIssues(root(id), filter as IssueFilter);
 	});
-	handle('githubIssue', (id, number) => issue(root(id), issueNumber(number)));
-	handle('githubSetIssueOpen', (id, number, open) =>
-		setIssueOpen(root(id), issueNumber(number), flag(open))
+	handle('githubIssue', (id, number, url) => issue(root(id), issueNumber(number), text(url)));
+	handle('githubSetIssueOpen', (id, number, open, url) =>
+		setIssueOpen(root(id), issueNumber(number), flag(open), text(url))
 	);
 }

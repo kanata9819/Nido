@@ -41,8 +41,8 @@ const api: NidoAPI = {
 	githubPullRequestDiff: (id, number, expectedHead) =>
 		ipcRenderer.invoke('nido:githubPullRequestDiff', id, number, expectedHead),
 	githubCheckout: (id, number) => ipcRenderer.invoke('nido:githubCheckout', id, number),
-	githubComment: (id, kind, number, body) =>
-		ipcRenderer.invoke('nido:githubComment', id, kind, number, body),
+	githubComment: (id, kind, number, body, url) =>
+		ipcRenderer.invoke('nido:githubComment', id, kind, number, body, url),
 	githubReview: (id, number, event, body, head) =>
 		ipcRenderer.invoke('nido:githubReview', id, number, event, body, head),
 	githubReply: (id, thread, body) => ipcRenderer.invoke('nido:githubReply', id, thread, body),
@@ -63,9 +63,9 @@ const api: NidoAPI = {
 			expectedBase
 		),
 	githubIssues: (id, filter) => ipcRenderer.invoke('nido:githubIssues', id, filter),
-	githubIssue: (id, number) => ipcRenderer.invoke('nido:githubIssue', id, number),
-	githubSetIssueOpen: (id, number, open) =>
-		ipcRenderer.invoke('nido:githubSetIssueOpen', id, number, open),
+	githubIssue: (id, number, url) => ipcRenderer.invoke('nido:githubIssue', id, number, url),
+	githubSetIssueOpen: (id, number, open, url) =>
+		ipcRenderer.invoke('nido:githubSetIssueOpen', id, number, open, url),
 	restoreWorkspaces: (shell) => ipcRenderer.invoke('nido:restore', shell),
 	workspaceLayout: (ids, active) => ipcRenderer.invoke('nido:layout', ids, active),
 	favoriteWorkspaces: () => ipcRenderer.invoke('nido:favorites'),

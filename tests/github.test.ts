@@ -9,12 +9,14 @@ import {
 	commentOnLine,
 	createPullRequest,
 	githubStatus,
+	issue,
 	listPullRequests,
 	mergePullRequest,
 	pullRequest,
 	pullRequestDiff,
 	replyToThread,
-	reviewPullRequest
+	reviewPullRequest,
+	setIssueOpen
 } from '../src/main/github/github';
 import {
 	combinedChecks,
@@ -588,6 +590,33 @@ test('deleting a merged branch escapes its name, and a failed deletion keeps the
 		'--match-head-commit',
 		mergeHead
 	]);
+});
+
+test('issue actions stay on the displayed repository even when gh has a different default', async () => {
+	const url = 'https://github.example.com/octo/old/issues/3';
+	const calls = await withReplies(
+		{
+			'issue view 3': { url: 'https://github.example.com/octo/new/issues/3' },
+			[`issue view ${url}`]: { number: 3, url }
+		},
+		async () => {
+			assert.equal((await issue(folder, 3, url)).url, url);
+			await addComment(folder, 'issue', 3, 'Only for the old repository', url);
+			await setIssueOpen(folder, 3, false, url);
+			await assert.rejects(
+				addComment(folder, 'issue', 4, 'Wrong issue', url),
+				/Invalid GitHub request/
+			);
+		}
+	);
+	assert.deepEqual(
+		calls.map(({ args }) => args.slice(0, 3)),
+		[
+			['issue', 'view', url],
+			['issue', 'comment', url],
+			['issue', 'close', url]
+		]
+	);
 });
 
 test('creating a pull request checks the draft before the branch is pushed', async () => {

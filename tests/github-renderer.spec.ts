@@ -63,7 +63,9 @@ test('pull requests list, open with their overview, and take comments from the k
 	await page.keyboard.type('Ship it');
 	await page.keyboard.press('Control+Enter');
 	await expect(page.getByRole('status')).toHaveText('Comment posted.');
-	expect(await calls(page, 'githubComment')).toEqual([['alpha', 'pr', 7, 'Ship it']]);
+	expect(await calls(page, 'githubComment')).toEqual([
+		['alpha', 'pr', 7, 'Ship it', 'https://github.com/octo/alpha/pull/7']
+	]);
 	// The pull request is read again after the comment.
 	expect((await calls(page, 'githubPullRequest')).length).toBe(2);
 
@@ -341,11 +343,15 @@ test('issues open with their comments, and can be commented on and closed', asyn
 	await page.keyboard.type('Here it is');
 	await page.keyboard.press('Control+Enter');
 	await expect(page.getByRole('status')).toHaveText('Comment posted.');
-	expect(await calls(page, 'githubComment')).toEqual([['alpha', 'issue', 3, 'Here it is']]);
+	expect(await calls(page, 'githubComment')).toEqual([
+		['alpha', 'issue', 3, 'Here it is', 'https://github.com/octo/alpha/issues/3']
+	]);
 
 	await page.keyboard.press('x');
 	await expect(page.getByRole('status')).toHaveText('Issue closed.');
-	expect(await calls(page, 'githubSetIssueOpen')).toEqual([['alpha', 3, false]]);
+	expect(await calls(page, 'githubSetIssueOpen')).toEqual([
+		['alpha', 3, false, 'https://github.com/octo/alpha/issues/3']
+	]);
 });
 
 test('relative links in an issue use the issue host and open in the browser', async ({ page }) => {
@@ -390,7 +396,7 @@ test('posting an issue comment updates its list count even if detail refresh fai
 		author: 'user',
 		state: 'OPEN',
 		updatedAt: '',
-		url: '',
+		url: 'https://github.com/octo/alpha/issues/3',
 		labels: [],
 		comments: 1,
 		body: 'Report',
@@ -440,6 +446,7 @@ test('switching issues cannot carry a comment draft to the new issue', async ({ 
 			0,
 			['First issue', 'Second issue'].map((title, index) => ({
 				number: index + 3,
+				url: `https://github.com/octo/alpha/issues/${index + 3}`,
 				title,
 				author: 'user',
 				state: 'OPEN',
@@ -504,14 +511,20 @@ test('closing an issue updates its state before the list reloads', async ({ page
 				title: 'Crash on start',
 				author: 'user',
 				state: 'OPEN',
+				url: 'https://github.com/octo/alpha/issues/3',
 				labels: [],
 				comments: 0
 			}
 		])
 	);
-	await expect(page.getByRole('listbox', { name: 'Issues' })).toBeFocused();
-	await page.keyboard.press('x');
-	await expect.poll(() => calls(page, 'githubSetIssueOpen')).toEqual([['alpha', 3, false]]);
+	const list = page.getByRole('listbox', { name: 'Issues' });
+	await expect(
+		list.getByRole('option', { name: '#3 Crash on start', selected: true })
+	).toBeVisible();
+	await list.press('x');
+	await expect
+		.poll(() => calls(page, 'githubSetIssueOpen'))
+		.toEqual([['alpha', 3, false, 'https://github.com/octo/alpha/issues/3']]);
 	await page.evaluate(() => window.rendererTest.settle('githubSetIssueOpen', 0, undefined));
 	await expect(page.getByRole('status')).toHaveText('Issue closed.');
 	await expect(page.getByRole('button', { name: 'Reopen issue' })).toBeVisible();
@@ -843,7 +856,12 @@ test('refresh reloads an open issue and keeps it selected after list reordering'
 		assignees: [],
 		timeline: []
 	};
-	const other = { ...issue, number: 4, title: 'Another issue' };
+	const other = {
+		...issue,
+		number: 4,
+		title: 'Another issue',
+		url: 'https://github.com/octo/alpha/issues/4'
+	};
 	await page.goto(`${origin}?view=github&defer=githubIssues,githubIssue`);
 	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
 	await page.keyboard.press('2');
@@ -857,7 +875,7 @@ test('refresh reloads an open issue and keeps it selected after list reordering'
 		issueList.getByRole('option', { name: '#3 Crash on start', selected: true })
 	).toBeVisible();
 	await issueList.press('Enter');
-	await expect.poll(() => calls(page, 'githubIssue')).toEqual([['alpha', 3]]);
+	await expect.poll(() => calls(page, 'githubIssue')).toEqual([['alpha', 3, issue.url]]);
 	await page.evaluate((value) => window.rendererTest.settle('githubIssue', 0, value), issue);
 	await expect(page.getByText('Original issue')).toBeVisible();
 
@@ -866,8 +884,8 @@ test('refresh reloads an open issue and keeps it selected after list reordering'
 	await expect
 		.poll(() => calls(page, 'githubIssue'))
 		.toEqual([
-			['alpha', 3],
-			['alpha', 3]
+			['alpha', 3, issue.url],
+			['alpha', 3, issue.url]
 		]);
 	const updated: IssueDetails = {
 		...issue,
