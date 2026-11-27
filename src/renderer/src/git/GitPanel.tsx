@@ -54,6 +54,7 @@ export default function GitPanel({
 		current,
 		stagedCount,
 		unstagedCount,
+		canCommit,
 		diff,
 		run,
 		stage,
@@ -174,6 +175,12 @@ export default function GitPanel({
 		if (busy) {
 			return t('Working…');
 		}
+		// Resolving every conflict to HEAD's content leaves nothing staged, yet the merge commits.
+		if (status?.merging && !stagedCount) {
+			return message.trim()
+				? t('The merge will be committed.')
+				: t('Enter a message to commit the merge.');
+		}
 		if (status && !changes.length) {
 			return t('No changes to commit.');
 		}
@@ -292,6 +299,7 @@ export default function GitPanel({
 						setMessage={setMessage}
 						busy={busy}
 						stagedCount={stagedCount}
+						canCommit={canCommit}
 						hint={commitHint()}
 						commit={commit}
 					/>
@@ -448,6 +456,7 @@ function CommitComposer({
 	setMessage,
 	busy,
 	stagedCount,
+	canCommit,
 	hint,
 	commit
 }: {
@@ -457,6 +466,8 @@ function CommitComposer({
 	setMessage: (message: string) => void;
 	busy: boolean;
 	stagedCount: number;
+	/** Something is staged, or a merge waits for its commit. */
+	canCommit: boolean;
 	/** What the button does now, shown below it. */
 	hint: string;
 	commit: () => void;
@@ -480,7 +491,7 @@ function CommitComposer({
 			/>
 			<button
 				className={styles.commitButton}
-				disabled={busy || !message.trim() || !stagedCount}
+				disabled={busy || !message.trim() || !canCommit}
 				onClick={commit}
 				aria-describedby={`${messageId}-hint`}
 			>

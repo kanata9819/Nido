@@ -44,6 +44,8 @@ export function useGitPanel({
 	current: GitChange | undefined;
 	stagedCount: number;
 	unstagedCount: number;
+	/** The commit button can commit: something is staged, or a merge waits for its commit. */
+	canCommit: boolean;
 	diff: string;
 	run: (action: () => Promise<unknown>) => Promise<void>;
 	stage: () => void;
@@ -67,6 +69,7 @@ export function useGitPanel({
 	const current = changes.find((change) => key(change) === selected);
 	const stagedCount = changes.filter((change) => change.staged).length;
 	const unstagedCount = changes.length - stagedCount;
+	const canCommit = stagedCount > 0 || !!status?.merging;
 
 	// Show a new status, keeping the selection on the same change, or the same file on the other
 	// side when it was staged or unstaged, or else the first change.
@@ -160,7 +163,7 @@ export function useGitPanel({
 	}
 
 	function commit(): void {
-		if (!message.trim() || !stagedCount) {
+		if (!message.trim() || !canCommit) {
 			return;
 		}
 		void run(async () => {
@@ -212,6 +215,7 @@ export function useGitPanel({
 		current,
 		stagedCount,
 		unstagedCount,
+		canCommit,
 		diff,
 		run,
 		stage,

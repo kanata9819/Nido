@@ -312,6 +312,11 @@ export interface GitStatus {
 	root: string;
 	branch: string;
 	changes: GitChange[];
+	/**
+	 * A merge is in progress (MERGE_HEAD exists). Its commit records the second parent, so it can
+	 * be made even when the resolved files match HEAD and nothing new is staged.
+	 */
+	merging?: boolean;
 	remote?: GitRemoteInfo;
 	/** How the branch compares with its upstream; set with `remote` once that has been fetched. */
 	sync?: GitSyncState;
