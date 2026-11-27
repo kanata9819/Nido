@@ -524,6 +524,14 @@ async function readStatus(root: string, paths?: string[]): Promise<GitStatus> {
 		}
 		const status = record.slice(2, 4);
 		const path = record.slice(start);
+		if (record[0] === 'u') {
+			// An unresolved conflict is one change, in the work tree: staging the file resolves it.
+			// Its XY letters name each side of the merge, not a staged and an unstaged change.
+			// Listing a staged side would offer an unstage, whose reset drops the conflict from
+			// the index while the markers stay in the file.
+			changes.push({ path, status: 'U', staged: false });
+			continue;
+		}
 		const original = record[0] === '2' ? records[++i] : undefined;
 		if (status[0] !== '.') {
 			changes.push({

@@ -1015,3 +1015,47 @@ test('diff emphasis keeps supplementary Unicode characters in one span', () => {
 		assert.deepEqual(changedRange(before, after), { before: [7, 9], after: [7, 9] });
 	}
 });
+
+test('an unresolved conflict is one unstaged change that cannot be unstaged away', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-git-conflict-'));
+	const git = (...args: string[]): string =>
+		execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
+	try {
+		git('init', '-q', '-b', 'main');
+		git('config', 'core.autocrlf', 'false');
+		git('config', 'user.name', 'Nido Test');
+		git('config', 'user.email', 'test@example.invalid');
+		git('config', 'commit.gpgsign', 'false');
+		await writeFile(join(root, 'notes.txt'), 'base\n');
+		git('add', 'notes.txt');
+		git('commit', '-qm', 'Base');
+		git('switch', '-qc', 'other');
+		await writeFile(join(root, 'notes.txt'), 'theirs\n');
+		git('commit', '-qam', 'Theirs');
+		git('switch', '-q', 'main');
+		await writeFile(join(root, 'notes.txt'), 'ours\n');
+		git('commit', '-qam', 'Ours');
+		assert.throws(() => git('merge', '-q', 'other'));
+		const unmerged = git('ls-files', '-u');
+		assert.equal(unmerged.split('\n').length, 3);
+
+		// Git reports UU, one letter per side of the merge, not a staged and an unstaged change.
+		assert.deepEqual((await gitStatus(root)).changes, [
+			{ path: 'notes.txt', status: 'U', staged: false }
+		]);
+		// An unstage would run `git reset`, dropping the conflict while its markers remain.
+		await assert.rejects(gitStage(root, 'notes.txt', true), /no longer exists/);
+		assert.equal(git('ls-files', '-u'), unmerged);
+		assert.match(await readFile(join(root, 'notes.txt'), 'utf8'), /^<<<<<<< /);
+
+		// Staging the edited file still marks the conflict resolved.
+		await writeFile(join(root, 'notes.txt'), 'resolved\n');
+		await gitStage(root, 'notes.txt', false);
+		assert.equal(git('ls-files', '-u'), '');
+		assert.deepEqual((await gitStatus(root)).changes, [
+			{ path: 'notes.txt', original: undefined, status: 'M', staged: true }
+		]);
+	} finally {
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
