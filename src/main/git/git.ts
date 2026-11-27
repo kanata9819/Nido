@@ -559,7 +559,15 @@ async function readStatus(root: string, paths?: string[]): Promise<GitStatus> {
 			async () => `${(await git(root, ['rev-parse', '--short', 'HEAD'])).trim()} (detached)`
 		);
 	}
+	if (!paths && (await mergeInProgress(root))) {
+		return { root, branch, changes, merging: true };
+	}
 	return { root, branch, changes };
+}
+
+/** Whether a merge waits for its commit: MERGE_HEAD names the commit being merged. */
+async function mergeInProgress(root: string): Promise<boolean> {
+	return !!(await git(root, ['rev-parse', '--quiet', '--verify', 'MERGE_HEAD'], true)).trim();
 }
 
 /** The change for `path` on the chosen side; throws when it is gone since the list was shown. */
@@ -650,7 +658,9 @@ export async function gitCommit(cwd: string, message: string): Promise<string> {
 		throw new Error('Enter a commit message (up to 10,000 characters).');
 	}
 	const status = await gitStatus(cwd);
-	if (!status.changes.some((change) => change.staged)) {
+	// A merge resolved to HEAD's content stages nothing new, but its commit still records the
+	// merge. Git itself refuses while conflicts remain unresolved.
+	if (!status.merging && !status.changes.some((change) => change.staged)) {
 		throw new Error('Stage changes before committing.');
 	}
 	return git(status.root, ['commit', '-m', message.trim()]);

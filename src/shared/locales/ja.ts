@@ -846,6 +846,8 @@ export const japanese: Record<string, string> = {
 	'Commit message': 'コミットメッセージ',
 	'Summarize your changes…': '変更内容を簡潔に…',
 	'Stage changes to include them in the commit.': 'コミットする変更をステージしてください。',
+	'The merge will be committed.': 'マージをコミットします。',
+	'Enter a message to commit the merge.': 'マージをコミットするメッセージを入力してください。',
 	'No changes to commit.': 'コミットする変更がありません。',
 	'Enter a message to commit staged changes ({count}).':
 		'メッセージを入力すると、ステージ済みの {count} ファイルをコミットできます。',

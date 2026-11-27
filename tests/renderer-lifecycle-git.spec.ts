@@ -1145,3 +1145,32 @@ test('the status bar shows the checked-out branch and opens Source control from 
 	await branch.click();
 	await expect(page.locator('[data-panel="git"]')).toBeVisible();
 });
+
+test('Git commits a merge resolved to HEAD’s content with nothing staged', async ({ page }) => {
+	await page.goto(`${origin}?view=git&defer=gitStatus`);
+	await page.evaluate(() =>
+		window.rendererTest.settle('gitStatus', 0, {
+			root: '/alpha',
+			branch: 'main',
+			changes: [],
+			merging: true
+		})
+	);
+	const input = page.getByRole('textbox', { name: 'Commit message' });
+	const commit = page.getByRole('button', { name: 'Commit staged', exact: true });
+	await expect(commit).toBeDisabled();
+	await expect(input).toHaveAccessibleDescription('Enter a message to commit the merge.');
+	await input.fill('Merge other');
+	await expect(input).toHaveAccessibleDescription('The merge will be committed.');
+	await expect(commit).toBeEnabled();
+	await commit.click();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.calls
+					.filter((call) => call.method === 'gitCommit')
+					.map((call) => call.args)
+			)
+		)
+		.toEqual([['alpha', 'Merge other']]);
+});

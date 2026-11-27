@@ -1059,3 +1059,50 @@ test('an unresolved conflict is one unstaged change that cannot be unstaged away
 		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 	}
 });
+
+test('a merge resolved to HEAD’s content commits with both parents', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-git-merge-ours-'));
+	const git = (...args: string[]): string =>
+		execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
+	try {
+		git('init', '-q', '-b', 'main');
+		git('config', 'core.autocrlf', 'false');
+		git('config', 'user.name', 'Nido Test');
+		git('config', 'user.email', 'test@example.invalid');
+		git('config', 'commit.gpgsign', 'false');
+		await writeFile(join(root, 'notes.txt'), 'base\n');
+		git('add', 'notes.txt');
+		git('commit', '-qm', 'Base');
+		git('switch', '-qc', 'other');
+		await writeFile(join(root, 'notes.txt'), 'theirs\n');
+		git('commit', '-qam', 'Theirs');
+		const theirs = git('rev-parse', 'HEAD');
+		git('switch', '-q', 'main');
+		await writeFile(join(root, 'notes.txt'), 'ours\n');
+		git('commit', '-qam', 'Ours');
+		const ours = git('rev-parse', 'HEAD');
+		// Without a merge, an empty commit is still refused.
+		await assert.rejects(gitCommit(root, 'Nothing'), /Stage changes before committing/);
+		assert.equal((await gitStatus(root)).merging, undefined);
+
+		assert.throws(() => git('merge', '-q', 'other'));
+		assert.equal((await gitStatus(root)).merging, true);
+		// Git refuses the commit while the conflict is unresolved.
+		await assert.rejects(gitCommit(root, 'Merge other'), /unmerged|conflict/i);
+
+		// Keeping the current branch's side stages nothing that differs from HEAD.
+		await writeFile(join(root, 'notes.txt'), 'ours\n');
+		git('add', 'notes.txt');
+		const status = await gitStatus(root);
+		assert.deepEqual(status.changes, []);
+		assert.equal(status.merging, true);
+
+		await gitCommit(root, 'Merge other');
+		assert.equal(git('rev-parse', 'HEAD^1'), ours);
+		assert.equal(git('rev-parse', 'HEAD^2'), theirs);
+		assert.equal(git('log', '-1', '--format=%s'), 'Merge other');
+		assert.equal((await gitStatus(root)).merging, undefined);
+	} finally {
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
