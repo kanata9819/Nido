@@ -159,7 +159,11 @@ test('selected-line replacement includes matches on both sides of an embedded CR
 		);
 		assert.deepEqual(await matcher.replace(text, [1], 'changed'), {
 			text: 'changed\rchanged\nlast\n',
-			count: 2
+			count: 2,
+			edits: [
+				[0, 6, 'changed'],
+				[7, 13, 'changed']
+			]
 		});
 	} finally {
 		matcher.close();
@@ -177,7 +181,11 @@ test('whole-word search and replacement keep combining marks with their word', a
 		);
 		assert.deepEqual(await matcher.replace(text, [2], 'き'), {
 			text: 'か\u3099\nき か\u3099 き\n',
-			count: 2
+			count: 2,
+			edits: [
+				[7, 10, 'き'],
+				[18, 21, 'き']
+			]
 		});
 	} finally {
 		matcher.close();

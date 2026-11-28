@@ -969,6 +969,7 @@ export const japanese: Record<string, string> = {
 	'Open an Editor session to edit files.':
 		'ファイルを編集するには、エディターのセッションを開いてください。',
 	'Neovim session is closed.': 'Neovimのセッションは終了しています。',
+	'Invalid tab direction.': 'タブの移動方向が正しくありません。',
 	'Path is outside this workspace.': 'このワークスペースの外のパスです。',
 	'Choose a file.': 'ファイルを選んでください。',
 	'Choose a project folder.': 'プロジェクトのフォルダーを選んでください。',

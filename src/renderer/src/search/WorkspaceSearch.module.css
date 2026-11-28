@@ -134,6 +134,17 @@
 .excluded {
 	opacity: 0.45;
 }
+.include {
+	flex: 0 0 auto;
+	align-self: flex-start;
+	min-width: 20px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
 .list p {
 	color: #84939e;
 	font-size: 12px;

@@ -5,6 +5,56 @@ local api = vim.api
 -- Per buffer, the rows that end in a literal CR and how many there are, kept current as the
 -- buffer changes so the status bar never rescans a large file.
 local states = {}
+-- A CRLF conversion can remove literal CRs from a mixed file. Undo records the text,
+-- so track the corresponding fileformat at that undo block as well.
+local conversions = {}
+
+local function undo_path(entries, target, converted, active)
+  for _, entry in ipairs(entries) do
+    if entry.alt then
+      local found, conversion = undo_path(entry.alt, target, converted, active)
+      if found then return true, conversion end
+    end
+    active = converted[entry.seq] and entry.seq or active
+    if entry.seq == target then return true, active end
+  end
+  return false
+end
+
+local function sync_format(buffer)
+  local state = conversions[buffer]
+  if not state then return end
+  local tree = vim.fn.undotree(buffer)
+  if tree.seq_cur == state.sequence then return end
+  state.sequence = tree.seq_cur
+  local found, active = undo_path(tree.entries, tree.seq_cur, state.blocks)
+  if not found and tree.seq_cur ~= 0 then return end
+  if active == state.active then return end
+  -- When the previous conversion aged out of the undo tree, it can no longer be undone.
+  if not active and not undo_path(tree.entries, state.active, state.blocks) then
+    conversions[buffer] = nil
+    return
+  end
+  -- Moving back to an ancestor undoes a conversion from Unix. A different
+  -- destination branch instead redoes its most recent CRLF conversion.
+  local previous = state.active
+  while previous and previous ~= active do
+    previous = state.blocks[previous].parent
+  end
+  local format = previous == active and 'unix' or 'dos'
+  if vim.bo[buffer].fileformat == state.format then
+    vim.bo[buffer].fileformat = format
+  end
+  state.format = format
+  state.active = active
+end
+
+api.nvim_create_autocmd({'TextChanged', 'BufWritePre'}, {
+  callback = function(event) sync_format(event.buf) end,
+})
+api.nvim_create_autocmd({'BufReadPre', 'BufWipeout'}, {
+  callback = function(event) conversions[event.buf] = nil end,
+})
 
 --- Record the rows [first, last) that end in CR.
 local function scan(state, buffer, first, last)
@@ -109,11 +159,19 @@ function M.convert(format)
   assert(format == 'LF' or format == 'CRLF', 'Invalid line ending')
   assert(vim.bo.buftype == '' and vim.bo.modifiable, 'Buffer cannot be modified')
   local view = vim.fn.winsaveview()
+  local buffer = api.nvim_get_current_buf()
+  sync_format(buffer)
+  local before
   if vim.bo.fileformat == 'unix' then
     -- Only strip CR belonging to a line ending; preserve embedded CR characters.
     local lines = api.nvim_buf_get_lines(0, 0, -1, false)
     for i, line in ipairs(lines) do
       if (i < #lines or vim.bo.endofline) and line:sub(-1) == '\r' then
+        if before == nil then
+          -- Group the removed CRs together without joining the preceding edit.
+          vim.bo.undolevels = vim.bo.undolevels
+          before = vim.fn.undotree().seq_cur
+        end
         -- Keep extmarks on their text by editing just the trailing CR.
         api.nvim_buf_set_text(0, i - 1, #line - 1, i - 1, #line, {})
       end
@@ -121,6 +179,15 @@ function M.convert(format)
   end
   vim.bo.fileformat = format == 'LF' and 'unix' or 'dos'
   vim.bo.fixendofline = false
+  local after = vim.fn.undotree().seq_cur
+  if format == 'CRLF' and before ~= nil and after ~= before then
+    local state = conversions[buffer] or {blocks={}}
+    state.blocks[after] = {parent=state.active}
+    state.sequence = after
+    state.active = after
+    state.format = 'dos'
+    conversions[buffer] = state
+  end
   vim.fn.winrestview(view)
   -- Publish even when only the fileformat option changed.
   vim.api.nvim_exec_autocmds('User', {pattern='NidoLineEndings'})

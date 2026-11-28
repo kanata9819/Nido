@@ -12,16 +12,12 @@ function M.detect()
 end
 
 -- Rewrite each line's leading whitespace with spaces or tabs, keeping its width.
--- `tabstop` is the width tabs had before the change.
-local function convert(spaces, size, tabstop)
+local function convert(spaces, size)
   local lines = api.nvim_buf_get_lines(0, 0, -1, false)
   for index, line in ipairs(lines) do
     local leading = line:match('^[ \t]*')
     if leading ~= '' then
-      local width = 0
-      for character in leading:gmatch('.') do
-        width = character == '\t' and (math.floor(width / tabstop) + 1) * tabstop or width + 1
-      end
+      local width = vim.fn.strdisplaywidth(leading)
       local replacement = spaces and string.rep(' ', width)
         or string.rep('\t', math.floor(width / size)) .. string.rep(' ', width % size)
       if replacement ~= leading then
@@ -38,7 +34,6 @@ function M.set(spaces, size, rewrite)
   assert(type(size) == 'number' and size % 1 == 0 and size >= 1 and size <= 16,
     'Invalid indent size')
   assert(vim.bo.buftype == '', 'Buffer has no indentation settings')
-  local tabstop = vim.bo.tabstop
   local view, textOffset, indentColumn
   if rewrite then
     assert(vim.bo.modifiable, 'Buffer cannot be modified')
@@ -47,13 +42,14 @@ function M.set(spaces, size, rewrite)
     if textOffset < 0 then
       indentColumn = vim.fn.virtcol('.', true)[1]
     end
-    convert(spaces, size, tabstop)
+    convert(spaces, size)
   end
   vim.bo.expandtab = spaces
   vim.bo.shiftwidth = size
   -- Tabs display at the chosen size; a softtabstop follows shiftwidth.
   if not spaces then
     vim.bo.tabstop = size
+    vim.bo.vartabstop = ''
   end
   if vim.bo.softtabstop ~= 0 then
     vim.bo.softtabstop = -1

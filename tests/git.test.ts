@@ -772,6 +772,46 @@ test('a PR branch made from another shared branch is published under its own nam
 	}
 });
 
+test('PR publishing honors push remote precedence and preserves a separate fetch upstream', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-pr-push-remote-'));
+	const git = (...args: string[]): string =>
+		execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
+	try {
+		git('init', '-q', '-b', 'main');
+		git('config', 'user.name', 'Nido Test');
+		git('config', 'user.email', 'test@example.invalid');
+		git('config', 'commit.gpgsign', 'false');
+		for (const remote of ['origin', 'fork', 'default-fork']) {
+			git('init', '-q', '--bare', join(root, `${remote}.git`));
+			git('remote', 'add', remote, join(root, `${remote}.git`));
+		}
+		git('commit', '-qm', 'Initial', '--allow-empty');
+		git('push', '-q', 'origin', 'main');
+		git('switch', '-qc', 'feature', 'origin/main');
+		git('commit', '-qm', 'Feature', '--allow-empty');
+		const head = git('rev-parse', 'HEAD');
+		git('config', 'remote.pushDefault', 'default-fork');
+		git('config', 'branch.feature.pushRemote', 'fork');
+		assert.deepEqual(await gitPushBranch(root, 'main', 'feature'), {
+			branch: 'feature',
+			remote: 'fork'
+		});
+		assert.equal(git('--git-dir=fork.git', 'rev-parse', 'refs/heads/feature'), head);
+		assert.equal(git('--git-dir=default-fork.git', 'for-each-ref', 'refs/heads/feature'), '');
+
+		git('config', '--unset', 'branch.feature.pushRemote');
+		assert.deepEqual(await gitPushBranch(root, 'main', 'feature'), {
+			branch: 'feature',
+			remote: 'default-fork'
+		});
+		assert.equal(git('--git-dir=default-fork.git', 'rev-parse', 'refs/heads/feature'), head);
+		assert.equal(git('--git-dir=origin.git', 'for-each-ref', 'refs/heads/feature'), '');
+		assert.equal(git('rev-parse', '--abbrev-ref', '@{upstream}'), 'origin/main');
+	} finally {
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
 test('Git publishes, fetches without changing HEAD, and pulls only when safe', async () => {
 	const directory = await mkdtemp(join(tmpdir(), 'nido-git-remote-'));
 	const root = join(directory, 'local');
@@ -1040,9 +1080,19 @@ test('an unresolved conflict is one unstaged change that cannot be unstaged away
 		assert.equal(unmerged.split('\n').length, 3);
 
 		// Git reports UU, one letter per side of the merge, not a staged and an unstaged change.
-		assert.deepEqual((await gitStatus(root)).changes, [
-			{ path: 'notes.txt', status: 'U', staged: false }
-		]);
+		const status = await gitStatus(root);
+		assert.deepEqual(status.changes, [{ path: 'notes.txt', status: 'U', staged: false }]);
+		// The preview compares HEAD to the working file and exposes numbered, highlighted rows.
+		const rows = splitDiff(await gitDiff(root, 'notes.txt', false, status));
+		assert.deepEqual(rows.find((row) => row.before)?.before, {
+			number: 1,
+			text: 'ours'
+		});
+		assert.deepEqual(rows.find((row) => row.after)?.after, {
+			number: 1,
+			text: '<<<<<<< HEAD',
+			changed: true
+		});
 		// An unstage would run `git reset`, dropping the conflict while its markers remain.
 		await assert.rejects(gitStage(root, 'notes.txt', true), /no longer exists/);
 		assert.equal(git('ls-files', '-u'), unmerged);
@@ -1050,6 +1100,11 @@ test('an unresolved conflict is one unstaged change that cannot be unstaged away
 
 		// Staging the edited file still marks the conflict resolved.
 		await writeFile(join(root, 'notes.txt'), 'resolved\n');
+		assert.deepEqual(splitDiff(await gitDiff(root, 'notes.txt', false, status))[0], {
+			before: { number: 1, text: 'ours', changed: true },
+			after: { number: 1, text: 'resolved', changed: true },
+			hunk: { before: 1, after: 1, context: '' }
+		});
 		await gitStage(root, 'notes.txt', false);
 		assert.equal(git('ls-files', '-u'), '');
 		assert.deepEqual((await gitStatus(root)).changes, [

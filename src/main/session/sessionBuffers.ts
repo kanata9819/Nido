@@ -67,6 +67,16 @@ return false`,
 		await this.interaction.command(() => this.client.request('nvim_set_current_buf', [buffer]));
 	}
 
+	async selectAdjacentBuffer(offset: -1 | 1): Promise<void> {
+		this.interaction.cancelPrefetch();
+		await this.interaction.command(() =>
+			this.client.request('nvim_exec_lua', [
+				"require('nido_buffers').select_adjacent(...)",
+				[offset]
+			])
+		);
+	}
+
 	/** Close a tab; `force` discards unsaved changes. */
 	async closeBuffer(buffer: number, force = false): Promise<void> {
 		this.interaction.cancelPrefetch();

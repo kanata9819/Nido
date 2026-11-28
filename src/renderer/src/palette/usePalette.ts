@@ -47,7 +47,7 @@ export function usePalette({
 		fileList,
 		loading,
 		reset: resetFileSearch
-	} = useFileSearch(panel, active, query, report);
+	} = useFileSearch(panel, active, query, report, setSelection);
 
 	const closePanel = useCallback(() => setPanel(null), []);
 	const showPanel = useCallback(

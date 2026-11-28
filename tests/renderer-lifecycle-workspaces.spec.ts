@@ -450,6 +450,47 @@ test('terminal startup in another workspace cannot take focus from the current e
 	await expect(betaTerminal).toBeVisible();
 });
 
+test('a shell that exits before the open response can be opened again', async ({ page }) => {
+	await page.goto(`${origin}?view=app&defer=openTerminal`);
+	const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+	const panel = page.getByRole('region', { name: 'Terminal', exact: true });
+	const pending = (): Promise<number> =>
+		page.evaluate(
+			() =>
+				window.rendererTest.pending.filter((call) => call.method === 'openTerminal').length
+		);
+	await expect(editor).toBeFocused();
+	await page.keyboard.press('Control+`');
+	await expect.poll(pending).toBe(1);
+	await page.evaluate(() => {
+		window.rendererTest.emit({ type: 'exit', id: 'early-exit-shell' });
+		window.rendererTest.settle('openTerminal', 0, {
+			id: 'early-exit-shell',
+			root: '/alpha',
+			name: 'Terminal Alpha',
+			kind: 'terminal'
+		});
+	});
+	await expect(panel).toHaveCount(0);
+	await expect(editor).toBeFocused();
+	await page.keyboard.press('Control+`');
+	await expect.poll(pending).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('openTerminal', 0, {
+			id: 'fresh-shell',
+			root: '/alpha',
+			name: 'Terminal Alpha',
+			kind: 'terminal'
+		})
+	);
+	await expect(panel.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+	expect(
+		await page.evaluate(
+			() => window.rendererTest.calls.filter((call) => call.method === 'openTerminal').length
+		)
+	).toBe(2);
+});
+
 test('terminal startup honors the latest toggle and a failed startup can be retried', async ({
 	page
 }) => {
@@ -798,6 +839,58 @@ test('typing while a workspace wakes reaches that workspace, not the previous on
 		['beta', '4Gix<Esc>j'],
 		['beta', 'k']
 	]);
+});
+
+test('retrying a failed wake only delivers input typed during the new attempt', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=app&defer=restoreWorkspaces,wakeWorkspace`);
+	await expect.poll(() => page.evaluate(() => window.rendererTest?.pending.length)).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('restoreWorkspaces', 0, {
+			workspaces: [
+				{ id: 'alpha', root: '/alpha', name: 'Alpha' },
+				{ id: 'beta', root: '/beta', name: 'Beta', sleeping: true }
+			],
+			active: 'alpha',
+			errors: []
+		})
+	);
+	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+	await page.keyboard.press('Alt+2');
+	const pendingWake = (): Promise<boolean> =>
+		page.evaluate(() =>
+			window.rendererTest.pending.some((call) => call.method === 'wakeWorkspace')
+		);
+	await expect.poll(pendingWake).toBe(true);
+	await page.keyboard.type('ix');
+	await page.keyboard.press('Escape');
+	await page.evaluate(() =>
+		window.rendererTest.settle('wakeWorkspace', 0, new Error('Folder not available'), true)
+	);
+	const retry = page
+		.getByRole('alert', { name: 'Could not reopen Beta' })
+		.getByRole('button', { name: 'Retry' });
+	await expect(retry).toBeFocused();
+	await retry.press('Enter');
+	await expect.poll(pendingWake).toBe(true);
+	await page.keyboard.type('iy');
+	await page.keyboard.press('Escape');
+	await page.evaluate(() =>
+		window.rendererTest.settle('wakeWorkspace', 0, {
+			workspace: { id: 'beta', root: '/beta', name: 'Beta' },
+			errors: []
+		})
+	);
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.calls
+					.filter((call) => call.method === 'input' && call.args[0] === 'beta')
+					.map((call) => call.args[1])
+			)
+		)
+		.toEqual(['iy<Esc>']);
 });
 
 test('typing during an abandoned wake is dropped, even after an earlier wake finished in the background', async ({

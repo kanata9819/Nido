@@ -157,13 +157,27 @@ export default function WorkspaceSearchResults({
 								}}
 							>
 								{replace && (
-									<span
+									<button
+										type="button"
+										role="checkbox"
+										tabIndex={-1}
+										aria-checked={!excluded.has(row.index)}
+										className={styles.include}
 										aria-label={t(
 											excluded.has(row.index) ? 'Excluded' : 'Included'
 										)}
+										onClick={(event) => {
+											event.stopPropagation();
+											if (!locked.current) {
+												toggle(row.index);
+												setSelection(row.index);
+												results.current?.focus();
+											}
+										}}
+										onDoubleClick={(event) => event.stopPropagation()}
 									>
 										{excluded.has(row.index) ? '☐' : '☑'}
-									</span>
+									</button>
 								)}
 								<span>
 									<strong title={row.title}>{row.title}</strong>

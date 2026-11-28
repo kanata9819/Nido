@@ -43,9 +43,9 @@ export function registerHistoryHandlers({
 			severity: 'error'
 		});
 	};
-	const capture = async (s: Session): Promise<void> => {
+	const capture = async (s: Session, final = false): Promise<void> => {
 		try {
-			await history.capture(s);
+			await (final ? history.flush(s) : history.capture(s));
 			reported.delete(s);
 		} catch (error) {
 			report(s, error);
@@ -105,7 +105,7 @@ export function registerHistoryHandlers({
 	});
 	return async (s) => {
 		if (state.historyEnabled !== false) {
-			await capture(s);
+			await capture(s, true);
 		}
 	};
 }

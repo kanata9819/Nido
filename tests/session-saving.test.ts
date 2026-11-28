@@ -234,6 +234,32 @@ test('EditorConfig reads CRLF files cleanly when the project requests LF', async
 	}
 });
 
+test('disabling EditorConfig keeps a manual line ending conversion when it only set indentation', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-editorconfig-manual-'));
+	const path = join(root, 'sample.txt');
+	let session: Session | undefined;
+	try {
+		await writeFile(
+			join(root, '.editorconfig'),
+			'root = true\n[*]\nindent_style = space\nindent_size = 2\n'
+		);
+		await writeFile(path, 'one\ntwo\n');
+		session = await Session.create(root, () => {});
+		await session.openFile('sample.txt');
+		const indent = await session.client.request('nvim_eval', ['&l:shiftwidth']);
+		await session.setEditorConfig(true);
+		assert.equal(await session.client.request('nvim_eval', ['&l:shiftwidth']), 2);
+		await session.setLineEnding('CRLF');
+		await session.setEditorConfig(false);
+		assert.equal(await session.client.request('nvim_eval', ['&l:shiftwidth']), indent);
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), 'one\r\ntwo\r\n');
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('EditorConfig keeps newly detected encoding and line endings after reloading a file', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-editorconfig-reload-'));
 	let session: Session | undefined;
@@ -363,6 +389,32 @@ test('converting indentation preserves the cursor on the same text and inside in
 	}
 });
 
+test('converting indentation preserves the displayed width of variable-width tabs', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-variable-indent-'));
+	const path = join(root, 'sample.txt');
+	let session: Session | undefined;
+	try {
+		await writeFile(path, '\tfirst\n\t\tsecond\n');
+		session = await Session.create(root, () => {});
+		await session.openFile('sample.txt');
+		await session.client.request('nvim_exec_lua', [
+			"vim.bo.tabstop = 8; vim.bo.vartabstop = '2,6'",
+			[]
+		]);
+		await session.setIndentation({ spaces: true, size: 2 }, true);
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), '  first\n        second\n');
+
+		await session.setIndentation({ spaces: false, size: 4 }, true);
+		assert.equal(await session.client.request('nvim_eval', ['&l:vartabstop']), '');
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), '  first\n\t\tsecond\n');
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('EditorConfig toggles existing buffers, indentation guides and save rules', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-editorconfig-'));
 	const grid = new Grid();
@@ -474,6 +526,47 @@ vim.g.eol_test_mark = vim.api.nvim_buf_set_extmark(0, vim.g.eol_test_ns, 2, 2, {
 		await session.save();
 		assert.equal(await readFile(join(root, 'dos.txt'), 'utf8'), 'one\ntwo\n');
 		await assert.rejects(session.setLineEnding('invalid' as 'LF'));
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('undo and redo a mixed-to-CRLF conversion without adding extra CR bytes', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-eol-undo-'));
+	const path = join(root, 'mixed.txt');
+	const original = 'one\r\ntwo\nlast';
+	let session: Session | undefined;
+	try {
+		await writeFile(path, original);
+		session = await Session.create(root, () => {});
+		await session.openFile('mixed.txt');
+		await session.setLineEnding('CRLF');
+		const conversion = (await session.client.request('nvim_eval', [
+			'undotree().seq_cur'
+		])) as number;
+		await session.input('u');
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), original);
+
+		await session.input('<C-r>');
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), 'one\r\ntwo\r\nlast');
+
+		// Editing after undo creates a different branch with a newer sequence number.
+		await session.input('uG0Cother<Esc>');
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), 'one\r\ntwo\nother');
+		await session.client.request('nvim_command', [`undo ${conversion}`]);
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), 'one\r\ntwo\r\nlast');
+
+		await session.setLineEnding('LF');
+		await session.client.request('nvim_buf_set_lines', [0, 0, 1, false, ['one\r']]);
+		await session.setLineEnding('CRLF');
+		await session.input('u');
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), original);
 	} finally {
 		await session?.stop();
 		await rm(root, { recursive: true, force: true });

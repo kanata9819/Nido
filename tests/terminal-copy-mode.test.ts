@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -29,6 +30,39 @@ async function waitFor(check: () => boolean, message: string): Promise<void> {
 	}
 	assert.ok(check(), message);
 }
+
+test(
+	'terminal copy mode accepts a multi-key command one key at a time',
+	{ timeout: 15000 },
+	async () => {
+		const root = await mkdtemp(join(tmpdir(), 'nido-copy-mode-prefix-'));
+		let owner: Session | undefined;
+		try {
+			owner = await Session.create(root, () => {});
+			const terminal = await owner.openTerminal(shell);
+			await terminal.enterCopyMode();
+			await terminal.input('G');
+			const first = terminal.input('g');
+			const second = terminal.input('g');
+			const completed = await Promise.race([
+				Promise.all([first, second]).then(() => true),
+				new Promise<boolean>((resolve) => {
+					setTimeout(() => resolve(false), 2000).unref();
+				})
+			]);
+			assert.equal(completed, true);
+			assert.equal(await terminal.inputMode(), 'nt');
+			assert.equal(await terminal.client.request('nvim_eval', ['line(".")']), 1);
+			const closed = once(terminal.process, 'close');
+			await terminal.input('q');
+			await terminal.input('exit<CR>');
+			await closed;
+		} finally {
+			await owner?.stop();
+			await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+		}
+	}
+);
 
 test(
 	'closing a different shell keeps copy mode in the displayed shell',
@@ -65,6 +99,34 @@ test(
 				't',
 				'the newly displayed shell accepts input'
 			);
+		} finally {
+			await owner?.stop();
+			await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+		}
+	}
+);
+
+test(
+	'q and Escape belong to the search prompt in terminal copy mode',
+	{ timeout: 15000 },
+	async () => {
+		const root = await mkdtemp(join(tmpdir(), 'nido-copy-mode-search-'));
+		let owner: Session | undefined;
+		try {
+			owner = await Session.create(root, () => {});
+			const terminal = await owner.openTerminal(shell);
+			await terminal.enterCopyMode();
+			await terminal.input('/');
+			assert.equal(await terminal.inputMode(), 'c');
+			await terminal.input('q');
+			assert.equal(await terminal.client.request('nvim_eval', ['getcmdline()']), 'q');
+			assert.equal(terminal.state.copyMode, true);
+			await terminal.input('<Esc>');
+			assert.equal(await terminal.inputMode(), 'nt');
+			assert.equal(terminal.state.copyMode, true);
+			await terminal.input('q');
+			assert.equal(await terminal.inputMode(), 't');
+			assert.equal(terminal.state.copyMode, false);
 		} finally {
 			await owner?.stop();
 			await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });

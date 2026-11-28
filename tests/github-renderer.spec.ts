@@ -166,6 +166,45 @@ test('a failed diff refresh hides the old patch but keeps the draft and threads'
 	await expect(submit).toBeEnabled();
 });
 
+test('a failed diff refresh keeps review threads available without showing the earlier diff', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=github&defer=githubPullRequestDiff`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect.poll(() => calls(page, 'githubPullRequestDiff')).toHaveLength(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubPullRequestDiff', 0, [
+			[
+				'src/login.ts',
+				'diff --git a/src/login.ts b/src/login.ts\n--- a/src/login.ts\n+++ b/src/login.ts\n@@ -1 +1 @@\n-before refresh\n+earlier diff line\n'
+			]
+		])
+	);
+	const files = page.getByRole('listbox', { name: 'Pull request files' });
+	await files.getByRole('option', { name: 'src/login.ts' }).click();
+	const preview = page.locator('[data-panel="github"] [data-git-preview]');
+	await expect(preview).toContainText('earlier diff line');
+	await page.keyboard.press('r');
+	await expect.poll(() => calls(page, 'githubPullRequestDiff')).toHaveLength(2);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubPullRequestDiff', 0, new Error('HTTP 503'), true)
+	);
+	await expect(page.getByRole('alert')).toContainText('HTTP 503');
+	await expect(page.getByText('The diff is unavailable. Refresh to try again.')).toBeVisible();
+	await expect(preview).not.toContainText('earlier diff line');
+	const threads = page.getByRole('region', { name: 'Review threads' });
+	await expect(threads).toContainText('Rename this?');
+	await files.press('c');
+	await expect(threads.getByRole('textbox', { name: /^Comment on line/ })).toHaveCount(0);
+	await expect(threads.getByRole('button', { name: /^Comment on a line/ })).toHaveCount(0);
+	await files.press('Enter');
+	await expect(threads).toBeFocused();
+	await expect(threads.getByRole('button', { name: 'Resolve', exact: true })).toBeEnabled();
+	await threads.getByRole('button', { name: 'Reply', exact: true }).click();
+	await expect(threads.getByRole('textbox', { name: 'Reply to the thread' })).toBeFocused();
+});
+
 test('a pull request file shows its diff and threads, which can be replied to and resolved', async ({
 	page
 }) => {
