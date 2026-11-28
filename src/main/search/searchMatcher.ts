@@ -15,6 +15,9 @@ export interface LineMatch {
 	text: string;
 }
 
+/** A replacement's half-open UTF-8 byte range in the original file and its new text. */
+export type SearchEdit = [start: number, end: number, text: string];
+
 // User regular expressions run outside Electron's main thread. A slow expression
 // can be cancelled without blocking input, IPC, or other workspaces.
 const matcherWorker = String.raw`
@@ -23,17 +26,44 @@ parentPort.on('message', ({ id, source, flags, text, ending, replacement, select
   try {
     const pattern = new RegExp(source, flags);
     if (selected) {
-      const parts = text.split(new RegExp('(' + ending + ')'));
+      const lines = text.split(ending);
+      const edits = [];
+      let offset = 0;
+      let next = 0;
       let count = 0;
-      for (const line of selected) {
-        const index = (line - 1) * 2;
-        if (parts[index] === undefined) throw new Error('Search results changed. Search again.');
-        const matches = [...parts[index].matchAll(pattern)];
-        if (!matches.length) throw new Error('Search results changed. Search again.');
-        count += matches.length;
-        parts[index] = parts[index].replace(pattern, regex ? replacement : () => replacement);
+      for (const line of [...new Set(selected)].sort((a, b) => a - b)) {
+        const index = line - 1;
+        const original = lines[index];
+        if (original === undefined) throw new Error('Search results changed. Search again.');
+        for (; next < index; next++) offset += Buffer.byteLength(lines[next]) + ending.length;
+        // Searchable text and replacement input contain no NUL. Delimit the expanded matches
+        // so native replacement templates ($1, named groups, etc.) also yield exact edit spans.
+        const tagged = '\0' + replacement + '\0';
+        const parts = original.replace(pattern, regex ? tagged : () => tagged).split('\0');
+        if (parts.length === 1) throw new Error('Search results changed. Search again.');
+        let byte = offset;
+        let part = 0;
+        for (const match of original.matchAll(pattern)) {
+          byte += Buffer.byteLength(parts[part++]);
+          const value = parts[part++];
+          const end = byte + Buffer.byteLength(match[0]);
+          if (value !== match[0]) {
+            const previous = edits[edits.length - 1];
+            if (previous && previous[1] === byte) {
+              previous[1] = end;
+              previous[2] += value;
+            } else {
+              edits.push([byte, end, value]);
+            }
+          }
+          byte = end;
+          count++;
+        }
+        lines[index] = parts.join('');
+        offset = byte + Buffer.byteLength(parts[part]) + ending.length;
+        next = index + 1;
       }
-      parentPort.postMessage({ id, value: { text: parts.join(''), count } });
+      parentPort.postMessage({ id, value: { text: lines.join(ending), count, edits } });
     } else {
       const matches = [];
       for (let start = 0, number = 1; ; number++) {
@@ -142,7 +172,7 @@ export class SearchMatcher {
 		text: string,
 		selected: number[],
 		replacement: string
-	): Promise<{ text: string; count: number }> {
+	): Promise<{ text: string; count: number; edits: SearchEdit[] }> {
 		return this.request({ text, ending: searchLineEnding(text), selected, replacement });
 	}
 

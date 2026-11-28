@@ -5,7 +5,7 @@ import type { NeovimClient } from 'neovim';
 import type { SearchMatch } from '../../shared/types';
 import type { ReplacementPreview, ReplacementResult, SearchOptions } from '../../shared/search';
 import { editorPath } from '../../shared/wsl';
-import { SearchMatcher } from './searchMatcher';
+import { SearchMatcher, type SearchEdit } from './searchMatcher';
 import { searchLineEnding } from './searchLines';
 
 // Workspace-wide replace: after a text search, replaces the selected matches in their files.
@@ -20,6 +20,7 @@ interface ReplacementFile {
 	path: string;
 	original: string;
 	changed: string;
+	edits: SearchEdit[];
 	hash: string;
 	count: number;
 }
@@ -225,6 +226,7 @@ export class WorkspaceReplacement {
 				path,
 				original: original.text,
 				changed: changed.text,
+				edits: changed.edits,
 				hash: original.hash,
 				count: changed.count
 			});
@@ -306,7 +308,17 @@ for _, item in ipairs(files) do
       local lines = vim.split(item.changed, ending, {plain=true})
       if hasEnding then table.remove(lines) end
       assert(#lines == #originalLines, 'Search results changed. Search again.')
-      table.insert(edits, {buf=buf, before=originalLines, after=lines, hasEnding=hasEnding})
+      local spans, row, offset = {}, 1, 0
+      for _, span in ipairs(item.edits) do
+        while row < #originalLines and span[1] > offset + #originalLines[row] do
+          offset = offset + #originalLines[row] + #ending
+          row = row + 1
+        end
+        local startCol, endCol = span[1] - offset, span[2] - offset
+        assert(startCol >= 0 and endCol <= #originalLines[row], 'Search results changed. Search again.')
+        table.insert(spans, {row - 1, startCol, endCol, span[3]})
+      end
+      table.insert(edits, {buf=buf, spans=spans, hasEnding=hasEnding})
     end
   end
 end
@@ -314,12 +326,10 @@ for _, edit in ipairs(edits) do
   vim.bo[edit.buf].buflisted = true
   vim.bo[edit.buf].endofline = edit.hasEnding
   vim.bo[edit.buf].fixendofline = false
-  -- Editing just the changed rows keeps marks and extmarks on untouched lines.
-  for row, line in ipairs(edit.after) do
-    local before = edit.before[row]
-    if line ~= before then
-      api.nvim_buf_set_text(edit.buf, row - 1, 0, row - 1, #before, {line})
-    end
+  -- Work backwards so the earlier byte columns still refer to the original text.
+  for index = #edit.spans, 1, -1 do
+    local row, startCol, endCol, value = unpack(edit.spans[index])
+    api.nvim_buf_set_text(edit.buf, row, startCol, row, endCol, {value})
   end
 end`,
 				[
@@ -327,7 +337,8 @@ end`,
 						path: editorPath(this.root, this.root + '/' + file.path),
 						ending: searchLineEnding(file.original),
 						original: file.original,
-						changed: file.changed
+						changed: file.changed,
+						edits: apply ? file.edits : []
 					})),
 					apply
 				]
