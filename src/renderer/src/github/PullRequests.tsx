@@ -277,10 +277,15 @@ export default function PullRequests({
 				)
 			}));
 
+	const file = opened && entry > 0 ? opened.files[entry - 1] : undefined;
 	const keys: Record<string, () => void> = opened
 		? {
 				o: checkout,
-				c: () => setForm('comment'),
+				c: () => {
+					if (!file || (diff && !file.historical && opened.state === 'OPEN')) {
+						setForm('comment');
+					}
+				},
 				v: () => {
 					if (canReviewPullRequest(opened)) {
 						setForm('review');
@@ -303,7 +308,6 @@ export default function PullRequests({
 		keysRef.current = keys;
 	});
 
-	const file = opened && entry > 0 ? opened.files[entry - 1] : undefined;
 	return (
 		<>
 			<div className={gitStyles.toolbar}>
