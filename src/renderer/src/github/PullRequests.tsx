@@ -119,6 +119,8 @@ export default function PullRequests({
 				? snapshot
 				: undefined;
 		setDiff(matchingDiff);
+		const previousFile =
+			keepEntry && opened?.url === details.url ? opened.files[entry - 1] : undefined;
 		if (matchingDiff) {
 			for (const [path, patch] of matchingDiff.files) {
 				if (listed.has(path)) {
@@ -137,6 +139,17 @@ export default function PullRequests({
 				files.push({ path, additions, deletions });
 				listed.add(path);
 			}
+		}
+		// The selected file can be known only from the previous patch. Keep its view mounted
+		// while the patch is unavailable so an open draft stays accessible.
+		if (
+			!matchingDiff &&
+			previousFile &&
+			!previousFile.historical &&
+			!listed.has(previousFile.path)
+		) {
+			files.push(previousFile);
+			listed.add(previousFile.path);
 		}
 		for (const thread of details.threads) {
 			if (thread.path && !listed.has(thread.path)) {
@@ -382,7 +395,7 @@ export default function PullRequests({
 				<div className={`${gitStyles.preview} ${styles.preview}`} data-git-preview>
 					{opened && file ? (
 						<PullRequestFile
-							key={`${opened.number}:${file.path}`}
+							key={`${opened.url}:${file.path}`}
 							workspaceId={workspaceId}
 							pr={opened}
 							path={file.path}

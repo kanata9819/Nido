@@ -45,7 +45,9 @@ export default function PullRequestFile({
 	const threads = pr.threads.filter((thread) => thread.path === path);
 	const focusThreads = historical || diff === undefined;
 	const canCommentOnLine = !historical && diff !== undefined && pr.state === 'OPEN';
-	const showLineForm = canCommentOnLine && commenting;
+	// A draft started on an earlier diff stays open while a refresh fails; it cannot be sent
+	// until the diff is back.
+	const showLineForm = !historical && commenting && pr.state === 'OPEN';
 	return (
 		<div className={styles.fileView}>
 			{historical ? (
@@ -121,9 +123,7 @@ function LineCommentForm({
 	busy,
 	act,
 	setCommenting
-}: Omit<PullRequestFileProps, 'commenting' | 'historical' | 'diff'> & {
-	diff: string;
-}): React.JSX.Element {
+}: Omit<PullRequestFileProps, 'commenting' | 'historical'>): React.JSX.Element {
 	const t = useI18n();
 	const [anchor] = useState({ head: diffHead, target: diffTarget, diff });
 	const [line, setLine] = useState('');
@@ -131,7 +131,7 @@ function LineCommentForm({
 	const stale =
 		anchor.head !== diffHead ||
 		anchor.head !== pr.headRefOid ||
-		anchor.diff !== diff ||
+		(diff !== undefined && anchor.diff !== diff) ||
 		anchor.target.baseRefName !== diffTarget.baseRefName ||
 		anchor.target.baseRefName !== pr.baseRefName ||
 		anchor.target.baseRefOid !== diffTarget.baseRefOid ||
@@ -151,7 +151,7 @@ function LineCommentForm({
 				label={t('Comment on line {line}', { line: line || '…' })}
 				submitLabel={t('Comment')}
 				busy={busy}
-				ready={!stale && Number(line) > 0}
+				ready={diff !== undefined && !stale && Number(line) > 0}
 				controls={
 					<>
 						<label className={styles.filter}>
