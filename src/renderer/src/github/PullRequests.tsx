@@ -3,6 +3,7 @@ import { useErrorMessage, useI18n } from '../i18n';
 import type {
 	PullRequestDetails,
 	PullRequestDiffTarget,
+	PullRequestFile as PullRequestFileInfo,
 	PullRequestFilter,
 	PullRequestSummary
 } from '../../../shared/github';
@@ -28,6 +29,10 @@ interface PullRequestDiffSnapshot {
 	head: string;
 	target: PullRequestDiffTarget;
 	files: Map<string, string>;
+}
+
+interface DisplayedPullRequest extends PullRequestDetails {
+	files: (PullRequestFileInfo & { historical?: true })[];
 }
 
 /**
@@ -56,7 +61,7 @@ export default function PullRequests({
 	const loaded = loadedKey === listKey;
 	const [index, setIndex] = useState(0);
 	// The opened pull request, its diff per file, and the entry selected in it (0: overview).
-	const [opened, setOpened] = useState<PullRequestDetails>();
+	const [opened, setOpened] = useState<DisplayedPullRequest>();
 	const [diff, setDiff] = useState<PullRequestDiffSnapshot>();
 	const [entry, setEntry] = useState(0);
 	const [form, setForm] = useState<PullRequestForm>();
@@ -99,7 +104,8 @@ export default function PullRequests({
 
 	/** Keep the same file across reloads, even when it moves to another row. */
 	function showDetails(details: PullRequestDetails, keepEntry: boolean, snapshot = diff): void {
-		const files = [...details.files];
+		const files: DisplayedPullRequest['files'] = [...details.files];
+		const listed = new Set(files.map((file) => file.path));
 		if (
 			snapshot &&
 			snapshot.head === details.headRefOid &&
@@ -107,7 +113,6 @@ export default function PullRequests({
 			snapshot.target.baseRefName === details.baseRefName &&
 			snapshot.target.baseRefOid === details.baseRefOid
 		) {
-			const listed = new Set(files.map((file) => file.path));
 			for (const [path, patch] of snapshot.files) {
 				if (listed.has(path)) {
 					continue;
@@ -123,6 +128,13 @@ export default function PullRequests({
 					}
 				}
 				files.push({ path, additions, deletions });
+				listed.add(path);
+			}
+		}
+		for (const thread of details.threads) {
+			if (thread.path && !listed.has(thread.path)) {
+				files.push({ path: thread.path, additions: 0, deletions: 0, historical: true });
+				listed.add(thread.path);
 			}
 		}
 		setOpened({ ...details, files });
@@ -234,8 +246,14 @@ export default function PullRequests({
 					label: file.path,
 					meta: (
 						<>
-							<span className={styles.added}>+{file.additions}</span>
-							<span className={styles.removed}>−{file.deletions}</span>
+							{file.historical ? (
+								<span className={styles.label}>{t('Outdated')}</span>
+							) : (
+								<>
+									<span className={styles.added}>+{file.additions}</span>
+									<span className={styles.removed}>−{file.deletions}</span>
+								</>
+							)}
 							<small className={styles.folder}>
 								<bdi>
 									{file.path.slice(0, Math.max(0, file.path.lastIndexOf('/')))}
@@ -259,10 +277,15 @@ export default function PullRequests({
 				)
 			}));
 
+	const file = opened && entry > 0 ? opened.files[entry - 1] : undefined;
 	const keys: Record<string, () => void> = opened
 		? {
 				o: checkout,
-				c: () => setForm('comment'),
+				c: () => {
+					if (!file || (diff && !file.historical && opened.state === 'OPEN')) {
+						setForm('comment');
+					}
+				},
 				v: () => {
 					if (canReviewPullRequest(opened)) {
 						setForm('review');
@@ -285,7 +308,6 @@ export default function PullRequests({
 		keysRef.current = keys;
 	});
 
-	const file = opened && entry > 0 ? opened.files[entry - 1] : undefined;
 	return (
 		<>
 			<div className={gitStyles.toolbar}>
@@ -343,7 +365,7 @@ export default function PullRequests({
 							document
 								.querySelector<HTMLElement>(
 									entry > 0
-										? '[data-panel="github"] [data-git-scroll="after"]'
+										? '[data-panel="github"] [data-git-scroll="after"], [data-panel="github"] [data-git-summary]'
 										: '[data-panel="github"] [data-git-summary]'
 								)
 								?.focus();
@@ -352,15 +374,16 @@ export default function PullRequests({
 					empty={t(loaded ? 'No pull requests.' : 'Loading…')}
 				/>
 				<div className={`${gitStyles.preview} ${styles.preview}`} data-git-preview>
-					{opened && file && diff ? (
+					{opened && file && (diff || file.historical) ? (
 						<PullRequestFile
 							key={`${opened.number}:${file.path}`}
 							workspaceId={workspaceId}
 							pr={opened}
 							path={file.path}
-							diff={diff.files.get(file.path) ?? ''}
-							diffHead={diff.head}
-							diffTarget={diff.target}
+							diff={diff?.files.get(file.path) ?? ''}
+							diffHead={diff?.head ?? opened.headRefOid}
+							diffTarget={diff?.target ?? opened}
+							historical={file.historical}
 							busy={working}
 							commenting={form === 'comment'}
 							setCommenting={(value) => setForm(value ? 'comment' : undefined)}
