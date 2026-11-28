@@ -113,26 +113,43 @@ export class HistoryService {
 		}
 	}
 
-	/** Record every buffer of the session that changed since its last capture. */
+	/** Record one batch of changed buffers. Overlapping background captures share it. */
 	capture(session: Session): Promise<void> {
 		const previous = this.pending.get(session);
 		if (previous) {
 			return previous;
 		}
-		const known = this.tokens.get(session) || new Map<number, HistoryToken>();
-		this.tokens.set(session, known);
-		const capturing = this.serial(session, async () => {
-			const values = await session.historySnapshots([...known.values()]);
-			for (const value of values) {
-				await this.record(value);
-				// Failed writes never advance the token, so the next pass can retry.
-				known.set(value.buffer, [
-					value.buffer,
-					value.tick,
-					value.fileformat,
-					value.endOfLine
-				]);
-			}
+		const capturing = this.captureBatches(session, false);
+		this.pending.set(session, capturing);
+		void capturing.finally(() => this.pending.delete(session)).catch(() => {});
+		return capturing;
+	}
+
+	/** Take a fresh snapshot after earlier captures and drain the remaining batches before closing. */
+	flush(session: Session): Promise<void> {
+		return this.captureBatches(session, true);
+	}
+
+	private captureBatches(session: Session, drain: boolean): Promise<void> {
+		return this.serial(session, async () => {
+			const known = this.tokens.get(session) || new Map<number, HistoryToken>();
+			this.tokens.set(session, known);
+			do {
+				const values = await session.historySnapshots([...known.values()]);
+				if (!values.length) {
+					break;
+				}
+				for (const value of values) {
+					await this.record(value);
+					// Failed writes never advance the token, so the next pass can retry.
+					known.set(value.buffer, [
+						value.buffer,
+						value.tick,
+						value.fileformat,
+						value.endOfLine
+					]);
+				}
+			} while (drain);
 			const buffers = new Set(session.state.buffers.map((buffer) => buffer.id));
 			for (const buffer of known.keys()) {
 				if (!buffers.has(buffer)) {
@@ -140,9 +157,6 @@ export class HistoryService {
 				}
 			}
 		});
-		this.pending.set(session, capturing);
-		void capturing.finally(() => this.pending.delete(session)).catch(() => {});
-		return capturing;
 	}
 
 	/** Record the current buffer if it changed, then list its versions. */
