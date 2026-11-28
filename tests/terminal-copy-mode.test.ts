@@ -73,6 +73,34 @@ test(
 );
 
 test(
+	'q and Escape belong to the search prompt in terminal copy mode',
+	{ timeout: 15000 },
+	async () => {
+		const root = await mkdtemp(join(tmpdir(), 'nido-copy-mode-search-'));
+		let owner: Session | undefined;
+		try {
+			owner = await Session.create(root, () => {});
+			const terminal = await owner.openTerminal(shell);
+			await terminal.enterCopyMode();
+			await terminal.input('/');
+			assert.equal(await terminal.inputMode(), 'c');
+			await terminal.input('q');
+			assert.equal(await terminal.client.request('nvim_eval', ['getcmdline()']), 'q');
+			assert.equal(terminal.state.copyMode, true);
+			await terminal.input('<Esc>');
+			assert.equal(await terminal.inputMode(), 'nt');
+			assert.equal(terminal.state.copyMode, true);
+			await terminal.input('q');
+			assert.equal(await terminal.inputMode(), 't');
+			assert.equal(terminal.state.copyMode, false);
+		} finally {
+			await owner?.stop();
+			await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+		}
+	}
+);
+
+test(
 	'terminal copy mode selects output with Vim keys, copies it and returns to the shell',
 	{ timeout: 60000 },
 	async () => {
