@@ -772,6 +772,46 @@ test('a PR branch made from another shared branch is published under its own nam
 	}
 });
 
+test('PR publishing honors push remote precedence and preserves a separate fetch upstream', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-pr-push-remote-'));
+	const git = (...args: string[]): string =>
+		execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
+	try {
+		git('init', '-q', '-b', 'main');
+		git('config', 'user.name', 'Nido Test');
+		git('config', 'user.email', 'test@example.invalid');
+		git('config', 'commit.gpgsign', 'false');
+		for (const remote of ['origin', 'fork', 'default-fork']) {
+			git('init', '-q', '--bare', join(root, `${remote}.git`));
+			git('remote', 'add', remote, join(root, `${remote}.git`));
+		}
+		git('commit', '-qm', 'Initial', '--allow-empty');
+		git('push', '-q', 'origin', 'main');
+		git('switch', '-qc', 'feature', 'origin/main');
+		git('commit', '-qm', 'Feature', '--allow-empty');
+		const head = git('rev-parse', 'HEAD');
+		git('config', 'remote.pushDefault', 'default-fork');
+		git('config', 'branch.feature.pushRemote', 'fork');
+		assert.deepEqual(await gitPushBranch(root, 'main', 'feature'), {
+			branch: 'feature',
+			remote: 'fork'
+		});
+		assert.equal(git('--git-dir=fork.git', 'rev-parse', 'refs/heads/feature'), head);
+		assert.equal(git('--git-dir=default-fork.git', 'for-each-ref', 'refs/heads/feature'), '');
+
+		git('config', '--unset', 'branch.feature.pushRemote');
+		assert.deepEqual(await gitPushBranch(root, 'main', 'feature'), {
+			branch: 'feature',
+			remote: 'default-fork'
+		});
+		assert.equal(git('--git-dir=default-fork.git', 'rev-parse', 'refs/heads/feature'), head);
+		assert.equal(git('--git-dir=origin.git', 'for-each-ref', 'refs/heads/feature'), '');
+		assert.equal(git('rev-parse', '--abbrev-ref', '@{upstream}'), 'origin/main');
+	} finally {
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
 test('Git publishes, fetches without changing HEAD, and pulls only when safe', async () => {
 	const directory = await mkdtemp(join(tmpdir(), 'nido-git-remote-'));
 	const root = join(directory, 'local');
