@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { Session } from '../src/main/session/session';
-import { availableTerminalShells, resolveTerminalShell } from '../src/main/platform/terminalShells';
+import {
+	availableTerminalShells,
+	powerShellArguments,
+	resolveTerminalShell
+} from '../src/main/platform/terminalShells';
 
 const environmentKeys = [
 	'PATH',
@@ -47,9 +51,12 @@ test('discovers standard installations without PATH and falls back from saved mi
 		await mkdir(join(root, 'PowerShell/7/pwsh.exe'), { recursive: true });
 		await executable(join(root, 'System32/wsl.exe'));
 		assert.deepEqual(await availableTerminalShells(), ['auto', 'powershell.exe', 'cmd.exe']);
-		assert.deepEqual(await resolveTerminalShell(), [powershell, '-NoLogo']);
-		assert.deepEqual(await resolveTerminalShell('pwsh'), [powershell, '-NoLogo']);
-		assert.deepEqual(await resolveTerminalShell('wsl.exe'), [powershell, '-NoLogo']);
+		assert.deepEqual(await resolveTerminalShell(), [powershell, ...powerShellArguments]);
+		assert.deepEqual(await resolveTerminalShell('pwsh'), [powershell, ...powerShellArguments]);
+		assert.deepEqual(await resolveTerminalShell('wsl.exe'), [
+			powershell,
+			...powerShellArguments
+		]);
 		assert.deepEqual(await resolveTerminalShell('cmd.exe'), [cmd]);
 
 		await rm(powershell);
@@ -69,11 +76,14 @@ test('uses absolute argv for PATH entries with spaces and refreshes changed inst
 		const standardPwsh = await executable(join(root, 'PowerShell/7/pwsh.exe'));
 		const cmd = await executable(join(root, 'System32/cmd.exe'));
 		assert.deepEqual(await availableTerminalShells(), ['auto', 'pwsh', 'cmd.exe']);
-		assert.deepEqual(await resolveTerminalShell(), [pathPwsh, '-NoLogo']);
-		assert.deepEqual(await resolveTerminalShell('pwsh'), [pathPwsh, '-NoLogo']);
+		assert.deepEqual(await resolveTerminalShell(), [pathPwsh, ...powerShellArguments]);
+		assert.deepEqual(await resolveTerminalShell('pwsh'), [pathPwsh, ...powerShellArguments]);
 
 		await rm(pathPwsh);
-		assert.deepEqual(await resolveTerminalShell('pwsh'), [standardPwsh, '-NoLogo']);
+		assert.deepEqual(await resolveTerminalShell('pwsh'), [
+			standardPwsh,
+			...powerShellArguments
+		]);
 		await rm(standardPwsh);
 		assert.deepEqual(await resolveTerminalShell('pwsh'), [cmd]);
 		await assert.rejects(resolveTerminalShell('pwsh -NoLogo'), /Invalid terminal shell\./);
@@ -111,7 +121,7 @@ test(
 			try {
 				assert.deepEqual(await resolveTerminalShell('pwsh'), [
 					join(windows, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
-					'-NoLogo'
+					...powerShellArguments
 				]);
 				session = await Session.create(root, () => {});
 				await session.startTerminal('pwsh');
@@ -135,3 +145,35 @@ test(
 		});
 	}
 );
+
+test('PowerShell turns only the default faint prediction color into gray', async (t) => {
+	const encoded = powerShellArguments[powerShellArguments.indexOf('-EncodedCommand') + 1];
+	const script = Buffer.from(encoded, 'base64').toString('utf16le');
+	const { execFile } = await import('node:child_process');
+	const run = (setup: string): Promise<string> =>
+		new Promise((resolve, reject) =>
+			execFile(
+				'pwsh',
+				[
+					'-NoProfile',
+					'-Command',
+					`${setup}\n${script}\n(Get-PSReadLineOption).InlinePredictionColor -replace [char]27, 'ESC'`
+				],
+				{ encoding: 'utf8', windowsHide: true, timeout: 20000 },
+				(error, stdout) => (error ? reject(error) : resolve(stdout.trim()))
+			)
+		);
+	try {
+		assert.equal(await run(''), 'ESC[90;3m');
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+			t.skip('PowerShell 7 is not installed');
+			return;
+		}
+		throw error;
+	}
+	assert.equal(
+		await run(`Set-PSReadLineOption -Colors @{ InlinePrediction = "$([char]27)[36m" }`),
+		'ESC[36m'
+	);
+});

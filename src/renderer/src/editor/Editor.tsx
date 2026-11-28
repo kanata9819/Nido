@@ -25,6 +25,8 @@ interface Props {
 	stickyScroll?: boolean;
 	stickyScrollMaxLines?: number;
 	terminal?: boolean;
+	/** Shown beside the main editor (the terminal panel): see useEditorRendering. */
+	panel?: boolean;
 	children?: ReactNode;
 	id: string;
 	active: boolean;
@@ -49,6 +51,7 @@ function Editor({
 	stickyScroll = true,
 	stickyScrollMaxLines = 5,
 	terminal = false,
+	panel = false,
 	children,
 	id,
 	active,
@@ -114,6 +117,7 @@ function Editor({
 		blocked,
 		active,
 		focusTick,
+		panel,
 		onError,
 		onReady,
 		errorRef: error,

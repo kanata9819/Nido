@@ -17,6 +17,8 @@ interface UseEditorRenderingOptions {
 	blocked: boolean;
 	active: boolean;
 	focusTick: number;
+	/** Shown beside the main editor, like the terminal panel (see the focus effect). */
+	panel: boolean;
 	onError: (message: string) => void;
 	onReady?: (id: string) => void;
 	errorRef: RefObject<(message: string) => void>;
@@ -52,6 +54,7 @@ export function useEditorRendering({
 	blocked,
 	active,
 	focusTick,
+	panel,
 	onError,
 	onReady,
 	errorRef,
@@ -143,11 +146,44 @@ export function useEditorRendering({
 		scrollCompletionRef
 	]);
 
-	// Focus the active editor when it becomes usable or is asked to take focus.
+	// Remember which editor last had focus, so a panel can tell whether an overlay took it.
 	useEffect(() => {
-		if (active && !blocked) {
-			inputRef.current?.focus();
-			paintRef.current();
+		const input = inputRef.current;
+		const remember = (): void => {
+			lastFocusedInput = input;
+		};
+		input?.addEventListener('focus', remember);
+		return () => input?.removeEventListener('focus', remember);
+	}, [inputRef]);
+
+	// Focus the active editor when it becomes usable or is asked to take focus.
+	const focused = useRef<{ focusTick: number; hadFocus: boolean }>(undefined);
+	useEffect(() => {
+		if (!active) {
+			focused.current = undefined;
+			return;
 		}
-	}, [active, blocked, focusTick, inputRef, paintRef]);
+		if (blocked) {
+			// Note whether this editor had focus when the overlay opened. When it closes,
+			// another editor may take focus first.
+			if (focused.current) {
+				focused.current.hadFocus = lastFocusedInput === inputRef.current;
+			}
+			return;
+		}
+		const previous = focused.current;
+		focused.current = { focusTick, hadFocus: true };
+		// A panel shown beside the main editor (the terminal) gets focus back after an overlay
+		// or the leader closes only if it had focus before; otherwise it would take focus from
+		// the editor the overlay returns to.
+		if (panel && previous?.focusTick === focusTick && !previous.hadFocus) {
+			paintRef.current();
+			return;
+		}
+		inputRef.current?.focus();
+		paintRef.current();
+	}, [active, blocked, focusTick, panel, inputRef, paintRef]);
 }
+
+/** The editor input that most recently received focus. */
+let lastFocusedInput: HTMLTextAreaElement | null = null;
