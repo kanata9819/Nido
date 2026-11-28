@@ -379,6 +379,35 @@ test('reopening tabs preserves live edits, retries missing files and never resto
 	}
 });
 
+test('reopening skips missing closed files until they become available again', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-reopen-missing-'));
+	let session: Session | undefined;
+	try {
+		const missing = join(root, 'missing.txt');
+		await writeFile(join(root, 'older.txt'), 'First line\nSecond line\n');
+		await writeFile(missing, 'Missing file\n');
+		session = await Session.create(root, () => {});
+		for (const file of ['older.txt', 'missing.txt']) {
+			await session.openFile(file, file === 'older.txt' ? 2 : 1, 2);
+			const buffer = (await session.client.request('nvim_eval', ['bufnr()'])) as number;
+			await session.closeBuffer(buffer);
+		}
+		await rm(missing);
+
+		await session.reopenBuffer();
+		assert.equal(await session.client.request('nvim_get_current_line', []), 'Second line');
+		assert.deepEqual(await session.client.request('nvim_win_get_cursor', [0]), [2, 1]);
+		await assert.rejects(session.reopenBuffer(), /File is unavailable: .*missing\.txt/);
+
+		await writeFile(missing, 'Available again\n');
+		await session.reopenBuffer();
+		assert.equal(await session.client.request('nvim_get_current_line', []), 'Available again');
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('literal file names open, reopen and restore without selecting a pattern match', async () => {
 	const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-literal-buffer-')));
 	const name = 'file[1].txt';
