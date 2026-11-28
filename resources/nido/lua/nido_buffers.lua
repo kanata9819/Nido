@@ -126,27 +126,33 @@ function M.close(buffer, force)
   end
 end
 
---- Reopen the most recently closed file at its cursor and tab position.
+--- Reopen the most recently closed available file. Keep missing entries for a later retry.
 function M.reopen()
-  local entry = closed[#closed]
-  if not entry then return end
-  local buffer = M.find(entry.path)
-  if buffer > 0 and api.nvim_buf_is_loaded(buffer) then
-    require('nido_scroll').restore()
-    vim.bo[buffer].buflisted = true
-    api.nvim_set_current_buf(buffer)
-  else
-    local info = vim.uv.fs_stat(entry.path)
-    assert(info and info.type == 'file', 'File is unavailable: ' .. entry.path)
-    require('nido_scroll').restore()
-    require('nido_eol').open(entry.path)
-    buffer = api.nvim_get_current_buf()
+  for index = #closed, 1, -1 do
+    local entry = closed[index]
+    local buffer = M.find(entry.path)
+    local loaded = buffer > 0 and api.nvim_buf_is_loaded(buffer)
+    local info = not loaded and vim.uv.fs_stat(entry.path)
+    if loaded or (info and info.type == 'file') then
+      require('nido_scroll').restore()
+      if loaded then
+        vim.bo[buffer].buflisted = true
+        api.nvim_set_current_buf(buffer)
+      else
+        require('nido_eol').open(entry.path)
+        buffer = api.nvim_get_current_buf()
+      end
+      local line = math.max(1, math.min(entry.position[1], api.nvim_buf_line_count(buffer)))
+      local text = api.nvim_buf_get_lines(buffer, line - 1, line, false)[1] or ''
+      api.nvim_win_set_cursor(0, {line, math.min(entry.position[2], #text)})
+      M.place(buffer, entry.index)
+      table.remove(closed, index)
+      return
+    end
   end
-  local line = math.max(1, math.min(entry.position[1], api.nvim_buf_line_count(buffer)))
-  local text = api.nvim_buf_get_lines(buffer, line - 1, line, false)[1] or ''
-  api.nvim_win_set_cursor(0, {line, math.min(entry.position[2], #text)})
-  M.place(buffer, entry.index)
-  table.remove(closed)
+  if #closed > 0 then
+    error('File is unavailable: ' .. closed[#closed].path)
+  end
 end
 
 return M
