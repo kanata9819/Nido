@@ -32,6 +32,34 @@ function copyKeyDown(event: KeyboardEvent): KeyboardEvent {
 	});
 }
 
+/** A dispatched keydown has no browser default action. Replay printable text in native fields. */
+function replayText(target: Element, event: KeyboardEvent): void {
+	if (
+		!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) ||
+		target.disabled ||
+		target.readOnly ||
+		event.metaKey ||
+		((event.ctrlKey || event.altKey) && !isAltGraph(event)) ||
+		[...event.key].length !== 1
+	) {
+		return;
+	}
+	const { selectionStart: start, selectionEnd: end, maxLength } = target;
+	if (
+		start === null ||
+		end === null ||
+		(maxLength >= 0 && target.value.length - (end - start) + event.key.length > maxLength)
+	) {
+		return;
+	}
+	const input = { data: event.key, inputType: 'insertText', bubbles: true, composed: true };
+	if (!target.dispatchEvent(new InputEvent('beforeinput', { ...input, cancelable: true }))) {
+		return;
+	}
+	target.setRangeText(event.key, start, end, 'end');
+	target.dispatchEvent(new InputEvent('input', input));
+}
+
 /** The mode name the shortcuts use, from Neovim's mode() value. */
 function modeName(mode: string): string {
 	if (mode === 'n') {
@@ -113,7 +141,11 @@ export function useKeyboardModeQueue({
 				// A replayed shortcut may itself focus a menu for the remaining keys.
 				replaying.current = true;
 				try {
-					flushSync(() => target?.dispatchEvent(next));
+					flushSync(() => {
+						if (target?.dispatchEvent(next) && target === document.activeElement) {
+							replayText(target, next);
+						}
+					});
 				} finally {
 					replaying.current = false;
 				}
