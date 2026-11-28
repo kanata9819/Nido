@@ -28,6 +28,77 @@ async function fixture(context: TestContext): Promise<string> {
 	return root;
 }
 
+test('a final history flush takes a fresh snapshot after an in-flight capture', async (context) => {
+	const root = await fixture(context);
+	const path = join(root, 'notes.txt');
+	await writeFile(path, 'saved text\n');
+	const session = await Session.create(root, () => {});
+	const store = new LocalHistory(join(root, 'history'));
+	const service = new HistoryService(store);
+	const sampled = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	const record = store.record.bind(store);
+	store.record = async (file, value, kind) => {
+		if (kind === 'draft' && value.text === 'background draft\n') {
+			sampled.resolve();
+			await release.promise;
+		}
+		return record(file, value, kind);
+	};
+	try {
+		await session.openFile('notes.txt');
+		await session.client.request('nvim_buf_set_lines', [0, 0, -1, false, ['background draft']]);
+		const background = service.capture(session);
+		try {
+			assert.equal(
+				await Promise.race([
+					sampled.promise.then(() => true),
+					background.then(() => false)
+				]),
+				true
+			);
+			await session.client.request('nvim_buf_set_lines', [0, 0, -1, false, ['final draft']]);
+			const flushed = service.flush(session);
+			release.resolve();
+			await flushed;
+		} finally {
+			release.resolve();
+			await background;
+		}
+		const versions = await store.list(path);
+		assert.equal((await store.version(path, versions[0].id)).text, 'final draft\n');
+	} finally {
+		await session.stop();
+	}
+});
+
+test('a final history flush drains more than one batch of edited files', async (context) => {
+	const root = await fixture(context);
+	const session = await Session.create(root, () => {});
+	const store = new LocalHistory(join(root, 'history'));
+	const service = new HistoryService(store);
+	try {
+		await session.client.request('nvim_exec_lua', [
+			`for i = 1, 9 do
+				local buffer = vim.api.nvim_create_buf(true, false)
+				vim.api.nvim_buf_set_name(buffer, vim.fn.getcwd() .. '/note-' .. i .. '.txt')
+				vim.api.nvim_buf_set_lines(buffer, 0, -1, false, {'draft ' .. i})
+				vim.api.nvim_set_current_buf(buffer)
+			end`,
+			[]
+		]);
+		await service.flush(session);
+		for (let index = 1; index <= 9; index++) {
+			const path = join(root, `note-${index}.txt`);
+			const [draft] = await store.list(path);
+			assert.equal(draft?.kind, 'draft', path);
+			assert.equal((await store.version(path, draft.id)).text, `draft ${index}\n`);
+		}
+	} finally {
+		await session.stop();
+	}
+});
+
 test('local history serializes concurrent revisions, avoids duplicate writes and survives restart', async (context) => {
 	const root = await fixture(context);
 	const directory = join(root, 'history');
