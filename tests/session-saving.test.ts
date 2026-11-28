@@ -363,6 +363,32 @@ test('converting indentation preserves the cursor on the same text and inside in
 	}
 });
 
+test('converting indentation preserves the displayed width of variable-width tabs', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-variable-indent-'));
+	const path = join(root, 'sample.txt');
+	let session: Session | undefined;
+	try {
+		await writeFile(path, '\tfirst\n\t\tsecond\n');
+		session = await Session.create(root, () => {});
+		await session.openFile('sample.txt');
+		await session.client.request('nvim_exec_lua', [
+			"vim.bo.tabstop = 8; vim.bo.vartabstop = '2,6'",
+			[]
+		]);
+		await session.setIndentation({ spaces: true, size: 2 }, true);
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), '  first\n        second\n');
+
+		await session.setIndentation({ spaces: false, size: 4 }, true);
+		assert.equal(await session.client.request('nvim_eval', ['&l:vartabstop']), '');
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), '  first\n\t\tsecond\n');
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('EditorConfig toggles existing buffers, indentation guides and save rules', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-editorconfig-'));
 	const grid = new Grid();
