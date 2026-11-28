@@ -450,6 +450,47 @@ test('terminal startup in another workspace cannot take focus from the current e
 	await expect(betaTerminal).toBeVisible();
 });
 
+test('a shell that exits before the open response can be opened again', async ({ page }) => {
+	await page.goto(`${origin}?view=app&defer=openTerminal`);
+	const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });
+	const panel = page.getByRole('region', { name: 'Terminal', exact: true });
+	const pending = (): Promise<number> =>
+		page.evaluate(
+			() =>
+				window.rendererTest.pending.filter((call) => call.method === 'openTerminal').length
+		);
+	await expect(editor).toBeFocused();
+	await page.keyboard.press('Control+`');
+	await expect.poll(pending).toBe(1);
+	await page.evaluate(() => {
+		window.rendererTest.emit({ type: 'exit', id: 'early-exit-shell' });
+		window.rendererTest.settle('openTerminal', 0, {
+			id: 'early-exit-shell',
+			root: '/alpha',
+			name: 'Terminal Alpha',
+			kind: 'terminal'
+		});
+	});
+	await expect(panel).toHaveCount(0);
+	await expect(editor).toBeFocused();
+	await page.keyboard.press('Control+`');
+	await expect.poll(pending).toBe(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('openTerminal', 0, {
+			id: 'fresh-shell',
+			root: '/alpha',
+			name: 'Terminal Alpha',
+			kind: 'terminal'
+		})
+	);
+	await expect(panel.getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+	expect(
+		await page.evaluate(
+			() => window.rendererTest.calls.filter((call) => call.method === 'openTerminal').length
+		)
+	).toBe(2);
+});
+
 test('terminal startup honors the latest toggle and a failed startup can be retried', async ({
 	page
 }) => {

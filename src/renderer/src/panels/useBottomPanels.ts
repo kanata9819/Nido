@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { DebugAction, TerminalShell, Workspace } from '../../../shared/types';
 import type { WorkspaceState } from '../types';
+import { onNidoEvent } from '../nidoEvents';
 
 interface Options {
 	active: string;
@@ -84,7 +85,20 @@ export function useBottomPanels({
 	const [terminalHeight, setTerminalHeight] = useState(storedTerminalHeight);
 	const [terminalMaximized, setTerminalMaximized] = useState(false);
 	// Terminals being started per workspace, and whether to show them once they are running.
-	const startingTerminals = useRef(new Map<string, { show: boolean; canFocus: () => boolean }>());
+	const startingTerminals = useRef(
+		new Map<string, { show: boolean; canFocus: () => boolean; exited: Set<string> }>()
+	);
+	useEffect(
+		() =>
+			onNidoEvent((event) => {
+				if (event.type === 'exit') {
+					for (const request of startingTerminals.current.values()) {
+						request.exited.add(event.id);
+					}
+				}
+			}),
+		[]
+	);
 	const terminalId = workspace?.terminalId;
 	const previousTerminal = useRef({ active, terminalId });
 	// When a workspace's terminal goes away (its shell exited), hide the panel.
@@ -253,12 +267,16 @@ export function useBottomPanels({
 			pending.canFocus = captureFocus();
 			return;
 		}
-		const request = { show: true, canFocus: captureFocus() };
+		const request = { show: true, canFocus: captureFocus(), exited: new Set<string>() };
 		startingTerminals.current.set(owner, request);
 		run(
 			window.nido
 				.openTerminal(owner, terminalShell)
 				.then((terminal) => {
+					// An exit can reach the renderer before the IPC response identifies the shell.
+					if (request.exited.has(terminal.id)) {
+						return;
+					}
 					setWorkspaces((old) =>
 						old.map((w) => (w.id === owner ? { ...w, terminalId: terminal.id } : w))
 					);
