@@ -199,6 +199,42 @@ test('double-clicking a result opens it once in both search modes', async ({ pag
 	]);
 });
 
+test('clicking a replacement checkbox toggles inclusion without opening the file', async ({
+	page
+}) => {
+	await open(page);
+	const results = page.getByRole('listbox', { name: 'Search results', exact: true });
+	await results.press('i');
+	await page.getByRole('textbox', { name: 'Search in files', exact: true }).fill('joke');
+	await matches(page, 'joke');
+	await page.getByRole('button', { name: 'Replace', exact: true }).click();
+	await page.getByRole('textbox', { name: 'Replace with', exact: true }).fill('changed');
+	const row = results.getByRole('option').nth(1);
+	const checkbox = row.getByRole('checkbox');
+	await expect(checkbox).toBeChecked();
+	await checkbox.click();
+	await expect(checkbox).not.toBeChecked();
+	await expect(results).toBeFocused();
+	await checkbox.click();
+	await expect(checkbox).toBeChecked();
+	await checkbox.click();
+	await page.getByRole('button', { name: /^Preview replacement/ }).click();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.calls
+					.filter((call) => call.method === 'previewReplacement')
+					.map((call) => call.args)
+			)
+		)
+		.toEqual([['alpha', 'search-1', 'changed', [0]]]);
+	expect(
+		await page.evaluate(() =>
+			window.rendererTest.calls.some((call) => call.method === 'openFile')
+		)
+	).toBe(false);
+});
+
 test('search and replacement complete using Vim keys without arrows or mouse', async ({ page }) => {
 	await open(page);
 	const query = page.getByRole('textbox', { name: 'Search in files', exact: true });
