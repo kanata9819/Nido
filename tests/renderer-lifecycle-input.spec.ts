@@ -697,6 +697,38 @@ test('canvas clicks keep their place between earlier and later editor input', as
 	await expect.poll(actions).toEqual(['h', 'click', 'x', 'paste', 'save', 'inputMode']);
 });
 
+test('Ctrl+P reaches Neovim in Visual mode and opens Quick Open in Normal mode', async ({
+	page
+}) => {
+	await page.goto(`${origin}?view=app&defer=inputMode`);
+	const input = page.getByRole('textbox', { name: 'Neovim input' });
+	await expect(input).toBeFocused();
+	const pendingMode = (): Promise<boolean> =>
+		page.evaluate(() =>
+			window.rendererTest.pending.some((call) => call.method === 'inputMode')
+		);
+	await page.keyboard.press('Control+p');
+	await expect.poll(pendingMode).toBe(true);
+	await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'v'));
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.calls.some(
+					(call) => call.method === 'input' && call.args[1] === '<C-p>'
+				)
+			)
+		)
+		.toBe(true);
+	const filter = page.getByRole('textbox', { name: 'Filter items' });
+	await expect(filter).toHaveCount(0);
+	await expect(input).toBeFocused();
+
+	await page.keyboard.press('Control+p');
+	await expect.poll(pendingMode).toBe(true);
+	await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'n'));
+	await expect(filter).toBeVisible();
+});
+
 test('Rapid insert text keeps spaces and following keys while a mode check is pending', async ({
 	page
 }) => {
