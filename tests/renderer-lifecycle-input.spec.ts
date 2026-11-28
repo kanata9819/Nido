@@ -741,6 +741,32 @@ test('Rapid insert text keeps spaces and following keys while a mode check is pe
 	await expect(page.getByRole('dialog', { name: 'Keyboard commands' })).toHaveCount(0);
 });
 
+test('rapid leader keys keep text queued for the search field', async ({ page }) => {
+	await page.goto(`${origin}?view=app&defer=inputMode`);
+	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
+	await page.keyboard.type(' siabc');
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.pending.some((call) => call.method === 'inputMode')
+			)
+		)
+		.toBe(true);
+	await page.evaluate(() => window.rendererTest.settle('inputMode', 0, 'n'));
+	const query = page.getByRole('textbox', { name: 'Search in files', exact: true });
+	await expect(query).toBeFocused();
+	await expect(query).toHaveValue('abc');
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.calls.some(
+					(call) => call.method === 'searchText' && call.args[1] === 'abc'
+				)
+			)
+		)
+		.toBe(true);
+});
+
 test('Rapid Normal-mode menu keys open the debugger and keep its focus', async ({ page }) => {
 	await page.goto(`${origin}?view=app&defer=inputMode`);
 	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
