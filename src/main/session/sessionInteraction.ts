@@ -96,8 +96,15 @@ export class SessionInteraction {
 					return;
 				}
 				if (this.copyMode && (keys === 'q' || keys === '<Esc>')) {
-					await this.leaveCopyMode();
-					return;
+					const mode = (await this.client.request('nvim_get_mode', [])) as {
+						mode: string;
+						blocking: boolean;
+					};
+					// In a search or selection, these keys belong to Neovim.
+					if (mode.mode === 'nt' && !mode.blocking) {
+						await this.leaveCopyMode();
+						return;
+					}
 				}
 			}
 			// Native completion bypasses insert mappings for Ctrl+N/P and inserts previews.
