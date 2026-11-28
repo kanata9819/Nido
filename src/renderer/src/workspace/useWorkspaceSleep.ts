@@ -147,6 +147,7 @@ export function useWorkspaceSleep({
 	}, [restoring, sleepWorkspace]);
 
 	const selectedSleeping = !!workspaces.find((workspace) => workspace.id === active)?.sleeping;
+	const wakeFailed = failed.has(active);
 	useEffect(() => {
 		const id = active;
 		if (restoring || !selectedSleeping || waking.current.has(id) || failed.has(id)) {
@@ -170,6 +171,7 @@ export function useWorkspaceSleep({
 				}
 			})
 			.catch((error) => {
+				pendingKeys.current.delete(id);
 				// Electron prefixes the main process error with the IPC channel.
 				const message = String(error).replace(
 					/^Error: Error invoking remote method '[^']*': (Error: )?/,
@@ -184,7 +186,7 @@ export function useWorkspaceSleep({
 	// Hold typing meanwhile and deliver it to the woken workspace, never the previous one.
 	useEffect(() => {
 		const id = active;
-		if (restoring || !selectedSleeping) {
+		if (restoring || !selectedSleeping || wakeFailed) {
 			return;
 		}
 		const pending = pendingKeys.current;
@@ -219,7 +221,7 @@ export function useWorkspaceSleep({
 				void window.nido.input(id, keys.join('')).catch((error) => report(String(error)));
 			}
 		};
-	}, [restoring, selectedSleeping, active, report]);
+	}, [restoring, selectedSleeping, wakeFailed, active, report]);
 
 	const retry = useCallback((id: string): void => {
 		setFailed((old) => {
