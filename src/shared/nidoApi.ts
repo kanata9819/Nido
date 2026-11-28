@@ -207,6 +207,7 @@ export interface BufferAPI {
 	openSymbol(id: string, index: number, version: number): Promise<void>;
 	previewReference(id: string, index: number, version: number): Promise<ReferencePreview>;
 	selectBuffer(id: string, buffer: number): Promise<void>;
+	selectAdjacentBuffer(id: string, offset: -1 | 1): Promise<void>;
 	closeBuffer(id: string, buffer: number): Promise<boolean>;
 	moveBuffer(id: string, buffer: number, target: number): Promise<void>;
 	reopenBuffer(id: string): Promise<void>;

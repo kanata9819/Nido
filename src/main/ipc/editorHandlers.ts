@@ -143,6 +143,12 @@ function registerSettingHandlers({ handle, session }: EditorHandlerDeps): void {
 /** File tabs: switching, reordering, reopening, closing and saving. */
 function registerBufferHandlers({ window, state, handle, session }: EditorHandlerDeps): void {
 	handle('selectBuffer', (id, buffer) => session(id).selectBuffer(integer(buffer)));
+	handle('selectAdjacentBuffer', (id, offset) => {
+		if (offset !== -1 && offset !== 1) {
+			throw new Error('Invalid tab direction.');
+		}
+		return session(id).selectAdjacentBuffer(offset);
+	});
 	handle('moveBuffer', (id, buffer, target) =>
 		session(id).moveBuffer(integer(buffer), integer(target))
 	);

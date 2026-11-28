@@ -46,6 +46,15 @@ function M.list()
   return result
 end
 
+--- Move relative to the live file tab in Nido's displayed order, wrapping around.
+function M.select_adjacent(offset)
+  local buffers = M.list()
+  if #buffers == 0 then return end
+  local index = vim.fn.index(buffers, api.nvim_get_current_buf())
+  if index < 0 and offset < 0 then index = 0 end
+  api.nvim_set_current_buf(buffers[(index + offset) % #buffers + 1])
+end
+
 --- Restore saved file tabs in order, deferring reads of background files until they are selected.
 --- The first successful open can reuse the initial empty buffer, just like an ordinary open.
 function M.restoreFiles(files, current)

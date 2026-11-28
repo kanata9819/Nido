@@ -278,6 +278,32 @@ test('reference previews preserve unsaved target text after the disk file change
 	}
 });
 
+test('queued relative tab navigation uses the live buffer and custom tab order', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-tab-navigation-'));
+	let session: Session | undefined;
+	try {
+		session = await Session.create(root, () => {});
+		const buffers: number[] = [];
+		for (const name of ['first.txt', 'second.txt', 'third.txt']) {
+			await writeFile(join(root, name), name);
+			await session.openFile(name);
+			buffers.push((await session.client.request('nvim_eval', ['bufnr()'])) as number);
+		}
+		const [first, second, third] = buffers;
+		await session.moveBuffer(third, second);
+		await session.selectBuffer(first);
+		await Promise.all([session.selectAdjacentBuffer(1), session.selectAdjacentBuffer(1)]);
+		assert.equal(await session.client.request('nvim_eval', ['bufnr()']), second);
+		await session.selectAdjacentBuffer(1);
+		assert.equal(await session.client.request('nvim_eval', ['bufnr()']), first);
+		await session.selectAdjacentBuffer(-1);
+		assert.equal(await session.client.request('nvim_eval', ['bufnr()']), second);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
 test('file tabs reorder, reopen in their original positions and retain their cursor', async () => {
 	const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-tab-order-')));
 	let session: Session | undefined;
