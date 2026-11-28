@@ -14,7 +14,7 @@ interface PullRequestFileProps {
 	workspaceId: string;
 	pr: PullRequestDetails;
 	path: string;
-	diff: string;
+	diff?: string;
 	diffHead: string;
 	diffTarget: PullRequestDiffTarget;
 	historical?: boolean;
@@ -43,11 +43,15 @@ export default function PullRequestFile({
 }: PullRequestFileProps): React.JSX.Element {
 	const t = useI18n();
 	const threads = pr.threads.filter((thread) => thread.path === path);
-	const showLineForm = !historical && commenting && pr.state === 'OPEN';
+	const focusThreads = historical || diff === undefined;
+	const canCommentOnLine = !historical && diff !== undefined && pr.state === 'OPEN';
+	const showLineForm = canCommentOnLine && commenting;
 	return (
 		<div className={styles.fileView}>
 			{historical ? (
 				<p>{t('This file is no longer in the current diff.')}</p>
+			) : diff === undefined ? (
+				<p>{t('The diff is unavailable. Refresh to try again.')}</p>
 			) : (
 				<div className={styles.diff}>
 					<GitDiff
@@ -63,16 +67,16 @@ export default function PullRequestFile({
 			<section
 				className={styles.threads}
 				aria-label={t('Review threads')}
-				tabIndex={historical ? 0 : undefined}
-				data-git-summary={historical || undefined}
+				tabIndex={focusThreads ? 0 : undefined}
+				data-git-summary={focusThreads || undefined}
 			>
 				<header className={styles.threadsHeading}>
 					<strong>
 						{t('Review threads')} <span>{threads.length}</span>
 					</strong>
-					{!historical && !showLineForm && (
+					{!focusThreads && !showLineForm && (
 						<button
-							disabled={busy || pr.state !== 'OPEN'}
+							disabled={busy || !canCommentOnLine}
 							onClick={() => setCommenting(true)}
 						>
 							{t('Comment on a line')} <kbd>c</kbd>
@@ -117,7 +121,9 @@ function LineCommentForm({
 	busy,
 	act,
 	setCommenting
-}: Omit<PullRequestFileProps, 'commenting' | 'historical'>): React.JSX.Element {
+}: Omit<PullRequestFileProps, 'commenting' | 'historical' | 'diff'> & {
+	diff: string;
+}): React.JSX.Element {
 	const t = useI18n();
 	const [anchor] = useState({ head: diffHead, target: diffTarget, diff });
 	const [line, setLine] = useState('');

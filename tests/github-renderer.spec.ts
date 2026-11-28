@@ -115,7 +115,9 @@ test('an unavailable diff leaves the pull request overview usable and can be ret
 	await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
-test('a refresh whose diff fails does not keep showing the earlier diff', async ({ page }) => {
+test('a failed diff refresh keeps review threads available without showing the earlier diff', async ({
+	page
+}) => {
 	await page.goto(`${origin}?view=github&defer=githubPullRequestDiff`);
 	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
 	await page.keyboard.press('Enter');
@@ -140,6 +142,16 @@ test('a refresh whose diff fails does not keep showing the earlier diff', async 
 	await expect(page.getByRole('alert')).toContainText('HTTP 503');
 	await expect(page.getByText('The diff is unavailable. Refresh to try again.')).toBeVisible();
 	await expect(preview).not.toContainText('earlier diff line');
+	const threads = page.getByRole('region', { name: 'Review threads' });
+	await expect(threads).toContainText('Rename this?');
+	await files.press('c');
+	await expect(threads.getByRole('textbox', { name: /^Comment on line/ })).toHaveCount(0);
+	await expect(threads.getByRole('button', { name: /^Comment on a line/ })).toHaveCount(0);
+	await files.press('Enter');
+	await expect(threads).toBeFocused();
+	await expect(threads.getByRole('button', { name: 'Resolve', exact: true })).toBeEnabled();
+	await threads.getByRole('button', { name: 'Reply', exact: true }).click();
+	await expect(threads.getByRole('textbox', { name: 'Reply to the thread' })).toBeFocused();
 });
 
 test('a pull request file shows its diff and threads, which can be replied to and resolved', async ({
