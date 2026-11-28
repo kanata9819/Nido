@@ -145,6 +145,8 @@ const api: NidoAPI = {
 	previewReference: (id, index, version) =>
 		ipcRenderer.invoke('nido:previewReference', id, index, version),
 	selectBuffer: (id, buffer) => ipcRenderer.invoke('nido:selectBuffer', id, buffer),
+	selectAdjacentBuffer: (id, offset) =>
+		ipcRenderer.invoke('nido:selectAdjacentBuffer', id, offset),
 	closeBuffer: (id, buffer) => ipcRenderer.invoke('nido:closeBuffer', id, buffer),
 	moveBuffer: (id, buffer, target) => ipcRenderer.invoke('nido:moveBuffer', id, buffer, target),
 	reopenBuffer: (id) => ipcRenderer.invoke('nido:reopenBuffer', id),

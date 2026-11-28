@@ -148,11 +148,11 @@ test('file tabs drag to another position and buffer navigation follows the publi
 		.poll(() =>
 			page.evaluate(() =>
 				window.rendererTest?.calls
-					.filter((call) => call.method === 'selectBuffer')
+					.filter((call) => call.method === 'selectAdjacentBuffer')
 					.map((call) => call.args)
 			)
 		)
-		.toEqual([['alpha', 33]]);
+		.toEqual([['alpha', 1]]);
 	await tabs
 		.getByRole('tab', { name: 'first.ts', exact: true })
 		.dragTo(tabs.getByRole('tab', { name: 'second.ts', exact: true }));
@@ -172,6 +172,26 @@ test('file tabs drag to another position and buffer navigation follows the publi
 		window.rendererTest.emit({ type: 'statePatch', id: 'alpha', state: { buffers } });
 	}, fileTabBuffers);
 	await expect(tabs.getByRole('tab')).toHaveText(['first.ts', 'second.ts', 'third.ts']);
+});
+
+test('rapid tab navigation sends a relative move for each keypress', async ({ page }) => {
+	await showFileTabs(page);
+	await page.keyboard.press('Shift+L');
+	await page.keyboard.press('Shift+L');
+	await page.keyboard.press('Shift+H');
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.rendererTest.calls
+					.filter((call) => call.method === 'selectAdjacentBuffer')
+					.map((call) => call.args)
+			)
+		)
+		.toEqual([
+			['alpha', 1],
+			['alpha', 1],
+			['alpha', -1]
+		]);
 });
 
 test('file tab keyboard moves respect the ends and are also available from the command palette', async ({

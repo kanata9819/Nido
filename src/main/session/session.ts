@@ -686,6 +686,10 @@ end`,
 		return this.buffers.selectBuffer(buffer);
 	}
 
+	selectAdjacentBuffer(offset: -1 | 1): Promise<void> {
+		return this.buffers.selectAdjacentBuffer(offset);
+	}
+
 	closeBuffer(buffer: number, force = false): Promise<void> {
 		return this.buffers.closeBuffer(buffer, force);
 	}

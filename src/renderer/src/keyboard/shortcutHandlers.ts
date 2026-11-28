@@ -38,14 +38,6 @@ function moveCurrentBuffer(context: ShortcutContext, offset: -1 | 1): void {
 	}
 }
 
-/** Selects the previous or next tab, wrapping around. */
-function selectAdjacentBuffer(context: ShortcutContext, offset: -1 | 1): void {
-	const { state, active, run } = context;
-	const count = state.buffers.length;
-	const next = state.buffers[(currentBufferIndex(context) + offset + count) % count];
-	run(window.nido.selectBuffer(active, next.id));
-}
-
 /** Escape closes or leaves whatever has focus. Returns whether to stop handling the key. */
 export function handleEscape(context: ShortcutContext, shortcut: Shortcut): boolean {
 	const { event, consume, focusedInput, terminalFocused } = shortcut;
@@ -285,7 +277,7 @@ export function handleEditorShortcuts(context: ShortcutContext, shortcut: Shortc
 		state.buffers.length > 0
 	) {
 		consume();
-		selectAdjacentBuffer(context, event.key === 'H' ? -1 : 1);
+		context.run(window.nido.selectAdjacentBuffer(active, event.key === 'H' ? -1 : 1));
 		return;
 	}
 	if (
