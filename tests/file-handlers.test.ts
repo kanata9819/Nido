@@ -58,25 +58,31 @@ test('file IPC validates requests and protects files open in other workspace ses
 		send: (event) => sent.push(event),
 		trash
 	});
-	const fileAction = (action: string, path = 'src'): Promise<string> =>
-		handlers.get('fileAction')!('current', action, path) as Promise<string>;
+	const fileAction = (action: string, path = 'src', target?: string): Promise<string> =>
+		handlers.get('fileAction')!('current', action, path, target) as Promise<string>;
 
-	for (const action of ['rename', 'delete', 'copy']) {
+	for (const action of ['rename', 'delete']) {
 		await assert.rejects(fileAction(action), /other workspace session/);
 		await assert.rejects(fileAction(action, 'src/file.txt'), /other workspace session/);
 	}
 	await assert.rejects(fileAction('invalid'), /Invalid file action/);
 	assert.deepEqual(mutations, []);
 	assert.deepEqual(sent, []);
+	await fileAction('copy', 'src/file.txt', 'copy.txt');
+	assert.deepEqual(mutations.pop(), ['copy', 'src/file.txt', 'copy.txt', trash]);
+	sent.length = 0;
 
 	// A sibling with the same prefix is outside the selected directory.
 	other.state.buffers[0].name = join(root, 'src-sibling/file.txt');
 	// A sleeping workspace has no Session, but reopens its files when it wakes.
 	sleeping.push(join(root, 'src/file.txt'));
-	for (const action of ['rename', 'delete', 'copy']) {
+	for (const action of ['rename', 'delete']) {
 		await assert.rejects(fileAction(action), /other workspace session/);
 	}
 	assert.deepEqual(mutations, []);
+	await fileAction('copy', 'src', 'src-copy');
+	assert.deepEqual(mutations.pop(), ['copy', 'src', 'src-copy', trash]);
+	sent.length = 0;
 	sleeping[0] = join(root, 'src-sibling/file.txt');
 	assert.equal(await fileAction('delete'), '');
 	assert.deepEqual(mutations, [['delete', 'src', '', trash]]);

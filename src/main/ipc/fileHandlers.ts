@@ -98,7 +98,7 @@ export function registerFileHandlers({
 				throw new Error('Close this file or folder in the other workspace session first.');
 			}
 		};
-		if (action === 'rename' || action === 'delete' || action === 'copy') {
+		if (action === 'rename' || action === 'delete') {
 			protectOtherWorkspaces(await current.path(text(path)));
 		}
 		const destination = target === undefined ? '' : text(target);
