@@ -546,6 +546,47 @@ test('a delayed shell restart cannot take focus after returning to the editor', 
 	await expect(editor).toBeFocused();
 });
 
+test('closing an overlay returns focus to the editor or terminal that had it', async ({ page }) => {
+	await page.goto(`${origin}?view=app&defer=restoreWorkspaces`);
+	await page.evaluate(() =>
+		window.rendererTest.settle('restoreWorkspaces', 0, {
+			workspaces: [{ id: 'alpha', root: '/alpha', name: 'Alpha', terminalId: 'shell' }],
+			active: 'alpha',
+			errors: []
+		})
+	);
+	const editor = page.getByRole('textbox', { name: 'Neovim input' });
+	const terminal = page.getByRole('textbox', { name: 'Terminal input' });
+	await expect(editor).toBeFocused();
+	await page.keyboard.press('Control+`');
+	await expect(terminal).toBeFocused();
+	await page.keyboard.press('Control+k');
+	await expect(editor).toBeFocused();
+	const frames = (): Promise<unknown> =>
+		page.evaluate(
+			() =>
+				new Promise((resolve) =>
+					requestAnimationFrame(() => requestAnimationFrame(resolve))
+				)
+		);
+	// The leader, Quick Open and the command palette return to the editor, not the shown terminal.
+	for (const opener of ['Space', 'Control+p', 'Control+Shift+p']) {
+		await page.keyboard.press(opener);
+		await frames();
+		await page.keyboard.press('Escape');
+		await frames();
+		await expect(editor).toBeFocused();
+	}
+	await page.keyboard.press('Control+`');
+	await page.keyboard.press('Control+`');
+	await expect(terminal).toBeFocused();
+	await page.keyboard.press('Control+Shift+p');
+	await frames();
+	await page.keyboard.press('Escape');
+	await frames();
+	await expect(terminal).toBeFocused();
+});
+
 test('workspace tabs move by keyboard and drag while keeping their colors and selection', async ({
 	page
 }) => {

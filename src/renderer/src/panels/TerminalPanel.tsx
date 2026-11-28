@@ -164,6 +164,7 @@ export default function TerminalPanel({
 				theme={settings.theme}
 				id={id}
 				terminal
+				panel
 				active={active}
 				fontSize={fontSize}
 				fontWeight={fontWeight}
