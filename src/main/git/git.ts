@@ -616,7 +616,9 @@ export async function gitDiff(
 		...diffConfig,
 		'diff',
 		...options,
-		...(staged ? ['--cached'] : []),
+		// The side-by-side viewer needs one baseline. Compare unresolved paths with HEAD,
+		// since the index has multiple stages and Git would emit a combined diff.
+		...(change.status === 'U' ? ['HEAD'] : staged ? ['--cached'] : []),
 		'--',
 		change.path,
 		...(change.original ? [change.original] : [])
