@@ -380,13 +380,13 @@ export default function PullRequests({
 					empty={t(loaded ? 'No pull requests.' : 'Loading…')}
 				/>
 				<div className={`${gitStyles.preview} ${styles.preview}`} data-git-preview>
-					{opened && file && (diff || file.historical) ? (
+					{opened && file ? (
 						<PullRequestFile
 							key={`${opened.number}:${file.path}`}
 							workspaceId={workspaceId}
 							pr={opened}
 							path={file.path}
-							diff={diff?.files.get(file.path) ?? ''}
+							diff={diff && (diff.files.get(file.path) ?? '')}
 							diffHead={diff?.head ?? opened.headRefOid}
 							diffTarget={diff?.target ?? opened}
 							historical={file.historical}
@@ -395,10 +395,6 @@ export default function PullRequests({
 							setCommenting={(value) => setForm(value ? 'comment' : undefined)}
 							act={act}
 						/>
-					) : opened && file ? (
-						<div className={gitStyles.emptyPreview} data-git-summary tabIndex={0}>
-							<p>{t('The diff is unavailable. Refresh to try again.')}</p>
-						</div>
 					) : opened ? (
 						<PullRequestOverview
 							workspaceId={workspaceId}
