@@ -462,6 +462,22 @@ test('reopening the search continues it: the query, and j goes on from the resul
 	]);
 });
 
+test('reopening the search selects the result opened by mouse', async ({ page }) => {
+	await open(page);
+	const results = page.getByRole('listbox', { name: 'Search results', exact: true });
+	await results.press('i');
+	const query = page.getByRole('textbox', { name: 'Search in files', exact: true });
+	await query.fill('joke');
+	await matches(page, 'joke');
+	await expect(results.getByRole('option').first()).toHaveAttribute('aria-selected', 'true');
+	await results.getByRole('option').nth(1).click();
+	await expect(results).toHaveCount(0);
+	await page.keyboard.press('Control+Shift+f');
+	await expect(query).toHaveValue('joke');
+	await matches(page, 'joke');
+	await expect(results.getByRole('option').nth(1)).toHaveAttribute('aria-selected', 'true');
+});
+
 test('Space s opens Search in files, and the Space menu lists it', async ({ page }) => {
 	await page.goto(`${origin}?view=app`);
 	const editor = page.getByRole('textbox', { name: 'Neovim input', exact: true });

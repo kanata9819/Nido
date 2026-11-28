@@ -117,6 +117,11 @@ export default function WorkspaceSearch({
 			.openFile(workspaceId, match.path, match.line, match.column)
 			.then(() => {
 				if (canFocus()) {
+					const saved = lastSearches.get(workspaceId);
+					if (saved?.query === query && saved.options === options) {
+						// Closing can unmount before a selection state update is committed.
+						lastSearches.set(workspaceId, { ...saved, selection: index });
+					}
 					onClose();
 				}
 			})
