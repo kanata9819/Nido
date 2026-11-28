@@ -258,7 +258,7 @@ function Thread({
 					{t(thread.isResolved ? 'Unresolve' : 'Resolve')}
 				</button>
 			</header>
-			<Timeline comments={thread.comments} />
+			<Timeline comments={thread.comments} baseUrl={pullRequestUrl} />
 			{replying && (
 				<Composer
 					label={t('Reply to the thread')}
