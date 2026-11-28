@@ -76,7 +76,7 @@ export default function PullRequestOverview({
 					<span className={styles.added}>+{pr.additions}</span>{' '}
 					<span className={styles.removed}>−{pr.deletions}</span>
 				</p>
-				<GitHubMarkdown source={pr.body} />
+				<GitHubMarkdown source={pr.body} baseUrl={pr.url} />
 				{pr.checkRuns.length > 0 && (
 					<>
 						<h3 className={styles.sectionTitle}>
@@ -106,7 +106,7 @@ export default function PullRequestOverview({
 					</>
 				)}
 				<h3 className={styles.sectionTitle}>{t('Conversation')}</h3>
-				<Timeline comments={pr.timeline} />
+				<Timeline comments={pr.timeline} baseUrl={pr.url} />
 			</section>
 			{form === 'comment' ? (
 				<Composer

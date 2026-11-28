@@ -444,6 +444,65 @@ test('threads for a path outside the current diff remain reachable', async ({ pa
 	await expect(page.getByRole('button', { name: /^Comment on a line/ })).toHaveCount(0);
 });
 
+test('relative links in a pull request use the pull request page', async ({ page }) => {
+	await page.goto(`${origin}?view=github&defer=githubPullRequest`);
+	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect.poll(() => calls(page, 'githubPullRequest')).toHaveLength(1);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubPullRequest', 0, {
+			number: 7,
+			url: 'https://github.com/octo/alpha/pull/7',
+			title: 'Add sign-in',
+			state: 'OPEN',
+			headRefOid: 'a'.repeat(40),
+			baseRefOid: 'b'.repeat(40),
+			baseRefName: 'main',
+			labels: [],
+			body: '[Body link](/octo/alpha/issues/5)',
+			checkRuns: [],
+			timeline: [
+				{ id: 'T1', author: 'user', body: '[Comment link](../issues/6)', createdAt: '' }
+			],
+			files: [{ path: 'src/login.ts', additions: 1, deletions: 0 }],
+			threads: [
+				{
+					id: 'HISTORICAL',
+					path: 'removed.ts',
+					line: 3,
+					side: 'RIGHT',
+					isResolved: false,
+					isOutdated: true,
+					comments: [
+						{
+							id: 'C1',
+							author: 'reviewer',
+							body: '[Thread link](/octo/alpha/issues/8)',
+							createdAt: ''
+						}
+					]
+				}
+			]
+		})
+	);
+	await expect(page.getByRole('link', { name: 'Body link' })).toHaveAttribute(
+		'href',
+		'https://github.com/octo/alpha/issues/5'
+	);
+	const comment = page.getByRole('link', { name: 'Comment link' });
+	await expect(comment).toHaveAttribute('href', 'https://github.com/octo/alpha/issues/6');
+	await comment.click();
+	expect(await calls(page, 'openDocumentation')).toEqual([
+		['https://github.com/octo/alpha/issues/6']
+	]);
+	const list = page.getByRole('listbox', { name: 'Pull request files' });
+	await list.getByRole('option', { name: 'removed.ts' }).click();
+	await expect(page.getByRole('link', { name: 'Thread link' })).toHaveAttribute(
+		'href',
+		'https://github.com/octo/alpha/issues/8'
+	);
+});
+
 test('reviews, merges and checkouts send their choices', async ({ page }) => {
 	await page.goto(`${origin}?view=github`);
 	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
