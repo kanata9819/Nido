@@ -480,6 +480,47 @@ vim.g.eol_test_mark = vim.api.nvim_buf_set_extmark(0, vim.g.eol_test_ns, 2, 2, {
 	}
 });
 
+test('undo and redo a mixed-to-CRLF conversion without adding extra CR bytes', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-eol-undo-'));
+	const path = join(root, 'mixed.txt');
+	const original = 'one\r\ntwo\nlast';
+	let session: Session | undefined;
+	try {
+		await writeFile(path, original);
+		session = await Session.create(root, () => {});
+		await session.openFile('mixed.txt');
+		await session.setLineEnding('CRLF');
+		const conversion = (await session.client.request('nvim_eval', [
+			'undotree().seq_cur'
+		])) as number;
+		await session.input('u');
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), original);
+
+		await session.input('<C-r>');
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), 'one\r\ntwo\r\nlast');
+
+		// Editing after undo creates a different branch with a newer sequence number.
+		await session.input('uG0Cother<Esc>');
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), 'one\r\ntwo\nother');
+		await session.client.request('nvim_command', [`undo ${conversion}`]);
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), 'one\r\ntwo\r\nlast');
+
+		await session.setLineEnding('LF');
+		await session.client.request('nvim_buf_set_lines', [0, 0, 1, false, ['one\r']]);
+		await session.setLineEnding('CRLF');
+		await session.input('u');
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), original);
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test("the current file's encoding is published, with its byte order mark", async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-encoding-'));
 	let session: Session | undefined;
