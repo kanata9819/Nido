@@ -3,6 +3,7 @@ import { useErrorMessage, useI18n } from '../i18n';
 import type {
 	PullRequestDetails,
 	PullRequestDiffTarget,
+	PullRequestFile as PullRequestFileInfo,
 	PullRequestFilter,
 	PullRequestSummary
 } from '../../../shared/github';
@@ -12,6 +13,7 @@ import PullRequestOverview, { type PullRequestForm } from './PullRequestOverview
 import PullRequestFile from './PullRequestFile';
 import { PullRequestCard } from './PullRequestCard';
 import { canMergePullRequest, canReviewPullRequest, type GitHubViewProps } from './githubModel';
+import { splitDiff } from '../git/diff/splitDiff';
 import gitStyles from '../git/Git.module.css';
 import styles from './GitHub.module.css';
 
@@ -22,6 +24,16 @@ const filterTitles = {
 	review: 'Review requested',
 	closed: 'Closed'
 } as const;
+
+interface PullRequestDiffSnapshot {
+	head: string;
+	target: PullRequestDiffTarget;
+	files: Map<string, string>;
+}
+
+interface DisplayedPullRequest extends PullRequestDetails {
+	files: (PullRequestFileInfo & { historical?: true })[];
+}
 
 /**
  * The pull requests of the repository. Enter opens one: the list then holds its overview and
@@ -49,12 +61,8 @@ export default function PullRequests({
 	const loaded = loadedKey === listKey;
 	const [index, setIndex] = useState(0);
 	// The opened pull request, its diff per file, and the entry selected in it (0: overview).
-	const [opened, setOpened] = useState<PullRequestDetails>();
-	const [diff, setDiff] = useState<{
-		head: string;
-		target: PullRequestDiffTarget;
-		files: Map<string, string>;
-	}>();
+	const [opened, setOpened] = useState<DisplayedPullRequest>();
+	const [diff, setDiff] = useState<PullRequestDiffSnapshot>();
 	const [entry, setEntry] = useState(0);
 	const [form, setForm] = useState<PullRequestForm>();
 	const list = useRef<HTMLDivElement>(null);
@@ -94,24 +102,52 @@ export default function PullRequests({
 		};
 	}, [workspaceId, filter, listKey]);
 
-	/**
-	 * Keep the same file across reloads, even when it moves to another row. A diff loaded for
-	 * another head, base or repository is dropped, so the preview never shows outdated changes.
-	 */
-	function showDetails(details: PullRequestDetails, keepEntry: boolean): void {
-		setOpened(details);
-		setDiff((current) =>
-			current &&
-			current.head === details.headRefOid &&
-			current.target.url === details.url &&
-			current.target.baseRefName === details.baseRefName &&
-			current.target.baseRefOid === details.baseRefOid
-				? current
-				: undefined
-		);
+	/** Keep the same file across reloads, even when it moves to another row. */
+	function showDetails(
+		details: PullRequestDetails,
+		keepEntry: boolean,
+		snapshot: PullRequestDiffSnapshot | undefined
+	): void {
+		const files: DisplayedPullRequest['files'] = [...details.files];
+		const listed = new Set(files.map((file) => file.path));
+		const matchingDiff =
+			snapshot &&
+			snapshot.head === details.headRefOid &&
+			snapshot.target.url === details.url &&
+			snapshot.target.baseRefName === details.baseRefName &&
+			snapshot.target.baseRefOid === details.baseRefOid
+				? snapshot
+				: undefined;
+		setDiff(matchingDiff);
+		if (matchingDiff) {
+			for (const [path, patch] of matchingDiff.files) {
+				if (listed.has(path)) {
+					continue;
+				}
+				let additions = 0;
+				let deletions = 0;
+				for (const row of splitDiff(patch)) {
+					if (row.after?.changed) {
+						additions += 1;
+					}
+					if (row.before?.changed) {
+						deletions += 1;
+					}
+				}
+				files.push({ path, additions, deletions });
+				listed.add(path);
+			}
+		}
+		for (const thread of details.threads) {
+			if (thread.path && !listed.has(thread.path)) {
+				files.push({ path: thread.path, additions: 0, deletions: 0, historical: true });
+				listed.add(thread.path);
+			}
+		}
+		setOpened({ ...details, files });
 		setEntry((value) => {
 			const path = keepEntry ? opened?.files[value - 1]?.path : undefined;
-			return path ? details.files.findIndex((file) => file.path === path) + 1 : 0;
+			return path ? files.findIndex((file) => file.path === path) + 1 : 0;
 		});
 	}
 
@@ -124,6 +160,7 @@ export default function PullRequests({
 				baseRefName: details.baseRefName,
 				baseRefOid: details.baseRefOid
 			};
+			let snapshot: PullRequestDiffSnapshot | undefined;
 			try {
 				const files = await window.nido.githubPullRequestDiff(
 					workspaceId,
@@ -131,13 +168,9 @@ export default function PullRequests({
 					details.headRefOid,
 					target
 				);
-				setDiff({ head: details.headRefOid, target, files: new Map(files) });
-			} catch (error) {
-				// The previous diff belongs to an earlier load; show it as unavailable instead.
-				setDiff(undefined);
-				throw error;
+				snapshot = { head: details.headRefOid, target, files: new Map(files) };
 			} finally {
-				showDetails(details, keepEntry);
+				showDetails(details, keepEntry, snapshot);
 				list.current?.focus();
 			}
 		});
@@ -188,7 +221,7 @@ export default function PullRequests({
 						opened.number,
 						opened.url
 					);
-					showDetails(details, true);
+					showDetails(details, true, diff);
 				} catch (error) {
 					result = t('{message} Could not refresh the pull request: {reason}', {
 						message: result,
@@ -219,8 +252,14 @@ export default function PullRequests({
 					label: file.path,
 					meta: (
 						<>
-							<span className={styles.added}>+{file.additions}</span>
-							<span className={styles.removed}>−{file.deletions}</span>
+							{file.historical ? (
+								<span className={styles.label}>{t('Outdated')}</span>
+							) : (
+								<>
+									<span className={styles.added}>+{file.additions}</span>
+									<span className={styles.removed}>−{file.deletions}</span>
+								</>
+							)}
 							<small className={styles.folder}>
 								<bdi>
 									{file.path.slice(0, Math.max(0, file.path.lastIndexOf('/')))}
@@ -244,10 +283,15 @@ export default function PullRequests({
 				)
 			}));
 
+	const file = opened && entry > 0 ? opened.files[entry - 1] : undefined;
 	const keys: Record<string, () => void> = opened
 		? {
 				o: checkout,
-				c: () => setForm('comment'),
+				c: () => {
+					if (!file || (diff && !file.historical && opened.state === 'OPEN')) {
+						setForm('comment');
+					}
+				},
 				v: () => {
 					if (canReviewPullRequest(opened)) {
 						setForm('review');
@@ -270,7 +314,6 @@ export default function PullRequests({
 		keysRef.current = keys;
 	});
 
-	const file = opened && entry > 0 ? opened.files[entry - 1] : undefined;
 	return (
 		<>
 			<div className={gitStyles.toolbar}>
@@ -328,7 +371,7 @@ export default function PullRequests({
 							document
 								.querySelector<HTMLElement>(
 									entry > 0
-										? '[data-panel="github"] [data-git-scroll="after"]'
+										? '[data-panel="github"] [data-git-scroll="after"], [data-panel="github"] [data-git-summary]'
 										: '[data-panel="github"] [data-git-summary]'
 								)
 								?.focus();
@@ -337,15 +380,16 @@ export default function PullRequests({
 					empty={t(loaded ? 'No pull requests.' : 'Loading…')}
 				/>
 				<div className={`${gitStyles.preview} ${styles.preview}`} data-git-preview>
-					{opened && file && diff ? (
+					{opened && file && (diff || file.historical) ? (
 						<PullRequestFile
 							key={`${opened.number}:${file.path}`}
 							workspaceId={workspaceId}
 							pr={opened}
 							path={file.path}
-							diff={diff.files.get(file.path) ?? ''}
-							diffHead={diff.head}
-							diffTarget={diff.target}
+							diff={diff?.files.get(file.path) ?? ''}
+							diffHead={diff?.head ?? opened.headRefOid}
+							diffTarget={diff?.target ?? opened}
+							historical={file.historical}
 							busy={working}
 							commenting={form === 'comment'}
 							setCommenting={(value) => setForm(value ? 'comment' : undefined)}

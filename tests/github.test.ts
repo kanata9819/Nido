@@ -44,7 +44,9 @@ process.stdin.on('end', () => {
 	const key = Object.keys(replies)
 		.filter((prefix) => args.join(' ').startsWith(prefix))
 		.sort((a, b) => b.length - a.length)[0];
-	const reply = key === undefined ? '' : replies[key];
+	const configured = key === undefined ? '' : replies[key];
+	const after = args.find((arg) => arg.startsWith('after='))?.slice('after='.length) ?? '';
+	const reply = configured?.byAfter ? configured.byAfter[after] : configured;
 	if (reply && reply.error) {
 		process.stderr.write(reply.error);
 		process.exit(1);
@@ -273,6 +275,58 @@ test('a pull request joins its details with its review threads', async () => {
 	assert.ok(graphql.args.includes('owner=octo'));
 	assert.ok(graphql.args.includes('name=app'));
 	assert.deepEqual(graphql.args.slice(-2), ['-F', 'number=12']);
+});
+
+test('review threads and replies are fetched through their last pages', async () => {
+	const url = 'https://github.com/octo/app/pull/12';
+	const page = (nodes: unknown[], endCursor?: string): object => ({
+		nodes,
+		pageInfo: { hasNextPage: !!endCursor, endCursor }
+	});
+	const root = (reviewThreads: unknown): object => ({
+		data: { repository: { pullRequest: { reviewThreads } } }
+	});
+	const nodes = Array.from({ length: 100 }, (_, i) => ({ id: `T${i}`, path: 'a.ts' }));
+	const firstComments = Array.from({ length: 100 }, (_, i) => ({ id: `C${i}`, body: String(i) }));
+	const calls = await withReplies(
+		{
+			[`pr view ${url}`]: { number: 12, url },
+			'api graphql -f query=query ReviewThreads': {
+				byAfter: {
+					'': root(
+						page(
+							[
+								{ ...nodes[0], comments: page(firstComments, 'reply-next') },
+								...nodes.slice(1)
+							],
+							'thread-next'
+						)
+					),
+					'thread-next': root(page([{ id: 'T100', path: 'b.ts' }]))
+				}
+			},
+			'api graphql -f query=query ReviewThreadComments': {
+				byAfter: {
+					'reply-next': {
+						data: { node: { comments: page([{ id: 'C100', body: 'Reply 101' }]) } }
+					}
+				}
+			}
+		},
+		async () => {
+			const pr = await pullRequest(folder, 12, url);
+			assert.equal(pr.threads.length, 101);
+			assert.equal(pr.threads.at(-1)?.id, 'T100');
+			assert.equal(pr.threads[0].comments.length, 101);
+			assert.equal(pr.threads[0].comments.at(-1)?.body, 'Reply 101');
+		}
+	);
+	assert.deepEqual(
+		calls
+			.filter(({ args }) => args[1] === 'graphql')
+			.map(({ args }) => args.find((arg) => arg.startsWith('after='))),
+		[undefined, 'after=thread-next', 'after=reply-next']
+	);
 });
 
 const diffHead = 'a'.repeat(40);

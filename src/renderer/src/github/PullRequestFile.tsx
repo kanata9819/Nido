@@ -17,6 +17,7 @@ interface PullRequestFileProps {
 	diff: string;
 	diffHead: string;
 	diffTarget: PullRequestDiffTarget;
+	historical?: boolean;
 	busy: boolean;
 	commenting: boolean;
 	setCommenting: (commenting: boolean) => void;
@@ -34,6 +35,7 @@ export default function PullRequestFile({
 	diff,
 	diffHead,
 	diffTarget,
+	historical,
 	busy,
 	commenting,
 	setCommenting,
@@ -41,24 +43,34 @@ export default function PullRequestFile({
 }: PullRequestFileProps): React.JSX.Element {
 	const t = useI18n();
 	const threads = pr.threads.filter((thread) => thread.path === path);
+	const showLineForm = !historical && commenting && pr.state === 'OPEN';
 	return (
 		<div className={styles.fileView}>
-			<div className={styles.diff}>
-				<GitDiff
-					workspaceId={workspaceId}
-					path={path}
-					diff={diff || t('No textual diff for this file.')}
-					label={t('Pull request diff')}
-					beforeLabel={pr.baseRefName}
-					afterLabel={pr.headRefName}
-				/>
-			</div>
-			<section className={styles.threads} aria-label={t('Review threads')}>
+			{historical ? (
+				<p>{t('This file is no longer in the current diff.')}</p>
+			) : (
+				<div className={styles.diff}>
+					<GitDiff
+						workspaceId={workspaceId}
+						path={path}
+						diff={diff || t('No textual diff for this file.')}
+						label={t('Pull request diff')}
+						beforeLabel={pr.baseRefName}
+						afterLabel={pr.headRefName}
+					/>
+				</div>
+			)}
+			<section
+				className={styles.threads}
+				aria-label={t('Review threads')}
+				tabIndex={historical ? 0 : undefined}
+				data-git-summary={historical || undefined}
+			>
 				<header className={styles.threadsHeading}>
 					<strong>
 						{t('Review threads')} <span>{threads.length}</span>
 					</strong>
-					{!commenting && (
+					{!historical && !showLineForm && (
 						<button
 							disabled={busy || pr.state !== 'OPEN'}
 							onClick={() => setCommenting(true)}
@@ -67,7 +79,7 @@ export default function PullRequestFile({
 						</button>
 					)}
 				</header>
-				{commenting && (
+				{showLineForm && (
 					<LineCommentForm
 						workspaceId={workspaceId}
 						pr={pr}
@@ -105,7 +117,7 @@ function LineCommentForm({
 	busy,
 	act,
 	setCommenting
-}: Omit<PullRequestFileProps, 'commenting'>): React.JSX.Element {
+}: Omit<PullRequestFileProps, 'commenting' | 'historical'>): React.JSX.Element {
 	const t = useI18n();
 	const [anchor] = useState({ head: diffHead, target: diffTarget, diff });
 	const [line, setLine] = useState('');

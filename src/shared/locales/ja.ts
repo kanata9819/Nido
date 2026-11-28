@@ -1189,6 +1189,7 @@ export const japanese: Record<string, string> = {
 	'1/2/3 Views · j/k Select · Enter Open · f Filter · b Browser · r Refresh · Ctrl+H/L List / Preview · Esc Close':
 		'1/2/3 表示 · j/k 選択 · Enter 開く · f 絞り込み · b ブラウザー · r 更新 · Ctrl+H/L 一覧 / プレビュー · Esc 閉じる',
 	'No textual diff for this file.': 'このファイルにはテキストの差分がありません。',
+	'This file is no longer in the current diff.': 'このファイルは現在の差分に含まれていません。',
 	'The diff is unavailable. Refresh to try again.':
 		'差分を取得できませんでした。更新して再試行してください。',
 	'Pull request diff': 'プルリクエストの差分',

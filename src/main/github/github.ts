@@ -130,18 +130,97 @@ export async function listPullRequests(
 	return (await ghJson<unknown[]>(cwd, args)).map(parsePullRequestSummary);
 }
 
-const threadQuery = `query($owner: String!, $name: String!, $number: Int!) {
+const commentFields = 'id author { login } body createdAt url';
+const pageFields = 'pageInfo { hasNextPage endCursor }';
+const threadQuery = `query ReviewThreads($owner: String!, $name: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
-      reviewThreads(first: 100) {
+      reviewThreads(first: 100, after: $after) {
         nodes {
           id isResolved isOutdated path line originalLine diffSide
-          comments(first: 100) { nodes { id author { login } body createdAt url } }
+          comments(first: 100) { nodes { ${commentFields} } ${pageFields} }
         }
+        ${pageFields}
       }
     }
   }
 }`;
+
+const threadCommentsQuery = `query ReviewThreadComments($thread: ID!, $after: String!) {
+  node(id: $thread) {
+    ... on PullRequestReviewThread {
+      comments(first: 100, after: $after) { nodes { ${commentFields} } ${pageFields} }
+    }
+  }
+}`;
+
+interface ReviewPage<T> {
+	nodes?: (T | null)[];
+	pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+}
+
+interface ReviewThreadNode {
+	id: string;
+	comments?: ReviewPage<unknown>;
+}
+
+function nextReviewPage(
+	page: ReviewPage<unknown> | undefined,
+	previous?: string
+): string | undefined {
+	if (!page?.pageInfo?.hasNextPage) {
+		return undefined;
+	}
+	const cursor = page.pageInfo.endCursor;
+	if (!cursor || cursor === previous) {
+		throw new GhError('GitHub CLI returned an unexpected reply.');
+	}
+	return cursor;
+}
+
+async function readReviewThreads(
+	cwd: string,
+	host: string,
+	owner: string,
+	name: string,
+	number: number
+): Promise<ReviewThreadNode[]> {
+	const threads: ReviewThreadNode[] = [];
+	let after: string | undefined;
+	do {
+		const data = await ghGraphql<{
+			repository?: { pullRequest?: { reviewThreads?: ReviewPage<ReviewThreadNode> } };
+		}>(cwd, threadQuery, { owner, name, number, ...(after ? { after } : {}) }, host);
+		const page = data.repository?.pullRequest?.reviewThreads;
+		for (const thread of page?.nodes ?? []) {
+			if (thread) {
+				threads.push(thread);
+			}
+		}
+		after = nextReviewPage(page, after);
+	} while (after);
+
+	for (const thread of threads) {
+		let after = nextReviewPage(thread.comments);
+		if (!after) {
+			continue;
+		}
+		const comments = [...(thread.comments?.nodes ?? [])];
+		do {
+			const data = await ghGraphql<{ node?: { comments?: ReviewPage<unknown> } }>(
+				cwd,
+				threadCommentsQuery,
+				{ thread: nodeId(thread.id), after },
+				host
+			);
+			comments.push(...(data.node?.comments?.nodes ?? []));
+			after = nextReviewPage(data.node?.comments, after);
+		} while (after);
+		thread.comments = { nodes: comments };
+	}
+
+	return threads;
+}
 
 /** A pull request with its files, checks, conversation and review threads. */
 export async function pullRequest(
@@ -158,12 +237,7 @@ export async function pullRequest(
 	]);
 	const canonical = new URL(conversationTarget('pr', number, details.url ?? url ?? ''));
 	const [, owner, name] = canonical.pathname.split('/');
-	const threads = await ghGraphql<unknown>(
-		cwd,
-		threadQuery,
-		{ owner, name, number },
-		canonical.host
-	);
+	const threads = await readReviewThreads(cwd, canonical.host, owner, name, number);
 	return parsePullRequestDetails(details, threads);
 }
 
