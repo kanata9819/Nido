@@ -9,6 +9,27 @@ import { wslDistributions } from './wsl';
 type InstalledShell = Exclude<TerminalShell, 'auto'>;
 const exec = promisify(execFile);
 
+/**
+ * PSReadLine draws its inline prediction as bright white, faint and italic by default. Neovim's
+ * terminal drops the faint attribute, so the prediction looked brighter than typed text. Once
+ * the profile has run, a prediction color the user left at that default becomes gray italic,
+ * which the terminal keeps. Encoded, so no quoting is needed on the command line.
+ */
+const predictionColorScript = [
+	'try {',
+	'  $option = Get-PSReadLineOption -ErrorAction Stop',
+	'  if ($option.InlinePredictionColor -eq "$([char]27)[97;2;3m") {',
+	'    Set-PSReadLineOption -Colors @{ InlinePrediction = "$([char]27)[90;3m" }',
+	'  }',
+	'} catch {}'
+].join('\n');
+export const powerShellArguments = [
+	'-NoLogo',
+	'-NoExit',
+	'-EncodedCommand',
+	Buffer.from(predictionColorScript, 'utf16le').toString('base64')
+];
+
 /** Neovim cannot start an App Execution Alias as a terminal job. Use the registered binary. */
 async function storePowerShell(windows: string): Promise<string[] | undefined> {
 	try {
@@ -26,7 +47,7 @@ async function storePowerShell(windows: string): Promise<string[] | undefined> {
 		if (isAbsolute(location)) {
 			const executable = resolve(location, 'pwsh.exe');
 			if ((await stat(executable)).isFile()) {
-				return [executable, '-NoLogo'];
+				return [executable, ...powerShellArguments];
 			}
 		}
 	} catch {
@@ -84,7 +105,7 @@ async function installedShell(shell: InstalledShell): Promise<string[] | undefin
 			}
 			return [
 				executable,
-				...(shell === 'pwsh' || shell === 'powershell.exe' ? ['-NoLogo'] : [])
+				...(shell === 'pwsh' || shell === 'powershell.exe' ? powerShellArguments : [])
 			];
 		} catch {
 			// Missing executables and an unavailable WSL installation are not choices.
