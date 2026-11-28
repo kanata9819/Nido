@@ -628,7 +628,7 @@ test('history, first-parent diffs and branch switches preserve conflicting edits
 	}
 });
 
-test('pushing a PR branch updates only its upstream even with matching pushes configured', async () => {
+test('pushing a PR branch updates only its own branch even with matching pushes configured', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-push-branch-'));
 	const remote = join(root, 'remote.git');
 	const git = (...args: string[]): string =>
@@ -656,17 +656,19 @@ test('pushing a PR branch updates only its upstream even with matching pushes co
 		git('branch', '-f', 'other', update);
 		git('-c', 'tag.gpgsign=false', 'tag', '-am', 'Local tag', 'local-tag');
 
-		await gitPushBranch(root);
+		// An upstream of another name is left alone; the branch is published under its own name.
+		assert.deepEqual(await gitPushBranch(root), { branch: 'feature', remote: 'fork' });
 		assert.deepEqual(
 			git('--git-dir', remote, 'for-each-ref', '--format=%(refname) %(objectname)').split(
 				/\r?\n/
 			),
 			[
-				`refs/heads/feature ${initial}`,
+				`refs/heads/feature ${update}`,
 				`refs/heads/other ${initial}`,
-				`refs/heads/published ${update}`
+				`refs/heads/published ${initial}`
 			]
 		);
+		assert.equal(git('rev-parse', '--abbrev-ref', '@{upstream}'), 'fork/feature');
 	} finally {
 		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 	}
@@ -727,6 +729,42 @@ test('a PR branch made from its base branch is published under its own name, not
 			remote: 'origin'
 		});
 		assert.equal(git('--git-dir', remote, 'rev-parse', 'refs/heads/main'), initial);
+		assert.equal(git('--git-dir', remote, 'rev-parse', 'refs/heads/feature'), work);
+		assert.equal(git('rev-parse', '--abbrev-ref', '@{upstream}'), 'origin/feature');
+	} finally {
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
+test('a PR branch made from another shared branch is published under its own name', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-push-shared-'));
+	const remote = join(root, 'remote.git');
+	const git = (...args: string[]): string =>
+		execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
+	try {
+		git('init', '-q', '-b', 'main');
+		git('init', '-q', '--bare', remote);
+		git('config', 'user.name', 'Nido Test');
+		git('config', 'user.email', 'test@example.invalid');
+		git('config', 'commit.gpgsign', 'false');
+		git('remote', 'add', 'origin', remote);
+		git('commit', '-qm', 'Initial', '--allow-empty');
+		git('push', '-q', 'origin', 'main');
+		git('switch', '-q', '-c', 'develop');
+		git('commit', '-qm', 'Develop work', '--allow-empty');
+		const develop = git('rev-parse', 'HEAD');
+		git('push', '-q', 'origin', 'develop');
+		git('fetch', '-q', 'origin');
+		// `git switch -c feature origin/develop` makes origin/develop the branch's upstream,
+		// but the pull request merges into main: develop must not receive the feature's work.
+		git('switch', '-q', '-c', 'feature', 'origin/develop');
+		git('commit', '-qm', 'Feature work', '--allow-empty');
+		const work = git('rev-parse', 'HEAD');
+		assert.deepEqual(await gitPushBranch(root, 'main', 'feature'), {
+			branch: 'feature',
+			remote: 'origin'
+		});
+		assert.equal(git('--git-dir', remote, 'rev-parse', 'refs/heads/develop'), develop);
 		assert.equal(git('--git-dir', remote, 'rev-parse', 'refs/heads/feature'), work);
 		assert.equal(git('rev-parse', '--abbrev-ref', '@{upstream}'), 'origin/feature');
 	} finally {
@@ -975,5 +1013,96 @@ test('diff emphasis keeps supplementary Unicode characters in one span', () => {
 	]) {
 		const [before, after] = pairs.map((text) => 'prefix ' + text + ' suffix');
 		assert.deepEqual(changedRange(before, after), { before: [7, 9], after: [7, 9] });
+	}
+});
+
+test('an unresolved conflict is one unstaged change that cannot be unstaged away', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-git-conflict-'));
+	const git = (...args: string[]): string =>
+		execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
+	try {
+		git('init', '-q', '-b', 'main');
+		git('config', 'core.autocrlf', 'false');
+		git('config', 'user.name', 'Nido Test');
+		git('config', 'user.email', 'test@example.invalid');
+		git('config', 'commit.gpgsign', 'false');
+		await writeFile(join(root, 'notes.txt'), 'base\n');
+		git('add', 'notes.txt');
+		git('commit', '-qm', 'Base');
+		git('switch', '-qc', 'other');
+		await writeFile(join(root, 'notes.txt'), 'theirs\n');
+		git('commit', '-qam', 'Theirs');
+		git('switch', '-q', 'main');
+		await writeFile(join(root, 'notes.txt'), 'ours\n');
+		git('commit', '-qam', 'Ours');
+		assert.throws(() => git('merge', '-q', 'other'));
+		const unmerged = git('ls-files', '-u');
+		assert.equal(unmerged.split('\n').length, 3);
+
+		// Git reports UU, one letter per side of the merge, not a staged and an unstaged change.
+		assert.deepEqual((await gitStatus(root)).changes, [
+			{ path: 'notes.txt', status: 'U', staged: false }
+		]);
+		// An unstage would run `git reset`, dropping the conflict while its markers remain.
+		await assert.rejects(gitStage(root, 'notes.txt', true), /no longer exists/);
+		assert.equal(git('ls-files', '-u'), unmerged);
+		assert.match(await readFile(join(root, 'notes.txt'), 'utf8'), /^<<<<<<< /);
+
+		// Staging the edited file still marks the conflict resolved.
+		await writeFile(join(root, 'notes.txt'), 'resolved\n');
+		await gitStage(root, 'notes.txt', false);
+		assert.equal(git('ls-files', '-u'), '');
+		assert.deepEqual((await gitStatus(root)).changes, [
+			{ path: 'notes.txt', original: undefined, status: 'M', staged: true }
+		]);
+	} finally {
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
+test('a merge resolved to HEAD’s content commits with both parents', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-git-merge-ours-'));
+	const git = (...args: string[]): string =>
+		execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
+	try {
+		git('init', '-q', '-b', 'main');
+		git('config', 'core.autocrlf', 'false');
+		git('config', 'user.name', 'Nido Test');
+		git('config', 'user.email', 'test@example.invalid');
+		git('config', 'commit.gpgsign', 'false');
+		await writeFile(join(root, 'notes.txt'), 'base\n');
+		git('add', 'notes.txt');
+		git('commit', '-qm', 'Base');
+		git('switch', '-qc', 'other');
+		await writeFile(join(root, 'notes.txt'), 'theirs\n');
+		git('commit', '-qam', 'Theirs');
+		const theirs = git('rev-parse', 'HEAD');
+		git('switch', '-q', 'main');
+		await writeFile(join(root, 'notes.txt'), 'ours\n');
+		git('commit', '-qam', 'Ours');
+		const ours = git('rev-parse', 'HEAD');
+		// Without a merge, an empty commit is still refused.
+		await assert.rejects(gitCommit(root, 'Nothing'), /Stage changes before committing/);
+		assert.equal((await gitStatus(root)).merging, undefined);
+
+		assert.throws(() => git('merge', '-q', 'other'));
+		assert.equal((await gitStatus(root)).merging, true);
+		// Git refuses the commit while the conflict is unresolved.
+		await assert.rejects(gitCommit(root, 'Merge other'), /unmerged|conflict/i);
+
+		// Keeping the current branch's side stages nothing that differs from HEAD.
+		await writeFile(join(root, 'notes.txt'), 'ours\n');
+		git('add', 'notes.txt');
+		const status = await gitStatus(root);
+		assert.deepEqual(status.changes, []);
+		assert.equal(status.merging, true);
+
+		await gitCommit(root, 'Merge other');
+		assert.equal(git('rev-parse', 'HEAD^1'), ours);
+		assert.equal(git('rev-parse', 'HEAD^2'), theirs);
+		assert.equal(git('log', '-1', '--format=%s'), 'Merge other');
+		assert.equal((await gitStatus(root)).merging, undefined);
+	} finally {
+		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 	}
 });

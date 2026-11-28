@@ -103,17 +103,24 @@ export default function PullRequests({
 	}, [workspaceId, filter, listKey]);
 
 	/** Keep the same file across reloads, even when it moves to another row. */
-	function showDetails(details: PullRequestDetails, keepEntry: boolean, snapshot = diff): void {
+	function showDetails(
+		details: PullRequestDetails,
+		keepEntry: boolean,
+		snapshot: PullRequestDiffSnapshot | undefined
+	): void {
 		const files: DisplayedPullRequest['files'] = [...details.files];
 		const listed = new Set(files.map((file) => file.path));
-		if (
+		const matchingDiff =
 			snapshot &&
 			snapshot.head === details.headRefOid &&
 			snapshot.target.url === details.url &&
 			snapshot.target.baseRefName === details.baseRefName &&
 			snapshot.target.baseRefOid === details.baseRefOid
-		) {
-			for (const [path, patch] of snapshot.files) {
+				? snapshot
+				: undefined;
+		setDiff(matchingDiff);
+		if (matchingDiff) {
+			for (const [path, patch] of matchingDiff.files) {
 				if (listed.has(path)) {
 					continue;
 				}
@@ -153,7 +160,7 @@ export default function PullRequests({
 				baseRefName: details.baseRefName,
 				baseRefOid: details.baseRefOid
 			};
-			let snapshot = diff;
+			let snapshot: PullRequestDiffSnapshot | undefined;
 			try {
 				const files = await window.nido.githubPullRequestDiff(
 					workspaceId,
@@ -162,7 +169,6 @@ export default function PullRequests({
 					target
 				);
 				snapshot = { head: details.headRefOid, target, files: new Map(files) };
-				setDiff(snapshot);
 			} finally {
 				showDetails(details, keepEntry, snapshot);
 				list.current?.focus();
@@ -215,7 +221,7 @@ export default function PullRequests({
 						opened.number,
 						opened.url
 					);
-					showDetails(details, true);
+					showDetails(details, true, diff);
 				} catch (error) {
 					result = t('{message} Could not refresh the pull request: {reason}', {
 						message: result,
@@ -231,7 +237,7 @@ export default function PullRequests({
 	const checkout = (): void => {
 		if (opened && opened.state === 'OPEN') {
 			void act(async () => {
-				await window.nido.githubCheckout(workspaceId, opened.number);
+				await window.nido.githubCheckout(workspaceId, opened.number, opened.url);
 				await refreshStatus();
 			}, 'Checked out the pull request’s branch.');
 		}

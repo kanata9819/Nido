@@ -41,11 +41,11 @@ const api: NidoAPI = {
 		ipcRenderer.invoke('nido:githubPullRequest', id, number, url),
 	githubPullRequestDiff: (id, number, expectedHead, target) =>
 		ipcRenderer.invoke('nido:githubPullRequestDiff', id, number, expectedHead, target),
-	githubCheckout: (id, number) => ipcRenderer.invoke('nido:githubCheckout', id, number),
+	githubCheckout: (id, number, url) => ipcRenderer.invoke('nido:githubCheckout', id, number, url),
 	githubComment: (id, kind, number, body, url) =>
 		ipcRenderer.invoke('nido:githubComment', id, kind, number, body, url),
-	githubReview: (id, number, event, body, head) =>
-		ipcRenderer.invoke('nido:githubReview', id, number, event, body, head),
+	githubReview: (id, number, event, body, head, url) =>
+		ipcRenderer.invoke('nido:githubReview', id, number, event, body, head, url),
 	githubReply: (id, thread, body, url) =>
 		ipcRenderer.invoke('nido:githubReply', id, thread, body, url),
 	githubResolve: (id, thread, resolved, url) =>
@@ -64,7 +64,7 @@ const api: NidoAPI = {
 		),
 	githubCreatePullRequest: (id, title, body, base, draft, head) =>
 		ipcRenderer.invoke('nido:githubCreatePullRequest', id, title, body, base, draft, head),
-	githubMerge: (id, number, method, deleteBranch, expectedHead, expectedBase) =>
+	githubMerge: (id, number, method, deleteBranch, expectedHead, expectedBase, url) =>
 		ipcRenderer.invoke(
 			'nido:githubMerge',
 			id,
@@ -72,7 +72,8 @@ const api: NidoAPI = {
 			method,
 			deleteBranch,
 			expectedHead,
-			expectedBase
+			expectedBase,
+			url
 		),
 	githubIssues: (id, filter) => ipcRenderer.invoke('nido:githubIssues', id, filter),
 	githubIssue: (id, number, url) => ipcRenderer.invoke('nido:githubIssue', id, number, url),

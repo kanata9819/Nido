@@ -225,9 +225,10 @@ export async function gitSwitch(cwd: string, name: string, create: boolean): Pro
 
 /**
  * Push only the checked-out branch, to its upstream when it has one, or else to `origin`, setting
- * that as its upstream. An upstream that is `base`, the branch a pull request will merge into
- * (as for a branch made from origin/main), is not pushed to: the branch is published under its
- * own name instead. Returns the published branch and remote.
+ * that as its upstream. An upstream of another name (as for a branch made from origin/main or
+ * origin/develop) is not pushed to: like Git's default push, the branch is published under its
+ * own name instead, so a pull request never updates the branch it was started from. Returns the
+ * published branch and remote.
  */
 export async function gitPushBranch(
 	cwd: string,
@@ -247,13 +248,10 @@ export async function gitPushBranch(
 	const target = {
 		branch,
 		remote: remote || 'origin',
-		upstream: upstream === `refs/heads/${base}` ? '' : upstream
+		upstream: upstream === `refs/heads/${branch}` ? upstream : ''
 	};
 	await pushBranch(cwd, target);
-	return {
-		branch: target.upstream ? target.upstream.slice('refs/heads/'.length) : branch,
-		remote: target.remote
-	};
+	return { branch, remote: target.remote };
 }
 
 export async function gitPushRemoteUrl(cwd: string, remote: string): Promise<string> {
@@ -526,6 +524,14 @@ async function readStatus(root: string, paths?: string[]): Promise<GitStatus> {
 		}
 		const status = record.slice(2, 4);
 		const path = record.slice(start);
+		if (record[0] === 'u') {
+			// An unresolved conflict is one change, in the work tree: staging the file resolves it.
+			// Its XY letters name each side of the merge, not a staged and an unstaged change.
+			// Listing a staged side would offer an unstage, whose reset drops the conflict from
+			// the index while the markers stay in the file.
+			changes.push({ path, status: 'U', staged: false });
+			continue;
+		}
 		const original = record[0] === '2' ? records[++i] : undefined;
 		if (status[0] !== '.') {
 			changes.push({
@@ -553,7 +559,15 @@ async function readStatus(root: string, paths?: string[]): Promise<GitStatus> {
 			async () => `${(await git(root, ['rev-parse', '--short', 'HEAD'])).trim()} (detached)`
 		);
 	}
+	if (!paths && (await mergeInProgress(root))) {
+		return { root, branch, changes, merging: true };
+	}
 	return { root, branch, changes };
+}
+
+/** Whether a merge waits for its commit: MERGE_HEAD names the commit being merged. */
+async function mergeInProgress(root: string): Promise<boolean> {
+	return !!(await git(root, ['rev-parse', '--quiet', '--verify', 'MERGE_HEAD'], true)).trim();
 }
 
 /** The change for `path` on the chosen side; throws when it is gone since the list was shown. */
@@ -644,7 +658,9 @@ export async function gitCommit(cwd: string, message: string): Promise<string> {
 		throw new Error('Enter a commit message (up to 10,000 characters).');
 	}
 	const status = await gitStatus(cwd);
-	if (!status.changes.some((change) => change.staged)) {
+	// A merge resolved to HEAD's content stages nothing new, but its commit still records the
+	// merge. Git itself refuses while conflicts remain unresolved.
+	if (!status.merging && !status.changes.some((change) => change.staged)) {
 		throw new Error('Stage changes before committing.');
 	}
 	return git(status.root, ['commit', '-m', message.trim()]);

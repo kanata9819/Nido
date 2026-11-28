@@ -214,7 +214,8 @@ function ReviewForm({
 			}
 			onSubmit={(body) =>
 				act(
-					() => window.nido.githubReview(workspaceId, pr.number, event, body, head),
+					() =>
+						window.nido.githubReview(workspaceId, pr.number, event, body, head, pr.url),
 					'Review submitted.'
 				)
 			}
@@ -255,7 +256,8 @@ function MergeForm({
 							method,
 							deleteBranch,
 							pr.headRefOid,
-							pr.baseRefName
+							pr.baseRefName,
+							pr.url
 						);
 					if (confirmationError) {
 						return t('GitHub did not confirm the merge: {reason}', {

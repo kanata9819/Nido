@@ -41,6 +41,8 @@ test('the final layout keeps the window as it was when quitting began', async (c
 	const path = join(root, 'workspaces.json');
 	const checkpoints = new LayoutCheckpoints(window as never, state, registry, path, () => {});
 	context.after(() => void window.emit('closed'));
+	// The workspace was restored, so the final layout is written.
+	checkpoints.start();
 
 	const final = checkpoints.saveFinal();
 	await new Promise((resolve) => setImmediate(resolve));
@@ -99,4 +101,59 @@ test('a close refreshes the backup even when a background checkpoint already sav
 	await checkpoints.saveReplacingBackup();
 	assert.deepEqual(errors, []);
 	assert.deepEqual(JSON.parse(await readFile(path + '.bak', 'utf8')), await readLayout(path));
+});
+
+test('quitting before any workspace was restored keeps the saved layout and its backup', async (context) => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-layout-early-quit-'));
+	context.after(() => rm(root, { recursive: true, force: true }));
+	const path = join(root, 'workspaces.json');
+	const saved = {
+		version: 1 as const,
+		active: 0,
+		window: { width: 1000, height: 700, maximized: false },
+		workspaces: [
+			{
+				root,
+				current: join(root, 'notes.md'),
+				files: [{ path: join(root, 'notes.md'), line: 3, column: 0 }],
+				untitled: [
+					{
+						id: '00000000-0000-4000-8000-000000000000:2',
+						index: 2,
+						lines: ['unsaved draft'],
+						endOfLine: true,
+						fileformat: 'unix' as const,
+						line: 1,
+						column: 0
+					}
+				]
+			}
+		]
+	};
+	await writeLayout(path, saved, { replaceBackup: true });
+	const window = Object.assign(new EventEmitter(), {
+		getNormalBounds: () => ({ width: 1000, height: 700 }),
+		isMaximized: () => false,
+		isDestroyed: () => false
+	});
+	// After a crash restart, the renderer has not asked for the restoration yet.
+	const registry = {
+		orderedIds: () => [],
+		sessions: new Map(),
+		snapshotOf: () => assert.fail('No workspace is open to snapshot.')
+	} as unknown as WorkspaceRegistry;
+	const state: AppState = {
+		order: [],
+		active: '',
+		restoration: undefined,
+		prompting: true,
+		closing: false
+	};
+	const checkpoints = new LayoutCheckpoints(window as never, state, registry, path, () => {});
+	context.after(() => void window.emit('closed'));
+
+	await checkpoints.saveFinal();
+
+	assert.deepEqual(JSON.parse(await readFile(path, 'utf8')), saved);
+	assert.deepEqual(JSON.parse(await readFile(path + '.bak', 'utf8')), saved);
 });

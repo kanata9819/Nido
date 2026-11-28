@@ -45,6 +45,8 @@ export function registerGithubHandlers({
 	changeBranch: (current: Session, change: () => Promise<void>) => Promise<void>;
 }): void {
 	const root = (id: unknown): string => session(id).workspace.root;
+	const optionalText = (value: unknown): string | undefined =>
+		value === undefined ? undefined : text(value);
 	const diffTarget = (value: unknown): PullRequestDiffTarget => {
 		const target = value as Record<string, unknown> | null | undefined;
 		return {
@@ -67,10 +69,11 @@ export function registerGithubHandlers({
 	handle('githubPullRequestDiff', (id, number, expectedHead, target) =>
 		pullRequestDiff(root(id), issueNumber(number), text(expectedHead), diffTarget(target))
 	);
-	handle('githubCheckout', async (id, number) => {
+	handle('githubCheckout', async (id, number, url) => {
 		const current = session(id);
 		const pr = issueNumber(number);
-		await changeBranch(current, () => checkoutPullRequest(current.workspace.root, pr));
+		const address = optionalText(url);
+		await changeBranch(current, () => checkoutPullRequest(current.workspace.root, pr, address));
 	});
 	handle('githubComment', (id, kind, number, body, url) => {
 		if (kind !== 'pr' && kind !== 'issue') {
@@ -78,8 +81,15 @@ export function registerGithubHandlers({
 		}
 		return addComment(root(id), kind, issueNumber(number), text(body), text(url));
 	});
-	handle('githubReview', (id, number, event, body, head) =>
-		reviewPullRequest(root(id), issueNumber(number), event as never, text(body), text(head))
+	handle('githubReview', (id, number, event, body, head, url) =>
+		reviewPullRequest(
+			root(id),
+			issueNumber(number),
+			event as never,
+			text(body),
+			text(head),
+			optionalText(url)
+		)
 	);
 	handle('githubReply', (id, thread, body, url) =>
 		replyToThread(root(id), text(thread), text(body), text(url))
@@ -106,14 +116,15 @@ export function registerGithubHandlers({
 			head: text(head)
 		})
 	);
-	handle('githubMerge', (id, number, method, deleteBranch, expectedHead, expectedBase) =>
+	handle('githubMerge', (id, number, method, deleteBranch, expectedHead, expectedBase, url) =>
 		mergePullRequest(
 			root(id),
 			issueNumber(number),
 			method as never,
 			flag(deleteBranch),
 			text(expectedHead),
-			text(expectedBase)
+			text(expectedBase),
+			optionalText(url)
 		)
 	);
 	handle('githubIssues', (id, filter) => {

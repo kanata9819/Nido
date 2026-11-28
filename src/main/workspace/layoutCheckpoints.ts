@@ -60,8 +60,15 @@ export class LayoutCheckpoints {
 		return this.checkpoints.save();
 	}
 
-	/** Write the layout one last time before quitting, after any background write. */
+	/**
+	 * Write the layout one last time before quitting, after any background write. Before any
+	 * workspace was restored or created, the saved layout is left as it is: quitting then (as
+	 * right after a crash restart) must not replace the recovery data with an empty layout.
+	 */
 	async saveFinal(): Promise<void> {
+		if (!this.ready) {
+			return;
+		}
 		await this.checkpoints.idle();
 		const ids = this.registry.orderedIds();
 		// The window as it was when quitting began; it can change or close during the snapshots.
