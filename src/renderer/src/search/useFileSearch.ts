@@ -54,6 +54,8 @@ export function useFileSearch(
 				})
 				.catch((error) => {
 					if (!cancelled && current === generation) {
+						latestFiles = undefined;
+						setFileList([]);
 						report(String(error));
 					}
 				})
