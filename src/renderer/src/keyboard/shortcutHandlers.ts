@@ -249,14 +249,8 @@ export function handleWorkspaceShortcuts(context: ShortcutContext, shortcut: Sho
 /** Shortcuts while an editor, not a terminal, has focus. */
 export function handleEditorShortcuts(context: ShortcutContext, shortcut: Shortcut): void {
 	const { event, key, consume, focusedInput, isNormalMode } = shortcut;
-	const { active, mode, leader, commands, state, showPanel } = context;
-	if (
-		event.ctrlKey &&
-		key === 'p' &&
-		active &&
-		!mode.current[active]?.startsWith('insert') &&
-		!mode.current[active]?.startsWith('c')
-	) {
+	const { active, leader, commands, state, showPanel } = context;
+	if (event.ctrlKey && key === 'p' && active && isNormalMode) {
 		consume();
 		showPanel('files');
 		return;
