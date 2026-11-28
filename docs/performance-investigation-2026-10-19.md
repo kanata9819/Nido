@@ -85,7 +85,7 @@
 
 ```powershell
 pnpm exec tsx --test .downloads/editor-audit-20261019-main.ts
-$env:PLAYWRIGHT_BROWSERS_PATH = 'C:\Users\taka9\AppData\Local\ms-playwright'
+$env:PLAYWRIGHT_BROWSERS_PATH = "$env:LOCALAPPDATA\ms-playwright"
 pnpm exec playwright test --config .downloads/editor-audit-20261019.config.ts
 pnpm exec tsx --test --test-concurrency=1 tests/grid-performance.test.ts tests/bracket-performance.test.ts
 pnpm test:renderer tests/renderer-lifecycle.spec.ts --grep 'cursor-only patches preserve completion|Completion keeps pending navigation'
