@@ -224,11 +224,9 @@ export async function gitSwitch(cwd: string, name: string, create: boolean): Pro
 }
 
 /**
- * Push only the checked-out branch, to its upstream when it has one, or else to `origin`, setting
- * that as its upstream. An upstream of another name (as for a branch made from origin/main or
- * origin/develop) is not pushed to: like Git's default push, the branch is published under its
- * own name instead, so a pull request never updates the branch it was started from. Returns the
- * published branch and remote.
+ * Publish the checked-out branch under its own name. An explicit push remote takes precedence
+ * over the upstream remote and origin. Keep the fetch upstream when publishing to a different
+ * remote. Return the published branch and remote for the pull request's head.
  */
 export async function gitPushBranch(
 	cwd: string,
@@ -245,10 +243,19 @@ export async function gitPushBranch(
 	if (upstream && (!remote || !upstream.startsWith('refs/heads/'))) {
 		throw new Error('Invalid branch name.');
 	}
+	if (!branch) {
+		throw new Error('Check out a branch first.');
+	}
+	const configuredRemote =
+		(await git(cwd, ['config', '--get', `branch.${branch}.pushRemote`], true)).trim() ||
+		(await git(cwd, ['config', '--get', 'remote.pushDefault'], true)).trim();
+	const pushRemote = configuredRemote || remote || 'origin';
+	const ref = `refs/heads/${branch}`;
 	const target = {
 		branch,
-		remote: remote || 'origin',
-		upstream: upstream === `refs/heads/${branch}` ? upstream : ''
+		remote: pushRemote,
+		// A ref here supplies the push destination without rewriting the fetch upstream.
+		upstream: upstream && (upstream === ref || pushRemote !== remote) ? ref : ''
 	};
 	await pushBranch(cwd, target);
 	return { branch, remote: target.remote };
