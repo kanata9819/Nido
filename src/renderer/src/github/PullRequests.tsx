@@ -119,6 +119,8 @@ export default function PullRequests({
 				? snapshot
 				: undefined;
 		setDiff(matchingDiff);
+		const previousFile =
+			keepEntry && opened?.url === details.url ? opened.files[entry - 1] : undefined;
 		if (matchingDiff) {
 			for (const [path, patch] of matchingDiff.files) {
 				if (listed.has(path)) {
@@ -137,6 +139,17 @@ export default function PullRequests({
 				files.push({ path, additions, deletions });
 				listed.add(path);
 			}
+		}
+		// The selected file can be known only from the previous patch. Keep its view mounted
+		// while the patch is unavailable so an open draft stays accessible.
+		if (
+			!matchingDiff &&
+			previousFile &&
+			!previousFile.historical &&
+			!listed.has(previousFile.path)
+		) {
+			files.push(previousFile);
+			listed.add(previousFile.path);
 		}
 		for (const thread of details.threads) {
 			if (thread.path && !listed.has(thread.path)) {
@@ -380,13 +393,13 @@ export default function PullRequests({
 					empty={t(loaded ? 'No pull requests.' : 'Loading…')}
 				/>
 				<div className={`${gitStyles.preview} ${styles.preview}`} data-git-preview>
-					{opened && file && (diff || file.historical) ? (
+					{opened && file ? (
 						<PullRequestFile
-							key={`${opened.number}:${file.path}`}
+							key={`${opened.url}:${file.path}`}
 							workspaceId={workspaceId}
 							pr={opened}
 							path={file.path}
-							diff={diff?.files.get(file.path) ?? ''}
+							diff={diff && (diff.files.get(file.path) ?? '')}
 							diffHead={diff?.head ?? opened.headRefOid}
 							diffTarget={diff?.target ?? opened}
 							historical={file.historical}
@@ -395,10 +408,6 @@ export default function PullRequests({
 							setCommenting={(value) => setForm(value ? 'comment' : undefined)}
 							act={act}
 						/>
-					) : opened && file ? (
-						<div className={gitStyles.emptyPreview} data-git-summary tabIndex={0}>
-							<p>{t('The diff is unavailable. Refresh to try again.')}</p>
-						</div>
 					) : opened ? (
 						<PullRequestOverview
 							workspaceId={workspaceId}

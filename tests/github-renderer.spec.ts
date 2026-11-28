@@ -115,23 +115,31 @@ test('an unavailable diff leaves the pull request overview usable and can be ret
 	await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
-test('a refresh whose diff fails does not keep showing the earlier diff', async ({ page }) => {
+test('a failed diff refresh hides the old patch but keeps the draft and threads', async ({
+	page
+}) => {
+	const patch = [['src/login.ts', '@@ -1 +1 @@\n-before refresh\n+earlier diff line\n']];
 	await page.goto(`${origin}?view=github&defer=githubPullRequestDiff`);
 	await expect(page.getByRole('listbox', { name: 'Pull requests' })).toBeFocused();
 	await page.keyboard.press('Enter');
 	await expect.poll(() => calls(page, 'githubPullRequestDiff')).toHaveLength(1);
-	await page.evaluate(() =>
-		window.rendererTest.settle('githubPullRequestDiff', 0, [
-			[
-				'src/login.ts',
-				'diff --git a/src/login.ts b/src/login.ts\n--- a/src/login.ts\n+++ b/src/login.ts\n@@ -1 +1 @@\n-before refresh\n+earlier diff line\n'
-			]
-		])
+	await page.evaluate(
+		(value) => window.rendererTest.settle('githubPullRequestDiff', 0, value),
+		patch
 	);
 	const files = page.getByRole('listbox', { name: 'Pull request files' });
 	await files.getByRole('option', { name: 'src/login.ts' }).click();
 	const preview = page.locator('[data-panel="github"] [data-git-preview]');
 	await expect(preview).toContainText('earlier diff line');
+	const threads = page.getByRole('region', { name: 'Review threads' });
+	await expect(threads).toContainText('Rename this?');
+	await page.keyboard.press('c');
+	const draft = page.getByRole('textbox', { name: /^Comment on line/ });
+	await draft.fill('Keep this unsent review text');
+	await page.getByRole('textbox', { name: 'Line number' }).fill('1');
+	const submit = page.getByRole('button', { name: 'Comment Ctrl+Enter', exact: true });
+	await expect(submit).toBeEnabled();
+	await files.focus();
 	await page.keyboard.press('r');
 	await expect.poll(() => calls(page, 'githubPullRequestDiff')).toHaveLength(2);
 	await page.evaluate(() =>
@@ -140,6 +148,22 @@ test('a refresh whose diff fails does not keep showing the earlier diff', async 
 	await expect(page.getByRole('alert')).toContainText('HTTP 503');
 	await expect(page.getByText('The diff is unavailable. Refresh to try again.')).toBeVisible();
 	await expect(preview).not.toContainText('earlier diff line');
+	await expect(threads).toContainText('Rename this?');
+	await expect(draft).toHaveValue('Keep this unsent review text');
+	await expect(submit).toBeDisabled();
+	await draft.press('Control+Enter');
+	expect(await calls(page, 'githubLineComment')).toEqual([]);
+
+	await files.focus();
+	await page.keyboard.press('r');
+	await expect.poll(() => calls(page, 'githubPullRequestDiff')).toHaveLength(3);
+	await page.evaluate(
+		(value) => window.rendererTest.settle('githubPullRequestDiff', 0, value),
+		patch
+	);
+	await expect(preview).toContainText('earlier diff line');
+	await expect(draft).toHaveValue('Keep this unsent review text');
+	await expect(submit).toBeEnabled();
 });
 
 test('a pull request file shows its diff and threads, which can be replied to and resolved', async ({
@@ -317,6 +341,18 @@ test('files present only in the diff are listed and can be opened', async ({ pag
 	await expect(file).toContainText('−1');
 	await file.click();
 	await expect(page.getByText('added second', { exact: true })).toBeVisible();
+	await page.keyboard.press('c');
+	const draft = page.getByRole('textbox', { name: /^Comment on line/ });
+	await draft.fill('Review the diff-only file');
+	await file.click();
+	await page.keyboard.press('r');
+	await expect.poll(() => calls(page, 'githubPullRequestDiff')).toHaveLength(2);
+	await page.evaluate(() =>
+		window.rendererTest.settle('githubPullRequestDiff', 0, new Error('HTTP 503'), true)
+	);
+	await expect(page.getByText('The diff is unavailable. Refresh to try again.')).toBeVisible();
+	await expect(file).toHaveAttribute('aria-selected', 'true');
+	await expect(draft).toHaveValue('Review the diff-only file');
 });
 
 test('threads for a path outside the current diff remain reachable', async ({ page }) => {

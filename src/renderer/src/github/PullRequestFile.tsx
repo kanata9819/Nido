@@ -8,13 +8,14 @@ import type {
 import GitDiff from '../git/GitDiff';
 import { Composer } from './Composer';
 import { Timeline } from './Timeline';
+import gitStyles from '../git/Git.module.css';
 import styles from './GitHub.module.css';
 
 interface PullRequestFileProps {
 	workspaceId: string;
 	pr: PullRequestDetails;
 	path: string;
-	diff: string;
+	diff?: string;
 	diffHead: string;
 	diffTarget: PullRequestDiffTarget;
 	historical?: boolean;
@@ -43,11 +44,16 @@ export default function PullRequestFile({
 }: PullRequestFileProps): React.JSX.Element {
 	const t = useI18n();
 	const threads = pr.threads.filter((thread) => thread.path === path);
+	const diffAvailable = diff !== undefined;
 	const showLineForm = !historical && commenting && pr.state === 'OPEN';
 	return (
 		<div className={styles.fileView}>
 			{historical ? (
 				<p>{t('This file is no longer in the current diff.')}</p>
+			) : !diffAvailable ? (
+				<div className={gitStyles.emptyPreview} data-git-summary tabIndex={0}>
+					<p>{t('The diff is unavailable. Refresh to try again.')}</p>
+				</div>
 			) : (
 				<div className={styles.diff}>
 					<GitDiff
@@ -72,7 +78,7 @@ export default function PullRequestFile({
 					</strong>
 					{!historical && !showLineForm && (
 						<button
-							disabled={busy || pr.state !== 'OPEN'}
+							disabled={busy || !diffAvailable || pr.state !== 'OPEN'}
 							onClick={() => setCommenting(true)}
 						>
 							{t('Comment on a line')} <kbd>c</kbd>
@@ -125,7 +131,7 @@ function LineCommentForm({
 	const stale =
 		anchor.head !== diffHead ||
 		anchor.head !== pr.headRefOid ||
-		anchor.diff !== diff ||
+		(diff !== undefined && anchor.diff !== diff) ||
 		anchor.target.baseRefName !== diffTarget.baseRefName ||
 		anchor.target.baseRefName !== pr.baseRefName ||
 		anchor.target.baseRefOid !== diffTarget.baseRefOid ||
@@ -145,7 +151,7 @@ function LineCommentForm({
 				label={t('Comment on line {line}', { line: line || '…' })}
 				submitLabel={t('Comment')}
 				busy={busy}
-				ready={!stale && Number(line) > 0}
+				ready={diff !== undefined && !stale && Number(line) > 0}
 				controls={
 					<>
 						<label className={styles.filter}>
