@@ -272,6 +272,54 @@ test(
 );
 
 test(
+	'global tsc and tsgo shims on Windows are probed by their full path',
+	{ timeout: 30000, skip: process.platform !== 'win32' && 'npm .cmd shims are Windows only' },
+	async () => {
+		const root = await realpath(await mkdtemp(join(tmpdir(), 'nido-pack-global-tsc-')));
+		const workspace = join(root, 'workspace');
+		const tools = join(root, 'tools');
+		const path = process.env.PATH;
+		let session: Session | undefined;
+		try {
+			await mkdir(workspace);
+			await mkdir(tools);
+			await writeFile(join(workspace, 'main.ts'), 'const total: number = "wrong";\n');
+			// npm installs global tools as .cmd shims; a TS6 tsc must leave the bundled server in use.
+			await writeFile(join(tools, 'tsc.cmd'), '@echo Version 6.0.3\r\n');
+			process.env.PATH = `${tools};${path}`;
+			const config = await discoverLanguagePacks(resources);
+			session = await Session.create(workspace, () => {}, resources, config);
+			await session.openFile('main.ts');
+			const lua = (code: string): Promise<unknown> =>
+				session!.client.request('nvim_exec_lua', [code, []]);
+			const typescript = async (): Promise<unknown> =>
+				(await session!.languagePacks()).find((pack) => pack.id === 'typescript');
+			assert.deepEqual(await typescript(), { id: 'typescript', status: 'ready' });
+			assert.equal(
+				await lua(
+					'return vim.wait(10000, function() return #vim.diagnostic.get(0, {severity=vim.diagnostic.severity.ERROR}) > 0 end, 20)'
+				),
+				true
+			);
+			// A TS7 tsgo shim becomes the native server, started by the path that was found.
+			await writeFile(join(tools, 'tsgo.cmd'), '@echo Version 7.0.0\r\n');
+			await session.reloadLanguagePacks({ ...config, disabled: ['typescript'] });
+			await session.reloadLanguagePacks(config);
+			// The extension takes its case from PATHEXT; Windows paths ignore case.
+			const command = (await lua('return vim.lsp.config.typescript.cmd')) as string[];
+			assert.deepEqual(
+				[command[0].toLowerCase(), ...command.slice(1)],
+				[join(tools, 'tsgo.cmd').toLowerCase(), '--lsp', '--stdio']
+			);
+		} finally {
+			process.env.PATH = path;
+			await session?.stop();
+			await cleanup(root);
+		}
+	}
+);
+
+test(
 	'missing tools and a crashing language server report failures without breaking editing',
 	{ timeout: 15000 },
 	async () => {
