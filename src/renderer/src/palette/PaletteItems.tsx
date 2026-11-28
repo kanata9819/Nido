@@ -42,8 +42,8 @@ const problemHeight = (): number => 46;
  * A palette's filter field and results. A palette opens on its list, as in Vim's Normal mode:
  * j/k move, Enter runs the selected item, and i, a or / start typing in the filter field.
  * Escape or Ctrl+C in the field returns to the list, keeping the filter; on the list they close
- * the palette. While results are still loading, Enter is remembered and runs the first result
- * for that query once loaded.
+ * the palette. While results are still loading, Enter is remembered for that query. Quick Open
+ * also remembers which file was selected if a result list was already shown.
  */
 export default function PaletteItems({
 	panel,
@@ -60,7 +60,7 @@ export default function PaletteItems({
 	const t = useI18n();
 	const results = useRef<HTMLDivElement>(null);
 	const filter = useRef<HTMLInputElement>(null);
-	const pendingEnter = useRef<string | undefined>(undefined);
+	const pendingEnter = useRef<{ query: string; path?: string } | undefined>(undefined);
 	const { selection, setSelection, reorderable, reorderTab, clearTab } = useTabSelection({
 		panel,
 		filtered,
@@ -78,10 +78,15 @@ export default function PaletteItems({
 	const [typing, setTyping] = useState(false);
 	// Run the Enter pressed while loading, unless the query changed or focus left the palette.
 	useEffect(() => {
-		if (!loading && pendingEnter.current === query) {
+		const pending = pendingEnter.current;
+		if (!loading && pending?.query === query) {
 			pendingEnter.current = undefined;
 			if ([filter.current, results.current].includes(document.activeElement as never)) {
-				filtered[Math.max(0, selection)]?.run();
+				const item =
+					pending.path === undefined
+						? filtered[Math.max(0, selection)]
+						: filtered.find((item) => item.detail === pending.path);
+				item?.run();
 			}
 		}
 	}, [loading, query, filtered, selection]);
@@ -138,7 +143,9 @@ export default function PaletteItems({
 		if (event.key === 'Enter' && !event.ctrlKey && !event.altKey && !event.metaKey) {
 			event.preventDefault();
 			if (['files', 'search', 'symbols'].includes(panel) && loading) {
-				pendingEnter.current = query;
+				const path =
+					panel === 'files' ? filtered[Math.max(0, selection)]?.detail : undefined;
+				pendingEnter.current = { query, path };
 			} else {
 				filtered[Math.max(0, selection)]?.run();
 			}
