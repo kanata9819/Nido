@@ -313,6 +313,44 @@ test('slow regex can time out or cancel while the main event loop remains respon
 	await assert.rejects(running, /cancelled/);
 });
 
+test('replacement keeps extmarks on untouched text before, between and after matches on a line', () =>
+	fixture(async (session, root) => {
+		const original = '前 needle middle needle tail';
+		const path = join(root, 'marked.txt');
+		await writeFile(path, original + '\n');
+		await session.openFile('marked.txt');
+		const lua = (code: string, args: unknown[] = []): Promise<unknown> =>
+			session.client.request('nvim_exec_lua', [code, args]);
+		const middle = Buffer.byteLength('前 needle mi');
+		const tail = Buffer.byteLength('前 needle middle needle ta');
+		await lua(
+			"vim.g.replace_marks = vim.api.nvim_create_namespace('replace marks'); for _, col in ipairs({...}) do vim.api.nvim_buf_set_extmark(0, vim.g.replace_marks, 0, col, {}) end",
+			[0, middle, tail]
+		);
+		const marks = (): Promise<unknown> =>
+			lua('return vim.api.nvim_buf_get_extmarks(0, vim.g.replace_marks, 0, -1, {})');
+		const before = await marks();
+		const found = await session.searchText('(?<word>needle)', {
+			...defaultSearchOptions,
+			regex: true
+		});
+		const preview = await session.previewReplacement(found.token!, '[$<word>]', [0]);
+		assert.equal(preview.count, 2);
+		await session.applyReplacement(preview.token);
+		assert.equal(
+			await session.client.request('nvim_get_current_line', []),
+			'前 [needle] middle [needle] tail'
+		);
+		assert.deepEqual(await marks(), [
+			[1, 0, 0],
+			[2, 0, middle + 2],
+			[3, 0, tail + 4]
+		]);
+		await lua('vim.cmd.undo()');
+		assert.equal(await session.client.request('nvim_get_current_line', []), original);
+		assert.deepEqual(await marks(), before);
+	}));
+
 test('replacement preserves mixed/CR-only endings, empty files and Unicode zero-width matches', () =>
 	fixture(async (session, root) => {
 		const originals = ['needle\r\nneedle\nneedle\r\n', 'needle\rneedle\r', '', '猫猫'];
