@@ -234,6 +234,32 @@ test('EditorConfig reads CRLF files cleanly when the project requests LF', async
 	}
 });
 
+test('disabling EditorConfig keeps a manual line ending conversion when it only set indentation', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'nido-editorconfig-manual-'));
+	const path = join(root, 'sample.txt');
+	let session: Session | undefined;
+	try {
+		await writeFile(
+			join(root, '.editorconfig'),
+			'root = true\n[*]\nindent_style = space\nindent_size = 2\n'
+		);
+		await writeFile(path, 'one\ntwo\n');
+		session = await Session.create(root, () => {});
+		await session.openFile('sample.txt');
+		const indent = await session.client.request('nvim_eval', ['&l:shiftwidth']);
+		await session.setEditorConfig(true);
+		assert.equal(await session.client.request('nvim_eval', ['&l:shiftwidth']), 2);
+		await session.setLineEnding('CRLF');
+		await session.setEditorConfig(false);
+		assert.equal(await session.client.request('nvim_eval', ['&l:shiftwidth']), indent);
+		await session.save();
+		assert.equal(await readFile(path, 'utf8'), 'one\r\ntwo\r\n');
+	} finally {
+		await session?.stop();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('EditorConfig keeps newly detected encoding and line endings after reloading a file', async () => {
 	const root = await mkdtemp(join(tmpdir(), 'nido-editorconfig-reload-'));
 	let session: Session | undefined;

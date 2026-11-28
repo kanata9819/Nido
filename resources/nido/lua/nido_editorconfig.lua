@@ -5,7 +5,7 @@ local api = vim.api
 local M = {}
 local editorconfig = require('editorconfig')
 local configure = editorconfig.config
--- Per buffer, the options before EditorConfig changed them.
+-- Per buffer, the original and applied values for options EditorConfig changed.
 local saved = {}
 -- The options EditorConfig can set.
 local options = {'expandtab', 'shiftwidth', 'softtabstop', 'tabstop', 'fileformat',
@@ -15,7 +15,11 @@ local options = {'expandtab', 'shiftwidth', 'softtabstop', 'tabstop', 'fileforma
 local function restore(buffer)
   api.nvim_clear_autocmds({group='nvim.editorconfig', event='BufWritePre', buffer=buffer})
   if saved[buffer] then
-    for name, value in pairs(saved[buffer]) do vim.bo[buffer][name] = value end
+    for name, value in pairs(saved[buffer]) do
+      if vim.bo[buffer][name] == value.applied then
+        vim.bo[buffer][name] = value.before
+      end
+    end
   end
   vim.b[buffer].editorconfig = nil
 end
@@ -28,12 +32,18 @@ editorconfig.config = function(buffer)
       or api.nvim_buf_get_name(buffer) == '' then
     return
   end
-  if not saved[buffer] then
-    saved[buffer] = {}
-    for _, name in ipairs(options) do saved[buffer][name] = vim.bo[buffer][name] end
-  end
   restore(buffer)
+  local before = {}
+  for _, name in ipairs(options) do before[name] = vim.bo[buffer][name] end
   configure(buffer)
+  local changes = {}
+  for _, name in ipairs(options) do
+    local applied = vim.bo[buffer][name]
+    if applied ~= before[name] then
+      changes[name] = {before = before[name], applied = applied}
+    end
+  end
+  saved[buffer] = changes
 end
 
 -- The GUI applies the persisted setting once it connects to this session.
