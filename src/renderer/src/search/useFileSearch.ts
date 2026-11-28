@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import type { FileEntry } from '../../../shared/types';
 import type { Panel } from '../types';
 import { onNidoEvent } from '../nidoEvents';
@@ -11,7 +11,8 @@ export function useFileSearch(
 	panel: Panel,
 	active: string,
 	query: string,
-	report: (message: string) => void
+	report: (message: string) => void,
+	setSelection: Dispatch<SetStateAction<number>>
 ): { fileList: FileEntry[]; loading: boolean; reset: () => void } {
 	const [fileList, setFileList] = useState<FileEntry[]>([]);
 	const [loading, setLoading] = useState(false);
@@ -26,6 +27,7 @@ export function useFileSearch(
 		}
 		let cancelled = false;
 		let generation = 0;
+		let latestFiles: FileEntry[] | undefined;
 		const refresh = (): void => {
 			window.clearTimeout(timer);
 			const current = ++generation;
@@ -34,6 +36,19 @@ export function useFileSearch(
 				.findFiles(active, query)
 				.then((files) => {
 					if (!cancelled && current === generation) {
+						const previous = latestFiles;
+						latestFiles = files;
+						if (previous) {
+							// An unchanged query can refresh after a file is added or removed.
+							// Keep the selected path even if it now appears at a different index.
+							setSelection((index) => {
+								const path = previous[index]?.path;
+								const position = files.findIndex((file) => file.path === path);
+								return position < 0
+									? Math.max(0, Math.min(index, files.length - 1))
+									: position;
+							});
+						}
 						setFileList(files);
 					}
 				})
@@ -62,7 +77,7 @@ export function useFileSearch(
 			window.removeEventListener('focus', refresh);
 			void window.nido.cancelFindFiles(active).catch(() => {});
 		};
-	}, [panel, active, query, report]);
+	}, [panel, active, query, report, setSelection]);
 
 	return { fileList, loading, reset };
 }

@@ -330,6 +330,46 @@ test('App opens references and debugger on new events while respecting a closed 
 	expect(errors).toEqual([]);
 });
 
+test('Quick Open keeps the selected path when files are inserted before it', async ({ page }) => {
+	await page.goto(`${origin}?view=app&defer=findFiles,openFile`);
+	await page.getByRole('button', { name: 'Find file', exact: true }).click();
+	const list = page.getByRole('group', { name: 'Palette results' });
+	const pending = (method: 'findFiles' | 'openFile'): Promise<unknown[][]> =>
+		page.evaluate(
+			(name) =>
+				window.rendererTest.pending
+					.filter((call) => call.method === name)
+					.map((call) => call.args),
+			method
+		);
+	const showFiles = (paths: string[]): Promise<void> =>
+		page.evaluate(
+			(names) =>
+				window.rendererTest.settle(
+					'findFiles',
+					0,
+					names.map((path) => ({ name: path, path, directory: false }))
+				),
+			paths
+		);
+
+	await expect.poll(() => pending('findFiles')).toEqual([['alpha', '']]);
+	await showFiles(['a.rs', 'b.rs']);
+	await expect(list.getByRole('button')).toHaveCount(2);
+	await expect(list).toBeFocused();
+	await page.keyboard.press('j');
+	const selectedFile = list.getByRole('button', { name: /b\.rs/ });
+	await expect(selectedFile).toHaveClass(/selectedItem/);
+
+	await page.evaluate(() => window.rendererTest.emit({ type: 'filesChanged', id: 'alpha' }));
+	await expect.poll(() => pending('findFiles')).toEqual([['alpha', '']]);
+	await page.keyboard.press('Enter');
+	expect(await pending('openFile')).toEqual([]);
+	await showFiles(['0.rs', 'a.rs', 'b.rs']);
+	await expect(selectedFile).toHaveClass(/selectedItem/);
+	await expect.poll(() => pending('openFile')).toEqual([['alpha', 'b.rs']]);
+});
+
 test('opening a file cannot dismiss a newer command palette', async ({ page }) => {
 	await page.goto(`${origin}?view=app&defer=findFiles,openFile`);
 	await expect(page.getByRole('textbox', { name: 'Neovim input' })).toBeFocused();
