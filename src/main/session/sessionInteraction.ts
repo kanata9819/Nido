@@ -131,7 +131,7 @@ export class SessionInteraction {
 			}
 			// i, a or a yank (which returns to the shell) leave copy mode from Neovim's side.
 			if (terminal && this.copyMode) {
-				const mode = (await this.client.request('nvim_eval', ['mode(1)'])) as string;
+				const mode = await this.processedInputMode();
 				if (mode.startsWith('t')) {
 					this.setCopyMode(false);
 				}
@@ -184,45 +184,48 @@ export class SessionInteraction {
 
 	/** Neovim's mode after every queued key has been processed, or 'pending' while it waits for a key. */
 	inputMode(): Promise<string> {
+		return this.enqueue(() => this.processedInputMode());
+	}
+
+	/** Observe the mode without waiting on the input queue from an operation already in it. */
+	private async processedInputMode(): Promise<string> {
 		// A deferred API request observes preceding input after Neovim has processed it.
-		return this.enqueue(async () => {
-			if (this.stopped) {
-				throw new Error('Neovim session is closed.');
+		if (this.stopped) {
+			throw new Error('Neovim session is closed.');
+		}
+		let completed = false;
+		let result = '';
+		let failure: unknown;
+		const deferred = this.client.request('nvim_eval', ['mode(1)']).then(
+			(value) => {
+				result = value as string;
+				completed = true;
+			},
+			(error) => {
+				failure = error;
+				completed = true;
 			}
-			let completed = false;
-			let result = '';
-			let failure: unknown;
-			const deferred = this.client.request('nvim_eval', ['mode(1)']).then(
-				(value) => {
-					result = value as string;
-					completed = true;
-				},
-				(error) => {
-					failure = error;
-					completed = true;
-				}
-			);
-			while (!completed) {
-				// A deferred request cannot finish while r/f/getchar waits for its next key.
-				// The fast API stays available; let that key through instead of deadlocking.
-				const mode = (await this.client.request('nvim_get_mode', [])) as {
-					mode: string;
-					blocking: boolean;
-				};
-				// Reply prompts (r/rm/r?) can report blocking=false.
-				if (mode.blocking || mode.mode.startsWith('r')) {
-					return mode.mode === 'n' ? 'pending' : mode.mode;
-				}
-				if (!completed) {
-					await new Promise((resolve) => setTimeout(resolve, 1));
-				}
+		);
+		while (!completed) {
+			// A deferred request cannot finish while r/f/getchar waits for its next key.
+			// The fast API stays available; let that key through instead of deadlocking.
+			const mode = (await this.client.request('nvim_get_mode', [])) as {
+				mode: string;
+				blocking: boolean;
+			};
+			// Reply prompts (r/rm/r?) can report blocking=false.
+			if (mode.blocking || mode.mode.startsWith('r')) {
+				return mode.mode === 'n' ? 'pending' : mode.mode;
 			}
-			await deferred;
-			if (failure) {
-				throw failure;
+			if (!completed) {
+				await new Promise((resolve) => setTimeout(resolve, 1));
 			}
-			return result;
-		});
+		}
+		await deferred;
+		if (failure) {
+			throw failure;
+		}
+		return result;
 	}
 
 	/** Select an item of the completion menu. */
