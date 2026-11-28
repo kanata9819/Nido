@@ -31,9 +31,12 @@ local function sync_ending(buffer)
     or ending_at(tree.entries, tree.seq_cur, state.entries, state.original)
   if ending and ending ~= state.active then
     local bo = vim.bo[buffer]
-    -- An explicit option change after restoring takes precedence.
+    -- Explicit option changes after restoring take precedence.
     if bo.endofline == state.active.eol and bo.fixendofline == state.active.fix then
       bo.endofline, bo.fixendofline = ending.eol, ending.fix
+    end
+    if bo.fileformat == state.active.format then
+      bo.fileformat = ending.format
     end
     state.active = ending
   end
@@ -175,10 +178,11 @@ function M.restore(path, token, value)
   if value.text == '' then lines = {} end
   local cursor = vim.api.nvim_win_get_cursor(0)
   local bo = vim.bo[buffer]
-  local before = {eol=bo.endofline, fix=bo.fixendofline}
+  local before = {eol=bo.endofline, fix=bo.fixendofline, format=bo.fileformat}
   local suppress_newline = not value.endOfLine and value.text ~= '' and before.fix
   local state = restored_endings[buffer]
-  if suppress_newline or state then
+  local track_ending = suppress_newline or before.format ~= value.fileformat or state ~= nil
+  if track_ending then
     -- Give this restoration its own undo entry, distinct from the preceding edit.
     bo.undolevels = bo.undolevels
   end
@@ -186,15 +190,15 @@ function M.restore(path, token, value)
   vim.api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
   bo.endofline = value.endOfLine
   if suppress_newline then bo.fixendofline = false end
-  if suppress_newline or state then
+  bo.fileformat = value.fileformat
+  if track_ending then
     state = state or {original=before, entries={}}
     local tree = vim.fn.undotree(buffer)
-    local ending = {eol=bo.endofline, fix=bo.fixendofline}
+    local ending = {eol=bo.endofline, fix=bo.fixendofline, format=bo.fileformat}
     state.entries[tree.seq_cur] = ending
     state.active, state.seq = ending, tree.seq_cur
     restored_endings[buffer] = state
   end
-  bo.fileformat = value.fileformat
   bo.modified = true
   cursor[1] = math.min(cursor[1], math.max(1, #lines))
   cursor[2] = math.min(cursor[2], #(lines[cursor[1]] or ''))

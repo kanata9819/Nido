@@ -456,6 +456,36 @@ test('saving a restored Time Machine version preserves its missing final newline
 	}
 });
 
+test('undo and redo of a Time Machine restoration preserve each version’s line endings', async (context) => {
+	const root = await fixture(context);
+	const file = join(root, 'notes.txt');
+	const original = 'first\r\nsecond\r\n';
+	const earlier = 'earlier\ntext\n';
+	await writeFile(file, original);
+	const session = await Session.create(root, () => {});
+	const service = new HistoryService(new LocalHistory(join(root, 'history')));
+	try {
+		const version = await service.store.record(file, content(earlier), 'saved');
+		await session.openFile('notes.txt');
+		const preview = await service.preview(session, file, version.id);
+		await service.restore(session, file, version.id, preview.token);
+		await session.save();
+		assert.equal(await readFile(file, 'utf8'), earlier);
+
+		await session.input('u');
+		await session.inputMode();
+		await session.save();
+		assert.equal(await readFile(file, 'utf8'), original);
+
+		await session.input('<C-r>');
+		await session.inputMode();
+		await session.save();
+		assert.equal(await readFile(file, 'utf8'), earlier);
+	} finally {
+		await session.stop();
+	}
+});
+
 test('an empty file preview token permits restoring a nonempty version', async (context) => {
 	const root = await fixture(context);
 	const file = join(root, 'empty.txt');
