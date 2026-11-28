@@ -423,6 +423,39 @@ for (const original of ['', '\n']) {
 	});
 }
 
+test('saving a restored Time Machine version preserves its missing final newline', async (context) => {
+	const root = await fixture(context);
+	const file = join(root, 'no-newline.txt');
+	await writeFile(file, 'without final newline');
+	const session = await Session.create(root, () => {});
+	const service = new HistoryService(new LocalHistory(join(root, 'history')));
+	try {
+		await session.openFile('no-newline.txt');
+		const original = await service.list(session);
+		await session.input('ccupdated<Esc>');
+		await session.inputMode();
+		await session.save();
+		const updated = await readFile(file, 'utf8');
+
+		const preview = await service.preview(session, original.path, original.versions[0].id);
+		await service.restore(session, original.path, original.versions[0].id, preview.token);
+		await session.save();
+		assert.equal(await readFile(file, 'utf8'), 'without final newline');
+
+		await session.input('u');
+		await session.inputMode();
+		await session.save();
+		assert.equal(await readFile(file, 'utf8'), updated);
+
+		await session.input('<C-r>');
+		await session.inputMode();
+		await session.save();
+		assert.equal(await readFile(file, 'utf8'), 'without final newline');
+	} finally {
+		await session.stop();
+	}
+});
+
 test('an empty file preview token permits restoring a nonempty version', async (context) => {
 	const root = await fixture(context);
 	const file = join(root, 'empty.txt');

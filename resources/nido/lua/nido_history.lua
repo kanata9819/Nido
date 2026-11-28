@@ -7,6 +7,44 @@ local limit_warning = 'This unsaved file exceeds the Time Machine limit (4 MiB o
 local binary_warning = 'This unsaved file cannot be captured by Time Machine because it contains binary data. Save it to keep your changes.'
 -- Buffers already warned that they cannot be recorded.
 local warned = {}
+-- Native undo restores the text, so remember the newline options at restoration undo entries.
+local restored_endings = {}
+
+local function ending_at(entries, target, restorations, ending)
+  for _, entry in ipairs(entries) do
+    if entry.alt then
+      local alternate = ending_at(entry.alt, target, restorations, ending)
+      if alternate then return alternate end
+    end
+    ending = restorations[entry.seq] or ending
+    if entry.seq == target then return ending end
+  end
+end
+
+local function sync_ending(buffer)
+  local state = restored_endings[buffer]
+  if not state then return end
+  local tree = vim.fn.undotree(buffer)
+  if tree.seq_cur == state.seq then return end
+  state.seq = tree.seq_cur
+  local ending = tree.seq_cur == 0 and state.original
+    or ending_at(tree.entries, tree.seq_cur, state.entries, state.original)
+  if ending and ending ~= state.active then
+    local bo = vim.bo[buffer]
+    -- An explicit option change after restoring takes precedence.
+    if bo.endofline == state.active.eol and bo.fixendofline == state.active.fix then
+      bo.endofline, bo.fixendofline = ending.eol, ending.fix
+    end
+    state.active = ending
+  end
+end
+
+vim.api.nvim_create_autocmd({'TextChanged', 'BufWritePre'}, {
+  callback = function(event) sync_ending(event.buf) end,
+})
+vim.api.nvim_create_autocmd({'BufReadPre', 'BufUnload'}, {
+  callback = function(event) restored_endings[event.buf] = nil end,
+})
 
 --- Whether the buffer's text ends with a newline.
 local function end_of_line(buffer)
@@ -136,11 +174,28 @@ function M.restore(path, token, value)
   -- empty line instead would make saving this revision write a newline.
   if value.text == '' then lines = {} end
   local cursor = vim.api.nvim_win_get_cursor(0)
+  local bo = vim.bo[buffer]
+  local before = {eol=bo.endofline, fix=bo.fixendofline}
+  local suppress_newline = not value.endOfLine and value.text ~= '' and before.fix
+  local state = restored_endings[buffer]
+  if suppress_newline or state then
+    -- Give this restoration its own undo entry, distinct from the preceding edit.
+    bo.undolevels = bo.undolevels
+  end
   -- A restoration is a new edit. Native undo can return to the previous draft.
   vim.api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
-  vim.bo[buffer].endofline = value.endOfLine
-  vim.bo[buffer].fileformat = value.fileformat
-  vim.bo[buffer].modified = true
+  bo.endofline = value.endOfLine
+  if suppress_newline then bo.fixendofline = false end
+  if suppress_newline or state then
+    state = state or {original=before, entries={}}
+    local tree = vim.fn.undotree(buffer)
+    local ending = {eol=bo.endofline, fix=bo.fixendofline}
+    state.entries[tree.seq_cur] = ending
+    state.active, state.seq = ending, tree.seq_cur
+    restored_endings[buffer] = state
+  end
+  bo.fileformat = value.fileformat
+  bo.modified = true
   cursor[1] = math.min(cursor[1], math.max(1, #lines))
   cursor[2] = math.min(cursor[2], #(lines[cursor[1]] or ''))
   vim.api.nvim_win_set_cursor(0, cursor)
